@@ -212,7 +212,7 @@ static void _color_picker_callback(GtkWidget *button, dt_iop_module_t *self)
 
 static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
 
@@ -238,7 +238,7 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
 
 static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
 
@@ -287,11 +287,11 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
     g->call_auto_exposure = 0;
     dt_iop_gui_leave_critical_section(self);
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
 
     gui_update(self);
 
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   else
   {
@@ -320,11 +320,11 @@ static void _signal_profile_user_changed(gpointer instance, uint8_t profile_type
 
       if(!IS_NULL_PTR(g))
       {
-        ++darktable.gui->reset;
+        dt_gui_freeze_begin();
 
         dt_bauhaus_slider_set_default(g->sl_middle_grey, def_middle_grey);
 
-        --darktable.gui->reset;
+        dt_gui_freeze_end();
       }
     }
   }
@@ -454,7 +454,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   (void)picker;
   (void)piece;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_basicadj_params_t *p = (dt_iop_basicadj_params_t *)self->params;
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
 
@@ -467,9 +467,9 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
                                                                        work_profile->nonlinearlut) * 100.f)
                                   : dt_camera_rgb_luminance(self->picked_color);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->sl_middle_grey, p->middle_grey);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1288,7 +1288,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(!IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
-    if(g->call_auto_exposure == 1 && !darktable.gui->reset)
+    if(g->call_auto_exposure == 1 && !dt_gui_widgets_suppressed())
     {
       g->call_auto_exposure = -1;
       dt_iop_gui_leave_critical_section(self);

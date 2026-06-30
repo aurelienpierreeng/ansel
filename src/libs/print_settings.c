@@ -481,13 +481,13 @@ void _fill_box_values(dt_lib_print_settings_t *ps)
 
     for(int i=0; i<9; i++)
     {
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ps->dtba[i]), (i == box->alignment));
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
     }
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(ps->b_x), x);
 
@@ -497,7 +497,7 @@ void _fill_box_values(dt_lib_print_settings_t *ps)
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(ps->b_height), sheight);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 static int _export_and_setup_pos(dt_job_t *job, dt_image_box *img, const int32_t idx)
@@ -1024,7 +1024,7 @@ _lock_callback(GtkWidget *button, gpointer user_data)
 static void
 _alignment_callback(GtkWidget *tb, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   int index=-1;
   const dt_lib_module_t *self = (dt_lib_module_t *)user_data;
@@ -1079,7 +1079,7 @@ _grid_callback(GtkWidget *widget, dt_lib_module_t *self)
 
 static void _grid_size_changed(GtkWidget *widget, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)self->data;
   const float value = gtk_spin_button_get_value(GTK_SPIN_BUTTON(ps->grid_size));
@@ -1091,7 +1091,7 @@ static void _grid_size_changed(GtkWidget *widget, dt_lib_module_t *self)
 static void
 _unit_changed(GtkWidget *combo, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)self->data;
 
@@ -1111,7 +1111,7 @@ _unit_changed(GtkWidget *combo, dt_lib_module_t *self)
   float incr;
   _precision_by_unit(ps->unit, &n_digits, &incr, NULL);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   gtk_spin_button_set_digits(GTK_SPIN_BUTTON(ps->b_top), n_digits);
   gtk_spin_button_set_digits(GTK_SPIN_BUTTON(ps->b_bottom), n_digits);
@@ -1145,7 +1145,7 @@ _unit_changed(GtkWidget *combo, dt_lib_module_t *self)
   // grid size
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(ps->grid_size), grid_size * units[ps->unit]);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   _fill_box_values(ps);
 }
@@ -2031,7 +2031,7 @@ void gui_post_expose(struct dt_lib_module_t *self, cairo_t *cr, int32_t width, i
 
 static void _width_changed(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)user_data;
 
@@ -2050,7 +2050,7 @@ static void _width_changed(GtkWidget *widget, gpointer user_data)
 
 static void _height_changed(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)user_data;
 
@@ -2069,7 +2069,7 @@ static void _height_changed(GtkWidget *widget, gpointer user_data)
 
 static void _x_changed(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)user_data;
 
@@ -2088,7 +2088,7 @@ static void _x_changed(GtkWidget *widget, gpointer user_data)
 
 static void _y_changed(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_lib_print_settings_t *ps = (dt_lib_print_settings_t *)user_data;
 

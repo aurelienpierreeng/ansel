@@ -54,6 +54,13 @@ both as `dt_supervisor_rekey(old, new)`: the old entry goes `alive: false` with 
 metadata and is created with a `"rekeyed_from"` link (a `create` record). The two
 hashes are therefore explicitly chained instead of one silently mutating.
 
+A cacheline rekey is triggered by a parameter change, so the new cacheline must
+reference the *triggering* history item, not the old one. The producing node was
+bound to the new history item at synchronization (before the rekey runs), so the
+rekey takes the `params` from the node's current binding rather than the stale
+old cacheline param, and the rekey records carry clickable `node` and `params`
+links (`cacheline → node → params`).
+
 ### Thread safety
 
 One supervisor mutex guards the registry. Emitters value-copy their arguments;
@@ -164,8 +171,23 @@ Domain specifics:
 - **history** — `module`, `iop_order`, `history_index`, `enabled`, and (when the
   module exposes introspection) the human-legible module parameters under
   `parameters` (rendered the same way `libs/history.c` does its tooltips, via
-  `module->get_introspection()`). Keyed by the parameter hash. `delete` flips
-  `alive`.
+  `module->get_introspection()`). The blend/masking parameters are rendered under
+  `blendop` (manually, since blend params have no introspection — mask mode,
+  colorspace, blend mode/operation, opacity, feathering, mask blur/contrast/
+  brightness, drawn/raster mask ids; omitted when blending is disabled). The
+  drawn masks attached to the item (`hist->forms`) are listed under `forms`
+  (each: `id`, `name`, `type`, and group `members`), and each is also registered
+  as its own `form` object. Also holds the image `filename`. Keyed by the
+  parameter hash. `delete` flips `alive`.
+- **form** — a mask form, keyed by `dt_supervisor_form_key(formid)`. `create` at
+  `dt_masks_create()` (type only; name/points not filled yet), `update` whenever
+  a history snapshot carries it (name + group members filled in). Carries `id`,
+  `name`, `type` (circle/ellipse/path/brush/gradient/group) and, for groups, the
+  `members` (each `{ id, hash }`, the hash being a **clickable link** to the
+  member form). The history item's inline `forms` entries are likewise clickable
+  links to the form objects. (Free is not hooked: `dt_masks_free_form` also fires for the
+  many transient history-snapshot copies that share a `formid`, so it is not a
+  reliable delete signal — forms persist in the registry as memory.)
 - **node** — `module`, `iop_order`. Topology object, keyed by the synthetic node
   key. `create` at `create_nodes` (no params yet) — also carries a `predecessor`
   edge to the node before it in the pipeline (iop_order order); `update` at
@@ -268,6 +290,7 @@ jq -c 'select(.domain=="widget") | {ts,widget,frame:.hash,
 | thumbnail | read/update | inside `_view_image_get_surface_internal()` (`views/view.c`), where the real mip level is known |
 | mipmap | create/delete | `dt_mipmap_cache_allocate_dynamic()` / `dt_mipmap_cache_deallocate_dynamic()` (`common/mipmap_cache.c`); create fetches the `dt_image_t` for its properties |
 | image | create/delete | `dt_image_cache_allocate()` / `dt_image_cache_deallocate()` (`common/image_cache.c`) |
+| form | create | `dt_masks_create()` (`develop/masks/masks.c`); update from history snapshots |
 
 ## Limits / TODO
 

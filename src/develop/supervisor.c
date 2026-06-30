@@ -20,10 +20,13 @@
 #include "common/image.h"            // dt_image_t
 #include "common/introspection.h"    // dt_introspection_field_t
 #include "develop/imageop.h"         // dt_iop_module_t (introspection accessors)
+#include "develop/blend.h"           // dt_develop_blend_params_t + name tables
+#include "develop/masks.h"           // dt_masks_form_t + group members
 #include "develop/pixelpipe_cache.h" // DT_PIXELPIPE_CACHE_HASH_INVALID
 #include "develop/pixelpipe_hb.h"    // dt_pixelpipe_get_pipe_name
 
 #include <json-glib/json-glib.h>
+#include <stdarg.h>
 #include <stdio.h>
 
 // Which facets registered against a given hash. A node-output hash, its
@@ -39,6 +42,7 @@ typedef enum dt_sv_facet_t
   DT_SV_F_THUMB = 1 << 5,
   DT_SV_F_MIPMAP = 1 << 6,
   DT_SV_F_IMAGE = 1 << 7,
+  DT_SV_F_FORM = 1 << 8,
 } dt_sv_facet_t;
 
 // One registry entry, identified by a single hash. All fields are value-copied;
@@ -88,6 +92,11 @@ typedef struct dt_sv_entry_t
 
   // mipmap facet
   char img_filename[128];
+
+  // form facet
+  int formid;
+  int form_type;
+  char form_name[64];
 } dt_sv_entry_t;
 
 // Cap on the retained GUI event log. ~200 B/event keeps this a few MB.
@@ -175,6 +184,71 @@ static uint64_t _image_key(const int32_t imgid)
 uint64_t dt_supervisor_image_key(const int32_t imgid)
 {
   return _image_key(imgid);
+}
+
+static uint64_t _form_key(const int formid)
+{
+  return _fnv1a("form", formid, 0);
+}
+
+uint64_t dt_supervisor_form_key(const int formid)
+{
+  return _form_key(formid);
+}
+
+static const char *_form_type_name(const int type)
+{
+  if(type & DT_MASKS_CIRCLE)   return "circle";
+  if(type & DT_MASKS_ELLIPSE)  return "ellipse";
+  if(type & DT_MASKS_POLYGON)  return "path";
+  if(type & DT_MASKS_BRUSH)    return "brush";
+  if(type & DT_MASKS_GRADIENT) return "gradient";
+  if(type & DT_MASKS_GROUP)    return "group";
+  return "?";
+}
+
+// For a group form, the members (its `points` are group refs). Each member is an
+// object { id, hash } where hash is the member's form key, so the GUI can make it
+// a clickable link to the member form object.
+static JsonArray *_form_members_json(const dt_masks_form_t *form)
+{
+  if(!form || !(form->type & DT_MASKS_GROUP) || !form->points) return NULL;
+  JsonArray *a = json_array_new();
+  for(GList *p = form->points; p; p = g_list_next(p))
+  {
+    const dt_masks_form_group_t *g = (const dt_masks_form_group_t *)p->data;
+    if(!g) continue;
+    JsonObject *o = json_object_new();
+    json_object_set_int_member(o, "id", g->formid);
+    char buf[32];
+    g_snprintf(buf, sizeof(buf), "0x%016" G_GINT64_MODIFIER "x", _form_key(g->formid));
+    json_object_set_string_member(o, "hash", buf);
+    json_array_add_object_element(a, o);
+  }
+  return a;
+}
+
+// Inline list of a history item's attached forms (id, name, type, members).
+static JsonArray *_forms_json(GList *forms)
+{
+  if(!forms) return NULL;
+  JsonArray *out = json_array_new();
+  for(GList *f = forms; f; f = g_list_next(f))
+  {
+    const dt_masks_form_t *form = (const dt_masks_form_t *)f->data;
+    if(!form) continue;
+    JsonObject *o = json_object_new();
+    json_object_set_int_member(o, "id", form->formid);
+    char buf[32];
+    g_snprintf(buf, sizeof(buf), "0x%016" G_GINT64_MODIFIER "x", _form_key(form->formid));
+    json_object_set_string_member(o, "hash", buf); // clickable link to the form object
+    if(form->name[0]) json_object_set_string_member(o, "name", form->name);
+    json_object_set_string_member(o, "type", _form_type_name(form->type));
+    JsonArray *members = _form_members_json(form);
+    if(members) json_object_set_array_member(o, "members", members);
+    json_array_add_object_element(out, o);
+  }
+  return out;
 }
 
 // devid < 0 is the CPU path; otherwise an OpenCL device slot.
@@ -271,6 +345,7 @@ static gboolean _touch_alive_locked(dt_sv_entry_t *e, const gboolean created, co
 static const char *_primary_domain(const dt_sv_entry_t *e)
 {
   if(!e) return "unknown";
+  if(e->facets & DT_SV_F_FORM)    return "form";
   if(e->facets & DT_SV_F_IMAGE)   return "image";
   if(e->facets & DT_SV_F_MIPMAP)  return "mipmap";
   if(e->facets & DT_SV_F_THUMB)   return "thumbnail";
@@ -362,6 +437,14 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
     g_strlcpy(e->mnemonic, json_object_get_string_member(root, "widget"), sizeof(e->mnemonic));
   else if(!g_strcmp0(d, "backbuf") && json_object_has_member(root, "pipe"))
     g_strlcpy(e->mnemonic, json_object_get_string_member(root, "pipe"), sizeof(e->mnemonic));
+  else if(!g_strcmp0(d, "form"))
+  {
+    const char *nm = json_object_has_member(root, "name") ? json_object_get_string_member(root, "name") : NULL;
+    const char *ty = json_object_has_member(root, "type") ? json_object_get_string_member(root, "type") : "";
+    const int id = json_object_has_member(root, "id") ? (int)json_object_get_int_member(root, "id") : 0;
+    if(nm && *nm) g_strlcpy(e->mnemonic, nm, sizeof(e->mnemonic));
+    else g_snprintf(e->mnemonic, sizeof(e->mnemonic), "#%d %s", id, ty);
+  }
   else if((!g_strcmp0(d, "image") || !g_strcmp0(d, "mipmap")) && json_object_has_member(root, "filename"))
     g_strlcpy(e->mnemonic, json_object_get_string_member(root, "filename"), sizeof(e->mnemonic));
   else if((!g_strcmp0(d, "mipmap") || !g_strcmp0(d, "image") || !g_strcmp0(d, "thumbnail"))
@@ -392,6 +475,47 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
     g_strlcpy(lk.label, str_edges[i], sizeof(lk.label));
     lk.hash = _parse_hash(json_object_get_string_member(root, str_edges[i]));
     g_array_append_val(e->links, lk);
+  }
+
+  // array edges of linkable objects: a group form's `members`, and a history
+  // item's `forms` (each form linkable, plus its own nested group `members`).
+  static const char *arr_edges[] = { "members", "forms", NULL };
+  for(int i = 0; arr_edges[i]; i++)
+  {
+    if(!json_object_has_member(root, arr_edges[i])) continue;
+    const char *label = !g_strcmp0(arr_edges[i], "forms") ? "form" : "member";
+    JsonArray *arr = json_object_get_array_member(root, arr_edges[i]);
+    const guint n = arr ? json_array_get_length(arr) : 0;
+    for(guint j = 0; j < n; j++)
+    {
+      JsonNode *node = json_array_get_element(arr, j);
+      if(!JSON_NODE_HOLDS_OBJECT(node)) continue;
+      JsonObject *o = json_node_get_object(node);
+      if(json_object_has_member(o, "hash"))
+      {
+        dt_sv_link_t lk = { 0 };
+        g_strlcpy(lk.label, label, sizeof(lk.label));
+        lk.hash = _parse_hash(json_object_get_string_member(o, "hash"));
+        g_array_append_val(e->links, lk);
+      }
+      // a form entry may itself carry group members
+      if(json_object_has_member(o, "members"))
+      {
+        JsonArray *m = json_object_get_array_member(o, "members");
+        const guint mn = m ? json_array_get_length(m) : 0;
+        for(guint k = 0; k < mn; k++)
+        {
+          JsonNode *mnode = json_array_get_element(m, k);
+          if(!JSON_NODE_HOLDS_OBJECT(mnode)) continue;
+          JsonObject *mo = json_node_get_object(mnode);
+          if(!json_object_has_member(mo, "hash")) continue;
+          dt_sv_link_t lk = { 0 };
+          g_strlcpy(lk.label, "member", sizeof(lk.label));
+          lk.hash = _parse_hash(json_object_get_string_member(mo, "hash"));
+          g_array_append_val(e->links, lk);
+        }
+      }
+    }
   }
   return e;
 }
@@ -573,6 +697,64 @@ static JsonArray *_params_json(const dt_iop_module_t *module, const void *params
   return out;
 }
 
+// "name = value" line into a JSON string array.
+static void _arr_addf(JsonArray *out, const char *fmt, ...) G_GNUC_PRINTF(2, 3);
+static void _arr_addf(JsonArray *out, const char *fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+  gchar *s = g_strdup_vprintf(fmt, ap);
+  va_end(ap);
+  json_array_add_string_element(out, s);
+  g_free(s);
+}
+
+static const char *_name_for_value(const dt_develop_name_value_t *list, const int value)
+{
+  for(const dt_develop_name_value_t *i = list; i && i->name[0]; i++)
+    if(i->value == value) return i->name;
+  return NULL;
+}
+
+static void _arr_add_enum(JsonArray *out, const char *label, const dt_develop_name_value_t *names,
+                          const int value)
+{
+  const char *n = _name_for_value(names, value);
+  if(n) _arr_addf(out, "%s = %s", label, _(n));
+  else _arr_addf(out, "%s = %d", label, value);
+}
+
+// Render the blend (masking) parameters human-legibly, mirroring the fields
+// libs/history.c shows in its tooltips. NULL when blending is disabled.
+static JsonArray *_blendop_json(const dt_develop_blend_params_t *bp)
+{
+  if(!bp || bp->mask_mode == DEVELOP_MASK_DISABLED) return NULL;
+
+  JsonArray *out = json_array_new();
+  _arr_add_enum(out, "mask mode", dt_develop_mask_mode_names, bp->mask_mode);
+  _arr_add_enum(out, "colorspace", dt_develop_blend_colorspace_names, bp->blend_cst);
+  _arr_add_enum(out, "blend mode", dt_develop_blend_mode_names, bp->blend_mode & DEVELOP_BLEND_MODE_MASK);
+  _arr_add_enum(out, "blend operation", dt_develop_blend_mode_flag_names, bp->blend_mode & DEVELOP_BLEND_REVERSE);
+  _arr_addf(out, "blend fulcrum = %.2f EV", bp->blend_parameter);
+  _arr_addf(out, "opacity = %.4f", bp->opacity);
+  _arr_add_enum(out, "combine masks", dt_develop_combine_masks_names,
+               bp->mask_combine & (DEVELOP_COMBINE_INV | DEVELOP_COMBINE_INCL));
+  _arr_addf(out, "feathering radius = %.4f", bp->feathering_radius);
+  _arr_add_enum(out, "feathering guide", dt_develop_feathering_guide_names, bp->feathering_guide);
+  _arr_addf(out, "mask blur = %.4f", bp->blur_radius);
+  _arr_addf(out, "mask contrast = %.4f", bp->contrast);
+  _arr_addf(out, "brightness = %.4f", bp->brightness);
+  _arr_addf(out, "details = %.4f", bp->details);
+  if(bp->mask_id) _arr_addf(out, "drawn mask id = %d", bp->mask_id);
+  if(bp->raster_mask_id)
+  {
+    _arr_addf(out, "raster mask instance = %d", bp->raster_mask_instance);
+    _arr_addf(out, "raster mask id = %d", bp->raster_mask_id);
+    _arr_add_enum(out, "invert mask", dt_develop_invert_mask_names, bp->raster_mask_invert);
+  }
+  return out;
+}
+
 // Common envelope shared by every event. `resurrected` adds the reuse-after-
 // delete marker. Pass pipe_type < 0 to omit the pipe field.
 static JsonObject *_envelope(const dt_sv_op_t op, const char *domain, const uint64_t hash,
@@ -596,12 +778,17 @@ static JsonObject *_envelope(const dt_sv_op_t op, const char *domain, const uint
 void dt_supervisor_history(const dt_sv_op_t op, const uint64_t param_hash, const char *op_name,
                            const int multi_priority, const char *multi_name, const int iop_order,
                            const int history_index, const int32_t imgid, const gboolean enabled,
-                           const dt_iop_module_t *module, const void *params)
+                           const dt_iop_module_t *module, const void *params,
+                           const dt_develop_blend_params_t *blend_params, GList *forms)
 {
   if(!dt_supervisor_active() || !_sv.inited) return;
 
-  // Render the parameters outside the lock (introspection only reads the module).
+  // Render params/blendops/forms outside the lock (they only read caller data).
   JsonArray *parameters = _params_json(module, params);
+  JsonArray *blendop = _blendop_json(blend_params);
+  JsonArray *forms_json = _forms_json(forms);
+  // Register each attached form as its own object (each call locks independently).
+  for(GList *f = forms; f; f = g_list_next(f)) dt_supervisor_form(DT_SV_UPDATE, f->data);
 
   dt_pthread_mutex_lock(&_sv.lock);
   gboolean created;
@@ -625,6 +812,8 @@ void dt_supervisor_history(const dt_sv_op_t op, const uint64_t param_hash, const
   json_object_set_int_member(root, "history_index", history_index);
   json_object_set_boolean_member(root, "enabled", enabled);
   if(parameters) json_object_set_array_member(root, "parameters", parameters);
+  if(blendop) json_object_set_array_member(root, "blendop", blendop);
+  if(forms_json) json_object_set_array_member(root, "forms", forms_json);
   // Hold the image filename (borrowed from the registered image object).
   if(imgid > 0)
   {
@@ -803,6 +992,12 @@ static JsonObject *_rekey_record(const dt_sv_op_t op, const dt_sv_entry_t *e, co
   _module_label(e, module, sizeof(module));
   if(strcmp(module, "?") != 0) json_object_set_string_member(o, "module", module);
   _set_hash_member(o, link_field, link_hash);
+  // Expose the history item that triggered the rekey, through the node, as
+  // clickable links (params is taken from the node's current binding).
+  JsonObject *node = _resolve_locked(e->node_hash);
+  if(node) json_object_set_object_member(o, "node", node);
+  JsonObject *params = _resolve_locked(e->param_hash);
+  if(params) json_object_set_object_member(o, "params", params);
   return o;
 }
 
@@ -842,6 +1037,13 @@ void dt_supervisor_rekey(const uint64_t old_hash, const uint64_t new_hash)
     new_e->bb_bpp = old->bb_bpp;
     old->alive = FALSE;
   }
+  // A rekey is triggered by a parameter change. The producing node was bound to
+  // the new history item at synchronization (before this rekey), so take the
+  // history from the node rather than inheriting the old cacheline's stale param.
+  const dt_sv_entry_t *node_e = _hash_is_set(new_e->node_hash)
+      ? (const dt_sv_entry_t *)g_hash_table_lookup(_sv.entries, &new_e->node_hash)
+      : NULL;
+  if(node_e && _hash_is_set(node_e->param_hash)) new_e->param_hash = node_e->param_hash;
   new_e->alive = TRUE;
 
   JsonObject *old_rec = old ? _rekey_record(DT_SV_DELETE, old, old_hash, "rekeyed_to", new_hash, FALSE) : NULL;
@@ -1055,6 +1257,37 @@ void dt_supervisor_image(const dt_sv_op_t op, const int32_t imgid, const dt_imag
   _emit_line(root);
 }
 
+void dt_supervisor_form(const dt_sv_op_t op, const dt_masks_form_t *form)
+{
+  if(!dt_supervisor_active() || !_sv.inited || !form) return;
+
+  const uint64_t key = _form_key(form->formid);
+  // Build the group members outside the lock (read-only walk of form->points).
+  JsonArray *members = _form_members_json(form);
+
+  dt_pthread_mutex_lock(&_sv.lock);
+  gboolean created;
+  dt_sv_entry_t *e = _entry_get_locked(key, &created);
+  e->facets |= DT_SV_F_FORM;
+  e->formid = form->formid;
+  e->form_type = form->type;
+  if(form->name[0]) g_strlcpy(e->form_name, form->name, sizeof(e->form_name));
+  // First sighting is a create regardless of the caller's intent (a form may be
+  // seen first via a history snapshot rather than its allocation).
+  const dt_sv_op_t eff_op = created ? DT_SV_CREATE : op;
+  const gboolean resurrected = _touch_alive_locked(e, created, eff_op);
+
+  JsonObject *root = _envelope(eff_op, "form", key, -1, -1, e->alive, resurrected);
+  json_object_set_int_member(root, "id", form->formid);
+  if(e->form_name[0]) json_object_set_string_member(root, "name", e->form_name);
+  json_object_set_string_member(root, "type", _form_type_name(form->type));
+  json_object_set_int_member(root, "version", form->version);
+  if(members) json_object_set_array_member(root, "members", members);
+  dt_pthread_mutex_unlock(&_sv.lock);
+
+  _emit_line(root);
+}
+
 // Append " 0xHASH (module)" for a resolved edge, marking dead entries.
 static void _describe_edge(GString *s, const char *prefix, const uint64_t hash)
 {
@@ -1089,7 +1322,12 @@ gchar *dt_supervisor_describe(const uint64_t hash)
   char dev[32];
   _device_string(e->devid, dev, sizeof(dev));
 
-  if(e->facets & DT_SV_F_IMAGE)
+  if(e->facets & DT_SV_F_FORM)
+  {
+    g_string_append_printf(s, "form #%d %s", e->formid, _form_type_name(e->form_type));
+    if(e->form_name[0]) g_string_append_printf(s, " (%s)", e->form_name);
+  }
+  else if(e->facets & DT_SV_F_IMAGE)
   {
     g_string_append_printf(s, "image #%d", e->imgid);
     if(e->img_filename[0]) g_string_append_printf(s, " (%s)", e->img_filename);

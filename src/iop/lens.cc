@@ -1459,20 +1459,13 @@ void reload_defaults(dt_iop_module_t *module)
 
       d->crop = cam[0]->CropFactor;
       d->scale = get_autoscale(module, d, cam[0]);
-      module->workflow_enabled = TRUE;
+      module->workflow_enabled = dt_image_needs_rawprepare(img);
       lf_free(cam);
     }
   }
 
-  // if we have a gui -> reset corrections_done message
-  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)module->gui_data;
-  if(g)
-  {
-    dt_iop_gui_enter_critical_section(module);
-    g->corrections_done = -1;
-    dt_iop_gui_leave_critical_section(module);
-    gtk_label_set_text(g->message, "");
-  }
+  // The corrections-done message reset lives in gui_update() now (GUI thread, live widget);
+  // reload_defaults() stays params-only and never touches gui_data.
 }
 
 void cleanup_global(dt_iop_module_so_t *module)
@@ -1646,7 +1639,7 @@ static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   camera_set(self, (lfCamera *)g_object_get_data(G_OBJECT(menuitem), "lfCamera"));
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
   p->modified = 1;
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
@@ -2008,7 +2001,7 @@ static void lens_menu_select(GtkMenuItem *menuitem, gpointer user_data)
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
   lens_set(self, (lfLens *)g_object_get_data(G_OBJECT(menuitem), "lfLens"));
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   p->modified = 1;
   const float scale = get_autoscale(self, p, g->camera);
   dt_bauhaus_slider_set(g->scale, scale);
@@ -2126,7 +2119,7 @@ static void target_geometry_changed(GtkWidget *widget, gpointer user_data)
 static void modflags_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   int pos = dt_bauhaus_combobox_get(widget);
@@ -2242,7 +2235,7 @@ static void corrections_done(gpointer instance, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_gui_enter_critical_section(self);
   const int corrections_done = g->corrections_done;
@@ -2260,10 +2253,10 @@ static void corrections_done(gpointer instance, gpointer user_data)
     }
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gtk_label_set_text(g->message, message);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->message), message);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 void gui_init(struct dt_iop_module_t *self)
@@ -2523,6 +2516,13 @@ void gui_update(struct dt_iop_module_t *self)
     lens_set(self, NULL);
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
   }
+
+  // reset the corrections-done message for the new image (moved here from reload_defaults so it
+  // only touches the widget on the GUI thread, when it exists)
+  dt_iop_gui_enter_critical_section(self);
+  g->corrections_done = -1;
+  dt_iop_gui_leave_critical_section(self);
+  gtk_label_set_text(g->message, "");
 
   gui_changed(self, NULL, NULL);
 }

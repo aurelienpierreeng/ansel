@@ -48,7 +48,7 @@ static int32_t dt_image_import_job_run(dt_job_t *job)
   char message[512] = { 0 };
   dt_image_import_t *params = dt_control_job_get_params(job);
 
-  snprintf(message, sizeof(message), _("importing image %s"), params->filename);
+  snprintf(message, sizeof(message), _("Importing image %s"), params->filename);
   dt_control_job_set_progress_message(job, message);
 
   const int id = dt_image_import(params->film_id, params->filename, TRUE);

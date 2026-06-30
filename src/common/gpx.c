@@ -382,10 +382,12 @@ void _gpx_parser_end_element(GMarkupParseContext *context, const gchar *element_
     }
     else if(strcmp(element_name, "trkpt") == 0)
     {
-      if(!gpx->invalid_track_point)
+      if(!gpx->invalid_track_point) {
         gpx->trkpts = g_list_prepend(gpx->trkpts, gpx->current_track_point);
-      else
+        gpx->current_track_point = NULL;
+      } else {
         dt_free(gpx->current_track_point);
+      }
 
     }
     else if(strcmp(element_name, "trkseg") == 0)

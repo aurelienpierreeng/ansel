@@ -175,7 +175,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 static void center_callback(GtkDarktableGradientSlider *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_relight_params_t *p = (dt_iop_relight_params_t *)self->params;
   dt_iop_color_picker_reset(self, TRUE);
   p->center = dtgtk_gradient_slider_get_value(slider);

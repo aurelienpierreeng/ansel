@@ -593,10 +593,12 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
 
     if(r->getDataType() == TYPE_USHORT16)
     {
-      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      // Fetch the rawspeed view in the serial region: it may throw, and an
+      // exception escaping an OpenMP parallel block calls std::terminate.
+      const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
+      __OMP_PARALLEL_FOR_CPP__(shared(in) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
-        const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * width;
 
         for(int i = 0; i < width; i++, out += 4)
@@ -609,10 +611,12 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
-      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      // Fetch the rawspeed view in the serial region: it may throw, and an
+      // exception escaping an OpenMP parallel block calls std::terminate.
+      const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
+      __OMP_PARALLEL_FOR_CPP__(shared(in) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
-        const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * width;
 
         for(int i = 0; i < width; i++, out += 4)
@@ -633,10 +637,12 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
 
     if(r->getDataType() == TYPE_USHORT16)
     {
-      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      // Fetch the rawspeed view in the serial region: it may throw, and an
+      // exception escaping an OpenMP parallel block calls std::terminate.
+      const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
+      __OMP_PARALLEL_FOR_CPP__(shared(in) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
-        const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * width;
 
         for(int i = 0; i < width; i++, out += 4)
@@ -650,10 +656,12 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
     }
     else // r->getDataType() == TYPE_FLOAT32
     {
-      __OMP_PARALLEL_FOR_CPP__(shared(r) firstprivate(height, width, buf, cpp))
+      // Fetch the rawspeed view in the serial region: it may throw, and an
+      // exception escaping an OpenMP parallel block calls std::terminate.
+      const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
+      __OMP_PARALLEL_FOR_CPP__(shared(in) firstprivate(height, width, buf, cpp))
       for(int j = 0; j < height; j++)
       {
-        const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * width;
 
         for(int i = 0; i < width; i++, out += 4)

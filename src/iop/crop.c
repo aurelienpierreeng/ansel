@@ -850,7 +850,7 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
     p->ratio_n = n;
     dt_conf_set_int("plugins/darkroom/crop/ratio_d", abs(p->ratio_d));
     dt_conf_set_int("plugins/darkroom/crop/ratio_n", abs(p->ratio_n));
-    if(darktable.gui->reset) return;
+    if(dt_gui_widgets_suppressed()) return;
   }
 
   // Search if current aspect ratio matches something known
@@ -869,7 +869,7 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
   }
 
   // Update combobox label
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   if(act == -1)
   {
@@ -883,9 +883,9 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
     // we got a default ratio
     dt_bauhaus_combobox_set(g->aspect_presets, act);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
-  if(!darktable.gui->reset) gui_changed(self, g->aspect_presets, NULL);
+  if(!dt_gui_widgets_suppressed()) gui_changed(self, g->aspect_presets, NULL);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -893,7 +893,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   if(w == g->cx)
   {
@@ -932,7 +932,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_bauhaus_slider_set(g->ch, g->clip_y + g->clip_h);
   dt_bauhaus_slider_set_soft_max(g->cy, g->clip_y + g->clip_h - 0.10);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   _commit_box(self, g, p);
   dt_control_queue_redraw_center();

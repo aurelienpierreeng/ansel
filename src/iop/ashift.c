@@ -2701,9 +2701,9 @@ failed:
   // to "off" state, and display warning message
   _clear_crop_box(p);
   p->cropmode = ASHIFT_CROP_OFF;
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   g->fitting = 0;
   dt_control_log(_("automatic cropping failed"));
 
@@ -3141,12 +3141,12 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
   // finally apply cropping
   do_crop(module, p);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->rotation, p->rotation);
   dt_bauhaus_slider_set(g->lensshift_v, p->lensshift_v);
   dt_bauhaus_slider_set(g->lensshift_h, p->lensshift_h);
   dt_bauhaus_slider_set(g->shear, p->shear);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 __DT_CLONE_TARGETS__
@@ -4494,6 +4494,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       || g->current_structure_method == ASHIFT_METHOD_LINES)
      && g->draw_near_point >= 0)
   {
+    dt_control_mouse_is_dragging(TRUE);
     const int line = g->draw_near_point / 2;
     if(IS_NULL_PTR(g->lines) || line >= g->lines_count) return FALSE;
 
@@ -4512,7 +4513,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(dt_modifier_is(state, GDK_SHIFT_MASK))
   {
     if(IS_NULL_PTR(g->lines) || IS_NULL_PTR(g->points) || IS_NULL_PTR(g->points_idx)) return FALSE;
-
+    dt_control_mouse_is_dragging(TRUE);
     g->lastx = pzx;
     g->lasty = pzy;
 
@@ -4566,6 +4567,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         g->draw_line_move = n;
         g->draw_pointmove_x = pts[0];
         g->draw_pointmove_y = pts[1];
+        dt_control_mouse_is_dragging(TRUE);
         return TRUE;
       }
     }
@@ -4649,6 +4651,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   if(!handled && g->current_structure_method == ASHIFT_METHOD_LINES && which == 1)
   {
+    dt_control_mouse_is_dragging(TRUE);
     // start to draw a manual line
     g->draw_point_move = TRUE;
     g->lastx = x;
@@ -4756,11 +4759,11 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     if(a < -180.0) a += 360.0;
     if(a > 180.0) a -= 360.0;
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     a -= dt_bauhaus_slider_get(g->rotation);
     p->rotation = -a;
     dt_bauhaus_slider_set(g->rotation, p->rotation);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     do_crop(self, p);
 
@@ -5049,7 +5052,7 @@ static void fitting_option_changed(GtkWidget *widget, gpointer user_data)
 
 static void cropmode_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
@@ -5075,7 +5078,7 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
 static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   if(event->button == 1)
   {
@@ -5122,7 +5125,7 @@ static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event,
 static int _event_fit_h_button_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   if(event->button == 1)
   {
@@ -5169,7 +5172,7 @@ static int _event_fit_h_button_clicked(GtkWidget *widget, GdkEventButton *event,
 static int _event_fit_both_button_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   if(event->button == 1)
   {
@@ -5218,7 +5221,7 @@ static int _event_fit_both_button_clicked(GtkWidget *widget, GdkEventButton *eve
 static int _event_structure_auto_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   if(event->button == 1)
   {
@@ -5274,7 +5277,7 @@ static int _event_structure_quad_clicked(GtkWidget *widget, GdkEventButton *even
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   if(!g->editing) return FALSE;
 
   dt_iop_request_focus(self);
@@ -5299,7 +5302,7 @@ static int _event_structure_lines_clicked(GtkWidget *widget, GdkEventButton *eve
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   if(!g->editing) return FALSE;
 
   dt_iop_request_focus(self);
@@ -5355,9 +5358,9 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
     // Commit the params backup
     gui_changed(self, NULL, NULL);
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     // Update GUI
     gtk_button_set_label(GTK_BUTTON(button), _("Edit"));
@@ -5414,7 +5417,7 @@ static void _run_pending_preview_job(dt_iop_module_t *self)
   g->jobcode = ASHIFT_JOBCODE_NONE;
   g->jobparams = 0;
 
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   switch(jobcode)
   {
@@ -5451,7 +5454,7 @@ static void _event_process_after_preview_callback(gpointer instance, gpointer us
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || g->jobcode == ASHIFT_JOBCODE_NONE || darktable.gui->reset) return;
+  if(IS_NULL_PTR(g) || g->jobcode == ASHIFT_JOBCODE_NONE || dt_gui_widgets_suppressed()) return;
 
   _run_pending_preview_job(self);
   dt_control_queue_redraw_center();
@@ -5473,7 +5476,7 @@ static void _event_process_after_ui_callback(gpointer instance, gpointer user_da
 
   (void)instance;
 
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   if(!g->editing && p->cropmode == ASHIFT_CROP_OFF) return;
 
   dt_dev_get_thumbnail_size(self->dev);
@@ -5555,6 +5558,86 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
+  // Slider labels (image-orientation dependent), widget defaults and the per-image edit-mode state
+  // reset, formerly in reload_defaults(). They need live widgets and the gui_data edit caches, so
+  // they belong here on the GUI thread. Read the already-computed default_params; never recompute.
+  const dt_iop_ashift_params_t *const d = (const dt_iop_ashift_params_t *)self->default_params;
+
+  // orientation only needed as a-priori info to label the lens-shift sliders before the pixelpipe
+  // is set up; later the pipeline assessment gives the definite result.
+  int isflipped = 0;
+  if(self->dev)
+  {
+    const dt_image_t *img = &self->dev->image_storage;
+    isflipped = (img->orientation == ORIENTATION_ROTATE_CCW_90_DEG
+                 || img->orientation == ORIENTATION_ROTATE_CW_90_DEG) ? 1 : 0;
+  }
+
+  char string_v[256];
+  char string_h[256];
+  snprintf(string_v, sizeof(string_v), _("lens shift (%s)"), isflipped ? _("horizontal") : _("vertical"));
+  snprintf(string_h, sizeof(string_h), _("lens shift (%s)"), isflipped ? _("vertical") : _("horizontal"));
+  dt_bauhaus_widget_set_label(g->lensshift_v, string_v);
+  dt_bauhaus_widget_set_label(g->lensshift_h, string_h);
+
+  dt_bauhaus_slider_set_default(g->f_length, d->f_length);
+  dt_bauhaus_slider_set_default(g->crop_factor, d->crop_factor);
+  dt_bauhaus_combobox_set_default(g->cropmode, d->cropmode);
+
+  dt_iop_gui_enter_critical_section(self);
+  dt_free(g->buf);
+  g->buf = NULL;
+  g->buf_width = 0;
+  g->buf_height = 0;
+  g->buf_x_off = 0;
+  g->buf_y_off = 0;
+  g->buf_scale = 1.0f;
+  g->buf_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->isflipped = -1;
+  g->lastfit = ASHIFT_FIT_NONE;
+  dt_iop_gui_leave_critical_section(self);
+
+  g->fitting = 0;
+  g->editing = FALSE;
+  dt_free(g->lines);
+  g->lines = NULL;
+  g->lines_count = 0;
+  g->horizontal_count = 0;
+  g->vertical_count = 0;
+  g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->lines_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->rotation_range = ROTATION_RANGE_SOFT;
+  g->lensshift_v_range = LENSSHIFT_RANGE_SOFT;
+  g->lensshift_h_range = LENSSHIFT_RANGE_SOFT;
+  g->shear_range = SHEAR_RANGE_SOFT;
+  g->lines_version = 0;
+  g->isselecting = 0;
+  g->isdeselecting = 0;
+  g->isbounding = ASHIFT_BOUNDING_OFF;
+  g->near_delta = 0;
+  g->selecting_lines_version = 0;
+
+  dt_free(g->points);
+  g->points = NULL;
+  dt_free(g->points_idx);
+  g->points_idx = NULL;
+  g->points_lines_count = 0;
+  g->points_version = 0;
+
+  g->jobcode = ASHIFT_JOBCODE_NONE;
+  g->jobparams = 0;
+  g->lastx = g->lasty = -1.0f;
+  g->crop_cx = g->crop_cy = 1.0f;
+
+  g->current_structure_method = ASHIFT_METHOD_NONE;
+  g->draw_line_move = -1;
+  g->draw_near_point = -1;
+  g->draw_point_move = FALSE;
+  memcpy(&g->previous_params, self->default_params, sizeof(dt_iop_ashift_params_t));
+  memcpy(&g->new_params, self->default_params, sizeof(dt_iop_ashift_params_t));
+
+  _gui_update_structure_states(self, FALSE);
+
   gtk_widget_set_visible(g->specifics, p->mode == ASHIFT_MODE_SPECIFIC);
   dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
   _make_controls_sensitive(self, FALSE);
@@ -5567,20 +5650,13 @@ void reload_defaults(dt_iop_module_t *module)
   // our module is disabled by default
   module->default_enabled = 0;
 
-  int isflipped = 0;
   float f_length = DEFAULT_F_LENGTH;
   float crop_factor = 1.0f;
 
-  // try to get information on orientation, focal length and crop factor from image data
+  // try to get focal length and crop factor from image data
   if(module->dev)
   {
     const dt_image_t *img = &module->dev->image_storage;
-    // orientation only needed as a-priori information to correctly label some sliders
-    // before pixelpipe has been set up. later we will get a definite result by
-    // assessing the pixelpipe
-    isflipped = (img->orientation == ORIENTATION_ROTATE_CCW_90_DEG
-                 || img->orientation == ORIENTATION_ROTATE_CW_90_DEG) ? 1 : 0;
-
     // focal length should be available in exif data if lens is electronically coupled to the camera
     f_length = isfinite(img->exif_focal_length) && img->exif_focal_length > 0.0f ? img->exif_focal_length : f_length;
     // crop factor of the camera is often not available and user will need to set it manually in the gui
@@ -5593,75 +5669,10 @@ void reload_defaults(dt_iop_module_t *module)
   ((dt_iop_ashift_params_t *)module->default_params)->cropmode
       = dt_conf_get_int("plugins/darkroom/ashift/autocrop_value");
 
-  // reset gui elements
-  dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)module->gui_data;
-  if(!IS_NULL_PTR(g))
-  {
-
-    char string_v[256];
-    char string_h[256];
-
-    snprintf(string_v, sizeof(string_v), _("lens shift (%s)"), isflipped ? _("horizontal") : _("vertical"));
-    snprintf(string_h, sizeof(string_h), _("lens shift (%s)"), isflipped ? _("vertical") : _("horizontal"));
-
-    dt_bauhaus_widget_set_label(g->lensshift_v, string_v);
-    dt_bauhaus_widget_set_label(g->lensshift_h, string_h);
-
-    dt_bauhaus_slider_set_default(g->f_length, f_length);
-    dt_bauhaus_slider_set_default(g->crop_factor, crop_factor);
-    dt_bauhaus_combobox_set_default(g->cropmode,
-                                    ((dt_iop_ashift_params_t *)module->default_params)->cropmode);
-
-    dt_iop_gui_enter_critical_section(module);
-    dt_free(g->buf);
-    g->buf_width = 0;
-    g->buf_height = 0;
-    g->buf_x_off = 0;
-    g->buf_y_off = 0;
-    g->buf_scale = 1.0f;
-    g->buf_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    g->isflipped = -1;
-    g->lastfit = ASHIFT_FIT_NONE;
-    dt_iop_gui_leave_critical_section(module);
-
-    g->fitting = 0;
-    g->editing = FALSE;
-    dt_free(g->lines);
-    g->lines_count =0;
-    g->horizontal_count = 0;
-    g->vertical_count = 0;
-    g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    g->lines_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    g->rotation_range = ROTATION_RANGE_SOFT;
-    g->lensshift_v_range = LENSSHIFT_RANGE_SOFT;
-    g->lensshift_h_range = LENSSHIFT_RANGE_SOFT;
-    g->shear_range = SHEAR_RANGE_SOFT;
-    g->lines_version = 0;
-    g->isselecting = 0;
-    g->isdeselecting = 0;
-    g->isbounding = ASHIFT_BOUNDING_OFF;
-    g->near_delta = 0;
-    g->selecting_lines_version = 0;
-
-    dt_free(g->points);
-    dt_free(g->points_idx);
-    g->points_lines_count = 0;
-    g->points_version = 0;
-
-    g->jobcode = ASHIFT_JOBCODE_NONE;
-    g->jobparams = 0;
-    g->lastx = g->lasty = -1.0f;
-    g->crop_cx = g->crop_cy = 1.0f;
-
-    g->current_structure_method = ASHIFT_METHOD_NONE;
-    g->draw_line_move = -1;
-    g->draw_near_point = -1;
-    g->draw_point_move = FALSE;
-    memcpy(&g->previous_params, module->default_params, sizeof(dt_iop_ashift_params_t));
-    memcpy(&g->new_params, module->default_params, sizeof(dt_iop_ashift_params_t));
-
-    _gui_update_structure_states(module, FALSE);
-  }
+  // The slider labels (image-orientation dependent), widget defaults and the edit-mode state reset
+  // (preview buffer, detected lines, fit/structure state) are done in gui_update() on the GUI thread:
+  // reload_defaults() also runs on export/thumbnail devs with no gui_data and off the GUI thread, so
+  // it must touch params only.
 }
 
 
@@ -5690,7 +5701,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 static gboolean _event_draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   dt_iop_gui_enter_critical_section(self);
   const int isflipped = g->isflipped;
@@ -5704,10 +5715,10 @@ static gboolean _event_draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *sel
   snprintf(string_v, sizeof(string_v), _("lens shift (%s)"), isflipped ? _("horizontal") : _("vertical"));
   snprintf(string_h, sizeof(string_h), _("lens shift (%s)"), isflipped ? _("vertical") : _("horizontal"));
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_widget_set_label(g->lensshift_v, string_v);
   dt_bauhaus_widget_set_label(g->lensshift_h, string_h);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   return FALSE;
 }

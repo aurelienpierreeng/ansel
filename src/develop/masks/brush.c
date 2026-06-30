@@ -1675,7 +1675,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
       dt_masks_dynbuf_add_2(mask_gui->guipoints, mask_gui->pos[0], mask_gui->pos[1]);
       dt_masks_dynbuf_add_2(mask_gui->guipoints_payload, masks_border, masks_hardness);
       dt_masks_dynbuf_add_2(mask_gui->guipoints_payload, masks_density, pressure);
-
+      dt_control_mouse_is_painting(TRUE);
       mask_gui->guipoints_count = 1;
 
       // add support for clone masks

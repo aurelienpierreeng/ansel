@@ -122,7 +122,7 @@
 // but use fairly infrequent updates for large imports to minimize overall time.
 #define INIT_UPDATE_INTERVAL	2 //seconds
 #define MAX_UPDATE_INTERVAL     3.0 //seconds
-// How long (in seconds) between updates of the "importing N/M" progress indicator?  Should be relatively
+// How long (in seconds) between updates of the "Importing N/M" progress indicator?  Should be relatively
 // short to avoid the impression that the import has gotten stuck.  Setting this too low will impact the
 // overall time for a large import.
 #define PROGRESS_UPDATE_INTERVAL 1

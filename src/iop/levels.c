@@ -978,7 +978,7 @@ static gboolean dt_iop_levels_scroll(GtkWidget *widget, GdkEventScroll *event, g
 
 static void dt_iop_levels_autoadjust_callback(GtkRange *range, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
   dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
 

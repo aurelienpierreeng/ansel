@@ -44,6 +44,7 @@
 #include "gui/gdkkeys.h"
 #include "develop/masks.h"
 #include "develop/develop.h"
+#include "develop/supervisor.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/math.h"
@@ -424,7 +425,7 @@ gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui)
   if(IS_NULL_PTR(gui)) return FALSE;
   const gboolean dragging = (gui->form_dragging || gui->source_dragging || gui->seg_dragging >= 0 || gui->node_dragging >= 0
                               || gui->handle_dragging >= 0 || gui->handle_border_dragging >= 0);
-  darktable.gui->mouse.is_dragging = dragging;
+  dt_control_mouse_is_dragging(dragging);
   return dragging;
 }
 
@@ -1952,6 +1953,8 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
 
   if (mask_form->functions && mask_form->functions->sanitize_config)
     mask_form->functions->sanitize_config(type);
+
+  if(dt_supervisor_active()) dt_supervisor_form(DT_SV_CREATE, mask_form);
 
   return mask_form;
 }

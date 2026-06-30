@@ -2243,8 +2243,8 @@ void reload_defaults(dt_iop_module_t *module)
                  module->dev->image_storage.dsc.filters,
                  dt_image_is_monochrome(&module->dev->image_storage),
                  d->demosaicing_method, module->default_enabled);
-  if(module->widget)
-    gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->default_enabled ? "raw" : "non_raw");
+  // Stack visibility (raw vs non_raw) is set from default_enabled in gui_update() (which already
+  // does exactly this), so reload_defaults() stays params-only.
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -2305,7 +2305,7 @@ void gui_update(struct dt_iop_module_t *self)
 
 static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
 

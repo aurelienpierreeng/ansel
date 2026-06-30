@@ -45,7 +45,9 @@ static void _populate_layer_list(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g)) return;
-  if(darktable.gui) ++darktable.gui->reset;
+  // Scope guard: the freeze spans the rest of the function, which has an early return; the
+  // guard releases it on every exit path (no manual end-before-return needed).
+  dt_gui_widget_freeze();
 
   while(dt_bauhaus_combobox_length(g->controls.layer_select) > 0)
     dt_bauhaus_combobox_remove_at(g->controls.layer_select, dt_bauhaus_combobox_length(g->controls.layer_select) - 1);
@@ -53,7 +55,6 @@ static void _populate_layer_list(dt_iop_module_t *self)
   if(IS_NULL_PTR(self->dev))
   {
     dt_bauhaus_combobox_set(g->controls.layer_select, -1);
-    if(darktable.gui) --darktable.gui->reset;
     return;
   }
 
@@ -83,7 +84,6 @@ static void _populate_layer_list(dt_iop_module_t *self)
      * sidecar. Keep unsaved or missing module attachments out of the shared
      * list so switching layers never invents phantom entries. */
     dt_bauhaus_combobox_set(g->controls.layer_select, -1);
-  if(darktable.gui) --darktable.gui->reset;
 }
 
 static void _reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)

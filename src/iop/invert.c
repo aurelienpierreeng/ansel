@@ -200,9 +200,9 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_iop_invert_params_t *p = self->params;
   for_four_channels(k) p->color[k] = grayrgb[k];
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gui_update_from_coeffs(self);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   dt_control_queue_redraw_widget(self->widget);
@@ -210,7 +210,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
 static void colorpicker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_invert_gui_data_t *g = (dt_iop_invert_gui_data_t *)self->gui_data;
   dt_iop_invert_params_t *p = (dt_iop_invert_params_t *)self->params;
 
@@ -299,38 +299,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   return 0;
 }
 
-void reload_defaults(dt_iop_module_t *self)
-{
-  dt_iop_invert_gui_data_t *const g = (dt_iop_invert_gui_data_t*)self->gui_data;
-
-  if (!IS_NULL_PTR(g))
-  {
-    if(dt_image_is_monochrome(&self->dev->image_storage))
-    {
-      // Here we could provide more for monochrome special cases. As no monochrome camera
-      // has a bayer sensor we don't need g->RGB_to_CAM and g->CAM_to_RGB corrections
-      dtgtk_reset_label_set_text(g->label, _("brightness of film material"));
-    }
-    else
-    {
-      dtgtk_reset_label_set_text(g->label, _("color of film material"));
-
-      if(self->dev->image_storage.flags & DT_IMAGE_4BAYER)
-      {
-        // Get and store the matrix to go from camera to RGB for 4Bayer images (used for spot WB)
-        if(!dt_colorspaces_conversion_matrices_rgb(self->dev->image_storage.adobe_XYZ_to_CAM,
-                                                   g->RGB_to_CAM, g->CAM_to_RGB,
-                                                   self->dev->image_storage.d65_color_matrix, NULL))
-        {
-          const char *camera = self->dev->image_storage.camera_makermodel;
-          fprintf(stderr, "[invert] `%s' color matrix not found for 4bayer image\n", camera);
-          dt_control_log(_("`%s' color matrix not found for 4bayer image"), camera);
-        }
-      }
-    }
-  }
-}
-
+// invert has no image-dependent default_params, so it needs no reload_defaults(): the per-image
+// GUI state (reset label text + the GUI-only 4-Bayer CAM matrices used for spot WB) is set up in
+// gui_update() instead, which runs on the GUI thread when the widgets exist.
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
@@ -366,6 +337,33 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(dt_iop_module_t *self)
 {
+  dt_iop_invert_gui_data_t *const g = (dt_iop_invert_gui_data_t *)self->gui_data;
+  const dt_image_t *const img = &self->dev->image_storage;
+
+  // Per-image GUI state (moved here from reload_defaults so it only runs on the GUI thread with
+  // live widgets): the reset label, and the 4-Bayer CAM<->RGB matrices used by spot WB below.
+  if(dt_image_is_monochrome(img))
+  {
+    // No monochrome camera has a Bayer sensor, so no RGB_to_CAM / CAM_to_RGB correction is needed.
+    dtgtk_reset_label_set_text(g->label, _("brightness of film material"));
+  }
+  else
+  {
+    dtgtk_reset_label_set_text(g->label, _("color of film material"));
+
+    if(img->flags & DT_IMAGE_4BAYER)
+    {
+      // Get and store the matrix to go from camera to RGB for 4Bayer images (used for spot WB)
+      if(!dt_colorspaces_conversion_matrices_rgb(img->adobe_XYZ_to_CAM, g->RGB_to_CAM, g->CAM_to_RGB,
+                                                 img->d65_color_matrix, NULL))
+      {
+        const char *camera = img->camera_makermodel;
+        fprintf(stderr, "[invert] `%s' color matrix not found for 4bayer image\n", camera);
+        dt_control_log(_("`%s' color matrix not found for 4bayer image"), camera);
+      }
+    }
+  }
+
   gui_update_from_coeffs(self);
 }
 

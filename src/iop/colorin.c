@@ -501,7 +501,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 static void intent_changed (GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)self->params;
   p->intent = (dt_iop_color_intent_t)dt_bauhaus_combobox_get(widget);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
@@ -511,7 +511,7 @@ static void intent_changed (GtkWidget *widget, gpointer user_data)
 static void profile_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_request_focus(self);
   dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)self->params;
   dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
@@ -546,7 +546,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)self->params;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_request_focus(self);
 

@@ -2672,77 +2672,59 @@ void init(dt_iop_module_t *module)
 }
 
 /** this will be called to init new defaults if a new image is loaded from film strip mode. */
+// Per-image default noise profile, gui-free (mirrors get_auto_profile but keeps the historical
+// a[0] = -1 sentinel that signals commit_params to re-autodetect at pipe time when a real per-ISO
+// match/interpolation is found). Used by reload_defaults() so defaults are computed even on
+// export/thumbnail devs that have no gui_data.
+static dt_noiseprofile_t _default_noise_profile(dt_iop_module_t *module)
+{
+  GList *profiles = dt_noiseprofile_get_matching(&module->dev->image_storage);
+  dt_noiseprofile_t interpolated = dt_noiseprofile_generic; // default to generic poissonian
+
+  const int iso = module->dev->image_storage.exif_iso;
+  dt_noiseprofile_t *last = NULL;
+  for(GList *iter = profiles; iter; iter = g_list_next(iter))
+  {
+    dt_noiseprofile_t *current = (dt_noiseprofile_t *)iter->data;
+    if(current->iso == iso)
+    {
+      interpolated = *current;
+      interpolated.a[0] = -1.0f; // signal later autodetection in commit_params
+      break;
+    }
+    if(last && last->iso < iso && current->iso > iso)
+    {
+      interpolated.iso = iso;
+      dt_noiseprofile_interpolate(last, current, &interpolated);
+      interpolated.a[0] = -1.0f;
+      break;
+    }
+    last = current;
+  }
+  g_list_free_full(profiles, dt_noiseprofile_free);
+  return interpolated;
+}
+
 void reload_defaults(dt_iop_module_t *module)
 {
-  dt_iop_denoiseprofile_gui_data_t *g = (dt_iop_denoiseprofile_gui_data_t *)module->gui_data;
-  if(!IS_NULL_PTR(g))
+  // Params only. The matching-profiles combobox, g->profiles/g->interpolated and the slider defaults
+  // are set in gui_update() (GUI thread, widgets present): reload_defaults() also runs on
+  // export/thumbnail devs with no gui_data, where the old `if(g)` guard left defaults uncomputed.
+  const dt_noiseprofile_t interpolated = _default_noise_profile(module);
+
+  // all these formulas were "guessed" and are completely empirical
+  const float a = interpolated.a[1];
+  dt_iop_denoiseprofile_params_t *d = module->default_params;
+
+  d->radius = infer_radius_from_profile(a);
+  d->scattering = infer_scattering_from_profile(a);
+  d->shadows = infer_shadows_from_profile(a);
+  d->bias = infer_bias_from_profile(a);
+
+  for(int k = 0; k < 3; k++)
   {
-    dt_bauhaus_combobox_clear(g->profile);
-
-    // get matching profiles:
-    char name[512];
-    if(g->profiles)
-    {
-      g_list_free_full(g->profiles, dt_noiseprofile_free);
-      g->profiles = NULL;
-    }
-    g->profiles = dt_noiseprofile_get_matching(&module->dev->image_storage);
-    g->interpolated = dt_noiseprofile_generic; // default to generic poissonian
-    g_strlcpy(name, _(g->interpolated.name), sizeof(name));
-
-    const int iso = module->dev->image_storage.exif_iso;
-    dt_noiseprofile_t *last = NULL;
-    for(GList *iter = g->profiles; iter; iter = g_list_next(iter))
-    {
-      dt_noiseprofile_t *current = (dt_noiseprofile_t *)iter->data;
-
-      if(current->iso == iso)
-      {
-        g->interpolated = *current;
-        // signal later autodetection in commit_params:
-        g->interpolated.a[0] = -1.0f;
-        snprintf(name, sizeof(name), _("found match for ISO %d"), iso);
-        break;
-      }
-      if(last && last->iso < iso && current->iso > iso)
-      {
-        g->interpolated.iso = iso;
-        dt_noiseprofile_interpolate(last, current, &g->interpolated);
-        // signal later autodetection in commit_params:
-        g->interpolated.a[0] = -1.0f;
-        snprintf(name, sizeof(name), _("interpolated from ISO %d and %d"), last->iso, current->iso);
-        break;
-      }
-      last = current;
-    }
-
-    dt_bauhaus_combobox_add(g->profile, name);
-    for(GList *iter = g->profiles; iter; iter = g_list_next(iter))
-    {
-      dt_noiseprofile_t *profile = (dt_noiseprofile_t *)iter->data;
-      dt_bauhaus_combobox_add(g->profile, profile->name);
-    }
-
-    // set defaults depending on the profile
-    // all these formulas were "guessed" and are completely empirical
-    const float a = g->interpolated.a[1];
-    dt_iop_denoiseprofile_params_t *d = module->default_params;
-
-    d->radius = infer_radius_from_profile(a);
-    d->scattering = infer_scattering_from_profile(a);
-    d->shadows = infer_shadows_from_profile(a);
-    d->bias = infer_bias_from_profile(a);
-
-    dt_bauhaus_slider_set_default(g->radius, d->radius);
-    dt_bauhaus_slider_set_default(g->scattering, d->scattering);
-    dt_bauhaus_slider_set_default(g->shadows, d->shadows);
-    dt_bauhaus_slider_set_default(g->bias, d->bias);
-
-    for(int k = 0; k < 3; k++)
-    {
-      d->a[k] = g->interpolated.a[k];
-      d->b[k] = g->interpolated.b[k];
-    }
+    d->a[k] = interpolated.a[k];
+    d->b[k] = interpolated.b[k];
   }
 }
 
@@ -3043,6 +3025,56 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_denoiseprofile_gui_data_t *g = (dt_iop_denoiseprofile_gui_data_t *)self->gui_data;
   dt_iop_denoiseprofile_params_t *p = (dt_iop_denoiseprofile_params_t *)self->params;
 
+  // Matching noise profiles + the interpolated default profile and the profile combobox, formerly
+  // built in reload_defaults(). They need live widgets and feed the profile picker below, so they
+  // belong here on the GUI thread. Keep g->interpolated in sync (used by the profile callback).
+  dt_bauhaus_combobox_clear(g->profile);
+  char name[512];
+  if(g->profiles)
+  {
+    g_list_free_full(g->profiles, dt_noiseprofile_free);
+    g->profiles = NULL;
+  }
+  g->profiles = dt_noiseprofile_get_matching(&self->dev->image_storage);
+  g->interpolated = dt_noiseprofile_generic; // default to generic poissonian
+  g_strlcpy(name, _(g->interpolated.name), sizeof(name));
+
+  const int iso = self->dev->image_storage.exif_iso;
+  dt_noiseprofile_t *last = NULL;
+  for(GList *iter = g->profiles; iter; iter = g_list_next(iter))
+  {
+    dt_noiseprofile_t *current = (dt_noiseprofile_t *)iter->data;
+    if(current->iso == iso)
+    {
+      g->interpolated = *current;
+      g->interpolated.a[0] = -1.0f; // signal later autodetection in commit_params
+      snprintf(name, sizeof(name), _("found match for ISO %d"), iso);
+      break;
+    }
+    if(last && last->iso < iso && current->iso > iso)
+    {
+      g->interpolated.iso = iso;
+      dt_noiseprofile_interpolate(last, current, &g->interpolated);
+      g->interpolated.a[0] = -1.0f;
+      snprintf(name, sizeof(name), _("interpolated from ISO %d and %d"), last->iso, current->iso);
+      break;
+    }
+    last = current;
+  }
+  dt_bauhaus_combobox_add(g->profile, name);
+  for(GList *iter = g->profiles; iter; iter = g_list_next(iter))
+  {
+    dt_noiseprofile_t *profile = (dt_noiseprofile_t *)iter->data;
+    dt_bauhaus_combobox_add(g->profile, profile->name);
+  }
+
+  // slider defaults from the (image-dependent) default params computed in reload_defaults()
+  const dt_iop_denoiseprofile_params_t *const d = (const dt_iop_denoiseprofile_params_t *)self->default_params;
+  dt_bauhaus_slider_set_default(g->radius, d->radius);
+  dt_bauhaus_slider_set_default(g->scattering, d->scattering);
+  dt_bauhaus_slider_set_default(g->shadows, d->shadows);
+  dt_bauhaus_slider_set_default(g->bias, d->bias);
+
   dt_bauhaus_combobox_set(g->profile, -1);
   unsigned combobox_index = 0;
   switch (p->mode)
@@ -3173,7 +3205,7 @@ static void dt_iop_denoiseprofile_get_params(dt_iop_denoiseprofile_params_t *p, 
 
 static gboolean denoiseprofile_draw_variance(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_denoiseprofile_gui_data_t *c = (dt_iop_denoiseprofile_gui_data_t *)self->gui_data;
@@ -3181,25 +3213,25 @@ static gboolean denoiseprofile_draw_variance(GtkWidget *widget, cairo_t *crf, gp
   if(!isnan(c->variance_R))
   {
     gchar *str = g_strdup_printf("%.2f", c->variance_R);
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     gtk_label_set_text(c->label_var_R, str);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
     dt_free(str);
   }
   if(!isnan(c->variance_G))
   {
     gchar *str = g_strdup_printf("%.2f", c->variance_G);
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     gtk_label_set_text(c->label_var_G, str);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
     dt_free(str);
   }
   if(!isnan(c->variance_B))
   {
     gchar *str = g_strdup_printf("%.2f", c->variance_B);
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     gtk_label_set_text(c->label_var_B, str);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
     dt_free(str);
   }
   return FALSE;
@@ -3521,7 +3553,7 @@ static void denoiseprofile_tab_switch(GtkNotebook *notebook, GtkWidget *page, gu
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_denoiseprofile_params_t *p = (dt_iop_denoiseprofile_params_t *)self->params;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_denoiseprofile_gui_data_t *c = (dt_iop_denoiseprofile_gui_data_t *)self->gui_data;
   if(p->wavelet_color_mode == MODE_Y0U0V0)
     c->channel = (dt_iop_denoiseprofile_channel_t)page_num + DT_DENOISE_PROFILE_Y0;

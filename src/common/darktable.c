@@ -521,7 +521,11 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   pthread_mutexattr_settype(&recursive_locking, PTHREAD_MUTEX_RECURSIVE);
   dt_pthread_mutex_init(&(darktable.plugin_threadsafe), NULL);
   dt_pthread_mutex_init(&(darktable.capabilities_threadsafe), NULL);
-  dt_pthread_mutex_init(&(darktable.exiv2_threadsafe), NULL);
+  // exiv2 and the Adobe XMP toolkit keep process-global state and are not thread-safe; this mutex
+  // serializes all exiv2 access (src/common/exif.cc). Make it recursive so a public exif function can
+  // hold it across its whole critical section while inner helpers (read_metadata_threadsafe) or
+  // re-entrant calls (e.g. variable expansion that reads metadata) re-lock it without deadlocking.
+  dt_pthread_mutex_init(&(darktable.exiv2_threadsafe), &recursive_locking);
   dt_pthread_mutex_init(&(darktable.readFile_mutex), NULL);
   dt_pthread_mutex_init(&(darktable.pipeline_threadsafe), NULL);
   dt_pthread_rwlock_init(&(darktable.database_threadsafe), NULL);
@@ -1266,12 +1270,12 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
     // prevent bauhaus widgets from sending value-changed signals
     // because some of them expect user interactions.
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
 
     // init the gui part of views
     dt_view_manager_gui_init(darktable.view_manager);
 
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     // initialize undo struct
     darktable.undo = dt_undo_init();

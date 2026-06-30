@@ -150,6 +150,55 @@ void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name)
   }
 }
 
+/* ------------------------------------------------------------------------------------------
+ * Widget-callback suppression depth (see common/darktable.h for the rationale and API).
+ * ------------------------------------------------------------------------------------------ */
+static inline gboolean _dt_on_gui_thread(void)
+{
+  // Same idiom as dt_control_signal (control/signal.c): is the caller the GUI/main thread?
+  return darktable.control && pthread_equal(darktable.control->gui_thread, pthread_self());
+}
+
+gboolean dt_gui_widgets_suppressed(void)
+{
+  return darktable.gui && darktable.gui->_widget_suppress_depth > 0;
+}
+
+void dt_gui_freeze_begin_(const char *file, int line)
+{
+  // Only the GUI thread owns widget state. Off-thread callers (notably worker-thread
+  // reload_defaults during thumbnail/export, which has no widgets to suppress) must not touch
+  // the shared depth, or concurrent non-atomic ++/-- drift it and break suppression for the
+  // GUI thread. For them this is a deliberate no-op.
+  if(!darktable.gui || !_dt_on_gui_thread()) return;
+  // MAX(.,0) heals any pre-existing negative drift so the depth is always genuinely suppressing.
+  darktable.gui->_widget_suppress_depth = MAX(darktable.gui->_widget_suppress_depth, 0) + 1;
+  (void)file;
+  (void)line;
+}
+
+void dt_gui_freeze_end_(const char *file, int line)
+{
+  if(!darktable.gui || !_dt_on_gui_thread()) return;
+  if(darktable.gui->_widget_suppress_depth <= 0)
+  {
+    // A bare end with nothing to match: an unbalanced freeze bracket exists. Surface it (with
+    // the offending site) instead of letting the counter go negative and silently disable
+    // suppression for the rest of the session.
+    fprintf(stderr, "[dt_gui_freeze] unbalanced end at %s:%d (depth was %d); "
+                    "look for a freeze begin without a matching end.\n",
+            file, line, darktable.gui->_widget_suppress_depth);
+    darktable.gui->_widget_suppress_depth = 0;
+    return;
+  }
+  darktable.gui->_widget_suppress_depth--;
+}
+
+void dt_gui_freeze_reset(void)
+{
+  if(darktable.gui) darktable.gui->_widget_suppress_depth = 0;
+}
+
 /*
  * OLD UI API
  */
@@ -1213,7 +1262,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   widget = dt_ui_main_window(darktable.gui->ui);
   g_signal_connect(G_OBJECT(widget), "configure-event", G_CALLBACK(_window_configure), NULL);
 
-  darktable.gui->reset = 0;
+  dt_gui_freeze_reset();
 
   // load theme
   dt_gui_load_theme(gui->gtkrc);

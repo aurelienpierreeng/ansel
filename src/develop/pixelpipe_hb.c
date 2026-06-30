@@ -852,22 +852,27 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   // needs the upstream cache entry.
   dt_pixel_cache_entry_t *existing_cache = NULL;
   void *existing_output = NULL;
+  /* Atomically look up the entry and increment its refcount so the caller receives a
+   * fully-owned reference.  peek() + separate ref_count_entry() has a TOCTOU window:
+   * peek releases its tryrdlock immediately, so the entry can reach refcount 0 and be
+   * evicted between peek() and ref_count_entry(). */
   const gboolean exact_output_cache_hit
       = !_bypass_cache(pipe, piece)
-        && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &existing_output, &existing_cache,
-                                       pipe->devid, NULL)
+        && dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, hash,
+                                                    &existing_output, &existing_cache)
         && !IS_NULL_PTR(existing_output);
 
   if(exact_output_cache_hit)
   {
-    /* An exact-hit child still needs one ref reserved for the immediate caller that will consume it next.
-     * `process_rec()` returns that upcoming-consumer ref as part of its contract instead of asking the caller
-     * to bump the counter again on input acquisition. */
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, existing_cache);
     _trace_cache_owner(pipe, module, "exact-hit-direct", "output", hash, NULL, existing_cache, FALSE);
     *out_hash = hash;
     *out_piece = piece;
     return 0;
+  }
+  else if(existing_cache)
+  {
+    /* ref_entry_by_hash succeeded but data was NULL (device-only entry); undo the ref. */
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, existing_cache);
   }
 
   // 3) now recurse through the pipeline.

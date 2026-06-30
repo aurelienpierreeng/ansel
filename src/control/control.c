@@ -420,6 +420,16 @@ void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int l
   darktable.control->cursor.hide = !visible;
 }
 
+void dt_control_mouse_is_dragging(gboolean state)
+{
+  darktable.gui->mouse.is_dragging = state;
+}
+
+void dt_control_mouse_is_painting(gboolean state)
+{
+  darktable.gui->mouse.is_painting = state;
+}
+
 int dt_control_running()
 {
   // FIXME: when shutdown, run_mutex is not inited anymore!
@@ -463,6 +473,12 @@ void dt_control_shutdown(dt_control_t *s)
     // pthread_kill(s->thread_res[k], 9);
     pthread_join(s->thread_res[k], NULL);
 
+  // Workers are joined: nothing else touches the queues now. Dispose every still-queued job here,
+  // while the plug-in .so files that own their callbacks (state_changed_cb, params_destroy) are
+  // still loaded. dt_control_cleanup() -> dt_control_jobs_cleanup() runs much later, after
+  // dt_lib_cleanup() has dlclose()'d those modules, so cancelling a leftover job there jumps into
+  // an unmapped callback and crashes (e.g. a pending textnotes-load job -> SIGSEGV).
+  dt_control_jobs_drain(s);
 }
 
 void dt_control_cleanup(dt_control_t *s)

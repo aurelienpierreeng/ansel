@@ -2493,7 +2493,7 @@ static void _update_layout(dt_lib_module_t *self)
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(d->dictionary_view));
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   d->suggestion_flag = dt_conf_get_bool("plugins/lighttable/tagging/nosuggestion");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->toggle_suggestion_button), d->suggestion_flag);
@@ -2547,12 +2547,12 @@ static void _update_layout(dt_lib_module_t *self)
   d->dttags_flag = dt_conf_get_bool("plugins/lighttable/tagging/dttags");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->dttags_check), d->dttags_flag);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 static void _toggle_suggestion_button_callback(GtkToggleButton *source, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   const gboolean new_state = !dt_conf_get_bool("plugins/lighttable/tagging/nosuggestion");
   dt_conf_set_bool("plugins/lighttable/tagging/nosuggestion", new_state);
   _update_layout(self);
@@ -2561,7 +2561,7 @@ static void _toggle_suggestion_button_callback(GtkToggleButton *source, dt_lib_m
 
 static void _toggle_tree_button_callback(GtkToggleButton *source, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   const gboolean new_state = !dt_conf_get_bool("plugins/lighttable/tagging/treeview");
   dt_conf_set_bool("plugins/lighttable/tagging/treeview", new_state);
   _update_layout(self);
@@ -2622,7 +2622,7 @@ static gint _sort_tree_path_func(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIte
 // "sort" combobox in the sidebar: by name (0) or by count (1)
 static void _sort_combo_changed(GtkWidget *combo, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_bool("plugins/lighttable/tagging/listsortedbycount", dt_bauhaus_combobox_get(combo) == 1);
   _update_layout(self);
   _sort_attached_list(self, FALSE);
@@ -2632,7 +2632,7 @@ static void _sort_combo_changed(GtkWidget *combo, dt_lib_module_t *self)
 // "view" combobox in the sidebar: attached list (0) or attached tree (1)
 static void _attached_view_combo_changed(GtkWidget *combo, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_bool("plugins/lighttable/tagging/attached_treeview", dt_bauhaus_combobox_get(combo) == 1);
   _update_layout(self);
   _init_treeview(self, 0);
@@ -2641,7 +2641,7 @@ static void _attached_view_combo_changed(GtkWidget *combo, dt_lib_module_t *self
 // "show system tags" checkbox in the sidebar
 static void _dttags_check_toggled(GtkToggleButton *source, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   d->dttags_flag = gtk_toggle_button_get_active(source);
   dt_conf_set_bool("plugins/lighttable/tagging/dttags", d->dttags_flag);
@@ -3050,14 +3050,14 @@ static void _refresh_suggestions(dt_lib_module_t *self)
 
 static void _confidence_changed(GtkSpinButton *spin, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_int("plugins/lighttable/tagging/confidence", gtk_spin_button_get_value_as_int(spin));
   _refresh_suggestions(self);
 }
 
 static void _recent_tags_changed(GtkSpinButton *spin, dt_lib_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_int("plugins/lighttable/tagging/nb_recent_tags", gtk_spin_button_get_value_as_int(spin));
   _size_recent_tags_list();
   _refresh_suggestions(self);

@@ -553,8 +553,14 @@ void init_presets(dt_iop_module_so_t *self)
 }
 
 
+// Core: compute the CAT adaptation ratio between the camera matrix's bogus-D65 and the given white
+// balance multipliers `wb_coeffs`. The coeff SOURCE differs by caller thread, and that is the whole
+// point of splitting this out: the pipeline must read temperature's coeffs from the per-piece buffer
+// descriptor (piece->dsc_in.temperature.coeffs, propagated in pipe order), NEVER from dev->proxy
+// (a GUI/main-thread inter-module channel). The GUI wrapper get_white_balance_coeff() sources proxy.
 __DT_CLONE_TARGETS__
-static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixel_t custom_wb)
+static int _custom_wb_from_coeffs(struct dt_iop_module_t *self, const dt_aligned_pixel_t wb_coeffs,
+                                  dt_aligned_pixel_t custom_wb)
 {
   // Init output with a no-op
   for(size_t k = 0; k < 4; k++) custom_wb[k] = 1.f;
@@ -592,18 +598,26 @@ static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixe
 
   // Second, if the temperature module is not using these, for example because they are wrong
   // and user made a correct preset, find the WB adaptation ratio
-  if(self->dev->proxy.wb_coeffs[0] != 0.f)
+  if(wb_coeffs[0] != 0.f)
   {
     for(size_t k = 0; k < 4; k++)
     {
-      // Guard the second-green ratio: proxy.wb_coeffs[3] may be 0 (non-RGBG sensor), which would
+      // Guard the second-green ratio: wb_coeffs[3] may be 0 (non-RGBG sensor), which would
       // yield inf. Mirror the first-green ratio in that case so custom_wb stays finite.
-      const float denom = self->dev->proxy.wb_coeffs[k];
+      const float denom = wb_coeffs[k];
       custom_wb[k] = (k == 3 && !isnormal(denom)) ? custom_wb[1] : bwb[k] / denom;
     }
   }
 
   return 0;
+}
+
+// GUI-thread wrapper: source temperature's WB from the dev proxy (the GUI inter-module channel).
+// Pipeline code must NOT call this -- use _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, ...).
+__DT_CLONE_TARGETS__
+static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixel_t custom_wb)
+{
+  return _custom_wb_from_coeffs(self, self->dev->proxy.wb_coeffs, custom_wb);
 }
 
 
@@ -1963,7 +1977,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     // So we need to re-run the detection at runtime...
     float x, y;
     dt_aligned_pixel_t custom_wb;
-    get_white_balance_coeff(self, custom_wb);
+    // Pipeline thread: source temperature's WB from the per-piece descriptor propagated in pipe
+    // order (temperature writes piece->dsc_out.temperature.coeffs), NOT from dev->proxy.
+    _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, custom_wb);
 
     if(find_temperature_from_raw_coeffs(&(self->dev->image_storage), custom_wb, &(x), &(y)))
     {
@@ -2064,7 +2080,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     // So we need to re-run the detection at runtime...
     float x, y;
     dt_aligned_pixel_t custom_wb;
-    get_white_balance_coeff(self, custom_wb);
+    // Pipeline thread: source temperature's WB from the per-piece descriptor propagated in pipe
+    // order (temperature writes piece->dsc_out.temperature.coeffs), NOT from dev->proxy.
+    _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, custom_wb);
 
     if(find_temperature_from_raw_coeffs(&(self->dev->image_storage), custom_wb, &(x), &(y)))
     {
@@ -2683,7 +2701,7 @@ void update_colorchecker_list(dt_iop_module_t *self)
 
 static void optimize_changed_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -2697,7 +2715,7 @@ static void optimize_changed_callback(GtkWidget *widget, gpointer user_data)
 
 static void checker_color_changed_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -2729,16 +2747,16 @@ static void checker_color_changed_callback(GtkWidget *widget, gpointer user_data
 
 void checker_changed_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
   const int checker_cmbbx_index = dt_bauhaus_combobox_get(widget);
   dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker", checker_cmbbx_index);
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   update_colorchecker_color_list(self);
   color_list_visibility(self, checker_cmbbx_index);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   const int n_color = dt_bauhaus_combobox_get(g->checkers_color_list);
   const dt_colorchecker_label_t *color_label = (n_color >= 0 && g->colorcheckers_color) ? (const dt_colorchecker_label_t*)g_list_nth_data(g->colorcheckers_color, n_color) : NULL;
@@ -2762,7 +2780,7 @@ void checker_changed_callback(GtkWidget *widget, gpointer user_data)
 
 static void safety_changed_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -2777,7 +2795,7 @@ static void safety_changed_callback(GtkWidget *widget, gpointer user_data)
 
 static void start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_request_focus(self);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
 
@@ -2799,7 +2817,7 @@ static void start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *s
 
 static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -2812,7 +2830,7 @@ static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpoin
 
 static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -2825,7 +2843,7 @@ static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gp
 
 static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
@@ -2853,7 +2871,7 @@ static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gp
 
   dt_iop_gui_leave_critical_section(self);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
   dt_bauhaus_slider_set(g->temperature, p->temperature);
 
@@ -2875,7 +2893,7 @@ static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gp
   dt_bauhaus_slider_set(g->scale_blue_G, p->blue[1]);
   dt_bauhaus_slider_set(g->scale_blue_B, p->blue[2]);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   gui_changed(self, NULL, NULL);
 
@@ -2900,7 +2918,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 
   check_if_close_to_daylight(p->x, p->y, &p->temperature, &p->illuminant, &p->adaptation);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   dt_bauhaus_slider_set(g->temperature, p->temperature);
   dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
@@ -2917,7 +2935,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   update_illuminant_color(self);
   dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   gui_changed(self, NULL, NULL);
 
@@ -2993,7 +3011,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   float x = p->x;
   float y = p->y;
   dt_aligned_pixel_t custom_wb;
-  get_white_balance_coeff(self, custom_wb);
+  // Pipeline thread: source temperature's WB from the per-piece descriptor propagated in pipe order
+  // (temperature writes piece->dsc_out.temperature.coeffs upstream), NOT from dev->proxy.
+  _custom_wb_from_coeffs(self, piece->dsc_in.temperature.coeffs, custom_wb);
   illuminant_to_xy(p->illuminant, &(self->dev->image_storage), custom_wb, &x, &y, p->temperature, p->illum_fluo, p->illum_led);
 
   // if illuminant is set as camera, x and y are set on-the-fly at commit time, so we need to set adaptation too
@@ -3301,9 +3321,9 @@ static gboolean _channelmixerrgb_sync_primaries_from_params(dt_iop_module_t *sel
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
   if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_iop_channelmixer_shared_primaries_to_sliders(&primaries, widgets);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   return isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
 }
 
@@ -3426,9 +3446,9 @@ static gboolean _channelmixerrgb_sync_simple_from_params(dt_iop_module_t *self, 
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
   if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_iop_channelmixer_shared_simple_to_sliders(&simple, widgets);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   return isfinite(roundtrip_error) && roundtrip_error <= DT_CHANNELMIXERRGB_SIMPLE_EPS;
 }
@@ -3640,7 +3660,7 @@ static void update_approx_cct(dt_iop_module_t *self)
 static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -3659,12 +3679,12 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
   if(t < 3000.f) t = CCT_reverse_lookup(p->x, p->y);
   p->temperature = t;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->temperature, p->temperature);
   update_approx_cct(self);
   update_illuminant_color(self);
   dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=illum_xy_callback slider=%p\n",
            (void *)slider);
@@ -3706,7 +3726,7 @@ void gui_update(struct dt_iop_module_t *self)
      Channelmixer's spot/color widgets can otherwise rerun auto-picking while
      a history refresh is already in flight, which feeds TOP_CHANGED/full-pipe
      loops when the picker is active. */
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   // always reset the mode the correct
   dt_bauhaus_combobox_set(g->spot_mode, DT_SPOT_MODE_CORRECT);
@@ -3804,7 +3824,39 @@ void gui_update(struct dt_iop_module_t *self)
   g->spot_RGB[2] = 0.f;
   g->spot_RGB[3] = 0.f;
 
-  --darktable.gui->reset;
+  // Widget defaults (reset values) and the image-dependent "as shot in camera" illuminant entry,
+  // derived from the per-image defaults that reload_defaults() already computed into default_params.
+  // This lives here, not in reload_defaults(), so it only touches widgets when they exist and on the
+  // GUI thread (reload_defaults also runs on export/thumbnail devs that have no widgets).
+  {
+    const dt_iop_channelmixer_rgb_params_t *d = (const dt_iop_channelmixer_rgb_params_t *)self->default_params;
+    const dt_image_t *img = &self->dev->image_storage;
+    const dt_aligned_pixel_t xyY = { d->x, d->y, 1.f };
+    dt_aligned_pixel_t Lch = { 0 };
+    dt_xyY_to_Lch(xyY, Lch);
+
+    dt_bauhaus_slider_set_default(g->illum_x, Lch[2] / M_PI * 180.f);
+    dt_bauhaus_slider_set_default(g->illum_y, Lch[1]);
+    dt_bauhaus_slider_set_default(g->temperature, d->temperature);
+    dt_bauhaus_combobox_set_default(g->illuminant, d->illuminant);
+    dt_bauhaus_combobox_set_default(g->adaptation, d->adaptation);
+    if(g->delta_E_label_text)
+    {
+      dt_free(g->delta_E_label_text);
+      g->delta_E_label_text = NULL;
+    }
+
+    if(dt_image_is_matrix_correction_supported(img) && !dt_image_is_monochrome(img))
+    {
+      if(dt_bauhaus_combobox_length(g->illuminant) < DT_ILLUMINANT_CAMERA + 1)
+        dt_bauhaus_combobox_add_full(g->illuminant, _("as shot in camera"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+                                     GINT_TO_POINTER(DT_ILLUMINANT_CAMERA), NULL, TRUE);
+    }
+    else
+      dt_bauhaus_combobox_remove_at(g->illuminant, DT_ILLUMINANT_CAMERA);
+  }
+
+  dt_gui_freeze_end();
 
   gui_changed(self, NULL, NULL);
 }
@@ -3823,6 +3875,22 @@ void init(dt_iop_module_t *module)
 void reload_defaults(dt_iop_module_t *module)
 {
   dt_iop_channelmixer_rgb_params_t *d = (dt_iop_channelmixer_rgb_params_t *)module->default_params;
+
+  // Our per-image defaults (illuminant chromaticity x/y, temperature) are derived from the white
+  // balance temperature publishes into dev->proxy.wb_coeffs (see get_white_balance_coeff()).
+  // temperature publishes the per-image DEFAULT WB from its own reload_defaults() (main thread, no
+  // pipeline involved). For that seed to be visible here, temperature must run before us:
+  // dt_dev_init_default_history() iterates modules in iop order, and temperature's iop_order is far
+  // below ours, so this holds -- but it is a silent data dependency, so assert it. A future
+  // iop-order change that put us first would otherwise regress our defaults on a brand-new history.
+  // (The EFFECTIVE/history WB is published later via temperature's commit_proxy(); our defaults are
+  // intentionally keyed on the metadata-default WB so a fresh init always matches a manual reset.)
+  const dt_iop_module_t *const temp = dt_iop_get_module_from_list(module->dev->iop, "temperature");
+  if(temp && temp->iop_order >= module->iop_order)
+    fprintf(stderr, "[channelmixerrgb] BUG: temperature (iop_order %d) must run before channelmixerrgb "
+                    "(iop_order %d); white-balance-derived defaults will be wrong on a fresh history\n",
+            temp->iop_order, module->iop_order);
+  assert(!temp || temp->iop_order < module->iop_order);
 
   d->normalize_R = TRUE;
   d->normalize_G = TRUE;
@@ -3854,7 +3922,7 @@ void reload_defaults(dt_iop_module_t *module)
 
   module->default_enabled = FALSE;
 
-  dt_aligned_pixel_t custom_wb;
+  dt_aligned_pixel_t custom_wb = { 1.f, 1.f, 1.f, 1.f };
   if(!CAT_already_applied
      && is_modern
      && !get_white_balance_coeff(module, custom_wb)
@@ -3865,7 +3933,7 @@ void reload_defaults(dt_iop_module_t *module)
       d->illuminant = DT_ILLUMINANT_CAMERA;
 
     check_if_close_to_daylight(d->x, d->y, &(d->temperature), &(d->illuminant), &(d->adaptation));
-    module->workflow_enabled = TRUE;
+    module->workflow_enabled = dt_image_needs_rawprepare(img);
   }
   else
   {
@@ -3874,40 +3942,16 @@ void reload_defaults(dt_iop_module_t *module)
     d->adaptation = DT_ADAPTATION_RGB;
   }
 
-  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)module->gui_data;
-  if(g)
-  {
-    const dt_aligned_pixel_t xyY = { d->x, d->y, 1.f };
-    dt_aligned_pixel_t Lch = { 0 };
-    dt_xyY_to_Lch(xyY, Lch);
-
-    dt_bauhaus_slider_set_default(g->illum_x, Lch[2] / M_PI * 180.f);
-    dt_bauhaus_slider_set_default(g->illum_y, Lch[1]);
-    dt_bauhaus_slider_set_default(g->temperature, d->temperature);
-    dt_bauhaus_combobox_set_default(g->illuminant, d->illuminant);
-    dt_bauhaus_combobox_set_default(g->adaptation, d->adaptation);
-    if(g->delta_E_label_text)
-    {
-      dt_free(g->delta_E_label_text);
-    }
-
-    if(dt_image_is_matrix_correction_supported(img) && !dt_image_is_monochrome(img))
-    {
-      if(dt_bauhaus_combobox_length(g->illuminant) < DT_ILLUMINANT_CAMERA + 1)
-        dt_bauhaus_combobox_add_full(g->illuminant, _("as shot in camera"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
-                                     GINT_TO_POINTER(DT_ILLUMINANT_CAMERA), NULL, TRUE);
-    }
-    else
-      dt_bauhaus_combobox_remove_at(g->illuminant, DT_ILLUMINANT_CAMERA);
-
-    gui_changed(module, NULL, NULL);
-  }
+  // NOTE: widget state (slider/combo defaults, the image-dependent "as shot in camera" illuminant
+  // entry) is intentionally NOT set here. reload_defaults() runs on export/thumbnail devs with no
+  // widgets and off the GUI thread; touching bauhaus here re-entered callbacks against half-built
+  // widgets and crashed. That work now lives in gui_update(), reading these same default_params.
 }
 
 
 static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -3926,9 +3970,9 @@ static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *
   dt_conf_set_float("darkroom/modules/channelmixerrgb/hue", Lch_target[2] * 360.f);
   dt_conf_set_bool("darkroom/modules/channelmixerrgb/use_mixing", use_mixing);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   paint_hue(self);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   // Re-run auto illuminant only for the module that currently owns the active picker.
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
@@ -3949,7 +3993,7 @@ static void _channelmixerrgb_set_mixer_mode(dt_iop_channelmixer_rgb_gui_data_t *
 
 static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
@@ -3970,9 +4014,9 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
     if(!_channelmixerrgb_sync_simple_from_params(self, &error))
     {
       dt_control_log(_("simple mixer mode requires all three output rows to be normalized with non-zero sums."));
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       _channelmixerrgb_set_mixer_mode(g, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
       dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
       return;
@@ -3995,9 +4039,9 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
        || !_channelmixerrgb_sync_primaries_from_params(self, &error))
     {
       dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(g->mixer_mode, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       _channelmixerrgb_set_mixer_mode(g, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
       dt_conf_set_int(DT_CHANNELMIXERRGB_SIMPLE_MODE_CONF, DT_CHANNELMIXERRGB_MIXER_COMPLETE);
       return;
@@ -4016,7 +4060,7 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
     p->normalize_G = FALSE;
     p->normalize_B = FALSE;
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), FALSE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), FALSE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), FALSE);
@@ -4029,7 +4073,7 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
     dt_bauhaus_slider_set(g->scale_blue_R, p->blue[0]);
     dt_bauhaus_slider_set(g->scale_blue_G, p->blue[1]);
     dt_bauhaus_slider_set(g->scale_blue_B, p->blue[2]);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     _channelmixerrgb_set_mixer_mode(g, mode);
     gui_changed(self, NULL, NULL);
@@ -4044,7 +4088,7 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
 
 static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
@@ -4065,7 +4109,7 @@ static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer 
     p->blue[col] = M[2][col];
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), p->normalize_R);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), p->normalize_G);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), p->normalize_B);
@@ -4079,7 +4123,7 @@ static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer 
   dt_bauhaus_slider_set(g->scale_blue_R, p->blue[0]);
   dt_bauhaus_slider_set(g->scale_blue_G, p->blue[1]);
   dt_bauhaus_slider_set(g->scale_blue_B, p->blue[2]);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   gui_changed(self, slider, NULL);
 
@@ -4089,7 +4133,7 @@ static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer 
 
 static void _channelmixerrgb_primaries_slider_callback(GtkWidget *slider, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
@@ -4120,7 +4164,7 @@ static void _channelmixerrgb_primaries_slider_callback(GtkWidget *slider, gpoint
   p->normalize_G = FALSE;
   p->normalize_B = FALSE;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_R), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_G), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->normalize_B), FALSE);
@@ -4134,7 +4178,7 @@ static void _channelmixerrgb_primaries_slider_callback(GtkWidget *slider, gpoint
   dt_bauhaus_slider_set(g->scale_blue_R, p->blue[0]);
   dt_bauhaus_slider_set(g->scale_blue_G, p->blue[1]);
   dt_bauhaus_slider_set(g->scale_blue_B, p->blue[2]);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   gui_changed(self, slider, NULL);
 
@@ -4221,7 +4265,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     }
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   if(IS_NULL_PTR(w) || w == g->hue_spot || w == g->chroma_spot || w == g->lightness_spot || w == g->spot_settings)
   {
@@ -4316,7 +4360,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   declare_cat_on_pipe(self, FALSE);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
@@ -4365,12 +4409,12 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   dt_Lab_2_LCH(Lab, Lch);
 
   // Write report in GUI
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   gtk_label_set_text(GTK_LABEL(g->Lch_origin),
                      g_strdup_printf(_("L: \t%.1f %%\nh: \t%.1f \302\260\nc: \t%.1f"),
                                      Lch[0], Lch[2] * 360.f, Lch[1] ));
   gtk_widget_queue_draw(g->origin_spot);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
   const gboolean use_mixing = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->use_mixing));
@@ -4448,12 +4492,12 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
     dt_Lab_2_LCH(Lab_output, Lch_output);
 
     // Return the values in sliders
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_slider_set(g->lightness_spot, Lch_output[0]);
     dt_bauhaus_slider_set(g->chroma_spot, Lch_output[1]);
     dt_bauhaus_slider_set(g->hue_spot, Lch_output[2] * 360.f);
     paint_hue(self);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     dt_conf_set_float("darkroom/modules/channelmixerrgb/lightness", Lch_output[0]);
     dt_conf_set_float("darkroom/modules/channelmixerrgb/chroma", Lch_output[1]);
@@ -4561,7 +4605,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
     // not accurate enough for color matching
     p->illuminant = DT_ILLUMINANT_CUSTOM;
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
 
     check_if_close_to_daylight(p->x, p->y, &p->temperature, NULL, NULL);
 
@@ -4582,7 +4626,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
     dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
     gtk_widget_queue_draw(g->origin_spot);
 
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     if(memcmp(&previous, p, sizeof(previous)) != 0)
     {
@@ -4599,7 +4643,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] apply picker=%p pipe=%p\n", (void *)picker, (void *)pipe);
   _auto_set_illuminant(self, pipe);
 }

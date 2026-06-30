@@ -2248,7 +2248,7 @@ static void _update_op_combo(dt_lib_collect_rule_t *dr)
 
 static void _op_changed(GtkWidget *w, dt_lib_collect_rule_t *dr)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_lib_collect_t *c = get_collect(dr);
   c->active_rule = dr->num;
   set_properties(dr);
@@ -2258,7 +2258,7 @@ static void _op_changed(GtkWidget *w, dt_lib_collect_rule_t *dr)
 
 static void combo_changed(GtkWidget *combo, dt_lib_collect_rule_t *dr)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_lib_collect_t *c = get_collect(dr);
   const int previous = _rule_get_item(dr->num); // conf still holds the old property
   const int property = _combo_get_active_collection(dr->combo);
@@ -2366,7 +2366,7 @@ static gboolean _entry_focus_in(GtkWidget *w, GdkEventFocus *event, dt_lib_colle
 // ---- Folders inline controls ----
 static void _recursive_toggled(GtkToggleButton *b, dt_lib_collect_t *d)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_lib_collect_rule_t *dr = get_active_rule(d);
   if(_combo_get_active_collection(dr->combo) != DT_COLLECTION_PROP_FOLDERS) return;
 
@@ -2392,14 +2392,14 @@ static void _sort_dir_toggled(GtkToggleButton *b, dt_lib_collect_t *d)
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(b), dtgtk_cairo_paint_sortby,
                                desc ? CPF_DIRECTION_DOWN : CPF_DIRECTION_UP, NULL);
   gtk_widget_queue_draw(GTK_WIDGET(b));
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_bool("plugins/collect/descending", desc);
   _force_refresh(d);
 }
 
 static void _sort_by_changed(GtkWidget *combo, dt_lib_collect_t *d)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_string("plugins/collect/filmroll_sort", dt_bauhaus_combobox_get(combo) == 0 ? "folder" : "id");
   _force_refresh(d);
 }
@@ -2407,14 +2407,14 @@ static void _sort_by_changed(GtkWidget *combo, dt_lib_collect_t *d)
 // Surfaced settings that used to live in the hidden preferences popup (TODO).
 static void _folder_levels_changed(GtkWidget *spin, dt_lib_collect_t *d)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_int("show_folder_levels", (int)gtk_spin_button_get_value(GTK_SPIN_BUTTON(spin)));
   _force_refresh(d);
 }
 
 static void _no_uncategorized_toggled(GtkToggleButton *b, dt_lib_collect_t *d)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_conf_set_bool("plugins/lighttable/tagging/no_uncategorized", gtk_toggle_button_get_active(b));
   _force_refresh(d);
 }
@@ -2618,7 +2618,7 @@ static void _hide_all_widgets(dt_lib_collect_t *d)
 
 static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
 {
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _hide_all_widgets(d);
 
   if(tab == TAB_FOLDERS)
@@ -2720,12 +2720,12 @@ static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
       }
     }
   }
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 static void _raw_toggled(GtkToggleButton *b, dt_lib_collect_t *d)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   if(gtk_toggle_button_get_active(b))
   {
     _rules_set_count(1);
@@ -2771,7 +2771,7 @@ static void _lib_collect_gui_update(dt_lib_module_t *self)
   dt_lib_collect_t *d = (dt_lib_collect_t *)self->data;
   if(d->view_rule != -1) return; // nothing changed since the last build
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   get_number_of_rules(d);
 
   dt_collect_tab_t tab;
@@ -2790,7 +2790,7 @@ static void _lib_collect_gui_update(dt_lib_module_t *self)
   const gboolean raw = (tab == TAB_QUERIES && _rule_get_item(0) == DT_COLLECTION_PROP_QUERY);
   _configure_tab(d, tab);
   if(!raw) update_view(get_active_rule(d)); // raw SQL mode has no value list
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 // =====================================================================================

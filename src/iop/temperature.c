@@ -104,6 +104,9 @@ DT_MODULE_INTROSPECTION(3, dt_iop_temperature_params_t)
 #define DT_IOP_TEMP_D65 3
 
 static void gui_sliders_update(struct dt_iop_module_t *self);
+static int calculate_bogus_daylight_wb(dt_iop_module_t *module, double bwb[4]);
+static void prepare_matrices(dt_iop_module_t *module);
+static void find_coeffs(dt_iop_module_t *module, double coeffs[4]);
 
 typedef struct dt_iop_temperature_params_t
 {
@@ -677,6 +680,35 @@ gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state
   return state;
 }
 
+// Publish the given WB multipliers into dev->proxy.wb_coeffs, the dev-wide value consumed by
+// channelmixerrgb's chromatic adaptation (get_white_balance_coeff()). dev->proxy is a GUI/main-thread
+// channel for inter-module communication; it MUST NOT be accessed from the pixel pipeline (neither
+// read nor write -- the pipeline only needs module params). It is published purely on the main
+// thread: reload_defaults() seeds the per-image default, commit_proxy() refreshes it once
+// history/presets are applied, and every GUI history commit re-publishes it (see
+// dt_dev_add_history_item_real / dt_dev_pop_history_items_ext).
+// (NOTE: channelmixerrgb still reads this from its process()/commit_params() for the live
+//  DT_ILLUMINANT_CAMERA tracking -- that is a remaining violation of the rule, to be removed by
+//  resolving the camera illuminant on the main thread into its params.)
+static void _publish_wb_coeffs(dt_iop_module_t *self, const dt_iop_temperature_params_t *p)
+{
+  if(IS_NULL_PTR(self->dev)) return;
+  // Mirror the legacy commit_params() values exactly: g2 falls back to the first green when it is
+  // not a usable number on a non-4-colour sensor (NaN/0 would poison the G2 CFA sites downstream).
+  const gboolean g2_usable = isnormal(p->g2) || (self->dev->image_storage.flags & DT_IMAGE_4BAYER);
+  self->dev->proxy.wb_coeffs[0] = p->red;
+  self->dev->proxy.wb_coeffs[1] = p->green;
+  self->dev->proxy.wb_coeffs[2] = p->blue;
+  self->dev->proxy.wb_coeffs[3] = g2_usable ? p->g2 : p->green;
+}
+
+// Main-thread proxy commit, invoked by the history layer after params are applied (and before any
+// pipeline runs). Publishes the module's EFFECTIVE (post-history/preset) WB to dev->proxy.
+void commit_proxy(dt_iop_module_t *self)
+{
+  _publish_wb_coeffs(self, (const dt_iop_temperature_params_t *)self->params);
+}
+
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -696,7 +728,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                  dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)),
                  dt_image_is_matrix_correction_supported(&self->dev->image_storage),
                  d->coeffs[0], d->coeffs[1], d->coeffs[2], d->coeffs[3], p->g2, g2_usable, piece->enabled);
-  for(int k = 0; k < 4; k++) self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
+  // NOTE: dev->proxy.wb_coeffs is intentionally NOT written here. dev->proxy is a GUI/main-thread
+  // inter-module channel and must not be touched from the pipeline; writing it from this
+  // pipeline-thread callback was a data race. It is now published on the main thread via
+  // commit_proxy() / reload_defaults().
   piece->dsc_out.temperature.enabled = 1;
   for(int k = 0; k < 4; k++)
   {
@@ -963,6 +998,50 @@ void gui_update(struct dt_iop_module_t *self)
 
 //  if(self->hide_enable_button) return;
 
+  // Per-image WB references + widget defaults, formerly computed in reload_defaults(). These need
+  // live widgets (bauhaus slider defaults, the presets combobox) and the GUI conversion matrices,
+  // so they belong here on the GUI thread. Read the already-computed default_params; never recompute.
+  dt_iop_temperature_params_t *const d = (dt_iop_temperature_params_t *)self->default_params;
+
+  prepare_matrices(self);
+
+  dt_bauhaus_slider_set_default(g->scale_r, d->red);
+  dt_bauhaus_slider_set_default(g->scale_g, d->green);
+  dt_bauhaus_slider_set_default(g->scale_b, d->blue);
+  dt_bauhaus_slider_set_default(g->scale_g2, d->g2);
+
+  // remember daylight wb used for temperature/tint conversion, assuming it corresponds to CIE D65
+  _temp_array_from_params(g->daylight_wb, d);
+  calculate_bogus_daylight_wb(self, g->daylight_wb);
+
+  // Store EXIF WB coeffs
+  if(is_raw)
+    find_coeffs(self, g->as_shot_wb);
+  else
+    g->as_shot_wb[0] = g->as_shot_wb[1] = g->as_shot_wb[2] = g->as_shot_wb[3] = 1.f;
+
+  g->as_shot_wb[0] /= g->as_shot_wb[1];
+  g->as_shot_wb[2] /= g->as_shot_wb[1];
+  g->as_shot_wb[3] /= g->as_shot_wb[1];
+  g->as_shot_wb[1] = 1.0;
+
+  {
+    float TempK_def, tint_def;
+    mul2temp(self, d, &TempK_def, &tint_def);
+    dt_bauhaus_slider_set_default(g->scale_k, TempK_def);
+    dt_bauhaus_slider_set_default(g->scale_tint, tint_def);
+  }
+
+  dt_bauhaus_combobox_clear(g->presets);
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "as shot")); // old "camera". reason for change: all other RAW development tools use "As Shot" or "shot"
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "from image area")); // old "spot", reason: describes exactly what'll happen
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "user modified"));
+  dt_bauhaus_combobox_add(g->presets, C_("white balance", "camera reference")); // old "camera neutral", reason: better matches intent
+  g->preset_cnt = DT_IOP_NUM_OF_STD_TEMP_PRESETS;
+  memset(g->preset_num, 0, sizeof(g->preset_num));
+
+  gui_sliders_update(self);
+
   dt_iop_color_picker_reset(self, TRUE);
 
   float tempK, tint;
@@ -1168,8 +1247,6 @@ void reload_defaults(dt_iop_module_t *module)
   }
   else
   {
-    if(module->gui_data) prepare_matrices(module);
-
     /* check if file is raw / hdr */
     if(is_raw)
     {
@@ -1202,52 +1279,19 @@ void reload_defaults(dt_iop_module_t *module)
                  dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
                  is_raw, monochrome, is_modern, module->default_enabled, d->red, d->green, d->blue, d->g2);
 
-  // remember daylight wb used for temperature/tint conversion,
-  // assuming it corresponds to CIE daylight (D65)
-  dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)module->gui_data;
-  if(!IS_NULL_PTR(g))
-  {
-    gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->hide_enable_button ? "disabled" : "enabled");
+  // Seed the dev WB proxy with the per-image DEFAULT coeffs (main thread). channelmixerrgb derives
+  // its own per-image defaults from dev->proxy.wb_coeffs, and reload_defaults() runs in iop order
+  // (temperature before channelmixerrgb) at history init, so this baseline is visible to it. The
+  // EFFECTIVE (history/preset) coeffs are published later by commit_proxy() once history is applied.
+  // KNOWN GAP (no fix landed yet): on a user WB auto-preset, channelmixerrgb's default is derived
+  // here against this pre-preset baseline, so a fresh init does not match a later manual reset.
+  _publish_wb_coeffs(module, d);
 
-    dt_bauhaus_slider_set_default(g->scale_r, d->red);
-    dt_bauhaus_slider_set_default(g->scale_g, d->green);
-    dt_bauhaus_slider_set_default(g->scale_b, d->blue);
-    dt_bauhaus_slider_set_default(g->scale_g2, d->g2);
-
-    // to have at least something and definitely not crash
-    _temp_array_from_params(g->daylight_wb, d);
-
-    calculate_bogus_daylight_wb(module, g->daylight_wb);
-
-    // Store EXIF WB coeffs
-    if(is_raw)
-      find_coeffs(module, g->as_shot_wb);
-    else
-      g->as_shot_wb[0] = g->as_shot_wb[1] = g->as_shot_wb[2] = g->as_shot_wb[3] = 1.f;
-
-    g->as_shot_wb[0] /= g->as_shot_wb[1];
-    g->as_shot_wb[2] /= g->as_shot_wb[1];
-    g->as_shot_wb[3] /= g->as_shot_wb[1];
-    g->as_shot_wb[1] = 1.0;
-
-    float TempK, tint;
-    mul2temp(module, d, &TempK, &tint);
-
-    dt_bauhaus_slider_set_default(g->scale_k, TempK);
-    dt_bauhaus_slider_set_default(g->scale_tint, tint);
-
-    dt_bauhaus_combobox_clear(g->presets);
-
-    dt_bauhaus_combobox_add(g->presets, C_("white balance", "as shot")); // old "camera". reason for change: all other RAW development tools use "As Shot" or "shot"
-    dt_bauhaus_combobox_add(g->presets, C_("white balance", "from image area")); // old "spot", reason: describes exactly what'll happen
-    dt_bauhaus_combobox_add(g->presets, C_("white balance", "user modified"));
-    dt_bauhaus_combobox_add(g->presets, C_("white balance", "camera reference")); // old "camera neutral", reason: better matches intent
-
-    g->preset_cnt = DT_IOP_NUM_OF_STD_TEMP_PRESETS;
-    memset(g->preset_num, 0, sizeof(g->preset_num));
-
-    gui_sliders_update(module);
-  }
+  // NOTE: widget state (slider/combo defaults, the daylight/as-shot WB references, the presets
+  // combobox, the per-CFA slider labels) is intentionally NOT set here. reload_defaults() runs on
+  // export/thumbnail devs with no widgets and off the GUI thread; touching bauhaus here re-entered
+  // callbacks against half-built widgets and crashed. That work now lives in gui_update(), reading
+  // these same default_params.
 }
 
 void init_global(dt_iop_module_so_t *module)
@@ -1272,7 +1316,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
   dt_iop_temperature_params_t *p = (dt_iop_temperature_params_t *)self->params;
@@ -1292,13 +1336,13 @@ static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
 
   _temp_params_from_array(p, g->mod_coeff);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->scale_r, p->red);
   dt_bauhaus_slider_set(g->scale_g, p->green);
   dt_bauhaus_slider_set(g->scale_b, p->blue);
   dt_bauhaus_slider_set(g->scale_g2, p->g2);
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1317,7 +1361,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 static gboolean btn_toggled(GtkWidget *togglebutton, GdkEventButton *event, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return TRUE;
+  if(dt_gui_widgets_suppressed()) return TRUE;
 
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t*)self->gui_data;
 
@@ -1340,7 +1384,7 @@ static gboolean btn_toggled(GtkWidget *togglebutton, GdkEventButton *event, dt_i
 
 static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
   dt_iop_temperature_params_t *p = (dt_iop_temperature_params_t *)self->params;
@@ -1390,14 +1434,14 @@ static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
     mul2temp(self, p, &TempK, &tint);
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->scale_k, TempK);
   dt_bauhaus_slider_set(g->scale_tint, tint);
   dt_bauhaus_slider_set(g->scale_r, p->red);
   dt_bauhaus_slider_set(g->scale_g, p->green);
   dt_bauhaus_slider_set(g->scale_b, p->blue);
   dt_bauhaus_slider_set(g->scale_g2, p->g2);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   color_temptint_sliders(self);
   color_rgb_sliders(self);
@@ -1410,7 +1454,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   (void)picker;
   (void)pipe;
   (void)piece;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
   dt_iop_temperature_params_t *p = (dt_iop_temperature_params_t *)self->params;
@@ -1426,7 +1470,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   p->g2   = fmaxf(0.0f, fminf(8.0f, (grayrgb[3] > 0.001f ? 1.0f / grayrgb[3] : 1.0f) / p->green));
   p->green = 1.0;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_SPOT);
 
   float tempK, tint;
@@ -1440,7 +1484,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_bauhaus_slider_set(g->scale_g2, p->g2);
 
   dt_bauhaus_combobox_set(g->presets, -1);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }

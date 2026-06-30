@@ -90,6 +90,7 @@ static const char *_domain_color(const char *d)
   if(!g_strcmp0(d, "thumbnail")) return "#bcbcbc";
   if(!g_strcmp0(d, "mipmap"))    return "#b0c4de";
   if(!g_strcmp0(d, "image"))     return "#e8c8a0";
+  if(!g_strcmp0(d, "form"))      return "#f0a0c0";
   return "#dddddd";
 }
 

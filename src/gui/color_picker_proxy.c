@@ -627,14 +627,14 @@ static void _color_picker_reset(dt_iop_color_picker_t *picker)
   {
     if(picker->module) dt_iop_set_cache_bypass(picker->module, FALSE);
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
 
     if(DTGTK_IS_TOGGLEBUTTON(picker->colorpick))
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(picker->colorpick), FALSE);
     else
       dt_bauhaus_widget_set_quad_active(picker->colorpick, FALSE);
 
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
 }
 
@@ -700,7 +700,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   dt_iop_module_t *module = self->module;
   dt_develop_t *const dev = darktable.develop;
 
-  if(darktable.gui->reset) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
 
   dt_iop_color_picker_t *prior_picker = dev ? dev->color_picker.picker : NULL;
   if(prior_picker && prior_picker != self)
@@ -751,12 +751,12 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
 
     // important to have set up state before toggling button and
     // triggering more callbacks
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     if(DTGTK_IS_TOGGLEBUTTON(self->colorpick))
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->colorpick), TRUE);
     else
       dt_bauhaus_widget_set_quad_active(self->colorpick, TRUE);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
 
     if(module)
       dt_iop_request_focus(module);
@@ -939,9 +939,9 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
       dev->color_picker.picker = color_picker;
       dev->color_picker.widget = button;
 
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
     }
 
     return button;
@@ -966,9 +966,9 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
       dev->color_picker.picker = color_picker;
       dev->color_picker.widget = w;
 
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_widget_set_quad_active(w, TRUE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
     }
 
     return w;

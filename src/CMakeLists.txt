@@ -625,6 +625,7 @@ if(WIN32)
   target_link_libraries(ansel_deps INTERFACE
     psapi      # GetProcessMemoryInfo()
     exchndl    # exception handling / backtrace
+    dbghelp    # Sym*: locally symbolicated crash backtrace for Sentry
   )
 endif()
 

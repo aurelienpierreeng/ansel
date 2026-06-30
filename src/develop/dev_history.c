@@ -164,21 +164,21 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
                                                const gboolean enabled, const void *params, const int32_t params_size,
                                                const dt_develop_blend_params_t *blend_params, GList *forms)
 {
-  if(!hist || IS_NULL_PTR(module)) return FALSE;
+  if(IS_NULL_PTR(hist) || IS_NULL_PTR(module)) return FALSE;
 
-  if(!hist->params)
+  if(IS_NULL_PTR(hist->params))
   {
     hist->params = g_malloc0(module->params_size);
     if(IS_NULL_PTR(hist->params)) return FALSE;
   }
 
-  if(!hist->blend_params)
+  if(IS_NULL_PTR(hist->blend_params))
   {
     hist->blend_params = g_malloc0(sizeof(dt_develop_blend_params_t));
     if(IS_NULL_PTR(hist->blend_params)) return FALSE;
   }
 
-  if(hist->forms)
+  if(!IS_NULL_PTR(hist->forms))
   {
     g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
     hist->forms = NULL;
@@ -200,7 +200,7 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
   const void *src_params = params ? params : module->params;
   const int32_t src_size = params ? params_size : module->params_size;
   const int32_t sz = MIN(module->params_size, src_size);
-  if(!IS_NULL_PTR(src_params) && hist->params && sz > 0) memcpy(hist->params, src_params, sz);
+  if(!IS_NULL_PTR(src_params) && !IS_NULL_PTR(hist->params) && sz > 0) memcpy(hist->params, src_params, sz);
 
   const dt_develop_blend_params_t *src_blend = blend_params ? blend_params : module->blend_params;
   if(src_blend && hist->blend_params) memcpy(hist->blend_params, src_blend, sizeof(dt_develop_blend_params_t));
@@ -315,24 +315,30 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
   if(dt_masks_copy_used_forms_for_module(dev_dest, dev_src, hist_src->module))
   {
     dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
-             "[dt_dev_history_item_from_source_history_item] mask copy failed: src=%s multi='%s'\n",
-             hist_src->module->op, hist_src->module->multi_name);
+            "[dt_dev_history_item_from_source_history_item] Forms copy failed: src=%s multi='%s'\n",
+            hist_src->module->op, hist_src->module->multi_name);
     dt_dev_free_history_item(hist);
     return 1;
   }
-  GList *forms_snapshot = NULL;
-  if(dt_iop_module_needs_mask_history(hist_src->module))
-  {
-    forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
-    if(IS_NULL_PTR(forms_snapshot))
-    {
-      dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
-               "[dt_dev_history_item_from_source_history_item] no destination mask forms to snapshot: "
-               "src=%s multi='%s'\n",
-               hist_src->module->op, hist_src->module->multi_name);
 
-      dt_dev_free_history_item(hist);
-      return 1;
+  gboolean raster_used = FALSE;
+  gboolean drawn_used = FALSE;
+  gboolean parametric_used = FALSE;
+  GList *forms_snapshot = NULL;
+  if(dt_iop_module_needs_mask_history_ext(hist_src->module, &raster_used, &drawn_used, &parametric_used))
+  {
+    if(drawn_used)
+    {
+      forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
+      if(IS_NULL_PTR(forms_snapshot))
+      {
+        dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
+                "[dt_dev_history_item_from_source_history_item] %s '%s' uses drawn mask but there is no destination mask forms to snapshot\n",
+                hist_src->module->op, hist_src->module->multi_name);
+
+        dt_dev_free_history_item(hist);
+        return 1;
+      }
     }
   }
 
@@ -784,7 +790,7 @@ static void _remove_history_leaks(dt_develop_t *dev)
         dt_supervisor_history(DT_SV_DELETE, hist->hash, hist->module->op, hist->module->multi_priority,
                               hist->module->multi_name, hist->module->iop_order,
                               g_list_index(dev->history, hist), dev->image_storage.id, hist->enabled,
-                              hist->module, hist->params);
+                              hist->module, hist->params, hist->blend_params, hist->forms);
       dt_dev_free_history_item(hist);
       dev->history = g_list_delete_link(dev->history, link);
     }
@@ -905,7 +911,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     if(is_new_item)
       dt_supervisor_history(DT_SV_CREATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
-                            hist->enabled, module, hist->params);
+                            hist->enabled, module, hist->params, hist->blend_params, hist->forms);
     else if(old_param_hash != hist->hash)
     {
       // in-place overwrite changed the hash: delete old key, add new key, then
@@ -913,12 +919,12 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
       dt_supervisor_rekey(old_param_hash, hist->hash);
       dt_supervisor_history(DT_SV_UPDATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
-                            hist->enabled, module, hist->params);
+                            hist->enabled, module, hist->params, hist->blend_params, hist->forms);
     }
     else
       dt_supervisor_history(DT_SV_UPDATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, hist->num, dev->image_storage.id,
-                            hist->enabled, module, hist->params);
+                            hist->enabled, module, hist->params, hist->blend_params, hist->forms);
   }
 
   return add_new_pipe_node;
@@ -958,6 +964,11 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   // Run the delayed post-commit actions if implemented
   if(!IS_NULL_PTR(module) && !IS_NULL_PTR(module->post_history_commit)) module->post_history_commit(module);
+
+  // Republish any dev->proxy state this module derives from its params (e.g. temperature's WB
+  // coeffs) on the main thread, before the pipeline recompute below. This covers user edits and
+  // resets; pipelines only read dev->proxy. (Bulk history loads go through pop_history_items_ext.)
+  if(!IS_NULL_PTR(module) && !IS_NULL_PTR(module->commit_proxy)) module->commit_proxy(module);
 
   // Figure out if the current history item includes masks/forms
   GList *last_history = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
@@ -1019,9 +1030,9 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
     // Changing a parameter of a disabled module enables it,
     // so update the GUI toggle state to reflect it.
-    ++darktable.gui->reset; // don't run GUI callbacks when setting GUI state
+    dt_gui_freeze_begin(); // don't run GUI callbacks when setting GUI state
     dt_iop_gui_set_enable_button(module);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   
   // Save history straight away. Regular GUI edits are the only place where
@@ -1054,7 +1065,7 @@ void dt_dev_history_free_history(dt_develop_t *dev)
       if(h && h->module)
         dt_supervisor_history(DT_SV_DELETE, h->hash, h->module->op, h->module->multi_priority,
                               h->module->multi_name, h->module->iop_order, h->num,
-                              dev->image_storage.id, h->enabled, h->module, h->params);
+                              dev->image_storage.id, h->enabled, h->module, h->params, h->blend_params, h->forms);
     }
   g_list_free_full(g_steal_pointer(&dev->history), dt_dev_free_history_item);
   dev->history = NULL;
@@ -1064,20 +1075,26 @@ gboolean dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
 {
   // Recreate the whole history from scratch.
   // Backend only: GUI updates and pixelpipe rebuilds need to be triggered by callers.
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
   return first_run;
 }
 
 
 /**
- * @brief Reload defaults for all modules in dev->iop.
+ * @brief Reset every module to its (already-computed) default params before history is overlaid.
  *
- * Some modules depend on defaults to initialize GUI state or internal structures.
+ * reload_defaults() is NOT called here: per-image defaults are computed once, at history init
+ * (dt_dev_init_default_history) and at module instance creation. Re-running it on every pop was the
+ * source of subtle bugs -- it touched GUI state on half-built widgets, and it re-derived
+ * cross-module defaults (e.g. channelmixerrgb's WB-derived illuminant) against a proxy that the
+ * pipeline had populated, so a fresh history no longer matched a manual reset. Here we only apply
+ * the existing default_params (cheap, no recompute), so modules absent from history fall back to
+ * their defaults; modules present in history are overwritten by _history_to_module() right after.
  *
  * @param dev Develop context.
  */
@@ -1086,7 +1103,7 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
   for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-    dt_iop_reload_defaults(module);
+    dt_iop_load_default_params(module);
 
     if(module->multi_priority == 0)
       module->iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, module->op, module->multi_priority);
@@ -1143,14 +1160,10 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   // This avoids using incomplete RAW metadata (WB coeffs, matrices) on newly-inited images.
   dt_dev_ensure_image_storage(dev, dev->image_storage.id);
 
-  // Shitty design ahead:
-  // some modules (temperature.c, colorin.c) init their GUI comboboxes
-  // in/from reload_defaults. Though we already loaded them once at
-  // _read_history_ext() when initing history, and history is now sanitized
-  // such that all used module will have at least an entry,
-  // it's not enough and we need to reload defaults here.
-  // But anyway, if user truncated history before mandatory modules,
-  // and we reload it here, it's good to ensure defaults are re-inited.
+  // Reset every module to its default params first; the history overlay below then overwrites the
+  // ones that have entries. Per-image defaults were already computed at history init / instance
+  // creation, so we do NOT recompute them here (no reload_defaults: GUI-unsafe, and it re-derived
+  // cross-module defaults against a pipeline-populated proxy). See _dt_dev_modules_reload_defaults.
   _dt_dev_modules_reload_defaults(dev);
 
   const int history_end = dt_dev_get_history_end_ext(dev);
@@ -1174,6 +1187,17 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   // Nuke dev->forms and replace it with the last hist->forms in history.
   dt_masks_replace_current_forms(dev, forms);
 
+  // History (metadata + presets) is now fully applied to module params. Let modules publish any
+  // dev->proxy state derived from their EFFECTIVE params (e.g. temperature's WB coeffs, consumed by
+  // channelmixerrgb) on this main/history thread, BEFORE the pipeline resync below runs. dev->proxy
+  // is a GUI/main-thread inter-module channel (pipelines must not touch it); this is the single
+  // main-thread publish point for bulk history loads.
+  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    if(module->commit_proxy) module->commit_proxy(module);
+  }
+
   dt_ioppr_resync_pipeline(dev, 0, "dt_dev_pop_history_items_ext end", TRUE);
 
   // Reloading defaults might have changed the global history hash
@@ -1185,13 +1209,13 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
 {
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   // Update darkroom sizes after releasing the history lock to avoid deadlocks.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
 }
 
 void dt_dev_history_gui_update(dt_develop_t *dev)
@@ -1205,7 +1229,7 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   dt_dev_history_refresh_nodes_ext(dev, &dev->iop, dev->history);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
   {
@@ -1226,7 +1250,7 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   }
 
   dt_dev_masks_list_change(dev);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_signal_modules_moved(dev);
 }
@@ -1985,7 +2009,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
     if(dt_supervisor_active())
       dt_supervisor_history(DT_SV_CREATE, hist->hash, module->op, module->multi_priority,
                             module->multi_name, module->iop_order, g_list_index(dev->history, hist),
-                            imgid, hist->enabled, module, hist->params);
+                            imgid, hist->enabled, module, hist->params, hist->blend_params, hist->forms);
 
     dt_print(DT_DEBUG_HISTORY, "[history] successfully loaded module %s history (enabled: %i)\n", hist->module->op, hist->enabled);
   }
@@ -2169,12 +2193,12 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
   if(write_history)
   {
     dt_pthread_rwlock_rdlock(&dev->history_mutex);
@@ -2209,7 +2233,7 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
     if(dt_supervisor_active() && h && h->module)
       dt_supervisor_history(DT_SV_DELETE, h->hash, h->module->op, h->module->multi_priority,
                             h->module->multi_name, h->module->iop_order, h->num,
-                            dev->image_storage.id, h->enabled, h->module, h->params);
+                            dev->image_storage.id, h->enabled, h->module, h->params, h->blend_params, h->forms);
     dt_dev_free_history_item(link->data);
     dev->history = g_list_delete_link(dev->history, link);
     link = next;
@@ -2218,12 +2242,12 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   // Re-apply history and resync iop order from the truncated stack.
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
+  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, imgid);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -2322,7 +2346,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
 
       if(darktable.develop->gui_module == mod) dt_iop_request_focus(NULL);
 
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
 
       // we remove the plugin effectively
       if(!dt_iop_is_hidden(mod))
@@ -2343,7 +2367,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
       // don't delete the module, a pipe may still need it
       dev->alliop = g_list_append(dev->alliop, mod);
 
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
 
       // and reset the list
       modules = iop_list;

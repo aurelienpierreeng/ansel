@@ -180,11 +180,11 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, dt_iop_module_
     g->call_auto_levels = 0;
     dt_iop_gui_leave_critical_section(self);
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
 
     gui_update(self);
 
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
   else
   {
@@ -550,7 +550,7 @@ static gboolean _area_scroll_callback(GtkWidget *widget, GdkEventScroll *event, 
 
 static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
 
@@ -576,7 +576,7 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
 
 static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
 
@@ -621,7 +621,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 static void _tab_switch_callback(GtkNotebook *notebook, GtkWidget *page, guint page_num, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
 
   g->channel = (dt_iop_rgblevels_channel_t)page_num;
@@ -1043,7 +1043,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   if(!IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
     dt_iop_gui_enter_critical_section(self);
-    if(g->call_auto_levels == 1 && !darktable.gui->reset)
+    if(g->call_auto_levels == 1 && !dt_gui_widgets_suppressed())
     {
       g->call_auto_levels = -1;
 

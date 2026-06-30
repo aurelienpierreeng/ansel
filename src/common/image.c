@@ -1660,7 +1660,12 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   DT_DEBUG_SQLITE3_BIND_INT64(stmt, 4, dt_datetime_now_to_gtimespan());
 
   rc = sqlite3_step(stmt);
-  if(rc != SQLITE_DONE) fprintf(stderr, "sqlite3 error %d\n", rc);
+  if(rc != SQLITE_DONE)
+  {
+    fprintf(stderr, "sqlite3 error %d\n", rc);
+    sqlite3_finalize(stmt);
+    return 0;
+  }
   sqlite3_finalize(stmt);
 
   id = dt_image_get_id(film_id, imgfname);

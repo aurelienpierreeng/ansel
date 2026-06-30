@@ -51,6 +51,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
 
+#include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/draw.h"
 #include "libs/lib.h"
@@ -231,6 +232,8 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
   dt_develop_t *dev = darktable.develop;
   dt_develop_t *snapshot_dev = snap->develop;
+  dt_pixel_cache_entry_t *entry = NULL;
+
   if(IS_NULL_PTR(dev) || !dev->gui_attached)
   {
     SNAP_LOG("[snapshots] refresh failed: darkroom dev unavailable\n");
@@ -310,11 +313,9 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
              " backbuf_hist=%" PRIu64 " pipe_hist=%" PRIu64 "\n",
              hash, pipe_hash, backbuf_hist, pipe_hist);
   */
-  dt_pixel_cache_entry_t *entry = NULL;
   void *data = NULL;
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID
-     || !dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, hash, &data, &entry,
-                                     snapshot_pipe.devid, NULL)
+     || !dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, hash, &data, &entry)
      || IS_NULL_PTR(data) || IS_NULL_PTR(entry))
   {
     fail_reason = "cache peek failed";
@@ -363,6 +364,7 @@ static int _lib_snapshots_refresh_pipe_image(dt_lib_module_t *self, dt_lib_snaps
   //         d->snapshot_imgid, d->selected, roi.width, roi.height, bw, bh, hash);
 
 cleanup:
+  if(entry) dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, entry);
   if(status != 0)
     SNAP_LOG("[snapshots] refresh failed: reason=%s snapshot_imgid=%d selected=%u frozen_imgid=%d in=%ux%u "
              "pipe_in=%dx%d pipe_out=%dx%d\n",
@@ -580,7 +582,9 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 int button_released(struct dt_lib_module_t *self, double x, double y, int which, uint32_t state)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
-  if(d->snapshot_image && which == 1)
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+
+  if(!visible_picker && d->snapshot_image && which == 1)
   {
     if(d->dragging)
     {
@@ -603,7 +607,9 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
 
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  if(d->snapshot_image)
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  
+  if(!visible_picker && d->snapshot_image)
   {
     if(d->on_going) return 1;
     if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
@@ -646,7 +652,9 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  if(d->snapshot_image)
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+
+  if(!visible_picker && d->snapshot_image)
   {
     if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
     const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);

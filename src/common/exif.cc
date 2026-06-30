@@ -86,7 +86,6 @@
 #include <zlib.h>
 
 #include <array>
-#include <cassert>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -388,7 +387,7 @@ public:
 
 #define read_metadata_threadsafe(image)                       \
 {                                                             \
-  Lock lock;                                                  \
+  Lock exiv2_lock;                                            \
   image->readMetadata();                                      \
 }
 
@@ -467,7 +466,7 @@ static void dt_remove_exif_keys(Exiv2::ExifData &exif, const char *keys[], unsig
       while((pos = exif.findKey(Exiv2::ExifKey(keys[i]))) != exif.end())
         exif.erase(pos);
     }
-    catch(Exiv2::AnyError &e)
+    catch(const std::exception &e)
     {
       // the only exception we may get is "invalid" tag, which is not
       // important enough to either stop the function, or even display
@@ -487,7 +486,7 @@ static void dt_remove_xmp_keys(Exiv2::XmpData &xmp, const char *keys[], unsigned
       while((pos = xmp.findKey(Exiv2::XmpKey(keys[i]))) != xmp.end())
         xmp.erase(pos);
     }
-    catch(Exiv2::AnyError &e)
+    catch(const std::exception &e)
     {
       // the only exception we may get is "invalid" tag, which is not
       // important enough to either stop the function, or even display
@@ -503,7 +502,7 @@ static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterat
   {
     return (*pos = xmpData.findKey(Exiv2::XmpKey(key))) != xmpData.end() && (*pos)->size();
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 read_xmp_tag] " << s << std::endl;
@@ -655,7 +654,7 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
     imgs = NULL;
     return true;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     if(imgs)
     {
@@ -675,7 +674,7 @@ static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::co
   {
     return (*pos = iptcData.findKey(Exiv2::IptcKey(key))) != iptcData.end() && (*pos)->size();
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 read_iptc_tag] " << s << std::endl;
@@ -756,7 +755,7 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
 
     return true;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 _exif_decode_iptc_data] " << img->filename << ": " << s << std::endl;
@@ -772,7 +771,7 @@ static bool _exif_read_exif_tag(Exiv2::ExifData &exifData,
     return (*pos = exifData.findKey(Exiv2::ExifKey(key)))
       != exifData.end() && (*pos)->size();
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 read_exif_tag] " << s << std::endl;
@@ -838,7 +837,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
-    assert(image.get() != 0);
+    if(!image.get()) return;
     read_metadata_threadsafe(image);
     Exiv2::ExifData &exifData = image->exifData();
     if(!exifData.empty())
@@ -849,7 +848,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
     }
     return;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 reading DefaultUserCrop] " << filename << ": " << s << std::endl;
@@ -1670,7 +1669,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     img->exif_inited = TRUE;
     return true;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 _exif_decode_exif_data] " << img->filename << ": " << s << std::endl;
@@ -1688,7 +1687,7 @@ int dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size)
     bool res = _exif_decode_exif_data(img, exifData);
     return res ? 0 : 1;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_read_from_blob] " << img->filename << ": " << s << std::endl;
@@ -1704,7 +1703,7 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
 
     // Get a list of preview images available in the image. The list is sorted
@@ -1739,7 +1738,7 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
 
     return 0;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_thumbnail] " << path << ": " << s << std::endl;
@@ -1775,7 +1774,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     bool res = true;
 
@@ -1805,7 +1804,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
 
     return res ? 0 : 1;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_read] " << path << ": " << s << std::endl;
@@ -1817,8 +1816,13 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
 {
   try
   {
+    // Serialize the whole exiv2 region (read + write): writeMetadata() below re-enters the
+    // non-thread-safe exiv2/XMP toolkit, so it must not run concurrently with other exiv2 work.
+    // The mutex is recursive, so the nested read_metadata_threadsafe() re-locks harmlessly.
+    Lock lock;
+
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     Exiv2::ExifData &imgExifData = image->exifData();
     Exiv2::ExifData blobExifData;
@@ -1862,7 +1866,7 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
     imgExifData.sortByTag();
     image->writeMetadata();
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_write_blob] " << path << ": " << s << std::endl;
@@ -1894,7 +1898,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     Exiv2::ExifData &exifData = image->exifData();
 
@@ -2232,7 +2236,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
     memcpy(*buf, &(blob[0]), length);
     return length;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     // std::cerr.rdbuf(savecerr);
     std::string s(e.what());
@@ -3111,7 +3115,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
   {
     // read xmp sidecar
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
-    assert(image.get() != 0);
+    if(!image.get()) return 1;
     read_metadata_threadsafe(image);
     Exiv2::XmpData &xmpData = image->xmpData();
 
@@ -3484,7 +3488,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     }
 
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     // actually nobody's interested in that if the file doesn't exist:
     // std::string s(e.what());
@@ -4117,6 +4121,10 @@ char *dt_exif_xmp_read_string(const int32_t imgid)
 {
   try
   {
+    // Serialize the non-thread-safe exiv2/XMP toolkit (XmpParser::decode()/encode() below) against
+    // all other exiv2 work. Recursive mutex, so nested helpers re-lock harmlessly.
+    Lock lock;
+
     char input_filename[PATH_MAX] = { 0 };
     gboolean from_cache = FALSE;
     dt_image_full_path(imgid,  input_filename,  sizeof(input_filename),  &from_cache, __FUNCTION__);
@@ -4174,9 +4182,9 @@ char *dt_exif_xmp_read_string(const int32_t imgid)
     }
     return g_strdup(xmpPacket.c_str());
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
-    std::cerr << "[xmp_read_blob] caught exiv2 exception '" << e << "'\n";
+    std::cerr << "[xmp_read_blob] caught exiv2 exception '" << e.what() << "'\n";
     return NULL;
   }
 }
@@ -4189,7 +4197,7 @@ static void dt_remove_xmp_key(Exiv2::XmpData &xmp, const char *key)
     if (pos != xmp.end())
       xmp.erase(pos);
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
   }
 }
@@ -4207,7 +4215,7 @@ static void _remove_xmp_keys(Exiv2::XmpData &xmpData, const char *key)
         ++i;
     }
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
   }
 }
@@ -4220,7 +4228,7 @@ static void dt_remove_exif_key(Exiv2::ExifData &exif, const char *key)
     if (pos != exif.end())
       exif.erase(pos);
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
   }
 }
@@ -4233,7 +4241,7 @@ static void dt_remove_iptc_key(Exiv2::IptcData &iptc, const char *key)
     while((pos = iptc.findKey(Exiv2::IptcKey(key))) != iptc.end())
       iptc.erase(pos);
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
   }
 }
@@ -4243,6 +4251,13 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
   dt_export_metadata_t *m = (dt_export_metadata_t *)metadata;
   try
   {
+    // Serialize the whole exiv2 region: this function mixes readMetadata(), XmpParser::decode() and
+    // writeMetadata(), all of which touch the non-thread-safe exiv2/XMP toolkit and must not run
+    // concurrently with other exiv2 work. The mutex is recursive, so the nested
+    // read_metadata_threadsafe() calls (and any metadata read during variable expansion) re-lock
+    // harmlessly.
+    Lock lock;
+
     char input_filename[PATH_MAX] = { 0 };
     gboolean from_cache = TRUE;
     dt_image_full_path(imgid,  input_filename,  sizeof(input_filename),  &from_cache, __FUNCTION__);
@@ -4264,9 +4279,9 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
         img->setXmpData(input_image->xmpData());
       }
     }
-    catch(Exiv2::AnyError &e)
+    catch(const std::exception &e)
     {
-      std::cerr << "[xmp_attach] " << input_filename << ": caught exiv2 exception '" << e << "'\n";
+      std::cerr << "[xmp_attach] " << input_filename << ": caught exiv2 exception '" << e.what() << "'\n";
     }
 
     Exiv2::XmpData &xmpData = img->xmpData();
@@ -4464,20 +4479,25 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
         {
           img->writeMetadata();
         }
-        catch(Exiv2::AnyError &e2)
+        catch(const std::exception &e2)
         {
-          std::cerr << "[dt_exif_xmp_attach_export] without history " << filename << ": caught exiv2 exception '" << e2 << "'\n";
+          std::cerr << "[dt_exif_xmp_attach_export] without history " << filename << ": caught exiv2 exception '" << e2.what() << "'\n";
           return -1;
         }
       }
       else
         throw;
     }
+    catch(const std::exception &e)
+    {
+      std::cerr << "[dt_exif_xmp_attach_export] " << filename << ": caught exception '" << e.what() << "'\n";
+      return -1;
+    }
     return 0;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
-    std::cerr << "[dt_exif_xmp_attach_export] " << filename << ": caught exiv2 exception '" << e << "'\n";
+    std::cerr << "[dt_exif_xmp_attach_export] " << filename << ": caught exiv2 exception '" << e.what() << "'\n";
     return -1;
   }
 }
@@ -4494,6 +4514,13 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
 
   try
   {
+    // The Adobe XMP toolkit behind Exiv2::XmpParser::decode()/encode() keeps process-global
+    // state and is NOT thread-safe. Sidecar writes run on the worker thread pool, so several
+    // imports/writes can hit dt_exif_xmp_write_with_imgpath() at once (and race the locked
+    // readMetadata() in dt_exif_read()), corrupting the heap -> SIGABRT in free(). Serialize the
+    // whole exiv2 region on the same (recursive) mutex read_metadata_threadsafe() uses.
+    Lock lock;
+
     Exiv2::XmpData xmpData;
     std::string xmpPacket;
     char *checksum_old = NULL;
@@ -4582,9 +4609,9 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
 
     return 0;
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
-    std::cerr << "[dt_exif_xmp_write] " << filename << ": caught exiv2 exception '" << e << "'\n";
+    std::cerr << "[dt_exif_xmp_write] " << filename << ": caught exiv2 exception '" << e.what() << "'\n";
     return -1;
   }
 }
@@ -4626,7 +4653,7 @@ dt_colorspaces_color_profile_type_t dt_exif_get_color_space(const uint8_t *data,
 
     return DT_COLORSPACE_DISPLAY; // nothing embedded
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_color_space] " << s << std::endl;
@@ -4645,7 +4672,7 @@ void dt_exif_get_datetime_taken(const uint8_t *data, size_t size, char *datetime
 
     _find_datetime_taken(exifData, pos, datetime_taken);
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_datetime_taken] " << s << std::endl;
@@ -4686,7 +4713,7 @@ void dt_exif_init()
   {
     Exiv2::XmpProperties::propertyList("lr");
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     // if lightroom is not known register it
     Exiv2::XmpProperties::registerNs("http://ns.adobe.com/lightroom/1.0/", "lr");
@@ -4695,7 +4722,7 @@ void dt_exif_init()
   {
     Exiv2::XmpProperties::propertyList("exifEX");
   }
-  catch(Exiv2::AnyError &e)
+  catch(const std::exception &e)
   {
     // if exifEX is not known register it
     Exiv2::XmpProperties::registerNs("http://cipa.jp/exif/1.0/", "exifEX");

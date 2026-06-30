@@ -37,7 +37,7 @@ set(POSTHOG_HOST "https://eu.i.posthog.com" CACHE STRING "PostHog ingestion host
 # Distribution channel baked into the binary (DT_BUILD_CHANNEL). Official CI builds
 # pass -DBUILD_CHANNEL=nightly; everything else stays "self-build". Lets crash
 # reports and analytics tell official binaries apart from local/dev builds.
-set(BUILD_CHANNEL "self-build" CACHE STRING "Build distribution channel: 'nightly' for official builds, 'self-build' otherwise.")
+set(BUILD_CHANNEL "self-build" CACHE STRING "Build distribution channel: 'nightly' for official builds, 'self-build' otherwise. If you are building a package for a distribution repository, please write 'package-${YOUR_DISTRO}' here for our statistics.")
 
 if(USE_OPENCL)
   option(TESTBUILD_OPENCL_PROGRAMS "Test-compile opencl programs (needs llvm and clang 3.9+)." ON)

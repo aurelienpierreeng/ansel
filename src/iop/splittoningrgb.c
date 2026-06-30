@@ -395,9 +395,9 @@ static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point,
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
   if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_iop_channelmixer_shared_simple_to_sliders(&simple, widgets);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   return isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
 }
@@ -432,9 +432,9 @@ static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int poi
   const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip);
   if(!IS_NULL_PTR(error)) *error = roundtrip_error;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_iop_channelmixer_shared_primaries_to_sliders(&primaries, widgets);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   return isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
 }
@@ -554,27 +554,27 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
 
     if(active_mode == DT_SPLITTONING_RGB_MIXER_SIMPLE && !simple_ok)
     {
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(g->point[point].mixer_mode, DT_SPLITTONING_RGB_MIXER_COMPLETE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_control_log(_("simple mixer mode requires normalized rows with non-zero sums."));
     }
     else if(active_mode == DT_SPLITTONING_RGB_MIXER_PRIMARIES && !primaries_ok)
     {
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(g->point[point].mixer_mode, DT_SPLITTONING_RGB_MIXER_COMPLETE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
     }
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _set_point_complete_widgets(g, p, point);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   _queue_preview_redraw(self);
 }
 
@@ -696,7 +696,7 @@ static gboolean _preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data
 
 static void _general_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
@@ -734,7 +734,7 @@ static void _general_callback(GtkWidget *widget, gpointer user_data)
 
 static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
@@ -750,9 +750,9 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
     if(!_sync_simple_from_params(self, point, &error))
     {
       dt_control_log(_("simple mixer mode requires normalized rows with non-zero sums."));
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(widget, DT_SPLITTONING_RGB_MIXER_COMPLETE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
       return;
@@ -764,9 +764,9 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
     if(!_sync_primaries_from_params(self, point, &error))
     {
       dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
-      ++darktable.gui->reset;
+      dt_gui_freeze_begin();
       dt_bauhaus_combobox_set(widget, DT_SPLITTONING_RGB_MIXER_COMPLETE);
-      --darktable.gui->reset;
+      dt_gui_freeze_end();
       _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
       return;
@@ -776,16 +776,16 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
   if(mode == DT_SPLITTONING_RGB_MIXER_SIMPLE)
     for(int row = 0; row < 3; row++) p->normalize[point][row] = TRUE;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _set_point_complete_widgets(g, p, point);
   _set_point_mixer_mode(g, point, mode);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   _commit_gui_change(self, widget);
 }
 
 static void _simple_slider_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
@@ -804,17 +804,17 @@ static void _simple_slider_callback(GtkWidget *widget, gpointer user_data)
 
   for(int row = 0; row < 3; row++) p->normalize[point][row] = TRUE;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _set_point_complete_widgets(g, p, point);
   _sync_primaries_from_params(self, point, NULL);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   _commit_gui_change(self, widget);
 }
 
 static void _primaries_slider_callback(GtkWidget *widget, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
@@ -839,9 +839,9 @@ static void _primaries_slider_callback(GtkWidget *widget, gpointer user_data)
   _set_point_rows(p, point, M);
   for(int row = 0; row < 3; row++) p->normalize[point][row] = FALSE;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   _set_point_complete_widgets(g, p, point);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   _commit_gui_change(self, widget);
 }
@@ -1017,7 +1017,7 @@ void cleanup_global(dt_iop_module_so_t *module)
  */
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
@@ -1045,9 +1045,9 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   p->ev[point] = CLAMP(log2f(fmaxf(luminance, NORM_MIN)), -16.f, 16.f);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->point[point].ev, p->ev[point]);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   _commit_gui_change(self, picker);
 }
@@ -1057,7 +1057,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   for(int point = 0; point < DT_SPLITTONING_RGB_POINT_COUNT; point++)
   {
@@ -1084,7 +1084,7 @@ void gui_update(struct dt_iop_module_t *self)
     _update_point_slider_colors(self, point);
   }
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
   if(g->preview_surface)
   {
     cairo_surface_destroy(g->preview_surface);

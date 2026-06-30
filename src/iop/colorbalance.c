@@ -687,11 +687,11 @@ static inline void set_RGB_sliders(GtkWidget *R, GtkWidget *G, GtkWidget *B, flo
     p[CHANNEL_GREEN] = rgb[1] * 2.0f;
     p[CHANNEL_BLUE] = rgb[2] * 2.0f;
 
-    ++darktable.gui->reset;
+    dt_gui_freeze_begin();
     dt_bauhaus_slider_set(R, p[CHANNEL_RED]);
     dt_bauhaus_slider_set(G, p[CHANNEL_GREEN]);
     dt_bauhaus_slider_set(B, p[CHANNEL_BLUE]);
-    --darktable.gui->reset;
+    dt_gui_freeze_end();
   }
 }
 
@@ -741,7 +741,7 @@ static inline void _check_tuner_picker_labels(dt_iop_module_t *self)
 
 static void apply_autogrey(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -771,16 +771,16 @@ static void apply_autogrey(dt_iop_module_t *self)
 
   p->grey = XYZ[1] * 100.0f;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->grey, p->grey);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_lift_neutralize(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -807,19 +807,19 @@ static void apply_lift_neutralize(dt_iop_module_t *self)
   p->lift[CHANNEL_GREEN] = RGB[1] + 1.0f;
   p->lift[CHANNEL_BLUE] = RGB[2] + 1.0f;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->lift_r, p->lift[CHANNEL_RED]);
   dt_bauhaus_slider_set(g->lift_g, p->lift[CHANNEL_GREEN]);
   dt_bauhaus_slider_set(g->lift_b, p->lift[CHANNEL_BLUE]);
   set_HSL_sliders(g->hue_lift, g->sat_lift, p->lift);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_gamma_neutralize(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -846,19 +846,19 @@ static void apply_gamma_neutralize(dt_iop_module_t *self)
   p->gamma[CHANNEL_GREEN] = CLAMP(2.0 - RGB[1], 0.0001f, 2.0f);
   p->gamma[CHANNEL_BLUE] = CLAMP(2.0 - RGB[2], 0.0001f, 2.0f);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->gamma_r, p->gamma[CHANNEL_RED]);
   dt_bauhaus_slider_set(g->gamma_g, p->gamma[CHANNEL_GREEN]);
   dt_bauhaus_slider_set(g->gamma_b, p->gamma[CHANNEL_BLUE]);
   set_HSL_sliders(g->hue_gamma, g->sat_gamma, p->gamma);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_gain_neutralize(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -885,19 +885,19 @@ static void apply_gain_neutralize(dt_iop_module_t *self)
   p->gain[CHANNEL_GREEN] = RGB[1];
   p->gain[CHANNEL_BLUE] = RGB[2];
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->gain_r, p->gain[CHANNEL_RED]);
   dt_bauhaus_slider_set(g->gain_g, p->gain[CHANNEL_GREEN]);
   dt_bauhaus_slider_set(g->gain_b, p->gain[CHANNEL_BLUE]);
   set_HSL_sliders(g->hue_gain, g->sat_gain, p->gain);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_lift_auto(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -912,16 +912,16 @@ static void apply_lift_auto(dt_iop_module_t *self)
 
   p->lift[CHANNEL_FACTOR] = -p->gain[CHANNEL_FACTOR] * XYZ[1] + 1.0f;
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->lift_factor, p->lift[CHANNEL_FACTOR]);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_gamma_auto(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -937,16 +937,16 @@ static void apply_gamma_auto(dt_iop_module_t *self)
   p->gamma[CHANNEL_FACTOR]
       = 2.0f - logf(0.1842f) / logf(MAX(p->gain[CHANNEL_FACTOR] * XYZ[1] + p->lift[CHANNEL_FACTOR] - 1.0f, 0.000001f));
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->gamma_factor, p->gamma[CHANNEL_FACTOR]);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_gain_auto(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -961,9 +961,9 @@ static void apply_gain_auto(dt_iop_module_t *self)
 
   p->gain[CHANNEL_FACTOR] = p->lift[CHANNEL_FACTOR] / (XYZ[1]);
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->gain_factor, p->gain[CHANNEL_FACTOR]);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1065,7 +1065,7 @@ static void apply_autocolor(dt_iop_module_t *self)
   p->gain[CHANNEL_GREEN] = RGB_gain[1];
   p->gain[CHANNEL_BLUE] = RGB_gain[2];
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->lift_r, p->lift[CHANNEL_RED]);
   dt_bauhaus_slider_set(g->lift_g, p->lift[CHANNEL_GREEN]);
   dt_bauhaus_slider_set(g->lift_b, p->lift[CHANNEL_BLUE]);
@@ -1081,7 +1081,7 @@ static void apply_autocolor(dt_iop_module_t *self)
   set_HSL_sliders(g->hue_lift, g->sat_lift, p->lift);
   set_HSL_sliders(g->hue_gamma, g->sat_gamma, p->gamma);
   set_HSL_sliders(g->hue_gain, g->sat_gain, p->gain);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1129,11 +1129,11 @@ static void apply_autoluma(dt_iop_module_t *self)
     p->gamma[CHANNEL_FACTOR] = CLAMP(2.0f - logf(0.1842f) / logf(MAX(p->gain[CHANNEL_FACTOR] * g->luma_patches[GAMMA] + p->lift[CHANNEL_FACTOR] - 1.0f, 0.000001f)), 0.0f, 2.0f);
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->lift_factor, p->lift[CHANNEL_FACTOR]);
   dt_bauhaus_slider_set(g->gamma_factor, p->gamma[CHANNEL_FACTOR]);
   dt_bauhaus_slider_set(g->gain_factor, p->gain[CHANNEL_FACTOR]);
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1355,7 +1355,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     _configure_slider_blocks(NULL, self);
   }
 
-  ++darktable.gui->reset;
+  dt_gui_freeze_begin();
 
   if(IS_NULL_PTR(w) || w == g->lift_r  || w == g->lift_g  || w == g->lift_b)
     set_HSL_sliders(g->hue_lift, g->sat_lift, p->lift);
@@ -1364,12 +1364,12 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   if(IS_NULL_PTR(w) || w == g->gain_r  || w == g->gain_g  || w == g->gain_b)
     set_HSL_sliders(g->hue_gain, g->sat_gain, p->gain);
 
-  --darktable.gui->reset;
+  dt_gui_freeze_end();
 }
 
 static void controls_callback(GtkWidget *combo, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data;
 
@@ -1556,7 +1556,7 @@ static void which##_callback(GtkWidget *slider, gpointer user_data)             
   dt_iop_colorbalance_params_t *p = (dt_iop_colorbalance_params_t *)self->params;       \
   dt_iop_colorbalance_gui_data_t *g = (dt_iop_colorbalance_gui_data_t *)self->gui_data; \
                                                                                         \
-  if(darktable.gui->reset) return;                                                      \
+  if(dt_gui_widgets_suppressed()) return;                                                      \
                                                                                         \
   dt_iop_color_picker_reset(self, TRUE);                                                \
                                                                                         \

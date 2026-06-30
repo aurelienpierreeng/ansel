@@ -867,7 +867,7 @@ static void watermark_callback(GtkWidget *tb, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
 
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
   memset(p->filename, 0, sizeof(p->filename));
   int n = dt_bauhaus_combobox_get(g->watermarks);
@@ -980,7 +980,7 @@ static void alignment_callback(GtkWidget *tb, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
 
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
 
 
@@ -1007,7 +1007,7 @@ static void alignment_callback(GtkWidget *tb, gpointer user_data)
 static void text_callback(GtkWidget *entry, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
   g_strlcpy(p->text, gtk_entry_get_text(GTK_ENTRY(entry)), sizeof(p->text));
   dt_conf_set_string("plugins/darkroom/watermark/text", p->text);
@@ -1017,7 +1017,7 @@ static void text_callback(GtkWidget *entry, gpointer user_data)
 static void colorpick_color_set(GtkColorButton *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
 
   GdkRGBA c;
@@ -1035,7 +1035,7 @@ static void colorpick_color_set(GtkColorButton *widget, gpointer user_data)
 static void fontsel_callback(GtkWidget *button, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
 
   gchar *fontname = gtk_font_chooser_get_font(GTK_FONT_CHOOSER(button));

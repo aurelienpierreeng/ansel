@@ -332,7 +332,7 @@ static void _sync_params_from_gui(dt_iop_module_t *self, const gboolean record_h
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   (void)record_history;
-  if(IS_NULL_PTR(g) || (darktable.gui && darktable.gui->reset)) return;
+  if(IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed())) return;
 
   dt_conf_set_int(DRAWLAYER_CONF_BRUSH_SHAPE, dt_drawlayer_widgets_get_brush_profile_selection(g->ui.widgets));
   dt_conf_set_int(DRAWLAYER_CONF_BRUSH_MODE, dt_bauhaus_combobox_get(g->controls.brush_mode));

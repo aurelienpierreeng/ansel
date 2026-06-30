@@ -33,6 +33,10 @@
 #include <curl/curl.h>
 #include <string.h>
 
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
 #define POSTHOG_API_KEY "phc_uLtshRLGnot4cMieYFebh4gxkszztKLcfHgEYSZF3Cu6"
 
 #ifndef POSTHOG_HOST
@@ -92,7 +96,16 @@ static gpointer _telemetry_worker(gpointer data)
       curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
       curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _discard_cb);
-      curl_easy_perform(curl); // best-effort: ignore network errors
+#if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
+      // On Windows the packaged libcurl has no usable CA bundle on disk, so TLS
+      // verification of the HTTPS endpoint fails and every POST is silently
+      // dropped (Sentry works because sentry-native uses WinHTTP). Verify against
+      // the Windows system certificate store instead. (libcurl >= 7.71)
+      curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
+      const CURLcode res = curl_easy_perform(curl); // best-effort: ignore network errors
+      if(res != CURLE_OK)
+        dt_print(DT_DEBUG_CONTROL, "[telemetry] POST failed: %s\n", curl_easy_strerror(res));
     }
     g_free(body);
   }
@@ -297,11 +310,26 @@ static JsonObject *_telemetry_system_properties(void)
   // Same per-run id as the Sentry session_id tag, to correlate without double count.
   json_object_set_string_member(p, "session_id", dt_session_id());
   json_object_set_string_member(p, "build_type", DT_BUILD_TYPE);
+  // Full C compiler flags baked in at configure time (includes -DNDEBUG, -O3, -g, etc.)
+  json_object_set_string_member(p, "build_cflags", DT_BUILD_C_FLAGS);
   // "nightly" for official builds, "self-build" otherwise - lets analytics exclude
   // local/development builds from population stats.
   json_object_set_string_member(p, "build_channel", DT_BUILD_CHANNEL);
 
   gchar *os = g_get_os_info(G_OS_INFO_KEY_PRETTY_NAME);
+#ifdef __APPLE__
+  // macOS has no /etc/os-release, so g_get_os_info() returns NULL there. Build a
+  // pretty name from the product version (e.g. "macOS 15.1") via sysctl.
+  if(!os)
+  {
+    char ver[256] = { 0 };
+    size_t len = sizeof(ver);
+    if(sysctlbyname("kern.osproductversion", ver, &len, NULL, 0) == 0 && ver[0])
+      os = g_strdup_printf("macOS %s", ver);
+    else
+      os = g_strdup("macOS");
+  }
+#endif
   if(os)
   {
     json_object_set_string_member(p, "os", os);

@@ -2964,6 +2964,12 @@ void gui_update(struct dt_iop_module_t *self)
   self->hide_enable_button = monochrome && !self->enabled;
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "default" : "monochrome");
 
+  // capability entry, added once (moved here from reload_defaults so it never touches widgets off
+  // the GUI thread / on a widget-less export dev)
+  if(dt_bauhaus_combobox_length(g->mode) < DT_IOP_HIGHLIGHTS_LAPLACIAN + 1)
+    dt_bauhaus_combobox_add_full(g->mode, _("guided laplacians"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+                                 GINT_TO_POINTER(DT_IOP_HIGHLIGHTS_LAPLACIAN), NULL, TRUE);
+
   dt_bauhaus_widget_set_quad_active(g->clip, FALSE);
   g->show_visualize = FALSE;
   gui_changed(self, NULL, NULL);
@@ -2981,20 +2987,13 @@ void reload_defaults(dt_iop_module_t *module)
   dt_iop_fmt_log(module, "reload_defaults: class=%s default_enabled=%d",
                  dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
                  module->default_enabled);
-  if(module->widget)
-    gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->default_enabled ? "default" : "monochrome");
-
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)module->gui_data;
-
-  if(g)
-    if(dt_bauhaus_combobox_length(g->mode) < DT_IOP_HIGHLIGHTS_LAPLACIAN + 1)
-      dt_bauhaus_combobox_add_full(g->mode, _("guided laplacians"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
-                                    GINT_TO_POINTER(DT_IOP_HIGHLIGHTS_LAPLACIAN), NULL, TRUE);
+  // Stack visibility and the "guided laplacians" capability entry are set from default_enabled in
+  // gui_update() (which already does the stack), so reload_defaults() stays params-only.
 }
 
 static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
 
