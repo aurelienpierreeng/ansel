@@ -992,6 +992,12 @@ static JsonObject *_rekey_record(const dt_sv_op_t op, const dt_sv_entry_t *e, co
   _module_label(e, module, sizeof(module));
   if(strcmp(module, "?") != 0) json_object_set_string_member(o, "module", module);
   _set_hash_member(o, link_field, link_hash);
+  // Expose the history item that triggered the rekey, through the node, as
+  // clickable links (params is taken from the node's current binding).
+  JsonObject *node = _resolve_locked(e->node_hash);
+  if(node) json_object_set_object_member(o, "node", node);
+  JsonObject *params = _resolve_locked(e->param_hash);
+  if(params) json_object_set_object_member(o, "params", params);
   return o;
 }
 
@@ -1031,6 +1037,13 @@ void dt_supervisor_rekey(const uint64_t old_hash, const uint64_t new_hash)
     new_e->bb_bpp = old->bb_bpp;
     old->alive = FALSE;
   }
+  // A rekey is triggered by a parameter change. The producing node was bound to
+  // the new history item at synchronization (before this rekey), so take the
+  // history from the node rather than inheriting the old cacheline's stale param.
+  const dt_sv_entry_t *node_e = _hash_is_set(new_e->node_hash)
+      ? (const dt_sv_entry_t *)g_hash_table_lookup(_sv.entries, &new_e->node_hash)
+      : NULL;
+  if(node_e && _hash_is_set(node_e->param_hash)) new_e->param_hash = node_e->param_hash;
   new_e->alive = TRUE;
 
   JsonObject *old_rec = old ? _rekey_record(DT_SV_DELETE, old, old_hash, "rekeyed_to", new_hash, FALSE) : NULL;

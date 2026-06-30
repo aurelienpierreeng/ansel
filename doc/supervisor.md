@@ -54,6 +54,13 @@ both as `dt_supervisor_rekey(old, new)`: the old entry goes `alive: false` with 
 metadata and is created with a `"rekeyed_from"` link (a `create` record). The two
 hashes are therefore explicitly chained instead of one silently mutating.
 
+A cacheline rekey is triggered by a parameter change, so the new cacheline must
+reference the *triggering* history item, not the old one. The producing node was
+bound to the new history item at synchronization (before the rekey runs), so the
+rekey takes the `params` from the node's current binding rather than the stale
+old cacheline param, and the rekey records carry clickable `node` and `params`
+links (`cacheline → node → params`).
+
 ### Thread safety
 
 One supervisor mutex guards the registry. Emitters value-copy their arguments;
