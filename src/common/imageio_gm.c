@@ -10,17 +10,17 @@
     Copyright (C) 2020-2021 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
-    
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -30,6 +30,7 @@
 #include "common/colorspaces.h"
 #include "common/darktable.h"
 #include "common/exif.h"
+#include "common/imageio_magick_abort_guard.h"
 #include "control/conf.h"
 #include "develop/develop.h"
 #include "imageio.h"
@@ -38,21 +39,8 @@
 #include <inttypes.h>
 #include <magick/api.h>
 #include <memory.h>
-#include <setjmp.h>
-#include <signal.h>
 #include <stdio.h>
 #include <strings.h>
-
-// Jump buffer and handler used to recover from SIGABRT raised by
-// GraphicsMagick internal assertion failures (e.g. __assert_rtn -> abort).
-// Without this guard the whole application is killed.
-static sigjmp_buf _gm_sigabrt_jmp;
-
-static void _gm_sigabrt_handler(int sig)
-{
-  (void)sig;
-  siglongjmp(_gm_sigabrt_jmp, 1);
-}
 
 
 // we only support images with certain filename extensions via GraphicsMagick;
@@ -93,26 +81,11 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
 
   g_strlcpy(image_info->filename, filename, sizeof(image_info->filename));
 
-  // Install a SIGABRT guard so that an assertion failure inside
-  // GraphicsMagick (which calls abort()) does not kill the whole app.
-  struct sigaction sa_new, sa_old;
-  memset(&sa_new, 0, sizeof(sa_new));
-  sa_new.sa_handler = _gm_sigabrt_handler;
-  sigemptyset(&sa_new.sa_mask);
-  sa_new.sa_flags = 0;
-  sigaction(SIGABRT, &sa_new, &sa_old);
-
-  if(sigsetjmp(_gm_sigabrt_jmp, 1) != 0)
-  {
-    // We jumped here from the SIGABRT handler – GraphicsMagick aborted.
-    fprintf(stderr, "[GraphicsMagick_open] caught SIGABRT from library while loading `%s'\n",
-            img->filename);
-    sigaction(SIGABRT, &sa_old, NULL);
-    if(image) DestroyImage(image);
-    if(image_info) DestroyImageInfo(image_info);
-    DestroyExceptionInfo(&exception);
-    return DT_IMAGEIO_FILE_CORRUPTED;
-  }
+  // GraphicsMagick calls assert() -> abort() on some malformed files instead
+  // of reporting through `exception`. Recover instead of crashing the whole
+  // app; on recovery, `image`/`image_info`/`exception` are NOT touched again
+  // (see imageio_magick_abort_guard.h) - we leak them and bail out directly.
+  DT_MAGICK_ABORT_GUARD("GraphicsMagick_open", filename, return DT_IMAGEIO_FILE_CORRUPTED);
 
   image = ReadImage(image_info, &exception);
   if(exception.severity != UndefinedException) CatchException(&exception);
@@ -152,10 +125,10 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
 
   if(IS_NULL_PTR(mbuf))
   {
+    DT_MAGICK_ABORT_GUARD_DISARM();
     if(image) DestroyImage(image);
     if(image_info) DestroyImageInfo(image_info);
     DestroyExceptionInfo(&exception);
-    sigaction(SIGABRT, &sa_old, NULL);
     return DT_IMAGEIO_OK;
   }
 
@@ -189,17 +162,17 @@ dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt
     memcpy(img->profile, profile_data, profile_length);
   }
 
+  DT_MAGICK_ABORT_GUARD_DISARM();
   if(image) DestroyImage(image);
   if(image_info) DestroyImageInfo(image_info);
   DestroyExceptionInfo(&exception);
-  sigaction(SIGABRT, &sa_old, NULL);
   return DT_IMAGEIO_OK;
 
 error:
+  DT_MAGICK_ABORT_GUARD_DISARM();
   if(image) DestroyImage(image);
   if(image_info) DestroyImageInfo(image_info);
   DestroyExceptionInfo(&exception);
-  sigaction(SIGABRT, &sa_old, NULL);
   return err;
 }
 #endif

@@ -74,6 +74,7 @@
 #endif
 #include "common/imageio_gm.h"
 #include "common/imageio_im.h"
+#include "common/imageio_magick_abort_guard.h"
 #include "common/imageio_jpeg.h"
 #include "common/imageio_pfm.h"
 #include "common/imageio_png.h"
@@ -253,6 +254,21 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     if(!IS_NULL_PTR(preview_format))
       g_strlcpy(image_info->magick, preview_format, sizeof(image_info->magick));
 
+    // GraphicsMagick calls assert() -> abort() on some malformed embedded
+    // previews instead of reporting through `exception`. Recover instead of
+    // crashing the whole app; on recovery, `image`/`image_info`/`exception`
+    // are NOT touched again (see imageio_magick_abort_guard.h) - we leak
+    // them and bail out directly, only freeing the buffer Ansel itself
+    // allocated if the per-row decode loop got partway through it.
+    DT_MAGICK_ABORT_GUARD("dt_imageio_large_thumbnail GM", filename, {
+      if(*buffer)
+      {
+        dt_pixelpipe_cache_free_align(*buffer);
+        *buffer = NULL;
+      }
+      goto error;
+    });
+
     image = BlobToImage(image_info, buf, bufsize, &exception);
 
     if(exception.severity != UndefinedException) CatchException(&exception);
@@ -292,6 +308,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     res = 0;
 
   error_gm:
+    DT_MAGICK_ABORT_GUARD_DISARM();
     if(image) DestroyImage(image);
     if(image_info) DestroyImageInfo(image_info);
     DestroyExceptionInfo(&exception);
@@ -301,6 +318,22 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
 	MagickBooleanType mret;
 
     image = NewMagickWand();
+
+    // ImageMagick calls assert() -> abort() on some malformed embedded
+    // previews instead of reporting through its normal error status.
+    // Recover instead of crashing the whole app; on recovery, `image` is
+    // NOT touched again (see imageio_magick_abort_guard.h) - we leak the
+    // wand and bail out directly, only freeing the buffer Ansel itself
+    // allocated if it was set before the abort.
+    DT_MAGICK_ABORT_GUARD("dt_imageio_large_thumbnail IM", filename, {
+      if(*buffer)
+      {
+        dt_free(*buffer);
+        *buffer = NULL;
+      }
+      goto error;
+    });
+
 	mret = MagickReadImageBlob(image, buf, bufsize);
     if(mret != MagickTrue)
     {
@@ -335,6 +368,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     res = 0;
 
 error_im:
+    DT_MAGICK_ABORT_GUARD_DISARM();
     DestroyMagickWand(image);
     if(res != 0) goto error;
 #else

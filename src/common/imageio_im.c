@@ -12,17 +12,17 @@
     Copyright (C) 2020-2021 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
-    
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -34,27 +34,16 @@
 #include "develop/develop.h"
 #include "common/exif.h"
 #include "common/colorspaces.h"
+#include "common/imageio_magick_abort_guard.h"
 #include "control/conf.h"
 
 #include <memory.h>
 #include <stdio.h>
 #include <inttypes.h>
-#include <setjmp.h>
-#include <signal.h>
 #include <strings.h>
 #include <assert.h>
 
 #include <MagickWand/MagickWand.h>
-
-// Jump buffer and handler used to recover from SIGABRT raised by
-// ImageMagick internal assertion failures (e.g. __assert_rtn -> abort).
-static sigjmp_buf _im_sigabrt_jmp;
-
-static void _im_sigabrt_handler(int sig)
-{
-  (void)sig;
-  siglongjmp(_im_sigabrt_jmp, 1);
-}
 
 
 /* we only support images with certain filename extensions via ImageMagick,
@@ -92,24 +81,11 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   image = NewMagickWand();
   if (IS_NULL_PTR(image)) return DT_IMAGEIO_FILE_CORRUPTED;
 
-  // Install a SIGABRT guard so that an assertion failure inside
-  // ImageMagick (which calls abort()) does not kill the whole app.
-  struct sigaction sa_new, sa_old;
-  memset(&sa_new, 0, sizeof(sa_new));
-  sa_new.sa_handler = _im_sigabrt_handler;
-  sigemptyset(&sa_new.sa_mask);
-  sa_new.sa_flags = 0;
-  sigaction(SIGABRT, &sa_new, &sa_old);
-
-  if(sigsetjmp(_im_sigabrt_jmp, 1) != 0)
-  {
-    // We jumped here from the SIGABRT handler – ImageMagick aborted.
-    fprintf(stderr, "[ImageMagick_open] caught SIGABRT from library while loading `%s'\n",
-            img->filename);
-    sigaction(SIGABRT, &sa_old, NULL);
-    if(image) DestroyMagickWand(image);
-    return DT_IMAGEIO_FILE_CORRUPTED;
-  }
+  // ImageMagick calls assert() -> abort() on some malformed files instead of
+  // reporting through its normal error status. Recover instead of crashing
+  // the whole app; on recovery, `image` is NOT touched again (see
+  // imageio_magick_abort_guard.h) - we leak the wand and bail out directly.
+  DT_MAGICK_ABORT_GUARD("ImageMagick_open", filename, return DT_IMAGEIO_FILE_CORRUPTED);
 
   ret = MagickReadImage(image, filename);
   if (ret != MagickTrue) {
@@ -147,8 +123,8 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
 
   if(IS_NULL_PTR(mbuf))
   {
+    DT_MAGICK_ABORT_GUARD_DISARM();
     DestroyMagickWand(image);
-    sigaction(SIGABRT, &sa_old, NULL);
     return DT_IMAGEIO_OK;
   }
 
@@ -181,13 +157,13 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
     MagickRelinquishMemory(profile_data);
   }
 
+  DT_MAGICK_ABORT_GUARD_DISARM();
   DestroyMagickWand(image);
-  sigaction(SIGABRT, &sa_old, NULL);
   return DT_IMAGEIO_OK;
 
 error:
+  DT_MAGICK_ABORT_GUARD_DISARM();
   DestroyMagickWand(image);
-  sigaction(SIGABRT, &sa_old, NULL);
   return err;
 }
 #endif
