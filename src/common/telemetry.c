@@ -96,7 +96,16 @@ static gpointer _telemetry_worker(gpointer data)
       curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
       curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _discard_cb);
-      curl_easy_perform(curl); // best-effort: ignore network errors
+#if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
+      // On Windows the packaged libcurl has no usable CA bundle on disk, so TLS
+      // verification of the HTTPS endpoint fails and every POST is silently
+      // dropped (Sentry works because sentry-native uses WinHTTP). Verify against
+      // the Windows system certificate store instead. (libcurl >= 7.71)
+      curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
+      const CURLcode res = curl_easy_perform(curl); // best-effort: ignore network errors
+      if(res != CURLE_OK)
+        dt_print(DT_DEBUG_CONTROL, "[telemetry] POST failed: %s\n", curl_easy_strerror(res));
     }
     g_free(body);
   }
