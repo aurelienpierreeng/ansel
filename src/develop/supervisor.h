@@ -25,6 +25,8 @@
 
 struct dt_image_t;
 struct dt_iop_module_t;
+struct dt_develop_blend_params_t;
+struct dt_masks_form_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -167,10 +169,24 @@ uint64_t dt_supervisor_image_key(int32_t imgid);
  */
 // `module`/`params` are optional: when the module exposes introspection, the
 // parameters are rendered human-legibly under "parameters" (pass NULL/NULL to skip).
+// `blend_params`, when given, is rendered under "blendop" (skipped when blending
+// is disabled).
 void dt_supervisor_history(dt_sv_op_t op, uint64_t param_hash, const char *op_name,
                            int multi_priority, const char *multi_name, int iop_order,
                            int history_index, int32_t imgid, gboolean enabled,
-                           const struct dt_iop_module_t *module, const void *params);
+                           const struct dt_iop_module_t *module, const void *params,
+                           const struct dt_develop_blend_params_t *blend_params, GList *forms);
+
+// Key under which a mask form is registered (by its formid).
+uint64_t dt_supervisor_form_key(int formid);
+
+/**
+ * Mask form lifecycle event — keyed by dt_supervisor_form_key(form->formid).
+ * `create` at allocation (dt_masks_create), `update` when a history snapshot
+ * carries the form (name/members filled in). Carries id, name, type and, for
+ * groups, the member form ids.
+ */
+void dt_supervisor_form(dt_sv_op_t op, const struct dt_masks_form_t *form);
 
 /**
  * Pipeline topology node event — keyed by dt_supervisor_node_key().

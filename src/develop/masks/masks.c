@@ -44,6 +44,7 @@
 #include "gui/gdkkeys.h"
 #include "develop/masks.h"
 #include "develop/develop.h"
+#include "develop/supervisor.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/math.h"
@@ -1952,6 +1953,8 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
 
   if (mask_form->functions && mask_form->functions->sanitize_config)
     mask_form->functions->sanitize_config(type);
+
+  if(dt_supervisor_active()) dt_supervisor_form(DT_SV_CREATE, mask_form);
 
   return mask_form;
 }
