@@ -3211,7 +3211,6 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(w), "icon-press", G_CALLBACK(_entry_clear_icon), NULL);
   gtk_box_pack_start(hbox, w, TRUE, TRUE, 0);
   gtk_widget_add_events(GTK_WIDGET(w), GDK_KEY_RELEASE_MASK);
-  g_signal_connect(G_OBJECT(w), "key-press-event", G_CALLBACK(_enter_key_pressed), (gpointer)self);
   d->entry = GTK_ENTRY(w);
 
   // validate button: attach the typed/picked tag without having to hit Enter
@@ -3239,6 +3238,11 @@ void gui_init(dt_lib_module_t *self)
     g_object_unref(completion);
   }
   g_object_unref(d->completion_store);  // kept alive by the completion above
+  // connected after gtk_entry_set_completion() so GtkEntryCompletion's own Return-key
+  // handling (accepting a keyboard-highlighted popup match into the entry text) runs
+  // before ours: otherwise a tag gets created from the raw typed prefix instead of the
+  // selected suggestion (#905)
+  g_signal_connect(G_OBJECT(d->entry), "key-press-event", G_CALLBACK(_enter_key_pressed), (gpointer)self);
 
   // ── tag management popup window (persistent, hidden until requested) ────
   d->manage_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
