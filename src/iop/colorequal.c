@@ -1779,7 +1779,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   _refresh_preview_cursor_sample(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
-  dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+  dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
   return 1;
 }
 
@@ -1841,7 +1841,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   _refresh_preview_cursor_sample(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
-  dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+  dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
   return 1;
 }
 
@@ -1854,7 +1854,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(!g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
     return;
 
-  if((dev->preview_pipe && dev->preview_pipe->processing) || !g->cursor_sample_valid)
+  if(!g->cursor_sample_valid)
   {
     if(!_refresh_preview_cursor_sample(self)) return;
   }
@@ -2005,7 +2005,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   {
     g->pending_preview_hash = previous_piece->global_hash;
     if(!dev->preview_pipe->processing) dt_dev_pixelpipe_update_history_preview(dev);
-    _invalidate_preview_cursor(g);
+    if(!g->cursor_sample_valid) _invalidate_preview_cursor(g);
     return FALSE;
   }
 
