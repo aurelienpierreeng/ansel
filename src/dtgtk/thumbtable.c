@@ -43,6 +43,7 @@
 #include "common/darktable.h"
 #include "gui/gdkkeys.h"
 #include "dtgtk/thumbtable.h"
+#include "dtgtk/thumbtable_internal.h"
 #include "dtgtk/thumbnail.h"
 #include "dtgtk/thumbtable_info.h"
 #include "common/collection.h"
@@ -182,25 +183,12 @@ static int _grab_focus(dt_thumbtable_t *table)
   if(IS_NULL_PTR(table)) return 0;
   table->focus_idle_id = 0;
 
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    GtkWidget *focused = NULL;
-    GtkWidget *toplevel = gtk_widget_get_toplevel(table->grid);
-    if(!IS_NULL_PTR(toplevel) && GTK_IS_WINDOW(toplevel))
-      focused = gtk_window_get_focus(GTK_WINDOW(toplevel));
-
-    // Grab focus here otherwise, on first click over the grid,
-    // scrolled window gets scrolled all the way to the top and it's annoying.
-    // This can work only if the grid is mapped and realized, which we ensure
-    // by wrapping that in a g_idle() method.
-    if(IS_NULL_PTR(focused) || (!GTK_IS_EDITABLE(focused) && !GTK_IS_TEXT_VIEW(focused)))
-      gtk_widget_grab_focus(table->grid);
-  }
+  if(table->ops->grab_focus) table->ops->grab_focus(table);
   dt_thumbtable_scroll_to_selection(table);
   return 0;
 }
 
-static void _thumbtable_schedule_focus(dt_thumbtable_t *table, const gint priority)
+void dt_thumbtable_schedule_focus(dt_thumbtable_t *table, const gint priority)
 {
   if(IS_NULL_PTR(table) || table->focus_idle_id) return;
   table->focus_idle_id = g_idle_add_full(priority, (GSourceFunc)_grab_focus, table, NULL);
@@ -231,88 +219,13 @@ void dt_thumbtable_queue_update(dt_thumbtable_t *table)
   _thumbtable_schedule_update(table);
 }
 
-/**
- * @brief Idle callback for applying grid configuration
- *
- * This handler is used when grid configuration changes (like column count).
- * It handles the grid reconfiguration and thumbnail updates, then schedules
- * a follow-up idle callback for scrolling to ensure proper GTK widget state.
- * 
- * The callback:
- * 1. Reconfigures the grid based on new column settings
- * 2. Updates and populates visible thumbnails
- * 3. Schedules a follow-up idle callback for scrolling
- */
-static gboolean _thumbtable_idle_apply_grid_configuration(gpointer user_data)
-{
-  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(IS_NULL_PTR(table)) return G_SOURCE_REMOVE;
-
-  table->idle_update_id = 0;
-  
-  // Reconfigure the grid with new column settings from config
-  dt_thumbtable_configure(table);
-  
-  // Update and populate visible thumbnails at new sizes
-  dt_thumbtable_update(table);
-
-  dt_thumbtable_refresh_thumbnail(table, UNKNOWN_IMAGE, TRUE);
-  
-  // Queue redraw for any unpopulated areas
-  if(table->thumb_nb == 0) gtk_widget_queue_draw(table->grid);
-  
-  // Schedule scrolling as a follow-up idle callback with lower priority.
-  // This ensures the GTK widget grid is fully mapped and realized before we attempt to scroll.
-  // We use a lower priority (G_PRIORITY_LOW) to let the GTK layout pass complete first.
-  _thumbtable_schedule_focus(table, G_PRIORITY_LOW);
-  
-  return G_SOURCE_REMOVE;
-}
-
-/**
- * @brief Apply grid configuration changes with proper event synchronization
- * @param table The thumbnail table
- *
- * This function should be called when grid properties like column count change.
- * It properly coalesces and orders the necessary updates:
- * 1. Configures the grid based on current column settings
- * 2. Updates and resizes all visible thumbnails
- * 3. Scrolls to maintain the active selection in view
- *
- * Unlike calling the functions separately, this ensures all operations happen
- * together in the correct order within a single idle callback, preventing
- * partial updates or out-of-sync scroll positions.
- */
-void dt_thumbtable_apply_grid_configuration(dt_thumbtable_t *table)
-{
-  if(IS_NULL_PTR(table)) return;
-  if(table->scroll_window && !gtk_widget_is_visible(table->scroll_window)) return;
-  
-  // Cancel any pending standard idle update to coalesce configuration changes
-  if(table->idle_update_id)
-  {
-    g_source_remove(table->idle_update_id);
-    table->idle_update_id = 0;
-  }
-  
-  // Ensure we have the current active image so we can scroll back to it after grid size change
-  dt_thumbtable_set_active_rowid(table);
-
-  // Schedule the coordinated grid configuration with higher priority to ensure
-  // it runs before other pending updates
-  table->idle_update_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, 
-                                          (GSourceFunc)_thumbtable_idle_apply_grid_configuration, 
-                                          table, NULL);
-}
-
 static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_data)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   if(IS_NULL_PTR(table)) return;
 
   // Only react to the adjustment that is meaningful in the current mode.
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER && adjustment != table->v_scrollbar) return;
-  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && adjustment != table->h_scrollbar) return;
+  if(!table->ops->wants_scroll_value(table, adjustment)) return;
 
   _thumbtable_schedule_update(table);
 }
@@ -322,14 +235,10 @@ static void _scrollbar_page_size_notify(GObject *object, GParamSpec *pspec, gpoi
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   if(IS_NULL_PTR(table)) return;
 
-  // Page size is only used to size the filemanager/grid. Filmstrip uses its parent allocation.
-  if(table->mode != DT_THUMBTABLE_MODE_FILEMANAGER) return;
-
-  // Only react to the scroll-axis (vertical) adjustment. The cross-axis adjustment's page size is
-  // driven by the grid width we set during configure; reacting to it would re-enter configure and
-  // can spin in a resize/redraw loop. (It is dormant under the NEVER horizontal policy, but guarding
-  // here keeps that assumption from silently breaking.)
-  if(object != (GObject *)table->v_scrollbar) return;
+  // Page size is only used to size the filemanager/grid (filmstrip uses its parent allocation), and
+  // only the scroll-axis (vertical) adjustment matters. Reacting to the cross-axis adjustment would
+  // re-enter configure (whose grid-width write drives that page size) and can spin in a resize loop.
+  if(!table->ops->wants_page_size_notify(table, object)) return;
 
   _thumbtable_schedule_update(table);
 }
@@ -352,25 +261,10 @@ static void _scrollbar_widget_size_allocate(GtkWidget *widget, GtkAllocation *al
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   if(IS_NULL_PTR(table) || IS_NULL_PTR(allocation) || IS_NULL_PTR(table->scroll_window)) return;
 
-  GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
-  GtkWidget *v_scroll = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
-
-  // Filmstrip height depends on the horizontal scrollbar height. When it gets realized/allocated,
-  // we need to recompute thumbnail sizes even if the parent size didn't change.
-  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && widget == h_scroll)
-  {
-    if(allocation->height == table->last_h_scrollbar_height) return;
-    table->last_h_scrollbar_height = allocation->height;
+  // The frontend decides which scrollbar's geometry drives its thumbnail sizing (filmstrip: the
+  // horizontal scrollbar height; filemanager: the vertical scrollbar width) and records it.
+  if(table->ops->relevant_scrollbar_changed(table, widget, allocation))
     _thumbtable_schedule_update(table);
-  }
-
-  // Filemanager fallback sizing subtracts the vertical scrollbar width.
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER && widget == v_scroll)
-  {
-    if(allocation->width == table->last_v_scrollbar_width) return;
-    table->last_v_scrollbar_width = allocation->width;
-    _thumbtable_schedule_update(table);
-  }
 }
 
 // We can't trust the mouse enter/leave events on thumnbails to properly
@@ -445,35 +339,13 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
 static void _rowid_to_position(dt_thumbtable_t *table, int rowid, int *x, int *y)
 {
   if(table->thumbs_per_row < 1) return;
-
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    int row = rowid / table->thumbs_per_row;  // euclidean division
-    int col = rowid % table->thumbs_per_row;
-    *x = col * table->thumb_width;
-    *y = row * table->thumb_height;
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    *x = rowid * table->thumb_width;
-    *y = 0;
-  }
+  table->ops->rowid_to_position(table, rowid, x, y);
 }
 
 // Needs updated table->x_position and table->y_position
 static int _position_to_rowid(dt_thumbtable_t *table, const double x, const double y)
 {
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    // Attempt to get the image rowid sitting in the center of the middle row
-    return (y + table->view_height / 2) / table->thumb_height * table->thumbs_per_row
-      + table->thumbs_per_row / 2 - 1;
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    return x + (table->view_width / 2.) / table->thumb_width;
-  }
-  return UNKNOWN_IMAGE;
+  return table->ops->position_to_rowid(table, x, y);
 }
 
 // Find the x, y coordinates of any given thumbnail
@@ -525,7 +397,7 @@ static void dt_thumbtable_scroll_to_rowid(dt_thumbtable_t *table, int rowid)
   dt_thumbtable_scroll_to_position(table, x_scroll, y_scroll);
 }
 
-static int _find_rowid_from_imgid(dt_thumbtable_t *table, const int32_t imgid)
+int dt_thumbtable_find_rowid_from_imgid(dt_thumbtable_t *table, const int32_t imgid)
 {
   if(IS_NULL_PTR(table) || IS_NULL_PTR(table->lut) || table->collection_count <= 0) return UNKNOWN_IMAGE;
 
@@ -545,7 +417,7 @@ int dt_thumbtable_scroll_to_imgid(dt_thumbtable_t *table, int32_t imgid)
   if(imgid > UNKNOWN_IMAGE)
   {
     dt_pthread_mutex_lock(&table->lock);
-    rowid = _find_rowid_from_imgid(table, imgid);
+    rowid = dt_thumbtable_find_rowid_from_imgid(table, imgid);
     dt_pthread_mutex_unlock(&table->lock);
   }
   else
@@ -583,37 +455,7 @@ int dt_thumbtable_scroll_to_selection(dt_thumbtable_t *table)
 static gboolean _get_row_ids(dt_thumbtable_t *table, int *rowid_min, int *rowid_max)
 {
   if(!table->configured || IS_NULL_PTR(table->v_scrollbar) || IS_NULL_PTR(table->h_scrollbar)) return FALSE;
-
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    // Pixel coordinates of the viewport:
-    float page_size = gtk_adjustment_get_page_size(table->v_scrollbar);
-    float position = gtk_adjustment_get_value(table->v_scrollbar);
-
-    // what is currently visible lies between position and position + page_size.
-    // don't preload next/previous rows because, when in 1 thumb/column,
-    // that can be quite slow
-    int row_min = floorf(position / (float)table->thumb_height);
-    int row_max = ceilf((position + page_size) / (float)table->thumb_height);
-
-    // rowid is the positional ID of the image in the SQLite collection, indexed from 0.
-    // SQLite indexes from 1 but then be use our own array to cache results.
-    *rowid_min = row_min * table->thumbs_per_row;
-    *rowid_max = row_max * table->thumbs_per_row;
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    float page_size = gtk_adjustment_get_page_size(table->h_scrollbar);
-    float position = gtk_adjustment_get_value(table->h_scrollbar);
-
-    // Preload the previous and next pages too because thumbnails are typically small
-    int row_min = (position - page_size) / table->thumb_width;
-    int row_max = (position + 2.f * page_size) / table->thumb_width;
-
-    *rowid_min = row_min * table->thumbs_per_row;
-    *rowid_max = row_max * table->thumbs_per_row;
-  }
-
+  table->ops->get_row_ids(table, rowid_min, rowid_max);
   return TRUE;
 }
 
@@ -621,29 +463,7 @@ static gboolean _get_row_ids(dt_thumbtable_t *table, int *rowid_min, int *rowid_
 gboolean _is_rowid_visible(dt_thumbtable_t *table, int rowid)
 {
   if(!table->configured || IS_NULL_PTR(table->v_scrollbar) || IS_NULL_PTR(table->h_scrollbar)) return FALSE;
-
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {    // Pixel coordinates of the viewport:
-    int page_size = gtk_adjustment_get_page_size(table->v_scrollbar);
-    int position = gtk_adjustment_get_value(table->v_scrollbar);
-    int page_bottom = page_size + position;
-
-    int img_top = (rowid / table->thumbs_per_row) * table->thumb_height;
-    int img_bottom = img_top + table->thumb_height;
-    return img_top >= position && img_bottom <= page_bottom;
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    int page_size = gtk_adjustment_get_page_size(table->h_scrollbar);
-    int position = gtk_adjustment_get_value(table->h_scrollbar);
-    int page_right = page_size + position;
-
-    int img_left = rowid * table->thumb_height;
-    int img_right = img_left + table->thumb_width;
-    return img_left >= position && img_right <= page_right;
-  }
-
-  return FALSE;
+  return table->ops->is_rowid_visible(table, rowid);
 }
 
 // Returns TRUE if visible row ids have changed since last check
@@ -665,49 +485,7 @@ gboolean _update_row_ids(dt_thumbtable_t *table)
 void _update_grid_area(dt_thumbtable_t *table)
 {
   if(!table->configured || !table->collection_inited) return;
-
-  double main_dimension = 0.;
-  int current_w = 0, current_h = 0;
-  gtk_widget_get_size_request(table->grid, &current_w, &current_h);
-  gboolean changed = FALSE;
-
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    const int height = (int)ceilf((float)table->collection_count / (float)table->thumbs_per_row) * table->thumb_height;
-    main_dimension = height;
-    // Pin the cross-axis (width) to the viewport so the grid reaches the scrollbar instead of stopping
-    // at the floor-rounded column total. Safe under NEVER: the grid content already fits view_width
-    // (decoration budgeted in configure), so this lands on a stable fixpoint (grid = view_width,
-    // scrolled window = parent) without perturbing the cross-axis adjustment.
-    if(current_h != height || current_w != table->view_width)
-    {
-      gtk_widget_set_size_request(table->grid, table->view_width, height);
-      changed = TRUE;
-    }
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    const int width = table->collection_count * table->thumb_width;
-    main_dimension = width;
-    // Pin the cross-axis (height) to the viewport for the same reason as above.
-    if(current_w != width || current_h != table->view_height)
-    {
-      gtk_widget_set_size_request(table->grid, width, table->view_height);
-      changed = TRUE;
-    }
-  }
-  else
-  {
-    main_dimension = 0.;
-    if(current_w != -1 || current_h != -1)
-    {
-      gtk_widget_set_size_request(table->grid, -1, -1);
-      changed = TRUE;
-    }
-  }
-
-  if(changed)
-    dt_print(DT_DEBUG_LIGHTTABLE, "Configuring grid size main dimension: %.f\n", main_dimension);
+  table->ops->update_content_size(table);
 }
 
 
@@ -741,7 +519,7 @@ void _grid_configure(dt_thumbtable_t *table, int width, int height, int per_row,
 // preferred size includes its margins). Budgeting for it - read from the theme rather than hardcoded -
 // keeps the grid within its viewport under the NEVER scroll policy instead of forcing the scrolled
 // window (and its scrollbar) past the parent overlay. The cell is square, so H and V surplus are equal.
-static int _thumb_cell_decoration(void)
+int dt_thumbtable_thumb_cell_decoration(void)
 {
   GtkWidgetPath *path = gtk_widget_path_new();
   gtk_widget_path_append_type(path, GTK_TYPE_EVENT_BOX);
@@ -766,56 +544,16 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
 {
   if(!gtk_widget_is_visible(table->scroll_window)) return;
 
-  int cols = 1;
   int new_width = 0;
   int new_height = 0;
   int new_thumbs_per_row = 0;
   int new_thumb_width = 0;
   int new_thumb_height = 0;
 
-  // GtkScrolledWindow reserves a "scrollbar-spacing" gutter between the content and the scrollbar.
-  // It is a legacy GtkWidget *style property* (default 3px), not a CSS box property - invisible in the
-  // GTK Inspector's CSS pane. We zero it via CSS (#thumbtable-scroll, see ansel.css) but still read its
-  // real value here so the maths stays exact whatever the theme/DPI yields.
-  gint sb_spacing = 0;
-  gtk_widget_style_get(table->scroll_window, "scrollbar-spacing", &sb_spacing, NULL);
-
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    // Use actual widget allocations for sizing: GtkAdjustment page sizes are not reliably updated
-    // during shrinking, which can prevent thumbnails from downscaling until another resize happens.
-    new_width = gtk_widget_get_allocated_width(table->parent_overlay);
-    new_height = gtk_widget_get_allocated_height(table->parent_overlay);
-
-    GtkWidget *v_scroll = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
-    const int v_scroll_w = v_scroll ? gtk_widget_get_allocated_width(v_scroll) : 0;
-    if(v_scroll_w > 0) new_width -= v_scroll_w + sb_spacing;
-
-    cols = dt_conf_get_int("plugins/lighttable/images_in_row");
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    // Don't use GtkAdjustment page sizes here: in filmstrip, the scrolled window height can
-    // be influenced by its (resized) children during initial layout, which may cause a
-    // feedback loop where thumbnails keep growing.
-    new_width = gtk_widget_get_allocated_width(table->parent_overlay);
-    new_height = gtk_widget_get_allocated_height(table->parent_overlay);
-    GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
-    int h_scroll_h = 0;
-    if(h_scroll)
-    {
-      h_scroll_h = gtk_widget_get_allocated_height(h_scroll);
-      if(h_scroll_h > 0) h_scroll_h += sb_spacing;
-    }
-
-    // Clamp to the explicit panel size request when present to enforce "container drives child size".
-    int req_w = -1, req_h = -1;
-    gtk_widget_get_size_request(table->parent_overlay, &req_w, &req_h);
-    if(req_h > 0)
-      new_height = MIN(new_height, req_h);
-
-    new_height -= h_scroll_h;
-  }
+  // The frontend reads the parent allocation and derives the viewport size, per-row count and
+  // individual thumbnail size (including the scrollbar gutter and per-cell decoration budget).
+  table->ops->configure_dims(table, &new_width, &new_height, &new_thumbs_per_row,
+                             &new_thumb_width, &new_thumb_height);
 
   // Parent is not allocated or something went wrong:
   // ensure to reset everything so no further code will run.
@@ -827,25 +565,6 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
     table->thumb_height = 0;
     table->thumb_width = 0;
     return;
-  }
-
-  // Reserve the per-cell decoration surplus on the cross axis so the whole grid (cols*thumb_width plus
-  // the last cell's protruding border) stays within the viewport. Under the NEVER scroll policy a
-  // GtkFixed wider than the viewport would drag the scrolled window (and scrollbar) past the parent.
-  const int deco = _thumb_cell_decoration();
-
-  // Compute derived thumbnail sizes and only invalidate thumbnails when they actually change.
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    new_thumbs_per_row = cols;
-    new_thumb_width = (int)floorf((float)(new_width - deco) / (float)MAX(new_thumbs_per_row, 1));
-    new_thumb_height = (new_thumbs_per_row == 1) ? new_height : new_thumb_width;
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    new_thumbs_per_row = 1;
-    new_thumb_height = new_height - deco;
-    new_thumb_width = new_thumb_height;
   }
 
   const gboolean thumbs_changed = (!table->configured
@@ -910,51 +629,13 @@ void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
   dt_thumbnail_set_group_border(thumb, borders);
 
   const int32_t rowid = thumb->rowid;
-  const int32_t groupid = thumb->info.group_id;
 
   // Ungrouped image: abort
   if(!dt_thumbtable_info_is_grouped(table->lut[rowid].thumb->info) || !table->draw_group_borders) return;
 
-  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    if(table->lut[CLAMP_ROW(rowid - table->thumbs_per_row)].groupid != groupid
-      || IS_COLLECTION_EDGE(rowid - table->thumbs_per_row))
-      borders |= DT_THUMBNAIL_BORDER_TOP;
-
-    if(table->lut[CLAMP_ROW(rowid + table->thumbs_per_row)].groupid != groupid
-      || IS_COLLECTION_EDGE(rowid + table->thumbs_per_row))
-      borders |= DT_THUMBNAIL_BORDER_BOTTOM;
-
-    if(table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
-      || IS_COLLECTION_EDGE(rowid - 1))
-      borders |= DT_THUMBNAIL_BORDER_LEFT;
-
-    if(table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
-      || IS_COLLECTION_EDGE(rowid + 1))
-      borders |= DT_THUMBNAIL_BORDER_RIGHT;
-
-    // If the group spans over more than a full row,
-    // close the row ends. Otherwise, we leave orphans opened at the row ends.
-    if(table->lut[rowid].thumb->info.group_members > table->thumbs_per_row)
-    {
-      if(rowid % table->thumbs_per_row == 0)
-        borders |= DT_THUMBNAIL_BORDER_LEFT;
-      if(rowid % table->thumbs_per_row == table->thumbs_per_row - 1)
-        borders |= DT_THUMBNAIL_BORDER_RIGHT;
-    }
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    borders |= DT_THUMBNAIL_BORDER_BOTTOM | DT_THUMBNAIL_BORDER_TOP;
-
-    if(table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
-      || IS_COLLECTION_EDGE(rowid - 1))
-      borders |= DT_THUMBNAIL_BORDER_LEFT;
-
-    if(table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
-      || IS_COLLECTION_EDGE(rowid + 1))
-      borders |= DT_THUMBNAIL_BORDER_RIGHT;
-  }
+  // The frontend adds the mode-specific border flags (grid closes on all four neighbours; the
+  // filmstrip always closes top+bottom and checks only its horizontal neighbours).
+  table->ops->group_borders(table, thumb, &borders);
 
   dt_thumbnail_set_group_border(thumb, borders);
 }
@@ -1026,13 +707,13 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   if(new_item)
   {
     _set_thumb_position(table, thumb);
-    gtk_fixed_put(GTK_FIXED(table->grid), thumb->widget, thumb->x, thumb->y);
+    table->ops->place_child(table, thumb);
     //fprintf(stdout, "adding new thumb at #%lu: %i, %i\n", rowid, thumb->x, thumb->y);
   }
   else if(new_position || size_changed)
   {
     _set_thumb_position(table, thumb);
-    gtk_fixed_move(GTK_FIXED(table->grid), thumb->widget, thumb->x, thumb->y);
+    table->ops->move_child(table, thumb);
     //fprintf(stdout, "moving new thumb at #%lu: %i, %i\n", rowid, thumb->x, thumb->y);
   }
 
@@ -1040,16 +721,8 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   dt_thumbnail_set_mouseover(thumb, (mouse_over == thumb->info.id));
   dt_thumbnail_alternative_mode(thumb, table->alternate_mode);
 
-  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    dt_thumbnail_update_selection(thumb, dt_view_active_images_has_imgid(thumb->info.id));
-    thumb->disable_actions = TRUE;
-  }
-  else if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.id));
-    thumb->disable_actions = FALSE;
-  }
+  // Per-mode selection/action state (filmstrip tracks active images and disables actions).
+  table->ops->on_thumbnail_added(table, thumb);
 
   _add_thumbnail_group_borders(table, thumb);
   gtk_widget_show(thumb->widget);
@@ -1088,7 +761,7 @@ void _resize_thumbnails(dt_thumbtable_t *table)
       if(size_changed)
       {
         _set_thumb_position(table, thumb);
-        gtk_fixed_move(GTK_FIXED(table->grid), thumb->widget, thumb->x, thumb->y);
+        table->ops->move_child(table, thumb);
       }
       dt_thumbnail_alternative_mode(thumb, table->alternate_mode);
     }
@@ -1185,36 +858,6 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   dt_pthread_mutex_unlock(&table->lock);
 }
 
-void dt_thumbtable_set_zoom(dt_thumbtable_t *table, dt_thumbtable_zoom_t level)
-{
-  table->zoom = level;
-  dt_thumbtable_set_active_rowid(table);
-  dt_thumbtable_refresh_thumbnail(table, UNKNOWN_IMAGE, TRUE);
-  _thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
-}
-
-dt_thumbtable_zoom_t dt_thumbtable_get_zoom(dt_thumbtable_t *table)
-{
-  return table->zoom;
-}
-
-void dt_thumbtable_offset_zoom(dt_thumbtable_t *table, const double delta_x, const double delta_y)
-{
-  dt_pthread_mutex_lock(&table->lock);
-  GHashTableIter iter;
-  gpointer value = NULL;
-  g_hash_table_iter_init(&iter, table->list);
-  while(g_hash_table_iter_next(&iter, NULL, &value))
-  {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)value;
-    thumb->zoomx += delta_x;
-    thumb->zoomy += delta_y;
-    gtk_widget_queue_draw(thumb->w_image);
-  }
-  dt_pthread_mutex_unlock(&table->lock);
-}
-
-
 void dt_thumbtable_set_focus_regions(dt_thumbtable_t *table, gboolean enable)
 {
   table->focus_regions = enable;
@@ -1300,7 +943,7 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     if(imgid <= 0) continue;
 
-    const int rowid = _find_rowid_from_imgid(table, imgid);
+    const int rowid = dt_thumbtable_find_rowid_from_imgid(table, imgid);
     if(rowid == UNKNOWN_IMAGE) continue;
 
     dt_thumbnail_t *thumb = table->lut[rowid].thumb;
@@ -1481,7 +1124,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     // Coalesce multiple layout/resize signals that can happen during collection loads.
     dt_thumbtable_queue_update(table);
 
-    _thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
+    dt_thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
   }
 }
 
@@ -1646,17 +1289,9 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   const int32_t imgid = dt_control_get_mouse_over_id();
 
-  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && imgid > UNKNOWN_IMAGE)
-  {
-    /* Views that need drags to commit the hovered image must do it before
-     * dt_act_on_get_images() snapshots the payload. */
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN, imgid);
-  }
-  else if(imgid > UNKNOWN_IMAGE)
-  {
-    // Ensure the image that collects the drag event is properly part of the selection
-    dt_selection_select(darktable.selection, imgid);
-  }
+  // Commit the hovered image before dt_act_on_get_images() snapshots the payload: the filmstrip
+  // raises a view signal, the grid extends the selection.
+  table->ops->on_drag_begin(table, imgid);
 
   table->drag_list = dt_act_on_get_images();
   _thumbtable_drag_set_icon(table, context);
@@ -1786,20 +1421,7 @@ int _imgid_to_rowid(dt_thumbtable_t *table, int32_t imgid)
   return rowid;
 }
 
-typedef enum dt_thumbtable_direction_t
-{
-  DT_TT_MOVE_UP,
-  DT_TT_MOVE_DOWN,
-  DT_TT_MOVE_LEFT,
-  DT_TT_MOVE_RIGHT,
-  DT_TT_MOVE_PREVIOUS_PAGE,
-  DT_TT_MOVE_NEXT_PAGE,
-  DT_TT_MOVE_START,
-  DT_TT_MOVE_END
-} dt_thumbtable_direction_t;
-
-
-void _move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_thumbtable_direction_t direction, int origin_imgid)
+void dt_thumbtable_move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_thumbtable_direction_t direction, int origin_imgid)
 {
   if(IS_NULL_PTR(table->lut)) return;
   if(!gtk_widget_is_visible(table->scroll_window)) return;
@@ -1906,87 +1528,44 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
     _alternative_mode(table, FALSE);
 
   guint key = dt_keys_mainpad_alternatives(event->keyval);
+
+  // Mode-specific navigation/selection keys first: the grid consumes Up/Down (row navigation) and
+  // space/nobreakspace (selection); the filmstrip has none and lets them fall through.
+  if(table->ops->handle_key && table->ops->handle_key(table, event, key, imgid))
+    return TRUE;
+
+  // Keys handled identically in both modes.
   switch(key)
   {
-    case GDK_KEY_Up:
-    {
-      if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-      {
-        _move_in_grid(table, event, DT_TT_MOVE_UP, imgid);
-        return TRUE;
-      }
-      break;
-    }
-    case GDK_KEY_Down:
-    {
-      if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-      {
-        _move_in_grid(table, event, DT_TT_MOVE_DOWN, imgid);
-        return TRUE;
-      }
-      break;
-    }
     case GDK_KEY_Left:
     {
-      _move_in_grid(table, event, DT_TT_MOVE_LEFT, imgid);
+      dt_thumbtable_move_in_grid(table, event, DT_TT_MOVE_LEFT, imgid);
       return TRUE;
     }
     case GDK_KEY_Right:
     {
-      _move_in_grid(table, event, DT_TT_MOVE_RIGHT, imgid);
+      dt_thumbtable_move_in_grid(table, event, DT_TT_MOVE_RIGHT, imgid);
       return TRUE;
     }
     case GDK_KEY_Page_Up:
     {
-      _move_in_grid(table, event, DT_TT_MOVE_PREVIOUS_PAGE, imgid);
+      dt_thumbtable_move_in_grid(table, event, DT_TT_MOVE_PREVIOUS_PAGE, imgid);
       return TRUE;
     }
     case GDK_KEY_Page_Down:
     {
-      _move_in_grid(table, event, DT_TT_MOVE_NEXT_PAGE, imgid);
+      dt_thumbtable_move_in_grid(table, event, DT_TT_MOVE_NEXT_PAGE, imgid);
       return TRUE;
     }
     case GDK_KEY_Home:
     {
-      _move_in_grid(table, event, DT_TT_MOVE_START, imgid);
+      dt_thumbtable_move_in_grid(table, event, DT_TT_MOVE_START, imgid);
       return TRUE;
     }
     case GDK_KEY_End:
     {
-      _move_in_grid(table, event, DT_TT_MOVE_END, imgid);
+      dt_thumbtable_move_in_grid(table, event, DT_TT_MOVE_END, imgid);
       return TRUE;
-    }
-    case GDK_KEY_space:
-    {
-      if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-      {
-        if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
-        {
-          dt_pthread_mutex_lock(&table->lock);
-          int rowid = _find_rowid_from_imgid(table, imgid);
-          dt_pthread_mutex_unlock(&table->lock);
-          dt_thumbtable_select_range(table, rowid);
-        }
-        else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-          dt_selection_toggle(darktable.selection, imgid);
-        else
-          dt_selection_select_single(darktable.selection, imgid);
-        return TRUE;
-      }
-      break;
-    }
-    case GDK_KEY_nobreakspace:
-    {
-      // Shift + space is decoded as nobreakspace on BÉPO keyboards
-      if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-      {
-        dt_pthread_mutex_lock(&table->lock);
-        int rowid = _find_rowid_from_imgid(table, imgid);
-        dt_pthread_mutex_unlock(&table->lock);
-        dt_thumbtable_select_range(table, rowid);
-        return TRUE;
-      }
-      break;
     }
     case GDK_KEY_Return:
     {
@@ -1994,8 +1573,8 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
       // opening to darkroom happens with double click (aka ACTIVATE event),
       // but the first click always select the clicked thumbnail before.
       // So we do the same here, even though it's not required and actually slightly annoying.
-      if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-        dt_selection_select_single(darktable.selection, imgid);
+      // (grid selects the thumbnail first; the filmstrip just activates.)
+      if(table->ops->pre_activate) table->ops->pre_activate(table, imgid);
 
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, imgid);
       return TRUE;
@@ -2055,9 +1634,28 @@ gboolean _event_main_leave(GtkWidget *widget, GdkEventCrossing *event, gpointer 
 }
 
 
+// Single dispatch point mapping a mode to its layout strategy. Every former if(mode==...) branch
+// now routes through the returned vtable (see thumbtable_internal.h and the two frontends).
+static const dt_thumbtable_layout_ops_t *_ops_for_mode(dt_thumbtable_mode_t mode)
+{
+  switch(mode)
+  {
+    case DT_THUMBTABLE_MODE_FILMSTRIP:
+      return dt_thumbtable_filmstrip_ops();
+    case DT_THUMBTABLE_MODE_FILEMANAGER:
+    default:
+      return dt_thumbtable_grid_ops();
+  }
+}
+
 dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
 {
   dt_thumbtable_t *table = (dt_thumbtable_t *)calloc(1, sizeof(dt_thumbtable_t));
+
+  // Bind the layout strategy before building the content widget: the frontend decides whether the
+  // content is a GtkFixed (grid) or a GtkLayout (filmstrip).
+  table->mode = mode;
+  table->ops = _ops_for_mode(mode);
 
   table->scroll_window = gtk_scrolled_window_new(NULL, NULL);
   // Named so the theme can zero its "scrollbar-spacing" style property (see dt_thumbtable_configure).
@@ -2082,12 +1680,15 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   if(v_scroll)
     g_signal_connect(G_OBJECT(v_scroll), "size-allocate", G_CALLBACK(_scrollbar_widget_size_allocate), table);
 
-  table->grid = gtk_fixed_new();
+  // Content widget: GtkFixed for the grid, GtkLayout for the filmstrip (the latter is a
+  // GtkScrollable, avoiding the implicit GtkViewport that collapsed the strip - issue #877).
+  table->grid = table->ops->create_content_widget();
   dt_gui_add_class(table->grid, "dt_thumbtable");
   gtk_container_add(GTK_CONTAINER(table->scroll_window), table->grid);
 
-  // gtk_container_add() wraps the grid in an implicit GtkViewport whose default shadow is
-  // GTK_SHADOW_IN (a .frame border). Drop it so it doesn't add to the scrolled window's size.
+  // A non-scrollable content widget (GtkFixed) gets wrapped in an implicit GtkViewport whose
+  // default shadow is GTK_SHADOW_IN (a .frame border). Drop it so it doesn't add to the scrolled
+  // window's size. A GtkScrollable (GtkLayout) is added directly, with no viewport to adjust.
   GtkWidget *viewport = gtk_bin_get_child(GTK_BIN(table->scroll_window));
   if(GTK_IS_VIEWPORT(viewport))
     gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), GTK_SHADOW_NONE);
@@ -2190,8 +1791,18 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
     _("Print/Filmstrip"),
     _("Map/Filmstrip")
   };
-  const int first_group = (mode == DT_THUMBTABLE_MODE_FILEMANAGER) ? 0 : 1;
-  const int last_group = (mode == DT_THUMBTABLE_MODE_FILEMANAGER) ? 1 : 4;
+  // The filemanager owns only the lighttable accel group (index 0); the shared filmstrip owns
+  // the darkroom/print/map groups (indices 1-3).
+  int first_group = 1, last_group = 4;
+  switch(mode)
+  {
+    case DT_THUMBTABLE_MODE_FILEMANAGER:
+      first_group = 0;
+      last_group = 1;
+      break;
+    default:
+      break;
+  }
 
   gchar *path = NULL;
   for(int group_index = first_group; group_index < last_group; group_index++)
@@ -2370,46 +1981,20 @@ void dt_thumbtable_stop(dt_thumbtable_t *table)
 
 void dt_thumbtable_update_parent(dt_thumbtable_t *table)
 {
-  _thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
+  dt_thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
 }
 
 void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
 {
   table->mode = mode;
+  table->ops = _ops_for_mode(mode);
+
   table->parent_overlay = gtk_overlay_new();
   g_signal_connect(G_OBJECT(table->parent_overlay), "size-allocate", G_CALLBACK(_parent_overlay_size_allocate), table);
 
-  if(mode == DT_THUMBTABLE_MODE_FILEMANAGER)
-  {
-    // The filemanager grid overlays the center canvas and floats as an OVERLAY child so its size
-    // request stays decoupled from the panel (the outer GtkOverlay drives its allocation). It is
-    // not affected by the Wayland blank-until-hover issue below because it is the focused content
-    // of the lighttable view, not a static sibling of a continuously repainted surface.
-    gtk_overlay_add_overlay(GTK_OVERLAY(table->parent_overlay), table->scroll_window);
-    gtk_widget_set_name(table->grid, "thumbtable-filemanager");
-    dt_gui_add_help_link(table->grid, dt_get_help_url("lighttable_filemanager"));
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
-  }
-  else if(mode == DT_THUMBTABLE_MODE_FILMSTRIP)
-  {
-    // The filmstrip is a static sibling of the heavily, continuously repainted darkroom center.
-    // As an overlay child its own offscreen GdkWindow goes stale/blank on Wayland until a pointer
-    // event invalidates it (thumbnails only appear on hover, issue #877). Make scroll_window the
-    // overlay's MAIN child so it draws into the overlay's own window and stays painted.
-    //
-    // The main child drives the overlay's size request, which would pin the panel height to the
-    // grid and break the resize-handle shrink + _parent_overlay_size_allocate reconfigure flow
-    // (the regression seen when the grid couldn't be downsized). Counter that with the vertical
-    // EXTERNAL policy + min_content_height(1) + propagate_natural_height(FALSE) recipe so the
-    // panel can still be freely shrunk; filmstrip thumb height is derived from the panel's
-    // allocation (see dt_thumbtable_configure), not from the scrolled window's own height request.
-    gtk_container_add(GTK_CONTAINER(table->parent_overlay), table->scroll_window);
-    gtk_widget_set_name(table->grid, "thumbtable-filmstrip");
-    dt_gui_add_help_link(table->grid, dt_get_help_url("filmstrip"));
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(table->scroll_window), GTK_POLICY_ALWAYS, GTK_POLICY_EXTERNAL);
-    gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(table->scroll_window), 1);
-    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(table->scroll_window), FALSE);
-  }
+  // The frontend builds its own scroll stack (overlay child vs. main child), widget name, help link
+  // and scroll policy.
+  table->ops->setup_parent(table);
 }
 
 void dt_thumbtable_select_all(dt_thumbtable_t *table)
@@ -2458,7 +2043,7 @@ void dt_thumbtable_select_range(dt_thumbtable_t *table, const int rowid)
     for(GList *s = g_list_first(selected); s; s = g_list_next(s))
     {
       int32_t imgid = GPOINTER_TO_INT(s->data);
-      int row = _find_rowid_from_imgid(table, imgid);
+      int row = dt_thumbtable_find_rowid_from_imgid(table, imgid);
       if(row < 0) continue; // not found - should not happen
       if(row < rowid_start) rowid_start = row;
       if(row > rowid_end) rowid_end = row;
@@ -2561,7 +2146,7 @@ void dt_thumbtable_dispatch_over(dt_thumbtable_t *table, GdkEventType type, int3
   }
 
   dt_pthread_mutex_lock(&table->lock);
-  table->rowid = _find_rowid_from_imgid(table, imgid);
+  table->rowid = dt_thumbtable_find_rowid_from_imgid(table, imgid);
   dt_pthread_mutex_unlock(&table->lock);
 
   // Attempt to re-grab focus on every interaction to restore keyboard navigation,

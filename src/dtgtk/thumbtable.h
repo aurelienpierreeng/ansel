@@ -92,9 +92,18 @@ typedef struct dt_thumbtable_cache_t
 } dt_thumbtable_cache_t;
 
 
+// Per-mode layout strategy; defined privately in dtgtk/thumbtable_internal.h and set once in
+// dt_thumbtable_new(). Stored here as an opaque pointer so external callers keep an intact struct
+// without seeing the vtable internals.
+typedef struct dt_thumbtable_layout_ops_t dt_thumbtable_layout_ops_t;
+
 typedef struct dt_thumbtable_t
 {
   dt_thumbtable_mode_t mode;
+
+  // Layout strategy selected from `mode` at construction (grid vs. filmstrip frontend).
+  const dt_thumbtable_layout_ops_t *ops;
+
   dt_thumbnail_overlay_t overlays;
 
   GtkWidget *grid; // GtkGrid

@@ -198,6 +198,8 @@ FILE(GLOB SOURCE_FILES
   "dtgtk/thumbtable_info.c"
   "dtgtk/thumbnail_btn.c"
   "dtgtk/thumbtable.c"
+  "dtgtk/filemanager.c"
+  "dtgtk/filmstrip.c"
   "dtgtk/togglebutton.c"
   "gui/accelerators.c"
   "gui/gtkentry.c"
