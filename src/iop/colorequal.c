@@ -1338,9 +1338,11 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   return TRUE;
 }
 
-static void _cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+static void _cacheline_ready_callback(gpointer instance, const guint64 hash,
+                                      const guint64 producer_node_key, gpointer user_data)
 {
   (void)instance;
+  (void)producer_node_key;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   if(g->pending_preview_hash != hash || !_refresh_preview_cursor_sample(self)) return;

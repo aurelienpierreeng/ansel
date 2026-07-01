@@ -1161,6 +1161,14 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
                                    module->iop_order, pipe->type, pipe->imgid, piece->roi_out.width,
                                    piece->roi_out.height, pipe->devid,
                                    dt_pixel_cache_entry_get_size(output_entry), NULL);
+  // Stamp the producing node identity so the CACHELINE_READY raised on the write-lock
+  // release below carries it: GUI cache-wait consumers can then be served by producer
+  // node even when the exact output hash drifted between their request and this publish
+  // (doc/pipeline-cache.md §8). Set on every publish so a rekey-reused entry never keeps
+  // a stale producer.
+  if(!IS_NULL_PTR(output_entry))
+    output_entry->producer_node_key
+        = dt_supervisor_node_key(pipe->type, module->op, module->multi_priority);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
   
   KILL_SWITCH_AND_FLUSH_CACHE;

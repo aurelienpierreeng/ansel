@@ -115,6 +115,11 @@ typedef struct dt_pixel_cache_entry_t
   int64_t age;              // timestamp of creation. Oldest entry will be the first freed if it's not locked
   char *name;               // name of the cache entry, for debugging
   int id;                   // id of the pipeline owning this entry. Used when flushing, a pipe can only flush its own.
+  uint64_t producer_node_key; // stable identity of the pipeline node that produced this output
+                              // (dt_supervisor_node_key(pipe_type, op, multi_priority)), or INVALID.
+                              // Travels with DT_SIGNAL_CACHELINE_READY so GUI waiters can match by
+                              // producer node even when the exact output hash drifted. See
+                              // doc/pipeline-cache.md §8.
   dt_atomic_int refcount;   // reference count for the cache entry, to avoid freeing it while still in use
   dt_pthread_rwlock_t lock; // read/write lock to avoid threads conflicts
   gboolean auto_destroy;    // TRUE for auto-destruction the next time it's used. Used for short-lived entries (transient states).

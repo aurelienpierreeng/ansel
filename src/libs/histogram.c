@@ -525,9 +525,12 @@ static void _preview_history_resync_callback(gpointer instance, gpointer user_da
   _refresh_preview_histograms(darktable.develop);
 }
 
-static void _preview_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+static void _preview_cacheline_ready_callback(gpointer instance, const guint64 hash,
+                                              const guint64 producer_node_key, gpointer user_data)
 {
   (void)instance;
+  (void)producer_node_key; // scope/module/picker buffer fetches match by producer node through
+                           // the cache-wait manager; this backbuf-hash refresh trigger is exact-hash.
   (void)user_data;
 
   dt_develop_t *const dev = darktable.develop;
@@ -2288,9 +2291,11 @@ static void _lib_histogram_history_resync_callback(gpointer instance, dt_lib_mod
   _sync_pending_histogram_hashes(self);
 }
 
-static void _lib_histogram_cacheline_ready_callback(gpointer instance, const guint64 hash, dt_lib_module_t *self)
+static void _lib_histogram_cacheline_ready_callback(gpointer instance, const guint64 hash,
+                                                    const guint64 producer_node_key, dt_lib_module_t *self)
 {
   (void)instance;
+  (void)producer_node_key;
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
   if(IS_NULL_PTR(d) || !_remove_pending_hash(d, hash)) return;
 

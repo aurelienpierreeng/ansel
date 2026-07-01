@@ -227,9 +227,11 @@ Domain specifics:
     flight, so no new `CACHE_REQUEST` was emitted (`request_emitted: false`,
     `note: "dedup-poll"`). This is the event that the retry protocol emits on every
     expose while a wait is unsatisfied.
-  - `delete` — the wait was **served** (`note: "served"`, on `CACHELINE_READY`
-    matching its hash) or **cancelled** (`note: "cancelled: <reason>"`, teardown /
-    reset / target change).
+  - `delete` — the wait was **served** or **cancelled**. `note` distinguishes them:
+    `"served"` (its exact awaited hash published), `"served (drift: node-key)"` (its
+    awaited hash never published, but its target module did — the manager matched on
+    the producing node key and the restart re-read the current hash; the recovery of
+    the §8 drift case), or `"cancelled: <reason>"` (teardown / reset / target change).
 
   The `awaits` edge is what turns an invisible hang into a one-click diagnosis. If
   it resolves to a live cacheline, the buffer exists and the bug is downstream

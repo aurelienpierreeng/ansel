@@ -435,33 +435,54 @@ cacheline hash it is blocked on, so the invisible hang becomes a one-click diagn
    facets to find which input diverged. The `comm -23` recipe in `supervisor.md`
    lists every orphaned awaited hash in one shot.
 
-### Mitigation in place: a hash-drift-proof wake-up for the color picker
+### Structural fix in place: serve waiters by producing node, not just by hash
 
 The exact-hash match is a fragile *primary* signal, not a safe *only* signal. The
-color picker (`src/gui/color_picker_proxy.c`) therefore also re-samples on
-`DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED`
-(`_iop_color_picker_pipe_finished_callback`). A completed preview run is immune to
-the drift: it fires once the pipe has *settled* and republished its outputs, and the
-picker's resume path re-reads the **current** `piece->global_hash` rather than the
-stale one it captured up front. So even when the exact awaited hash is never
-republished, the picker converges within a pipe cycle instead of hanging. The
-`CACHELINE_READY` path stays as the fast hit-case serving; the pipe-finished callback
-is a fallback, gated on the picker still being `update_pending`, so it is a no-op once
-a sample has landed. (After a module-only `CACHE_REQUEST`, which stops before the
-backbuffer, `dev_history.c`/`develop.c` queues the backbuffer continuation, so a full
-run — hence `PREVIEW_PIPE_FINISHED` — is still guaranteed to follow.)
+cache-wait manager (`dev_pixelpipe.c`) now serves a pending waiter on **either** an
+exact hash match **or** a producing-node match — which fixes every consumer that goes
+through the manager at once (color picker `input_wait`/`output_wait`, histogram
+`scope_wait`/`module_wait`/`picker_wait`, autoset `input_wait`):
+
+- Every cacheline is stamped at publish with the identity of the node that produced
+  it — `dt_pixel_cache_entry_t.producer_node_key`, a
+  `dt_supervisor_node_key(pipe_type, op, multi_priority)`. When the write lock is
+  released, `DT_SIGNAL_CACHELINE_READY` now carries **both** the published hash *and*
+  that producer key (the key is computed on the worker thread and value-copied through
+  the async signal, so no live object or evictable entry is dereferenced on the GUI
+  thread).
+- Each waiter records the producer key of the output it wants
+  (`wait->target_node_key`, set in `peek_gui()`; `INVALID` for a backbuf target, which
+  has no single producing node and therefore keeps to exact-hash).
+- `_dt_dev_pixelpipe_cache_wait_ready_callback()` serves a waiter when
+  `wait->hash == published_hash` **or** `wait->target_node_key == producer_node_key`.
+  The drift case is exactly "the awaited hash never published but the target module
+  did": the node match then serves the right consumer, and its restart re-reads the
+  module's *current* output hash and hits. The exact-hash match is kept as the fast
+  path *and* because it is a pure value comparison independent of the just-published
+  entry (which may already be evicted by the time the GUI-thread callback runs), so the
+  existing served-then-re-miss self-healing is preserved. A node-key serve is logged /
+  supervised as `served (drift: node-key)`.
+
+The color picker additionally re-samples on `DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED`
+(`_iop_color_picker_pipe_finished_callback`) as belt-and-suspenders: it also covers
+the case where the pipe finds the requested hash already cached and returns *without*
+republishing (so no `CACHELINE_READY` fires at all), because a module-only
+`CACHE_REQUEST` still queues the backbuffer continuation in `develop.c`, guaranteeing a
+`PREVIEW_PIPE_FINISHED`. It is gated on the picker still being `update_pending`, so it
+is a no-op once a sample has landed.
 
 ### Remaining fix direction (design, not yet implemented)
 
-The mitigation makes the picker converge, but the root fragility — a GUI-precomputed
-awaited hash — remains for every other cache-wait consumer. The structural fix is to
-make the GUI await the hash the pipe *will* publish, not one precomputed from a stale
-graph. Candidates: (a) have the worker report the actually-published hash for a given
-`CACHE_REQUEST` and match waiters on **request identity** rather than a GUI-computed
-hash; (b) capture `H_gui` from the same synchronized graph state the worker will use,
-i.e. after the pending pipe-change is synchronized; or (c) also match
-`CACHELINE_READY` waiters by `(pipe, module target)`, so a hash drift still serves the
-right consumer. Any of these breaks the strict `H_gui == H_pipe` dependency.
+The node-key serve makes the drift *recover* rather than removing it. A backbuf waiter
+still relies on exact hash, and consumers that subscribe to `CACHELINE_READY` directly
+(the histogram's `initialscale`/`colorout` backbuf refresh triggers, toneequal,
+colorequal) still match their own captured hash and could adopt the same producer-node
+match if they prove fragile. The cleaner long-term fix removes the GUI-precomputed hash
+entirely: (a) have the worker report the actually-published hash for a given
+`CACHE_REQUEST` and match waiters on **request identity**; or (b) capture `H_gui` from
+the same synchronized graph state the worker will use, i.e. after the pending
+pipe-change is synchronized. Either breaks the strict `H_gui == H_pipe` dependency at
+the source.
 
 ## 9. Known limitations / TODO
 

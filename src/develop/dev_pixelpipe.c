@@ -40,6 +40,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
 // declared in dev_pixelpipe.h. It must run before any dt_pixelpipe_get_global_hash() because the
 // auto-disable it performs feeds the cumulative global hash (see its definition).
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
+                                                        const guint64 producer_node_key,
                                                         gpointer user_data);
 
 typedef struct dt_dev_pixelpipe_cache_wait_record_t
@@ -769,6 +770,14 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
       wait->pipe = pipe;
       wait->module = !IS_NULL_PTR(piece) ? piece->module : NULL;
       wait->hash = hash;
+      // Record the producing node identity so CACHELINE_READY can serve this waiter by
+      // its target module even if the exact awaited hash drifts before publish (§8). A
+      // backbuf target (piece == NULL) has no single producing node, so it keeps to the
+      // exact-hash match only.
+      wait->target_node_key = !IS_NULL_PTR(piece) && !IS_NULL_PTR(piece->module)
+                                  ? dt_supervisor_node_key(pipe->type, piece->module->op,
+                                                           piece->module->multi_priority)
+                                  : DT_PIXELPIPE_CACHE_HASH_INVALID;
       wait->restart = restart;
       wait->user_data = restart_data;
       if(IS_NULL_PTR(wait->owner_tag))
@@ -854,10 +863,21 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
  * `DT_SIGNAL_CACHELINE_READY` may wake several GUI consumers at once (pickers,
  * histograms, darkroom surfaces, autoset). We therefore:
  * 1. iterate the pending wait list under the manager lock,
- * 2. extract only waiters whose requested hash matches @p hash,
+ * 2. extract every waiter whose requested hash matches @p hash **or** whose
+ *    target module matches the producing node @p producer_node_key,
  * 3. disconnect the global signal and clear the busy cursor when the queue
  *    becomes empty,
  * 4. release the lock before running restart callbacks.
+ *
+ * The producer-node match (step 2) is what makes the protocol robust to hash
+ * drift: a waiter registers the hash it *predicted* on the GUI thread, but the
+ * worker recomputes all hashes and may publish a *different* one for the same
+ * module output (doc/pipeline-cache.md §8). Matching on the producing node then
+ * still serves the right consumer; its restart re-reads the module's current
+ * output hash and hits. The exact-hash match is kept as the fast common path and
+ * because it is a pure value comparison (independent of the just-published entry,
+ * which may already be evicted by the time this GUI-thread callback runs), so the
+ * existing served-then-re-miss self-healing is preserved.
  *
  * Keeping callbacks out of the critical section is intentional: restart
  * handlers can queue redraws or request new cachelines, so running them under
@@ -865,10 +885,13 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
  * contention.
  */
 static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const guint64 hash,
+                                                        const guint64 producer_node_key,
                                                         gpointer user_data)
 {
   GList *to_restart = NULL;
   gboolean restore_wait_cursor = FALSE;
+  const gboolean node_key_valid
+      = producer_node_key != 0 && producer_node_key != DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   dt_pthread_mutex_lock(&_cache_wait_manager.lock);
   for(GList *iter = _cache_wait_manager.pending; iter; )
@@ -876,7 +899,9 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
     GList *next = g_list_next(iter);
     dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
     dt_dev_pixelpipe_cache_wait_t *wait = !IS_NULL_PTR(record) ? record->wait : NULL;
-    if(!IS_NULL_PTR(wait) && wait->connected && wait->hash == hash)
+    const gboolean node_match = node_key_valid && !IS_NULL_PTR(wait)
+                                && wait->target_node_key == producer_node_key;
+    if(!IS_NULL_PTR(wait) && wait->connected && (wait->hash == hash || node_match))
     {
       _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
       _cache_wait_manager.served_requests++;
@@ -907,24 +932,32 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
     dt_dev_pixelpipe_cache_wait_t *wait = iter->data;
     const dt_dev_pixelpipe_cache_ready_callback_t restart = wait->restart;
     gpointer restart_data = wait->user_data;
+    // A drift serve: the awaited hash never published, but the target module did
+    // (matched via producer_node_key). Record it as such so the supervisor timeline
+    // shows the recovery instead of a phantom exact hit.
+    const gboolean drift_serve = wait->hash != hash;
 
     dt_print(DT_DEBUG_PIPECACHE,
-             "[cache-wait] served id=%" PRIu64 " owner=%s hash=%" PRIu64 " target=%s\n",
+             "[cache-wait] served id=%" PRIu64 " owner=%s awaited=%" PRIu64 " published=%" PRIu64
+             " target=%s%s\n",
              wait->request_id,
              !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
-             hash,
-             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
+             wait->hash, hash,
+             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf",
+             drift_serve ? " (drift: node-key)" : "");
 
     if(dt_supervisor_active())
-      dt_supervisor_cache_wait(DT_SV_DELETE, wait->request_id, hash, wait->owner_tag,
+      dt_supervisor_cache_wait(DT_SV_DELETE, wait->request_id, wait->hash, wait->owner_tag,
                                !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
                                !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
                                !IS_NULL_PTR(wait->pipe) ? (int)wait->pipe->type : -1,
-                               !IS_NULL_PTR(wait->pipe) ? wait->pipe->imgid : -1, FALSE, "served");
+                               !IS_NULL_PTR(wait->pipe) ? wait->pipe->imgid : -1, FALSE,
+                               drift_serve ? "served (drift: node-key)" : "served");
 
     wait->pipe = NULL;
     wait->module = NULL;
     wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    wait->target_node_key = DT_PIXELPIPE_CACHE_HASH_INVALID;
     wait->restart = NULL;
     wait->user_data = NULL;
     wait->request_id = 0;
@@ -994,6 +1027,7 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
   wait->pipe = NULL;
   wait->module = NULL;
   wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  wait->target_node_key = DT_PIXELPIPE_CACHE_HASH_INVALID;
   wait->restart = NULL;
   wait->user_data = NULL;
   wait->request_id = 0;

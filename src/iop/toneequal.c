@@ -3096,9 +3096,11 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
-static void _develop_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+static void _develop_cacheline_ready_callback(gpointer instance, const guint64 hash,
+                                              const guint64 producer_node_key, gpointer user_data)
 {
   (void)instance;
+  (void)producer_node_key;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->preview_pipe)) return;

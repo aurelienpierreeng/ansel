@@ -875,9 +875,12 @@ static void _iop_color_picker_history_resync_callback(gpointer instance, gpointe
   _queue_refresh_active_picker(dev);
 }
 
-static void _iop_color_picker_cacheline_ready_callback(gpointer instance, const guint64 hash, gpointer user_data)
+static void _iop_color_picker_cacheline_ready_callback(gpointer instance, const guint64 hash,
+                                                       const guint64 producer_node_key, gpointer user_data)
 {
   (void)instance;
+  (void)producer_node_key; // the shared cache-wait manager serves the picker's input/output
+                           // waits by producer node; this direct path stays exact-hash only.
   (void)user_data;
 
   dt_develop_t *const dev = darktable.develop;
@@ -898,12 +901,42 @@ static void _iop_color_picker_cacheline_ready_callback(gpointer instance, const 
   if(matched) _queue_refresh_active_picker(dev);
 }
 
+/**
+ * Hash-drift-proof wake-up.
+ *
+ * The CACHELINE_READY path above matches a single hash captured up-front on the
+ * GUI thread (`wait_input_hash` / `wait_output_hash`, and the cache-wait handles
+ * inside `_sample_picker_from_cache`). If any hash input drifts between that
+ * capture and the worker's publish — the module's own `request_color_pick` /
+ * `runtime_data_hash()` state folding into its `global_hash`, a 1px ROI
+ * disagreement, etc. — the worker publishes a *different* hash, CACHELINE_READY
+ * never matches, and the picker waits forever (pipeline-cache.md §8; issues
+ * #955 / #957).
+ *
+ * A completed preview run is immune to that drift: it fires once the pipe has
+ * settled and republished its outputs, and `_refresh_active_picker` re-reads the
+ * *current* piece hashes rather than a stale captured one. So even when the exact
+ * awaited hash is never republished, the picker converges on the settled state
+ * within a pipe cycle instead of hanging. This is a fallback, not a replacement:
+ * the CACHELINE_READY path still serves the common (hit) case immediately.
+ */
+static void _iop_color_picker_pipe_finished_callback(gpointer instance, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
+  dt_develop_t *const dev = darktable.develop;
+  if(IS_NULL_PTR(dev)) return;
+  _queue_refresh_active_picker(dev);
+}
+
 void dt_iop_color_picker_init(void)
 {
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
                                   G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
                                   G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+                                  G_CALLBACK(_iop_color_picker_pipe_finished_callback), NULL);
 }
 
 void dt_iop_color_picker_cleanup(void)
@@ -912,6 +945,8 @@ void dt_iop_color_picker_cleanup(void)
                                      G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
                                      G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+                                     G_CALLBACK(_iop_color_picker_pipe_finished_callback), NULL);
 }
 
 static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker_kind_t kind, GtkWidget *w,

@@ -72,6 +72,7 @@ typedef struct dt_signal_description
 
 static GType uint_arg[] = { G_TYPE_UINT };
 static GType uint64_arg[] = { G_TYPE_UINT64 };
+static GType uint64_2arg[] = { G_TYPE_UINT64, G_TYPE_UINT64 };
 static GType int_arg[] = { G_TYPE_INT };
 static GType uint_2arg[] = { G_TYPE_UINT, G_TYPE_UINT };
 static GType pointer_arg[] = { G_TYPE_POINTER };
@@ -175,8 +176,8 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     FALSE }, // DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED
   { "dt-develop-ui-pipe-finished", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED
-  { "dt-cacheline-ready", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 1, uint64_arg, NULL,
-    FALSE }, // DT_SIGNAL_CACHELINE_READY
+  { "dt-cacheline-ready", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 2, uint64_2arg, NULL,
+    FALSE }, // DT_SIGNAL_CACHELINE_READY (hash, producer_node_key)
   { "dt-develop-modulegroups-set", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__POINTER, 1, pointer_arg, NULL,
     FALSE }, // DT_SIGNAL_DEVELOP_MODULEGROUPS_SET
   { "dt-develop-history-will-change", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3,

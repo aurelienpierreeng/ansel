@@ -1746,6 +1746,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   cache_entry->hash = hash;
   cache_entry->serial = cache->next_serial++;
   cache_entry->id = id;
+  cache_entry->producer_node_key = DT_PIXELPIPE_CACHE_HASH_INVALID;
   cache_entry->refcount = 0;
   cache_entry->auto_destroy = FALSE;
   cache_entry->external_alloc = FALSE;
@@ -2420,8 +2421,14 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, gboole
   {
     dt_pthread_rwlock_unlock(&cache_entry->lock);
     _pixel_cache_message(cache_entry, "write unlock", TRUE);
+    // The producer node key travels alongside the hash so GUI waiters can match by
+    // the node that produced this output even when the exact output hash the GUI
+    // predicted has drifted from the one the worker actually published (the
+    // never-served case, doc/pipeline-cache.md §8). INVALID for non-module outputs
+    // (raster masks, republished inputs): waiters simply fall back to hash match.
     if(cache_entry && cache_entry->hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CACHELINE_READY, cache_entry->hash);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CACHELINE_READY, cache_entry->hash,
+                                    cache_entry->producer_node_key);
   }
 }
 

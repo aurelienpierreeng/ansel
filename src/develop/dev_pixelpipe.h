@@ -154,6 +154,9 @@ typedef struct dt_dev_pixelpipe_cache_wait_t
   struct dt_dev_pixelpipe_t *pipe;
   const struct dt_iop_module_t *module;
   uint64_t hash;
+  uint64_t target_node_key; // producer node identity of the awaited output; lets the manager
+                            // serve this waiter when its target module publishes, even if the
+                            // exact awaited hash drifted (INVALID for a backbuf target).
   dt_dev_pixelpipe_cache_ready_callback_t restart;
   gpointer user_data;
   const char *owner_tag;
