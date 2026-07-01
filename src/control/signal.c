@@ -71,7 +71,6 @@ typedef struct dt_signal_description
 
 
 static GType uint_arg[] = { G_TYPE_UINT };
-static GType uint64_arg[] = { G_TYPE_UINT64 };
 static GType uint64_2arg[] = { G_TYPE_UINT64, G_TYPE_UINT64 };
 static GType int_arg[] = { G_TYPE_INT };
 static GType uint_2arg[] = { G_TYPE_UINT, G_TYPE_UINT };
