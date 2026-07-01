@@ -43,6 +43,7 @@ typedef enum dt_sv_facet_t
   DT_SV_F_MIPMAP = 1 << 6,
   DT_SV_F_IMAGE = 1 << 7,
   DT_SV_F_FORM = 1 << 8,
+  DT_SV_F_CACHEWAIT = 1 << 9,
 } dt_sv_facet_t;
 
 // One registry entry, identified by a single hash. All fields are value-copied;
@@ -97,6 +98,12 @@ typedef struct dt_sv_entry_t
   int formid;
   int form_type;
   char form_name[64];
+
+  // cache-wait facet
+  uint64_t awaits_hash;     // cache-wait -> the cacheline hash the GUI is blocked on
+  uint64_t request_id;      // numeric identity of the wait request
+  char owner_tag[48];       // consumer label (e.g. "color-picker-input")
+  gboolean request_emitted; // TRUE when this event also (re)emitted a CACHE_REQUEST
 } dt_sv_entry_t;
 
 // Cap on the retained GUI event log. ~200 B/event keeps this a few MB.
@@ -189,6 +196,14 @@ uint64_t dt_supervisor_image_key(const int32_t imgid)
 static uint64_t _form_key(const int formid)
 {
   return _fnv1a("form", formid, 0);
+}
+
+// A cache-wait request is a runtime object (one queued GUI fetch), keyed by its
+// monotonic request id so each queue/serve/cancel of the same request folds onto
+// one entry, and successive requests from the same consumer are distinct objects.
+static uint64_t _cache_wait_key(const uint64_t request_id)
+{
+  return _fnv1a("cache-wait", (int)(request_id & 0xffffffffu), (int)(request_id >> 32));
 }
 
 uint64_t dt_supervisor_form_key(const int formid)
@@ -345,6 +360,7 @@ static gboolean _touch_alive_locked(dt_sv_entry_t *e, const gboolean created, co
 static const char *_primary_domain(const dt_sv_entry_t *e)
 {
   if(!e) return "unknown";
+  if(e->facets & DT_SV_F_CACHEWAIT) return "cache-wait";
   if(e->facets & DT_SV_F_FORM)    return "form";
   if(e->facets & DT_SV_F_IMAGE)   return "image";
   if(e->facets & DT_SV_F_MIPMAP)  return "mipmap";
@@ -445,6 +461,14 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
     if(nm && *nm) g_strlcpy(e->mnemonic, nm, sizeof(e->mnemonic));
     else g_snprintf(e->mnemonic, sizeof(e->mnemonic), "#%d %s", id, ty);
   }
+  else if(!g_strcmp0(d, "cache-wait"))
+  {
+    const char *owner = json_object_has_member(root, "owner") ? json_object_get_string_member(root, "owner") : NULL;
+    const char *target = json_object_has_member(root, "target") ? json_object_get_string_member(root, "target") : NULL;
+    if(owner && target) g_snprintf(e->mnemonic, sizeof(e->mnemonic), "%s→%s", owner, target);
+    else if(owner) g_strlcpy(e->mnemonic, owner, sizeof(e->mnemonic));
+    else if(target) g_strlcpy(e->mnemonic, target, sizeof(e->mnemonic));
+  }
   else if((!g_strcmp0(d, "image") || !g_strcmp0(d, "mipmap")) && json_object_has_member(root, "filename"))
     g_strlcpy(e->mnemonic, json_object_get_string_member(root, "filename"), sizeof(e->mnemonic));
   else if((!g_strcmp0(d, "mipmap") || !g_strcmp0(d, "image") || !g_strcmp0(d, "thumbnail"))
@@ -453,7 +477,7 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
 
   // nested-object edges carry the linked object id in their "hash" member
   static const char *obj_edges[]
-      = { "params", "input", "node", "consumes", "mipmap", "image", "predecessor", NULL };
+      = { "params", "input", "node", "consumes", "mipmap", "image", "predecessor", "awaits", NULL };
   for(int i = 0; obj_edges[i]; i++)
   {
     if(!json_object_has_member(root, obj_edges[i])) continue;
@@ -467,7 +491,7 @@ static dt_sv_logged_event_t *_extract_event(JsonObject *root, const gchar *json_
     }
   }
   // the rekey chain links are plain hash strings
-  static const char *str_edges[] = { "rekeyed_from", "rekeyed_to", NULL };
+  static const char *str_edges[] = { "rekeyed_from", "rekeyed_to", "awaits_hash", NULL };
   for(int i = 0; str_edges[i]; i++)
   {
     if(!json_object_has_member(root, str_edges[i])) continue;
@@ -978,6 +1002,54 @@ void dt_supervisor_cacheline_delete(const uint64_t hash, const size_t size, cons
   if(params) json_object_set_object_member(root, "params", params);
   JsonObject *node = _resolve_locked(e->node_hash);
   if(node) json_object_set_object_member(root, "node", node);
+  dt_pthread_mutex_unlock(&_sv.lock);
+
+  _emit_line(root);
+}
+
+void dt_supervisor_cache_wait(const dt_sv_op_t op, const uint64_t request_id, const uint64_t awaited_hash,
+                              const char *owner_tag, const char *op_name, const int multi_priority,
+                              const int pipe_type, const int32_t imgid, const gboolean request_emitted,
+                              const char *note)
+{
+  if(!dt_supervisor_active() || !_sv.inited) return;
+
+  const uint64_t key = _cache_wait_key(request_id);
+
+  dt_pthread_mutex_lock(&_sv.lock);
+  gboolean created;
+  dt_sv_entry_t *e = _entry_get_locked(key, &created);
+  e->facets |= DT_SV_F_CACHEWAIT;
+  e->request_id = request_id;
+  if(op_name) g_strlcpy(e->op_name, op_name, sizeof(e->op_name));
+  e->multi_priority = multi_priority;
+  e->pipe_type = pipe_type;
+  if(imgid > 0) e->imgid = imgid;
+  if(owner_tag) g_strlcpy(e->owner_tag, owner_tag, sizeof(e->owner_tag));
+  if(_hash_is_set(awaited_hash)) e->awaits_hash = awaited_hash;
+  e->request_emitted = request_emitted;
+  const gboolean resurrected = _touch_alive_locked(e, created, op);
+
+  // A cache-wait is not pipe-bound in the cacheline sense, but the target pipe is
+  // useful context; _entry_pipe_type() only surfaces it for cache/node/backbuf, so
+  // pass it explicitly here.
+  JsonObject *root = _envelope(op, "cache-wait", key, pipe_type, e->imgid, e->alive, resurrected);
+  json_object_set_int_member(root, "request_id", (gint64)request_id);
+  if(e->owner_tag[0]) json_object_set_string_member(root, "owner", e->owner_tag);
+  char module[128];
+  _module_label(e, module, sizeof(module));
+  if(strcmp(module, "?") != 0) json_object_set_string_member(root, "target", module);
+  json_object_set_boolean_member(root, "request_emitted", request_emitted);
+  if(note) json_object_set_string_member(root, "note", note);
+
+  // Link to the awaited cacheline. When it resolves, the wait is chained to a real
+  // output object (walk cache-wait -> awaits -> cacheline). When it does NOT resolve
+  // (no cacheline was ever published under that hash), fall back to the raw hash so
+  // the "order to grab a cacheline never processed" case stays searchable — that
+  // absence is the signature of a producer/consumer hash mismatch.
+  JsonObject *awaits = _resolve_locked(e->awaits_hash);
+  if(awaits) json_object_set_object_member(root, "awaits", awaits);
+  else if(_hash_is_set(e->awaits_hash)) _set_hash_member(root, "awaits_hash", e->awaits_hash);
   dt_pthread_mutex_unlock(&_sv.lock);
 
   _emit_line(root);

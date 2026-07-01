@@ -94,7 +94,8 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   collapsible row each: the collapsed line shows the common fields (ts, op,
   colored domain, a per-domain **mnemonic** — module/instance for
   cacheline/node/history, image id for mipmap/image/thumbnail, widget tag for
-  widget, pipe for backbuf — own hash, thread); expanding reveals the linked-object hashes
+  widget, pipe for backbuf, `owner→target` for cache-wait — own hash, thread);
+  expanding reveals the linked-object hashes
   and the full pretty-printed record (built lazily on first expand). The timeline
   keeps the most recent rows (older ones are trimmed; the full log stays in the
   supervisor).
@@ -160,7 +161,7 @@ Common envelope:
 | `ts` | seconds since app start (same clock as `dt_print`) |
 | `thread` | calling thread tag |
 | `op` | `create` \| `update` \| `read` \| `delete` |
-| `domain` | `history` \| `node` \| `cacheline` \| `backbuf` \| `widget` \| `thumbnail` |
+| `domain` | `history` \| `node` \| `cacheline` \| `backbuf` \| `widget` \| `thumbnail` \| `cache-wait` |
 | `hash` | this object's own hash (`0x…`) |
 | `alive` | whether the represented object still exists |
 | `resurrected` | present (`true`) only on a reuse-after-delete |
@@ -211,6 +212,33 @@ Domain specifics:
   > cacheline resolves its `params` edge from the node's binding rather than from
   > `piece->hash` — so cachelines of `runtime_data_hash()` modules are tied to
   > history too, not just the simple ones.
+- **cache-wait** — one queued GUI fetch through the cache-wait manager
+  (`dev_pixelpipe.c`, see `pipeline-cache.md` §4). Keyed by a synthetic key over
+  the wait's monotonic `request_id`, so the queue / serve / cancel of one request
+  fold onto a single object and successive requests from the same consumer stay
+  distinct. Carries `request_id`, `owner` (the consumer tag, e.g.
+  `color-picker-input`), `target` (the awaited module, absent for a backbuf
+  request), `request_emitted` (whether this event also emitted a `CACHE_REQUEST`),
+  an optional `note`, and — the crucial edge — `awaits`, resolving the cacheline
+  hash the GUI is blocked on. Ops:
+  - `create` — the wait was **queued** (`peek_gui()` miss on a new target);
+    `request_emitted: true`.
+  - `read` — a **deduped re-poll**: the consumer peeked again for a wait already in
+    flight, so no new `CACHE_REQUEST` was emitted (`request_emitted: false`,
+    `note: "dedup-poll"`). This is the event that the retry protocol emits on every
+    expose while a wait is unsatisfied.
+  - `delete` — the wait was **served** (`note: "served"`, on `CACHELINE_READY`
+    matching its hash) or **cancelled** (`note: "cancelled: <reason>"`, teardown /
+    reset / target change).
+
+  The `awaits` edge is what turns an invisible hang into a one-click diagnosis. If
+  it resolves to a live cacheline, the buffer exists and the bug is downstream
+  (the consumer did not reopen it). If it **degrades to a raw `awaits_hash`** — no
+  cacheline was ever published under that hash — the pipe produced a *different*
+  output hash than the GUI is waiting on, so `CACHELINE_READY` never matches the
+  pending record: the "order to grab a cacheline is never processed and never
+  finishes" case. A run of `read` (dedup-poll) events with no matching `delete`
+  (served), whose `awaits` never resolves, is its exact fingerprint.
 - **backbuf** — `device`, `history_hash`, `size` `[w,h,bpp]`, resolved `module`/
   `params`; merges into the cacheline entry sharing its hash.
 - **widget** — `widget` tag, resolved `consumes`/`params`. The consumed hash is
@@ -272,6 +300,28 @@ jq -c 'select(.domain=="widget") | {ts,widget,frame:.hash,
        state:.params.history_index}' events.ndjson
 ```
 
+Cache-wait lifecycle, per request (queue → dedup-polls → serve/cancel):
+
+```sh
+jq -c 'select(.domain=="cache-wait") | {ts,op,request_id,owner,target,
+       awaits:(.awaits.hash // .awaits_hash),note}' events.ndjson
+```
+
+Stuck cache-waits — queued or re-polled but **never served**, and whose awaited
+hash was **never published** as a cacheline (issues #955 / #957). This lists every
+awaited hash and subtracts those a cacheline `create` ever produced:
+
+```sh
+comm -23 \
+  <(jq -r 'select(.domain=="cache-wait") | (.awaits.hash // .awaits_hash) // empty' events.ndjson | sort -u) \
+  <(jq -r 'select(.domain=="cacheline" and .op=="create") | .hash' events.ndjson | sort -u)
+```
+
+Every hash it prints is a buffer the GUI blocked on that the pipe never produced —
+a producer/consumer hash mismatch. Feed one back to
+`jq -c 'select((.awaits.hash // .awaits_hash)==\"0x…\")'` to see which consumer,
+module and pipe is starving.
+
 ## Instrumented sites
 
 | domain | op | site |
@@ -285,6 +335,9 @@ jq -c 'select(.domain=="widget") | {ts,widget,frame:.hash,
 | cacheline | create | output publish in `dt_dev_pixelpipe_process_rec()` (`pixelpipe_hb.c`) |
 | cacheline | read | the three cache-hit chokepoints in `pixelpipe_cache.c` |
 | cacheline | delete | `_free_cache_entry()` (`pixelpipe_cache.c`) |
+| cache-wait | create | wait queued in `dt_dev_pixelpipe_cache_peek_gui()` (`dev_pixelpipe.c`) |
+| cache-wait | read | deduped re-poll (same wait in flight, request suppressed) in `dt_dev_pixelpipe_cache_peek_gui()` |
+| cache-wait | delete | served in `_dt_dev_pixelpipe_cache_wait_ready_callback()`; cancelled in `dt_dev_pixelpipe_cache_wait_cleanup()` (`dev_pixelpipe.c`) |
 | backbuf | update | after `dt_dev_set_backbuf()` (`pixelpipe_hb.c`) |
 | widget | read | surface rebind in `_lock_pipe_surface()` (`views/darkroom.c`) |
 | thumbnail | read/update | inside `_view_image_get_surface_internal()` (`views/view.c`), where the real mip level is known |

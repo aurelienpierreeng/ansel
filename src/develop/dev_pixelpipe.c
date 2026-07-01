@@ -806,6 +806,12 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
                !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
                wait->hash,
                !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
+
+      if(dt_supervisor_active())
+        dt_supervisor_cache_wait(DT_SV_CREATE, wait->request_id, wait->hash, wait->owner_tag,
+                                 !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
+                                 !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
+                                 (int)pipe->type, pipe->imgid, TRUE, NULL);
     }
     else
     {
@@ -813,6 +819,16 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
        * each expose keeps retrying an unsatisfied target forever when the pipeline cannot
        * publish it, for example after an OpenCL memory pre-check failure on very large images. */
       request_cacheline = FALSE;
+
+      /* A deduped re-poll: the consumer asked again for a wait already in flight, and no
+       * new CACHE_REQUEST was emitted. A run of these with no matching serve (and no
+       * cacheline ever published under wait->hash) is the "never processed, never
+       * finishes" signature. */
+      if(dt_supervisor_active())
+        dt_supervisor_cache_wait(DT_SV_READ, wait->request_id, wait->hash, wait->owner_tag,
+                                 !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
+                                 !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
+                                 (int)pipe->type, pipe->imgid, FALSE, "dedup-poll");
     }
   }
 
@@ -899,6 +915,13 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
              hash,
              !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
 
+    if(dt_supervisor_active())
+      dt_supervisor_cache_wait(DT_SV_DELETE, wait->request_id, hash, wait->owner_tag,
+                               !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
+                               !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
+                               !IS_NULL_PTR(wait->pipe) ? (int)wait->pipe->type : -1,
+                               !IS_NULL_PTR(wait->pipe) ? wait->pipe->imgid : -1, FALSE, "served");
+
     wait->pipe = NULL;
     wait->module = NULL;
     wait->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -920,6 +943,7 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
   const uint64_t hash = wait->hash;
   const char *owner_tag = wait->owner_tag;
   const dt_iop_module_t *module = wait->module;
+  const dt_dev_pixelpipe_t *cancel_pipe = wait->pipe;
   const char *cancel_reason = !IS_NULL_PTR(reason) ? reason : "unspecified";
 
   dt_pthread_mutex_lock(&_cache_wait_manager.lock);
@@ -955,6 +979,17 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
            !IS_NULL_PTR(module) ? module->op : "backbuf",
            age_ms,
            cancel_reason);
+
+  if(dt_supervisor_active())
+  {
+    char note[64];
+    g_snprintf(note, sizeof(note), "cancelled: %s", cancel_reason);
+    dt_supervisor_cache_wait(DT_SV_DELETE, request_id, hash, owner_tag,
+                             !IS_NULL_PTR(module) ? module->op : NULL,
+                             !IS_NULL_PTR(module) ? module->multi_priority : 0,
+                             !IS_NULL_PTR(cancel_pipe) ? (int)cancel_pipe->type : -1,
+                             !IS_NULL_PTR(cancel_pipe) ? cancel_pipe->imgid : -1, FALSE, note);
+  }
 
   wait->pipe = NULL;
   wait->module = NULL;

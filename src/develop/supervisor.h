@@ -269,6 +269,34 @@ void dt_supervisor_mipmap(dt_sv_op_t op, int32_t imgid, int mip);
 void dt_supervisor_image(dt_sv_op_t op, int32_t imgid, const struct dt_image_t *img);
 
 /**
+ * Cache-wait request event — one queued GUI fetch through the cache-wait manager
+ * (dev_pixelpipe.c). Keyed by a synthetic key over @p request_id, so the queue /
+ * serve / cancel of one request fold onto a single object and successive requests
+ * from the same consumer stay distinct.
+ *
+ * The event carries an `awaits` edge to the cacheline hash the GUI is blocked on:
+ * clicking it walks `cache-wait -> awaits -> cacheline`. If no cacheline was ever
+ * published under that hash, the edge degrades to a raw `awaits_hash` — that
+ * missing target is the fingerprint of the "order to grab a cacheline is never
+ * processed" failure (the pipe published a *different* hash than the GUI awaits,
+ * so CACHELINE_READY never matches the pending record).
+ *
+ * @param op              CREATE at queue, READ on a deduped re-poll (a repeat
+ *                        peek that found the same wait in flight and suppressed a
+ *                        new CACHE_REQUEST), DELETE at serve or cancel.
+ * @param request_id      the wait's monotonic request id (identity).
+ * @param awaited_hash    the cacheline hash being waited on.
+ * @param owner_tag       consumer label (e.g. "color-picker-input").
+ * @param op_name         target module op (NULL for a backbuf request).
+ * @param request_emitted TRUE when this event also (re)emitted a CACHE_REQUEST to
+ *                        the pipe; FALSE on a deduped re-poll.
+ * @param note            optional free-text qualifier ("served", "cancelled: …").
+ */
+void dt_supervisor_cache_wait(dt_sv_op_t op, uint64_t request_id, uint64_t awaited_hash,
+                              const char *owner_tag, const char *op_name, int multi_priority,
+                              int pipe_type, int32_t imgid, gboolean request_emitted, const char *note);
+
+/**
  * Programmatic human-readable rendering of any tracked object, by hash.
  * Produces the same narrative the NDJSON encodes, e.g.
  *   "cacheline 0x71c4 (exposure/0, preview, 1920x1280, cpu) computed from
