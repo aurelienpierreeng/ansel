@@ -219,9 +219,15 @@ static gboolean _grid_relevant_scrollbar_changed(dt_thumbtable_t *table, GtkWidg
 
 // --- Per-thumbnail state ----------------------------------------------------------------------
 
+// The grid highlights the lighttable selection.
+static gboolean _grid_is_thumb_highlighted(dt_thumbtable_t *table, int32_t imgid)
+{
+  return dt_selection_is_id_selected(darktable.selection, imgid);
+}
+
 static void _grid_on_thumbnail_added(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
 {
-  dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.id));
+  dt_thumbnail_update_selection(thumb, _grid_is_thumb_highlighted(table, thumb->info.id));
   thumb->disable_actions = FALSE;
 }
 
@@ -330,6 +336,7 @@ const dt_thumbtable_layout_ops_t *dt_thumbtable_grid_ops(void)
     .wants_scroll_value = _grid_wants_scroll_value,
     .wants_page_size_notify = _grid_wants_page_size_notify,
     .relevant_scrollbar_changed = _grid_relevant_scrollbar_changed,
+    .is_thumb_highlighted = _grid_is_thumb_highlighted,
     .on_thumbnail_added = _grid_on_thumbnail_added,
     .on_drag_begin = _grid_on_drag_begin,
     .setup_parent = _grid_setup_parent,

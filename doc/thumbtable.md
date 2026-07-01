@@ -103,6 +103,7 @@ instance via `dt_thumbtable_grid_ops()` / `dt_thumbtable_filmstrip_ops()`; the e
 | `group_borders`              | Group-membership border flags for a thumbnail | four-neighbour | top+bottom always, left/right |
 | `place_child` / `move_child` | Put / move a thumbnail widget | `gtk_fixed_put/move` | `gtk_layout_put/move` |
 | `wants_scroll_value` / `wants_page_size_notify` / `relevant_scrollbar_changed` | Scrollbar-event predicates (the engine does the scheduling) | vertical adjustment | horizontal adjustment |
+| `is_thumb_highlighted`       | Source of the "selected"-looking highlight | the lighttable selection | the active / developed image(s) |
 | `on_thumbnail_added`         | Per-thumb selection/action state when it enters the viewport | selection-driven, actions enabled | active-image-driven, actions disabled |
 | `on_drag_begin`              | Commit the hovered image at drag-begin | extend the selection | raise the filmstrip-drag signal |
 | `setup_parent`               | Build the overlay scroll stack, name, help link, scroll policy | overlay child, `NEVER`/`ALWAYS` | overlay main child, `ALWAYS`/`EXTERNAL` |
@@ -130,6 +131,22 @@ detaches widgets dynamically, because attaching many thousands of children — a
 detaching them — is prohibitively slow in GTK. Allocation and freeing always go through
 `table->list`; the LUT only tracks references into it. `table->lock` guards the dynamically-sized
 iterations so background signals and the GUI thread never mutate the lists concurrently.
+
+## Thumbnail highlight
+
+Both modes reuse the thumbnail's "selected" visual (a lighter frame plus a small triangle) but
+drive it from **different sources**, expressed by the `is_thumb_highlighted` op:
+
+- the **filemanager** highlights the lighttable **selection**;
+- the **filmstrip** highlights the **active / developed** image(s) — the picture currently open in
+  the darkroom — via `dt_view_active_images_has_imgid()`.
+
+The engine repaints highlights from this op on *both* `DT_SIGNAL_SELECTION_CHANGED` and
+`DT_SIGNAL_ACTIVE_IMAGES_CHANGE` (`_refresh_highlights`), so each mode follows whichever it cares
+about and is not clobbered by the other. This matters because opening a new picture in the darkroom
+**clears the selection** and **sets a new active image** in the same step: if the filmstrip tracked
+the selection it would lose its developed-image marker on every navigation
+([issue #954](https://github.com/aurelienpierreeng/ansel/issues/954)).
 
 ## Lifecycle
 

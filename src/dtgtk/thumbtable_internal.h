@@ -111,6 +111,13 @@ typedef struct dt_thumbtable_layout_ops_t
   gboolean (*wants_page_size_notify)(dt_thumbtable_t *table, GObject *object);
   gboolean (*relevant_scrollbar_changed)(dt_thumbtable_t *table, GtkWidget *widget, GtkAllocation *allocation);
 
+  // The mode's source of truth for the "highlighted" (selected-looking) thumbnail state: the
+  // lighttable selection for the grid, the active/developed image(s) for the filmstrip. The engine
+  // repaints highlights from this on BOTH selection and active-image changes, so whichever the mode
+  // actually tracks stays in sync (issue #954: clearing the selection on darkroom entry must not
+  // clear the filmstrip's developed-image marker).
+  gboolean (*is_thumb_highlighted)(dt_thumbtable_t *table, int32_t imgid);
+
   // Per-thumbnail selection / action state applied when a thumbnail enters the viewport.
   // (was: _add_thumbnail_at_rowid selection block)
   void (*on_thumbnail_added)(dt_thumbtable_t *table, dt_thumbnail_t *thumb);

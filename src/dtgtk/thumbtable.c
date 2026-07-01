@@ -816,10 +816,18 @@ static void _dt_profile_change_callback(gpointer instance, int type, gpointer us
   dt_thumbtable_refresh_thumbnail(table, UNKNOWN_IMAGE, TRUE);
 }
 
-static void _dt_selection_changed_callback(gpointer instance, gpointer user_data)
+// Repaint every materialised thumbnail's "highlighted" state from the mode's source of truth
+// (grid: the selection; filmstrip: the active/developed image - see is_thumb_highlighted). Called
+// on both selection and active-image changes so the mode tracks whichever one it cares about and
+// is not clobbered by the other. Issue #954: the darkroom clears the selection AND sets a new
+// active image when the developed picture changes; the filmstrip must follow the active image.
+static void _refresh_highlights(dt_thumbtable_t *table)
 {
-  if(IS_NULL_PTR(user_data)) return;
-  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(IS_NULL_PTR(table)) return;
+  // Hidden tables re-evaluate highlights on view re-entry (populate calls on_thumbnail_added), so
+  // there is no point (and, for huge collections, real cost) in scanning them here.
+  if(!gtk_widget_is_visible(table->scroll_window)) return;
+
   gboolean first = TRUE;
 
   dt_pthread_mutex_lock(&table->lock);
@@ -840,22 +848,37 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
       continue;
     }
 
-    const gboolean selected = thumb->selected;
-    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.id));
+    const gboolean was_highlighted = thumb->selected;
+    dt_thumbnail_update_selection(thumb, table->ops->is_thumb_highlighted(table, thumb->info.id));
 
     if(thumb->selected && first)
     {
       dt_view_image_info_update(thumb->info.id);
 
-      // Sync the table active row id with the first thumb in selection
+      // Sync the table active row id with the first highlighted thumb
       table->rowid = thumb->rowid;
       first = FALSE;
     }
 
-    if(thumb->selected != selected)
+    if(thumb->selected != was_highlighted)
       gtk_widget_queue_draw(thumb->widget);
   }
   dt_pthread_mutex_unlock(&table->lock);
+}
+
+static void _dt_selection_changed_callback(gpointer instance, gpointer user_data)
+{
+  if(IS_NULL_PTR(user_data)) return;
+  _refresh_highlights((dt_thumbtable_t *)user_data);
+}
+
+// The filmstrip highlights the active/developed image; refresh when it changes (e.g. navigating to
+// another picture in darkroom). The grid's highlight source is the selection, so this is a no-op
+// there.
+static void _dt_active_images_changed_callback(gpointer instance, gpointer user_data)
+{
+  if(IS_NULL_PTR(user_data)) return;
+  _refresh_highlights((dt_thumbtable_t *)user_data);
 }
 
 void dt_thumbtable_set_focus_regions(dt_thumbtable_t *table, gboolean enable)
@@ -1766,6 +1789,8 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
                             G_CALLBACK(_dt_collection_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_dt_selection_changed_callback), table);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE,
+                            G_CALLBACK(_dt_active_images_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                             G_CALLBACK(_dt_profile_change_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED,
@@ -1922,6 +1947,7 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_collection_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_selection_changed_callback), table);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_active_images_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_profile_change_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_image_info_changed_callback), table);
 

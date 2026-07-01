@@ -196,9 +196,16 @@ static gboolean _filmstrip_relevant_scrollbar_changed(dt_thumbtable_t *table, Gt
 
 // --- Per-thumbnail state ----------------------------------------------------------------------
 
+// The filmstrip highlights the active/developed image(s), NOT the lighttable selection (which the
+// darkroom clears on image change) - see issue #954.
+static gboolean _filmstrip_is_thumb_highlighted(dt_thumbtable_t *table, int32_t imgid)
+{
+  return dt_view_active_images_has_imgid(imgid);
+}
+
 static void _filmstrip_on_thumbnail_added(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
 {
-  dt_thumbnail_update_selection(thumb, dt_view_active_images_has_imgid(thumb->info.id));
+  dt_thumbnail_update_selection(thumb, _filmstrip_is_thumb_highlighted(table, thumb->info.id));
   thumb->disable_actions = TRUE;
 }
 
@@ -255,6 +262,7 @@ const dt_thumbtable_layout_ops_t *dt_thumbtable_filmstrip_ops(void)
     .wants_scroll_value = _filmstrip_wants_scroll_value,
     .wants_page_size_notify = _filmstrip_wants_page_size_notify,
     .relevant_scrollbar_changed = _filmstrip_relevant_scrollbar_changed,
+    .is_thumb_highlighted = _filmstrip_is_thumb_highlighted,
     .on_thumbnail_added = _filmstrip_on_thumbnail_added,
     .on_drag_begin = _filmstrip_on_drag_begin,
     .setup_parent = _filmstrip_setup_parent,
