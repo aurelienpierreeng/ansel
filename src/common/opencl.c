@@ -890,6 +890,16 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
         }
       if(confentry[0] == '\0') continue;
 
+      // Vendor-exclusion tags: append !AMD, !NVIDIA, or !INTEL after the
+      // program number to skip that program for that vendor's OpenCL runtime.
+      if((vendor_id == DT_OPENCL_VENDOR_INTEL   && strstr(confentry, "!INTEL"))  ||
+         (vendor_id == DT_OPENCL_VENDOR_AMD     && strstr(confentry, "!AMD"))    ||
+         (vendor_id == DT_OPENCL_VENDOR_NVIDIA  && strstr(confentry, "!NVIDIA")))
+      {
+        dt_print(DT_DEBUG_OPENCL, "[dt_opencl_device_init] skipping program `%s' (vendor exclusion)\n", confentry);
+        continue;
+      }
+
       const char *programname = NULL, *programnumber = NULL;
       gchar **tokens = g_strsplit_set(confentry, " \t", 2);
       if(tokens)
