@@ -100,9 +100,15 @@ static gboolean _thumbnail_btn_draw(GtkWidget *widget, cairo_t *cr)
     const float icon_y = padding.top;
     const float icon_w = allocation.width - (padding.left + padding.right);
     const float icon_h = allocation.height - (padding.top + padding.bottom);
-    DTGTK_THUMBNAIL_BTN(widget)->icon(
-        cr, icon_x, icon_y, icon_w, icon_h, flags,
-        DTGTK_THUMBNAIL_BTN(widget)->icon_data ? DTGTK_THUMBNAIL_BTN(widget)->icon_data : bg_color);
+    // Only paint when there is positive room for the icon. The paint helpers do
+    // cairo_scale(cr, w, h); a zero dimension makes that matrix non-invertible, which poisons the
+    // shared cairo context and cascades a "drawing failure ... invalid matrix" up the whole widget
+    // tree. Padding can eat the whole allocation on tiny buttons (e.g. filmstrip thumbnails during
+    // a view transition), so the >= 2px allocation guard above is not enough on its own.
+    if(icon_w > 0.f && icon_h > 0.f)
+      DTGTK_THUMBNAIL_BTN(widget)->icon(
+          cr, icon_x, icon_y, icon_w, icon_h, flags,
+          DTGTK_THUMBNAIL_BTN(widget)->icon_data ? DTGTK_THUMBNAIL_BTN(widget)->icon_data : bg_color);
   }
   // and eventually the image border
   cairo_restore(cr);
