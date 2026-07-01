@@ -997,6 +997,8 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
   _opencl_splash_active = FALSE;
 
   dt_pthread_mutex_init(&cl->lock, NULL);
+  dt_pthread_mutex_init(&cl->mem_sizes_lock, NULL);
+  cl->mem_sizes = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
   cl->inited = 0;
   cl->enabled = 0;
   cl->stopped = 0;
@@ -1319,6 +1321,8 @@ void dt_opencl_cleanup(dt_opencl_t *cl)
   dt_free(cl->detected_devs);
 
   dt_free(cl->dev);
+  if(cl->mem_sizes) g_hash_table_destroy(cl->mem_sizes);
+  dt_pthread_mutex_destroy(&cl->mem_sizes_lock);
   dt_pthread_mutex_destroy(&cl->lock);
 }
 
@@ -2339,7 +2343,7 @@ void *dt_opencl_copy_host_to_device_constant(const int devid, const size_t size,
     dt_print(DT_DEBUG_OPENCL,
              "[opencl copy_host_to_device_constant] could not alloc buffer on device %d: %i\n", devid, err);
 
-  dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
+  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, size, OPENCL_MEMORY_ADD);
 
   return dev;
 }
@@ -2374,7 +2378,11 @@ void *dt_opencl_copy_host_to_device_rowpitch(const int devid, void *host, const 
     dt_print(DT_DEBUG_OPENCL,
              "[opencl copy_host_to_device] could not alloc/copy img buffer on device %d: %i\n", devid, err);
 
-  dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
+  if(err == CL_SUCCESS)
+  {
+    const size_t bytes = (size_t)(rowpitch ? rowpitch : width * bpp) * height;
+    dt_opencl_memory_statistics(devid, dev, bytes, OPENCL_MEMORY_ADD);
+  }
 
   return dev;
 }
@@ -2388,7 +2396,7 @@ void dt_opencl_release_mem_object(cl_mem mem)
   // case in a centralized way at this place
   if(IS_NULL_PTR(mem)) return;
 
-  dt_opencl_memory_statistics(-1, mem, OPENCL_MEMORY_SUB);
+  dt_opencl_memory_statistics(-1, mem, 0, OPENCL_MEMORY_SUB);
 
   (darktable.opencl->dlocl->symbols->dt_clReleaseMemObject)(mem);
 }
@@ -2439,7 +2447,8 @@ int dt_opencl_unmap_mem_object(const int devid, cl_mem mem_object, void *mapped_
 }
 
 static inline void *_dt_opencl_alloc_image2d(const int devid, const int width, const int height,
-                                             const cl_mem_flags flags, const cl_image_format fmt, void *host,
+                                             const size_t bytes, const cl_mem_flags flags,
+                                             const cl_image_format fmt, void *host,
                                              const char *const context)
 {
   if(!darktable.opencl->inited || devid < 0) return NULL;
@@ -2464,7 +2473,7 @@ static inline void *_dt_opencl_alloc_image2d(const int devid, const int width, c
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl %s] could not alloc img buffer on device %d: %i\n", context, devid, err);
 
-  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
+  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, bytes, OPENCL_MEMORY_ADD);
   return dev;
 }
 
@@ -2487,7 +2496,8 @@ void *dt_opencl_alloc_device(const int devid, const int width, const int height,
   else
     return NULL;
 
-  return _dt_opencl_alloc_image2d(devid, width, height, CL_MEM_READ_WRITE, fmt, NULL, "alloc_device");
+  const size_t bytes = (size_t)width * height * effective_bpp;
+  return _dt_opencl_alloc_image2d(devid, width, height, bytes, CL_MEM_READ_WRITE, fmt, NULL, "alloc_device");
 }
 
 void *dt_opencl_alloc_device_use_host_pointer(const int devid, const int width, const int height,
@@ -2508,7 +2518,9 @@ void *dt_opencl_alloc_device_use_host_pointer(const int devid, const int width, 
   else
     return NULL;
 
-  return _dt_opencl_alloc_image2d(devid, width, height, flags, fmt, host, "alloc_device_use_host_pointer");
+  const size_t bytes = (size_t)width * height * effective_bpp;
+  return _dt_opencl_alloc_image2d(devid, width, height, bytes, flags, fmt, host,
+                                  "alloc_device_use_host_pointer");
 }
 
 void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t size, const int flags, void *host_ptr)
@@ -2535,7 +2547,7 @@ void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t siz
     dt_print(DT_DEBUG_OPENCL, "[opencl alloc_device_buffer] could not alloc buffer on device %d: %d\n", devid,
              err);
 
-  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, buf, OPENCL_MEMORY_ADD);
+  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, buf, size, OPENCL_MEMORY_ADD);
 
   return buf;
 }
@@ -2618,15 +2630,55 @@ int dt_opencl_get_image_element_size(cl_mem mem)
   return (err == CL_SUCCESS) ? (int)size : 0;
 }
 
-void dt_opencl_memory_statistics(int devid, cl_mem mem, dt_opencl_memory_t action)
+typedef struct dt_opencl_mem_record_t
 {
-  if(devid < 0)
-    devid = dt_opencl_get_mem_context_id(mem);
+  int devid;
+  size_t size;
+} dt_opencl_mem_record_t;
+
+void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_memory_t action)
+{
+  if(IS_NULL_PTR(mem)) return;
+
+  if(action == OPENCL_MEMORY_ADD)
+  {
+    // devid and size are known at allocation time -- record them so the release
+    // path can undo the exact same amount without querying the driver.
+    if(devid < 0) return;
+    dt_opencl_mem_record_t *rec = (dt_opencl_mem_record_t *)malloc(sizeof(dt_opencl_mem_record_t));
+    rec->devid = devid;
+    rec->size = size;
+    dt_pthread_mutex_lock(&darktable.opencl->mem_sizes_lock);
+    // g_hash_table_insert frees the previous value (g_free) if the key already
+    // exists, so re-inserting the same cl_mem pointer never leaks.
+    g_hash_table_insert(darktable.opencl->mem_sizes, mem, rec);
+    dt_pthread_mutex_unlock(&darktable.opencl->mem_sizes_lock);
+  }
+  else
+  {
+    // Look up what we recorded on ADD. Never ask the driver about the object here
+    // either: on some Windows drivers clGetMemObjectInfo faults under vRAM
+    // pressure (issues #130221119 / #130557353), aborting the process.
+    dt_pthread_mutex_lock(&darktable.opencl->mem_sizes_lock);
+    dt_opencl_mem_record_t *rec = (dt_opencl_mem_record_t *)g_hash_table_lookup(darktable.opencl->mem_sizes, mem);
+    if(rec)
+    {
+      devid = rec->devid;
+      size = rec->size;
+      g_hash_table_remove(darktable.opencl->mem_sizes, mem);
+    }
+    else
+    {
+      // Untracked object (allocated before this bookkeeping, or via a path that
+      // did not register). Nothing reliable to subtract; leave the counter be.
+      devid = -1;
+    }
+    dt_pthread_mutex_unlock(&darktable.opencl->mem_sizes_lock);
+  }
 
   if(devid < 0)
     return;
 
-  const size_t size = dt_opencl_get_mem_object_size(mem);
   if(action == OPENCL_MEMORY_ADD)
     darktable.opencl->dev[devid].memory_in_use += size;
   else

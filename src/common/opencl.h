@@ -273,6 +273,12 @@ typedef struct dt_opencl_t
 
   // global kernels for guided filter.
   struct dt_guided_filter_cl_global_t *guided_filter;
+
+  // Maps every live cl_mem we allocated to the (devid, byte size) we requested,
+  // so memory accounting never has to query the driver (clGetMemObjectInfo) about
+  // a freshly-created object -- some drivers fault on that under vRAM pressure.
+  GHashTable *mem_sizes;
+  dt_pthread_mutex_t mem_sizes_lock;
 } dt_opencl_t;
 
 /** description of memory requirements of local buffer
@@ -459,7 +465,12 @@ int dt_opencl_get_image_element_size(cl_mem mem);
 int dt_opencl_get_mem_context_id(cl_mem mem);
 cl_mem_flags dt_opencl_get_mem_flags(cl_mem mem);
 
-void dt_opencl_memory_statistics(int devid, cl_mem mem, dt_opencl_memory_t action);
+// Track a cl_mem allocation/release in the per-device memory accounting.
+// On OPENCL_MEMORY_ADD, pass the byte size that was requested for `mem` on device
+// `devid`; it is recorded so the matching OPENCL_MEMORY_SUB can undo it exactly
+// without ever asking the driver about the object (see mem_sizes in dt_opencl_t).
+// On OPENCL_MEMORY_SUB, `devid` and `size` are ignored -- the recorded values win.
+void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_memory_t action);
 
 /** check if image size fit into limits given by OpenCL runtime */
 gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const size_t height, const unsigned bpp,
