@@ -2732,38 +2732,60 @@ cl_ulong dt_opencl_get_device_memalloc(const int devid)
   return _opencl_get_device_memalloc(devid);
 }
 
+dt_opencl_fit_reason_t dt_opencl_image_fits_device_reason(const int devid, const size_t width,
+                                const size_t height, const unsigned bpp, const float factor,
+                                const size_t overhead, size_t *needed, size_t *limit)
+{
+  size_t n = 0, l = 0;
+  dt_opencl_fit_reason_t reason = DT_OPENCL_FIT_OK;
+
+  dt_opencl_t *cl = darktable.opencl;
+  if(!cl->inited || devid < 0)
+  {
+    reason = DT_OPENCL_FIT_UNINITED;
+  }
+  else
+  {
+    const size_t required = width * height * bpp;
+    const size_t total = (size_t)ceilf((float)required * factor) + overhead;
+
+    if(cl->dev[devid].max_image_width < width || cl->dev[devid].max_image_height < height)
+    {
+      // dimension limit: compared quantities are pixel counts, not bytes -> leave n/l at 0
+      reason = DT_OPENCL_FIT_DIMENSION;
+    }
+    else if(_opencl_get_device_memalloc(devid) < required)
+    {
+      n = required;
+      l = _opencl_get_device_memalloc(devid);
+      dt_print(DT_DEBUG_OPENCL,
+               "[opencl] trying to allocate %" PRIu64 " MiB of memory while the vRAM has %" PRIu64
+               " MiB total\n",
+               (uint64_t)(n / (1024 * 1024)), (uint64_t)(l / (1024 * 1024)));
+      reason = DT_OPENCL_FIT_ALLOC_LIMIT;
+    }
+    else if(dt_opencl_get_device_available(devid) < total)
+    {
+      n = total;
+      l = dt_opencl_get_device_available(devid);
+      dt_print(DT_DEBUG_OPENCL,
+               "[opencl] trying to allocate %" PRIu64 " MiB of memory while the vRAM has %" PRIu64
+               " MiB left\n",
+               (uint64_t)(n / (1024 * 1024)), (uint64_t)(l / (1024 * 1024)));
+      reason = DT_OPENCL_FIT_AVAILABLE;
+    }
+  }
+
+  if(needed) *needed = n;
+  if(limit) *limit = l;
+  return reason;
+}
+
 gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const size_t height, const unsigned bpp,
                                 const float factor, const size_t overhead)
 {
-  dt_opencl_t *cl = darktable.opencl;
-  if(!cl->inited || devid < 0) return FALSE;
-
-  const size_t required  = width * height * bpp;
-  const size_t total = (size_t)ceilf((float)required * factor) + overhead;
-
-  if(cl->dev[devid].max_image_width < width || cl->dev[devid].max_image_height < height)
-    return FALSE;
-
-  if(_opencl_get_device_memalloc(devid) < required)
-  {
-    dt_print(DT_DEBUG_OPENCL,
-             "[opencl] trying to allocate %" PRIu64 " MiB of memory while the vRAM has %" PRIu64
-             " MiB total\n",
-             (uint64_t)(required / (1024 * 1024)),
-             (uint64_t)(_opencl_get_device_memalloc(devid) / (1024 * 1024)));
-    return FALSE;
-  }
-
-  if(dt_opencl_get_device_available(devid) >= total) 
-    return TRUE;
-
-  dt_print(DT_DEBUG_OPENCL,
-            "[opencl] trying to allocate %" PRIu64 " MiB of memory while the vRAM has %" PRIu64
-            " MiB left\n",
-            (uint64_t)(total / (1024 * 1024)),
-            (uint64_t)(dt_opencl_get_device_available(devid) / (1024 * 1024)));
-
-  return FALSE;
+  return dt_opencl_image_fits_device_reason(devid, width, height, bpp, factor, overhead, NULL, NULL)
+         == DT_OPENCL_FIT_OK;
 }
 
 /** round size to a multiple of the value given in the device specifig config parameter clroundup_wd/ht */

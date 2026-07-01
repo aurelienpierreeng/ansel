@@ -115,6 +115,19 @@ typedef enum dt_opencl_pinmode_t
   DT_OPENCL_PINNING_DISABLED = 2
 } dt_opencl_pinmode_t;
 
+// Why an image did (or did not) fit on an OpenCL device. Each non-OK reason maps
+// to a *different* limit, so a caller logging "needs X but limit is Y" must report
+// the quantities that were actually compared for the returned reason -- see
+// dt_opencl_image_fits_device_reason().
+typedef enum dt_opencl_fit_reason_t
+{
+  DT_OPENCL_FIT_OK = 0,       // the image fits, the device can process it
+  DT_OPENCL_FIT_DIMENSION,    // width/height exceed the device 2D image limits
+  DT_OPENCL_FIT_ALLOC_LIMIT,  // a single buffer exceeds CL_DEVICE_MAX_MEM_ALLOC_SIZE
+  DT_OPENCL_FIT_AVAILABLE,    // not enough free vRAM headroom for the factored allocation
+  DT_OPENCL_FIT_UNINITED      // OpenCL unavailable / invalid device
+} dt_opencl_fit_reason_t;
+
 /**
  * to support multi-gpu and mixed systems with cpu support,
  * we encapsulate devices and use separate command queues.
@@ -475,6 +488,13 @@ void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_m
 /** check if image size fit into limits given by OpenCL runtime */
 gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const size_t height, const unsigned bpp,
                                 const float factor, const size_t overhead);
+/** Like dt_opencl_image_fits_device() but also reports *why* the image (didn't) fit.
+ * `needed` and `limit` are filled with the two byte quantities that were actually compared
+ * for the returned reason (both 0 for DIMENSION/UNINITED), so a caller can log a message
+ * consistent with the real check instead of guessing a limit. Either out-param may be NULL. */
+dt_opencl_fit_reason_t dt_opencl_image_fits_device_reason(const int devid, const size_t width,
+                                const size_t height, const unsigned bpp, const float factor,
+                                const size_t overhead, size_t *needed, size_t *limit);
 /** get available memory for the device */
 cl_ulong dt_opencl_get_device_available(const int devid);
 

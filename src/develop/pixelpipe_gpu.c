@@ -248,18 +248,24 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   const size_t precheck_width = ROUNDUPDWD(MAX(piece->roi_in.width, piece->roi_out.width), pipe->devid);
   const size_t precheck_height = ROUNDUPDHT(MAX(piece->roi_in.height, piece->roi_out.height), pipe->devid);
-  gboolean fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
-                                                        MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
-                                                        required_factor_cl, tiling->overhead);
+  // Remember *why* the pre-check (dis)allowed OpenCL so the CPU-fallback message on the
+  // error path can quote the limit that was actually exceeded instead of a fixed one.
+  size_t fit_needed = 0, fit_limit = 0;
+  dt_opencl_fit_reason_t fit_reason
+      = dt_opencl_image_fits_device_reason(pipe->devid, precheck_width, precheck_height,
+                                           MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
+                                           required_factor_cl, tiling->overhead, &fit_needed, &fit_limit);
+  gboolean fits_on_device = (fit_reason == DT_OPENCL_FIT_OK);
   if(!fits_on_device)
   {
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s pre-check didn't fit on device, flushing cached pinned buffers and retrying\n",
              module->name());
     dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid);
-    fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
-                                                 MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
-                                                 required_factor_cl, tiling->overhead);
+    fit_reason = dt_opencl_image_fits_device_reason(pipe->devid, precheck_width, precheck_height,
+                                                    MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
+                                                    required_factor_cl, tiling->overhead, &fit_needed, &fit_limit);
+    fits_on_device = (fit_reason == DT_OPENCL_FIT_OK);
   }
 
   gboolean possible_cl = !(pipe->type == DT_DEV_PIXELPIPE_PREVIEW
@@ -655,13 +661,36 @@ error:
     /* Root modules build their own input from external storage. If the OpenCL pre-check
      * rejects the required allocation, CPU fallback must keep the same no-input contract
      * instead of looking for an upstream cacheline that cannot exist. */
-    const size_t required_mib
-        = ((size_t)precheck_width * precheck_height * MAX(piece->dsc_in.bpp, piece->dsc_out.bpp))
-          / (1024 * 1024);
-    const size_t max_alloc_mib = (size_t)dt_opencl_get_device_memalloc(pipe->devid) / (1024 * 1024);
-    dt_control_log(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
-                     " MiB but device limit is %" G_GSIZE_FORMAT " MiB; falling back to CPU"),
-                   module->name(), required_mib, max_alloc_mib);
+
+    /* The `error:` label is the catch-all for *every* GPU failure (kernel errors, driver
+     * allocation faults, colorspace/blend failures...), not only the memory pre-check.
+     * Only quote a memory limit when the pre-check actually rejected the buffer, and quote
+     * the limit that was really exceeded -- otherwise the numbers contradict the failure
+     * (e.g. "needs 100 MiB but device limit is 1991 MiB", issue #878). */
+    switch(fit_reason)
+    {
+      case DT_OPENCL_FIT_ALLOC_LIMIT:
+        dt_control_log(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
+                         " MiB but the largest allocation the device allows is %" G_GSIZE_FORMAT
+                         " MiB; falling back to CPU"),
+                       module->name(), (size_t)(fit_needed / (1024 * 1024)),
+                       (size_t)(fit_limit / (1024 * 1024)));
+        break;
+      case DT_OPENCL_FIT_AVAILABLE:
+        dt_control_log(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
+                         " MiB but only %" G_GSIZE_FORMAT " MiB are free on the device; falling back to CPU"),
+                       module->name(), (size_t)(fit_needed / (1024 * 1024)),
+                       (size_t)(fit_limit / (1024 * 1024)));
+        break;
+      case DT_OPENCL_FIT_DIMENSION:
+        dt_control_log(_("OpenCL failed for module `%s`: image dimensions %" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT
+                         " exceed the device limits; falling back to CPU"),
+                       module->name(), precheck_width, precheck_height);
+        break;
+      default: // DT_OPENCL_FIT_OK / UNINITED: the buffer fit, the GPU failed for another reason
+        dt_control_log(_("OpenCL failed for module `%s`; falling back to CPU"), module->name());
+        break;
+    }
     return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
                                     cache_output, cpu_input_entry, output_entry);
   }
