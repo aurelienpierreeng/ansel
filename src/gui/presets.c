@@ -1113,6 +1113,27 @@ static void _cache_disable_callback(GtkButton *button, dt_iop_module_t *module)
 }
 #endif
 
+// preset names containing '|' are split into a nested submenu hierarchy, the same way
+// style names (src/libs/styles.c, src/gui/actions/styles.c) and tag names
+// (src/libs/tagging.c) are grouped into a tree: every non-empty '|'-separated segment but
+// the last becomes an intermediate submenu, the last segment is the leaf entry. `path` is
+// the '|'-joined prefix built so far and is used as the cache key so a shared prefix reuses
+// the same submenu instead of creating a duplicate.
+static GtkWidget *_presets_get_submenu(GtkWidget *parent, GHashTable *submenus, const gchar *path,
+                                      const gchar *label)
+{
+  GtkWidget *submenu = g_hash_table_lookup(submenus, path);
+  if(submenu) return submenu;
+
+  GtkWidget *item = gtk_menu_item_new_with_label(label);
+  submenu = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
+  gtk_menu_shell_append(GTK_MENU_SHELL(parent), item);
+
+  g_hash_table_insert(submenus, g_strdup(path), submenu);
+  return submenu;
+}
+
 static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t version,
                                                   dt_iop_params_t *params, int32_t params_size,
                                                   dt_develop_blend_params_t *bl_params, dt_iop_module_t *module,
@@ -1203,6 +1224,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
   // collect all presets for op from db
   gboolean found = 0;
   int last_wp = -1;
+  GHashTable *submenus = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const int chk_writeprotect = sqlite3_column_int(stmt, 2);
@@ -1240,14 +1262,35 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
                   MIN(bl_params_size, sizeof(dt_develop_blend_params_t))))
       isdefault = TRUE;
 
+    gchar **split = g_strsplit(name, "|", -1);
+    int leaf = -1;
+    for(int i = 0; split[i]; i++)
+      if(split[i][0] != '\0') leaf = i;
+
+    GtkWidget *parent_menu = GTK_WIDGET(menu);
+    if(leaf > 0)
+    {
+      GString *path = g_string_new(NULL);
+      for(int i = 0; i < leaf; i++)
+      {
+        if(split[i][0] == '\0') continue;
+        if(path->len > 0) g_string_append_c(path, '|');
+        g_string_append(path, split[i]);
+        parent_menu = _presets_get_submenu(parent_menu, submenus, path->str, split[i]);
+      }
+      g_string_free(path, TRUE);
+    }
+    const gchar *leaf_name = leaf >= 0 ? split[leaf] : name;
+
     gchar *label;
     if(isdefault)
-      label = g_strdup_printf("%s %s", name, _("(default)"));
+      label = g_strdup_printf("%s %s", leaf_name, _("(default)"));
     else
-      label = g_strdup(name);
+      label = g_strdup(leaf_name);
     mi = gtk_menu_item_new_with_label(label);
 
     dt_free(label);
+    g_strfreev(split);
 
     if(module
        && !memcmp(params, op_params, MIN(op_params_size, params_size))
@@ -1276,10 +1319,11 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
         g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(pick_callback), callback_data);
       gtk_widget_set_tooltip_text(mi, (const char *)sqlite3_column_text(stmt, 3));
     }
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+    gtk_menu_shell_append(GTK_MENU_SHELL(parent_menu), mi);
     cnt++;
   }
   sqlite3_finalize(stmt);
+  g_hash_table_destroy(submenus);
 
   if(cnt > 0) gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
