@@ -51,6 +51,7 @@
 #include "develop/dev_history.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
+#include "dtgtk/paint.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
@@ -67,7 +68,9 @@ DT_MODULE(1)
 /* a snapshot */
 typedef struct dt_lib_snapshot_t
 {
+  GtkWidget *row;           // container for button + delete_button; shown/hidden as a unit
   GtkWidget *button;
+  GtkWidget *delete_button;
   float sample_scale;
   cairo_surface_t *image;        // full-resolution, rendered once at capture time
   cairo_surface_t *display_image; // Mitchell-resampled crop of `image`, rebuilt on zoom change
@@ -108,25 +111,28 @@ typedef struct dt_lib_snapshots_t
 /* callback for take snapshot */
 static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpointer user_data);
 static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer user_data);
+static void _lib_snapshots_delete_button_clicked_callback(GtkWidget *widget, gpointer user_data);
 
-static void _lib_snapshot_clear_state(dt_lib_snapshot_t *snap)
+// Reset the value fields to "empty" without destroying any cairo surface or touching GTK
+// widgets. Used when a snapshot's surfaces are being handed off to another slot (compacting
+// the list after a delete) rather than dropped -- the caller is responsible for the surfaces.
+static void _lib_snapshot_reset_fields(dt_lib_snapshot_t *snap)
 {
-  if(IS_NULL_PTR(snap)) return;
-  if(!IS_NULL_PTR(snap->display_image))
-  {
-    cairo_surface_destroy(snap->display_image);
-    snap->display_image = NULL;
-  }
-  if(!IS_NULL_PTR(snap->image))
-  {
-    cairo_surface_destroy(snap->image);
-    snap->image = NULL;
-  }
+  snap->image = NULL;
+  snap->display_image = NULL;
   snap->display_scale = 0.0f;
   snap->crop_x = snap->crop_y = snap->crop_w = snap->crop_h = 0;
   snap->imgid = UNKNOWN_IMAGE;
   snap->history_end = 0;
   snap->sample_scale = 1.0f;
+}
+
+static void _lib_snapshot_clear_state(dt_lib_snapshot_t *snap)
+{
+  if(IS_NULL_PTR(snap)) return;
+  if(!IS_NULL_PTR(snap->display_image)) cairo_surface_destroy(snap->display_image);
+  if(!IS_NULL_PTR(snap->image)) cairo_surface_destroy(snap->image);
+  _lib_snapshot_reset_fields(snap);
 }
 
 // Render the frozen snapshot history into a full-resolution cairo surface.
@@ -776,7 +782,7 @@ void gui_reset(dt_lib_module_t *self)
   for(uint32_t k = 0; k < d->size; k++)
   {
     _lib_snapshot_clear_state(d->snapshot + k);
-    gtk_widget_hide(d->snapshot[k].button);
+    gtk_widget_hide(d->snapshot[k].row);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->snapshot[k].button), FALSE);
   }
 
@@ -819,14 +825,30 @@ void gui_init(dt_lib_module_t *self)
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_label_set_xalign(GTK_LABEL(label), 0);
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_widget_set_hexpand(d->snapshot[k].button, TRUE);
 
     g_signal_connect(G_OBJECT(d->snapshot[k].button), "clicked",
                      G_CALLBACK(_lib_snapshots_toggled_callback), self);
 
     g_object_set_data(G_OBJECT(d->snapshot[k].button), "snapshot", GINT_TO_POINTER(k + 1));
 
-    gtk_box_pack_start(GTK_BOX(d->snapshots_box), GTK_WIDGET(d->snapshot[k].button), FALSE, FALSE, 0);
-    gtk_widget_set_no_show_all(d->snapshot[k].button, TRUE);
+    // Same trash icon as the shapes list under "drawn mask" in develop/blend_gui.c
+    // (group_delete_col): themed "user-trash-symbolic", not a dtgtk cairo glyph.
+    d->snapshot[k].delete_button = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(d->snapshot[k].delete_button), GTK_RELIEF_NONE);
+    gtk_button_set_image(GTK_BUTTON(d->snapshot[k].delete_button),
+                         gtk_image_new_from_icon_name("user-trash-symbolic", GTK_ICON_SIZE_MENU));
+    gtk_widget_set_tooltip_text(d->snapshot[k].delete_button, _("remove this snapshot"));
+    g_object_set_data(G_OBJECT(d->snapshot[k].delete_button), "snapshot", GINT_TO_POINTER(k + 1));
+    g_signal_connect(G_OBJECT(d->snapshot[k].delete_button), "clicked",
+                     G_CALLBACK(_lib_snapshots_delete_button_clicked_callback), self);
+
+    d->snapshot[k].row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(d->snapshot[k].row), d->snapshot[k].button, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(d->snapshot[k].row), d->snapshot[k].delete_button, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(d->snapshots_box), d->snapshot[k].row, FALSE, FALSE, 0);
+    gtk_widget_set_no_show_all(d->snapshot[k].row, TRUE);
   }
 
   /* add snapshot box and take snapshot button to widget ui*/
@@ -861,18 +883,26 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   /* rotate slots down to make room for new one on top */
   for(int k = d->size - 1; k > 0; k--)
   {
+    GtkWidget *r = d->snapshot[k].row;
     GtkWidget *b = d->snapshot[k].button;
+    GtkWidget *db = d->snapshot[k].delete_button;
     d->snapshot[k] = d->snapshot[k - 1];
+    d->snapshot[k].row = r;
     d->snapshot[k].button = b;
+    d->snapshot[k].delete_button = db;
     gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[k].button))),
       gtk_label_get_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[k - 1].button)))));
   }
 
   /* update top slot with new snapshot */
   char label[64];
+  GtkWidget *r = d->snapshot[0].row;
   GtkWidget *b = d->snapshot[0].button;
+  GtkWidget *db = d->snapshot[0].delete_button;
   d->snapshot[0] = last;
+  d->snapshot[0].row = r;
   d->snapshot[0].button = b;
+  d->snapshot[0].delete_button = db;
   const gchar *name = _("original");
   gchar *dynamic_name = NULL;
   if(dt_dev_get_history_end_ext(darktable.develop) > 0)
@@ -901,9 +931,66 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   /* update slots used */
   if(d->num_snapshots != d->size) d->num_snapshots++;
 
-  /* show active snapshot slots */
-  for(uint32_t k = 0; k < d->num_snapshots; k++) gtk_widget_show(d->snapshot[k].button);
+  /* show active snapshot slots. row has no-show-all set (so ambient show_all() calls on
+   * an ancestor leave inactive slots hidden), which means show_all() on row itself is
+   * *also* a no-op -- it must be shown explicitly, and so must its children since they
+   * were never individually shown either. */
+  for(uint32_t k = 0; k < d->num_snapshots; k++)
+  {
+    gtk_widget_show(d->snapshot[k].row);
+    gtk_widget_show(d->snapshot[k].button);
+    gtk_widget_show(d->snapshot[k].delete_button);
+  }
+}
 
+static void _lib_snapshots_delete_button_clicked_callback(GtkWidget *widget, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if(IS_NULL_PTR(self->data)) return;
+  dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
+  if(IS_NULL_PTR(d)) return;
+
+  const uint32_t which = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "snapshot"));
+  if(which < 1 || which > d->num_snapshots) return;
+  const uint32_t p = which - 1;
+
+  if(d->selected == which) d->selected = 0;
+  else if(d->selected > which) d->selected--;
+
+  // Free the deleted snapshot's surfaces now, before its slot gets overwritten by the shift
+  // below -- otherwise they would be silently leaked (overwritten with no destroy call).
+  _lib_snapshot_clear_state(d->snapshot + p);
+
+  /* shift every older slot up by one to fill the gap, keeping row/button/delete_button
+   * pinned to their screen position (same pattern as the "take snapshot" rotation). Each
+   * `d->snapshot[k] = d->snapshot[k + 1]` *moves* ownership of the cairo surfaces (struct
+   * assignment, no refcounting) rather than copying it, so nothing here may destroy them:
+   * the slot being overwritten already handed its own surfaces to k-1 in the previous
+   * iteration (or, for k == p, they were just freed above). */
+  for(uint32_t k = p; k < d->num_snapshots - 1; k++)
+  {
+    GtkWidget *r = d->snapshot[k].row;
+    GtkWidget *b = d->snapshot[k].button;
+    GtkWidget *db = d->snapshot[k].delete_button;
+    d->snapshot[k] = d->snapshot[k + 1];
+    d->snapshot[k].row = r;
+    d->snapshot[k].button = b;
+    d->snapshot[k].delete_button = db;
+    gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[k].button))),
+      gtk_label_get_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[k + 1].button)))));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->snapshot[k].button), (k + 1) == d->selected);
+  }
+
+  // The last active slot's surfaces (if any) were just relocated into the slot above it by
+  // the loop's last iteration, so only reset its fields here -- destroying them would be a
+  // double-free of surfaces now owned by that other slot.
+  const uint32_t last = d->num_snapshots - 1;
+  _lib_snapshot_reset_fields(d->snapshot + last);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->snapshot[last].button), FALSE);
+  gtk_widget_hide(d->snapshot[last].row);
+  d->num_snapshots--;
+
+  dt_control_queue_redraw_center();
 }
 
 static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer user_data)
