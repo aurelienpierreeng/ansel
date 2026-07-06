@@ -634,6 +634,10 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *intersections,
           {
             // we have found a self-intersection portion, between v[k] and i
             // and we are sure that this portion doesn't include one of the shape extrema
+            // sanity check: both indices must be valid border_point indices
+            if(cell_values[k] < node_count * 3 || cell_values[k] >= border_point_count
+               || i < node_count * 3 || i >= border_point_count)
+              continue;
             if(intersection_count > 0)
             {
               const int inter_last0 = (int)dt_masks_dynbuf_get(intersections, -2);
@@ -762,6 +766,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   }
 
   float *border_init = dt_pixelpipe_cache_alloc_align_float_cache((size_t)6 * node_count, 0);
+  if(!IS_NULL_PTR(border_init)) memset(border_init, 0, sizeof(float) * 6 * node_count);
   if(IS_NULL_PTR(border_init))
   {
     dt_masks_dynbuf_free(intersections);
@@ -977,10 +982,14 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
             (*border_buffer)[node_index * 6 + i] = border_init[node_index * 6 + i];
 
         // now we want to write the skipping zones
+        // guard: buffer must be large enough to hold node falloff data
+        const int buf_count = *border_count;
         for(int i = 0; i < inter_count; i++)
         {
-          const int v = (dt_masks_dynbuf_buffer(intersections))[i * 2];
-          const int w = (dt_masks_dynbuf_buffer(intersections))[ i * 2 + 1];
+          const int v = (int)(dt_masks_dynbuf_buffer(intersections))[i * 2];
+          const int w = (int)(dt_masks_dynbuf_buffer(intersections))[i * 2 + 1];
+          // bounds-check v and w against the allocated buffer size
+          if(v < 0 || v >= buf_count || w < 0 || w >= buf_count) continue;
           if(v <= w)
           {
             (*border_buffer)[v * 2] = NAN;
@@ -988,7 +997,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
           }
           else
           {
-            if(w > node_count * 3)
+            if(w > (int)(node_count * 3) && (int)(node_count * 3) < buf_count)
             {
               if(isnan((*border_buffer)[node_count * 6]) && isnan((*border_buffer)[node_count * 6 + 1]))
                 (*border_buffer)[node_count * 6 + 1] = w;
