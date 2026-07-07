@@ -589,6 +589,15 @@ if [ $DO_INSTALL ] ; then
 		$SUDO ln -sfn "$INSTALL_PREFIX"/share/applications/photos.ansel.ansel.desktop /usr/share/applications/ansel.desktop
 	fi
 fi
+# Optionally upload debug symbols to Sentry so self-build crash reports get
+# symbolicated server-side.  Requires SENTRY_AUTH_TOKEN to be exported in the
+# environment; silently skipped otherwise (see tools/sentry-upload-symbols.sh).
+if [ -n "${SENTRY_AUTH_TOKEN:-}" ]; then
+	echo
+	echo "Uploading debug symbols to Sentry (SENTRY_AUTH_TOKEN is set)..."
+	"${DT_SRC_DIR}/tools/sentry-upload-symbols.sh" "$BUILD_DIR"
+fi
+
 # update Lensfun
 echo
 if [ $SKIP_UPDATE_LENSFUN -eq 0 ] ; then

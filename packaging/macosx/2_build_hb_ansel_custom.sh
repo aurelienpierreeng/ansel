@@ -83,5 +83,13 @@ cmake .. \
 # Build using all available cores
 make -j"$(sysctl -n hw.ncpu)"
 
+# Optionally upload debug symbols to Sentry so self-build crash reports get
+# symbolicated server-side.  Requires SENTRY_AUTH_TOKEN to be exported in the
+# environment; silently skipped otherwise (see tools/sentry-upload-symbols.sh).
+if [[ -n "${SENTRY_AUTH_TOKEN:-}" ]]; then
+    echo "Uploading debug symbols to Sentry (SENTRY_AUTH_TOKEN is set)..."
+    "${scriptDir}/../../tools/sentry-upload-symbols.sh" "$buildDir"
+fi
+
 # Install
 make install

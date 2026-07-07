@@ -225,9 +225,30 @@ static char *_sentry_capture_windows_backtrace(const sentry_ucontext_t *uctx, gs
 
   const HANDLE proc = GetCurrentProcess();
   SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+
+  // Build a symbol search path that includes the directory holding the
+  // running executable.  Self-builds keep their PDB files next to the binary
+  // (e.g. C:\msys2__\opt\ansel\bin\), which DbgHelp will not find when the
+  // search path is NULL (only the current directory and system paths are
+  // checked in that case).  Passing the executable directory fixes
+  // symbolication for self-build crash reports without uploading PDBs to
+  // Sentry.
+  char search_path[MAX_PATH * 3] = { 0 };
+  char exe_dir[MAX_PATH] = { 0 };
+  if(GetModuleFileNameA(NULL, exe_dir, sizeof(exe_dir)))
+  {
+    char *sep = strrchr(exe_dir, '\\');
+    if(sep) *sep = '\0'; // keep directory part only
+
+    // Search path: exe dir + standard "srv*" chain so system symbols still resolve.
+    _snprintf(search_path, sizeof(search_path) - 1,
+              "%s;srv*%s\\sym_cache*https://msdl.microsoft.com/download/symbols",
+              exe_dir, exe_dir);
+  }
+
   // May fail with ERROR_INVALID_PARAMETER if sentry already initialized the
   // symbol handler for this process; symbols stay usable either way.
-  SymInitialize(proc, NULL, TRUE);
+  SymInitialize(proc, search_path[0] ? search_path : NULL, TRUE);
 
   GString *out = g_string_new(NULL);
   g_string_append_printf(out, "this is %s reporting a crash (local DbgHelp backtrace, crashing thread):\n\n",
