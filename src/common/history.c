@@ -101,6 +101,7 @@ void dt_history_item_free(gpointer data)
 static void _remove_preset_flag(const int32_t imgid)
 {
   dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(IS_NULL_PTR(image)) return;
 
   // clear flag
   image->flags &= ~DT_IMAGE_AUTO_PRESETS_APPLIED;
