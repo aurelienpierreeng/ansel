@@ -924,6 +924,11 @@ size_t dt_get_available_mem();
 // Get the maximum size for the whole mipmap cache
 size_t dt_get_mipmap_mem();
 
+// Cross-platform (Windows/macOS/Linux) query of currently-free and reclaimable system RAM,
+// read live from the OS at call time -- unlike dt_get_available_mem()/dt_get_mipmap_mem()
+// above, this is not derived from any of our own static conf-based budgeting.
+size_t get_usable_memory_bytes();
+
 /**
  * @brief Set the memory buffer to zero as a pack of unsigned char
  *

@@ -212,6 +212,17 @@ typedef struct dt_opencl_device_t
   // also used for blacklisted drivers
   int disabled;
 
+  // CL_DEVICE_HOST_UNIFIED_MEMORY: TRUE for integrated GPUs that share the system's RAM
+  // instead of owning dedicated vRAM. On these devices, "available memory" as reported by
+  // the driver (max_global_mem, max_mem_alloc) and tracked by our own memory_in_use
+  // bookkeeping is a much less reliable estimate of what can actually be allocated: the
+  // whole OS, desktop compositor and every other process compete for that same pool, and we
+  // have no visibility into that competition. Used to pick a larger default forced_headroom
+  // (see dt_opencl_read_device_config()) so a size that our own accounting says "fits" is
+  // less likely to still exceed real availability and abort inside the driver instead of
+  // failing cleanly with CL_OUT_OF_RESOURCES.
+  gboolean host_unified_memory;
+
   // Some devices are known to be unused by other apps so there is no need to test for available memory at all.
   // Also some devices might behave badly with the checking code, in this case we could enforce a headroom here.
   size_t forced_headroom;
@@ -226,6 +237,9 @@ typedef struct dt_opencl_detected_device_t
   int disabled;
   int pinned_memory;
   size_t forced_headroom;
+  // Mirrors dt_opencl_device_t.host_unified_memory -- lets GUI code (preferences) label the
+  // headroom setting accurately for integrated GPUs without reaching into the live device array.
+  gboolean host_unified_memory;
 } dt_opencl_detected_device_t;
 
 struct dt_bilateral_cl_global_t;
@@ -597,6 +611,9 @@ typedef struct dt_opencl_detected_device_t
   int disabled;
   int pinned_memory;
   size_t forced_headroom;
+  // Mirrors dt_opencl_device_t.host_unified_memory -- lets GUI code (preferences) label the
+  // headroom setting accurately for integrated GPUs without reaching into the live device array.
+  gboolean host_unified_memory;
 } dt_opencl_detected_device_t;
 static inline void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics)
 {

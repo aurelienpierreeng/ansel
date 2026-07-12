@@ -298,6 +298,17 @@ gboolean dt_opencl_read_device_config(const int devid)
     int forced_headroom = dt_conf_get_int(key_device);
     if(forced_headroom > 0) cl->dev[devid].forced_headroom = forced_headroom;
   }
+  else if(cl->dev[devid].host_unified_memory)
+    // The 200 MiB conf default (see anselconfig.xml.in) is sized for a dedicated GPU's own
+    // vRAM pool. An integrated GPU shares system RAM with the whole OS/desktop/every other
+    // process instead, none of which our memory_in_use bookkeeping can see -- a plain 200 MiB
+    // margin is routinely not enough, letting dt_opencl_image_fits_device_reason() wave
+    // through an allocation that then has no real room left and aborts inside the driver
+    // (Sentry issue 133679051: SIGABRT deep in an Intel/Mesa driver's clCreateImage2D, on a
+    // 6.99 GB unified-memory laptop). Only applied on first detection of the device, same as
+    // the branch below -- an existing per-device conf value (including one the user tuned
+    // down themselves) is always left untouched.
+    cl->dev[devid].forced_headroom = MAX(1024ul, (size_t)dt_conf_get_int64("memory_opencl_headroom"));
   else // this is used if updating to 4.0 or fresh installs; see commenting _opencl_get_unused_device_mem()
     cl->dev[devid].forced_headroom = dt_conf_get_int64("memory_opencl_headroom");
 
@@ -509,6 +520,13 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
   // test GPU availability, vendor, memory, image support etc:
   (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_AVAILABLE, sizeof(cl_bool), &device_available, NULL);
+
+  // Queried early (before dt_opencl_read_device_config() below, which needs it to pick a sane
+  // default headroom on first run) rather than alongside the other capability queries further down.
+  cl_bool host_unified_memory = CL_FALSE;
+  (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_HOST_UNIFIED_MEMORY, sizeof(cl_bool),
+                                           &host_unified_memory, NULL);
+  cl->dev[dev].host_unified_memory = (host_unified_memory == CL_TRUE);
 
   err = dt_opencl_get_device_info(cl, devid, CL_DEVICE_VENDOR, (void **)&vendor, &vendor_size);
   if(err != CL_SUCCESS)
@@ -730,6 +748,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
       detected->disabled = cl->dev[dev].disabled & 1;
       detected->pinned_memory = cl->dev[dev].pinned_memory;
       detected->forced_headroom = cl->dev[dev].forced_headroom;
+      detected->host_unified_memory = cl->dev[dev].host_unified_memory;
       cl->num_detected_devs++;
     }
   }
@@ -2718,7 +2737,19 @@ cl_ulong dt_opencl_get_device_available(const int devid)
   if(!darktable.opencl->inited || devid < 0) return 0;
   const cl_ulong limit = darktable.opencl->dev[devid].used_available;
   const size_t in_use = darktable.opencl->dev[devid].memory_in_use;
-  return (limit > in_use) ? (limit - in_use) : 0;
+  const cl_ulong available = (limit > in_use) ? (limit - in_use) : 0;
+
+  // used_available/memory_in_use are our own bookkeeping of what the OpenCL driver reports and
+  // what we ourselves have allocated through it -- on a device sharing memory with the whole
+  // system, that bookkeeping has no idea what the OS, desktop or any other process is doing
+  // with that same pool. Ask the OS directly for what's really free right now and never claim
+  // more than that. This is a second, tighter safety net layered on top of forced_headroom,
+  // not a replacement for it: forced_headroom still covers the gap between this snapshot and
+  // the actual allocation, and the platform-specific slack in what each OS reports as "usable".
+  if(darktable.opencl->dev[devid].host_unified_memory)
+    return MIN(available, (cl_ulong)get_usable_memory_bytes());
+
+  return available;
 }
 
 static cl_ulong _opencl_get_device_memalloc(const int devid)
