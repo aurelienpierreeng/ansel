@@ -100,6 +100,13 @@ static void usage(const char *progname)
   fprintf(stderr, "                          if specified, takes preference over output\n");
   fprintf(stderr, "   --import <file or dir> specify input file or dir, can be used'\n");
   fprintf(stderr, "                          multiple times instead of input file\n");
+  fprintf(stderr, "   --imgid <id>      process an image already in the library, using its\n");
+  fprintf(stderr, "                     editing history from library.db (no input file, no XMP;\n");
+  fprintf(stderr, "                     can be used multiple times; only the output is positional)\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "   the output destination may contain $(VARIABLES) expanded by the disk\n");
+  fprintf(stderr, "   storage, e.g. '/path/$(FILE_NAME)-myfix' with --out-ext tiff produces\n");
+  fprintf(stderr, "   /path/<original basename>-myfix.tiff\n");
   fprintf(stderr, "   --icc-type <type> specify icc type, default to NONE\n");
   fprintf(stderr, "                     use --help icc-type for list of supported types\n");
   fprintf(stderr, "   --icc-file <file> specify icc filename, default to NONE\n");
@@ -225,6 +232,7 @@ int main(int argc, char *arg[])
            output_to_dir = FALSE;
 
   GList* inputs = NULL;
+  GList* imgids = NULL;
 
   dt_colorspaces_color_profile_type_t icc_type = DT_COLORSPACE_NONE;
   gchar *icc_filename = NULL;
@@ -329,6 +337,20 @@ int main(int argc, char *arg[])
         else
           fprintf(stderr, _("notice: input file or dir '%s' doesn't exist, skipping\n"), arg[k]);
       }
+      else if(!strcmp(arg[k], "--imgid") && argc > k + 1)
+      {
+        k++;
+        const int imgid = atoi(arg[k]);
+
+        if(imgid > 0)
+          imgids = g_list_append(imgids, GINT_TO_POINTER(imgid));
+        else
+        {
+          fprintf(stderr, _("incorrect image id for --imgid: '%s'\n"), arg[k]);
+          usage(arg[0]);
+          exit(1);
+        }
+      }
       else if(!strcmp(arg[k], "--icc-type") && argc > k + 1)
       {
         k++;
@@ -399,14 +421,55 @@ int main(int argc, char *arg[])
   int m_argc = 0;
   char **m_arg = malloc(sizeof(char *) * (5 + argc - k + 1));
   m_arg[m_argc++] = "ansel-cli";
-  m_arg[m_argc++] = "--library";
-  m_arg[m_argc++] = ":memory:";
+
+  // --imgid mode reads the image and its editing history from the user's library.db, so the
+  // default library must be used. Every other mode keeps the throwaway in-memory library.
+  if(IS_NULL_PTR(imgids))
+  {
+    m_arg[m_argc++] = "--library";
+    m_arg[m_argc++] = ":memory:";
+  }
+
   m_arg[m_argc++] = "--conf";
   m_arg[m_argc++] = "write_sidecar_files=FALSE";
   for(; k < argc; k++) m_arg[m_argc++] = arg[k];
   m_arg[m_argc] = NULL;
 
-  if( (inputs && file_counter < 1) || (IS_NULL_PTR(inputs) && file_counter < 2) || file_counter > 3)
+  if(imgids && (inputs || file_counter != 1))
+  {
+    // --imgid takes no input file and no XMP: the only positional argument is the output
+    if(inputs || file_counter > 1)
+      fprintf(stderr, _("error: --imgid cannot be combined with input files or an XMP (history comes from library.db)\n"));
+    else
+      fprintf(stderr, _("error: --imgid requires an output destination\n"));
+
+    usage(arg[0]);
+    dt_free(m_arg);
+    if(output_filename)
+    {
+      dt_free(output_filename);
+    }
+    if(output_ext)
+    {
+      dt_free(output_ext);
+    }
+    g_list_free(imgids);
+    if(inputs)
+    {
+      g_list_free_full(inputs, dt_free_gpointer);
+      inputs = NULL;
+    }
+    exit(1);
+  }
+  else if(imgids)
+  {
+    // the single positional argument is the output destination
+    if(output_filename)
+      dt_free(output_filename);
+    output_filename = g_strdup(input_filename);
+    input_filename = xmp_filename = NULL;
+  }
+  else if( (inputs && file_counter < 1) || (IS_NULL_PTR(inputs) && file_counter < 2) || file_counter > 3)
   {
     usage(arg[0]);
     dt_free(m_arg);
@@ -521,6 +584,29 @@ int main(int argc, char *arg[])
   }
 
   GList *id_list = NULL;
+
+  // --imgid mode: the images are already in the library with their history; just check they exist
+  for(GList *l = imgids; !IS_NULL_PTR(l); l = g_list_next(l))
+  {
+    const int imgid = GPOINTER_TO_INT(l->data);
+    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+
+    if(image && image->id == imgid)
+    {
+      dt_image_cache_read_release(darktable.image_cache, image);
+      id_list = g_list_append(id_list, GINT_TO_POINTER(imgid));
+    }
+    else
+    {
+      if(image)
+        dt_image_cache_read_release(darktable.image_cache, image);
+      fprintf(stderr, _("error: no image with id %d in the library"), imgid);
+      fprintf(stderr, "\n");
+    }
+  }
+
+  g_list_free(imgids);
+  imgids = NULL;
 
   for(GList *l = inputs; !IS_NULL_PTR(l); l=g_list_next(l))
   {
