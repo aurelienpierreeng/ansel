@@ -342,8 +342,11 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_p
   int graymode = get_dither_parameters(data, pipe, piece, scale, &levels);
   if(graymode < 0)
   {
-    for(int j = 0; j < height * width; j++)
-      clipnan_pixel(out + 4*j, in + 4*j);
+    // No determinable quantization for this output: pass the buffer through UNTOUCHED.
+    // (Float/int32 outputs never even reach here: commit_params() disables the module for
+    // them. The historical clipnan_pixel() pass here clamped to [0,1], which destroyed the
+    // HDR values of every float/EXR export.)
+    dt_iop_image_copy_by_size(ovoid, ivoid, width, height, 4);
     return;
   }
 
@@ -589,6 +592,15 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   memcpy(&(d->random.range), &(p->random.range), sizeof(p->random.range));
   d->random.radius = p->random.radius;
   d->random.damping = p->random.damping;
+
+  // Dithering quantizes to integer levels: on floating-point (or int32) outputs it is
+  // meaningless whatever the dither type, so disable the node entirely. Its passthrough
+  // paths used to clamp every float/EXR export to [0,1], destroying HDR values (e.g.
+  // reconstructed highlights above the white point).
+  const int prec = pipe->levels & IMAGEIO_PREC_MASK;
+
+  if(prec == IMAGEIO_FLOAT || prec == IMAGEIO_INT32)
+    piece->enabled = FALSE;
 
   // Floyd-Steinberg can't run on OpenCL because it's a super-serial algo
   // But it's still slow on CPU
