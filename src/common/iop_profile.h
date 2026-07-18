@@ -55,6 +55,11 @@ typedef struct dt_iop_order_iccprofile_info_t
   dt_iop_color_intent_t intent;
   dt_colormatrix_t matrix_in; // don't align on more than 16 bits or OpenCL will fail
   dt_colormatrix_t matrix_out;
+  // gamut-shape approximation of matrix_in/matrix_out (see dt_colorspaces_get_approximate_matrix_from_profile()),
+  // populated only when the profile has no exact matrix (matrix_in/matrix_out are NAN), e.g. LUT-only ICC
+  // profiles such as printer profiles. NAN when unavailable. Never use for an actual color conversion.
+  dt_colormatrix_t matrix_in_approx;
+  dt_colormatrix_t matrix_out_approx;
   int lutsize;
   float *lut_in[3];
   float *lut_out[3];

@@ -329,6 +329,69 @@ int dt_colorspaces_get_matrix_from_output_profile(cmsHPROFILE prof, dt_colormatr
   return dt_colorspaces_get_matrix_from_profile(prof, matrix, lutr, lutg, lutb, lutsize, 0);
 }
 
+int dt_colorspaces_get_approximate_matrix_from_profile(cmsHPROFILE prof, dt_colormatrix_t matrix_in,
+                                                        dt_colormatrix_t matrix_out)
+{
+  if(IS_NULL_PTR(prof)) return 1;
+
+  cmsHPROFILE xyz_profile = cmsCreateXYZProfile();
+  if(IS_NULL_PTR(xyz_profile)) return 1;
+
+  // relative colorimetric: we only care about the primaries' direction, not about
+  // any deliberate whitepoint rescaling an absolute intent would add.
+  cmsHTRANSFORM transform = cmsCreateTransform(prof, TYPE_RGB_DBL, xyz_profile, TYPE_XYZ_DBL,
+                                               INTENT_RELATIVE_COLORIMETRIC,
+                                               cmsFLAGS_NOCACHE | cmsFLAGS_NOOPTIMIZE);
+  cmsCloseProfile(xyz_profile);
+  if(IS_NULL_PTR(transform)) return 1;
+
+  // evaluate the profile's actual (possibly non-linear, LUT-based) transform at the pure
+  // primaries, and treat the resulting XYZ as if they were colorant tags of an equivalent
+  // matrix-shaper profile. This ignores the profile's real per-channel/cross-channel
+  // response, so it is only a gamut-shape approximation, never an accurate conversion.
+  const double rgb_primaries[3][3] = { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } };
+  double xyz[3][3];
+  cmsDoTransform(transform, rgb_primaries, xyz, 3);
+  cmsDeleteTransform(transform);
+
+  dt_colormatrix_t matrix_tmp = { { xyz[0][0], xyz[1][0], xyz[2][0] },
+                                  { xyz[0][1], xyz[1][1], xyz[2][1] },
+                                  { xyz[0][2], xyz[1][2], xyz[2][2] } };
+
+  // some pathological profiles evaluate to all-zero primaries
+  float sum = 0.0f;
+  for(int k1 = 0; k1 < 3; k1++)
+    for(int k2 = 0; k2 < 3; k2++)
+      sum += matrix_tmp[k1][k2];
+  if(sum == 0.0f) return 1;
+
+  // The primaries as actually rendered by the profile do not, in general, sum to its white
+  // point the way true additive RGB primaries would: mixing full R+G+B ink on paper is nowhere
+  // near paper white, since ink is a subtractive, non-additive process. Every consumer of
+  // matrix_in/matrix_out relies on the additive invariant RGB(1,1,1) <-> XYZ(white) (it is what
+  // "target_white"/normalized chroma mean downstream); left unscaled, matrix_tmp violates it and
+  // silently sends legitimate colors far outside [0, 1], collapsing gamut-mapping consumers to a
+  // flat, clipped color. Rescale each primary column so R+G+B lands exactly on the profile's PCS
+  // white point instead - the same chromaticities+white-point construction real matrix-shaper
+  // profiles use (see _compute_prequantized_primaries() above).
+  dt_colormatrix_t matrix_tmp_inv;
+  if(mat3SSEinv(matrix_tmp_inv, matrix_tmp)) return 1;
+
+  const cmsCIEXYZ *const white_pt = cmsD50_XYZ();
+  const dt_aligned_pixel_t white_xyz = { (float)white_pt->X, (float)white_pt->Y, (float)white_pt->Z, 0.f };
+  dt_aligned_pixel_t scale;
+  dot_product(white_xyz, matrix_tmp_inv, scale);
+
+  for(int row = 0; row < 3; row++)
+    for(int col = 0; col < 3; col++)
+      matrix_tmp[row][col] *= scale[col];
+
+  memcpy(matrix_in, matrix_tmp, sizeof(dt_colormatrix_t));
+  if(mat3SSEinv(matrix_out, matrix_tmp)) return 1;
+
+  return 0;
+}
+
 static cmsHPROFILE dt_colorspaces_create_lab_profile()
 {
   return cmsCreateLab4Profile(cmsD50_xyY());

@@ -2017,16 +2017,24 @@ static inline __attribute__((always_inline)) int filmic_v4_prepare_matrices(dt_c
   dt_colormatrix_mul(temp_matrix, XYZ_D65_to_D50_CAT16, LMS_2006_D65_to_XYZ_D65);
   dt_colormatrix_mul(output_matrix, work_profile->matrix_out, temp_matrix);
 
-  // If the pipeline output profile is supported (matrix profile), we gamut map against it
-  const int use_output_profile = (!IS_NULL_PTR(export_profile));
+  // If the pipeline output profile is supported (matrix profile, exact or approximated), we
+  // gamut map against it. LUT-only profiles (typically printer profiles) have no exact matrix;
+  // fall back to the gamut-shape approximation computed in dt_ioppr_generate_profile_info().
+  const int has_exact_matrix = !IS_NULL_PTR(export_profile) && !isnan(export_profile->matrix_in[0][0]);
+  const int has_approx_matrix = !IS_NULL_PTR(export_profile) && !isnan(export_profile->matrix_in_approx[0][0]);
+  const int use_output_profile = has_exact_matrix || has_approx_matrix;
+
   if(use_output_profile)
   {
+    const float (*const matrix_out_src)[4] = has_exact_matrix ? export_profile->matrix_out : export_profile->matrix_out_approx;
+    const float (*const matrix_in_src)[4] = has_exact_matrix ? export_profile->matrix_in : export_profile->matrix_in_approx;
+
     // Prepare the LMS 2006 -> XYZ D65 -> XYZ D50 -> output RGB (D50) matrix
     dt_colormatrix_mul(temp_matrix, XYZ_D65_to_D50_CAT16, LMS_2006_D65_to_XYZ_D65);
-    dt_colormatrix_mul(export_output_matrix, export_profile->matrix_out, temp_matrix);
+    dt_colormatrix_mul(export_output_matrix, matrix_out_src, temp_matrix);
 
     // Prepare the output RGB (D50) -> XYZ D50 -> XYZ D65 -> LMS 2006 matrix
-    dt_colormatrix_mul(temp_matrix, XYZ_D50_to_D65_CAT16, export_profile->matrix_in);
+    dt_colormatrix_mul(temp_matrix, XYZ_D50_to_D65_CAT16, matrix_in_src);
     dt_colormatrix_mul(export_input_matrix, XYZ_D65_to_LMS_2006_D65, temp_matrix);
   }
 
@@ -2616,11 +2624,14 @@ static const dt_iop_order_iccprofile_info_t *_filmic_get_output_profile(const dt
         darktable.color_profiles->softproof_intent);
     // LUT-only (non matrix-shaper) profiles - typical of printer/inkjet ICC profiles - are
     // flagged by NAN matrices. The gamut-mapping code below only knows how to use 3x3
-    // matrices, so using a NAN one silently poisons the whole image with NaN pixels. Fall
-    // back to the pipe output profile in that case; the actual soft-proof color conversion
-    // still happens correctly downstream, in colorout, which supports full lcms2 transforms.
-    if(!IS_NULL_PTR(softproof_profile) && !isnan(softproof_profile->matrix_in[0][0])
-       && !isnan(softproof_profile->matrix_out[0][0]))
+    // matrices, so using a NAN one would silently poison the whole image with NaN pixels.
+    // filmic_v4_prepare_matrices() falls back to matrix_in_approx/matrix_out_approx (a gamut
+    // shape approximation, see dt_colorspaces_get_approximate_matrix_from_profile()) when the
+    // exact matrix is unavailable, and disables output-profile gamut mapping entirely only if
+    // that approximation itself failed. The actual soft-proof color conversion always happens
+    // correctly downstream, in colorout, which supports full lcms2 transforms either way.
+    if(!IS_NULL_PTR(softproof_profile)
+       && (!isnan(softproof_profile->matrix_in[0][0]) || !isnan(softproof_profile->matrix_in_approx[0][0])))
       return softproof_profile;
   }
   return dt_ioppr_get_pipe_output_profile_info(pipe);

@@ -61,6 +61,8 @@ static inline __attribute__((always_inline)) void _mark_as_nonmatrix_profile(dt_
   profile_info->matrix_in_transposed[0][0] = NAN;
   profile_info->matrix_out[0][0] = NAN;
   profile_info->matrix_out_transposed[0][0] = NAN;
+  profile_info->matrix_in_approx[0][0] = NAN;
+  profile_info->matrix_out_approx[0][0] = NAN;
 }
 
 __DT_CLONE_TARGETS__
@@ -674,6 +676,16 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
     {
       transpose_3xSSE(profile_info->matrix_in, profile_info->matrix_in_transposed);
       transpose_3xSSE(profile_info->matrix_out, profile_info->matrix_out_transposed);
+    }
+
+    if(isnan(profile_info->matrix_in[0][0]))
+    {
+      // exact matrix-shaper extraction failed (typically a LUT-only profile, e.g. a printer
+      // profile) - approximate a gamut shape for heuristics that don't need an accurate
+      // conversion (filmic's soft-proof gamut mapping). matrix_in/matrix_out themselves stay
+      // NAN, so every other consumer keeps taking the accurate lcms2 path.
+      dt_colorspaces_get_approximate_matrix_from_profile(rgb_profile, profile_info->matrix_in_approx,
+                                                          profile_info->matrix_out_approx);
     }
   }
 

@@ -271,6 +271,15 @@ int dt_colorspaces_get_matrix_from_input_profile(cmsHPROFILE prof, dt_colormatri
 int dt_colorspaces_get_matrix_from_output_profile(cmsHPROFILE prof, dt_colormatrix_t matrix, float *lutr, float *lutg,
                                                   float *lutb, const int lutsize);
 
+/** approximate a profile-to-XYZ (and its inverse) matrix by evaluating pure primaries and white
+ * through the profile's actual transform. Unlike dt_colorspaces_get_matrix_from_*_profile(), this
+ * works on any RGB profile, including LUT-only ones (cmsIsMatrixShaper() == FALSE) such as printer
+ * profiles, at the cost of ignoring the profile's real (nonlinear, cross-channel) behavior. Only
+ * fit for heuristics that need a gamut *shape* (e.g. filmic's soft-proof gamut mapping), never for
+ * an actual color conversion. Returns 0 on success. */
+int dt_colorspaces_get_approximate_matrix_from_profile(cmsHPROFILE prof, dt_colormatrix_t matrix_in,
+                                                        dt_colormatrix_t matrix_out);
+
 /** wrapper to get the name from a color profile. this tries to handle character encodings. */
 void dt_colorspaces_get_profile_name(cmsHPROFILE p, const char *language, const char *country, char *name,
                                      size_t len);
