@@ -654,7 +654,7 @@ interpolate_and_mask(read_only image2d_t input,
                      write_only image2d_t interpolated,
                      write_only image2d_t clipping_mask,
                      constant float *clips,
-                     constant float *wb,
+                     constant float *white_balance,
                      const int filters,
                      const int width, const int height)
 {
@@ -667,32 +667,23 @@ interpolate_and_mask(read_only image2d_t input,
 
   const int c = FC(i, j, filters);
 
-  float R = 0.f;
-  float G = 0.f;
-  float B = 0.f;
+  float val_r = 0.f;
+  float val_g = 0.f;
+  float val_b = 0.f;
 
   int R_clipped = 0;
   int G_clipped = 0;
   int B_clipped = 0;
 
-  if(i == 0 || j == 0 || i == height - 1 || j == width - 1)
   {
-    // We are on the image edges. We don't need to demosaic,
-    // just set R = G = B = center and record clipping.
-    // This will introduce a marginal error close to edges, mostly irrelevant
-    // because we are dealing with local averages anyway, later on.
-    // Also we remosaic the image at the end, so only the relevant channel gets picked.
-    // Finally, it's unlikely that the borders of the image get clipped due to vignetting.
-    R = G = B = center;
-    R_clipped = G_clipped = B_clipped = (center > clips[c]);
-  }
-  else
-  {
-    // fetch neighbours and cache them for perf
-    const size_t i_prev = (i - 1);
-    const size_t i_next = (i + 1);
-    const size_t j_prev = (j - 1);
-    const size_t j_next = (j + 1);
+    // Mirrored neighbour indexing on the image border ring: reflection preserves each
+    // neighbour's CFA colour (the Bayer pattern is 2-periodic), so the per-channel
+    // interpolation and clip flags below stay valid on the borders. Mirrors the CPU
+    // _interpolate_and_mask (see the border-ring comment there).
+    const int i_prev = (i == 0) ? 1 : (i - 1);
+    const int i_next = (i == height - 1) ? height - 2 : (i + 1);
+    const int j_prev = (j == 0) ? 1 : (j - 1);
+    const int j_next = (j == width - 1) ? width - 2 : (j + 1);
 
     const float north = read_imagef(input, samplerA, (int2)(j, i_prev)).x;
     const float south = read_imagef(input, samplerA, (int2)(j, i_next)).x;
@@ -706,39 +697,39 @@ interpolate_and_mask(read_only image2d_t input,
 
     if(c == GREEN) // green pixel
     {
-      G = center;
+      val_g = center;
       G_clipped = (center > clips[GREEN]);
     }
     else // non-green pixel
     {
       // interpolate inside an X/Y cross
-      G = (north + south + east + west) / 4.f;
+      val_g = (north + south + east + west) / 4.f;
       G_clipped = (north > clips[GREEN] || south > clips[GREEN] || east > clips[GREEN] || west > clips[GREEN]);
     }
 
     if(c == RED ) // red pixel
     {
-      R = center;
+      val_r = center;
       R_clipped = (center > clips[RED]);
     }
     else // non-red pixel
     {
-      if(FC(i - 1, j, filters) == RED && FC(i + 1, j, filters) == RED)
+      if(FC(i + 1, j, filters) == RED)
       {
-        // we are on a red column, so interpolate column-wise
-        R = (north + south) / 2.f;
+        // we are on a red column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
+        val_r = (north + south) / 2.f;
         R_clipped = (north > clips[RED] || south > clips[RED]);
       }
-      else if(FC(i, j - 1, filters) == RED && FC(i, j + 1, filters) == RED)
+      else if(FC(i, j + 1, filters) == RED)
       {
-        // we are on a red row, so interpolate row-wise
-        R = (west + east) / 2.f;
+        // we are on a red row, interpolate row-wise
+        val_r = (west + east) / 2.f;
         R_clipped = (west > clips[RED] || east > clips[RED]);
       }
       else
       {
         // we are on a blue row, so interpolate inside a square
-        R = (north_west + north_east + south_east + south_west) / 4.f;
+        val_r = (north_west + north_east + south_east + south_west) / 4.f;
         R_clipped = (north_west > clips[RED] || north_east > clips[RED] || south_west > clips[RED]
                       || south_east > clips[RED]);
       }
@@ -746,27 +737,27 @@ interpolate_and_mask(read_only image2d_t input,
 
     if(c == BLUE ) // blue pixel
     {
-      B = center;
+      val_b = center;
       B_clipped = (center > clips[BLUE]);
     }
     else // non-blue pixel
     {
-      if(FC(i - 1, j, filters) == BLUE && FC(i + 1, j, filters) == BLUE)
+      if(FC(i + 1, j, filters) == BLUE)
       {
-        // we are on a blue column, so interpolate column-wise
-        B = (north + south) / 2.f;
+        // we are on a blue column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
+        val_b = (north + south) / 2.f;
         B_clipped = (north > clips[BLUE] || south > clips[BLUE]);
       }
-      else if(FC(i, j - 1, filters) == BLUE && FC(i, j + 1, filters) == BLUE)
+      else if(FC(i, j + 1, filters) == BLUE)
       {
         // we are on a red row, so interpolate row-wise
-        B = (west + east) / 2.f;
+        val_b = (west + east) / 2.f;
         B_clipped = (west > clips[BLUE] || east > clips[BLUE]);
       }
       else
       {
         // we are on a red row, so interpolate inside a square
-        B = (north_west + north_east + south_east + south_west) / 4.f;
+        val_b = (north_west + north_east + south_east + south_west) / 4.f;
 
         B_clipped = (north_west > clips[BLUE] || north_east > clips[BLUE] || south_west > clips[BLUE]
                     || south_east > clips[BLUE]);
@@ -774,10 +765,11 @@ interpolate_and_mask(read_only image2d_t input,
     }
   }
 
-  float4 RGB = {R, G, B, native_sqrt(R * R + G * G + B * B) };
+  float4 rgb_pixel = {val_r, val_g, val_b, native_sqrt(val_r * val_r + val_g * val_g + val_b * val_b) };
   float4 clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
-  const float4 WB4 = { wb[0], wb[1], wb[2], wb[3] };
-  write_imagef(interpolated, (int2)(j, i), RGB / WB4);
+  const float4 wb4 = { white_balance[0], white_balance[1], white_balance[2], white_balance[3] };
+  // clamp at zero like the CPU path (black-subtracted raw can dip negative)
+  write_imagef(interpolated, (int2)(j, i), fmax(rgb_pixel / wb4, 0.f));
   write_imagef(clipping_mask, (int2)(j, i), clipped);
 }
 
@@ -900,7 +892,7 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
                             write_only image2d_t interpolated,
                             write_only image2d_t clipping_mask,
                             constant float *clips,
-                            constant float *wb,
+                            constant float *white_balance,
                             const int width, const int height,
                             const int rx, const int ry,
                             global const unsigned char (*const xtrans)[6],
@@ -913,9 +905,9 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
 
   const float center = read_imagef(input, sampleri, (int2)(j, i)).x;
 
-  float R = 0.f;
-  float G = 0.f;
-  float B = 0.f;
+  float val_r = 0.f;
+  float val_g = 0.f;
+  float val_b = 0.f;
 
   int R_clipped = 0;
   int G_clipped = 0;
@@ -940,9 +932,9 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
         used_clipped[color] |= (value > clips[color]);
       }
 
-    R = (f == RED   || count[RED]   == 0) ? center : sum[RED]   / count[RED];
-    G = (f == GREEN || count[GREEN] == 0) ? center : sum[GREEN] / count[GREEN];
-    B = (f == BLUE  || count[BLUE]  == 0) ? center : sum[BLUE]  / count[BLUE];
+    val_r = (f == RED   || count[RED]   == 0) ? center : sum[RED]   / count[RED];
+    val_g = (f == GREEN || count[GREEN] == 0) ? center : sum[GREEN] / count[GREEN];
+    val_b = (f == BLUE  || count[BLUE]  == 0) ? center : sum[BLUE]  / count[BLUE];
 
     R_clipped = (f == RED   || count[RED]   == 0) ? (center > clips[RED])   : used_clipped[RED];
     G_clipped = (f == GREEN || count[GREEN] == 0) ? (center > clips[GREEN]) : used_clipped[GREEN];
@@ -974,17 +966,17 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
       const int total = ip[1];
       if(color == RED)
       {
-        R = (total > 0) ? sum[RED] / total : center;
+        val_r = (total > 0) ? sum[RED] / total : center;
         R_clipped = used_clipped[RED];
       }
       else if(color == GREEN)
       {
-        G = (total > 0) ? sum[GREEN] / total : center;
+        val_g = (total > 0) ? sum[GREEN] / total : center;
         G_clipped = used_clipped[GREEN];
       }
       else
       {
-        B = (total > 0) ? sum[BLUE] / total : center;
+        val_b = (total > 0) ? sum[BLUE] / total : center;
         B_clipped = used_clipped[BLUE];
       }
     }
@@ -992,39 +984,47 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
     const int f = *ip;
     if(f == RED)
     {
-      R = center;
+      val_r = center;
       R_clipped = (center > clips[RED]);
     }
     else if(f == GREEN)
     {
-      G = center;
+      val_g = center;
       G_clipped = (center > clips[GREEN]);
     }
     else
     {
-      B = center;
+      val_b = center;
       B_clipped = (center > clips[BLUE]);
     }
   }
 
-  float4 RGB = { R, G, B, native_sqrt(R * R + G * G + B * B) };
+  float4 rgb_pixel = { val_r, val_g, val_b, native_sqrt(val_r * val_r + val_g * val_g + val_b * val_b) };
   float4 clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
-  const float4 WB4 = { wb[0], wb[1], wb[2], wb[3] };
-  write_imagef(interpolated, (int2)(j, i), RGB / WB4);
+  const float4 wb4 = { white_balance[0], white_balance[1], white_balance[2], white_balance[3] };
+  // clamp at zero like the CPU path (black-subtracted raw can dip negative)
+  write_imagef(interpolated, (int2)(j, i), fmax(rgb_pixel / wb4, 0.f));
   write_imagef(clipping_mask, (int2)(j, i), clipped);
 }
 
 
 kernel void
 remosaic_and_replace(read_only image2d_t input,
+                     read_only image2d_t input_raw,
                      read_only image2d_t interpolated,
                      read_only image2d_t clipping_mask,
                      write_only image2d_t output,
-                     constant float *wb,
+                     constant float *white_balance,
+                     constant float *clips,
+                     const int clip_is_floor,
                      const int filters,
                      const int width, const int height)
 {
-  // Take RGB ratios and norm, reconstruct RGB and remosaic the image
+  // Take RGB ratios and norm, reconstruct RGB and remosaic the image.
+  // clip_is_floor: a clipped photosite's raw reading is a FLOOR, not a measurement (under
+  // sensor rolloff it sits at the detection threshold, below the true signal); the blend base
+  // then only pulls the result UP to the floor, never down to the biased reading. Mirrors the
+  // CPU _remosaic_and_replace. The 2021 mode keeps the historical blend (flag 0).
   const int j = get_global_id(0); // = x
   const int i = get_global_id(1); // = y
 
@@ -1032,23 +1032,30 @@ remosaic_and_replace(read_only image2d_t input,
 
   const int c = FC(i, j, filters);
   const float4 center = read_imagef(interpolated, sampleri, (int2)(j, i));
-  float *rgb = (float *)&center;
+  float *rgb_channels = (float *)&center;
   const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;
-  const float4 pix_in = read_imagef(input, sampleri, (int2)(j, i));
-  const float4 pix_out = opacity * fmax(rgb[c] * wb[c], 0.f) + (1.f - opacity) * pix_in;
+  const float reconstructed = fmax(rgb_channels[c] * white_balance[c], 0.f);
+  float4 base = read_imagef(input, sampleri, (int2)(j, i));
+  if(clip_is_floor && read_imagef(input_raw, sampleri, (int2)(j, i)).x >= clips[c])
+    base = fmax(base, reconstructed);
+  const float4 pix_out = opacity * reconstructed + (1.f - opacity) * base;
   write_imagef(output, (int2)(j, i), pix_out);
 }
 
 kernel void
 remosaic_and_replace_xtrans(read_only image2d_t input,
+                            read_only image2d_t input_raw,
                             read_only image2d_t interpolated,
                             read_only image2d_t clipping_mask,
                             write_only image2d_t output,
-                            constant float *wb,
+                            constant float *white_balance,
+                            constant float *clips,
+                            const int clip_is_floor,
                             const int width, const int height,
                             const int rx, const int ry,
                             global const unsigned char (*const xtrans)[6])
 {
+  // see remosaic_and_replace for the clip_is_floor semantics
   const int j = get_global_id(0);
   const int i = get_global_id(1);
 
@@ -1056,10 +1063,13 @@ remosaic_and_replace_xtrans(read_only image2d_t input,
 
   const int c = FCxtrans(ry + i, rx + j, xtrans);
   const float4 center = read_imagef(interpolated, sampleri, (int2)(j, i));
-  float *rgb = (float *)&center;
+  float *rgb_channels = (float *)&center;
   const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;
-  const float4 pix_in = read_imagef(input, sampleri, (int2)(j, i));
-  const float4 pix_out = opacity * fmax(rgb[c] * wb[c], 0.f) + (1.f - opacity) * pix_in;
+  const float reconstructed = fmax(rgb_channels[c] * white_balance[c], 0.f);
+  float4 base = read_imagef(input, sampleri, (int2)(j, i));
+  if(clip_is_floor && read_imagef(input_raw, sampleri, (int2)(j, i)).x >= clips[c])
+    base = fmax(base, reconstructed);
+  const float4 pix_out = opacity * reconstructed + (1.f - opacity) * base;
   write_imagef(output, (int2)(j, i), pix_out);
 }
 
@@ -1073,17 +1083,23 @@ box_blur_5x5(read_only image2d_t in,
 
   if(x >= width || y >= height) return;
 
-  float4 acc = 0.f;
+  float4 accum = 0.f;
+  int hits = 0;
 
-  for(int ii = -2; ii < 3; ++ii)
-    for(int jj = -2; jj < 3; ++jj)
+  // shrinking window at the borders (average over the in-bounds taps only): matches the CPU
+  // dt_box_mean, whose border normalization uses the actual hit count -- the previous
+  // replicate-and-divide-by-25 shifted the feathered clip mask at every image border
+  for(int offset_y = -2; offset_y < 3; ++offset_y)
+    for(int offset_x = -2; offset_x < 3; ++offset_x)
     {
-      const int row = clamp(y + ii, 0, height - 1);
-      const int col = clamp(x + jj, 0, width - 1);
-      acc += read_imagef(in, samplerA, (int2)(col, row)) / 25.f;
+      const int row = y + offset_y;
+      const int col = x + offset_x;
+      if(row < 0 || row >= height || col < 0 || col >= width) continue;
+      accum += read_imagef(in, samplerA, (int2)(col, row));
+      hits++;
     }
 
-  write_imagef(out, (int2)(x, y), acc);
+  write_imagef(out, (int2)(x, y), accum / (float)hits);
 }
 
 
