@@ -21,7 +21,7 @@
  */
 
 #include "chart/common.h"
-#include "iop/gaussian_elimination.h"
+#include "common/solvers/gaussian_elimination.h"
 
 // using SVD to solve the system with h[8] also being 0 would be better, but this seems to be good enough
 int get_homography(const point_t *source, const point_t *target, float *h)

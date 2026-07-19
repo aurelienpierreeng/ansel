@@ -26,7 +26,7 @@
 #include "common/illuminants.h"
 #include "common/matrices.h"
 #include "develop/imageop_math.h"
-#include "gaussian_elimination.h"
+#include "common/solvers/gaussian_elimination.h"
 #include "iop/channelmixerrgb_shared.h"
 
 #include <float.h>
