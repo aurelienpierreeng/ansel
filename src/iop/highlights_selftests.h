@@ -97,13 +97,13 @@ static void _sp_chol_cl_selftest(const int devid, void *gd_void, const dt_dev_pi
   if(factor_cpu) _sp_chol_solve(factor_cpu, solution_cpu);
 
   // GPU
-  _sp_chol_cl_t *factor_gpu
-      = _sp_chol_factor_cl(devid, gd_void, dimension, matrix_col_ptr, matrix_row_index, matrix_values);
+  _sp_chol_cl_t *factor_gpu = _sp_chol_factor_cl(devid, _hl_sp_chol_kernels(gd_void), dimension, matrix_col_ptr,
+                                                 matrix_row_index, matrix_values);
   double max_rel_diff = -1.0;
   if(factor_cpu && factor_gpu)
   {
     cl_mem rhs_device = _sp_cl_upload(devid, rhs, sizeof(double) * dimension);
-    if(rhs_device && !_sp_chol_solve_cl(factor_gpu, gd_void, rhs_device))
+    if(rhs_device && !_sp_chol_solve_cl(factor_gpu, _hl_sp_chol_kernels(gd_void), rhs_device))
     {
       double *solution_gpu = malloc(sizeof(double) * dimension);
       if(dt_opencl_read_buffer_from_device(devid, solution_gpu, rhs_device, 0, sizeof(double) * dimension, CL_TRUE)
