@@ -60,10 +60,13 @@
 #include "bauhaus/bauhaus.h"
 #include "common/box_filters.h"
 #include "common/bspline.h"
+#include "common/gaussian.h"
+#include "common/distance_transform.h"   // per-hole reconstruction radius = max clip-to-valid depth
 #include "common/opencl.h"
 #include "common/imagebuf.h"
 #include "common/fast_guided_filter.h"
 #include "control/control.h"
+#include "iop/choleski.h"   // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
@@ -108,6 +111,7 @@ typedef enum dt_iop_highlights_mode_t
   DT_IOP_HIGHLIGHTS_LCH = 1,     // $DESCRIPTION: "reconstruct in LCh"
   DT_IOP_HIGHLIGHTS_INPAINT = 2, // $DESCRIPTION: "reconstruct color"
   DT_IOP_HIGHLIGHTS_LAPLACIAN = 3, //$DESCRIPTION: "guided laplacians"
+  DT_IOP_HIGHLIGHTS_HARMONIC = 4, //$DESCRIPTION: "harmonic transposition"
 } dt_iop_highlights_mode_t;
 
 typedef enum dt_atrous_wavelets_scales_t
@@ -175,6 +179,94 @@ typedef struct dt_iop_highlights_global_data_t
   int kernel_highlights_guide_laplacians;
   int kernel_highlights_diffuse_color;
   int kernel_highlights_box_blur;
+  int kernel_sparse_chol_update_level;
+  int kernel_sparse_chol_final_level;
+  int kernel_sparse_chol_fwd_level;
+  int kernel_sparse_chol_bwd_level;
+  int kernel_hl_cfa_steer;
+  int kernel_hl_cfa_down;
+  int kernel_hl_cfa_box;
+  int kernel_hl_cfa_grad;
+  int kernel_hl_cfa_tensor;
+  int kernel_hl_cfa_gnorm;
+  int kernel_hl_cfa_weights;
+  int kernel_hl_cfa_jacobi;
+  int kernel_hl_cfa_jacobi_block;
+  int kernel_hl_fill_down;
+  int kernel_hl_fill_seed;
+  int kernel_hl_fill_seed_up;
+  int kernel_hl_fill_jacobi;
+  int kernel_hl_fill_jacobi_block;
+  int kernel_hl_fill_up;
+  int kernel_hl_cf_lref_partials;
+  int kernel_hl_cf_pack_joint;
+  int kernel_hl_cf_fit_joint;
+  int kernel_hl_cf_eval_joint;
+  int kernel_hl_cf_pack_pair;
+  int kernel_hl_cf_fit_pair;
+  int kernel_hl_cf_eval_pair;
+  int kernel_hl_cf_pack_deepmask;
+  int kernel_hl_cf_eval_deep;
+  int kernel_hl_buf_to_img;
+  int kernel_hl_hf_pack;
+  int kernel_hl_hf_fit;
+  int kernel_hl_hf_energy;
+  int kernel_hl_hf_eval;
+  int kernel_hl_hf_damp;
+  int kernel_hl_soft_floor;
+  int kernel_hl_hard_floor;
+  int kernel_hl_lsb_hole;
+  int kernel_hl_ratio_plane;
+  int kernel_hl_dome_down;
+  int kernel_hl_dome_blend;
+  int kernel_hl_core_floor;
+  int kernel_hl_cmean_reduce;
+  int kernel_hl_pde_init;
+  int kernel_hl_mask_to_img1;
+  int kernel_hl_core_blend;
+  int kernel_hl_pde_rhs;
+  int kernel_hl_pde_scatter;
+  int kernel_hl_aniso_prep;
+  int kernel_hl_box3;
+  int kernel_hl_grad_reduce;
+  int kernel_hl_aniso_tensor;
+  int kernel_hl_aniso_weights;
+  int kernel_hl_aniso_reassemble;
+  int kernel_hl_aniso_rhs;
+  int kernel_hl_aniso_scatter;
+  int kernel_hl_knee_bin;
+  int kernel_hl_knee_jmom;
+  int kernel_hl_knee_pmom;
+  int kernel_hl_knee_joint_reg;
+  int kernel_hl_knee_pair_reg;
+  int kernel_hl_knee_apply;
+  int kernel_hl_mask_pack;
+  int kernel_hl_region_gather;
+  int kernel_hl_region_scatter;
+  int kernel_hl_region_stats;
+  int kernel_hl_need_self;
+  int kernel_hl_knee_apply_interp;
+  int kernel_hl_cg_embed;
+  int kernel_hl_cg_op;
+  int kernel_hl_cg_r0;
+  int kernel_hl_cg_beta;
+  int kernel_hl_relu;
+  int kernel_hl_cg_r1;
+  int kernel_hl_cg_ap;
+  int kernel_hl_cg_update;
+  int kernel_hl_aniso_pyr_down;
+  int kernel_hl_pyr_getc;
+  int kernel_hl_pyr_putc;
+  int kernel_hl_pyr_getc4;
+  int kernel_hl_pyr_putc4;
+  int kernel_hl_pyr_project;
+  int kernel_hl_aniso_obs_full;
+  int kernel_hl_aniso_obs_flags;
+  int kernel_hl_window_pack;
+  int kernel_hl_window_unpack;
+  int kernel_hl_aniso_iter;
+  int kernel_hl_aniso_iter_block;
+  int kernel_hl_aniso_splat;
   int kernel_highlights_false_color;
 
   int kernel_filmic_bspline_vertical;
@@ -317,6 +409,10 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
                                           const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                                           const dt_iop_roi_t *const roi_in,
                                           const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
+static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                  const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                                  const dt_iop_roi_t *const roi_in,
+                                  const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
 
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
@@ -392,7 +488,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_4f_clip, sizes);
     if(err != CL_SUCCESS) goto error;
   }
-  else if(d->mode == DT_IOP_HIGHLIGHTS_CLIP || d->mode > DT_IOP_HIGHLIGHTS_LAPLACIAN)
+  else if(d->mode == DT_IOP_HIGHLIGHTS_CLIP || d->mode > DT_IOP_HIGHLIGHTS_HARMONIC)
   {
     // raw images with clip mode (both bayer and xtrans)
     // This is also the fallback if d->mode is set with something invalid
@@ -461,6 +557,16 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_1f_lch_xtrans, sizes, local);
     if(err != CL_SUCCESS) goto error;
   }
+  else if(d->mode == DT_IOP_HIGHLIGHTS_HARMONIC)
+  {
+    // hybrid CPU-orchestrated driver: the raw roundtrips through the host inside the module
+    // (bit-identical to the CPU path), the rest of the pipe stays on the GPU
+    const dt_aligned_pixel_t clips = {  0.995f * d->clip * piece->dsc_in.processed_maximum[0],
+                                        0.995f * d->clip * piece->dsc_in.processed_maximum[1],
+                                        0.995f * d->clip * piece->dsc_in.processed_maximum[2], clip };
+    err = process_harmonic_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
+    if(err != CL_SUCCESS) goto error;
+  }
   else if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN)
   {
     const dt_aligned_pixel_t clips = {  0.995f * d->clip * piece->dsc_in.processed_maximum[0],
@@ -488,9 +594,11 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   dt_iop_highlights_data_t *d = (dt_iop_highlights_data_t *)piece->data;
   const uint32_t filters = piece->dsc_in.filters;
 
-  if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN && filters)
+  if((d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN || d->mode == DT_IOP_HIGHLIGHTS_HARMONIC) && filters)
   {
     // Mosaic CFA and guided laplacian method: prepare for wavelets decomposition.
+    // Harmonic transposition reuses the same conservative budget (it disables tiling in
+    // commit_params and allocates region buffers well under this envelope).
     const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
     const float final_radius = (float)((int)(1 << d->scales)) / scale;
     const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
@@ -1048,11 +1156,20 @@ __DT_CLONE_TARGETS__
 static void _interpolate_and_mask(const float *const restrict input,
                                   float *const restrict interpolated,
                                   float *const restrict clipping_mask,
-                                  const dt_aligned_pixel_t clips,
-                                  const dt_aligned_pixel_t wb,
+                                  const dt_aligned_pixel_t clips_in,
+                                  const dt_aligned_pixel_t det_scale,
+                                  const dt_aligned_pixel_t white_balance,
                                   const uint32_t filters,
                                   const size_t width, const size_t height)
 {
+  // Per-channel effective detection thresholds. det_scale = 1 is the plain clip detection;
+  // below 1 it extends the reconstructable set down into the sensor's rolloff band
+  // (the BAND OVERRIDE: the knee can restore the band's level but not the slope the sensor
+  // never recorded, while the colour-line model, anchored on truly linear data below the
+  // band, can -- the measured band value then acts as the per-pixel floor).
+  dt_aligned_pixel_t clips;
+  for_four_channels(c) clips[c] = clips_in[c] * det_scale[c];
+
   // Bilinear interpolation
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
@@ -1070,23 +1187,18 @@ static void _interpolate_and_mask(const float *const restrict input,
       int G_clipped = 0;
       int B_clipped = 0;
 
-      if(i == 0 || j == 0 || i == height - 1 || j == width - 1)
       {
-        // We are on the image edges. We don't need to demosaic,
-        // just set R = G = B = center and record clipping.
-        // This will introduce a marginal error close to edges, mostly irrelevant
-        // because we are dealing with local averages anyway, later on.
-        // Also we remosaic the image at the end, so only the relevant channel gets picked.
-        // Finally, it's unlikely that the borders of the image get clipped due to vignetting.
-        R = G = B = center;
-        R_clipped = G_clipped = B_clipped = (center > clips[c]);
-      }
-      else
-      {
-        const size_t i_prev = (i - 1) * width;
-        const size_t i_next = (i + 1) * width;
-        const size_t j_prev = (j - 1);
-        const size_t j_next = (j + 1);
+        // Mirrored neighbour indexing on the image border ring: reflection preserves each
+        // neighbour's CFA colour (the Bayer pattern is 2-periodic), so the per-channel
+        // interpolation and clip flags below stay valid on the borders. The previous shortcut
+        // (R = G = B = center, all three clip flags keyed on the centre's own channel)
+        // corrupted the guide planes and produced dashed per-channel masks along the border
+        // ring : fits anchored on them dragged the border-row reconstruction down to the clip
+        // level (a one-pixel V-dip through the raw value at every contour on the border rows).
+        const size_t i_prev = ((i == 0) ? 1 : i - 1) * width;
+        const size_t i_next = ((i == height - 1) ? height - 2 : i + 1) * width;
+        const size_t j_prev = (j == 0) ? 1 : j - 1;
+        const size_t j_next = (j == width - 1) ? width - 2 : j + 1;
 
         const float north = input[i_prev + j];
         const float south = input[i_next + j];
@@ -1117,15 +1229,15 @@ static void _interpolate_and_mask(const float *const restrict input,
         }
         else // non-red pixel
         {
-          if(FC(i - 1, j, filters) == RED && FC(i + 1, j, filters) == RED)
+          if(FC(i + 1, j, filters) == RED)
           {
-            // we are on a red column, so interpolate column-wise
+            // we are on a red column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
             R = (north + south) / 2.f;
             R_clipped = (north > clips[RED] || south > clips[RED]);
           }
-          else if(FC(i, j - 1, filters) == RED && FC(i, j + 1, filters) == RED)
+          else if(FC(i, j + 1, filters) == RED)
           {
-            // we are on a red row, so interpolate row-wise
+            // we are on a red row, interpolate row-wise
             R = (west + east) / 2.f;
             R_clipped = (west > clips[RED] || east > clips[RED]);
           }
@@ -1145,15 +1257,15 @@ static void _interpolate_and_mask(const float *const restrict input,
         }
         else // non-blue pixel
         {
-          if(FC(i - 1, j, filters) == BLUE && FC(i + 1, j, filters) == BLUE)
+          if(FC(i + 1, j, filters) == BLUE)
           {
-            // we are on a blue column, so interpolate column-wise
+            // we are on a blue column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
             B = (north + south) / 2.f;
             B_clipped = (north > clips[BLUE] || south > clips[BLUE]);
           }
-          else if(FC(i, j - 1, filters) == BLUE && FC(i, j + 1, filters) == BLUE)
+          else if(FC(i, j + 1, filters) == BLUE)
           {
-            // we are on a red row, so interpolate row-wise
+            // we are on a blue row, interpolate row-wise
             B = (west + east) / 2.f;
             B_clipped = (west > clips[BLUE] || east > clips[BLUE]);
           }
@@ -1171,10 +1283,10 @@ static void _interpolate_and_mask(const float *const restrict input,
       dt_aligned_pixel_t RGB = { R, G, B, sqrtf(sqf(R) + sqf(G) + sqf(B)) };
       dt_aligned_pixel_t clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
 
-      for_each_channel(k, aligned(RGB, interpolated, clipping_mask, clipped, wb))
+      for_each_channel(k, aligned(RGB, interpolated, clipping_mask, clipped, white_balance))
       {
         const size_t idx = (i * width + j) * 4 + k;
-        interpolated[idx] = fmaxf(RGB[k] / wb[k], 0.f);
+        interpolated[idx] = fmaxf(RGB[k] / white_balance[k], 0.f);
         clipping_mask[idx] = clipped[k];
       }
     }
@@ -1277,7 +1389,7 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
                                          float *const restrict interpolated,
                                          float *const restrict clipping_mask,
                                          const dt_aligned_pixel_t clips,
-                                         const dt_aligned_pixel_t wb,
+                                         const dt_aligned_pixel_t white_balance,
                                          const dt_iop_roi_t *const roi_in,
                                          const int32_t lookup[6][6][32],
                                          const uint8_t (*const xtrans)[6],
@@ -1358,10 +1470,10 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
       RGB[ALPHA] = sqrtf(sqf(RGB[RED]) + sqf(RGB[GREEN]) + sqf(RGB[BLUE]));
       clipped[ALPHA] = (clipped[RED] || clipped[GREEN] || clipped[BLUE]);
 
-      for_each_channel(k, aligned(RGB, interpolated, clipping_mask, clipped, wb))
+      for_each_channel(k, aligned(RGB, interpolated, clipping_mask, clipped, white_balance))
       {
         const size_t index = idx * 4 + k;
-        interpolated[index] = fmaxf(RGB[k] / wb[k], 0.f);
+        interpolated[index] = fmaxf(RGB[k] / white_balance[k], 0.f);
         clipping_mask[index] = clipped[k];
       }
     }
@@ -1370,14 +1482,23 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
 
 __DT_CLONE_TARGETS__
 static void _remosaic_and_replace(const float *const restrict input,
+                                  const float *const restrict input_raw,
                                   const float *const restrict interpolated,
                                   const float *const restrict clipping_mask,
                                   float *const restrict output,
-                                  const dt_aligned_pixel_t wb,
+                                  const dt_aligned_pixel_t white_balance,
+                                  const dt_aligned_pixel_t clips,
+                                  const int clip_is_floor,
                                   const uint32_t filters,
                                   const size_t width, const size_t height)
 {
-  // Take RGB ratios and norm, reconstruct RGB and remosaic the image
+  // Take RGB ratios and norm, reconstruct RGB and remosaic the image.
+  // With clip_is_floor, a clipped photosite's raw reading is treated as a FLOOR, not a
+  // measurement: under sensor rolloff the raw values of just-detected photosites sit at the
+  // detection threshold, below the true signal, and feathering the reconstruction toward them
+  // printed a V-shaped dip at every contour (the profile passes through the raw value). The
+  // blend base of clipped photosites can then only pull the result UP to the measured floor,
+  // never down to the biased reading. The 2021 mode keeps the historical blend (flag 0).
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
@@ -1386,8 +1507,10 @@ static void _remosaic_and_replace(const float *const restrict input,
       const size_t idx = i * width + j;
       const size_t index = idx * 4;
       const float opacity = clipping_mask[index + ALPHA];
-      output[idx] = opacity * fmaxf(interpolated[index + c] * wb[c], 0.f)
-                    + (1.f - opacity) * input[idx];
+      const float reconstructed = fmaxf(interpolated[index + c] * white_balance[c], 0.f);
+      float base = input[idx];
+      if(clip_is_floor && input_raw[idx] >= clips[c]) base = fmaxf(base, reconstructed);
+      output[idx] = opacity * reconstructed + (1.f - opacity) * base;
     }
   
 }
@@ -1395,14 +1518,18 @@ static void _remosaic_and_replace(const float *const restrict input,
 /** Reproject the reconstructed RGB back onto the X-Trans mosaic. */
 __DT_CLONE_TARGETS__
 static void _remosaic_and_replace_xtrans(const float *const restrict input,
+                                         const float *const restrict input_raw,
                                          const float *const restrict interpolated,
                                          const float *const restrict clipping_mask,
                                          float *const restrict output,
-                                         const dt_aligned_pixel_t wb,
+                                         const dt_aligned_pixel_t white_balance,
+                                         const dt_aligned_pixel_t clips,
+                                         const int clip_is_floor,
                                          const dt_iop_roi_t *const roi_in,
                                          const uint8_t (*const xtrans)[6],
                                          const size_t width, const size_t height)
 {
+  // see _remosaic_and_replace for the clip_is_floor semantics
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
@@ -1411,8 +1538,10 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
       const size_t index = idx * 4;
       const int c = FCxtrans((int)i, (int)j, roi_in, xtrans);
       const float opacity = clipping_mask[index + ALPHA];
-      output[idx] = opacity * fmaxf(interpolated[index + c] * wb[c], 0.f)
-                    + (1.f - opacity) * input[idx];
+      const float reconstructed = fmaxf(interpolated[index + c] * white_balance[c], 0.f);
+      float base = input[idx];
+      if(clip_is_floor && input_raw[idx] >= clips[c]) base = fmaxf(base, reconstructed);
+      output[idx] = opacity * reconstructed + (1.f - opacity) * base;
     }
   
 }
@@ -1810,6 +1939,15 @@ static inline int wavelets_process(const float *const restrict in, float
 }
 
 
+// Harmonic transposition (DT_IOP_HIGHLIGHTS_HARMONIC): the whole method lives in its own
+// include units to keep this module readable -- shared macros/structs, then the C code, then
+// the OpenCL code (which also pulls in the CPU/GPU parity self-tests). Order matters: the
+// OpenCL half calls CPU functions and the self-tests compare against the CPU twins, so the
+// C half must be visible first. See the header comment in each file.
+#include "iop/highlights_harmonic_common.h"
+#include "iop/highlights_harmonic_cpu.h"
+#include "iop/highlights_harmonic_cl.h"
+
 __DT_CLONE_TARGETS__
 static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                    const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
@@ -1863,7 +2001,8 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pi
   dt_aligned_pixel_t normalization = { 1.f, 1.f, 1.f, 1.f };
   _compute_laplacian_normalization(input, roi_in, filters, NULL, normalization);
 
-  _interpolate_and_mask(input, interpolated, clipping_mask, clips, normalization, filters, width, height);
+  const dt_aligned_pixel_t det_unit = { 1.f, 1.f, 1.f, 1.f };
+  _interpolate_and_mask(input, interpolated, clipping_mask, clips, det_unit, normalization, filters, width, height);
   if(dt_box_mean(clipping_mask, height, width, 4, 2, 1) != 0)
   {
     err = 1;
@@ -1893,7 +2032,8 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pi
 
   // Upsample
   interpolate_bilinear(ds_interpolated, ds_width, ds_height, interpolated, width, height, 4);
-  _remosaic_and_replace(input, interpolated, clipping_mask, output, normalization, filters, width, height);
+  _remosaic_and_replace(input, input, interpolated, clipping_mask, output, normalization, clips, FALSE,
+                        filters, width, height);
 
 #if DEBUG_DUMP_PFM
   dump_PFM("/tmp/interpolated.pfm", interpolated, width, height);
@@ -1989,7 +2129,8 @@ static int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_p
   }
 
   interpolate_bilinear(ds_interpolated, ds_width, ds_height, interpolated, width, height, 4);
-  _remosaic_and_replace_xtrans(input, interpolated, clipping_mask, output, normalization, roi_in, xtrans, width, height);
+  _remosaic_and_replace_xtrans(input, input, interpolated, clipping_mask, output, normalization, clips,
+                               FALSE, roi_in, xtrans, width, height);
 
 error:
   dt_pixelpipe_cache_free_align(interpolated);
@@ -2361,14 +2502,18 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_
   if(err != CL_SUCCESS) goto error;
 
   // Remosaic
+  const int clip_floor_off = FALSE;   // 2021 mode keeps the historical blend
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 1, sizeof(cl_mem), (void *)&interpolated);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 2, sizeof(cl_mem), (void *)&clipping_mask);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 3, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 4, sizeof(cl_mem), (void *)&normalization_final);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 5, sizeof(int), (void *)&filters_shifted);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 6, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 7, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 1, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 2, sizeof(cl_mem), (void *)&interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 3, sizeof(cl_mem), (void *)&clipping_mask);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 4, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 5, sizeof(cl_mem), (void *)&normalization_final);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 6, sizeof(cl_mem), (void *)&clips_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 7, sizeof(int), (void *)&clip_floor_off);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 8, sizeof(int), (void *)&filters_shifted);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 9, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace, 10, sizeof(int), (void *)&height);
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_remosaic_and_replace, sizes);
   if(err != CL_SUCCESS) goto error;
 
@@ -2594,16 +2739,20 @@ static cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_interpolate_bilinear, sizes);
   if(err != CL_SUCCESS) goto error;
 
+  const int clip_floor_off = FALSE;   // 2021 mode keeps the historical blend
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 1, sizeof(cl_mem), (void *)&interpolated);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 2, sizeof(cl_mem), (void *)&clipping_mask);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 3, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 4, sizeof(cl_mem), (void *)&normalization_final);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 5, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 6, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 7, sizeof(int), (void *)&roi_in->x);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 8, sizeof(int), (void *)&roi_in->y);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 9, sizeof(cl_mem), (void *)&dev_xtrans);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 1, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 2, sizeof(cl_mem), (void *)&interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 3, sizeof(cl_mem), (void *)&clipping_mask);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 4, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 5, sizeof(cl_mem), (void *)&normalization_final);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 6, sizeof(cl_mem), (void *)&clips_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 7, sizeof(int), (void *)&clip_floor_off);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 8, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 9, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 10, sizeof(int), (void *)&roi_in->x);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 11, sizeof(int), (void *)&roi_in->y);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, 12, sizeof(cl_mem), (void *)&dev_xtrans);
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_remosaic_and_replace_xtrans, sizes);
   if(err != CL_SUCCESS) goto error;
   dt_opencl_release_mem_object(clips_cl);
@@ -2806,6 +2955,16 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         return 1;
       break;
     }
+    case DT_IOP_HIGHLIGHTS_HARMONIC:
+    {
+      const dt_aligned_pixel_t clips = { 0.995f * data->clip * piece->dsc_in.processed_maximum[0],
+                                         0.995f * data->clip * piece->dsc_in.processed_maximum[1],
+                                         0.995f * data->clip * piece->dsc_in.processed_maximum[2], clip };
+      if((filters == 9u && process_harmonic_xtrans(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
+         || (filters != 9u && process_harmonic_bayer(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips)))
+        return 1;
+      break;
+    }
     default:
     case DT_IOP_HIGHLIGHTS_CLIP:
       process_clip(piece, ivoid, ovoid, roi_in, roi_out, clip);
@@ -2833,13 +2992,23 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                  dt_image_pipe_class_name(dt_image_pipe_class(img)), piece->dsc_in.filters,
                  d->mode, piece->enabled);
 
-  // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT
+  // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT. HARMONIC runs the hybrid CPU-orchestrated
+  // driver (host roundtrip inside the module keeps the pipe's CL chain intact).
   piece->process_cl_ready = (d->mode == DT_IOP_HIGHLIGHTS_INPAINT) ? 0 : 1;
 
-  if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN) 
+  if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN || d->mode == DT_IOP_HIGHLIGHTS_HARMONIC)
     piece->cache_output_on_ram = TRUE;
 
-  if(d->mode != DT_IOP_HIGHLIGHTS_LAPLACIAN)
+  if(d->mode == DT_IOP_HIGHLIGHTS_HARMONIC)
+  {
+    // The segmented full-resolution reconstruction needs each clipped region intact: tiling
+    // would split a large blown highlight (e.g. the sun) across tile borders, and the per-region
+    // biharmonic core dome would then be solved on each half against a fake tile edge (-> a
+    // half-recovered, dark-cored disc). Process the whole frame instead.
+    piece->process_tiling_ready = 0;
+  }
+
+  if(d->mode != DT_IOP_HIGHLIGHTS_LAPLACIAN && d->mode != DT_IOP_HIGHLIGHTS_HARMONIC)
   {
     if(!piece->dsc_in.filters)
     {
@@ -2883,6 +3052,96 @@ void init_global(dt_iop_module_so_t *module)
       = (dt_iop_highlights_global_data_t *)malloc(sizeof(dt_iop_highlights_global_data_t));
   module->data = gd;
   gd->kernel_highlights_1f_clip = dt_opencl_create_kernel(program, "highlights_1f_clip");
+  const int harmonic_program = 38;   // highlights_harmonic.cl (harmonic transposition, fp32)
+  const int sparse_program = 37;     // highlights_sparse.cl (fp64 sparse solvers)
+  gd->kernel_sparse_chol_update_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_update_level");
+  gd->kernel_sparse_chol_final_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_final_level");
+  gd->kernel_sparse_chol_fwd_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_fwd_level");
+  gd->kernel_sparse_chol_bwd_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_bwd_level");
+  gd->kernel_hl_pde_rhs = dt_opencl_create_kernel(sparse_program, "hl_pde_rhs");
+  gd->kernel_hl_pde_scatter = dt_opencl_create_kernel(sparse_program, "hl_pde_scatter");
+  gd->kernel_hl_aniso_rhs = dt_opencl_create_kernel(sparse_program, "hl_aniso_rhs");
+  gd->kernel_hl_aniso_scatter = dt_opencl_create_kernel(sparse_program, "hl_aniso_scatter");
+  gd->kernel_hl_cg_r1 = dt_opencl_create_kernel(sparse_program, "hl_cg_r1");
+  gd->kernel_hl_cg_ap = dt_opencl_create_kernel(sparse_program, "hl_cg_ap");
+  gd->kernel_hl_cg_update = dt_opencl_create_kernel(sparse_program, "hl_cg_update");
+  gd->kernel_hl_cfa_steer = dt_opencl_create_kernel(harmonic_program, "hl_cfa_steer");
+  gd->kernel_hl_cfa_down = dt_opencl_create_kernel(harmonic_program, "hl_cfa_down");
+  gd->kernel_hl_cfa_box = dt_opencl_create_kernel(harmonic_program, "hl_cfa_box");
+  gd->kernel_hl_cfa_grad = dt_opencl_create_kernel(harmonic_program, "hl_cfa_grad");
+  gd->kernel_hl_cfa_tensor = dt_opencl_create_kernel(harmonic_program, "hl_cfa_tensor");
+  gd->kernel_hl_cfa_gnorm = dt_opencl_create_kernel(harmonic_program, "hl_cfa_gnorm");
+  gd->kernel_hl_cfa_weights = dt_opencl_create_kernel(harmonic_program, "hl_cfa_weights");
+  gd->kernel_hl_cfa_jacobi = dt_opencl_create_kernel(harmonic_program, "hl_cfa_jacobi");
+  gd->kernel_hl_cfa_jacobi_block = dt_opencl_create_kernel(harmonic_program, "hl_cfa_jacobi_block");
+  gd->kernel_hl_fill_down = dt_opencl_create_kernel(harmonic_program, "hl_fill_down");
+  gd->kernel_hl_fill_seed = dt_opencl_create_kernel(harmonic_program, "hl_fill_seed");
+  gd->kernel_hl_fill_seed_up = dt_opencl_create_kernel(harmonic_program, "hl_fill_seed_up");
+  gd->kernel_hl_fill_jacobi = dt_opencl_create_kernel(harmonic_program, "hl_fill_jacobi");
+  gd->kernel_hl_fill_jacobi_block = dt_opencl_create_kernel(harmonic_program, "hl_fill_jacobi_block");
+  gd->kernel_hl_fill_up = dt_opencl_create_kernel(harmonic_program, "hl_fill_up");
+  gd->kernel_hl_cf_lref_partials = dt_opencl_create_kernel(harmonic_program, "hl_cf_lref_partials");
+  gd->kernel_hl_cf_pack_joint = dt_opencl_create_kernel(harmonic_program, "hl_cf_pack_joint");
+  gd->kernel_hl_cf_fit_joint = dt_opencl_create_kernel(harmonic_program, "hl_cf_fit_joint");
+  gd->kernel_hl_cf_eval_joint = dt_opencl_create_kernel(harmonic_program, "hl_cf_eval_joint");
+  gd->kernel_hl_cf_pack_pair = dt_opencl_create_kernel(harmonic_program, "hl_cf_pack_pair");
+  gd->kernel_hl_cf_fit_pair = dt_opencl_create_kernel(harmonic_program, "hl_cf_fit_pair");
+  gd->kernel_hl_cf_eval_pair = dt_opencl_create_kernel(harmonic_program, "hl_cf_eval_pair");
+  gd->kernel_hl_cf_pack_deepmask = dt_opencl_create_kernel(harmonic_program, "hl_cf_pack_deepmask");
+  gd->kernel_hl_cf_eval_deep = dt_opencl_create_kernel(harmonic_program, "hl_cf_eval_deep");
+  gd->kernel_hl_buf_to_img = dt_opencl_create_kernel(harmonic_program, "hl_buf_to_img");
+  gd->kernel_hl_hf_pack = dt_opencl_create_kernel(harmonic_program, "hl_hf_pack");
+  gd->kernel_hl_hf_fit = dt_opencl_create_kernel(harmonic_program, "hl_hf_fit");
+  gd->kernel_hl_hf_energy = dt_opencl_create_kernel(harmonic_program, "hl_hf_energy");
+  gd->kernel_hl_hf_eval = dt_opencl_create_kernel(harmonic_program, "hl_hf_eval");
+  gd->kernel_hl_hf_damp = dt_opencl_create_kernel(harmonic_program, "hl_hf_damp");
+  gd->kernel_hl_soft_floor = dt_opencl_create_kernel(harmonic_program, "hl_soft_floor");
+  gd->kernel_hl_hard_floor = dt_opencl_create_kernel(harmonic_program, "hl_hard_floor");
+  gd->kernel_hl_lsb_hole = dt_opencl_create_kernel(harmonic_program, "hl_lsb_hole");
+  gd->kernel_hl_ratio_plane = dt_opencl_create_kernel(harmonic_program, "hl_ratio_plane");
+  gd->kernel_hl_dome_down = dt_opencl_create_kernel(harmonic_program, "hl_dome_down");
+  gd->kernel_hl_dome_blend = dt_opencl_create_kernel(harmonic_program, "hl_dome_blend");
+  gd->kernel_hl_core_floor = dt_opencl_create_kernel(harmonic_program, "hl_core_floor");
+  gd->kernel_hl_cmean_reduce = dt_opencl_create_kernel(harmonic_program, "hl_cmean_reduce");
+  gd->kernel_hl_pde_init = dt_opencl_create_kernel(harmonic_program, "hl_pde_init");
+  gd->kernel_hl_mask_to_img1 = dt_opencl_create_kernel(harmonic_program, "hl_mask_to_img1");
+  gd->kernel_hl_core_blend = dt_opencl_create_kernel(harmonic_program, "hl_core_blend");
+  gd->kernel_hl_aniso_prep = dt_opencl_create_kernel(harmonic_program, "hl_aniso_prep");
+  gd->kernel_hl_box3 = dt_opencl_create_kernel(harmonic_program, "hl_box3");
+  gd->kernel_hl_grad_reduce = dt_opencl_create_kernel(harmonic_program, "hl_grad_reduce");
+  gd->kernel_hl_aniso_tensor = dt_opencl_create_kernel(harmonic_program, "hl_aniso_tensor");
+  gd->kernel_hl_aniso_weights = dt_opencl_create_kernel(harmonic_program, "hl_aniso_weights");
+  gd->kernel_hl_aniso_reassemble = dt_opencl_create_kernel(harmonic_program, "hl_aniso_reassemble");
+  gd->kernel_hl_knee_bin = dt_opencl_create_kernel(harmonic_program, "hl_knee_bin");
+  gd->kernel_hl_knee_jmom = dt_opencl_create_kernel(harmonic_program, "hl_knee_jmom");
+  gd->kernel_hl_knee_pmom = dt_opencl_create_kernel(harmonic_program, "hl_knee_pmom");
+  gd->kernel_hl_knee_joint_reg = dt_opencl_create_kernel(harmonic_program, "hl_knee_joint_reg");
+  gd->kernel_hl_knee_pair_reg = dt_opencl_create_kernel(harmonic_program, "hl_knee_pair_reg");
+  gd->kernel_hl_knee_apply = dt_opencl_create_kernel(harmonic_program, "hl_knee_apply");
+  gd->kernel_hl_mask_pack = dt_opencl_create_kernel(harmonic_program, "hl_mask_pack");
+  gd->kernel_hl_region_gather = dt_opencl_create_kernel(harmonic_program, "hl_region_gather");
+  gd->kernel_hl_region_scatter = dt_opencl_create_kernel(harmonic_program, "hl_region_scatter");
+  gd->kernel_hl_region_stats = dt_opencl_create_kernel(harmonic_program, "hl_region_stats");
+  gd->kernel_hl_need_self = dt_opencl_create_kernel(harmonic_program, "hl_need_self");
+  gd->kernel_hl_knee_apply_interp = dt_opencl_create_kernel(harmonic_program, "hl_knee_apply_interp");
+  gd->kernel_hl_cg_embed = dt_opencl_create_kernel(harmonic_program, "hl_cg_embed");
+  gd->kernel_hl_cg_op = dt_opencl_create_kernel(harmonic_program, "hl_cg_op");
+  gd->kernel_hl_cg_r0 = dt_opencl_create_kernel(harmonic_program, "hl_cg_r0");
+  gd->kernel_hl_cg_beta = dt_opencl_create_kernel(harmonic_program, "hl_cg_beta");
+  gd->kernel_hl_relu = dt_opencl_create_kernel(harmonic_program, "hl_relu");
+  gd->kernel_hl_aniso_pyr_down = dt_opencl_create_kernel(harmonic_program, "hl_aniso_pyr_down");
+  gd->kernel_hl_pyr_getc = dt_opencl_create_kernel(harmonic_program, "hl_pyr_getc");
+  gd->kernel_hl_pyr_getc4 = dt_opencl_create_kernel(harmonic_program, "hl_pyr_getc4");
+  gd->kernel_hl_pyr_putc4 = dt_opencl_create_kernel(harmonic_program, "hl_pyr_putc4");
+  gd->kernel_hl_pyr_project = dt_opencl_create_kernel(harmonic_program, "hl_pyr_project");
+  gd->kernel_hl_aniso_obs_full = dt_opencl_create_kernel(harmonic_program, "hl_aniso_obs_full");
+  gd->kernel_hl_aniso_obs_flags = dt_opencl_create_kernel(harmonic_program, "hl_aniso_obs_flags");
+  gd->kernel_hl_window_pack = dt_opencl_create_kernel(harmonic_program, "hl_window_pack");
+  gd->kernel_hl_window_unpack = dt_opencl_create_kernel(harmonic_program, "hl_window_unpack");
+  gd->kernel_hl_pyr_putc = dt_opencl_create_kernel(harmonic_program, "hl_pyr_putc");
+  gd->kernel_hl_aniso_iter = dt_opencl_create_kernel(harmonic_program, "hl_aniso_iter");
+  gd->kernel_hl_aniso_iter_block = dt_opencl_create_kernel(harmonic_program, "hl_aniso_iter_block");
+  gd->kernel_hl_aniso_splat = dt_opencl_create_kernel(harmonic_program, "hl_aniso_splat");
   gd->kernel_highlights_1f_lch_bayer = dt_opencl_create_kernel(program, "highlights_1f_lch_bayer");
   gd->kernel_highlights_1f_lch_xtrans = dt_opencl_create_kernel(program, "highlights_1f_lch_xtrans");
   gd->kernel_highlights_4f_clip = dt_opencl_create_kernel(program, "highlights_4f_clip");
@@ -2910,6 +3169,94 @@ void init_global(dt_iop_module_so_t *module)
 void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_highlights_global_data_t *gd = (dt_iop_highlights_global_data_t *)module->data;
+  dt_opencl_free_kernel(gd->kernel_sparse_chol_update_level);
+  dt_opencl_free_kernel(gd->kernel_sparse_chol_final_level);
+  dt_opencl_free_kernel(gd->kernel_sparse_chol_fwd_level);
+  dt_opencl_free_kernel(gd->kernel_sparse_chol_bwd_level);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_steer);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_down);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_box);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_grad);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_tensor);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_gnorm);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_weights);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_jacobi);
+  dt_opencl_free_kernel(gd->kernel_hl_cfa_jacobi_block);
+  dt_opencl_free_kernel(gd->kernel_hl_fill_down);
+  dt_opencl_free_kernel(gd->kernel_hl_fill_seed);
+  dt_opencl_free_kernel(gd->kernel_hl_fill_seed_up);
+  dt_opencl_free_kernel(gd->kernel_hl_fill_jacobi);
+  dt_opencl_free_kernel(gd->kernel_hl_fill_jacobi_block);
+  dt_opencl_free_kernel(gd->kernel_hl_fill_up);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_lref_partials);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_pack_joint);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_fit_joint);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_eval_joint);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_pack_pair);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_fit_pair);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_eval_pair);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_pack_deepmask);
+  dt_opencl_free_kernel(gd->kernel_hl_cf_eval_deep);
+  dt_opencl_free_kernel(gd->kernel_hl_buf_to_img);
+  dt_opencl_free_kernel(gd->kernel_hl_hf_pack);
+  dt_opencl_free_kernel(gd->kernel_hl_hf_fit);
+  dt_opencl_free_kernel(gd->kernel_hl_hf_energy);
+  dt_opencl_free_kernel(gd->kernel_hl_hf_eval);
+  dt_opencl_free_kernel(gd->kernel_hl_hf_damp);
+  dt_opencl_free_kernel(gd->kernel_hl_soft_floor);
+  dt_opencl_free_kernel(gd->kernel_hl_hard_floor);
+  dt_opencl_free_kernel(gd->kernel_hl_lsb_hole);
+  dt_opencl_free_kernel(gd->kernel_hl_ratio_plane);
+  dt_opencl_free_kernel(gd->kernel_hl_dome_down);
+  dt_opencl_free_kernel(gd->kernel_hl_dome_blend);
+  dt_opencl_free_kernel(gd->kernel_hl_core_floor);
+  dt_opencl_free_kernel(gd->kernel_hl_cmean_reduce);
+  dt_opencl_free_kernel(gd->kernel_hl_pde_init);
+  dt_opencl_free_kernel(gd->kernel_hl_mask_to_img1);
+  dt_opencl_free_kernel(gd->kernel_hl_core_blend);
+  dt_opencl_free_kernel(gd->kernel_hl_pde_rhs);
+  dt_opencl_free_kernel(gd->kernel_hl_pde_scatter);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_prep);
+  dt_opencl_free_kernel(gd->kernel_hl_box3);
+  dt_opencl_free_kernel(gd->kernel_hl_grad_reduce);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_tensor);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_weights);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_reassemble);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_rhs);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_scatter);
+  dt_opencl_free_kernel(gd->kernel_hl_knee_bin);
+  dt_opencl_free_kernel(gd->kernel_hl_knee_jmom);
+  dt_opencl_free_kernel(gd->kernel_hl_knee_pmom);
+  dt_opencl_free_kernel(gd->kernel_hl_knee_joint_reg);
+  dt_opencl_free_kernel(gd->kernel_hl_knee_pair_reg);
+  dt_opencl_free_kernel(gd->kernel_hl_knee_apply);
+  dt_opencl_free_kernel(gd->kernel_hl_mask_pack);
+  dt_opencl_free_kernel(gd->kernel_hl_region_gather);
+  dt_opencl_free_kernel(gd->kernel_hl_region_scatter);
+  dt_opencl_free_kernel(gd->kernel_hl_region_stats);
+  dt_opencl_free_kernel(gd->kernel_hl_need_self);
+  dt_opencl_free_kernel(gd->kernel_hl_knee_apply_interp);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_embed);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_op);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_r0);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_beta);
+  dt_opencl_free_kernel(gd->kernel_hl_relu);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_r1);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_ap);
+  dt_opencl_free_kernel(gd->kernel_hl_cg_update);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_pyr_down);
+  dt_opencl_free_kernel(gd->kernel_hl_pyr_getc);
+  dt_opencl_free_kernel(gd->kernel_hl_pyr_getc4);
+  dt_opencl_free_kernel(gd->kernel_hl_pyr_putc4);
+  dt_opencl_free_kernel(gd->kernel_hl_pyr_project);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_obs_full);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_obs_flags);
+  dt_opencl_free_kernel(gd->kernel_hl_window_pack);
+  dt_opencl_free_kernel(gd->kernel_hl_window_unpack);
+  dt_opencl_free_kernel(gd->kernel_hl_pyr_putc);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_iter);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_iter_block);
+  dt_opencl_free_kernel(gd->kernel_hl_aniso_splat);
   dt_opencl_free_kernel(gd->kernel_highlights_4f_clip);
   dt_opencl_free_kernel(gd->kernel_highlights_1f_lch_bayer);
   dt_opencl_free_kernel(gd->kernel_highlights_1f_lch_xtrans);
@@ -2957,10 +3304,14 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   const gboolean israw = (self->dev->image_storage.dsc.filters != 0);
   dt_iop_highlights_mode_t mode = p->mode;
 
-  gtk_widget_set_visible(g->noise_level, raw && mode == DT_IOP_HIGHLIGHTS_LAPLACIAN);
+  // harmonic transposition reads noise_level (regrain) and solid_color (all-clip core reaction);
+  // iterations and scales belong to the a-trous guided laplacians only
+  gtk_widget_set_visible(g->noise_level, raw && (mode == DT_IOP_HIGHLIGHTS_LAPLACIAN
+                                                 || mode == DT_IOP_HIGHLIGHTS_HARMONIC));
   gtk_widget_set_visible(g->iterations, raw && mode == DT_IOP_HIGHLIGHTS_LAPLACIAN);
   gtk_widget_set_visible(g->scales, raw && mode == DT_IOP_HIGHLIGHTS_LAPLACIAN);
-  gtk_widget_set_visible(g->solid_color, raw && mode == DT_IOP_HIGHLIGHTS_LAPLACIAN);
+  gtk_widget_set_visible(g->solid_color, raw && (mode == DT_IOP_HIGHLIGHTS_LAPLACIAN
+                                                 || mode == DT_IOP_HIGHLIGHTS_HARMONIC));
 
   dt_bauhaus_widget_set_quad_visibility(g->clip, israw);
 }
@@ -2977,11 +3328,14 @@ void gui_update(struct dt_iop_module_t *self)
   self->hide_enable_button = monochrome && !self->enabled;
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "default" : "monochrome");
 
-  // capability entry, added once (moved here from reload_defaults so it never touches widgets off
+  // capability entries, added once (moved here from reload_defaults so it never touches widgets off
   // the GUI thread / on a widget-less export dev)
   if(dt_bauhaus_combobox_length(g->mode) < DT_IOP_HIGHLIGHTS_LAPLACIAN + 1)
     dt_bauhaus_combobox_add_full(g->mode, _("guided laplacians"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
                                  GINT_TO_POINTER(DT_IOP_HIGHLIGHTS_LAPLACIAN), NULL, TRUE);
+  if(dt_bauhaus_combobox_length(g->mode) < DT_IOP_HIGHLIGHTS_HARMONIC + 1)
+    dt_bauhaus_combobox_add_full(g->mode, _("harmonic transposition"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+                                 GINT_TO_POINTER(DT_IOP_HIGHLIGHTS_HARMONIC), NULL, TRUE);
 
   dt_bauhaus_widget_set_quad_active(g->clip, FALSE);
   g->show_visualize = FALSE;
