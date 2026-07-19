@@ -218,16 +218,10 @@ typedef struct
 // max planes sharing one anchor mask in the fused GPU harmonic fill
 #define DT_HL_FILL_CL_MAXP 3
 
-// exact sparse SPD Cholesky direct solvers (dome, region PDE); iterative fallback kept
+// exact sparse SPD Cholesky direct solvers (dome, region PDE); iterative fallback kept.
+// The factor structs and the solvers themselves live in the reusable libraries
+// common/solvers/sparse_cholesky.h (CPU) and common/solvers/sparse_cholesky_cl.h (GPU).
 #define DT_HL_SPARSE_SOLVE 1
-
-typedef struct
-{
-  int dimension;
-  int *col_ptr;   // dimension+1 column pointers
-  int *row_index; // row indices
-  double *values; // the FIRST entry of each column is the diagonal
-} _sp_chol_t;
 
 // cap on the direct-solve size (number of hole unknowns) for the full-resolution diffusion
 // systems; beyond it the iterative conjugate-gradient fallback runs (the factor's memory
@@ -264,20 +258,3 @@ typedef struct _hl_knee_curve_t
   int engaged;                 // 0 = identity (no correction for this channel)
   float lift[DT_HL_KNEE_BINS]; // additive lift per bin center, clip-normalized units
 } _hl_knee_curve_t;
-
-#ifdef HAVE_OPENCL
-// GPU sparse Cholesky factor handle (device buffers + host-side symbolic metadata).
-typedef struct
-{
-  int dimension;
-  int n_nonzero;
-  int nlev;
-  int *lev_off; // host: nlev+1 offsets into the level column list
-  int *lev_off_bwd;
-  int nlev_bwd;
-  int *lev_pos_off; // host: nlev+1 offsets into the level-grouped entry-position list
-  cl_mem values, colptr, rowind, contptr, contsrc, contljk, posof;
-  cl_mem rowptr, rowcol, rowpos, diagpos, levcols, levrows_bwd;
-  int devid;
-} _sp_chol_cl_t;
-#endif // HAVE_OPENCL
