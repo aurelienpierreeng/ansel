@@ -80,8 +80,24 @@
  * Added constraints.
  */
 
-//#include "nmsimplex.h"
+#pragma once
 
+// Nelder-Mead reflection / contraction / expansion coefficients (the algorithm's standard
+// constants). Guarded so a caller may override them before including this header.
+#ifndef NMS_ALPHA
+#define NMS_ALPHA 1.0
+#endif
+#ifndef NMS_BETA
+#define NMS_BETA 0.5
+#endif
+#ifndef NMS_GAMMA
+#define NMS_GAMMA 2.0
+#endif
+
+// Nelder-Mead simplex minimizer of objfunc over n parameters, starting from start[] (overwritten
+// with the best point). EPSILON = convergence threshold, scale = initial simplex size, maxiter =
+// iteration cap, constrain = optional projection of a trial point onto the feasible set (may be
+// NULL), params = opaque pointer forwarded to objfunc/constrain. Returns the iteration count.
 static int simplex(double (*objfunc)(double[], void *params), double start[], int n, double EPSILON, double scale,
                    int maxiter, void (*constrain)(double[], int n), void *params)
 {

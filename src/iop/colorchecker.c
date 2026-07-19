@@ -57,7 +57,7 @@
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
-#include "iop/gaussian_elimination.h"
+#include "common/solvers/gaussian_elimination.h"
 
 #include <assert.h>
 #include <math.h>

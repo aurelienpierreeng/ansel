@@ -66,7 +66,7 @@
 #include "common/imagebuf.h"
 #include "common/fast_guided_filter.h"
 #include "control/control.h"
-#include "iop/choleski.h"   // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
+#include "common/solvers/choleski.h"   // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

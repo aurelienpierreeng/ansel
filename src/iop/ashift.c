@@ -141,7 +141,7 @@
 
 // For parameter optimization we are using the Nelder-Mead simplex method
 // implemented by Michael F. Hutt.
-#include "ashift_nmsimplex.c"
+#include "common/solvers/nelder_mead_simplex.h"
 
 
 DT_MODULE_INTROSPECTION(5, dt_iop_ashift_params_t)
