@@ -412,13 +412,14 @@ void dt_masks_gui_reset_dragging(dt_masks_form_gui_t *gui)
   gui->seg_dragging = -1;
   gui->form_dragging = FALSE;
   gui->source_dragging = FALSE;
+  gui->gamma_dragging = FALSE;
 }
 
 gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui)
 {
   if(IS_NULL_PTR(gui)) return FALSE;
   const gboolean dragging = (gui->form_dragging || gui->source_dragging || gui->seg_dragging >= 0 || gui->node_dragging >= 0
-                              || gui->handle_dragging >= 0 || gui->handle_border_dragging >= 0);
+                              || gui->handle_dragging >= 0 || gui->handle_border_dragging >= 0 || gui->gamma_dragging);
   dt_control_mouse_is_dragging(dragging);
   return dragging;
 }
@@ -1880,6 +1881,44 @@ static int dt_masks_legacy_params_v5_to_v6(dt_develop_t *develop, void *params)
   return 0;
 }
 
+static int dt_masks_legacy_params_v6_to_v7(dt_develop_t *develop, void *params)
+{
+  /*
+   * difference affecting every shape
+   * up to v6: fixed falloff curve between the shape and the outer border edge
+   *           (quadratic for circle/ellipse, linear for path/brush,
+   *           linear-or-sigmoidal for gradient)
+   * after v6: that curve is reshaped by a per-shape "gamma" exponent; 1.0
+   *           reproduces the pre-v7 curve exactly, so every existing shape
+   *           must be seeded with 1.0 explicitly (uninitialized on disk
+   *           otherwise, for gradient's repurposed field in particular)
+   */
+
+  dt_masks_form_t *mask_form = (dt_masks_form_t *)params;
+
+  GList *point_node = mask_form->points;
+
+  if(IS_NULL_PTR(point_node)) return 1;
+
+  for(GList *node = point_node; node; node = g_list_next(node))
+  {
+    if(mask_form->type & DT_MASKS_CIRCLE)
+      ((dt_masks_node_circle_t *)node->data)->gamma = 1.0f;
+    else if(mask_form->type & DT_MASKS_ELLIPSE)
+      ((dt_masks_node_ellipse_t *)node->data)->gamma = 1.0f;
+    else if(mask_form->type & DT_MASKS_POLYGON)
+      ((dt_masks_node_polygon_t *)node->data)->gamma = 1.0f;
+    else if(mask_form->type & DT_MASKS_BRUSH)
+      ((dt_masks_node_brush_t *)node->data)->gamma = 1.0f;
+    else if(mask_form->type & DT_MASKS_GRADIENT)
+      ((dt_masks_anchor_gradient_t *)node->data)->gamma = 1.0f;
+  }
+
+  mask_form->version = 7;
+
+  return 0;
+}
+
 
 int dt_masks_legacy_params(dt_develop_t *develop, void *params, const int old_version, const int new_version)
 {
@@ -1891,35 +1930,44 @@ int dt_masks_legacy_params(dt_develop_t *develop, void *params, const int old_ve
   }
 #endif
 
-  if(old_version == 1 && new_version == 6)
+  if(old_version == 1 && new_version == 7)
   {
     result = dt_masks_legacy_params_v1_to_v2(develop, params);
     if(!result) result = dt_masks_legacy_params_v2_to_v3(develop, params);
     if(!result) result = dt_masks_legacy_params_v3_to_v4(develop, params);
     if(!result) result = dt_masks_legacy_params_v4_to_v5(develop, params);
     if(!result) result = dt_masks_legacy_params_v5_to_v6(develop, params);
+    if(!result) result = dt_masks_legacy_params_v6_to_v7(develop, params);
   }
-  else if(old_version == 2 && new_version == 6)
+  else if(old_version == 2 && new_version == 7)
   {
     result = dt_masks_legacy_params_v2_to_v3(develop, params);
     if(!result) result = dt_masks_legacy_params_v3_to_v4(develop, params);
     if(!result) result = dt_masks_legacy_params_v4_to_v5(develop, params);
     if(!result) result = dt_masks_legacy_params_v5_to_v6(develop, params);
+    if(!result) result = dt_masks_legacy_params_v6_to_v7(develop, params);
   }
-  else if(old_version == 3 && new_version == 6)
+  else if(old_version == 3 && new_version == 7)
   {
     result = dt_masks_legacy_params_v3_to_v4(develop, params);
     if(!result) result = dt_masks_legacy_params_v4_to_v5(develop, params);
     if(!result) result = dt_masks_legacy_params_v5_to_v6(develop, params);
+    if(!result) result = dt_masks_legacy_params_v6_to_v7(develop, params);
   }
-  else if(old_version == 4 && new_version == 6)
+  else if(old_version == 4 && new_version == 7)
   {
     result = dt_masks_legacy_params_v4_to_v5(develop, params);
     if(!result) result = dt_masks_legacy_params_v5_to_v6(develop, params);
+    if(!result) result = dt_masks_legacy_params_v6_to_v7(develop, params);
   }
-  else if(old_version == 5 && new_version == 6)
+  else if(old_version == 5 && new_version == 7)
   {
     result = dt_masks_legacy_params_v5_to_v6(develop, params);
+    if(!result) result = dt_masks_legacy_params_v6_to_v7(develop, params);
+  }
+  else if(old_version == 6 && new_version == 7)
+  {
+    result = dt_masks_legacy_params_v6_to_v7(develop, params);
   }
 
   return result;
@@ -2263,7 +2311,8 @@ gboolean dt_masks_is_anything_hovered(const dt_masks_form_gui_t *mask_gui)
   return mask_gui->node_hovered >= 0
           || mask_gui->handle_hovered >= 0
           || mask_gui->handle_border_hovered >= 0
-          || mask_gui->seg_hovered >= 0;
+          || mask_gui->seg_hovered >= 0
+          || mask_gui->gamma_handle_hovered;
 }
 
 static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
@@ -2344,7 +2393,7 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
     mask_gui->source_selected = prev_source_selected;
   }
 
-  if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
+  if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling || mask_gui->gamma_dragging) return;
   if(dt_modifier_is(state, GDK_CONTROL_MASK)) return;
   if(!shape_was_selected) return;
 

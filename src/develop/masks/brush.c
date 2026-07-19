@@ -49,6 +49,9 @@
 #define HARDNESS_MIN 0.00001f
 #define HARDNESS_MAX 1.0f
 
+#define GAMMA_MIN 0.1f
+#define GAMMA_MAX 10.0f
+
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
 
@@ -175,6 +178,7 @@ static GList *_brush_ramer_douglas_peucker(const float *point_buffer, int point_
     first_node->hardness = payload_buffer[1];
     first_node->density = payload_buffer[2];
     first_node->state = DT_MASKS_POINT_STATE_NORMAL;
+    first_node->gamma = 1.0f;
     result_list = g_list_append(result_list, (gpointer)first_node);
 
     dt_masks_node_brush_t *last_node = malloc(sizeof(dt_masks_node_brush_t));
@@ -185,6 +189,7 @@ static GList *_brush_ramer_douglas_peucker(const float *point_buffer, int point_
     last_node->hardness = payload_buffer[(point_count - 1) * 4 + 1];
     last_node->density = payload_buffer[(point_count - 1) * 4 + 2];
     last_node->state = DT_MASKS_POINT_STATE_NORMAL;
+    last_node->gamma = 1.0f;
     result_list = g_list_append(result_list, (gpointer)last_node);
   }
 
@@ -1381,6 +1386,21 @@ static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_m
 
       return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
     }
+    case DT_MASKS_INTERACTION_GAMMA:
+    {
+      float gamma_sum = 0.0f;
+      int gamma_count = 0;
+
+      for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
+      {
+        const dt_masks_node_brush_t *node = (const dt_masks_node_brush_t *)point_node->data;
+        if(IS_NULL_PTR(node)) continue;
+        gamma_sum += node->gamma;
+        gamma_count++;
+      }
+
+      return gamma_count > 0 ? gamma_sum / (float)gamma_count : NAN;
+    }
     default:
       return NAN;
   }
@@ -1417,6 +1437,9 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parentid, dt_masks_f
 static int _change_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
                         struct dt_iop_module_t *module, int index, const float amount,
                         const dt_masks_increment_t increment, const int flow);
+static int _change_gamma(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
+                         struct dt_iop_module_t *module, int index, const float amount,
+                         const dt_masks_increment_t increment, const int flow);
 
 static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_interaction_t interaction, float value,
                                           dt_masks_increment_t increment, int flow,
@@ -1432,6 +1455,9 @@ static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_i
       return _brush_get_interaction_value(mask_form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
       if(!_change_hardness(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
+      return _brush_get_interaction_value(mask_form, interaction);
+    case DT_MASKS_INTERACTION_GAMMA:
+      if(!_change_gamma(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
       return _brush_get_interaction_value(mask_form, interaction);
     default:
       return NAN;
@@ -1460,6 +1486,29 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parentid, dt_masks_f
   }
 
   dt_masks_get_set_conf_value(mask_form, "hardness", result_amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
+
+  // we recreate the form points
+  dt_masks_gui_form_create(mask_form, mask_gui, index, module);
+
+  return 1;
+}
+
+static int _change_gamma(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
+                         struct dt_iop_module_t *module, int index, const float amount,
+                         const dt_masks_increment_t increment, const int flow)
+{
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
+  int node_index = 0;
+  for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry), node_index++)
+  {
+    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
+    {
+      dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
+      if(!node) continue;
+      node->gamma = CLAMPF(dt_masks_apply_increment(node->gamma, amount, increment, flow),
+                           GAMMA_MIN, GAMMA_MAX);
+    }
+  }
 
   // we recreate the form points
   dt_masks_gui_form_create(mask_form, mask_gui, index, module);
@@ -1613,6 +1662,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t
   new_node->border[1] = point0->border[1] * (1.0f - t) + point1->border[1] * t;
   new_node->hardness = point0->hardness * (1.0f - t) + point1->hardness * t;
   new_node->density = point0->density * (1.0f - t) + point1->density * t;
+  new_node->gamma = point0->gamma * (1.0f - t) + point1->gamma * t;
 
   mask_form->points = g_list_insert(mask_form->points, new_node, selected_segment + 1);
   _brush_init_ctrl_points(mask_form);
@@ -2686,7 +2736,8 @@ static int _brush_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe
 
 /** we write a falloff segment */
 static void _brush_falloff(float *const restrict buffer, int segment_start[2], int segment_end[2],
-                           int offset_x, int offset_y, int buffer_width, float hardness, float density)
+                           int offset_x, int offset_y, int buffer_width, float hardness, float density,
+                           const float gamma)
 {
   // segment length
   const int segment_length = sqrt((segment_end[0] - segment_start[0]) * (segment_end[0] - segment_start[0])
@@ -2705,7 +2756,7 @@ static void _brush_falloff(float *const restrict buffer, int segment_start[2], i
     // position
     const int x = (int)((float)step * segment_dx * inv_length) + segment_start[0] - offset_x;
     const int y = (int)((float)step * segment_dy * inv_length) + segment_start[1] - offset_y;
-    const float opacity = density * ((step <= solid_length) ? 1.0f : 1.0f - (float)(step - solid_length) * inv_soft);
+    const float opacity = density * ((step <= solid_length) ? 1.0f : powf(1.0f - (float)(step - solid_length) * inv_soft, gamma));
     const int buffer_index = y * buffer_width + x;
     buffer[buffer_index] = MAX(buffer[buffer_index], opacity);
     if(x > 0)
@@ -2784,6 +2835,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   memset(*buffer, 0, sizeof(float) * buffer_size);
 
   // now we fill the falloff
+  const float gamma = ((dt_masks_node_brush_t *)mask_form->points->data)->gamma;
   int segment_start[2], segment_end[2];
   int prev_start[2] = { 0, 0 };
   int prev_end[2] = { 0, 0 };
@@ -2812,12 +2864,12 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
                               (int)floorf(prev_end[1] + t * (segment_end[1] - prev_end[1]) + 0.5f) };
         const float hard = prev_payload[0] + t * (payload[border_index * 2] - prev_payload[0]);
         const float dens = prev_payload[1] + t * (payload[border_index * 2 + 1] - prev_payload[1]);
-        _brush_falloff(*buffer, interp_start, interp_end, *offset_x, *offset_y, *width, hard, dens);
+        _brush_falloff(*buffer, interp_start, interp_end, *offset_x, *offset_y, *width, hard, dens, gamma);
       }
     }
 
     _brush_falloff(*buffer, segment_start, segment_end, *offset_x, *offset_y, *width,
-                   payload[border_index * 2], payload[border_index * 2 + 1]);
+                   payload[border_index * 2], payload[border_index * 2 + 1], gamma);
 
     prev_start[0] = segment_start[0];
     prev_start[1] = segment_start[1];
@@ -2841,13 +2893,16 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
 
 /** we write a falloff segment respecting limits of buffer */
 static inline void _brush_falloff_roi(float *buffer, const int *segment_start, const int *segment_end,
-                                      int buffer_width, int buffer_height, float hardness, float density)
+                                      int buffer_width, int buffer_height, float hardness, float density,
+                                      const float gamma)
 {
   // segment length (increase by 1 to avoid division-by-zero special case handling)
   const int segment_length = sqrt((segment_end[0] - segment_start[0]) * (segment_end[0] - segment_start[0])
                                   + (segment_end[1] - segment_start[1]) * (segment_end[1] - segment_start[1]))
                              + 1;
   const int solid_length = hardness * segment_length;
+  const int soft_length = segment_length - solid_length;
+  const float inv_soft = (soft_length > 0) ? 1.0f / (float)soft_length : 0.0f;
 
   const float step_x = (float)(segment_end[0] - segment_start[0]) / (float)segment_length;
   const float step_y = (float)(segment_end[1] - segment_start[1]) / (float)segment_length;
@@ -2859,9 +2914,6 @@ static inline void _brush_falloff_roi(float *buffer, const int *segment_start, c
 
   float cursor_x = segment_start[0];
   float cursor_y = segment_start[1];
-
-  float opacity = density;
-  const float opacity_step = density / (float)(segment_length - solid_length);
 
   const int start_x = segment_start[0], start_y = segment_start[1];
   const int end_x = segment_end[0], end_y = segment_end[1];
@@ -2879,7 +2931,8 @@ static inline void _brush_falloff_roi(float *buffer, const int *segment_start, c
 
     cursor_x += step_x;
     cursor_y += step_y;
-    if(step > solid_length) opacity -= opacity_step;
+    const float opacity = density * ((step <= solid_length) ? 1.0f
+                                     : powf(1.0f - (float)(step - solid_length) * inv_soft, gamma));
 
     if(!fully_inside && (x < 0 || x >= buffer_width || y < 0 || y >= buffer_height)) continue;
 
@@ -2989,6 +3042,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   }
 
   // now we fill the falloff
+  const float gamma = ((dt_masks_node_brush_t *)mask_form->points->data)->gamma;
   if(!use_sparse)
   {
     __OMP_PARALLEL_FOR__(if(border_count - node_count * 3 > 1000))
@@ -3004,7 +3058,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
         continue;
 
       _brush_falloff_roi(buffer, segment_start, segment_end, roi_width, roi_height, payload[border_index * 2],
-                         payload[border_index * 2 + 1]);
+                         payload[border_index * 2 + 1], gamma);
     }
   }
   else
@@ -3036,7 +3090,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
           {
             const float hard = prev_payload[0] + t * (payload[border_index * 2] - prev_payload[0]);
             const float dens = prev_payload[1] + t * (payload[border_index * 2 + 1] - prev_payload[1]);
-            _brush_falloff_roi(buffer, interp_start, interp_end, roi_width, roi_height, hard, dens);
+            _brush_falloff_roi(buffer, interp_start, interp_end, roi_width, roi_height, hard, dens, gamma);
           }
         }
       }
@@ -3045,7 +3099,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
            || MAX(segment_start[1], segment_end[1]) < 0
            || MIN(segment_start[1], segment_end[1]) >= roi_height))
         _brush_falloff_roi(buffer, segment_start, segment_end, roi_width, roi_height,
-                           payload[border_index * 2], payload[border_index * 2 + 1]);
+                           payload[border_index * 2], payload[border_index * 2 + 1], gamma);
 
       prev_start[0] = segment_start[0];
       prev_start[1] = segment_start[1];

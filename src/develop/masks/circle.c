@@ -45,6 +45,9 @@
 #define HARDNESS_MIN 0.0005f
 #define HARDNESS_MAX 1.0f
 
+#define GAMMA_MIN 0.1f
+#define GAMMA_MAX 10.0f
+
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
 
@@ -106,10 +109,56 @@ static void _circle_distance_cb(float pointer_x, float pointer_y, float cursor_r
                        inside_border, near, inside_source, dist);
 }
 
+/**
+ * @brief Locate the shape-edge point, border-edge point and gamma handle point along the
+ * "north" radial line (straight up from center), in the same absolute screen space as
+ * gpt->points/gpt->border.
+ */
+static gboolean _circle_gamma_handle_points(const dt_masks_form_gui_points_t *gpt,
+                                            const dt_masks_node_circle_t *circle,
+                                            float edge[2], float border_pt[2], float handle[2])
+{
+  const int l_shape = gpt->points_count - 1;
+  const int l_border = gpt->border_count - 1;
+  if(l_shape <= 0 || l_border <= 0) return FALSE;
+
+  // sample index for angle = 3*pi/2 ("north", since alpha = (i-1)*2*pi/l)
+  const int idx_shape = CLAMP((int)roundf(3.0f * l_shape / 4.0f) + 1, 1, l_shape);
+  const int idx_border = CLAMP((int)roundf(3.0f * l_border / 4.0f) + 1, 1, l_border);
+
+  edge[0] = gpt->points[idx_shape * 2];
+  edge[1] = gpt->points[idx_shape * 2 + 1];
+  border_pt[0] = gpt->border[idx_border * 2];
+  border_pt[1] = gpt->border[idx_border * 2 + 1];
+
+  const float t = dt_masks_gamma_to_t_quadratic(circle->gamma, circle->radius, circle->radius + circle->border);
+  handle[0] = edge[0] + t * (border_pt[0] - edge[0]);
+  handle[1] = edge[1] + t * (border_pt[1] - edge[1]);
+  return TRUE;
+}
+
 static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)
 {
-  return dt_masks_find_closest_handle_common(mask_form, mask_gui, form_index, 0,
-                                             NULL, NULL, NULL, _circle_distance_cb, NULL, NULL);
+  const int result = dt_masks_find_closest_handle_common(mask_form, mask_gui, form_index, 0,
+                                                          NULL, NULL, NULL, _circle_distance_cb, NULL, NULL);
+
+  mask_gui->gamma_handle_hovered = FALSE;
+  if(!mask_gui->creation && mask_gui->group_selected == form_index && mask_gui->node_dragging < 0
+     && !mask_gui->form_dragging && !mask_gui->source_dragging && !mask_gui->gamma_dragging)
+  {
+    const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)mask_form->points->data;
+    const dt_masks_form_gui_points_t *gpt
+        = (const dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
+    float edge[2], border_pt[2], handle[2];
+    if(circle && gpt && _circle_gamma_handle_points(gpt, circle, edge, border_pt, handle)
+       && dt_masks_point_is_within_radius(mask_gui->pos[0], mask_gui->pos[1], handle[0], handle[1],
+                                          sqf(DT_GUI_MOUSE_EFFECT_RADIUS)))
+    {
+      mask_gui->gamma_handle_hovered = TRUE;
+    }
+  }
+
+  return result;
 }
 
 static void _circle_get_creation_values(const dt_masks_form_t *form, float *radius, float *border)
@@ -125,6 +174,7 @@ static void _circle_init_new(dt_masks_form_t *form, dt_masks_form_gui_t *gui, dt
 {
   dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, circle->center);
   _circle_get_creation_values(form, &circle->radius, &circle->border);
+  circle->gamma = 1.0f;
 
   if(dt_masks_form_is_clone(form))
     dt_masks_set_source_pos_initial_value(gui, form);
@@ -213,6 +263,8 @@ static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks
       return circle->radius;
     case DT_MASKS_INTERACTION_HARDNESS:
       return circle->border;
+    case DT_MASKS_INTERACTION_GAMMA:
+      return circle->gamma;
     default:
       return NAN;
   }
@@ -233,6 +285,8 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
                             int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                         int index, const float amount, const dt_masks_increment_t increment, const int flow);
+static int _change_gamma(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                         int index, const float amount, const dt_masks_increment_t increment, const int flow);
 
 static float _circle_set_interaction_value(dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
                                            dt_masks_increment_t increment, int flow,
@@ -249,6 +303,9 @@ static float _circle_set_interaction_value(dt_masks_form_t *form, dt_masks_inter
     case DT_MASKS_INTERACTION_HARDNESS:
       if(!_change_hardness(form, gui, module, index, value, increment, flow)) return NAN;
       return _circle_get_interaction_value(form, interaction);
+    case DT_MASKS_INTERACTION_GAMMA:
+      if(!_change_gamma(form, gui, module, index, value, increment, flow)) return NAN;
+      return _circle_get_interaction_value(form, interaction);
     default:
       return NAN;
   }
@@ -264,6 +321,21 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
                           HARDNESS_MIN, HARDNESS_MAX);
 
   _init_hardness(form, amount, increment, flow);
+
+  // we recreate the form points
+  dt_masks_gui_form_create(form, gui, index, module);
+
+  return 1;
+}
+
+static int _change_gamma(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
+{
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
+  if(IS_NULL_PTR(circle)) return 0;
+
+  circle->gamma = CLAMPF(dt_masks_apply_increment(circle->gamma, amount, increment, flow),
+                         GAMMA_MIN, GAMMA_MAX);
 
   // we recreate the form points
   dt_masks_gui_form_create(form, gui, index, module);
@@ -361,7 +433,13 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
       dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
       if(IS_NULL_PTR(gpt)) return 0;
 
-      if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      if(gui->gamma_handle_hovered && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      {
+        // we start dragging the gamma falloff handle
+        gui->gamma_dragging = TRUE;
+        return 1;
+      }
+      else if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the source dragging
         gui->delta[0] = gpt->source[0] - gui->pos[0];
@@ -403,6 +481,12 @@ static int _circle_events_button_released(struct dt_iop_module_t *module, double
   }
   else if(gui->source_dragging)
   {
+    return 1;
+  }
+  else if(gui->gamma_dragging)
+  {
+    // we end the gamma handle dragging
+    gui->gamma_dragging = FALSE;
     return 1;
   }
   return 0;
@@ -449,6 +533,30 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
 
     // we recreate the form points
     dt_masks_gui_form_create(form, gui, index, module);
+
+    return 1;
+  }
+  else if(gui->gamma_dragging)
+  {
+    dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
+    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+    if(IS_NULL_PTR(circle) || IS_NULL_PTR(gpt)) return 0;
+
+    float edge[2], border_pt[2], handle[2];
+    if(_circle_gamma_handle_points(gpt, circle, edge, border_pt, handle))
+    {
+      // project the cursor onto the [edge, border_pt] segment to get t in [0,1]
+      const float seg_x = border_pt[0] - edge[0];
+      const float seg_y = border_pt[1] - edge[1];
+      const float seg_len2 = sqf(seg_x) + sqf(seg_y);
+      float t = 0.0f;
+      if(seg_len2 > 1e-6f)
+        t = CLAMPF(((gui->pos[0] - edge[0]) * seg_x + (gui->pos[1] - edge[1]) * seg_y) / seg_len2, 0.0f, 1.0f);
+
+      circle->gamma = CLAMPF(dt_masks_t_to_gamma_quadratic(t, circle->radius, circle->radius + circle->border),
+                             GAMMA_MIN, GAMMA_MAX);
+      dt_masks_gui_form_create(form, gui, index, module);
+    }
 
     return 1;
   }
@@ -616,6 +724,15 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     if(gpt->border && gpt->border_count > 1)
       dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
                           gpt->border_count, &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_ROUND);
+
+    // draw the gamma falloff handle, on the invisible radial line between the shape edge
+    // and the outer border edge
+    dt_masks_form_t *drawn_form = dt_masks_get_drawn_form(index);
+    const dt_masks_node_circle_t *circle
+        = (drawn_form && drawn_form->points) ? (const dt_masks_node_circle_t *)drawn_form->points->data : NULL;
+    float edge[2], border_pt[2], handle[2];
+    if(circle && _circle_gamma_handle_points(gpt, circle, edge, border_pt, handle))
+      dt_draw_handle(cr, edge, zoom_scale, handle, gui->gamma_handle_hovered || gui->gamma_dragging, FALSE);
   }
 
   // draw the source if any
@@ -822,7 +939,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
     const float ratio = (total2 - l2) / border2;
     // enforce 1.0 inside the circle and 0.0 outside the feathering
     const float f = CLIP(ratio);
-    ptbuffer[i] = sqf(f);
+    ptbuffer[i] = powf(sqf(f), circle->gamma);
   }
 
   dt_pixelpipe_cache_free_align(points);
@@ -1020,7 +1137,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
       const float ratio = (sqr_total - l2) / sqr_border;
       // enforce 1.0 inside the circle and 0.0 outside the feathering
       const float f = CLAMP(ratio, 0.0f, 1.0f);
-      points[2*index] = f * f;
+      points[2*index] = powf(f * f, circle->gamma);
     }
 
   if(darktable.unmuted & DT_DEBUG_PERF)

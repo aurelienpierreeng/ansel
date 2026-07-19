@@ -43,6 +43,8 @@
 #define extent_MAX 1.0f
 #define CURVATURE_MIN -2.0f
 #define CURVATURE_MAX 2.0f
+#define GAMMA_MIN 0.1f
+#define GAMMA_MAX 10.0f
 
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
@@ -177,6 +179,108 @@ static float _gradient_get_border_len_sq(const dt_masks_form_gui_points_t *gpt)
   return gradient_dx * gradient_dx + gradient_dy * gradient_dy;
 }
 
+// Falloff formula (see the render loop below): u = clip(0.5 + 0.5*raw) in [0,1], u=0 at the
+// 0%-opacity border, u=1 at the 100%-opacity border (matching circle/ellipse's convention
+// where the "shape" edge holds 100% and the "border" edge holds 0%). gamma=1 reproduces the
+// original 0.5+0.5*raw curve exactly (required for backward compatibility: existing gradient
+// masks must not change appearance). For gamma!=1 the exponent actually applied is E = gamma^2
+// (gamma >= 1) or E = 1/gamma^2 (gamma < 1, the reciprocal branch), not gamma itself: a linear
+// rate-of-2 match to circle/ellipse's f^(2*gamma) (tried first) still left the transition
+// visibly less crushed against the border than circle/ellipse at the same slider value, so the
+// exponent grows quadratically instead (E=100 at gamma=10, vs. circle/ellipse's own E=20) while
+// still anchoring E=1 (linear) at gamma=1, since gradient's own pre-existing base exponent is 1
+// (linear), not circle/ellipse's 2 (quadratic).
+//   value = u^E                          (gamma >= 1: steepens toward the 100% edge)
+//   value = 1 - (1-u)^E                  (gamma < 1: steepens toward the 0% edge, mirrors the
+//                                         other branch so the slope stays finite at both u=0
+//                                         and u=1 for every gamma instead of shooting to
+//                                         infinity, which reads as a hard cut)
+//
+// The on-canvas handle position must solve the *exact same* equation (value(u)=0.5) so that
+// dragging it to a given spot always matches what gamma actually produces in the image.
+static float _gradient_gamma_to_u(const float gamma)
+{
+  const float g = CLAMPF(gamma, GAMMA_MIN, GAMMA_MAX);
+  // value(u) = 0.5  =>  u = 0.5^(1/E) (g>=1 branch, E=g^2) or u = 1 - 0.5^(1/E) (g<1 branch,
+  // E=1/g^2, so 1/E=g^2); both give u=0.5 at g=1 (E=1 either way), confirming the two pieces
+  // meet continuously.
+  return (g >= 1.0f) ? powf(0.5f, 1.0f / (g * g)) : 1.0f - powf(0.5f, g * g);
+}
+
+// Inverse of _gradient_gamma_to_u: returns the gamma value directly.
+static float _gradient_u_to_gamma(const float u)
+{
+  const float uu = CLAMPF(u, 1e-4f, 1.0f - 1e-4f);
+  if(uu >= 0.5f)
+  {
+    const float e = logf(0.5f) / logf(uu); // e = g^2  =>  g = sqrt(e)
+    return CLAMPF(sqrtf(fmaxf(e, 0.0f)), GAMMA_MIN, GAMMA_MAX);
+  }
+  else
+  {
+    const float e = logf(0.5f) / logf(1.0f - uu); // e = 1/g^2  =>  g = 1/sqrt(e)
+    return CLAMPF(1.0f / sqrtf(fmaxf(e, 1e-6f)), GAMMA_MIN, GAMMA_MAX);
+  }
+}
+
+/**
+ * @brief Locate the border2 point, the border1 point and the gamma handle point along the
+ * segment between them, in the same absolute screen space as gpt->points/gpt->border. The
+ * segment is offset sideways along the gradient's own axis so it doesn't overlap the
+ * rotation pivot drawn at the anchor.
+ */
+static gboolean _gradient_gamma_handle_points(const dt_masks_form_gui_points_t *gpt,
+                                              const dt_masks_anchor_gradient_t *gradient,
+                                              float border2_pt[2], float border1_pt[2], float handle[2])
+{
+  if(IS_NULL_PTR(gpt->points) || gpt->points_count < 2 || IS_NULL_PTR(gpt->border) || gpt->border_count < 2)
+    return FALSE;
+
+  const float center[2] = { gpt->points[0], gpt->points[1] };
+
+  const int separator_idx = _find_border_separator(gpt->border, gpt->border_count);
+  const int end_idx = (separator_idx > 0) ? separator_idx : gpt->border_count;
+
+  // first curve (before the separator) is the border2 (u=0, low-gamma) side
+  float dist1_sq = FLT_MAX, dist2_sq = FLT_MAX;
+  _closest_point_on_line(center[0], center[1], gpt->border, 0, end_idx, &border2_pt[0], &border2_pt[1], &dist1_sq);
+  if(dist1_sq >= FLT_MAX) return FALSE;
+
+  if(separator_idx > 0 && separator_idx < gpt->border_count - 1)
+  {
+    _closest_point_on_line(center[0], center[1], gpt->border, separator_idx + 1, gpt->border_count,
+                           &border1_pt[0], &border1_pt[1], &dist2_sq);
+  }
+  if(dist2_sq >= FLT_MAX)
+  {
+    // only one border line is valid (e.g. near an image edge): mirror the anchor around it
+    border1_pt[0] = 2.0f * center[0] - border2_pt[0];
+    border1_pt[1] = 2.0f * center[1] - border2_pt[1];
+  }
+
+  // gpt->points[2,3] points toward one of the border lines (same axis as border1<->border2,
+  // per _gradient_get_border_len_sq/_gradient_get_distance), so it is *not* usable as an offset
+  // direction here. Derive the true perpendicular (the gradient's actual transition axis) by
+  // rotating the border1<->border2 segment 90 degrees, and slide the whole segment sideways
+  // along it, away from the rotation pivot drawn at the anchor.
+  const float seg_dx = border1_pt[0] - border2_pt[0];
+  const float seg_dy = border1_pt[1] - border2_pt[1];
+  const float seg_len = sqrtf(sqf(seg_dx) + sqf(seg_dy));
+  if(seg_len > 1e-3f)
+  {
+    const float offset = seg_len * 0.15f;
+    const float offset_x = -seg_dy / seg_len * offset;
+    const float offset_y = seg_dx / seg_len * offset;
+    border1_pt[0] += offset_x; border1_pt[1] += offset_y;
+    border2_pt[0] += offset_x; border2_pt[1] += offset_y;
+  }
+
+  const float u = _gradient_gamma_to_u(gradient->gamma);
+  handle[0] = border2_pt[0] + u * (border1_pt[0] - border2_pt[0]);
+  handle[1] = border2_pt[1] + u * (border1_pt[1] - border2_pt[1]);
+  return TRUE;
+}
+
 typedef struct dt_masks_gradient_creation_values_t
 {
   float extent;
@@ -202,6 +306,7 @@ static void _gradient_init_new(dt_masks_form_gui_t *gui, dt_masks_anchor_gradien
   gradient->extent = values.extent;
   gradient->curvature = values.curvature;
   gradient->rotation = values.rotation;
+  gradient->gamma = 1.0f;
 }
 
 static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotation, float curvature,
@@ -355,9 +460,28 @@ static void _gradient_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, 
 static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int index)
 {
   if(mask_gui) mask_gui->pivot_selected = FALSE;
-  return dt_masks_find_closest_handle_common(mask_form, mask_gui, index, 1,
+  const int result = dt_masks_find_closest_handle_common(mask_form, mask_gui, index, 1,
                                              NULL, NULL, _gradient_node_position_cb,
                                              _gradient_distance_cb, _gradient_post_select_cb, NULL);
+
+  mask_gui->gamma_handle_hovered = FALSE;
+  if(!mask_gui->creation && mask_gui->group_selected == index && !mask_gui->form_rotating
+     && !mask_gui->form_dragging && !mask_gui->gamma_dragging)
+  {
+    const dt_masks_anchor_gradient_t *gradient = (const dt_masks_anchor_gradient_t *)mask_form->points->data;
+    const dt_masks_form_gui_points_t *gpt
+        = (const dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, index);
+    float edge[2], border_pt[2], handle[2];
+    if(gradient && gpt && _gradient_gamma_handle_points(gpt, gradient, edge, border_pt, handle)
+       && dt_masks_point_is_within_radius(mask_gui->pos[0], mask_gui->pos[1], handle[0], handle[1],
+                                          sqf(DT_GUI_MOUSE_EFFECT_RADIUS)))
+    {
+      mask_gui->gamma_handle_hovered = TRUE;
+      mask_gui->pivot_selected = FALSE; // gamma handle takes priority over rotation here
+    }
+  }
+
+  return result;
 }
 
 
@@ -401,6 +525,8 @@ static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_mas
       return gradient->extent;
     case DT_MASKS_INTERACTION_HARDNESS:
       return gradient->curvature;
+    case DT_MASKS_INTERACTION_GAMMA:
+      return gradient->gamma;
     default:
       return NAN;
   }
@@ -421,6 +547,8 @@ static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struc
                           int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                              int index, const float amount, const dt_masks_increment_t increment, const int flow);
+static int _change_gamma(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                         int index, const float amount, const dt_masks_increment_t increment, const int flow);
 
 static float _gradient_set_interaction_value(dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
                                              dt_masks_increment_t increment, int flow,
@@ -436,6 +564,9 @@ static float _gradient_set_interaction_value(dt_masks_form_t *form, dt_masks_int
       return _gradient_get_interaction_value(form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
       if(!_change_curvature(form, gui, module, index, value, increment, flow)) return NAN;
+      return _gradient_get_interaction_value(form, interaction);
+    case DT_MASKS_INTERACTION_GAMMA:
+      if(!_change_gamma(form, gui, module, index, value, increment, flow)) return NAN;
       return _gradient_get_interaction_value(form, interaction);
     default:
       return NAN;
@@ -479,6 +610,21 @@ static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, st
   }
 
   _init_curvature(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
+
+  // we recreate the form points
+  dt_masks_gui_form_create(form, gui, index, module);
+
+  return 1;
+}
+
+static int _change_gamma(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
+{
+  if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return 0;
+  dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
+  if(IS_NULL_PTR(gradient)) return 0;
+
+  gradient->gamma = CLAMPF(dt_masks_apply_increment(gradient->gamma, amount, increment, flow),
+                           GAMMA_MIN, GAMMA_MAX);
 
   // we recreate the form points
   dt_masks_gui_form_create(form, gui, index, module);
@@ -583,6 +729,12 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, doubl
     const dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
     if(IS_NULL_PTR(gpt)) return 0;
 
+    else if(gui->gamma_handle_hovered && gui->edit_mode == DT_MASKS_EDIT_FULL)
+    {
+      // we start dragging the gamma falloff handle
+      gui->gamma_dragging = TRUE;
+      return 1;
+    }
     else if((gui->form_selected || gui->seg_hovered >= 0 || gui->seg_selected)
             && gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
@@ -651,12 +803,18 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, doub
       gradient->state = DT_MASKS_GRADIENT_STATE_LINEAR;
 
     dt_conf_set_int("plugins/darkroom/masks/gradient/state", gradient->state);
-    
+
     // we recreate the form points
     dt_masks_gui_form_create(form, gui, index, module);
 
     // we save the new parameters
 
+    return 1;
+  }
+  else if(gui->gamma_dragging)
+  {
+    // we end the gamma handle dragging
+    gui->gamma_dragging = FALSE;
     return 1;
   }
   return 0;
@@ -712,6 +870,27 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
 
     // we recreate the form points
     dt_masks_gui_form_create(form, gui, index, module);
+
+    return 1;
+  }
+
+  if(gui->gamma_dragging)
+  {
+    float border2_pt[2], border1_pt[2], handle[2];
+    if(_gradient_gamma_handle_points(gpt, gradient, border2_pt, border1_pt, handle))
+    {
+      // project the cursor onto the [border2, border1] segment to get u in [0,1]
+      const float seg_x = border1_pt[0] - border2_pt[0];
+      const float seg_y = border1_pt[1] - border2_pt[1];
+      const float seg_len2 = sqf(seg_x) + sqf(seg_y);
+      float u = 0.5f;
+      if(seg_len2 > 1e-6f)
+        u = CLAMPF(((gui->pos[0] - border2_pt[0]) * seg_x + (gui->pos[1] - border2_pt[1]) * seg_y) / seg_len2,
+                   0.0f, 1.0f);
+
+      gradient->gamma = CLAMPF(_gradient_u_to_gamma(u), GAMMA_MIN, GAMMA_MAX);
+      dt_masks_gui_form_create(form, gui, index, module);
+    }
 
     return 1;
   }
@@ -1089,6 +1268,21 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     if(gpt->border && gpt->border_count > 0)
       dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
                           gpt->border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
+
+    // draw the gamma falloff handle, sliding along the full border2<->border1 span
+    dt_masks_form_t *drawn_form = dt_masks_get_drawn_form(index);
+    const dt_masks_anchor_gradient_t *gradient
+        = (drawn_form && drawn_form->points) ? (const dt_masks_anchor_gradient_t *)drawn_form->points->data : NULL;
+    float border2_pt[2], border1_pt[2], handle[2];
+    if(gradient && _gradient_gamma_handle_points(gpt, gradient, border2_pt, border1_pt, handle))
+    {
+      cairo_move_to(cr, border2_pt[0], border2_pt[1]);
+      cairo_line_to(cr, border1_pt[0], border1_pt[1]);
+      dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, FALSE, zoom_scale, CAIRO_LINE_CAP_ROUND);
+
+      dt_draw_node(cr, FALSE, FALSE, gui->gamma_handle_hovered || gui->gamma_dragging, zoom_scale,
+                  handle[0], handle[1]);
+    }
   }
 
   if(gpt->points && gpt->points_count >= 3)
@@ -1231,8 +1425,12 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   const float normf = 1.0f / extent;
   const float curvature = gradient->curvature;
   const dt_masks_gradient_states_t state = gradient->state;
+  const float gamma = gradient->gamma;
 
-  const int lutmax = ceilf(4 * extent * ihwscale);
+  // gamma/gradient falloff must stay confined strictly between the two border lines
+  // (distance = +-extent): u already clips to [0,1] there, so shrink the LUT and the
+  // outer hard-clamp to match instead of extrapolating out to 4x the extent.
+  const int lutmax = ceilf(extent * ihwscale);
   const int lutsize = 2 * lutmax + 2;
   float *lut = dt_pixelpipe_cache_alloc_align_float_cache((size_t)lutsize, 0);
   if(IS_NULL_PTR(lut))
@@ -1244,7 +1442,20 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
   for(int n = 0; n < lutsize; n++)
   {
     const float distance = (n - lutmax) * hwscale;
-    const float value = 0.5f + 0.5f * ((state == DT_MASKS_GRADIENT_STATE_LINEAR) ? normf * distance: erff(distance / extent));
+    // normalize erf by erff(2) so the sigmoid state also reaches exactly +-1 at distance=+-extent
+    // (raw erff(distance/extent) only reaches ~0.84 there), matching the linear state's exact
+    // boundary and avoiding a visible jump against the hard clamp at the border.
+    const float raw = (state == DT_MASKS_GRADIENT_STATE_LINEAR) ? normf * distance
+                                                                 : erff(2.0f * distance / extent) / erff(2.0f);
+    const float u = CLAMPF(0.5f + 0.5f * raw, 0.0f, 1.0f);
+    // Effective exponent E (see the comment above _gradient_gamma_to_u) grows quadratically
+    // with gamma, while still giving E=1 (linear) at gamma=1 for backward compatibility. u=1 is
+    // the 100%-opacity "shape" edge, so gamma>=1 steepens the curve toward it. Mirroring for
+    // gamma<1 (ease in from 0, flatten toward 1) keeps the slope finite at both ends instead of
+    // shooting to infinity, which reads as a hard cut right off the 0%-opacity border. The two
+    // branches agree exactly at gamma == 1 (E=1 either way), so there is no seam.
+    const float value = (gamma >= 1.0f) ? powf(u, gamma * gamma)
+                                        : 1.0f - powf(1.0f - u, 1.0f / (gamma * gamma));
     lut[n] = (value < 0.0f) ? 0.0f : ((value > 1.0f) ? 1.0f : value);
   }
 
@@ -1265,8 +1476,8 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelp
 
       const float distance = y0 - curvature * x0 * x0;
 
-      points[(j * gw + i) * 2] = (distance <= -4.0f * extent) ? 0.0f :
-                                    ((distance >= 4.0f * extent) ? 1.0f : dt_gradient_lookup(clut, distance * ihwscale));
+      points[(j * gw + i) * 2] = (distance <= -extent) ? 0.0f :
+                                    ((distance >= extent) ? 1.0f : dt_gradient_lookup(clut, distance * ihwscale));
     }
   }
 
@@ -1397,8 +1608,12 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   const float normf = 1.0f / extent;
   const float curvature = gradient->curvature;
   const dt_masks_gradient_states_t state = gradient->state;
+  const float gamma = gradient->gamma;
 
-  const int lutmax = ceilf(4 * extent * ihwscale);
+  // gamma/gradient falloff must stay confined strictly between the two border lines
+  // (distance = +-extent): u already clips to [0,1] there, so shrink the LUT and the
+  // outer hard-clamp to match instead of extrapolating out to 4x the extent.
+  const int lutmax = ceilf(extent * ihwscale);
   const int lutsize = 2 * lutmax + 2;
   float *lut = dt_pixelpipe_cache_alloc_align_float_cache((size_t)lutsize, 0);
   if(IS_NULL_PTR(lut))
@@ -1410,7 +1625,20 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
   for(int n = 0; n < lutsize; n++)
   {
     const float distance = (n - lutmax) * hwscale;
-    const float value = 0.5f + 0.5f * ((state == DT_MASKS_GRADIENT_STATE_LINEAR) ? normf * distance: erff(distance / extent));
+    // normalize erf by erff(2) so the sigmoid state also reaches exactly +-1 at distance=+-extent
+    // (raw erff(distance/extent) only reaches ~0.84 there), matching the linear state's exact
+    // boundary and avoiding a visible jump against the hard clamp at the border.
+    const float raw = (state == DT_MASKS_GRADIENT_STATE_LINEAR) ? normf * distance
+                                                                 : erff(2.0f * distance / extent) / erff(2.0f);
+    const float u = CLAMPF(0.5f + 0.5f * raw, 0.0f, 1.0f);
+    // Effective exponent E (see the comment above _gradient_gamma_to_u) grows quadratically
+    // with gamma, while still giving E=1 (linear) at gamma=1 for backward compatibility. u=1 is
+    // the 100%-opacity "shape" edge, so gamma>=1 steepens the curve toward it. Mirroring for
+    // gamma<1 (ease in from 0, flatten toward 1) keeps the slope finite at both ends instead of
+    // shooting to infinity, which reads as a hard cut right off the 0%-opacity border. The two
+    // branches agree exactly at gamma == 1 (E=1 either way), so there is no seam.
+    const float value = (gamma >= 1.0f) ? powf(u, gamma * gamma)
+                                        : 1.0f - powf(1.0f - u, 1.0f / (gamma * gamma));
     lut[n] = (value < 0.0f) ? 0.0f : ((value > 1.0f) ? 1.0f : value);
   }
 
@@ -1431,7 +1659,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pi
 
       const float distance = y0 - curvature * x0 * x0;
 
-      points[index * 2] = (distance <= -4.0f * extent) ? 0.0f : ((distance >= 4.0f * extent) ? 1.0f : dt_gradient_lookup(clut, distance * ihwscale));
+      points[index * 2] = (distance <= -extent) ? 0.0f : ((distance >= extent) ? 1.0f : dt_gradient_lookup(clut, distance * ihwscale));
     }
   }
 

@@ -297,10 +297,14 @@ static void _masks_gui_menu_item_block_activate(GtkWidget *widget, gpointer user
   g_signal_stop_emission_by_name(widget, "activate");
 }
 
+// Forwards a menu item's pointer/scroll events onto an interactive child widget (bauhaus
+// slider or checkbox) embedded inside it: GTK menus otherwise swallow these events before the
+// child ever sees them. `user_data` is the target widget directly, not a wrapper struct, so
+// this is reusable for any embedded control, not just the interaction sliders.
 static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
-  dt_masks_gui_interaction_slider_t *data = (dt_masks_gui_interaction_slider_t *)user_data;
-  if(IS_NULL_PTR(data) || !data->slider) return FALSE;
+  GtkWidget *target = GTK_WIDGET(user_data);
+  if(IS_NULL_PTR(target)) return FALSE;
 
   GdkEvent *copy = gdk_event_copy(event);
   if(IS_NULL_PTR(copy)) return FALSE;
@@ -334,7 +338,7 @@ static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *
   if(has_coords)
   {
     int sx = 0, sy = 0;
-    if(gtk_widget_translate_coordinates(widget, data->slider, (int)x, (int)y, &sx, &sy))
+    if(gtk_widget_translate_coordinates(widget, target, (int)x, (int)y, &sx, &sy))
     {
       switch(copy->type)
       {
@@ -359,15 +363,15 @@ static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *
     }
   }
 
-  GdkWindow *slider_window = gtk_widget_get_window(data->slider);
-  if(slider_window)
+  GdkWindow *target_window = gtk_widget_get_window(target);
+  if(target_window)
   {
     if(copy->any.window) g_object_unref(copy->any.window);
-    copy->any.window = g_object_ref(slider_window);
+    copy->any.window = g_object_ref(target_window);
     copy->any.send_event = TRUE;
   }
 
-  gtk_widget_event(data->slider, copy);
+  gtk_widget_event(target, copy);
   gdk_event_free(copy);
   return TRUE;
 }
@@ -421,13 +425,13 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
                         G_CALLBACK(_masks_gui_interaction_slider_changed),
                         data, (GClosureNotify)g_free, 0);
   g_signal_connect(G_OBJECT(menu_item), "button-press-event",
-                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), slider);
   g_signal_connect(G_OBJECT(menu_item), "button-release-event",
-                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), slider);
   g_signal_connect(G_OBJECT(menu_item), "motion-notify-event",
-                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), slider);
   g_signal_connect(G_OBJECT(menu_item), "scroll-event",
-                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), slider);
 
   gtk_box_pack_start(GTK_BOX(box), slider, TRUE, TRUE, 0);
   gtk_container_add(GTK_CONTAINER(menu_item), box);
@@ -743,6 +747,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   {
     const float opacity = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_OPACITY);
     const float hardness = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_HARDNESS);
+    const float gamma = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_GAMMA);
 
     _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
                                       DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
@@ -754,6 +759,10 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
                                       isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
+                                      gui, darktable.develop->gui_module);
+    _masks_gui_add_interaction_slider(menu, _("Progression"), op_form, DT_MASKS_INTERACTION_GAMMA,
+                                      DT_MASKS_INCREMENT_ABSOLUTE, 0.1f, 10.0f, 0.05f,
+                                      isfinite(gamma) ? gamma : 1.0f, 2, "", 1.0f,
                                       gui, darktable.develop->gui_module);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
