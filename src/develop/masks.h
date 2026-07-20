@@ -123,7 +123,7 @@ GList darktable.develop->forms
 extern "C" {
 #endif
 
-#define DEVELOP_MASKS_VERSION (6)
+#define DEVELOP_MASKS_VERSION (7)
 
 /**forms types */
 typedef enum dt_masks_type_t
@@ -233,6 +233,7 @@ typedef struct dt_masks_node_circle_t
   float center[2]; // point in normalized input space
   float radius;
   float border;
+  float gamma; // falloff shaping exponent between the shape and the outer border edge; 1.0 = unchanged
 } dt_masks_node_circle_t;
 
 /** structure used to store 1 node for an ellipse */
@@ -243,6 +244,7 @@ typedef struct dt_masks_node_ellipse_t
   float rotation;
   float border;
   dt_masks_ellipse_flags_t flags;
+  float gamma; // falloff shaping exponent between the shape and the outer border edge; 1.0 = unchanged
 } dt_masks_node_ellipse_t;
 
 /** structure used to store 1 node for a path form */
@@ -253,6 +255,7 @@ typedef struct dt_masks_node_polygon_t
   float ctrl2[2];
   float border[2];
   dt_masks_points_states_t state;
+  float gamma; // falloff shaping exponent between the shape and the outer border edge; 1.0 = unchanged
 } dt_masks_node_polygon_t;
 
 /** structure used to store 1 node for a brush form */
@@ -265,6 +268,7 @@ typedef struct dt_masks_node_brush_t
   float density;
   float hardness;
   dt_masks_points_states_t state;
+  float gamma; // falloff shaping exponent between the shape and the outer border edge; 1.0 = unchanged
 } dt_masks_node_brush_t;
 
 /** structure used to store anchor for a gradient */
@@ -273,7 +277,8 @@ typedef struct dt_masks_anchor_gradient_t
   float center[2];
   float rotation;
   float extent;
-  float steepness;
+  float gamma; // falloff shaping exponent between the shape and the outer border edge; 1.0 = unchanged
+                // (formerly the unused "steepness" field; same offset, repurposed)
   float curvature;
   dt_masks_gradient_states_t state;
 } dt_masks_anchor_gradient_t;
@@ -305,6 +310,7 @@ typedef enum dt_masks_interaction_t
   DT_MASKS_INTERACTION_SIZE = 1,     // property of the form (shape), explicit
   DT_MASKS_INTERACTION_HARDNESS = 2, // property of the form (shape), explicit
   DT_MASKS_INTERACTION_OPACITY = 3,  // property of the group in which the form is included, explicit
+  DT_MASKS_INTERACTION_GAMMA = 4,    // property of the form (shape), explicit
   DT_MASKS_INTERACTION_LAST
 } dt_masks_interaction_t;
 
@@ -490,9 +496,10 @@ typedef struct dt_masks_form_gui_t
   gboolean border_selected;
   gboolean source_selected;
   gboolean pivot_selected;
+  gboolean gamma_handle_hovered; // cursor is near the on-canvas gamma falloff handle (circle/ellipse/gradient)
 
   int group_selected;
-  
+
   int source_pos_type;
 
   gboolean form_dragging;
@@ -500,6 +507,7 @@ typedef struct dt_masks_form_gui_t
   gboolean form_rotating;
   gboolean border_toggling;
   gboolean gradient_toggling;
+  gboolean gamma_dragging; // dragging the on-canvas gamma falloff handle
   int node_dragging;
   int handle_dragging;
   int seg_dragging;
@@ -643,6 +651,29 @@ static inline void dt_masks_gui_delta_from_raw_anchor(dt_develop_t *dev, const d
   dt_masks_gui_delta_to_raw_norm(dev, gui, point);
   *delta_x = point[0] - anchor[0];
   *delta_y = point[1] - anchor[1];
+}
+
+// Circle/ellipse falloff formula: mask = f^(2*gamma), f = clip((total_r^2-l^2)/(total_r^2-inner_r^2)),
+// l = radial distance from center. Returns the normalized linear position t in [0,1] between
+// inner_r (t=0, shape edge) and total_r (t=1, outer border edge) where the falloff crosses 50%
+// opacity, for the on-canvas gamma handle to sit at.
+static inline float dt_masks_gamma_to_t_quadratic(const float gamma, const float inner_r, const float total_r)
+{
+  if(total_r <= inner_r) return 0.0f;
+  const float f = powf(0.5f, 1.0f / (2.0f * gamma));
+  const float l2 = sqf(total_r) - f * (sqf(total_r) - sqf(inner_r));
+  const float l = sqrtf(fmaxf(l2, 0.0f));
+  return CLAMPF((l - inner_r) / (total_r - inner_r), 0.0f, 1.0f);
+}
+
+// Inverse of dt_masks_gamma_to_t_quadratic: given the handle's linear position t in [0,1], returns gamma.
+static inline float dt_masks_t_to_gamma_quadratic(const float t, const float inner_r, const float total_r)
+{
+  const float l = inner_r + CLAMPF(t, 0.0f, 1.0f) * (total_r - inner_r);
+  const float denom = sqf(total_r) - sqf(inner_r);
+  if(denom <= 0.0f) return 1.0f;
+  const float f = CLAMPF((sqf(total_r) - sqf(l)) / denom, 1e-4f, 1.0f - 1e-4f);
+  return logf(0.5f) / (2.0f * logf(f));
 }
 
 // Clone and spot forms share the same default presets, while regular drawn masks use their own.
@@ -918,6 +949,24 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *dev_dest, dt_develop_t *de
                                         const struct dt_iop_module_t *mod_src);
 /** return the mask manager module instance if present */
 struct dt_iop_module_t *dt_masks_get_mask_manager(struct dt_develop_t *dev);
+
+// post_expose() callbacks only receive `gui`/`index`, not the concrete shape form being drawn.
+// dt_masks_get_visible_form() may return a wrapping DT_MASKS_GROUP instead of the shape itself
+// (groups store a GList of dt_masks_form_group_t {formid,...} entries, not raw shape points), so
+// resolve through the same by-formid lookup dt_group_events_post_expose() uses internally.
+static inline dt_masks_form_t *dt_masks_get_drawn_form(int index)
+{
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+  if(IS_NULL_PTR(visible_form)) return NULL;
+  if(visible_form->type & DT_MASKS_GROUP)
+  {
+    const dt_masks_form_group_t *entry
+        = (const dt_masks_form_group_t *)g_list_nth_data(visible_form->points, index);
+    if(IS_NULL_PTR(entry)) return NULL;
+    return dt_masks_get_from_id(darktable.develop, entry->formid);
+  }
+  return visible_form;
+}
 
 /** read the forms from the db */
 void dt_masks_read_masks_history(dt_develop_t *dev, const int32_t imgid);
