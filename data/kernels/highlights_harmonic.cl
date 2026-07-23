@@ -1494,7 +1494,7 @@ hl_knee_bin(global const float *input, global float *binned_planes,
     {
       const int row = i * cell_size + y;
       const int col = j * cell_size + sample_x;
-      const int c = is_xtrans ? FCxtrans(region_y + row, region_x + col, xtrans) : FC(row, col, filters);
+      const int c = is_xtrans ? FCxtrans(region_y + row, region_x + col, xtrans) : FC(region_y + row, region_x + col, filters);
       if(c <= 2)
       {
         accum[c] += input[row * width + col];
@@ -1665,7 +1665,7 @@ hl_knee_apply(global const float *input, global float *output,
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int idx = y * width + x;
-  const int c = is_xtrans ? FCxtrans(region_y + y, region_x + x, xtrans) : FC(y, x, filters);
+  const int c = is_xtrans ? FCxtrans(region_y + y, region_x + x, xtrans) : FC(region_y + y, region_x + x, filters);
   float raw_value = input[idx];
   const float clip_rgb[3] = { clipraw.x, clipraw.y, clipraw.z };
   const int engaged_flags[3] = { engaged.x, engaged.y, engaged.z };
