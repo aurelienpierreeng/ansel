@@ -3904,7 +3904,11 @@ static int process_harmonic_bayer(struct dt_iop_module_t *self, const dt_dev_pix
 {
   int err_code = 0;
 
-  const uint32_t filters = piece->dsc_in.filters;
+  // Every helper below (normalization, knee estimate/apply, gather, remosaic) reads
+  // FC(row, col, filters) with tile-local row/col (0-based within this buffer, no roi offset
+  // added), so filters must be pre-shifted for roi_in's crop position here -- mirrors
+  // demosaic.c's tile-local algorithms.
+  const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
 
   const size_t height = roi_in->height;
   const size_t width = roi_in->width;

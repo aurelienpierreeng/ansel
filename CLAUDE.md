@@ -254,9 +254,9 @@ is split across two places, each owning a different, non-overlapping part of the
   returns — is a plain local variable, discarded at the end of the call, recomputed next time.
   Call `dt_dev_get_roi_filters()` for every new tile-local consumer instead of inlining
   `dt_rawspeed_crop_dcraw_filters(piece->dsc_in.filters, roi_in->x, roi_in->y)` again — it now has
-  two call families (demosaic's own algorithms below, and `iop/highlights.c`'s laplacian Bayer
-  reconstruction, CPU and OpenCL) and duplicating the one-liner a third time is how this class of
-  bug keeps reappearing instead of getting fixed once.
+  two call families (demosaic's own algorithms below, and `iop/highlights.c`'s laplacian/harmonic
+  Bayer reconstruction, CPU and OpenCL) and duplicating the one-liner a third time is how this class
+  of bug keeps reappearing instead of getting fixed once.
 
 Every algorithm that reads the CFA — in demosaic or elsewhere — falls into exactly one of two
 categories, and mixing them up is the recurring failure mode here:
@@ -273,13 +273,22 @@ categories, and mixing them up is the recurring failure mode here:
   the **fully pre-shifted** `filters` from `dt_dev_get_roi_filters(piece, roi_in)`, computed once
   at the top of `process()`/`process_cl()`/`process_rcd_cl()` — passing them the raw, margin-only
   table silently drops the dynamic part of the shift. RCD, LMMSE, PPG, AMaZE, and the Bayer
-  downsample path (CPU and OpenCL) are in this group, and so is `iop/highlights.c`'s laplacian
-  Bayer reconstruction (CPU and OpenCL, through the shared `interpolate_and_mask`/
-  `remosaic_and_replace` kernels — those two kernels have no ROI-offset argument of their own,
-  unlike `highlights_normalize_reduce_first`, which does and stays self-correcting on the raw
-  table). Bayer has no xtrans-table equivalent of this split: `dt_rawspeed_crop_dcraw_filters()`
-  already no-ops on X-Trans (`filters == 9u`), so `dt_dev_get_roi_filters()` is always safe to call
-  regardless of sensor type.
+  downsample path (CPU and OpenCL) are in this group, and so is `iop/highlights.c`'s laplacian and
+  harmonic-transposition Bayer reconstruction (CPU, and the OpenCL host code that feeds the shared
+  `interpolate_and_mask`/`remosaic_and_replace` kernels — those two kernels have no ROI-offset
+  argument of their own, unlike `highlights_normalize_reduce_first`, which does and stays
+  self-correcting on the raw table). Bayer has no xtrans-table equivalent of this split:
+  `dt_rawspeed_crop_dcraw_filters()` already no-ops on X-Trans (`filters == 9u`), so
+  `dt_dev_get_roi_filters()` is always safe to call regardless of sensor type.
+
+  The GPU harmonic-transposition kernels (`hl_knee_bin`/`hl_knee_apply`,
+  `data/kernels/highlights_harmonic.cl`) are a self-correcting design instead — they take the raw
+  table plus explicit `region_x`/`region_y` args (bound to `roi_in->x/y` host-side) and are meant to
+  add them at the lookup, same as `FCxtrans`. One CFA-identity ternary in each kernel
+  (`is_xtrans ? FCxtrans(region_y + row, region_x + col, xtrans) : FC(row, col, filters)`) added the
+  offset only on the X-Trans branch and left the Bayer `FC()` branch reading unshifted `row`/`col` —
+  correct by construction on X-Trans, wrong on Bayer for any `roi_in` not itself CFA-aligned. Both
+  branches of that ternary must add the same `region_y +`/`region_x +` offset.
 
 A third, narrower trap lives inside `xtrans_markesteijn_interpolate()`/`xtrans_fdc_interpolate()`
 (`iop/demosaic/markesteijn.c`, CPU and OpenCL builders alike): the `allhex[3][3][...]` neighbor-

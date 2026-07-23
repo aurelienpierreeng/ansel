@@ -3643,7 +3643,9 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
                                       const dt_aligned_pixel_t normalization, const float **remosaic_input_out,
                                       float **input_corr_out, const _hl_knee_curve_t knee_pre[3])
 {
-  const uint32_t filters = piece->dsc_in.filters;
+  // _hl_knee_apply_cfa below reads FC(row, col, filters) with tile-local row/col, so filters
+  // must be pre-shifted for roi_in's crop position (mirrors process_harmonic_bayer).
+  const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
   const uint8_t(*const xtrans)[6] = (filters == 9u) ? (const uint8_t(*const)[6])piece->dsc_in.xtrans : NULL;
   const size_t width = roi_in->width;
   const size_t height = roi_in->height;
@@ -3994,7 +3996,13 @@ static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pix
 
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)self->global_data;
   const int devid = pipe->devid;
+  // _hl_knee_estimate_cl and the hl_knee_* kernels are self-correcting: they take this raw
+  // filters value PLUS roi_in->x/y as separate kernel args and add them themselves. The shared
+  // interpolate_and_mask/remosaic_and_replace Bayer kernels (and the host-side
+  // _compute_laplacian_normalization call below) have no roi offset arg at all -- they need
+  // filters pre-shifted for roi_in's crop position instead (mirrors the CPU driver's fix).
   const uint32_t filters = piece->dsc_in.filters;
+  const uint32_t filters_shifted = dt_dev_get_roi_filters(piece, roi_in);
   const int width = roi_in->width;
   const int height = roi_in->height;
   const size_t npix = (size_t)width * height;
@@ -4046,7 +4054,7 @@ static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pix
   if(cl_err != CL_SUCCESS) goto fallback;
 
   dt_aligned_pixel_t norm_host = { 1.f, 1.f, 1.f, 1.f };
-  _compute_laplacian_normalization(h_raw, roi_in, filters,
+  _compute_laplacian_normalization(h_raw, roi_in, filters_shifted,
                                    is_xtrans ? (const uint8_t(*const)[6])piece->dsc_in.xtrans : NULL, norm_host);
   normalization_final = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), norm_host);
   if(IS_NULL_PTR(normalization_final)) goto fallback;
@@ -4126,7 +4134,7 @@ static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pix
                              &det_clips_cl);
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask, 4, sizeof(cl_mem),
                              &normalization_final);
-    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask, 5, sizeof(int), &filters);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask, 5, sizeof(int), &filters_shifted);
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask, 6, sizeof(int),
                              &roi_out->width);
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask, 7, sizeof(int),
@@ -4278,7 +4286,7 @@ static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pix
             dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &temp);
             dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &clips_cl);
             dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &normalization_final);
-            dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &filters);
+            dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &filters_shifted);
             dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &roi_out->width);
             dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), &roi_out->height);
             restore_err = _hl_cl_enq2d(devid, kernel, sizes);
@@ -4414,7 +4422,7 @@ remosaic:;
                              &clips_cl);
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace, 7, sizeof(int),
                              &clip_floor_on);
-    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace, 8, sizeof(int), &filters);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace, 8, sizeof(int), &filters_shifted);
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace, 9, sizeof(int), &width);
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace, 10, sizeof(int), &height);
     cl_err = _hl_cl_enq2d(devid, global_data->kernel_highlights_remosaic_and_replace, sizes);
