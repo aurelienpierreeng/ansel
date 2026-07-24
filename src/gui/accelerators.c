@@ -2512,7 +2512,7 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
     for(GList *item = g_list_last(shortcut->closure); item; item = g_list_previous(item))
     {
       PayloadClosure *candidate = (PayloadClosure *)item->data;
-      if(IS_NULL_PTR(candidate) || IS_NULL_PTR(candidate->base)) continue;
+      if(IS_NULL_PTR(candidate) || IS_NULL_PTR(candidate->base) || IS_NULL_PTR(candidate->base->data)) continue;
       if(GTK_IS_WIDGET(candidate->base->data))
       {
         GtkWidget *candidate_widget = GTK_WIDGET(candidate->base->data);
