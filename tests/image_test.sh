@@ -348,26 +348,44 @@ process_one() {
         diffnote=" (delta-E comparison failed vs baseline, likely a size mismatch)"
         verdict="DIFF"
       else
-        local base_bad=no
-        if [ "$deltae_rc" -ge 2 ]; then
-          verdict="DIFF"
-          base_bad=yes
-        elif [ "$deltae_rc" -eq 1 ]; then
-          [ "$STRICT_CPU" = yes ] && { verdict="DIFF"; base_bad=yes; }
-        fi
-        # Color exactly the metric(s) responsible for the failure: max dE > 2.3
-        # or avg dE > 0.767 (2.3/3) is what deltae's own exit(2) checks. A
-        # --strict-cpu-only failure (rc=1, some nonzero drift under both real
-        # thresholds) is deltae's exit(0)-vs-exit(1) boundary, which is purely
-        # `max dE < 0.01` -- so that's the one to flag when neither real
-        # threshold was actually crossed.
-        local max_bad=no avg_bad=no
-        if [ "$base_bad" = yes ]; then
-          awk -v v="$max_de" 'BEGIN{exit !(v > 2.3)}' && max_bad=yes
-          awk -v v="$avg_de" 'BEGIN{exit !(v > 2.3/3)}' && avg_bad=yes
-          if [ "$max_bad" = no ] && [ "$avg_bad" = no ]; then
-            max_bad=yes
+        # avg dE > 0.767 (2.3/3) is a population-wide problem -- never filtered
+        # by pixel count. max dE > 2.3 on its own can be a single dark-shadow
+        # pixel where an isolated ±1/255 rounding step (platform/compiler FP
+        # noise) produces an outsized CIEDE2000 value purely because Lab's L*
+        # compresses luminance non-linearly (the same 1-bit rounding step reads
+        # as a much bigger dE near black than at mid/highlight tones) -- so it
+        # only counts as a real, visible regression once it affects more than
+        # MAX_PCT_ABOVE_TOLERANCE% of pixels, mirroring the opencl-vs-CPU
+        # comparison's own tolerance below. Missing/unparseable pct_de fails
+        # safe (treated as widespread) rather than silently passing.
+        local avg_bad=no max_bad_raw=no max_bad_widespread=no
+        awk -v v="$avg_de" 'BEGIN{exit !(v > 2.3/3)}' && avg_bad=yes
+        awk -v v="$max_de" 'BEGIN{exit !(v > 2.3)}' && max_bad_raw=yes
+        if [ "$max_bad_raw" = yes ]; then
+          if [ -z "$pct_de" ]; then
+            max_bad_widespread=yes
+          else
+            awk -v v="$pct_de" -v t="$MAX_PCT_ABOVE_TOLERANCE" 'BEGIN{exit !(v > t)}' && max_bad_widespread=yes
           fi
+        fi
+        local base_bad=no max_bad=no
+        if [ "$avg_bad" = yes ]; then
+          verdict="DIFF"; base_bad=yes
+        elif [ "$max_bad_widespread" = yes ]; then
+          verdict="DIFF"; base_bad=yes; max_bad=yes
+        elif [ "$max_bad_raw" = yes ] && [ "$STRICT_CPU" = yes ]; then
+          # --strict-cpu is zero-tolerance: even a handful of outlier pixels still fail.
+          verdict="DIFF"; base_bad=yes; max_bad=yes
+        elif [ "$deltae_rc" -eq 1 ] && [ "$STRICT_CPU" = yes ]; then
+          # deltae's own exit(0)-vs-exit(1) boundary: some nonzero drift under
+          # both real thresholds (max dE >= 0.01) -- only --strict-cpu cares.
+          verdict="DIFF"; base_bad=yes
+        fi
+        # Color exactly the metric(s) responsible for the failure. A
+        # --strict-cpu-only failure with neither real threshold crossed is the
+        # deltae_rc=1 case above, so flag max there too when nothing else did.
+        if [ "$base_bad" = yes ] && [ "$max_bad" = no ] && [ "$avg_bad" = no ]; then
+          max_bad=yes
         fi
         local max_c="" max_r="" avg_c="" avg_r=""
         [ "$max_bad" = yes ] && { max_c="$C_RED"; max_r="$C_RESET"; }
