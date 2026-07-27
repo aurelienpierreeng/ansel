@@ -104,6 +104,15 @@ static cl_mem _sp_cl_upload(const int devid, const void *data, const size_t byte
 // device-side numeric factorization, level by level. gd carries the kernel handles.
 // Mirrors _sp_chol_factor on the CPU: any change here must be mirrored there and re-validated
 // with the HL_SPCL_TEST self-test (_sp_chol_cl_selftest).
+//
+// Maths bridge: this computes the same factorization A = L * L^T as the CPU _sp_chol_factor
+// (SPD region-PDE / biharmonic-dome systems, article "Guided laplacian highlights"), but
+// reorganized for the GPU. The numeric recurrences are unchanged --
+//   L[i,j] = ( A[i,j] - sum_{k<j} L[i,k] L[j,k] ) / L[j,j] ,   L[j,j] = sqrt( A[j,j] - sum_k L[j,k]^2 )
+// -- only the schedule differs: the host precomputes (1) the symbolic pattern of L, (2) every
+// cmod(j,k) contribution -L[i,k]*L[j,k] grouped by the destination entry it lands in, and (3) an
+// elimination-tree LEVEL SCHEDULE, so the device factors one whole level of mutually independent
+// columns at a time (article "Performance -> The OpenCL pipe": the level-scheduled factorization).
 static _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kernels_t kernels, const int dimension,
                                          const int *const restrict matrix_col_ptr,
                                          const int *const restrict matrix_row_index,
@@ -183,6 +192,10 @@ static _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kern
   // contribution under the entry it subtracts INTO lets the numeric kernel run one thread per
   // matrix entry with no atomics and the exact ascending-update summation order (the target
   // columns' destination sets are disjoint, so both merge sweeps parallelize over j).
+  // Maths bridge: for k in reach(j), each shared row `row` (>= j) contributes the single product
+  // -L[row,k]*L[j,k] to entry (row,j) of L -- i.e. it realizes one term of the sum
+  // A[row,j] - sum_{k} L[row,k] L[j,k]. contsrc = position of L[row,k], contljk = position of
+  // L[j,k]; the update kernel later sums all contributions landing on each entry.
   contptr_h = calloc((size_t)factor->n_nonzero + 1, sizeof(int));
   fillc = calloc(factor->n_nonzero, sizeof(int));
   if(!contptr_h || !fillc) goto fail;
@@ -230,6 +243,10 @@ static _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kern
   // level schedule: group columns into dependency levels -- columns in the same level are
   // mutually independent and can be factored/solved in parallel. Forward levels serve the
   // factorization and the forward solve; backward levels are built separately below.
+  // Maths bridge: level(j) = 1 + max_{k in reach(j)} level(k) = the longest chain of column
+  // dependencies feeding j in the elimination tree. Columns sharing a level have disjoint
+  // dependency cones, so factoring/solving them together is exact -- this is the parallelism the
+  // sequential CPU column sweep cannot expose.
   col_level = calloc(dimension, sizeof(int));
   if(!col_level) goto fail;
   int maxlev = 0;
@@ -237,8 +254,8 @@ static _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kern
   {
     int neighbor_max = -1;
     for(int upd_slot = updoff[j]; upd_slot < updoff[j + 1]; upd_slot++)
-      if(col_level[updk[upd_slot]] > neighbor_max) neighbor_max = col_level[updk[upd_slot]];
-    col_level[j] = neighbor_max + 1;
+      if(col_level[updk[upd_slot]] > neighbor_max) neighbor_max = col_level[updk[upd_slot]]; // deepest predecessor
+    col_level[j] = neighbor_max + 1; // one level after all columns j depends on
     if(col_level[j] > maxlev) maxlev = col_level[j];
   }
   factor->nlev = maxlev + 1;
@@ -273,6 +290,9 @@ static _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kern
   }
 
   // backward levels: x[j] depends on x[rows > j of column j] (its ancestors)
+  // Maths bridge: the backward solve L^T x = y computes x_j = (y_j - sum_{i>j} L[i,j] x_i)/L[j,j],
+  // so x_j needs every x_i for the below-diagonal rows i of column j first -- the dependency order
+  // is the reverse of the factorization, hence a separately built level schedule.
   {
     int *col_level_bwd = calloc(dimension, sizeof(int));
     int *level_rows = malloc(sizeof(int) * dimension);
@@ -382,6 +402,10 @@ static _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kern
   // level-scheduled numeric factorization: per level, one thread per matrix entry applies
   // every contribution scheduled onto its entry, then each column of the level finalizes
   // (sqrt of the diagonal, scale of the sub-diagonal)
+  // Maths bridge, per level: sparse_chol_update_level forms  A[i,j] - sum_k L[i,k] L[j,k]  into
+  // every entry (the cmod sum from pass 2); sparse_chol_final_level then sets
+  // L[j,j] = sqrt(that diagonal value) and L[i,j] /= L[j,j] for the sub-diagonal rows -- together
+  // the two recurrences at the top of this function, run in parallel across the level's columns.
   const double _tf2 = dt_get_wtime();
   {
     const int kernel_update = kernels.update_level;
@@ -485,6 +509,11 @@ fail:
 // substitution. Returns 0 on success. gd = kernel handles.
 // Mirrors _sp_chol_solve on the CPU: any change here must be mirrored there and re-validated
 // with the HL_SPCL_TEST self-test (_sp_chol_cl_selftest).
+//
+// Maths bridge: x = A^{-1} b via the two triangular solves  L y = b  (forward) then  L^T x = y
+// (backward), identical to the CPU _sp_chol_solve, but each solve runs level by level (all rows/
+// columns of one level are mutually independent and solved by one work-group each). Forward uses
+// the CSR row mirror of L; backward uses the native CSC columns of L (= rows of L^T).
 static int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp_chol_cl_kernels_t kernels, cl_mem rhs)
 {
   const int devid = factor->devid;

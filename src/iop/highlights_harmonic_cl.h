@@ -82,7 +82,14 @@ static inline cl_int _hl_cl_enq2dl(const int devid, const int kernel, const size
 // note below. Fills the hole cells of every vals[p] in place. Mirrors _cf_harmonic_fill_n on
 // the CPU: any change here must be mirrored there and re-validated with the HL_FILLCL_TEST
 // self-test (_cf_harmonic_fill_cl_selftest).
-
+//
+// MATHS BRIDGE -- article "The algorithm" step 3, the E_transport solver on the GPU: the anchored,
+// coarse-to-fine anisotropic transport that minimizes E_transport = Sum_p int grad(p)^T D grad(p),
+// p|anchors = p_fit, by relaxing div(D grad p)=0 (steer != NULL builds D via the hl_cfa_* kernels;
+// steer == NULL => D = I, the plain harmonic fill). Structure mirrors the CPU _cf_harmonic_fill_n:
+// base grid at pitch ~sigma/4, pyramid halved until the long side <= 8 cells (convergence from depth,
+// not sweep count), flat anchor-mean seed at the coarsest level, bilinear seed of each finer level,
+// 100 Jacobi sweeps per level, then bilinear upsample into the full-res hole pixels.
 static cl_int _cf_harmonic_fill_cl_n(const int devid, void *gd_void, cl_mem *vals, const int n_planes_in,
                                      cl_mem hole, const int region_w, const int region_h, const int base_ds,
                                      const int mask_is_hole, cl_mem steer)
@@ -266,8 +273,10 @@ static cl_int _cf_harmonic_fill_cl_n(const int devid, void *gd_void, cl_mem *val
       }
     }
 
-    // aniso: level steering plane -> blurred L/L^2 -> gradients (+ mean-magnitude reduction)
-    // -> Weickert tensor -> precomputed edge weights. Mirrors the CPU per-level build exactly;
+    // aniso: build the E_transport steering tensor D at this level (article step 3 D equation):
+    // level steering plane -> blurred L/L^2 -> gradients (+ mean-magnitude reduction)
+    // -> Weickert tensor (hl_cfa_tensor = _cf_adaptive_tensor) -> precomputed edge weights.
+    // Mirrors the CPU per-level build exactly;
     // the gnorm reduction is finished on device so the queue never drains mid-fill. Shared by
     // all n_planes planes -- fusing them is what amortizes this whole chain.
     if(steered)
@@ -572,6 +581,11 @@ static cl_int _region_blur_cl(const int devid, cl_mem in, cl_mem out, const int 
 // Mirrors the joint coefficient-field stage inside _region_guided_filter (CPU): any change here
 // must be mirrored there and re-validated with the HL_CFCL_TEST self-tests
 // (_cf_joint_stage_cl_selftest / _cf_stage_cl_selftest).
+//
+// MATHS BRIDGE -- article "The algorithm" step 3, one two-guide colour-line: fit (a,b,d) at every pixel
+// from the blurred moments through the 2x2 normal equations (hl_cf_fit_joint), transport the coefficient
+// planes with the E_transport fill (_cf_harmonic_fill_cl), then evaluate v_hat = a*u1 + b*u2 + d against
+// the measured guides (hl_cf_eval_joint). R^2 is diffused as a fourth plane on the broader anchor mask.
 static cl_int _cf_joint_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid,
                                  cl_mem model_quality, cl_mem mom0, cl_mem mom1, cl_mem mom2, cl_mem steer,
                                  const float *const restrict channel_means, const int region_w, const int region_h,
@@ -666,6 +680,11 @@ out:
 // Runs unconditionally (no target-count guard: an empty target set writes nothing).
 // Mirrors the pair coefficient-field stage inside _region_guided_filter (CPU): any change here
 // must be mirrored there and re-validated with the HL_CFCL_TEST self-tests.
+//
+// MATHS BRIDGE -- article "The algorithm" step 3, the single-guide fallback: the model collapses to
+// v_hat = a*u + d with a = Cov(u,v)/Var(u) and R^2 = Cov(u,v)^2/(Var(u) Var(v)) (hl_cf_fit_pair),
+// transported by the E_transport fill and evaluated by hl_cf_eval_pair. Same fit/transport/evaluate
+// skeleton as the joint stage, one guide instead of two.
 static cl_int _cf_pair_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid,
                                 cl_mem model_quality, cl_mem moment_a, cl_mem moment_b, cl_mem steer,
                                 const float *const restrict channel_means, const int region_w, const int region_h,
@@ -752,6 +771,11 @@ out:
 // Caller releases the returned cl_mem buffers. Mirrors the deferred joint fit inside
 // _region_guided_filter (CPU): any change here must be mirrored there and re-validated with
 // the HL_CFCL_TEST self-tests.
+//
+// MATHS BRIDGE -- article "The algorithm" step 3, the deep channel's ordering subtlety: fit (a,b,d)
+// and transport them (E_transport) exactly as the joint stage, but DEFER v_hat = a*u1 + b*u2 + d so it
+// is evaluated only after the other clipped channels are reconstructed -- then every guide it reads is
+// a continuous surface (no clip-contour arc). Returns the four diffused planes (a, b, d, R^2) to stash.
 static cl_int _cf_joint_fit_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem mom0,
                                cl_mem mom1, cl_mem mom2, cl_mem steer, const float *const restrict channel_means,
                                const int region_w, const int region_h, const float cf_sigma, const float cf_fmin,
@@ -834,6 +858,13 @@ out:
 // score), lsb (frozen brightness plane for the fit weights); all float4 device buffers.
 // Mirrors the coefficient-field stage of _region_guided_filter (CPU): any change here must be
 // mirrored there and re-validated with the HL_CFCL_TEST self-tests (_cf_stage_cl_selftest).
+//
+// MATHS BRIDGE -- article "The algorithm" step 3 end to end, the GPU driver of the coefficient field:
+// pack + Gaussian-blur the ten windowed moment planes ONCE (three 4-channel blurs via hl_cf_pack_joint),
+// run the two-guide joint fits (deep channel deferred), the single-guide pair fallbacks, then the
+// deferred deep-channel evaluation with the depth-split blend. sigma = clip(r/6, 8, 64), fit windows
+// weighted by w = [all valid] * soft occlusion weight (cf_binv); moments centred on channel_means to
+// avoid the E[u^2]-E[u]^2 float cancellation.
 static cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem model_quality,
                            cl_mem luminance, cl_mem steer, const float *const restrict channel_means,
                            dt_gaussian_cl_t *gaussian, const int region_w, const int region_h,
@@ -861,6 +892,8 @@ static cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_m
     cl_err = DT_OPENCL_DEFAULT_ERROR;
     goto out;
   }
+  // three modes = the ten centred moment planes: mode 0 -> [n, wR, wG, wB], mode 1 -> [wRR, wGG, wBB, wRG],
+  // mode 2 -> [wRB, wGB, unweighted-n, 0]; each packed product image is Gaussian-blurred to a windowed moment
   for(int mode = 0; mode < 3 && cl_err == CL_SUCCESS; mode++)
   {
     const int kernel = global_data->kernel_hl_cf_pack_joint;
@@ -1004,6 +1037,16 @@ out:
 // damped detail at strict targets, damped-only treatment at single-guide pixels.
 // Mirrors the DT_HL_HF_GUIDE block of _region_guided_filter (CPU): any change here must be
 // mirrored there and re-validated with the HL_HFCL_TEST self-test (_hf_stage_cl_selftest).
+//
+// MATHS BRIDGE -- Step 4 (HF refit), article §"Hybrid Laplacian-band guiding of the high frequencies"
+// / §"Rebuild the high frequencies": split estimate at sigma/4 into low band ubar (lowpass) and detail
+// u - ubar; fit the detail band's OWN colour-line with R^2-shrunk gains (hl_hf_fit: gain *= R^2, the
+// correct shrinkage on a zero-mean band), transport the gains with the E_transport fill, then blend the
+// guided resynthesis h_g = a(u_g1-ubar_g1)+b(u_g2-ubar_g2) against the R^2-damped transfer
+// h_d = R^2 (u_c - ubar_c) by quadratic min-energy odds w = e_d^2/(e_d^2 + e_g^2), e_{d,g} = blurred
+// |HF| (hl_hf_energy + hl_hf_eval) -- a guide misfire spikes e_g so the damped path self-selects.
+// Single-guide pixels keep only the damped detail (hl_hf_damp). The band split blurs at sigma/4 (floored
+// at 2 px) while the moments blur at the fit's cf_sigma -- the two scales are deliberately different.
 static cl_int _hf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem model_quality,
                            cl_mem luminance, cl_mem steer, dt_gaussian_cl_t *gaussian, const int region_w,
                            const int region_h, const float cf_sigma, const float cf_fmin, const float cf_binv)
@@ -1210,6 +1253,12 @@ static inline _sp_chol_cl_kernels_t _hl_sp_chol_kernels(void *gd_void)
 // the caller like the CPU _biharmonic_dome's force_ds.
 // Mirrors _biharmonic_dome on the CPU: any change here must be mirrored there and
 // re-validated with the HL_DOMECL_TEST self-test (_selfdome_stage_cl_selftest).
+//
+// MATHS BRIDGE -- article "Biharmonic inpainting" / E_bihar: solves Delta^2 u = 0 on the (coarse)
+// hole with u|dOmega = u_valid Dirichlet data, so the rim curvature is extended into a smooth dome
+// (value AND slope continued). Restricting the SPD biharmonic operator to the hole unknowns gives
+// the linear system A u = b factored below by the GPU sparse Cholesky (SPD system, annotated in
+// common/solvers/sparse_cholesky.h); the bilinear upsample restores the low-frequency dome to full res.
 static cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, cl_mem hole, const int region_w,
                                   const int region_h, const int downsample, const dt_dev_pixelpipe_t *pipe)
 {
@@ -1266,8 +1315,9 @@ static cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, 
   {
 
     {
-      // assemble the 13-point biharmonic operator (Laplacian applied twice), with the unknowns
-      // permuted by geometric nested dissection (the CPU dome's exact system)
+      // assemble the 13-point biharmonic operator Delta^2 = Delta(Delta) (the 5-point Laplacian
+      // convolved with itself: center 20, edge -8, diagonal 2, far-axis 1; reaches two rings out),
+      // with the unknowns permuted by geometric nested dissection (the CPU dome's exact system)
       static const int stencil_off_y[13] = { 0, -1, 1, 0, 0, -1, -1, 1, 1, -2, 2, 0, 0 };
       static const int stencil_off_x[13] = { 0, 0, 0, -1, 1, -1, 1, -1, 1, 0, 0, -2, 2 };
       static const double stencil_coef[13] = { 20., -8., -8., -8., -8., 2., 2., 2., 2., 1., 1., 1., 1. };
@@ -1307,6 +1357,8 @@ static cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, 
             const size_t neighbor_index = (size_t)neighbor_y * coarse_w + neighbor_x;
             if(!coarse_hole[neighbor_index])
             {
+              // Dirichlet boundary: a non-hole neighbour is fixed data (u|dOmega = u_valid), so its
+              // stencil term moves to the RHS as -coef * u_valid
               rhs_accum -= stencil_coef[stencil] * cf[neighbor_index];
               continue;
             }
@@ -1330,6 +1382,8 @@ static cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, 
         }
         matrix_col_ptr[unknown_count] = n_nonzero;
 
+        // factor + solve A u = b, A = the restricted Delta^2 (SPD), b = the boundary_sum RHS:
+        // the exact biharmonic dome on the coarse hole (GPU sparse Cholesky)
         const double _tch = dt_get_wtime();
         factor = _sp_chol_factor_cl(devid, _hl_sp_chol_kernels(gd_void), unknown_count, matrix_col_ptr,
                                     matrix_row_index, matrix_values);
@@ -1494,6 +1548,14 @@ out:
 // Mirrors the DT_HL_SELF_DOME block of _region_guided_filter (CPU): any change here must be
 // mirrored there and re-validated with the HL_DOMECL_TEST self-test
 // (_selfdome_stage_cl_selftest).
+//
+// MATHS BRIDGE -- article "The algorithm" steps 5-6. Step 5: soft saturation floor (rounded lower
+// bound at c0). Step 6: hue-coupled self-dome -- ONE shared biharmonic brightness dome (Delta^2 L_sum
+// = 0, hl_soft_floor->hl_lsb_hole->_biharmonic_dome_cl) times harmonically-filled chromaticity ratios
+// r_c = est_c/L_sum, blended in by the depth-gated keep weight
+//   keep = 1 - dome_fraction,  dome_fraction = (1 - S_{0.4}^{0.85}(R^2)) * exp(-(delta/1.5 sigma)^2)
+// (hl_dome_blend), then a hard clip-floor re-assert. The hue coupling (dome_c = L_dome * r_c) is what
+// stops three per-channel domes drifting the hue -- the failure that kept the per-channel ancestor off.
 static cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid,
                                  cl_mem model_quality, cl_mem clip0, cl_mem depth, const int region_w,
                                  const int region_h, const float cf_sigma, const float reg_radius,
@@ -1666,6 +1728,12 @@ static cl_int _region_blur1_cl(const int devid, cl_mem in, cl_mem out, const int
 // _region_pde_solve for the joint core's screened-harmonic chroma (order 1, lam 1, constant
 // reaction strength d and flat target): the fallback when the all-clip core exceeds
 // DT_HL_SPARSE_MAX unknowns and the direct factorization is off the table.
+//
+// MATHS BRIDGE -- Step 7 E_chrominance screened-Poisson (article §"Chrominance, by diffusion"):
+// solves (dscalar*I - Delta) r = dscalar*tscalar on the hole, r|dOmega = r_valid (Dirichlet), where
+// dscalar = lambda_solid = solid_color^2*4 (the flat-colour reaction strength) and tscalar = the
+// mean valid chromaticity r_target. A = d*I - Delta is never formed; each iteration applies its
+// action A p = d*p + Op(p) via the hl_cg_* kernels (Op = -Delta, order 1) in highlights_sparse.cl.
 // Dot products accumulate in double precision on the device (64-bit-float program); only the
 // 2 KB of reduction partials cross the bus per iteration. The CPU conjugate gradient is
 // itself OpenMP-summation-order nondeterministic, so tolerance-level (not bit-exact) parity
@@ -1846,6 +1914,13 @@ out:
 // Mirrors the all-clip joint-core block of _region_guided_filter (CPU, DT_HL_COEFF_FIELD):
 // any change here must be mirrored there and re-validated with the HL_CORECL_TEST self-test
 // (_joint_core_stage_cl_selftest).
+//
+// MATHS BRIDGE -- Step 7 all-clip core (article §"Filling holes with no survivor"): magnitude =
+// shared biharmonic dome L_dome (Delta^2 L_sum = 0, floored at sum_c clip0_c), chrominance =
+// screened-Poisson rim fill r_c ((lambda_solid*I - Delta) r = lambda_solid*r_target) with
+// r_target = mean valid chromaticity, solved per channel by ONE shared Cholesky factor (direct) or
+// the on-device CG (large cores). Recombine core_c = L_dome * (r_c / sum_j r_j), composed through a
+// gaussian-feathered core mask (no hard hand-off at the core rim).
 static cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem clip0,
                                    const int region_w, const int region_h, const float solid_color,
                                    const float reg_radius, const int extent, const dt_dev_pixelpipe_t *pipe)
@@ -1855,7 +1930,7 @@ static cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estima
   cl_int cl_err = DT_OPENCL_DEFAULT_ERROR;
   size_t size[3] = { ROUNDUPDWD(region_w, devid), ROUNDUPDHT(region_h, devid), 1 };
   const float epsilon = 1e-6f;
-  const float react = solid_color * solid_color * 4.f;
+  const float react = solid_color * solid_color * 4.f; // lambda_solid: the screened-Poisson reaction (flat-colour pull)
 
   if(global_data->kernel_hl_pde_rhs < 0 || global_data->kernel_hl_pde_scatter < 0) return cl_err; // no fp64 device
 
@@ -1963,6 +2038,8 @@ static cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estima
   // ONE symbolic analysis + GPU numeric factorization for the three channels; when the core
   // exceeds DT_HL_SPARSE_MAX (or the factorization fails) take the same road as the CPU:
   // the matrix-free CG, here fully on the device
+  // assemble A = lambda_solid*I - Delta (order 1) over the all-clip hole; use_cg when the core
+  // is too large for the direct factorization (mirrors the CPU _sp_pde_factor / CG choice)
   int n_unknowns = 0;
   int use_cg = !_sp_pde_assemble(hole_mask, NULL, (react > 0.f) ? react : 0.f, 1, 1.f, region_w, region_h,
                                  &matrix_col_ptr, &matrix_row_index, &matrix_values, &perm_grid, &n_unknowns);
@@ -2154,6 +2231,12 @@ static inline void _knee_blur(const float *const restrict in, float *const restr
 // write-back copy), and bilinearly splats the ratios into the fine planes' clipped channels
 // to seed the next level. Any change here must be mirrored in the CPU pyramid and
 // re-validated with the HL_ANISOCL_TEST self-test (_aniso_stage_cl_selftest).
+//
+// MATHS BRIDGE -- Step 8 large-core path (article §"The update rules", the explicit trace-form
+// pyramid): the multiscale solver for min int grad(r)^T D grad(r) s.t. r >= c0/L when the core
+// exceeds DT_HL_SPARSE_MAX. Each level projects onto the obstacle then runs 240 explicit steps of
+// r <- max(r + 0.18*tr(D Hess r), c0/L) (kernel hl_aniso_iter[_block]); coarsest level first so
+// the whole hole is seeded before refinement. D = structure tensor of the recovered luminance.
 static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, cl_mem valid, cl_mem luminance,
                                 cl_mem clip0, const int region_w, const int region_h, const float radius,
                                 const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi,
@@ -2398,6 +2481,13 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
 // buffer, so no full-res float plane crosses the bus. Any change here must be mirrored in
 // _aniso_div_solve (CPU) and re-validated with the HL_ANISOCL_TEST self-test
 // (_aniso_stage_cl_selftest).
+//
+// MATHS BRIDGE -- Step 8 chrominance coherence (article §"Chrominance coherence"): the
+// divergence-form exact solve of div(D grad r) = 0, r|dOmega = r_valid, restricted to the all-clip
+// hole (partial-clip pixels are Dirichlet anchors). Weickert nonnegativity graph Laplacian from D
+// (edge weights = hl_aniso_weights), ONE Cholesky factor for the three channel RHS, then a full-res
+// obstacle-projected polish (r >= c0/L) since a direct factorization cannot project mid-solve.
+// Cores above DT_HL_SPARSE_MAX fall to _aniso_pyramid_cl. Reassembly RGB = L_sum * r.
 static cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem clip0,
                               const int region_w, const int region_h, const float radius,
                               const dt_dev_pixelpipe_t *pipe)
@@ -2952,6 +3042,11 @@ out:
 // production CPU reconstruction on it (coordinates translated to the window), scatter back.
 // Sequentially consistent with the device regions: the blocking readback drains the in-order
 // queue, and the unpack rewrites the exact window the CPU read.
+//
+// MATHS BRIDGE -- runs the full CPU _region_guided_filter on this window, so ALL stages including
+// the Step-7 all-clip core (biharmonic dome x screened-Poisson chroma) and the Step-8 anisotropic
+// div(D grad r)=0 chroma coherence are the CPU versions annotated in highlights_harmonic_cpu.h.
+// Used for regions too small for the ~1000-launch GPU path to pay off; no maths of its own.
 static cl_int _region_cpu_offload_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                                      const int width, const _hl_region_t *const region,
                                      const dt_dev_pixelpipe_t *pipe, const float solid_color, const int max_iter,
@@ -3028,6 +3123,18 @@ out:
   return cl_err;
 }
 
+// MATHS/PIPELINE BRIDGE -- device-resident per-region reconstruction, the GPU twin of the CPU
+// _region_guided_filter (article §"The algorithm", steps 3-8, and §"The OpenCL pipe": a big region
+// stays resident on the device for its whole rebuild). Same step composition as the CPU header, each
+// step a device stage minimizing the same energy:
+//   3 colour-line coefficient field  _cf_stage_cl            (E_affine per pixel + E_transport diffusion)
+//   4 HF refit                       _hf_stage_cl            (detail-band re-fit on the colour line)
+//   5-6 floors + gated self-dome     _selfdome_stage_cl      (E_bihar self-dome, depth-gated by We = R^4)
+//   7 all-clip luminance dome+chroma _joint_core_stage_cl    (E_bihar dome x E_chrominance screened Poisson)
+//   8 anisotropic chroma coherence   _aniso_stage_cl         (E_chrominance div(D grad r)=0)
+// The stage parameters (cf_sigma = clip(R/6, 8, 64), deep channel, shared dome grid ds_shared) come from
+// ONE on-device reduction (kernel_hl_region_stats) so the queue never drains mid-region; only the 8x256
+// reduction partials cross the bus. The reconstructed clipped channels are scattered back on device.
 static cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                                        const int width, const _hl_region_t *const region,
                                        const dt_dev_pixelpipe_t *pipe, const float solid_color)
@@ -3211,6 +3318,7 @@ static cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem in
   }
 
   {
+    // Step 7: all-clip joint core (shared biharmonic dome x screened-Poisson diffused chroma)
     const int extent = MAX(region->x1 - region->x0, region->y1 - region->y0) + 1;
     cl_err = _joint_core_stage_cl(devid, gd_void, estimate, valid, clip0, region_w, region_h, solid_color,
                                   region->radius, extent, pipe);
@@ -3218,6 +3326,7 @@ static cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem in
   }
   if(cl_err != CL_SUCCESS) goto out;
   const double _tg5 = dt_get_wtime();
+  // Step 8: structure-steered chrominance coherence (div(D grad r)=0 under the obstacle r >= c0/L)
   cl_err = _aniso_stage_cl(devid, gd_void, estimate, valid, clip0, region_w, region_h, region->radius, pipe);
   if(cl_err == CL_SUCCESS) _hl_cl_finish_timed(devid);
   const double _tg6 = dt_get_wtime();
@@ -3256,12 +3365,15 @@ out:
 
 #endif // HAVE_OPENCL && DT_HL_COEFF_FIELD && DT_HL_SPARSE_SOLVE && ANISO_SOLVER 2
 #ifdef HAVE_OPENCL
+// Step 2 (article "The algorithm", knee inversion) on the GPU: build the per-channel inverse
+//   k^-1(v) = v + median{ v_hat_i - v_i | v_i in bin(v) },
+// v_hat from a windowed colour-line regression v_hat = a*u1 + b*u2 + d (joint) or a*u + d (single).
 // GPU knee estimation (sensor saturation-rolloff curve, see the DT_HL_KNEE macro comment):
 // the device runs Phase A (colour-filter-array binning, the 5-sigma windowed moment blurs --
-// packed 4 planes per gaussian pass -- and the colour-line regressions); the host keeps
-// Phase B (vote medians + monotone curve fit) on the downloaded BINNED planes (<= 1.5 Mpx
-// grid, x/pred/r2s/done only). The full-res raw mosaic never crosses the bus.
-// Mirrors _hl_knee_estimate on the CPU: any change here must be mirrored there and
+// packed 4 planes per gaussian pass -- and the colour-line regressions producing v_hat/R^2); the
+// host keeps Phase B (vote medians + significance gate + monotone curve fit) on the downloaded
+// BINNED planes (<= 1.5 Mpx grid, x/pred/r2s/done only). The full-res raw mosaic never crosses the
+// bus. Mirrors _hl_knee_estimate on the CPU: any change here must be mirrored there and
 // re-validated with the HL_KNEECL_TEST self-test (_knee_cl_selftest).
 static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in, const size_t width,
                                    const size_t height, const uint32_t filters, const dt_iop_roi_t *const roi_in,
@@ -3343,6 +3455,8 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
   cl_err = _hl_cl_read_timed(devid, binned, dev_binned, 0, sizeof(float) * bin_pixels * 3, CL_TRUE);
   if(cl_err != CL_SUCCESS) goto cleanup;
 
+  // band mass per channel: count binned cells in [LO, DET) (mirrors the CPU); a channel with < 200
+  // stays identity
   size_t nband[3] = { 0, 0, 0 };
   for(size_t pixel = 0; pixel < bin_pixels; pixel++)
     for(int c = 0; c < 3; c++)
@@ -3368,7 +3482,8 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
       dt_gaussian_free_cl(gsig); // previous sigma's handle
       gsig = NULL;
 
-      // joint moments (10 planes packed in 3 float4 images), blurred at this sigma
+      // joint moments (n, means, second moments; 10 planes packed in 3 float4 images), then blurred
+      // by G_sigma to realise the windowed sums sum_y w G_sigma(...) of the 2x2 normal equations
       {
         const int kernel = global_data->kernel_hl_knee_jmom;
         dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &dev_binned);
@@ -3392,11 +3507,13 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
       if(cl_err == CL_SUCCESS) cl_err = dt_gaussian_blur_cl(gsig, moment_c, blur_c);
       if(cl_err != CL_SUCCESS) goto cleanup;
 
+      // joint 2-guide regression v_hat = a*u1 + b*u2 + d per target channel c, solving the 2x2 normal
+      // system from the blurred moments (the kernel does the Cramer's-rule solve; writes pred/r2/done)
       for(int c = 0; c < 3; c++)
       {
         if(nband[c] < 200) continue;
-        const int guide1 = (c == 0) ? 1 : 0;
-        const int guide2 = (c == 2) ? 1 : 2;
+        const int guide1 = (c == 0) ? 1 : 0; // u1 guide channel
+        const int guide2 = (c == 2) ? 1 : 2; // u2 guide channel
         const int kernel = global_data->kernel_hl_knee_joint_reg;
         dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &dev_binned);
         dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &blur_a);
@@ -3417,7 +3534,8 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
         if(cl_err != CL_SUCCESS) goto cleanup;
       }
 
-      // single-guide fallback, both orientations of each pair
+      // single-guide fallback v_hat = a*u + d (a = Cov(v,u)/Var(u)) for cells the joint pass left
+      // done==0, both orientations of each pair (predict a from b, then b from a)
       for(int chan_a = 0; chan_a < 3; chan_a++)
         for(int chan_b = chan_a + 1; chan_b < 3; chan_b++)
         {
@@ -3473,32 +3591,36 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
   if(cl_err == CL_SUCCESS) cl_err = _hl_cl_read_timed(devid, done, dev_done, 0, bin_pixels * 3, CL_TRUE);
   if(cl_err != CL_SUCCESS) goto cleanup;
 
-  // ---- Phase B (host, identical to the CPU): vote medians + monotone curve fit ----
+  // ---- Phase B (host, identical to the CPU _hl_knee_estimate; see there for the full maths):
+  // pool the votes v_hat_i - v_i into 24 band bins, take each bin's significant median lift, then
+  // make the curve monotone + raise-only. ----
   for(int c = 0; c < 3; c++)
   {
     if(nband[c] < 200) continue;
 
     size_t count[DT_HL_KNEE_BINS] = { 0 };
     size_t offset[DT_HL_KNEE_BINS + 1] = { 0 };
-    const float bin_width = (DT_HL_KNEE_DET - DT_HL_KNEE_LO) / (float)DT_HL_KNEE_BINS;
+    const float bin_width = (DT_HL_KNEE_DET - DT_HL_KNEE_LO) / (float)DT_HL_KNEE_BINS; // band width / 24
 
+    // pass 1: count votes per bin (only predicted cells clearing the R^2 > R2MIN fit-quality gate)
     for(size_t pixel = 0; pixel < bin_pixels; pixel++)
     {
       if(!done[c * bin_pixels + pixel] || r2_scores[c * bin_pixels + pixel] <= DT_HL_KNEE_R2MIN) continue;
-      const int bin_index
+      const int bin_index // bin of the measured value v
           = CLAMP((int)((binned[c * bin_pixels + pixel] - DT_HL_KNEE_LO) / bin_width), 0, DT_HL_KNEE_BINS - 1);
       count[bin_index]++;
     }
-    for(int i = 0; i < DT_HL_KNEE_BINS; i++) offset[i + 1] = offset[i] + count[i];
+    for(int i = 0; i < DT_HL_KNEE_BINS; i++) offset[i + 1] = offset[i] + count[i]; // prefix-sum -> per-bin base
 
     size_t fill[DT_HL_KNEE_BINS];
     memcpy(fill, offset, sizeof(fill));
+    // pass 2: scatter each vote v_hat_i - v_i (pred - measured) into its bin's slots
     for(size_t pixel = 0; pixel < bin_pixels; pixel++)
     {
       if(!done[c * bin_pixels + pixel] || r2_scores[c * bin_pixels + pixel] <= DT_HL_KNEE_R2MIN) continue;
-      const float x_val = binned[c * bin_pixels + pixel];
+      const float x_val = binned[c * bin_pixels + pixel]; // measured v
       const int bin_index = CLAMP((int)((x_val - DT_HL_KNEE_LO) / bin_width), 0, DT_HL_KNEE_BINS - 1);
-      votes[fill[bin_index]++] = pred[c * bin_pixels + pixel] - x_val;
+      votes[fill[bin_index]++] = pred[c * bin_pixels + pixel] - x_val; // one pixel's vote
     }
 
     float lift[DT_HL_KNEE_BINS];
@@ -3508,18 +3630,20 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
     {
       lift[i] = 0.f;
       seen[i] = 0;
-      if(count[i] < DT_HL_KNEE_MINVOTES) continue;
+      if(count[i] < DT_HL_KNEE_MINVOTES) continue; // need >= 100 votes for a stable error estimate
       float *const bin_votes = votes + offset[i];
-      const float median_lift = _knee_median(bin_votes, count[i]);
-      for(size_t k = 0; k < count[i]; k++) bin_votes[k] = fabsf(bin_votes[k] - median_lift);
-      const float median_abs_dev = _knee_median(bin_votes, count[i]);
+      const float median_lift = _knee_median(bin_votes, count[i]); // median{ v_hat_i - v_i } = raw bin lift
+      for(size_t k = 0; k < count[i]; k++) bin_votes[k] = fabsf(bin_votes[k] - median_lift); // |lift_i - median|
+      const float median_abs_dev = _knee_median(bin_votes, count[i]); // MAD (robust spread)
+      // SE of the bin median = 1.858*MAD/sqrt(n); 1.858 = 1.4826 (MAD->sigma) * 1.2533 (sigma->SE of median)
       const float std_err = 1.858f * median_abs_dev / sqrtf((float)count[i]);
       seen[i] = 1;
       nseen++;
-      if(median_lift > DT_HL_KNEE_NSIGMA * std_err) lift[i] = median_lift;
+      if(median_lift > DT_HL_KNEE_NSIGMA * std_err) lift[i] = median_lift; // accept only if lift > 2*SE (~95% gate)
     }
-    if(nseen < 3) continue;
+    if(nseen < 3) continue; // too few populated bins -> identity
 
+    // interpolate lift over unseen bins (flat-extend the ends, linear between two seen bins)
     int prev = -1;
     for(int i = 0; i < DT_HL_KNEE_BINS; i++)
     {
@@ -3538,13 +3662,14 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
       if(prev < 0 && next < 0)
         lift[i] = 0.f;
       else if(prev < 0)
-        lift[i] = lift[next];
+        lift[i] = lift[next]; // flat-extend before the first seen bin
       else if(next < 0)
-        lift[i] = lift[prev];
+        lift[i] = lift[prev]; // flat-extend past the last seen bin
       else
-        lift[i] = lift[prev] + (lift[next] - lift[prev]) * (float)(i - prev) / (float)(next - prev);
+        lift[i] = lift[prev] + (lift[next] - lift[prev]) * (float)(i - prev) / (float)(next - prev); // linear
     }
 
+    // monotone raise-only clamp: cumulative max (rolloff bias grows toward clip), negatives dropped
     float running_max = 0.f;
     float lift_max = 0.f;
     for(int i = 0; i < DT_HL_KNEE_BINS; i++)
@@ -3553,6 +3678,7 @@ static cl_int _hl_knee_estimate_cl(const int devid, void *gd_void, cl_mem dev_in
       curves[c].lift[i] = running_max;
       lift_max = fmaxf(lift_max, running_max);
     }
+    // engage threshold: peak lift below ENGAGE = 0.005 is noise -> identity (no-op guarantee)
     curves[c].engaged = (lift_max >= DT_HL_KNEE_ENGAGE);
     if(!curves[c].engaged) memset(curves[c].lift, 0, sizeof(curves[c].lift));
   }
@@ -3578,7 +3704,9 @@ cleanup:
   return cl_err;
 }
 
-// Apply the engaged knee curves to the raw mosaic (colour filter array) on the device.
+// Step 2 application on the device: replace each engaged-channel band pixel v of the raw mosaic by
+// k^-1(v) = v + L(v) (the hl_knee_apply kernel does the per-pixel curve lookup). The per-channel
+// lift[] knot arrays are flattened and uploaded; engaged flags gate which channels are corrected.
 // Mirrors _hl_knee_apply_cfa on the CPU: any change here must be mirrored there and
 // re-validated with the HL_KNEECL_TEST self-test (_knee_cl_selftest).
 static cl_int _hl_knee_apply_cfa_cl(const int devid, void *gd_void, cl_mem dev_in, cl_mem dev_out,
@@ -3636,6 +3764,14 @@ static cl_int _hl_knee_apply_cfa_cl(const int devid, void *gd_void, cl_mem dev_i
 // validated path -- unify when the CPU drivers next change).
 // On success *remosaic_input_out points to `input` or to a knee-corrected CFA copy
 // (*input_corr_out, caller frees with dt_pixelpipe_cache_free_align).
+//
+// MATHS/PIPELINE BRIDGE -- the CPU "middle" of the OpenCL pipe (article §"The OpenCL pipe": GPU gather
+// and GPU remosaic bracket a host middle). It runs the once-per-image steps BETWEEN the gather and the
+// remosaic on host planes the GPU already produced: step 2 knee application (_hl_knee_apply_interpolated),
+// step 1b depth + segmentation (distance transform + _segment_clipped_regions), then steps 3-8 per region
+// via the CPU _region_guided_filter. Identical code to process_harmonic_bayer/xtrans' middle (kept as a
+// separate copy to avoid touching the validated CPU drivers); it is the fallback the device middle
+// (_harmonic_reconstruct_cl) drops to when the GPU middle cannot run.
 static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                       const dt_dev_pixelpipe_iop_t *piece, const float *const restrict input,
                                       float *const restrict interpolated, float *const restrict clipping_mask,
@@ -3702,6 +3838,7 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
       piece->dsc_in.processed_maximum[0], piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2],
       clips[0], clips[1], clips[2], (unsigned long long)nclipped, 100.0 * (double)nclipped / (double)npix, nreg);
 
+  // FLOW steps 3-8 (per region): CPU per-region reconstruction, same call as the CPU drivers.
   for(int region_index = 0; region_index < nreg; region_index++)
     _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
                           data->solid_color, data->iterations, data->noise_level);
@@ -3743,6 +3880,12 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
 // bit-identity with the CPU, so it must go through the full validation protocol.
 // Stage-1 fallback: full host roundtrip running the exact CPU driver (bit-identical to the
 // CPU pipe by construction). Used when any GPU gather/remosaic step fails.
+//
+// PIPELINE BRIDGE (article §"The OpenCL pipe", the bit-identical fallback): the single-channel raw
+// crosses the bus ONCE to the host (dt_opencl_copy_device_to_host), the whole CPU driver
+// (process_harmonic_bayer/xtrans -- all 8 steps, gather through remosaic) runs on it, and the result is
+// written back once (dt_opencl_write_host_to_device). No GPU kernels of this mode are used, so the output
+// is byte-for-byte the CPU path; the surrounding pipe still stays on the GPU (no scheduler-level fallback).
 static cl_int _harmonic_cl_roundtrip(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                      const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                                      const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
@@ -3759,9 +3902,11 @@ static cl_int _harmonic_cl_roundtrip(struct dt_iop_module_t *self, const dt_dev_
 
   if(IS_NULL_PTR(host_in) || IS_NULL_PTR(host_out)) goto error;
 
+  // bus crossing 1/2: pull the raw mosaic down to the host
   cl_err = dt_opencl_copy_device_to_host(devid, host_in, dev_in, roi_in->width, roi_in->height, sizeof(float));
   if(cl_err != CL_SUCCESS) goto error;
 
+  // run the exact CPU driver (all 8 steps) on the host copy -> bit-identical to the CPU pipe
   if((filters == 9u && process_harmonic_xtrans(self, pipe, piece, host_in, host_out, roi_in, roi_out, clips))
      || (filters != 9u && process_harmonic_bayer(self, pipe, piece, host_in, host_out, roi_in, roi_out, clips)))
   {
@@ -3769,6 +3914,7 @@ static cl_int _harmonic_cl_roundtrip(struct dt_iop_module_t *self, const dt_dev_
     goto error;
   }
 
+  // bus crossing 2/2: push the reconstructed CFA back to the device
   cl_err
       = dt_opencl_write_host_to_device(devid, host_out, dev_out, roi_out->width, roi_out->height, sizeof(float));
 
@@ -3789,6 +3935,15 @@ error:
 // per-region reconstruction, all on device buffers. Returns CL_SUCCESS when the whole middle
 // ran on the GPU; any failure leaves the caller to run the host middle instead. corr_out
 // receives the knee-corrected 1-channel CFA buffer when the knee engages (caller releases).
+//
+// PIPELINE BRIDGE (article §"The OpenCL pipe", the device-resident middle): the once-per-image steps
+// run on device buffers -- step 2 knee, step 1b segmentation SUPPORT (only the byte seed/member masks
+// come down and the depth plane goes up; the Euclidean distance transform and connected-component flood
+// fill stay on the host because they are inherently serial), then steps 3-8 per region. The per-region
+// loop ROUTES each region by size: big regions stay device-resident (_region_guided_filter_cl); regions
+// at or below DT_HL_CL_CPU_REGION_PX cross the bus once and take the CPU path (_region_cpu_offload_cl),
+// because a device region pays ~1000 kernel launches that a small hole cannot amortize. Only byte masks,
+// the depth plane and small reduction partials ever cross the bus.
 static cl_int _harmonic_reconstruct_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                        const dt_dev_pixelpipe_iop_t *piece, cl_mem raw_buf, cl_mem interp_buf,
                                        cl_mem mask_buf, cl_mem *corr_out, const dt_iop_roi_t *const roi_in,
@@ -3921,22 +4076,29 @@ static cl_int _harmonic_reconstruct_cl(struct dt_iop_module_t *self, const dt_de
   if(cl_err != CL_SUCCESS) goto out;
 
   {
+    // ROUTING THRESHOLD (article §"The OpenCL pipe"): DT_HL_CL_CPU_REGION_PX (~1 Mpx padded window),
+    // env-overridable for tuning. It is the padded-window pixel count above which the ~1000-launch GPU
+    // per-region path pays off; below it, one bus crossing to the CPU is cheaper.
     size_t cpu_px = DT_HL_CL_CPU_REGION_PX;
     const char *override_env = getenv("HL_CL_CPU_PX");
     if(override_env) cpu_px = (size_t)strtoull(override_env, NULL, 10);
     int n_cpu = 0;
     for(int region_index = 0; region_index < nreg && cl_err == CL_SUCCESS; region_index++)
     {
+      // routing key = the PADDED read-window area (rx0..rx1 x ry0..ry1), the same window either path
+      // reconstructs -- not the bare clipped bbox
       const size_t region_px = (size_t)(regions[region_index].rx1 - regions[region_index].rx0 + 1)
                                * (size_t)(regions[region_index].ry1 - regions[region_index].ry0 + 1);
       if(region_px <= cpu_px)
       {
+        // small region: cross the bus once and reconstruct on the CPU (bit-identical to the CPU driver)
         cl_err = _region_cpu_offload_cl(devid, global_data, interp_buf, mask_buf, depth_dev, width,
                                         &regions[region_index], pipe, data->solid_color, data->iterations,
                                         data->noise_level);
         n_cpu++;
       }
       else
+        // big region: stay device-resident for the whole rebuild
         cl_err = _region_guided_filter_cl(devid, global_data, interp_buf, mask_buf, depth_dev, width,
                                           &regions[region_index], pipe, data->solid_color);
     }
@@ -3977,6 +4139,17 @@ out:
 // (bilinear interpolation + clip mask + feathering), the reconstruction middle (fully on GPU
 // when possible, otherwise on downloaded host planes), and the GPU remosaic. Any GPU failure
 // falls back to _harmonic_cl_roundtrip (bit-identical CPU path through a host roundtrip).
+//
+// MATHS/PIPELINE BRIDGE (article §"The OpenCL pipe"): the hybrid CPU-orchestrated GPU driver. GPU gather
+// (step 1a: kernel_highlights_bilinear_and_mask + box_blur -> [R,G,B,norm] planes and clip mask, on
+// device) and GPU remosaic (the terminal composite) BRACKET a middle that runs one of three ways, in
+// preference order: (1) _harmonic_reconstruct_cl -- steps 2 + 1b + 3-8 device-resident, small regions
+// offloaded per the ~1 Mpx routing threshold, only masks/depth/partials crossing the bus; (2) if the
+// device middle cannot run (fp64 device, grain requested, oversized hole), the working planes are pulled
+// down and _harmonic_reconstruct_host runs the CPU middle, then the reconstruction is uploaded and the
+// GPU remosaic still runs; (3) if any GPU gather/remosaic step itself fails, the whole thing falls back
+// to _harmonic_cl_roundtrip (bit-identical to the CPU path). The article steps 3-8 maths live in
+// _region_guided_filter_cl / _region_guided_filter; this driver is pure host<->device routing glue.
 static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                   const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                                   const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
@@ -4175,6 +4348,7 @@ static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pix
         HL_CL_RELEASE(clipping_mask);
         staged = 1;
       }
+      // preference 1: the device-resident middle (steps 2 + 1b + 3-8 on device, small regions offloaded)
       gpu_err = _harmonic_reconstruct_cl(self, pipe, piece, raw_buf, interp_buf, mask_buf, &corr_buf, roi_in,
                                          clips, norm_host, dev_xtrans, knee);
     }
@@ -4333,14 +4507,16 @@ static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pix
     dt_opencl_release_mem_object(interp_buf);
     dt_opencl_release_mem_object(mask_buf);
     dt_opencl_release_mem_object(corr_buf);
-    if(gpu_err == CL_SUCCESS) goto remosaic;
+    if(gpu_err == CL_SUCCESS) goto remosaic; // device middle succeeded -> straight to the GPU remosaic
     // GPU middle unavailable (fp64 device, grain requested, oversized hole...): host middle below
     HL_CL_RELEASE(corr_cl);
     dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] harmonic GPU middle failed (%i), using the host middle\n",
              gpu_err);
   }
 
-  // ---- download the working planes + raw (knee estimation reads the mosaic) ----
+  // ---- host-middle path (preference 2): the GPU gather succeeded but the device middle could not run.
+  //      Pull the gathered working planes down (the raw h_raw is already resident) so the CPU middle can
+  //      run the same steps 2 + 1b + 3-8 it would on a CPU pipe ----
   h_interp = dt_pixelpipe_cache_alloc_align_float(npix * 4, pipe);
   h_mask = dt_pixelpipe_cache_alloc_align_float(npix * 4, pipe);
   if(IS_NULL_PTR(h_interp) || IS_NULL_PTR(h_mask)) goto fallback;
@@ -4355,11 +4531,14 @@ static cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pix
                                 &remosaic_input, &input_corr, knee))
     goto fallback;
 
-  // ---- upload the reconstruction (+ the knee-corrected CFA when engaged) and remosaic ----
+  // ---- upload the reconstructed planes back to the device so the GPU remosaic below closes the pipe ----
   cl_err = dt_opencl_write_host_to_device(devid, h_interp, interpolated, width, height, sizeof(float) * 4);
   if(cl_err != CL_SUCCESS) goto fallback;
 
 remosaic:;
+  // FLOW: GPU remosaic + composite (the pipe's terminal node, reached from either middle). Pick the base
+  // CFA the composite reads on unmasked sites: the knee-corrected copy (corr_cl / input_corr) when the
+  // knee engaged, else the pristine dev_in -- so valid pixels match the reconstruction's basis.
   cl_mem remosaic_in_cl = dev_in;
   if(corr_cl)
     remosaic_in_cl = corr_cl;
@@ -4461,6 +4640,7 @@ fallback:
   dt_pixelpipe_cache_free_align(h_mask);
   dt_pixelpipe_cache_free_align(h_raw);
   dt_pixelpipe_cache_free_align(input_corr);
+  // preference 3 (last resort): a GPU gather/remosaic step failed -> the bit-identical host roundtrip.
   return _harmonic_cl_roundtrip(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
 }
 #endif // HAVE_OPENCL

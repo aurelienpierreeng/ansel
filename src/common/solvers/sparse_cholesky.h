@@ -70,6 +70,17 @@ static void _sp_chol_free(_sp_chol_t *factor)
 // band (width = the stencil reach) comes last -- the elimination order that keeps Cholesky
 // fill-in at the 2D-optimal O(N log N). Iterative with an explicit range stack.
 // unknown_x/unknown_y give each unknown's pixel coordinates.
+//
+// Nested dissection (maths bridge): the unknowns are pixels of a 2D grid, and the PDE operators
+// factored here (biharmonic Delta^2 L_sum = 0 for the luminance dome, screened Poisson
+// Delta^2 r - lambda r = ... for the chrominance, anisotropic div(D grad p) = 0 for the coefficient
+// transport -- article "Guided laplacian highlights", sections "Biharmonic inpainting" and "The
+// optimization problem", energies E_bihar / E_chrominance / E_transport) are all local stencils, so
+// two grid halves separated by a band of width `reach` interact ONLY through that band. Ordering
+// each half's unknowns before the separator makes the halves' blocks factor with no mutual fill;
+// only the (small) separator block fills. Recursing gives O(N log N) factor nonzeros / O(N^1.5)
+// flops, versus O(N^1.5) fill / O(N^2) flops for the natural raster order. This geometric bisection
+// replaces the generic approximate-minimum-degree heuristic a black-box sparse solver would need.
 static void _sp_nd_order(int *const restrict unknown_ids, const int count, const int *const restrict unknown_x,
                          const int *const restrict unknown_y, const int reach)
 {
@@ -107,6 +118,8 @@ static void _sp_nd_order(int *const restrict unknown_ids, const int count, const
     const int extent_y = ymax - ymin + 1;
     if(MAX(extent_x, extent_y) <= 2 * reach + 1) continue; // too thin to dissect
 
+    // bisect along the longer axis (keeps the separator band as short as possible => less fill),
+    // cutting at the midpoint coordinate of that axis
     const int split_on_x = (extent_x >= extent_y);
     const int *const coord = split_on_x ? unknown_x : unknown_y;
     const int cut_position = (split_on_x ? xmin + extent_x / 2 : ymin + extent_y / 2);
@@ -160,6 +173,11 @@ static void _sp_nd_order(int *const restrict unknown_ids, const int count, const
 // Elimination tree (the column dependency order of the factorization: each column's parent is
 // the first column that uses its result) of an upper-triangular compressed-sparse-column (CSC)
 // matrix. Liu's classic algorithm with path compression via `ancestor`.
+//
+// Maths bridge: parent[k] = min{ i > k : L[i,k] != 0 } = the first row below the diagonal in
+// column k of the factor L, i.e. the first column whose elimination consumes column k's result.
+// This forest is exactly the column-dependency DAG the GPU level schedule parallelizes (columns
+// with disjoint root-paths are independent); on the CPU it drives _sp_ereach's pattern walk.
 static void _sp_etree(const int dimension, const int *const restrict col_ptr, const int *const restrict row_index,
                       int *const restrict parent, int *const restrict ancestor)
 {
@@ -174,11 +192,13 @@ static void _sp_etree(const int dimension, const int *const restrict col_ptr, co
     for(int entry = col_ptr[k]; entry < col_ptr[k + 1]; entry++)
     {
       int i = row_index[entry];
+      // climb the partial tree from each above-diagonal nonzero A[i,k] (i < k) toward the root,
+      // compressing the path so every visited node points directly at k
       while(i != -1 && i < k)
       {
         const int next_ancestor = ancestor[i];
         ancestor[i] = k;
-        if(next_ancestor == -1) parent[i] = k;
+        if(next_ancestor == -1) parent[i] = k; // i had no parent yet: k is its first user => parent[i] = k
         i = next_ancestor;
       }
     }
@@ -192,6 +212,12 @@ static void _sp_etree(const int dimension, const int *const restrict col_ptr, co
 // returned in topological (dependency) order. Returns `stack_top` such that
 // pattern_stack[stack_top..dimension-1] holds the pattern. mark[] holds per-k marks
 // (mark[i] == k means visited).
+//
+// Maths bridge: row k of L has a nonzero L[k,j] exactly for the columns j reachable from the
+// above-diagonal nonzeros of A's column k by walking parent[] up the elimination tree (the
+// symbolic Cholesky pattern theorem). Those j are precisely the columns whose contribution the
+// numeric factor must subtract when forming row k -- returned deepest-ancestor-last so the numeric
+// sweep applies them in valid dependency order (each L[j,*] already finalized when read).
 static int _sp_ereach(const int dimension, const int *const restrict col_ptr, const int *const restrict row_index,
                       const int k, const int *const restrict parent, int *const restrict pattern_stack,
                       int *const restrict mark)
@@ -222,8 +248,14 @@ static int _sp_ereach(const int dimension, const int *const restrict col_ptr, co
   return stack_top;
 }
 
-// Up-looking Cholesky factorization A = L * L^T (one row of L at a time) of an upper-triangular
-// compressed-sparse-column symmetric-positive-definite matrix.
+// Up-looking sparse Cholesky  A = L * L^T  (Cholesky-Banachiewicz, row by row): factors the SPD
+// system of the region PDE / biharmonic dome (article "Guided laplacian highlights", sections
+// "Biharmonic inpainting" and "The optimization problem"). For each row k the elimination reach
+// (_sp_ereach) gives the columns j < k that contribute; the classic recurrences realized below are
+//   off-diagonal   L[k,j] = ( A[k,j] - sum_{m<j} L[k,m] L[j,m] ) / L[j,j]      (j in reach of k)
+//   diagonal       L[k,k] = sqrt( A[k,k] - sum_{j<k} L[k,j]^2 )
+// implemented with a dense scratch row `work[]` (the running numerator A[k,*] - accumulated
+// products) that is scattered from column A[:,k], reduced by each reach column j, then read off.
 // Notation bridge (math symbol -> code name):
 //   A          the input matrix         -> matrix_col_ptr / matrix_row_index / matrix_values
 //   L          the computed factor      -> factor->col_ptr / factor->row_index / factor->values
@@ -291,7 +323,8 @@ static _sp_chol_t *_sp_chol_factor(const int dimension, const int *const restric
   for(int k = 0; k < dimension; k++)
   {
     const int reach_top = _sp_ereach(dimension, matrix_col_ptr, matrix_row_index, k, parent, elim_stack, mark);
-    // scatter column k of A (rows <= k)
+    // seed the scratch row with column k of A: work[i] = A[k,i] for i<k (numerator of L[k,i]),
+    // pivot = A[k,k] (numerator of the diagonal, before the sum of squares is subtracted)
     double pivot = 0.0;
     for(int entry = matrix_col_ptr[k]; entry < matrix_col_ptr[k + 1]; entry++)
     {
@@ -304,18 +337,24 @@ static _sp_chol_t *_sp_chol_factor(const int dimension, const int *const restric
     for(int reach_pos = reach_top; reach_pos < dimension; reach_pos++)
     {
       const int j = elim_stack[reach_pos];
+      // L[k,j] = ( A[k,j] - sum_{m<j} L[k,m] L[j,m] ) / L[j,j]: work[j] holds the fully-reduced
+      // numerator here (every earlier reach column m<j already subtracted its L[k,m]L[j,m]),
+      // values[col_ptr[j]] = L[j,j] (the diagonal is stored first in each column)
       const double multiplier = work[j] / factor->values[factor->col_ptr[j]];
       work[j] = 0.0;
+      // apply column j's contribution to the still-pending numerators: work[i] -= L[i,j] * L[k,j]
+      // for the below-diagonal rows i of column j (this is the "up-looking" left-of-diagonal update)
       for(int entry = factor->col_ptr[j] + 1; entry < col_fill[j]; entry++)
         work[factor->row_index[entry]] -= factor->values[entry] * multiplier;
-      pivot -= multiplier * multiplier;
+      pivot -= multiplier * multiplier; // subtract L[k,j]^2 from the diagonal accumulator A[k,k]
+      // store L[k,j] as entry (row k) of column j -- CSC lower-triangular: (k,j) with k>j lives in column j
       const int slot = col_fill[j]++;
       factor->row_index[slot] = k;
       factor->values[slot] = multiplier;
     }
-    if(!(pivot > 0.0)) goto fail; // not positive definite (or NaN)
+    if(!(pivot > 0.0)) goto fail; // pivot = A[k,k] - sum_j L[k,j]^2 <= 0 (or NaN): matrix not SPD
     factor->row_index[factor->col_ptr[k]] = k;
-    factor->values[factor->col_ptr[k]] = sqrt(pivot);
+    factor->values[factor->col_ptr[k]] = sqrt(pivot); // L[k,k] = sqrt( A[k,k] - sum_j L[k,j]^2 )
   }
 
   dt_pixelpipe_cache_free_align(parent);
@@ -344,21 +383,24 @@ fail:
 // col_ptr); b, the intermediate y, and the solution x all live in `rhs`, overwritten in place
 // (rhs holds b on entry, y after the forward sweep, x after the backward sweep).
 // `forward_value` = y[j]; `accum` = x[j] accumulated before its final divide by the diagonal.
+// Two triangular solves realize x = A^{-1} b via  L y = b  then  L^T x = y.
 static void _sp_chol_solve(const _sp_chol_t *const factor, double *const restrict rhs)
 {
   const int dimension = factor->dimension;
-  for(int j = 0; j < dimension; j++) // forward: L y = b
+  for(int j = 0; j < dimension; j++) // forward: L y = b  (column-oriented: y_j = (b_j - sum_{i<j} L[j,i] y_i)/L[j,j])
   {
-    const double forward_value = rhs[j] / factor->values[factor->col_ptr[j]];
+    const double forward_value = rhs[j] / factor->values[factor->col_ptr[j]]; // y_j = (reduced b_j) / L[j,j]
     rhs[j] = forward_value;
+    // once y_j is known, push its contribution forward: b_i -= L[i,j] y_j for all rows i>j of column j
     for(int entry = factor->col_ptr[j] + 1; entry < factor->col_ptr[j + 1]; entry++)
       rhs[factor->row_index[entry]] -= factor->values[entry] * forward_value;
   }
-  for(int j = dimension - 1; j >= 0; j--) // backward: L^T x = y
+  for(int j = dimension - 1; j >= 0; j--) // backward: L^T x = y  (x_j = (y_j - sum_{i>j} L[i,j] x_i)/L[j,j])
   {
-    double accum = rhs[j];
+    double accum = rhs[j]; // y_j
+    // gather the already-solved x_i (rows i>j of column j = columns i>j of row j in L^T)
     for(int entry = factor->col_ptr[j] + 1; entry < factor->col_ptr[j + 1]; entry++)
       accum -= factor->values[entry] * rhs[factor->row_index[entry]];
-    rhs[j] = accum / factor->values[factor->col_ptr[j]];
+    rhs[j] = accum / factor->values[factor->col_ptr[j]]; // x_j = (y_j - sum_{i>j} L[i,j] x_i) / L[j,j]
   }
 }

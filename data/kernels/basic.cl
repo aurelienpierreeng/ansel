@@ -658,6 +658,10 @@ interpolate_and_mask(read_only image2d_t input,
                      const int filters,
                      const int width, const int height)
 {
+  // Step 1 (article "The algorithm"), GPU twin of CPU _interpolate_and_mask: bilinear demosaic of
+  // the raw CFA to [R,G,B,norm] + a binary per-channel validity mask keyed on v > 0.995*c (clips[]
+  // already folds in the 0.995 factor). Every channel gets a value everywhere -> regression, not
+  // inpainting. Masks stay binary; borders mirror (see below).
   // Bilinear interpolation
   const int j = get_global_id(0); // = x
   const int i = get_global_id(1); // = y
@@ -697,13 +701,14 @@ interpolate_and_mask(read_only image2d_t input,
 
     if(c == GREEN) // green pixel
     {
-      val_g = center;
-      G_clipped = (center > clips[GREEN]);
+      val_g = center;                          // channel measured here: pass raw through
+      G_clipped = (center > clips[GREEN]);      // clip flag: raw > 0.995*c
     }
     else // non-green pixel
     {
-      // interpolate inside an X/Y cross
+      // interpolate inside an X/Y cross: G = mean of {N,S,E,W}, equal 1/4 bilinear weights
       val_g = (north + south + east + west) / 4.f;
+      // validity = OR of the 4 contributors' clip flags
       G_clipped = (north > clips[GREEN] || south > clips[GREEN] || east > clips[GREEN] || west > clips[GREEN]);
     }
 
@@ -716,22 +721,25 @@ interpolate_and_mask(read_only image2d_t input,
     {
       if(FC(i + 1, j, filters) == RED)
       {
+        // red neighbours above/below: R = mean of {N,S}, equal 1/2 weights
         // we are on a red column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
         val_r = (north + south) / 2.f;
-        R_clipped = (north > clips[RED] || south > clips[RED]);
+        R_clipped = (north > clips[RED] || south > clips[RED]);   // OR of the 2 contributors
       }
       else if(FC(i, j + 1, filters) == RED)
       {
+        // red neighbours left/right: R = mean of {W,E}, equal 1/2 weights
         // we are on a red row, interpolate row-wise
         val_r = (west + east) / 2.f;
-        R_clipped = (west > clips[RED] || east > clips[RED]);
+        R_clipped = (west > clips[RED] || east > clips[RED]);     // OR of the 2 contributors
       }
       else
       {
+        // red neighbours at the 4 diagonal corners: R = mean of the square, equal 1/4 weights
         // we are on a blue row, so interpolate inside a square
         val_r = (north_west + north_east + south_east + south_west) / 4.f;
         R_clipped = (north_west > clips[RED] || north_east > clips[RED] || south_west > clips[RED]
-                      || south_east > clips[RED]);
+                      || south_east > clips[RED]);                // OR of the 4 contributors
       }
     }
 
@@ -744,35 +752,46 @@ interpolate_and_mask(read_only image2d_t input,
     {
       if(FC(i + 1, j, filters) == BLUE)
       {
+        // blue neighbours above/below: B = mean of {N,S}, equal 1/2 weights
         // we are on a blue column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
         val_b = (north + south) / 2.f;
-        B_clipped = (north > clips[BLUE] || south > clips[BLUE]);
+        B_clipped = (north > clips[BLUE] || south > clips[BLUE]);   // OR of the 2 contributors
       }
       else if(FC(i, j + 1, filters) == BLUE)
       {
+        // blue neighbours left/right: B = mean of {W,E}, equal 1/2 weights
         // we are on a red row, so interpolate row-wise
         val_b = (west + east) / 2.f;
-        B_clipped = (west > clips[BLUE] || east > clips[BLUE]);
+        B_clipped = (west > clips[BLUE] || east > clips[BLUE]);     // OR of the 2 contributors
       }
       else
       {
+        // blue neighbours at the 4 diagonal corners: B = mean of the square, equal 1/4 weights
         // we are on a red row, so interpolate inside a square
         val_b = (north_west + north_east + south_east + south_west) / 4.f;
 
         B_clipped = (north_west > clips[BLUE] || north_east > clips[BLUE] || south_west > clips[BLUE]
-                    || south_east > clips[BLUE]);
+                    || south_east > clips[BLUE]);                   // OR of the 4 contributors
       }
     }
   }
 
+  // w slot = magnitude norm sqrt(R^2+G^2+B^2); mask w = any-clip opacity = OR of the 3 flags.
   float4 rgb_pixel = {val_r, val_g, val_b, native_sqrt(val_r * val_r + val_g * val_g + val_b * val_b) };
   float4 clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
   const float4 wb4 = { white_balance[0], white_balance[1], white_balance[2], white_balance[3] };
+  // Local channel normalization (article "Local channel normalization"): divide each channel by
+  // wb4 = the tile-average of that CFA colour (from highlights_normalize_reduce_*), a crude local
+  // white balance so guide selection is not biased by channel magnitude.
   // clamp at zero like the CPU path (black-subtracted raw can dip negative)
   write_imagef(interpolated, (int2)(j, i), fmax(rgb_pixel / wb4, 0.f));
-  write_imagef(clipping_mask, (int2)(j, i), clipped);
+  write_imagef(clipping_mask, (int2)(j, i), clipped);  // binary flags, no feathering here
 }
 
+// GPU twin of CPU _compute_laplacian_normalization, stage 1 of a 2-pass parallel reduction.
+// Each pixel contributes value/N (N = width*height) into its CFA colour lane; the workgroup sums
+// its tile into local memory, and the group total is written to accu[]. Stage 2 (reduce_second)
+// sums the per-group totals -> per-channel tile averages = the local white balance used above.
 kernel void
 highlights_normalize_reduce_first(read_only image2d_t in, const int width, const int height,
                                   global float4 *accu, const unsigned int filters,
@@ -788,16 +807,17 @@ highlights_normalize_reduce_first(read_only image2d_t in, const int width, const
 
   const float n_pixels = (float)(width * height);
   const int inside = (x < width && y < height);
-  const int c = inside ? FC(y + ry, x + rx, filters) : -1;
-  const float pixel = inside ? read_imagef(in, sampleri, (int2)(x, y)).x / n_pixels : 0.f;
+  const int c = inside ? FC(y + ry, x + rx, filters) : -1;  // CFA colour (self-correcting: +rx,+ry)
+  const float pixel = inside ? read_imagef(in, sampleri, (int2)(x, y)).x / n_pixels : 0.f; // value/N
 
-  buffer[l] = (float4)(c == RED ? pixel : 0.f,
+  buffer[l] = (float4)(c == RED ? pixel : 0.f,    // route this pixel's value/N into its colour lane
                        c == GREEN ? pixel : 0.f,
                        c == BLUE ? pixel : 0.f,
                        1.f);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
+  // tree reduction inside the workgroup: sum all lanes into buffer[0] (per-colour partial sums)
   const int lsz = mul24(xlsz, ylsz);
   for(int offset = lsz / 2; offset > 0; offset /= 2)
   {
@@ -810,10 +830,11 @@ highlights_normalize_reduce_first(read_only image2d_t in, const int width, const
     const int xgid = get_group_id(0);
     const int ygid = get_group_id(1);
     const int xgsz = get_num_groups(0);
-    accu[mad24(ygid, xgsz, xgid)] = buffer[0];
+    accu[mad24(ygid, xgsz, xgid)] = buffer[0];  // one partial (R,G,B) sum per workgroup
   }
 }
 
+// X-Trans twin of highlights_normalize_reduce_first (self-correcting CFA lookup on the raw table).
 kernel void
 highlights_normalize_reduce_first_xtrans(read_only image2d_t in, const int width, const int height,
                                          global float4 *accu, const int rx, const int ry,
@@ -856,6 +877,9 @@ highlights_normalize_reduce_first_xtrans(read_only image2d_t in, const int width
   }
 }
 
+// Stage 2 of the normalization reduction: sum every per-workgroup partial from stage 1 into a
+// single (sum_R, sum_G, sum_B) = the per-channel tile averages (each already carries the /N from
+// stage 1). This is the GPU equivalent of _compute_laplacian_normalization's final sums.
 kernel void
 highlights_normalize_reduce_second(const global float4 *input, global float4 *result,
                                    const int length, local float4 *buffer)
@@ -863,6 +887,7 @@ highlights_normalize_reduce_second(const global float4 *input, global float4 *re
   int x = get_global_id(0);
   float4 sum = (float4)0.f;
 
+  // grid-stride pass: each thread accumulates a strided subset of the partial sums
   while(x < length)
   {
     sum.xyz += input[x].xyz;
@@ -898,6 +923,9 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
                             global const unsigned char (*const xtrans)[6],
                             global const int (*const lookup)[6][32])
 {
+  // Step 1 (article "The algorithm"), X-Trans GPU twin of _interpolate_and_mask_xtrans: bilinear
+  // demosaic to [R,G,B,norm] + binary per-channel validity (v > 0.995*c). Interior pixels use the
+  // precomputed 6x6-phase lookup; the border ring averages the in-tile support only.
   const int j = get_global_id(0);
   const int i = get_global_id(1);
 
@@ -956,10 +984,11 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
       const int y = (short)(offset >> 16);
       const int color = ip[2];
       const float value = read_imagef(input, samplerA, (int2)(j + x, i + y)).x;
-      sum[color] += value * ip[1];
-      used_clipped[color] |= (value > clips[color]);
+      sum[color] += value * ip[1];                    // accumulate weight*value (ip[1] = bilinear weight)
+      used_clipped[color] |= (value > clips[color]);  // OR the contributor's clip flag
     }
 
+    // missing colours = weighted mean sum/total; centre colour passes through (below)
     for(int k = 0; k < 2; k++, ip += 2)
     {
       const int color = ip[0];
@@ -999,12 +1028,14 @@ interpolate_and_mask_xtrans(read_only image2d_t input,
     }
   }
 
+  // w slot = magnitude norm sqrt(R^2+G^2+B^2); mask w = any-clip opacity = OR of the 3 flags.
   float4 rgb_pixel = { val_r, val_g, val_b, native_sqrt(val_r * val_r + val_g * val_g + val_b * val_b) };
   float4 clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
   const float4 wb4 = { white_balance[0], white_balance[1], white_balance[2], white_balance[3] };
+  // Local channel normalization: divide each channel by its tile-average wb4, clamp >= 0.
   // clamp at zero like the CPU path (black-subtracted raw can dip negative)
   write_imagef(interpolated, (int2)(j, i), fmax(rgb_pixel / wb4, 0.f));
-  write_imagef(clipping_mask, (int2)(j, i), clipped);
+  write_imagef(clipping_mask, (int2)(j, i), clipped);  // binary flags, no feathering here
 }
 
 
@@ -1033,12 +1064,14 @@ remosaic_and_replace(read_only image2d_t input,
   const int c = FC(i, j, filters);
   const float4 center = read_imagef(interpolated, sampleri, (int2)(j, i));
   float *rgb_channels = (float *)&center;
-  const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;
+  const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;  // any-clip weight (0/1)
+  // undo local channel normalization (x tile-average white_balance[c]), clamp >= 0
   const float reconstructed = fmax(rgb_channels[c] * white_balance[c], 0.f);
   float4 base = read_imagef(input, sampleri, (int2)(j, i));
+  // Refinement 2: on a clipped photosite the raw reading is a FLOOR -> base = max(raw, rec)
   if(clip_is_floor && read_imagef(input_raw, sampleri, (int2)(j, i)).x >= clips[c])
     base = fmax(base, reconstructed);
-  const float4 pix_out = opacity * reconstructed + (1.f - opacity) * base;
+  const float4 pix_out = opacity * reconstructed + (1.f - opacity) * base; // out = a*rec + (1-a)*base
   write_imagef(output, (int2)(j, i), pix_out);
 }
 
@@ -1061,18 +1094,23 @@ remosaic_and_replace_xtrans(read_only image2d_t input,
 
   if(j >= width || i >= height) return;
 
-  const int c = FCxtrans(ry + i, rx + j, xtrans);
+  const int c = FCxtrans(ry + i, rx + j, xtrans);   // self-correcting CFA lookup (+rx,+ry on raw table)
   const float4 center = read_imagef(interpolated, sampleri, (int2)(j, i));
   float *rgb_channels = (float *)&center;
-  const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;
+  const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;  // any-clip weight (0/1)
+  // undo local channel normalization (x tile-average white_balance[c]), clamp >= 0
   const float reconstructed = fmax(rgb_channels[c] * white_balance[c], 0.f);
   float4 base = read_imagef(input, sampleri, (int2)(j, i));
+  // Refinement 2: on a clipped photosite the raw reading is a FLOOR -> base = max(raw, rec)
   if(clip_is_floor && read_imagef(input_raw, sampleri, (int2)(j, i)).x >= clips[c])
     base = fmax(base, reconstructed);
-  const float4 pix_out = opacity * reconstructed + (1.f - opacity) * base;
+  const float4 pix_out = opacity * reconstructed + (1.f - opacity) * base; // out = a*rec + (1-a)*base
   write_imagef(output, (int2)(j, i), pix_out);
 }
 
+// 5x5 box average = mask feathering (article "Feathering the mask"): smooths a binary clip mask
+// into a soft opacity in [0,1]. (In the harmonic mode the compositing masks are otherwise binary
+// end-to-end; this box blur is the sole smoothing step, shared with the 2021 mode.)
 kernel void
 box_blur_5x5(read_only image2d_t in,
              write_only image2d_t out,
@@ -1083,8 +1121,8 @@ box_blur_5x5(read_only image2d_t in,
 
   if(x >= width || y >= height) return;
 
-  float4 accum = 0.f;
-  int hits = 0;
+  float4 accum = 0.f;   // sum of in-bounds taps
+  int hits = 0;         // number of taps actually inside the image (shrinking window at borders)
 
   // shrinking window at the borders (average over the in-bounds taps only): matches the CPU
   // dt_box_mean, whose border normalization uses the actual hit count -- the previous
@@ -1099,7 +1137,7 @@ box_blur_5x5(read_only image2d_t in,
       hits++;
     }
 
-  write_imagef(out, (int2)(x, y), accum / (float)hits);
+  write_imagef(out, (int2)(x, y), accum / (float)hits);   // mean over the in-bounds taps only
 }
 
 

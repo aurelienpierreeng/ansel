@@ -1170,6 +1170,11 @@ static void _interpolate_and_mask(const float *const restrict input,
   dt_aligned_pixel_t clips;
   for_four_channels(c) clips[c] = clips_in[c] * det_scale[c];
 
+  // Step 1 (article "The algorithm"): bilinear demosaic of the raw CFA to a throwaway [R,G,B,norm]
+  // buffer, plus a binary per-channel validity mask keyed on the clip flag v > 0.995*c (here
+  // clips[] already folds in the 0.995 detection factor and the det_scale band override above).
+  // Every channel gets a value at every pixel so the downstream guided fit is a regression, not
+  // an inpainting, problem. Refinements: masks stay binary (0/1), borders mirror (see below).
   // Bilinear interpolation
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
@@ -1212,13 +1217,16 @@ static void _interpolate_and_mask(const float *const restrict input,
 
         if(c == GREEN) // green pixel
         {
-          G = center;
-          G_clipped = (center > clips[GREEN]);
+          G = center;                            // channel measured here: pass the raw value through
+          G_clipped = (center > clips[GREEN]);   // clip flag: raw > 0.995*c
         }
         else // non-green pixel
         {
-          // interpolate inside an X/Y cross
+          // interpolate inside an X/Y cross: green sits on the 4 orthogonal neighbours (Bayer),
+          // so G = mean of {N,S,E,W} = equal 1/4 bilinear weights over the valid green support.
           G = (north + south + east + west) / 4.f;
+          // validity is the OR of the neighbours' clip flags (a channel counts as clipped if ANY
+          // photosite that fed its interpolation was itself clipped).
           G_clipped = (north > clips[GREEN] || south > clips[GREEN] || east > clips[GREEN] || west > clips[GREEN]);
         }
 
@@ -1231,22 +1239,25 @@ static void _interpolate_and_mask(const float *const restrict input,
         {
           if(FC(i + 1, j, filters) == RED)
           {
+            // red neighbours are directly above/below: R = mean of {N,S}, equal 1/2 weights
             // we are on a red column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
             R = (north + south) / 2.f;
-            R_clipped = (north > clips[RED] || south > clips[RED]);
+            R_clipped = (north > clips[RED] || south > clips[RED]);   // OR of the 2 contributors
           }
           else if(FC(i, j + 1, filters) == RED)
           {
+            // red neighbours are left/right: R = mean of {W,E}, equal 1/2 weights
             // we are on a red row, interpolate row-wise
             R = (west + east) / 2.f;
-            R_clipped = (west > clips[RED] || east > clips[RED]);
+            R_clipped = (west > clips[RED] || east > clips[RED]);     // OR of the 2 contributors
           }
           else
           {
+            // red neighbours are the 4 diagonal corners: R = mean of the square, equal 1/4 weights
             // we are on a blue row, so interpolate inside a square
             R = (north_west + north_east + south_east + south_west) / 4.f;
             R_clipped = (north_west > clips[RED] || north_east > clips[RED] || south_west > clips[RED]
-                          || south_east > clips[RED]);
+                          || south_east > clips[RED]);                // OR of the 4 contributors
           }
         }
 
@@ -1259,35 +1270,44 @@ static void _interpolate_and_mask(const float *const restrict input,
         {
           if(FC(i + 1, j, filters) == BLUE)
           {
+            // blue neighbours are directly above/below: B = mean of {N,S}, equal 1/2 weights
             // we are on a blue column (FC(i-1) == FC(i+1) on Bayer), interpolate column-wise
             B = (north + south) / 2.f;
-            B_clipped = (north > clips[BLUE] || south > clips[BLUE]);
+            B_clipped = (north > clips[BLUE] || south > clips[BLUE]);   // OR of the 2 contributors
           }
           else if(FC(i, j + 1, filters) == BLUE)
           {
+            // blue neighbours are left/right: B = mean of {W,E}, equal 1/2 weights
             // we are on a blue row, interpolate row-wise
             B = (west + east) / 2.f;
-            B_clipped = (west > clips[BLUE] || east > clips[BLUE]);
+            B_clipped = (west > clips[BLUE] || east > clips[BLUE]);     // OR of the 2 contributors
           }
           else
           {
+            // blue neighbours are the 4 diagonal corners: B = mean of the square, equal 1/4 weights
             // we are on a red row, so interpolate inside a square
             B = (north_west + north_east + south_east + south_west) / 4.f;
 
             B_clipped = (north_west > clips[BLUE] || north_east > clips[BLUE] || south_west > clips[BLUE]
-                        || south_east > clips[BLUE]);
+                        || south_east > clips[BLUE]);                   // OR of the 4 contributors
           }
         }
       }
 
+      // ALPHA slot carries the magnitude norm = sqrt(R^2 + G^2 + B^2) (Euclidean, as coded);
+      // the any-clip opacity is the OR of the three per-channel validity flags.
       dt_aligned_pixel_t RGB = { R, G, B, sqrtf(sqf(R) + sqf(G) + sqf(B)) };
       dt_aligned_pixel_t clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
 
       for_each_channel(k, aligned(RGB, interpolated, clipping_mask, clipped, white_balance))
       {
         const size_t idx = (i * width + j) * 4 + k;
+        // Local channel normalization (article "Local channel normalization"): divide each channel
+        // by white_balance[k] = the tile-average of that CFA colour (from _compute_laplacian_
+        // normalization), a crude local white balance so the guide-selection variance is not biased
+        // toward whichever channel carries the largest raw numbers. Clamp >= 0 (raw can dip negative).
         interpolated[idx] = fmaxf(RGB[k] / white_balance[k], 0.f);
-        clipping_mask[idx] = clipped[k];
+        clipping_mask[idx] = clipped[k];    // store the binary flag; no feathering here (masks stay hard)
       }
     }
   
@@ -1307,6 +1327,11 @@ static void _compute_laplacian_normalization(const float *const restrict input,
                                              const uint8_t (*const xtrans)[6],
                                              dt_aligned_pixel_t normalization)
 {
+  // Local channel normalization (article "Local channel normalization"): for each CFA colour,
+  // compute its plain average over the whole ROI, sum_c = (1/N) * sum over photosites of colour c.
+  // Note the division by n_pixels here uses the FULL pixel count N (not the per-colour count), so
+  // these factors also carry the CFA fill fraction of each colour -- they are the exact divisors
+  // that _interpolate_and_mask/_remosaic later divide by / multiply back.
   float sum_R = 0.f;
   float sum_G = 0.f;
   float sum_B = 0.f;
@@ -1318,7 +1343,7 @@ static void _compute_laplacian_normalization(const float *const restrict input,
       const int c = (filters == 9u) ? FCxtrans((int)i, (int)j, roi_in, xtrans) : FC(i, j, filters);
       if(c < 0 || c > 2) continue;
 
-      const float value = input[i * roi_in->width + j] / n_pixels;
+      const float value = input[i * roi_in->width + j] / n_pixels; // accumulate value/N into its colour
       if(c == RED)
         sum_R += value;
       else if(c == GREEN)
@@ -1330,7 +1355,7 @@ static void _compute_laplacian_normalization(const float *const restrict input,
   normalization[RED] = sum_R;
   normalization[GREEN] = sum_G;
   normalization[BLUE] = sum_B;
-  normalization[ALPHA] = 1.f;
+  normalization[ALPHA] = 1.f;   // norm/opacity slot is untouched by the local white balance
 }
 
 /** Build the X-Trans bilinear interpolation lookup for the current ROI phase.
@@ -1357,9 +1382,12 @@ static void _build_xtrans_bilinear_lookup(int32_t lookup[6][6][32],
       for(int y = -1; y <= 1; y++)
         for(int x = -1; x <= 1; x++)
         {
+          // Separable bilinear tent weight: 1<<((y==0)+(x==0)) gives 4 on-axis-both (the centre,
+          // excluded below), 2 for an edge neighbour (one axis aligned), 1 for a diagonal corner --
+          // i.e. the {1,2,1}x{1,2,1} kernel of the same bilinear demosaic used on Bayer above.
           const int weight = 1 << ((y == 0) + (x == 0));
           const int color = FCxtrans(row + y, col + x, roi_in, xtrans);
-          if(color == f) continue;
+          if(color == f) continue;      // skip the centre's own colour: it is passed through as measured
           *ip++ = (y << 16) | (x & 0xffffu);
           *ip++ = weight;
           *ip++ = color;
@@ -1395,6 +1423,9 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
                                          const uint8_t (*const xtrans)[6],
                                          const size_t width, const size_t height)
 {
+  // Step 1 (article "The algorithm"), X-Trans twin of _interpolate_and_mask: bilinear demosaic to
+  // [R,G,B,norm] + a binary per-channel validity mask keyed on v > 0.995*c. The 6x6 X-Trans phase
+  // is 3x3-periodic in support geometry, resolved via the precomputed lookup for interior pixels.
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
@@ -1427,6 +1458,9 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
         for(int c = 0; c < 3; c++)
         {
           const int has_samples = (count[c] > 0);
+          // c==f: the measured centre colour passes through. Otherwise plain average over the
+          // available same-colour neighbours (equal weights on the shrunken border support), with
+          // the clip flag = OR of those neighbours' flags (or the centre's own for c==f).
           RGB[c] = (c == f || !has_samples) ? center : sum[c] / count[c];
           clipped[c] = (c == f || !has_samples) ? (center > clips[c]) : used_clipped[c];
         }
@@ -1454,27 +1488,37 @@ static void _interpolate_and_mask_xtrans(const float *const restrict input,
 
         // Normalize the two missing colors from the accumulated weights, then
         // restore the measured center color unchanged.
+        // RGB[color] = (sum of weight*value) / (sum of weights) = weighted bilinear mean.
         for(int k = 0; k < 2; k++, ip += 2)
         {
           const int color = ip[0];
           const int total = ip[1];
-          RGB[color] = (total > 0) ? sum[color] / total : center;
-          clipped[color] = used_clipped[color];
+          RGB[color] = (total > 0) ? sum[color] / total : center;   // weighted mean, else fall back
+          clipped[color] = used_clipped[color];                     // OR of the contributors' flags
         }
 
         const int f = *ip;
-        RGB[f] = center;
-        clipped[f] = (center > clips[f]);
+        RGB[f] = center;                     // centre colour: measured raw value passes through
+        clipped[f] = (center > clips[f]);    // clip flag: raw > 0.995*c
       }
 
+      // ALPHA slot = Euclidean magnitude norm sqrt(R^2+G^2+B^2); opacity = OR of the per-channel flags.
+      // NOTE (article cross-reference): this is the interpolated buffer's shared "norm" channel, and it
+      // is NOT the harmonic method's magnitude L_sum. The 2021 guided-laplacian mode consumes it (its
+      // a-trous ratio/norm split, see wavelets_process LAST_SCALE); the harmonic path only carries it and
+      // never reads it as a magnitude -- forcing it to R+G+B leaves all six ground-truth scenes
+      // bit-identical (verified). The article's L_sum = R+G+B is computed separately in the all-clip core
+      // (lum_accum in _region_guided_filter / the hl_lsb_hole kernel), which already matches the article.
       RGB[ALPHA] = sqrtf(sqf(RGB[RED]) + sqf(RGB[GREEN]) + sqf(RGB[BLUE]));
       clipped[ALPHA] = (clipped[RED] || clipped[GREEN] || clipped[BLUE]);
 
       for_each_channel(k, aligned(RGB, interpolated, clipping_mask, clipped, white_balance))
       {
         const size_t index = idx * 4 + k;
+        // Local channel normalization: divide by white_balance[k] = tile-average of that colour;
+        // clamp >= 0. Same crude local white balance as the Bayer path above.
         interpolated[index] = fmaxf(RGB[k] / white_balance[k], 0.f);
-        clipping_mask[index] = clipped[k];
+        clipping_mask[index] = clipped[k];   // binary flag, no feathering (masks stay hard)
       }
     }
   
@@ -1492,13 +1536,14 @@ static void _remosaic_and_replace(const float *const restrict input,
                                   const uint32_t filters,
                                   const size_t width, const size_t height)
 {
-  // Take RGB ratios and norm, reconstruct RGB and remosaic the image.
-  // With clip_is_floor, a clipped photosite's raw reading is treated as a FLOOR, not a
-  // measurement: under sensor rolloff the raw values of just-detected photosites sit at the
-  // detection threshold, below the true signal, and feathering the reconstruction toward them
-  // printed a V-shaped dip at every contour (the profile passes through the raw value). The
-  // blend base of clipped photosites can then only pull the result UP to the measured floor,
-  // never down to the biased reading. The 2021 mode keeps the historical blend (flag 0).
+  // Remosaic + composite (article "The algorithm", step "remosaic + composite").
+  // Compositing rule:  out = opacity*rec + (1 - opacity)*base.
+  // Refinement 2 (clipped raw is a FLOOR): with clip_is_floor set, for a clipped photosite
+  // base = max(raw, rec) instead of raw -- under sensor rolloff the raw reading of a just-detected
+  // photosite sits at the detection threshold, below the true signal, so it is a lower bound, not a
+  // measurement. Feathering the reconstruction toward it printed a V-shaped dip at every contour
+  // (the profile passes through the raw value); the floor lets the blend only pull UP to it, never
+  // down to the biased reading. The 2021 mode keeps the historical blend (flag 0).
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
@@ -1506,11 +1551,13 @@ static void _remosaic_and_replace(const float *const restrict input,
       const size_t c = FC(i, j, filters);
       const size_t idx = i * width + j;
       const size_t index = idx * 4;
-      const float opacity = clipping_mask[index + ALPHA];
+      const float opacity = clipping_mask[index + ALPHA];  // any-clip mask -> blend weight (0 or 1)
+      // Undo the local channel normalization: multiply the reconstructed channel back by its
+      // tile-average white_balance[c] to return to raw scale, clamp >= 0.
       const float reconstructed = fmaxf(interpolated[index + c] * white_balance[c], 0.f);
       float base = input[idx];
-      if(clip_is_floor && input_raw[idx] >= clips[c]) base = fmaxf(base, reconstructed);
-      output[idx] = opacity * reconstructed + (1.f - opacity) * base;
+      if(clip_is_floor && input_raw[idx] >= clips[c]) base = fmaxf(base, reconstructed); // floor
+      output[idx] = opacity * reconstructed + (1.f - opacity) * base; // out = a*rec + (1-a)*base
     }
   
 }
@@ -1529,7 +1576,8 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
                                          const uint8_t (*const xtrans)[6],
                                          const size_t width, const size_t height)
 {
-  // see _remosaic_and_replace for the clip_is_floor semantics
+  // see _remosaic_and_replace for the clip_is_floor semantics and the compositing rule
+  //   out = opacity*rec + (1 - opacity)*base,  base = max(raw, rec) on a clipped floor.
   __OMP_PARALLEL_FOR__(collapse(2))
   for(size_t i = 0; i < height; i++)
     for(size_t j = 0; j < width; j++)
@@ -1537,11 +1585,12 @@ static void _remosaic_and_replace_xtrans(const float *const restrict input,
       const size_t idx = i * width + j;
       const size_t index = idx * 4;
       const int c = FCxtrans((int)i, (int)j, roi_in, xtrans);
-      const float opacity = clipping_mask[index + ALPHA];
+      const float opacity = clipping_mask[index + ALPHA];  // any-clip mask -> blend weight (0 or 1)
+      // undo local channel normalization (x tile-average white_balance[c]), clamp >= 0
       const float reconstructed = fmaxf(interpolated[index + c] * white_balance[c], 0.f);
       float base = input[idx];
-      if(clip_is_floor && input_raw[idx] >= clips[c]) base = fmaxf(base, reconstructed);
-      output[idx] = opacity * reconstructed + (1.f - opacity) * base;
+      if(clip_is_floor && input_raw[idx] >= clips[c]) base = fmaxf(base, reconstructed); // floor
+      output[idx] = opacity * reconstructed + (1.f - opacity) * base; // out = a*rec + (1-a)*base
     }
   
 }
