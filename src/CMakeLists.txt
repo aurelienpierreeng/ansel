@@ -155,6 +155,7 @@ FILE(GLOB SOURCE_FILES
   "develop/develop.c"
   "develop/dev_history.c"
   "develop/dev_pixelpipe.c"
+  "develop/dev_snapshot.c"
   "develop/imageop.c"
   "develop/imageop_math.c"
   "develop/imageop_gui.c"

@@ -38,19 +38,17 @@
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/metadata.h"
-#include "common/mipmap_cache.h"
 #include "common/selection.h"
 #include "common/styles.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "develop/dev_snapshot.h"
 #include "dtgtk/thumbnail.h"
 
 #include "gui/gtk.h"
 #include "gui/styles.h"
 #include "libs/lib.h"
-
-#define DUPLICATE_COMPARE_SIZE 40
 
 DT_MODULE(1)
 
@@ -59,17 +57,9 @@ static sqlite3_stmt *_duplicate_versions_stmt = NULL;
 typedef struct dt_lib_duplicate_t
 {
   GtkWidget *duplicate_box;
-  int32_t imgid;
-  gboolean busy;
-  int cur_final_width;
-  int cur_final_height;
-  int32_t preview_width;
-  int32_t preview_height;
-  gboolean allow_zoom;
-
-  cairo_surface_t *preview_surf;
-  float preview_zoom;
-  int preview_id;
+  int32_t imgid;                 // duplicate currently held under mouse press, UNKNOWN_IMAGE if none
+  dt_dev_snapshot_t preview;     // hold-to-preview render + pan/zoom-synced crop cache, see develop/dev_snapshot.h
+  int32_t preview_cached_imgid;  // which imgid `preview` currently holds, UNKNOWN_IMAGE if none
 
   GList *thumbs;
 } dt_lib_duplicate_t;
@@ -142,43 +132,77 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
 
 static gboolean _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventButton *event, dt_lib_module_t *self)
 {
-  if(event->button == 1)
+  if(event->button == 1 && event->type == GDK_BUTTON_PRESS)
   {
-    if(event->type == GDK_BUTTON_PRESS)
+    dt_develop_t *dev = darktable.develop;
+    if(IS_NULL_PTR(dev)) return FALSE;
+
+    dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
+    const int32_t imgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "imgid"));
+    if(imgid <= 0) return FALSE;
+
+    // Render once per duplicate and keep it around for the panel's lifetime -- re-pressing the
+    // same thumbnail is then instant. The first press on a given duplicate still pays for a full
+    // pipeline run (same cost as the "take snapshot" button in libs/snapshots.c), so show the
+    // same busy-cursor feedback while it's in flight.
+    if(d->preview_cached_imgid != imgid)
     {
-      dt_develop_t *dev = darktable.develop;
-      if(IS_NULL_PTR(dev)) return FALSE;
-      return TRUE;
+      dt_control_change_cursor_by_name_and_flush("progress");
+      const gboolean ok = dt_dev_snapshot_capture(&d->preview, imgid, 1.0f, NULL, NULL, -1);
+      dt_control_commit_cursor();
+      d->preview_cached_imgid = ok ? imgid : UNKNOWN_IMAGE;
     }
+
+    d->imgid = (d->preview_cached_imgid == imgid) ? imgid : UNKNOWN_IMAGE;
+    dt_control_queue_redraw_center();
+    return TRUE;
   }
   return FALSE;
 }
 
-static gboolean _lib_duplicate_thumb_release_callback(GtkWidget *widget, GdkEventButton *event, dt_lib_module_t *self)
+// Cancels the hold-to-preview, whether triggered by releasing the button or by the pointer
+// leaving the thumbnail while still held -- see the two signals this is connected to below.
+static gboolean _lib_duplicate_thumb_revert_callback(GtkWidget *widget, GdkEvent *event, dt_lib_module_t *self)
 {
+  // thumb->widget (the event box this is connected to) is not a single window: it contains
+  // several unconditionally-shown child event boxes/drawing areas of its own (w_image,
+  // w_top_eb, w_bottom_eb in dtgtk/thumbnail.c), each with their own GdkWindow. Moving the
+  // pointer between those, while still inside the thumbnail's visible bounds, crosses a child
+  // window boundary and fires a leave-notify on the parent too (detail == GDK_NOTIFY_INFERIOR).
+  // Only a crossing to a window that is NOT a descendant is an actual "left the thumbnail".
+  if(event->type == GDK_LEAVE_NOTIFY && event->crossing.detail == GDK_NOTIFY_INFERIOR) return FALSE;
+
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
 
   d->imgid = UNKNOWN_IMAGE;
-  if(d->busy)
-  {
-    dt_control_log_busy_leave();
-    dt_control_toast_busy_leave();
-  }
-  d->busy = FALSE;
   dt_control_queue_redraw_center();
 
   return FALSE;
 }
 
+/* while a duplicate thumbnail is held, show it full-frame in the center view instead of the
+   image currently being edited, matching the live pan/zoom -- released on button-up. */
+void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t height, int32_t pointerx,
+                     int32_t pointery)
+{
+  dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
+  if(IS_NULL_PTR(d) || d->imgid <= 0 || d->preview_cached_imgid != d->imgid) return;
+
+  dt_develop_t *dev = darktable.develop;
+  float image_box[4] = { 0.0f };
+  dt_dev_get_image_box_in_widget(dev, width, height, image_box);
+  if(image_box[2] <= 0.0f || image_box[3] <= 0.0f) return;
+
+  dt_dev_snapshot_draw(&d->preview, cri, dev, width, height, image_box[0], image_box[1], image_box[2],
+                       image_box[3]);
+}
+
 void view_leave(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct dt_view_t *new_view)
 {
-  // we leave the view. Let's destroy preview surf if any
+  // we leave the view. Let's destroy the cached preview if any
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
-  if(d->preview_surf)
-  {
-    cairo_surface_destroy(d->preview_surf);
-    d->preview_surf = NULL;
-  }
+  dt_dev_snapshot_clear(&d->preview);
+  d->preview_cached_imgid = UNKNOWN_IMAGE;
 }
 
 static void _thumb_remove(gpointer user_data)
@@ -202,12 +226,11 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
 
   d->imgid = UNKNOWN_IMAGE;
-  // we drop the preview if any
-  if(d->preview_surf)
-  {
-    cairo_surface_destroy(d->preview_surf);
-    d->preview_surf = NULL;
-  }
+  // we drop the cached preview if any -- it belongs to a thumb the list rebuild below is about
+  // to tear down, and stays keyed to a specific imgid that may no longer even be a duplicate of
+  // whatever image this panel now describes
+  dt_dev_snapshot_clear(&d->preview);
+  d->preview_cached_imgid = UNKNOWN_IMAGE;
   // we drop all the thumbs
   g_list_free_full(d->thumbs, _thumb_remove);
   d->thumbs = NULL;
@@ -258,10 +281,16 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
 
     if(imgid != dev->image_storage.id)
     {
+      g_object_set_data(G_OBJECT(thumb->widget), "imgid", GINT_TO_POINTER(imgid));
       g_signal_connect(G_OBJECT(thumb->widget), "button-press-event",
                        G_CALLBACK(_lib_duplicate_thumb_press_callback), self);
       g_signal_connect(G_OBJECT(thumb->widget), "button-release-event",
-                       G_CALLBACK(_lib_duplicate_thumb_release_callback), self);
+                       G_CALLBACK(_lib_duplicate_thumb_revert_callback), self);
+      // GTK keeps delivering crossing events to the widget that holds the implicit pointer
+      // grab, so dragging off the thumbnail without releasing is caught here the same way.
+      gtk_widget_add_events(thumb->widget, GDK_LEAVE_NOTIFY_MASK);
+      g_signal_connect(G_OBJECT(thumb->widget), "leave-notify-event",
+                       G_CALLBACK(_lib_duplicate_thumb_revert_callback), self);
     }
 
     gchar chl[256];
@@ -308,13 +337,6 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
     gtk_widget_set_visible(bt, FALSE);
   }
 
-  // and reset the final size of the current image
-  if(dev->image_storage.id >= 0)
-  {
-    d->cur_final_width = 0;
-    d->cur_final_height = 0;
-  }
-
   dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_lib_duplicate_init_callback), self); //unblock signals
 }
 
@@ -328,13 +350,6 @@ static void _lib_duplicate_collection_changed(gpointer instance, dt_collection_c
 static void _lib_duplicate_preview_updated_callback(gpointer instance, dt_lib_module_t *self)
 {
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
-  // we reset the final size of the current image
-  if(darktable.develop->image_storage.id >= 0)
-  {
-    d->cur_final_width = 0;
-    d->cur_final_height = 0;
-  }
-
   gtk_widget_queue_draw (d->duplicate_box);
   dt_control_queue_redraw_center();
 }
@@ -347,10 +362,7 @@ void gui_init(dt_lib_module_t *self)
   self->data = (void *)d;
 
   d->imgid = UNKNOWN_IMAGE;
-  d->preview_surf = NULL;
-  d->preview_zoom = 1.0;
-  d->preview_width = 0;
-  d->preview_height = 0;
+  d->preview_cached_imgid = UNKNOWN_IMAGE;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   dt_gui_add_class(self->widget, "dt_duplicate_ui");
@@ -386,11 +398,7 @@ void gui_cleanup(dt_lib_module_t *self)
 
   if(!IS_NULL_PTR(d))
   {
-    if(d->preview_surf)
-    {
-      cairo_surface_destroy(d->preview_surf);
-      d->preview_surf = NULL;
-    }
+    dt_dev_snapshot_clear(&d->preview);
 
     g_list_free_full(d->thumbs, _thumb_remove);
     d->thumbs = NULL;
