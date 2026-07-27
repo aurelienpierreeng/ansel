@@ -90,7 +90,23 @@ add_iop(dither "dither.c")
 add_iop(monochrome "monochrome.c")
 add_iop(basecurve "basecurve.c" DEFAULT_VISIBLE)
 add_iop(colorzones "colorzones.c")
-add_iop(highlights "highlights.c" DEFAULT_VISIBLE)
+add_iop(highlights "highlights.c"
+        "highlights/gather.c"
+        "highlights/clip.c"
+        "highlights/lch.c"
+        "highlights/laplacian.c"
+        "highlights/blur.c"
+        "highlights/segmentation.c"
+        "highlights/pde.c"
+        "highlights/knee.c"
+        "highlights/dome.c"
+        "highlights/chroma.c"
+        "highlights/coefficient_field.c"
+        "highlights/core.c"
+        "highlights/region.c"
+        "highlights/process.c"
+        "highlights/selftests.c"
+        DEFAULT_VISIBLE)
 add_iop(rawoverexposed "rawoverexposed.c")
 add_iop(velvia "velvia.c")
 add_iop(vignette "vignette.c")

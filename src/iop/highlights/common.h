@@ -18,11 +18,14 @@
 
 #pragma once
 
+#include "common/darktable.h"     // HL_PFOR/__OMP_PARALLEL_FOR__, CLAMP, dt_get_wtime, SIMD macros
+#include "common/gaussian.h"      // dt_gaussian_t / dt_gaussian_cl_t (in _hl_gauss_slot_t + CL protos)
+#include "develop/pixelpipe_hb.h" // dt_dev_pixelpipe_t (in _hl_region_ctx_t) + dt_dev_pixelpipe_iop_t
+#include <stdint.h>
+
 // Shared macros and struct definitions for the highlights harmonic-transposition mode,
-// used by both the C (highlights_harmonic_cpu.h) and OpenCL (highlights_harmonic_cl.h)
+// used by both the C (the CPU stages) and OpenCL (process.h / the OpenCL stages)
 // halves. This is a textual include unit of highlights.c (see the note in _cpu.h).
-
-
 
 /*
     Harmonic transposition: Ansel's highlight-reconstruction method (2026 rebuild).
@@ -91,7 +94,6 @@ typedef struct
 
 // GUIDE-SELECTION TUNABLES -- traced from magenta regressions on real amber/orange highlights.
 // DT_HL_PAIR_VARIANCE: 1 = score guides by the pair-restricted variance already computed for the fit
-//   (perf: -3 blurs/scale); 0 = score by each guide's SINGLE-channel variance (original, more robust
 //   where valid pairs are scarce -- e.g. the thin valid surround of a saturated highlight).
 // DT_HL_GUIDE_GATE: may a CLIPPED channel guide through its clip value? On amber/orange highlights
 //   the only surviving channel is a LOW blue -- a poor guide that collapses green to magenta -- while
@@ -133,7 +135,6 @@ typedef struct
 // Re-enabled for real-image A/B; flip either to 0 to isolate. They help genuinely decorrelated
 // content (rare in natural images) and are near no-ops on correlated content.
 #define DT_HL_SELF_DOME 1
-
 
 // Structure-steered chroma post-pass: keep the ladder's MAGNITUDE (norm), re-diffuse the clipped
 // channels' RATIOS along the isophotes of the recovered luminance, coarse-to-fine so the diffusion
@@ -258,3 +259,246 @@ typedef struct _hl_knee_curve_t
   int engaged;                 // 0 = identity (no correction for this channel)
   float lift[DT_HL_KNEE_BINS]; // additive lift per bin center, clip-normalized units
 } _hl_knee_curve_t;
+
+// ---------------------------------------------------------------------------------------------
+// Per-region working-set handle shared by the CPU reconstruction stages (region.h et al.).
+// MATHS/FLOW BRIDGE -- per-region reconstruction (article §"The algorithm", steps 3-8), the whole
+// second half of the mermaid flowchart run once per merged region Omega on its PADDED read window
+// (article §"The C production code": each region is cropped to region->rx0..ry1, reconstructed in a
+// contiguous rw x rh buffer, then scattered back -- so the cost is linear in the padded area, not the
+// image, article §"Linear in the padded area"). The stages compose as:
+//   3 colour-line coefficient field   (_region fit+transport+eval block below; minimizes E_affine per
+//                                       pixel, then transports the coefficients by E_transport) ->
+//   4 HF refit                        (re-fits the high-frequency detail band on the same colour line) ->
+//   5-6 soft floors + self-dome       (5: clip-level floor so a fit can only RAISE a saturated channel;
+//                                       6: depth-gated blend of the guided estimate with a per-channel
+//                                       biharmonic self-dome, weight We = R^4, minimizing E_bihar where
+//                                       the colour line is weak) ->
+//   7 all-clip luminance dome + chroma (E_bihar luminance dome shared by R,G,B, times an E_chrominance
+//                                       screened-Poisson chromaticity fill, for pixels where NO channel
+//                                       survives) ->
+//   8 anisotropic chroma coherence    (final E_chrominance diffusion ironing the core<->annulus seam) ->
+//   composite                          (scatter the reconstructed CLIPPED channels back, floored at 0).
+// The region radius R (deepest clip-to-valid depth, from _segment_clipped_regions) sets the reach: the
+// coarsest guided scale and the coefficient-field window sigma = clip(R/6, 8, 64) are both derived from
+// it below, so the +-3 sigma window just reaches the deepest pixel and no farther. The internal step
+// sections are annotated in place; this header only ties them together.
+// Per-region working set shared by the reconstruction stages of _region_guided_filter.
+// Holds the padded-window buffers (allocated once by the driver) and the region geometry so
+// each stage operates on the same arrays through a single handle instead of a ~35-argument
+// call. Buffer reuse across stages is intentional and documented at each site (e.g.
+// valid_variance carries the CF fit coefficients, then the dome-gate weight Wc; prev_scale
+// carries blur moments, then the anisotropic anchor validity). Do not "tidy up" the reuse.
+typedef struct _hl_region_ctx_t
+{
+  // full-resolution I/O (indexed with `width` stride at the region's rx0/ry0 offset)
+  float *interp;
+  const float *mask;
+  const float *depth;
+  int width;
+  // region geometry + tunables
+  const _hl_region_t *region;
+  const dt_dev_pixelpipe_t *pipe;
+  int region_w, region_h;
+  size_t region_pixels;
+  int extent;
+  float epsilon;
+  int max_cg_iter;
+  float solid_color;
+  float noise_level;
+  // group-A padded-window buffers (live for the whole region)
+  float *estimate, *prev_scale, *valid, *blur_in;
+  float *plane1, *plane2, *plane3;
+  float *valid_variance, *guide_score, *clip_depth, *clip0;
+  // group-B solver working set (freed after the all-clip / anisotropic stages)
+  uint8_t *hole;
+  float *solver_field, *fill_planes, *dome_lum, *lum_accum, *reaction_weight, *flat_target;
+  float *cg_residual, *cg_dir, *cg_operator, *cg_tmp1, *cg_tmp2;
+} _hl_region_ctx_t;
+
+// ---------------------------------------------------------------------------------------------
+// Highlights module parameters + per-module OpenCL global data. Defined here (rather than in
+// highlights.c) so every per-stage module TU can see them; highlights.c keeps only its GUI
+// data struct. The params struct carries the introspection $DEFAULT/$DESCRIPTION annotations.
+
+typedef enum dt_iop_highlights_mode_t
+{
+  DT_IOP_HIGHLIGHTS_CLIP = 0,      // $DESCRIPTION: "clip highlights"
+  DT_IOP_HIGHLIGHTS_LCH = 1,       // $DESCRIPTION: "reconstruct in LCh"
+  DT_IOP_HIGHLIGHTS_INPAINT = 2,   // $DESCRIPTION: "reconstruct color"
+  DT_IOP_HIGHLIGHTS_LAPLACIAN = 3, //$DESCRIPTION: "guided laplacians"
+  DT_IOP_HIGHLIGHTS_HARMONIC = 4,  //$DESCRIPTION: "harmonic transposition"
+} dt_iop_highlights_mode_t;
+
+typedef enum dt_atrous_wavelets_scales_t
+{
+  WAVELETS_1_SCALE = 0,   // $DESCRIPTION: "2 px"
+  WAVELETS_2_SCALE = 1,   // $DESCRIPTION: "4 px"
+  WAVELETS_3_SCALE = 2,   // $DESCRIPTION: "8 px"
+  WAVELETS_4_SCALE = 3,   // $DESCRIPTION: "16 px"
+  WAVELETS_5_SCALE = 4,   // $DESCRIPTION: "32 px"
+  WAVELETS_6_SCALE = 5,   // $DESCRIPTION: "64 px"
+  WAVELETS_7_SCALE = 6,   // $DESCRIPTION: "128 px (slow)"
+  WAVELETS_8_SCALE = 7,   // $DESCRIPTION: "256 px (slow)"
+  WAVELETS_9_SCALE = 8,   // $DESCRIPTION: "512 px (very slow)"
+  WAVELETS_10_SCALE = 9,  // $DESCRIPTION: "1024 px (very slow)"
+  WAVELETS_11_SCALE = 10, // $DESCRIPTION: "2048 px (insanely slow)"
+  WAVELETS_12_SCALE = 11, // $DESCRIPTION: "4096 px (insanely slow)"
+} dt_atrous_wavelets_scales_t;
+
+typedef struct dt_iop_highlights_params_t
+{
+  // params of v1
+  dt_iop_highlights_mode_t mode; // $DEFAULT: DT_IOP_HIGHLIGHTS_CLIP $DESCRIPTION: "method"
+  float blendL;                  // unused $DEFAULT: 1.0
+  float blendC;                  // unused $DEFAULT: 0.0
+  float blendh;                  // unused $DEFAULT: 0.0
+  // params of v2
+  float clip; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "clipping threshold"
+  // params of v3
+  float noise_level;                  // $MIN: 0. $MAX: 1.0 $DEFAULT: 0.00 $DESCRIPTION: "noise level"
+  int iterations;                     // $MIN: 1 $MAX: 512 $DEFAULT: 30 $DESCRIPTION: "iterations"
+  dt_atrous_wavelets_scales_t scales; // $DEFAULT: 8 $DESCRIPTION: "diameter of reconstruction"
+  float reconstructing;               // $MIN: 0.0 $MAX: 1.0  $DEFAULT: 0.4 $DESCRIPTION: "cast balance"
+  float combine;                      // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 2.0 $DESCRIPTION: "combine segments"
+  int debugmode;
+  // params of v4
+  float solid_color; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "inpaint a flat color"
+} dt_iop_highlights_params_t;
+
+typedef dt_iop_highlights_params_t dt_iop_highlights_data_t;
+
+typedef struct dt_iop_highlights_global_data_t
+{
+  int kernel_highlights_1f_clip;
+  int kernel_highlights_1f_lch_bayer;
+  int kernel_highlights_1f_lch_xtrans;
+  int kernel_highlights_4f_clip;
+  int kernel_highlights_bilinear_and_mask;
+  int kernel_highlights_bilinear_and_mask_xtrans;
+  int kernel_highlights_normalize_reduce_first;
+  int kernel_highlights_normalize_reduce_first_xtrans;
+  int kernel_highlights_normalize_reduce_second;
+  int kernel_highlights_remosaic_and_replace;
+  int kernel_highlights_remosaic_and_replace_xtrans;
+  int kernel_highlights_guide_laplacians;
+  int kernel_highlights_diffuse_color;
+  int kernel_highlights_box_blur;
+  int kernel_sparse_chol_update_level;
+  int kernel_sparse_chol_final_level;
+  int kernel_sparse_chol_fwd_level;
+  int kernel_sparse_chol_bwd_level;
+  int kernel_hl_cfa_steer;
+  int kernel_hl_cfa_down;
+  int kernel_hl_cfa_box;
+  int kernel_hl_cfa_grad;
+  int kernel_hl_cfa_tensor;
+  int kernel_hl_cfa_gnorm;
+  int kernel_hl_cfa_weights;
+  int kernel_hl_cfa_jacobi;
+  int kernel_hl_cfa_jacobi_block;
+  int kernel_hl_fill_down;
+  int kernel_hl_fill_seed;
+  int kernel_hl_fill_seed_up;
+  int kernel_hl_fill_jacobi;
+  int kernel_hl_fill_jacobi_block;
+  int kernel_hl_fill_up;
+  int kernel_hl_cf_lref_partials;
+  int kernel_hl_cf_pack_joint;
+  int kernel_hl_cf_fit_joint;
+  int kernel_hl_cf_eval_joint;
+  int kernel_hl_cf_pack_pair;
+  int kernel_hl_cf_fit_pair;
+  int kernel_hl_cf_eval_pair;
+  int kernel_hl_cf_pack_deepmask;
+  int kernel_hl_cf_eval_deep;
+  int kernel_hl_buf_to_img;
+  int kernel_hl_hf_pack;
+  int kernel_hl_hf_fit;
+  int kernel_hl_hf_energy;
+  int kernel_hl_hf_eval;
+  int kernel_hl_hf_damp;
+  int kernel_hl_soft_floor;
+  int kernel_hl_hard_floor;
+  int kernel_hl_lsb_hole;
+  int kernel_hl_ratio_plane;
+  int kernel_hl_dome_down;
+  int kernel_hl_dome_blend;
+  int kernel_hl_core_floor;
+  int kernel_hl_cmean_reduce;
+  int kernel_hl_pde_init;
+  int kernel_hl_mask_to_img1;
+  int kernel_hl_core_blend;
+  int kernel_hl_pde_rhs;
+  int kernel_hl_pde_scatter;
+  int kernel_hl_aniso_prep;
+  int kernel_hl_box3;
+  int kernel_hl_grad_reduce;
+  int kernel_hl_aniso_tensor;
+  int kernel_hl_aniso_weights;
+  int kernel_hl_aniso_reassemble;
+  int kernel_hl_aniso_rhs;
+  int kernel_hl_aniso_scatter;
+  int kernel_hl_knee_bin;
+  int kernel_hl_knee_jmom;
+  int kernel_hl_knee_pmom;
+  int kernel_hl_knee_joint_reg;
+  int kernel_hl_knee_pair_reg;
+  int kernel_hl_knee_apply;
+  int kernel_hl_mask_pack;
+  int kernel_hl_region_gather;
+  int kernel_hl_region_scatter;
+  int kernel_hl_region_stats;
+  int kernel_hl_need_self;
+  int kernel_hl_knee_apply_interp;
+  int kernel_hl_cg_embed;
+  int kernel_hl_cg_op;
+  int kernel_hl_cg_r0;
+  int kernel_hl_cg_beta;
+  int kernel_hl_relu;
+  int kernel_hl_cg_r1;
+  int kernel_hl_cg_ap;
+  int kernel_hl_cg_update;
+  int kernel_hl_aniso_pyr_down;
+  int kernel_hl_pyr_getc;
+  int kernel_hl_pyr_putc;
+  int kernel_hl_pyr_getc4;
+  int kernel_hl_pyr_putc4;
+  int kernel_hl_pyr_project;
+  int kernel_hl_aniso_obs_full;
+  int kernel_hl_aniso_obs_flags;
+  int kernel_hl_window_pack;
+  int kernel_hl_window_unpack;
+  int kernel_hl_aniso_iter;
+  int kernel_hl_aniso_iter_block;
+  int kernel_hl_aniso_splat;
+  int kernel_highlights_false_color;
+
+  int kernel_filmic_bspline_vertical;
+  int kernel_filmic_bspline_horizontal;
+  int kernel_filmic_bspline_vertical_local;
+  int kernel_filmic_bspline_horizontal_local;
+
+  int kernel_interpolate_bilinear;
+} dt_iop_highlights_global_data_t;
+
+// ---------------------------------------------------------------------------------------------
+// Guided-laplacian (2021 a-trous) shared constants + scale enums. Used by the laplacian mode TU
+// and by highlights.c's tiling_callback; kept here so both see one definition.
+
+#define MAX_NUM_SCALES 12
+#define REDUCESIZE 64
+#define DS_FACTOR 4
+#define SQRT3 1.7320508075688772935274463415058723669L
+#define SQRT12 3.4641016151377545870548926830117447339L // 2*SQRT3
+typedef enum diffuse_reconstruct_variant_t
+{
+  DIFFUSE_RECONSTRUCT_RGB = 0,
+  DIFFUSE_RECONSTRUCT_CHROMA
+} diffuse_reconstruct_variant_t;
+enum wavelets_scale_t
+{
+  ANY_SCALE = 1 << 0,   // any wavelets scale   : reconstruct += HF
+  FIRST_SCALE = 1 << 1, // first wavelets scale : reconstruct = 0
+  LAST_SCALE = 1 << 2,  // last wavelets scale  : reconstruct += residual
+};

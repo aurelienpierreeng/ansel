@@ -31,6 +31,7 @@
 
 #include "common/darktable.h"
 #include "common/imagebuf.h"
+#include "control/control.h" // dt_control_log (OOM error toast) — self-contained include order
 #include "develop/imageop_math.h"
 
 
