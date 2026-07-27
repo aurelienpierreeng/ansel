@@ -74,6 +74,9 @@ sparse_chol_update_level(global double *values,
   const int thread_index = get_global_id(0);
   if(thread_index >= npos) return;
   const int entry = pos_of[lev_start + thread_index];
+  // accum = A[i,j] - sum_k L[i,k]*L[j,k], the pre-scale numerator of entry (i,j) of L:
+  // values[entry] starts at A[i,j]; each contribution subtracts one product L[j,k]*L[i,k]
+  // (cont_ljk -> position of L[j,k], cont_src -> position of L[i,k]), in ascending-k order
   double accum = values[entry];
   for(int contribution = cont_ptr[entry]; contribution < cont_ptr[entry + 1]; contribution++)
     accum -= values[cont_ljk[contribution]] * values[cont_src[contribution]];
@@ -96,9 +99,12 @@ sparse_chol_final_level(global double *values,
   const int local_id = get_local_id(0);
   const int local_size = get_local_size(0);
 
+  // L[j,j] = sqrt( A[j,j] - sum_k L[j,k]^2 ): the diagonal slot already holds the numerator from
+  // sparse_chol_update_level, so finalizing is just its square root
   if(local_id == 0) values[colptr[j]] = sqrt(values[colptr[j]]);
   barrier(CLK_GLOBAL_MEM_FENCE);
   const double diag_value = values[colptr[j]];
+  // L[i,j] = ( A[i,j] - sum_k L[i,k] L[j,k] ) / L[j,j]: divide each sub-diagonal numerator by L[j,j]
   for(int entry = colptr[j] + 1 + local_id; entry < colptr[j + 1]; entry += local_size)
     values[entry] /= diag_value;
 }
@@ -126,9 +132,11 @@ sparse_chol_fwd_level(global double *solution,
   const int local_id = get_local_id(0);
   const int local_size = get_local_size(0);
 
+  // y_j = ( b_j - sum_{k<j} L[j,k] y_k ) / L[j,j]: gather the products L[j,k]*y_k over row j's
+  // off-diagonal entries (already-solved y_k), tree-reduce them, then thread 0 divides by L[j,j]
   double accum = 0.0;
   for(int entry = rowptr[j] + local_id; entry < rowptr[j + 1]; entry += local_size)
-    accum += values[rowpos[entry]] * solution[rowcol[entry]];
+    accum += values[rowpos[entry]] * solution[rowcol[entry]]; // += L[j,k] * y_k
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
   for(int offset = local_size / 2; offset > 0; offset /= 2)
@@ -136,7 +144,7 @@ sparse_chol_fwd_level(global double *solution,
     if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
     barrier(CLK_LOCAL_MEM_FENCE);
   }
-  if(local_id == 0) solution[j] = (solution[j] - scratch[0]) / values[diagpos[j]];
+  if(local_id == 0) solution[j] = (solution[j] - scratch[0]) / values[diagpos[j]]; // (b_j - sum) / L[j,j]
 }
 
 // Backward triangular solve (L^T x = y, the transpose of L), second half. One work-group per
@@ -159,9 +167,11 @@ sparse_chol_bwd_level(global double *solution,
   const int local_id = get_local_id(0);
   const int local_size = get_local_size(0);
 
+  // x_j = ( y_j - sum_{i>j} L[i,j] x_i ) / L[j,j]: gather the products L[i,j]*x_i over the
+  // below-diagonal entries of column j (= row j of L^T, the already-solved x_i), reduce, divide
   double accum = 0.0;
   for(int entry = colptr[j] + 1 + local_id; entry < colptr[j + 1]; entry += local_size)
-    accum += values[entry] * solution[rowind[entry]];
+    accum += values[entry] * solution[rowind[entry]]; // += L[i,j] * x_i
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
   for(int offset = local_size / 2; offset > 0; offset /= 2)
@@ -169,7 +179,7 @@ sparse_chol_bwd_level(global double *solution,
     if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
     barrier(CLK_LOCAL_MEM_FENCE);
   }
-  if(local_id == 0) solution[j] = (solution[j] - scratch[0]) / values[colptr[j]];
+  if(local_id == 0) solution[j] = (solution[j] - scratch[0]) / values[colptr[j]]; // (y_j - sum) / L[j,j]
 }
 
 // Right-hand side (the constant vector b) of the screened chroma diffusion solve inside an
@@ -181,6 +191,13 @@ sparse_chol_bwd_level(global double *solution,
 // divided by 6) minus the centre, edge-clamped -- exactly the CPU _lap5. pgrid maps unknown
 // index -> pixel index. Mirrors the right-hand-side assembly of the CPU _region_pde_solve --
 // any change here must be mirrored there and re-validated with the HL_CORECL_TEST self-test.
+// Maths bridge: this is the RHS b of the screened-Poisson system that minimizes E_chrominance =
+// integral( |grad r|^2 + lambda |r|^2 )  (article "The optimization problem", energy 3), whose
+// Euler-Lagrange equation is  Delta r - lambda r = -lambda r_target . Discretized, the SPD system
+// solved by the Cholesky factor is (lambda I - Delta) r = lambda r_target + (Delta of the known
+// rim, moved to the RHS). Here react = lambda, cmeanc = the flat target colour r_target (the
+// "inpaint a flat colour" bias), `laplacian` = the boundary-embedded plane's Laplacian carrying
+// the known rim into b. The obstacle constraint r_c >= c0/L of E_chrominance is enforced elsewhere.
 kernel void
 hl_pde_rhs(global const float *boundary_ratio, global const int *pgrid, global double *rhs,
            const int n_unknowns, const int width, const int height, const float react, const float cmeanc)
@@ -203,8 +220,9 @@ hl_pde_rhs(global const float *boundary_ratio, global const int *pgrid, global d
   const float val_ne = boundary_ratio[y_north * width + x_east];
   const float val_sw = boundary_ratio[y_south * width + x_west];
   const float val_se = boundary_ratio[y_south * width + x_east];
+  // 9-point discrete Laplacian of the rim-embedded ratio plane (Delta applied to the known boundary)
   const float laplacian = (4.f * (north + south + west + east) + (val_nw + val_ne + val_sw + val_se) - 20.f * center) / 6.f;
-  rhs[unknown] = (double)react * (double)cmeanc + (double)laplacian;
+  rhs[unknown] = (double)react * (double)cmeanc + (double)laplacian; // b = lambda*r_target + Delta(rim)
 }
 
 // Scatter the solved chroma values (double-precision vector b, one entry per unknown hole
@@ -215,7 +233,7 @@ hl_pde_scatter(global const double *rhs, global const int *pgrid, global float *
 {
   const int unknown = get_global_id(0);
   if(unknown >= n_unknowns) return;
-  ratio[pgrid[unknown]] = fmax((float)rhs[unknown], 0.f);
+  ratio[pgrid[unknown]] = fmax((float)rhs[unknown], 0.f); // project the solved ratio onto r >= 0
 }
 
 // Right-hand side of the edge-aware (anisotropic: smooth ALONG image edges, not across them)
@@ -225,6 +243,12 @@ hl_pde_scatter(global const double *rhs, global const int *pgrid, global float *
 // weight x that neighbour's ratio value, accumulated in double precision like the CPU
 // assembly. Mirrors the CPU _aniso_div_solve -- any change here must be mirrored there and
 // re-validated with the HL_ANISOCL_TEST self-test.
+// Maths bridge: this assembles b for the anisotropic transport E_transport = integral( grad p^T D
+// grad p )  (article "The optimization problem", term 1b), whose Euler-Lagrange equation is
+// div(D grad p) = 0 -- a weighted-Laplacian SPD system sum_k w_k (p_k - p_center) = 0. The
+// Weickert weights w_k = edge_weights steer D (isophote- vs gradient-dominant). Neighbours that
+// are valid anchors (data outside the matrix) move to the RHS as sum_k w_k * p_k; hole neighbours
+// stay in the matrix. The matrix diagonal (sum of weights) is assembled on the host side.
 kernel void
 hl_aniso_rhs(global const float *edge_weights, global const float *valid_anchor, global const float *chroma,
              global const int *pgrid, global double *rhs,
@@ -244,10 +268,10 @@ hl_aniso_rhs(global const float *edge_weights, global const float *valid_anchor,
     if(weight_value <= 0.f) continue;
     const int neighbor_x = origin_x + neighbor_dx[direction], neighbor_y = origin_y + neighbor_dy[direction];
     const int j = neighbor_y * width + neighbor_x;
-    if(valid_anchor[j * 4 + 0] < 0.5f) continue;   // hole neighbour: lives in the matrix
-    accum += (double)weight_value * (double)chroma[j * 4 + c];
+    if(valid_anchor[j * 4 + 0] < 0.5f) continue;   // hole neighbour: lives in the matrix (LHS), not the RHS
+    accum += (double)weight_value * (double)chroma[j * 4 + c]; // += w_k * p_k for anchor neighbours
   }
-  rhs[unknown] = accum;
+  rhs[unknown] = accum; // b = sum_{k in anchors} w_k p_k
 }
 
 // Scatter the solved ratio values back into channel c of the packed 4-float-per-pixel plane
@@ -276,6 +300,9 @@ hl_aniso_scatter(global const double *rhs, global const int *pgrid, global float
 // r -= dscalar*u + t2 (t2 holds the Laplacian term of the initial guess u, computed by the
 // hl_cg_op kernel in highlights_harmonic.cl); p = r; emits per-group partial sums of r*r.
 // Non-hole pixels get their search direction zeroed.
+// Maths bridge: the operator is A = dscalar*I + (-Delta) (the same screened-Poisson E_chrominance
+// SPD matrix the direct solver factors); this forms the initial residual r = b - A u and search
+// direction p = r, and accumulates ||r||^2 (the CG numerator / convergence measure).
 kernel void
 hl_cg_r1(global float *residual, global float *search_dir, global const float *solution, global const float *laplacian_term,
          global const uchar *hole, global double *partial, const int dimension, const float dscalar,
@@ -289,9 +316,9 @@ hl_cg_r1(global float *residual, global float *search_dir, global const float *s
   for(int i = global_id; i < dimension; i += global_size)
   {
     if(!hole[i]) { search_dir[i] = 0.f; continue; }
-    residual[i] -= dscalar * solution[i] + laplacian_term[i];
-    search_dir[i] = residual[i];
-    accum += (double)residual[i] * residual[i];
+    residual[i] -= dscalar * solution[i] + laplacian_term[i]; // r = b - A u  (A u = dscalar*u - Delta u)
+    search_dir[i] = residual[i];                              // p = r
+    accum += (double)residual[i] * residual[i];               // += r_i^2  -> ||r||^2
   }
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
@@ -319,8 +346,8 @@ hl_cg_ap(global float *matvec, global const float *search_dir, global const floa
   for(int i = global_id; i < dimension; i += global_size)
   {
     if(!hole[i]) { matvec[i] = 0.f; continue; }
-    matvec[i] = dscalar * search_dir[i] + laplacian_term[i];
-    accum += (double)search_dir[i] * matvec[i];
+    matvec[i] = dscalar * search_dir[i] + laplacian_term[i]; // ap = A p  (dscalar*p - Delta p)
+    accum += (double)search_dir[i] * matvec[i];              // += p_i * ap_i  -> p.Ap (alpha denominator)
   }
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);
@@ -348,9 +375,9 @@ hl_cg_update(global float *solution, global float *residual, global const float 
   for(int i = global_id; i < dimension; i += global_size)
   {
     if(!hole[i]) continue;
-    solution[i] += alpha * search_dir[i];
-    residual[i] -= alpha * matvec[i];
-    accum += (double)residual[i] * residual[i];
+    solution[i] += alpha * search_dir[i];        // u <- u + alpha*p   (alpha = ||r||^2 / p.Ap)
+    residual[i] -= alpha * matvec[i];            // r <- r - alpha*ap
+    accum += (double)residual[i] * residual[i];  // += r_i^2  -> new ||r||^2 for the convergence test
   }
   scratch[local_id] = accum;
   barrier(CLK_LOCAL_MEM_FENCE);

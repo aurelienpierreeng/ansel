@@ -125,6 +125,8 @@ hl_fill_seed_up(global float *solution, global const float *anchor_value, global
 // One Jacobi relaxation sweep, ping-pong (reads u, writes v; the host swaps the two buffers
 // between launches): anchor cells copy their value through unchanged, hole cells become the
 // plain average of their 4 neighbours (edge-clamped at the level border).
+// MATHS BRIDGE -- isotropic (D = I) harmonic fill: dst = 1/4 (N+S+W+E), the discrete div(grad p)=0
+// update; anchors are Dirichlet boundary data (p|anchors = p_fit), copied through unchanged.
 kernel void
 hl_fill_jacobi(global const float *source, global float *dest, global const uchar *anchor,
                const int level_w, const int level_h)
@@ -133,7 +135,7 @@ hl_fill_jacobi(global const float *source, global float *dest, global const ucha
   const int y = get_global_id(1);
   if(x >= level_w || y >= level_h) return;
   const int i = y * level_w + x;
-  if(anchor[i]) { dest[i] = source[i]; return; }
+  if(anchor[i]) { dest[i] = source[i]; return; }   // anchor = Dirichlet datum, pinned
   const int idx_north = max(y - 1, 0) * level_w + x;
   const int idx_south = min(y + 1, level_h - 1) * level_w + x;
   const int idx_west = y * level_w + max(x - 1, 0);
@@ -309,6 +311,10 @@ hl_cfa_grad(global const float *blurred_lum, global float *grad_x, global float 
 // the tensor from gradient transport (clean halo ramp, m -> 0: the model travels radially
 // inward from the rim) toward isophote transport (hard edge crossing the zone, m -> 1: do not
 // mix colour-lines across an object boundary).
+// MATHS BRIDGE -- article "The algorithm" step 3, the E_transport steering tensor D:
+//   D = [ m + (1-m) c2 ] t t^T + [ m c2 + (1-m) ] g g^T ,  c2 = exp(-|grad L| / (4 <|grad L|>))
+//   m = v / (v + (k Lbar)^2) ,  v = max( var_w(L) - (4/3)|grad L|^2 , 0 ) ,  k = 0.15
+// g = unit gradient (uphill), t = unit isophote (level line = g rotated 90 deg), m in [0,1].
 // Finish the mean-gradient-magnitude reduction on device: one work-item sums the per-group
 // partials (same order as the former host loop) and writes the final gnorm scalar, so the
 // host never has to block on a mid-fill readback (one full queue drain per level per fill).
@@ -336,20 +342,21 @@ hl_cfa_tensor(global const float *grad_x, global const float *grad_y,
   const float magnitude = hypot(grad_dx, grad_dy);
   const float nonzero = (magnitude > 1e-12f) ? 1.f : 0.f;
   const float inv_mag = nonzero / (magnitude + (1.f - nonzero));
-  const float grad_ux = grad_dx * inv_mag + (1.f - nonzero);   // gradient direction
+  const float grad_ux = grad_dx * inv_mag + (1.f - nonzero);   // g = unit gradient direction (uphill)
   const float grad_uy = grad_dy * inv_mag;
   const float iso_x = -grad_uy;
-  const float iso_y = grad_ux;             // isophote direction
-  const float cross_damp = exp(-magnitude / (4.f * gnorm));
+  const float iso_y = grad_ux;             // t = unit isophote direction (g rotated 90 deg)
+  const float cross_damp = exp(-magnitude / (4.f * gnorm));   // c2 = exp(-|grad L| / (4 <|grad L|>))
 
-  const float mean = blurred_lum[i];
-  const float variance = fmax(blurred_sq[i] - mean * mean, 0.f);
-  const float var_residual = fmax(variance - (4.f / 3.f) * (grad_dx * grad_dx + grad_dy * grad_dy), 0.f);
-  const float k_scaled = k * fmax(mean, 1e-9f);
-  const float edge_measure = var_residual / (var_residual + k_scaled * k_scaled + 1e-18f);
-  const float diffusivity_tangent = edge_measure + (1.f - edge_measure) * cross_damp;       // tangent diffusivity
-  const float diffusivity_gradient = edge_measure * cross_damp + (1.f - edge_measure);       // gradient diffusivity
+  const float mean = blurred_lum[i];                          // Lbar (windowed mean of the steering plane)
+  const float variance = fmax(blurred_sq[i] - mean * mean, 0.f);   // var_w(L)
+  const float var_residual = fmax(variance - (4.f / 3.f) * (grad_dx * grad_dx + grad_dy * grad_dy), 0.f);   // v = var_w - (4/3)|grad L|^2
+  const float k_scaled = k * fmax(mean, 1e-9f);              // k * Lbar
+  const float edge_measure = var_residual / (var_residual + k_scaled * k_scaled + 1e-18f);   // m = v / (v + (k Lbar)^2)
+  const float diffusivity_tangent = edge_measure + (1.f - edge_measure) * cross_damp;       // coeff of t t^T = m + (1-m) c2
+  const float diffusivity_gradient = edge_measure * cross_damp + (1.f - edge_measure);       // coeff of g g^T = m c2 + (1-m)
 
+  // D = diffusivity_tangent * t t^T + diffusivity_gradient * g g^T (symmetric xx/xy/yy entries)
   tensor_xx[i] = diffusivity_tangent * iso_x * iso_x + diffusivity_gradient * grad_ux * grad_ux;
   tensor_xy[i] = diffusivity_tangent * iso_x * iso_y + diffusivity_gradient * grad_ux * grad_uy;
   tensor_yy[i] = diffusivity_tangent * iso_y * iso_y + diffusivity_gradient * grad_uy * grad_uy;
@@ -403,6 +410,9 @@ hl_cfa_weights(global const float *tensor_xx, global const float *tensor_xy, glo
 // One tensor-weighted Jacobi sweep (8 neighbours) over up to 3 planes sharing the anchor
 // mask, ping-pong like hl_fill_jacobi. The planes share the mask, the tensor and hence the
 // weights, so one launch advances all of them with the weights computed once per cell.
+// MATHS BRIDGE -- steered (D != I) fill: dst = Sum_k w_ik src(nb_k) / Sum_k w_ik, the discrete
+// div(D grad p)=0 update over the 8-neighbour Weickert nonnegativity stencil (w_ik = cfa_edge_w >= 0,
+// so the update is a convex combination of neighbours -> maximum principle holds).
 // This large-grid variant recomputes the edge weights from the three tensor planes on
 // purpose: the planes enjoy ~9x neighbour reuse in cache, whereas a precomputed-weights
 // buffer carries 3x the unique bytes and made this bandwidth-bound kernel 50% slower
@@ -436,14 +446,14 @@ hl_cfa_jacobi(global const float *source0, global const float *source1, global c
     const int neighbor_y = clamp(y + cfa_neighbor_dy[direction], 0, level_h - 1);
     const int neighbor_x = clamp(x + cfa_neighbor_dx[direction], 0, level_w - 1);
     const int j = neighbor_y * level_w + neighbor_x;
-    const float weight_value = cfa_edge_w(tensor_xx, tensor_xy, tensor_yy, i, j, cfa_neighbor_dx[direction], cfa_neighbor_dy[direction]);
-    sum_weights += weight_value;
-    sum0 += weight_value * source0[j];
+    const float weight_value = cfa_edge_w(tensor_xx, tensor_xy, tensor_yy, i, j, cfa_neighbor_dx[direction], cfa_neighbor_dy[direction]); // w_ik >= 0
+    sum_weights += weight_value;                         // Sum_k w_ik
+    sum0 += weight_value * source0[j];                   // Sum_k w_ik * p(nb_k)
     if(n_planes > 1) sum1 += weight_value * source1[j];
     if(n_planes > 2) sum2 += weight_value * source2[j];
   }
   const int has_weight = (sum_weights > 1e-9f);
-  dest0[i] = has_weight ? sum0 / sum_weights : source0[i];
+  dest0[i] = has_weight ? sum0 / sum_weights : source0[i];   // p(i) <- Sum_k w_ik p(nb_k) / Sum_k w_ik
   if(n_planes > 1) dest1[i] = has_weight ? sum1 / sum_weights : source1[i];
   if(n_planes > 2) dest2[i] = has_weight ? sum2 / sum_weights : source2[i];
 }
@@ -568,6 +578,9 @@ hl_cf_lref_partials(global const float *estimate, global const float *valid,
 // red x green, etc.; "unweighted" = the plain all-valid indicator used by the mass checks in
 // the fit):
 // mode 0: [w, wR, wG, wB]   mode 1: [wRR, wGG, wBB, wRG]   mode 2: [wRB, wGB, unweighted, 0]
+// MATHS BRIDGE -- article step 3: these three float4 images, once Gaussian-blurred, are the TEN windowed
+// moment planes (1 mass n + 3 means + 6 second moments) that the 2x2 normal equations are solved from;
+// the blur realizes the windowed weighted sum Sum_y w(y) G_sigma(x-y)(.) at every x.
 kernel void
 hl_cf_pack_joint(global const float *estimate, global const float *valid, global const float *luminance_plane,
                  write_only image2d_t output, const int width, const int height,
@@ -633,36 +646,40 @@ hl_cf_fit_joint(read_only image2d_t moments1_img, read_only image2d_t moments2_i
   const float mean_rb = moments3.x * inv_weight;
   const float mean_gb = moments3.y * inv_weight;
 
-  const float mean_guide1 = means[guide1];
-  const float mean_guide2 = means[guide2];
-  const float mean_target = means[c];
-  const float var_11 = fmax(second_moments[guide1] - mean_guide1 * mean_guide1, 0.f);
-  const float var_22 = fmax(second_moments[guide2] - mean_guide2 * mean_guide2, 0.f);
+  // MATHS BRIDGE -- article step 3: solve the 2x2 normal equations Sigma [a;b] = [Cov(u1,v); Cov(u2,v)],
+  // Sigma = [[Var u1, Cov(u1,u2)],[Cov(u1,u2), Var u2]] + ridge, by Cramer's rule. u1=guide1, u2=guide2, v=c.
+  const float mean_guide1 = means[guide1];  // E[u1]
+  const float mean_guide2 = means[guide2];  // E[u2]
+  const float mean_target = means[c];       // E[v]
+  const float var_11 = fmax(second_moments[guide1] - mean_guide1 * mean_guide1, 0.f);   // Var(u1) = E[u1^2]-E[u1]^2
+  const float var_22 = fmax(second_moments[guide2] - mean_guide2 * mean_guide2, 0.f);   // Var(u2)
   // off-diagonal (a,b): pick from RG/RB/GB by index sum
   #define OFF(ch_a, ch_b) (((ch_a) + (ch_b)) == 1 ? mean_rg : (((ch_a) + (ch_b)) == 2 ? mean_rb : mean_gb))
-  const float var_12 = OFF(guide1, guide2) - mean_guide1 * mean_guide2;
-  const float cov_1 = OFF(c, guide1) - mean_target * mean_guide1;
-  const float cov_2 = OFF(c, guide2) - mean_target * mean_guide2;
-  const float var_target = fmax(second_moments[c] - mean_target * mean_target, 0.f);
+  const float var_12 = OFF(guide1, guide2) - mean_guide1 * mean_guide2;   // Cov(u1,u2)
+  const float cov_1 = OFF(c, guide1) - mean_target * mean_guide1;         // Cov(v,u1) = RHS_1
+  const float cov_2 = OFF(c, guide2) - mean_target * mean_guide2;         // Cov(v,u2) = RHS_2
+  const float var_target = fmax(second_moments[c] - mean_target * mean_target, 0.f);   // Var(v), denom of R^2
   #undef OFF
 
-  const float lambda = 1e-3f * 0.5f * (var_11 + var_22) + 1e-12f;
-  const float determinant = fmax((var_11 + lambda) * (var_22 + lambda) - var_12 * var_12, 1e-18f);
-  const float slope_a = ((var_22 + lambda) * cov_1 - var_12 * cov_2) / determinant;
-  const float slope_b = ((var_11 + lambda) * cov_2 - var_12 * cov_1) / determinant;
-  const float r_sq = clamp((slope_a * cov_1 + slope_b * cov_2) / (var_target + 1e-12f), 0.f, 1.f);
+  const float lambda = 1e-3f * 0.5f * (var_11 + var_22) + 1e-12f;   // relative Tikhonov ridge = 1e-3 * (Var u1 + Var u2)/2
+  const float determinant = fmax((var_11 + lambda) * (var_22 + lambda) - var_12 * var_12, 1e-18f);   // det Sigma (with ridge)
+  const float slope_a = ((var_22 + lambda) * cov_1 - var_12 * cov_2) / determinant;   // a = (Sigma^-1 RHS)_1 (Cramer)
+  const float slope_b = ((var_11 + lambda) * cov_2 - var_12 * cov_1) / determinant;   // b = (Sigma^-1 RHS)_2 (Cramer)
+  const float r_sq = clamp((slope_a * cov_1 + slope_b * cov_2) / (var_target + 1e-12f), 0.f, 1.f);   // R^2 = (a Cov(v,u1)+b Cov(v,u2))/Var(v)
 
   coeff_a[i] = slope_a;
   coeff_b[i] = slope_b;
-  // intercept of the CENTERED fit, unshifted back to absolute values
+  // intercept of the CENTERED fit, unshifted back to absolute values: d = E[v] - a E[u1] - b E[u2]
   const float shifts[3] = { shift_r, shift_g, shift_b };
   coeff_d[i] = (mean_target + shifts[c]) - slope_a * (mean_guide1 + shifts[guide1]) - slope_b * (mean_guide2 + shifts[guide2]);
   fit_quality[i] = r_sq;
 
   const int mass_ok = (moments3.z > min_mass && moments1.x > 0.25f * moments3.z);
   const int valid_ok = (valid[i * 4 + c] >= 0.5f);
+  // anchor gate (article: R^2 > 0.25 with bounded slopes) = the Dirichlet data for the E_transport fill;
+  // |a|,|b| < 64 rejects only degenerate windows whose exploding slopes would poison the fill boundary
   anchor[i] = (mass_ok && valid_ok && r_sq > 0.25f && fabs(slope_a) < 64.f && fabs(slope_b) < 64.f);
-  broad[i] = (mass_ok && valid_ok);
+  broad[i] = (mass_ok && valid_ok);   // broader mass-only anchor set for the diffused R^2 plane
 }
 
 // Apply the joint coefficients (now smoothed across the hole by the harmonic fill): at every
@@ -681,6 +698,7 @@ hl_cf_eval_joint(global const float *coeff_a, global const float *coeff_b, globa
   const int i = y * width + x;
   if(valid[i * 4 + c] < 0.5f && valid[i * 4 + guide1] >= 0.5f && valid[i * 4 + guide2] >= 0.5f)
   {
+    // evaluation v_hat = a*u1 + b*u2 + d against the MEASURED guides (diffused a,b,d; true guide pixels)
     estimate[i * 4 + c] = coeff_a[i] * estimate[i * 4 + guide1] + coeff_b[i] * estimate[i * 4 + guide2] + coeff_d[i];
     model_quality[i * 4 + c] = clamp(fit_quality[i], 0.f, 1.f);
   }
@@ -742,21 +760,22 @@ hl_cf_fit_pair(read_only image2d_t moments_a_img, read_only image2d_t moments_b_
 
   const float weight_sum = fmax(moments_a.x, 1e-9f);
   const float inv_weight = 1.f / weight_sum;
-  const float mean_target = (orientation ? moments_a.z : moments_a.y) * inv_weight;
-  const float mean_guide = (orientation ? moments_a.y : moments_a.z) * inv_weight;
-  const float var_guide = fmax((orientation ? moments_a.w : moments_b.x) * inv_weight - mean_guide * mean_guide, 0.f);
-  const float var_target = fmax((orientation ? moments_b.x : moments_a.w) * inv_weight - mean_target * mean_target, 0.f);
-  const float covariance = moments_b.y * inv_weight - mean_target * mean_guide;
-  const float slope = covariance / (var_guide * (1.f + 1e-3f) + 1e-12f);
-  const float r_sq = clamp(covariance * covariance / (var_guide * var_target + 1e-18f), 0.f, 1.f);
+  // MATHS BRIDGE -- article step 3 single-guide fallback: v_hat = a*u + d, one 1x1 normal equation.
+  const float mean_target = (orientation ? moments_a.z : moments_a.y) * inv_weight;   // E[v] (target)
+  const float mean_guide = (orientation ? moments_a.y : moments_a.z) * inv_weight;    // E[u] (guide)
+  const float var_guide = fmax((orientation ? moments_a.w : moments_b.x) * inv_weight - mean_guide * mean_guide, 0.f);   // Var(u)
+  const float var_target = fmax((orientation ? moments_b.x : moments_a.w) * inv_weight - mean_target * mean_target, 0.f);   // Var(v)
+  const float covariance = moments_b.y * inv_weight - mean_target * mean_guide;       // Cov(u,v)
+  const float slope = covariance / (var_guide * (1.f + 1e-3f) + 1e-12f);              // a = Cov(u,v)/Var(u), 1e-3 relative ridge
+  const float r_sq = clamp(covariance * covariance / (var_guide * var_target + 1e-18f), 0.f, 1.f);   // R^2 = Cov^2/(Var u Var v)
 
   coeff_slope[i] = slope;
-  // intercept of the CENTERED fit, unshifted back to absolute values
+  // intercept of the CENTERED fit, unshifted back to absolute values: d = E[v] - a E[u]
   coeff_intercept[i] = (mean_target + shift_target) - slope * (mean_guide + shift_guide);
   fit_quality[i] = r_sq;
   const int mass_ok = (moments_b.z > min_mass && moments_a.x > 0.25f * moments_b.z);
   const int valid_ok = (valid[i * 4 + target_channel] >= 0.5f);
-  anchor[i] = (mass_ok && valid_ok && r_sq > 0.25f && fabs(slope) < 64.f);
+  anchor[i] = (mass_ok && valid_ok && r_sq > 0.25f && fabs(slope) < 64.f);   // R^2 > 0.25, bounded slope -> Dirichlet anchor
   broad[i] = (mass_ok && valid_ok);
 }
 
@@ -776,6 +795,7 @@ hl_cf_eval_pair(global const float *coeff_slope, global const float *coeff_inter
   const int i = y * width + x;
   if(valid[i * 4 + target_channel] < 0.5f && valid[i * 4 + guide_channel] >= 0.5f && valid[i * 4 + other_channel] < 0.5f)
   {
+    // evaluation v_hat = a*u + d against the measured guide (diffused a,d; true guide pixel)
     estimate[i * 4 + target_channel] = coeff_slope[i] * estimate[i * 4 + guide_channel] + coeff_intercept[i];
     model_quality[i * 4 + target_channel] = clamp(fit_quality[i], 0.f, 1.f);
   }
@@ -818,6 +838,8 @@ hl_cf_eval_deep(global const float *coeff_a, global const float *coeff_b, global
                        || (valid[i * 4 + 2] >= 0.5f);
   if(valid[i * 4 + deep_channel] >= 0.5f || !anyvalid) return;
 
+  // deferred deep-channel evaluation v_hat = a*u1 + b*u2 + d (stashed diffused coefficients,
+  // now-reconstructed continuous guides), blended with the one-hop pair value by the depth split
   const float joint_pred = coeff_a[i] * estimate[i * 4 + guide1] + coeff_b[i] * estimate[i * 4 + guide2] + coeff_d[i];
   const int has_pair = (valid[i * 4 + guide1] < 0.5f || valid[i * 4 + guide2] < 0.5f);
   const float mask_value = clamp(read_imagef(deepmask, sampleri, (int2)(x, y)).x, 0.f, 1.f);
@@ -835,6 +857,17 @@ hl_cf_eval_deep(global const float *coeff_a, global const float *coeff_b, global
 // and the channel's own damped detail. Mirrors the detail-band stage of the CPU
 // _region_guided_filter, driven by _hf_stage_cl -- any change here must be mirrored there
 // and re-validated with the HL_HFCL_TEST self-test.
+//
+// MATHS BRIDGE -- Step 4 (HF refit), article §"Hybrid Laplacian-band guiding of the high frequencies"
+// / §"Rebuild the high frequencies": the estimate is split at sigma/4 into a low band ubar (the "low"
+// image) and a detail band u - ubar. The detail band gets its OWN windowed colour-line with R^2-shrunk
+// gains (hl_hf_fit: on a zero-mean band shrinkage is the correct estimator -- no magnitude to lose,
+// only noise to not print), diffused by the E_transport fill. Then the HF is blended between the guided
+// resynthesis h_g = a(u_g1-ubar_g1)+b(u_g2-ubar_g2) (hl_hf_energy/hl_hf_eval) and the R^2-damped
+// transfer h_d = R^2 (u_c - ubar_c) by quadratic min-energy odds w = e_d^2/(e_d^2 + e_g^2),
+// e_{d,g} = blurred |HF_{d,g}| -- an edge-misfire spikes the guided HF energy e_g, so w -> 0 and the
+// damped path wins there (the failure self-detects, no content discriminator needed). Single-guide
+// pixels keep only the damped detail (hl_hf_damp).
 
 // Plain copy of a 4-float-per-pixel buffer into an OpenCL image, because the gaussian-blur
 // routine consumes images, not buffers.
@@ -864,6 +897,7 @@ hl_hf_pack(global const float *estimate, global const float *valid, global const
   if(x >= width || y >= height) return;
   const int i = y * width + x;
   const float4 low_pixel = read_imagef(low_image, sampleri, (int2)(x, y));
+  // detail band H = est - ubar (the low band): a zero-mean high-frequency plane per channel
   const float detail_r = estimate[i*4+0] - low_pixel.x;
   const float detail_g = estimate[i*4+1] - low_pixel.y;
   const float detail_b = estimate[i*4+2] - low_pixel.z;
@@ -915,11 +949,16 @@ hl_hf_fit(read_only image2d_t moments1_img, read_only image2d_t moments2_img, re
   const float cov_2 = OFF(c, guide2) - mean_target * mean_guide2;
   const float var_target = fmax(second_moments[c] - mean_target * mean_target, 0.f);
   #undef OFF
-  const float lambda = 1e-3f * 0.5f * (var_11 + var_22) + 1e-12f;
-  const float determinant = fmax((var_11 + lambda) * (var_22 + lambda) - var_12 * var_12, 1e-18f);
-  const float gain_a_raw = ((var_22 + lambda) * cov_1 - var_12 * cov_2) / determinant;
-  const float gain_b_raw = ((var_11 + lambda) * cov_2 - var_12 * cov_1) / determinant;
-  const float r_sq = clamp((gain_a_raw * cov_1 + gain_b_raw * cov_2) / (var_target + 1e-12f), 0.f, 1.f);
+  // MATHS BRIDGE -- article step 4: the SAME 2x2 normal equations as hl_cf_fit_joint, but on the
+  // detail-band moments, giving raw gains (a,b) that predict channel c's detail from the two guides'
+  // details; R^2 = fraction of the target detail's variance the fit explains. u1=guide1, u2=guide2, v=c.
+  const float lambda = 1e-3f * 0.5f * (var_11 + var_22) + 1e-12f;   // relative Tikhonov ridge
+  const float determinant = fmax((var_11 + lambda) * (var_22 + lambda) - var_12 * var_12, 1e-18f);   // det Sigma
+  const float gain_a_raw = ((var_22 + lambda) * cov_1 - var_12 * cov_2) / determinant;   // a = (Sigma^-1 RHS)_1 (Cramer)
+  const float gain_b_raw = ((var_11 + lambda) * cov_2 - var_12 * cov_1) / determinant;   // b = (Sigma^-1 RHS)_2 (Cramer)
+  const float r_sq = clamp((gain_a_raw * cov_1 + gain_b_raw * cov_2) / (var_target + 1e-12f), 0.f, 1.f);   // R^2
+  // R^2-shrunk gains: on a zero-mean detail band shrinkage IS the correct estimator (a weak
+  // colour-line then transfers proportionally less texture), unlike the full-signal fit which keeps a,b raw
   gain_a[i] = gain_a_raw * r_sq;
   gain_b[i] = gain_b_raw * r_sq;
   const int mass_ok = (moments3.z > min_mass && moments1.x > 0.25f * moments3.z);
@@ -942,8 +981,11 @@ hl_hf_energy(global const float *estimate, global const float *valid, global con
   const int i = y * width + x;
   const float4 low_pixel = read_imagef(low_image, sampleri, (int2)(x, y));
   const float low_band[3] = { low_pixel.x, low_pixel.y, low_pixel.z };
+  // h_g = a(u_g1-ubar_g1) + b(u_g2-ubar_g2): the guide-transferred detail (diffused shrunk gains)
   const float detail_guide = gain_a[i] * (estimate[i*4+guide1] - low_band[guide1]) + gain_b[i] * (estimate[i*4+guide2] - low_band[guide2]);
+  // h_d = R^2 (u_c - ubar_c): the channel's own detail, damped by its diffused fit quality
   const float detail_own = clamp(model_quality[i*4+c], 0.f, 1.f) * (estimate[i*4+c] - low_band[c]);
+  // write |h_g|, |h_d|; the host blurs these into the local energies e_g, e_d the min-energy odds use
   write_imagef(output, (int2)(x, y), (float4)(fabs(detail_guide), fabs(detail_own), 0.f, 0.f));
 }
 
@@ -968,7 +1010,11 @@ hl_hf_eval(global float *estimate, global const float *valid, global const float
   const float detail_guide = gain_a[i] * (estimate[i*4+guide1] - low_band[guide1]) + gain_b[i] * (estimate[i*4+guide2] - low_band[guide2]);
   const float detail_own = clamp(model_quality[i*4+c], 0.f, 1.f) * (estimate[i*4+c] - low_band[c]);
   const float4 energy_pixel = read_imagef(energy, sampleri, (int2)(x, y));
+  // quadratic min-energy odds: e_g = energy.x = blurred|h_g|, e_d = energy.y = blurred|h_d|;
+  // w = e_d^2/(e_d^2 + e_g^2) favours whichever candidate carries LESS local HF energy -- a
+  // guide misfire spikes e_g, driving w -> 0 so the damped path wins exactly there
   const float weight_guide = energy_pixel.y * energy_pixel.y / fmax(energy_pixel.y * energy_pixel.y + energy_pixel.x * energy_pixel.x, 1e-18f);
+  // resynthesis: u_c = ubar_c + w*h_g + (1-w)*h_d
   estimate[i*4+c] = low_band[c] + weight_guide * detail_guide + (1.f - weight_guide) * detail_own;
 }
 
@@ -990,6 +1036,8 @@ hl_hf_damp(global float *estimate, global const float *valid, global const float
   for(int c = 0; c < 3; c++)
     if(valid[i*4+c] < 0.5f)
     {
+      // no second guide -> no h_g candidate: keep only the R^2-damped own detail
+      // u_c = ubar_c + R^2 (u_c - ubar_c)
       const float detail_keep = clamp(model_quality[i*4+c], 0.f, 1.f);
       estimate[i*4+c] = low_band[c] + detail_keep * (estimate[i*4+c] - low_band[c]);
     }
@@ -1008,6 +1056,8 @@ hl_hf_damp(global float *estimate, global const float *valid, global const float
 // rounding the transition over about 2% of the clip level (a smooth maximum computed as
 // half of the difference plus the square root of difference squared plus width squared) so
 // no hard crease appears where estimates cross the floor. Valid channels are untouched.
+// MATHS BRIDGE -- article step 5: out = c0 + 1/2 ( (e-c0) + sqrt((e-c0)^2 + (0.02 c0)^2) ), a smooth
+// max(e, c0) softened over width 0.02*c0 so the hard max()'s floor-binding contour never prints as an edge.
 kernel void
 hl_soft_floor(global float *estimate, global const float *valid, global const float *clip0,
               const int width, const int height)
@@ -1019,9 +1069,9 @@ hl_soft_floor(global float *estimate, global const float *valid, global const fl
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
     {
-      const float clip_level = clip0[i * 4 + c];
-      const float diff = estimate[i * 4 + c] - clip_level;
-      const float soft_width = 0.02f * fmax(clip_level, 1e-6f);
+      const float clip_level = clip0[i * 4 + c];               // c0, the saturated reading
+      const float diff = estimate[i * 4 + c] - clip_level;     // e - c0
+      const float soft_width = 0.02f * fmax(clip_level, 1e-6f); // transition width = 2% of c0
       estimate[i * 4 + c] = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
     }
 }
@@ -1045,6 +1095,9 @@ hl_hard_floor(global float *estimate, global const float *valid, global const fl
 // Build the luminance-proxy plane (lsb = red + green + blue of est, a cheap brightness
 // measure) and the byte hole mask: with allmode = 1 a hole is a pixel where ALL three
 // channels are clipped, with allmode = 0 a pixel where ANY channel is clipped.
+// MATHS BRIDGE -- step 7 magnitude/chrominance split: lsb = L_sum = R+G+B (the summed luminance
+// that gets the one shared biharmonic dome); allmode=1 marks the all-clip core Omega (no survivor)
+// this joint-core stage rebuilds.
 kernel void
 hl_lsb_hole(global const float *estimate, global const float *valid,
             global float *luminance, global uchar *hole, const int width, const int height,
@@ -1054,7 +1107,7 @@ hl_lsb_hole(global const float *estimate, global const float *valid,
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
-  luminance[i] = estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2];
+  luminance[i] = estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2]; // L_sum = R+G+B
   const int clipped_r = (valid[i * 4 + 0] < 0.5f);
   const int clipped_g = (valid[i * 4 + 1] < 0.5f);
   const int clipped_b = (valid[i * 4 + 2] < 0.5f);
@@ -1064,6 +1117,9 @@ hl_lsb_hole(global const float *estimate, global const float *valid,
 // One chroma-ratio plane: ratio = channel c of est divided by the luminance proxy lsb
 // (floored at eps so dark pixels never divide by zero). The dome stage smooths these ratios
 // with the harmonic fill so hue stays coherent while the brightness is replaced by the dome.
+// MATHS BRIDGE -- article step 6, the hue-coupled chromaticity: r_c = est_c / L_sum is a BOUNDED
+// quantity, so it is carried inward by a plain harmonic fill (Delta r = 0) while brightness gets the
+// biharmonic dome; recombining as dome_c = L_dome * r_c couples the channels so the hue cannot drift.
 kernel void
 hl_ratio_plane(global const float *estimate, global const float *luminance, global float *ratio,
                const int width, const int height, const int c, const float epsilon)
@@ -1078,7 +1134,9 @@ hl_ratio_plane(global const float *estimate, global const float *luminance, glob
 // Pyramid downsample with the DOME's semantics (contrast with hl_fill_down, which averages
 // anchors): coarse value = mean of the NON-hole fine pixels of the block (0 if none), coarse
 // hole flag = 1 when hole pixels are the majority of the block. Feeds the biharmonic-dome
-// solve on the coarse grid.
+// solve on the coarse grid. The downsample keeps the coarse hole small enough for the direct
+// SPD Cholesky (O(N^3)); the dome is low-frequency, so solving Delta^2 u = 0 coarse then bilinearly
+// upsampling loses nothing. Boundary cells keep real rim data (majority-hole flag, non-hole mean).
 kernel void
 hl_dome_down(global const float *value, global const uchar *hole,
              global float *coarse_value, global uchar *coarse_hole,
@@ -1111,6 +1169,10 @@ hl_dome_down(global const float *value, global const uchar *hole,
 // blown zone the pixel sits, in units of 1.5 x the blur sigma):
 // we = 1 - (1 - ramp) * gaussian, squared. Where NO channel survived (anyvalid = 0) the dome
 // wins outright; elsewhere est = we * est + (1 - we) * dome.
+// MATHS BRIDGE -- article step 6: keep = 1 - dome_fraction with
+//   dome_fraction = (1 - S_{0.4}^{0.85}(R^2)) * exp(-(delta/1.5 sigma)^2),
+// R^2 (bsc) asking "is the colour-line real" via smoothstep S, delta (dep) asking "is the dome
+// trustworthy" via a gaussian of depth; dome_c = L_dome * (r_c / sum r) recombines hue-coupled.
 kernel void
 hl_dome_blend(global float *estimate, global const float *valid, global const float *model_quality,
               global const float *clip_depth, global const float *dome_lum,
@@ -1130,13 +1192,14 @@ hl_dome_blend(global float *estimate, global const float *valid, global const fl
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
     {
-      const float quality_ramp = clamp((model_quality[i * 4 + c] - 0.4f) / 0.45f, 0.f, 1.f);
-      const float weight_quality = quality_ramp * quality_ramp * (3.f - 2.f * quality_ramp);
-      const float depth_norm = clip_depth[i] / (1.5f * cf_sigma);
-      const float depth_gauss = exp(-depth_norm * depth_norm);
-      const float keep_root = sqrt(clamp(1.f - (1.f - weight_quality) * depth_gauss, 0.f, 1.f));
-      const float keep_weight = keep_root * keep_root;
-      const float dome_value = dome_lum[i] * (ratios[c] / ratio_sum);
+      const float quality_ramp = clamp((model_quality[i * 4 + c] - 0.4f) / 0.45f, 0.f, 1.f);   // ramp arg (0.4..0.85)
+      const float weight_quality = quality_ramp * quality_ramp * (3.f - 2.f * quality_ramp);   // S_{0.4}^{0.85}(R^2)
+      const float depth_norm = clip_depth[i] / (1.5f * cf_sigma);                                // delta / (1.5 sigma)
+      const float depth_gauss = exp(-depth_norm * depth_norm);                                   // exp(-(delta/1.5 sigma)^2)
+      const float keep_root = sqrt(clamp(1.f - (1.f - weight_quality) * depth_gauss, 0.f, 1.f)); // sqrt(keep)
+      const float keep_weight = keep_root * keep_root;                                           // keep = 1 - dome_fraction
+      const float dome_value = dome_lum[i] * (ratios[c] / ratio_sum);                            // dome_c = L_dome * chroma share
+      // est = keep*est + (1-keep)*dome; no surviving guide -> take the dome outright
       estimate[i * 4 + c] = anyvalid ? (keep_weight * estimate[i * 4 + c] + (1.f - keep_weight) * dome_value) : dome_value;
     }
 }
@@ -1157,6 +1220,8 @@ hl_dome_blend(global float *estimate, global const float *valid, global const fl
 // Floor the shared luminance dome at the saturated sum inside the all-clip core: every
 // channel is at least at its clip level clip0 there, so the dome must never extrapolate
 // below "all three channels at clip" (the sum of the three clip levels).
+// MATHS BRIDGE -- step 7 saturation floor on the dome (article §"A saturation floor"):
+// L_dome >= sum_c clip0_c. Monotone (only raises), so it never dims the rim or shifts the hue.
 kernel void
 hl_core_floor(global float *dome_lum, global const uchar *hole, global const float *clip0,
               const int width, const int height)
@@ -1166,6 +1231,7 @@ hl_core_floor(global float *dome_lum, global const uchar *hole, global const flo
   if(x >= width || y >= height) return;
   const int i = y * width + x;
   if(!hole[i]) return;
+  // L_dome <- max(L_dome, clip0_R + clip0_G + clip0_B): floor at "all channels at clip"
   dome_lum[i] = fmax(dome_lum[i], clip0[i * 4 + 0] + clip0[i * 4 + 1] + clip0[i * 4 + 2]);
 }
 
@@ -1173,6 +1239,8 @@ hl_core_floor(global float *dome_lum, global const uchar *hole, global const flo
 // (each est channel divided by the luminance proxy lsb) over fully-valid pixels, packed as
 // (r, g, b, count); the host sums the per-group results into the mean chroma cmean that the
 // screened solve pulls toward.
+// MATHS BRIDGE -- step 7 flat-colour target r_target = <RGB/L_sum> over fully-valid pixels
+// (article's bar-c_c): the screened-Poisson reaction damps the core chroma toward this mean.
 kernel void
 hl_cmean_reduce(global const float *estimate, global const float *valid, global const float *luminance,
                 global float4 *partial, const int n_pixels, const float epsilon, local float4 *scratch)
@@ -1204,6 +1272,9 @@ hl_cmean_reduce(global const float *estimate, global const float *valid, global 
 // the solution must attach to); rat = the output ratio plane pre-seeded with the mean chroma
 // cmeanc inside the hole (the solver's scatter overwrites the hole entries with the exact
 // solution afterwards); u = the solver's starting guess (ratio outside, mean chroma inside).
+// MATHS BRIDGE -- step 7 screened-Poisson setup for channel c: boundary_ratio = the Dirichlet rim
+// data r_valid = est_c/L_sum (zero on the hole, so applying Op to it gives the eliminated boundary
+// term); the hole seed r_target = cmeanc biases an under-converged centre toward the flat mean.
 kernel void
 hl_pde_init(global const float *estimate, global const float *luminance, global const uchar *hole,
             global float *boundary_ratio, global float *ratio, global float *solution,
@@ -1213,7 +1284,7 @@ hl_pde_init(global const float *estimate, global const float *luminance, global 
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
-  const float chroma_ratio = estimate[i * 4 + c] / fmax(luminance[i], epsilon);
+  const float chroma_ratio = estimate[i * 4 + c] / fmax(luminance[i], epsilon); // r_c = est_c / L_sum
   const float seed_value = hole[i] ? cmeanc : chroma_ratio;
   boundary_ratio[i] = hole[i] ? 0.f : seed_value;
   ratio[i] = fmax(seed_value, 0.f);
@@ -1236,6 +1307,10 @@ hl_mask_to_img1(global const uchar *mask, write_only image2d_t output, const int
 // each channel's share of the diffused chroma ratios (r0/r1/r2), at full strength. In the
 // feather ring around the hole (blurred-mask weight wf > 0): blend that core value into the
 // CLIPPED channels only, leaving measured data untouched.
+// MATHS BRIDGE -- step 7 recombination + feathered hand-over: core_c = L_dome * (r_c / sum_j r_j)
+// (RGB = L*r); the blurred core mask wf gives a smooth alpha-blend of the core reconstruction into
+// the surrounding coefficient-field reconstruction (the method's one smooth weight: it blends two
+// reconstructions, never reclassifies a measurement).
 kernel void
 hl_core_blend(global float *estimate, global const float *valid, global const uchar *hole,
               global const float *dome_lum, global const float *ratio0, global const float *ratio1,
@@ -1246,17 +1321,19 @@ hl_core_blend(global float *estimate, global const float *valid, global const uc
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
-  const float feather_weight = clamp(read_imagef(feather_img, samplerA, (int2)(x, y)).x, 0.f, 1.f);
+  const float feather_weight = clamp(read_imagef(feather_img, samplerA, (int2)(x, y)).x, 0.f, 1.f); // alpha (blurred core mask)
   const float ratios[3] = { ratio0[i], ratio1[i], ratio2[i] };
-  const float ratio_sum = fmax(ratios[0] + ratios[1] + ratios[2], epsilon);
+  const float ratio_sum = fmax(ratios[0] + ratios[1] + ratios[2], epsilon); // sum_j r_j
 
   if(hole[i])
   {
+    // interior of the core: core_c = L_dome * (r_c / sum_j r_j), full strength
     for(int c = 0; c < 3; c++)
       estimate[i * 4 + c] = dome_lum[i] * (ratios[c] / ratio_sum);
   }
   else if(feather_weight > 1e-4f)
   {
+    // feather ring: alpha*core_c + (1-alpha)*est on CLIPPED channels only (valid data untouched)
     for(int c = 0; c < 3; c++)
       if(valid[i * 4 + c] < 0.5f)
         estimate[i * 4 + c] = feather_weight * dome_lum[i] * (ratios[c] / ratio_sum) + (1.f - feather_weight) * estimate[i * 4 + c];
@@ -1271,6 +1348,11 @@ hl_core_blend(global float *estimate, global const float *valid, global const uc
 // diffused with edge-dependent weights so the recovered colour follows the image structure.
 // Mirrors the CPU _aniso_tensor / _aniso_div_solve path, driven by _aniso_stage_cl -- any
 // change here must be mirrored there and re-validated with the HL_ANISOCL_TEST self-test.
+//
+// MATHS BRIDGE -- Step 8 / E_chrominance anisotropic (article §"Chrominance coherence"):
+// div(D grad r) = 0, r = RGB/L_sum, Dirichlet r|dOmega = r_valid, obstacle r_c >= c0/L_sum.
+// D = structure tensor (isophote t vs gradient g blend). Divergence form is discretized as the
+// Weickert nonnegativity graph Laplacian (hl_aniso_weights), solved by a shared sparse Cholesky.
 
 // Build the fine-level inputs of the anisotropic pass in one sweep: vldan = the
 // diffusion-only validity mask (only all-clip pixels stay marked for diffusion; every other
@@ -1287,13 +1369,15 @@ hl_aniso_prep(global const float *estimate, global const float *valid,
   if(x >= width || y >= height) return;
   const int i = y * width + x;
   const int all_clipped = (valid[i * 4 + 0] < 0.5f && valid[i * 4 + 1] < 0.5f && valid[i * 4 + 2] < 0.5f);
+  // vldan: all-clip pixels stay < 0.5 (they diffuse); every other pixel becomes a Dirichlet anchor
+  // (validity raised to >= 0.6), so div(D grad r)=0 is restricted to the all-clip hole
   for(int c = 0; c < 4; c++)
     valid_anchor[i * 4 + c] = all_clipped ? valid[i * 4 + c] : fmax(valid[i * 4 + c], 0.6f);
   hole[i] = all_clipped;
-  const float lum_sum = fmax(estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2], epsilon);
+  const float lum_sum = fmax(estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2], epsilon); // L_sum
   luminance[i] = lum_sum;
   for(int c = 0; c < 3; c++)
-    chroma[i * 4 + c] = estimate[i * 4 + c] / lum_sum;
+    chroma[i * 4 + c] = estimate[i * 4 + c] / lum_sum; // r_c = est_c / L_sum
   chroma[i * 4 + 3] = 0.f;
 }
 
@@ -1378,9 +1462,10 @@ hl_aniso_tensor(global const float *grad_x, global const float *grad_y,
   const float inv_mag = nonzero / (magnitude + (1.f - nonzero));
   const float grad_ux = grad_dx * inv_mag + (1.f - nonzero);
   const float grad_uy = grad_dy * inv_mag;
-  const float cross_damp = exp(-magnitude / (4.f * gnorm));
-  const float iso_x = -grad_uy;
+  const float cross_damp = exp(-magnitude / (4.f * gnorm)); // c2 = exp(-|grad L|/(4 <|grad L|>))
+  const float iso_x = -grad_uy; // isophote t = gradient g rotated 90 deg (level line)
   const float iso_y = grad_ux;
+  // D = t t^T + c2 * g g^T (mirrors CPU _aniso_tensor)
   tensor_xx[i] = iso_x * iso_x + cross_damp * grad_ux * grad_ux;
   tensor_xy[i] = iso_x * iso_y + cross_damp * grad_ux * grad_uy;
   tensor_yy[i] = iso_y * iso_y + cross_damp * grad_uy * grad_uy;
@@ -1413,15 +1498,17 @@ hl_aniso_weights(global const float *tensor_xx, global const float *tensor_xy, g
     float weight_value = 0.f;
     if(neighbor_x >= 0 && neighbor_y >= 0 && neighbor_x < width && neighbor_y < height)
     {
+      // edge-averaged tensor D = [[a,b],[b,c]]; b clamped to +-min(a,c) so every weight stays >= 0
+      // (Weickert nonnegativity -> SPD M-matrix -> discrete maximum principle, mirrors _aniso_edge_w)
       const int j = neighbor_y * width + neighbor_x;
-      const float weight_a = 0.5f * (tensor_xx[grid_index] + tensor_xx[j]);
-      const float weight_c = 0.5f * (tensor_yy[grid_index] + tensor_yy[j]);
+      const float weight_a = 0.5f * (tensor_xx[grid_index] + tensor_xx[j]); // a = D_xx
+      const float weight_c = 0.5f * (tensor_yy[grid_index] + tensor_yy[j]); // c = D_yy
       const float min_ac = fmin(weight_a, weight_c);
-      const float weight_b = clamp(0.5f * (tensor_xy[grid_index] + tensor_xy[j]), -min_ac, min_ac);
-      if(neighbor_dy[direction] == 0) weight_value = fmax(weight_a - fabs(weight_b), 1e-4f);
-      else if(neighbor_dx[direction] == 0) weight_value = fmax(weight_c - fabs(weight_b), 1e-4f);
-      else if(neighbor_dx[direction] == neighbor_dy[direction]) weight_value = fmax(weight_b, 0.f);
-      else weight_value = fmax(-weight_b, 0.f);
+      const float weight_b = clamp(0.5f * (tensor_xy[grid_index] + tensor_xy[j]), -min_ac, min_ac); // b
+      if(neighbor_dy[direction] == 0) weight_value = fmax(weight_a - fabs(weight_b), 1e-4f);         // axis x: a - |b|
+      else if(neighbor_dx[direction] == 0) weight_value = fmax(weight_c - fabs(weight_b), 1e-4f);    // axis y: c - |b|
+      else if(neighbor_dx[direction] == neighbor_dy[direction]) weight_value = fmax(weight_b, 0.f);  // diag (+,+)/(-,-): +b
+      else weight_value = fmax(-weight_b, 0.f);                                                      // diag (+,-)/(-,+): -b
     }
     edge_weights[unknown * 8 + direction] = weight_value;
   }
@@ -1444,15 +1531,16 @@ hl_aniso_reassemble(global float *estimate, global const float *valid_anchor, gl
   // only the all-clip core is ever written (vldan flags partially-valid pixels' channels
   // >= 0.6): magnitude = dome luminance split by the diffused ratios. Mirrors the CPU
   // reassembly (a ladder-era magnitude-transfer branch was removed from both).
-  const float ratio_sum = fmax(chroma[i * 4 + 0] + chroma[i * 4 + 1] + chroma[i * 4 + 2], epsilon);
+  const float ratio_sum = fmax(chroma[i * 4 + 0] + chroma[i * 4 + 1] + chroma[i * 4 + 2], epsilon); // sum_j r_j
   for(int c = 0; c < 3; c++)
     if(valid_anchor[i * 4 + c] < 0.5f)
     {
       const float ratio_c = fmax(chroma[i * 4 + c], 0.f);
-      const float magnitude = luminance[i] * ratio_c / ratio_sum;
+      const float magnitude = luminance[i] * ratio_c / ratio_sum; // u_c = L_sum * r_c / sum_j r_j (RGB = L*r)
       // SOFT saturation floor: the hard max() prints an exactly-flat shelf at the clip level
       // plus a gradient kink wherever the magnitude transfer under-predicts a channel near
       // its own rim. Mirrors the CPU reassembly.
+      // u_c <- c0 + 0.5*((u-c0) + sqrt((u-c0)^2 + w^2)), w = 0.02*c0 (smooth max(u, c0), article rule 3)
       const float clip_level = clip0[i * 4 + c];
       const float diff = magnitude - clip_level;
       const float soft_width = 0.02f * fmax(clip_level, 1e-6f);
@@ -1583,27 +1671,30 @@ hl_knee_joint_reg(global const float *binned_planes, read_only image2d_t moments
   const float second_moments[6] = { moments_b.x, moments_b.y, moments_b.z, moments_b.w, moments_c.x, moments_c.y };
   const int index_lut[3][3] = { { 0, 1, 2 }, { 1, 3, 4 }, { 2, 4, 5 } };
 
-  const float inv_weight = 1.f / weight_sum;
-  const float mean_target = first_moments[1 + c] * inv_weight;
-  const float mean_guide1 = first_moments[1 + guide1] * inv_weight;
-  const float mean_guide2 = first_moments[1 + guide2] * inv_weight;
-  const float var_11 = fmax(second_moments[index_lut[guide1][guide1]] * inv_weight - mean_guide1 * mean_guide1, 0.f);
-  const float var_22 = fmax(second_moments[index_lut[guide2][guide2]] * inv_weight - mean_guide2 * mean_guide2, 0.f);
-  const float var_12 = second_moments[index_lut[guide1][guide2]] * inv_weight - mean_guide1 * mean_guide2;
-  const float cov_1 = second_moments[index_lut[c][guide1]] * inv_weight - mean_target * mean_guide1;
-  const float cov_2 = second_moments[index_lut[c][guide2]] * inv_weight - mean_target * mean_guide2;
-  const float var_target = fmax(second_moments[index_lut[c][c]] * inv_weight - mean_target * mean_target, 0.f);
+  const float inv_weight = 1.f / weight_sum;                     // 1/n, converts summed moments to E[.]
+  const float mean_target = first_moments[1 + c] * inv_weight;   // E[v]
+  const float mean_guide1 = first_moments[1 + guide1] * inv_weight; // E[u1]
+  const float mean_guide2 = first_moments[1 + guide2] * inv_weight; // E[u2]
+  // second moments de-meaned = Var/Cov (centered about the window mean to avoid float E[u^2]-E[u]^2 cancellation)
+  const float var_11 = fmax(second_moments[index_lut[guide1][guide1]] * inv_weight - mean_guide1 * mean_guide1, 0.f); // Var(u1)
+  const float var_22 = fmax(second_moments[index_lut[guide2][guide2]] * inv_weight - mean_guide2 * mean_guide2, 0.f); // Var(u2)
+  const float var_12 = second_moments[index_lut[guide1][guide2]] * inv_weight - mean_guide1 * mean_guide2; // Cov(u1,u2) off-diag
+  const float cov_1 = second_moments[index_lut[c][guide1]] * inv_weight - mean_target * mean_guide1; // Cov(v,u1) RHS
+  const float cov_2 = second_moments[index_lut[c][guide2]] * inv_weight - mean_target * mean_guide2; // Cov(v,u2) RHS
+  const float var_target = fmax(second_moments[index_lut[c][c]] * inv_weight - mean_target * mean_target, 0.f); // Var(v) for R^2
 
-  const float lambda = 1e-3f * 0.5f * (var_11 + var_22) + 1e-12f;
-  const float diag_11 = var_11 + lambda;
-  const float diag_22 = var_22 + lambda;
-  const float determinant = fmax(diag_11 * diag_22 - var_12 * var_12, 1e-18f);
-  const float slope_1 = (diag_22 * cov_1 - var_12 * cov_2) / determinant;
-  const float slope_2 = (diag_11 * cov_2 - var_12 * cov_1) / determinant;
+  const float lambda = 1e-3f * 0.5f * (var_11 + var_22) + 1e-12f; // relative Tikhonov ridge = 1e-3*(Var u1+Var u2)/2
+  const float diag_11 = var_11 + lambda;                          // ridged normal-matrix diagonal [0][0]
+  const float diag_22 = var_22 + lambda;                          // ridged normal-matrix diagonal [1][1]
+  const float determinant = fmax(diag_11 * diag_22 - var_12 * var_12, 1e-18f); // det of the 2x2 system
+  const float slope_1 = (diag_22 * cov_1 - var_12 * cov_2) / determinant; // a = slope on u1 (Cramer's rule)
+  const float slope_2 = (diag_11 * cov_2 - var_12 * cov_1) / determinant; // b = slope on u2 (Cramer's rule)
 
+  // v_hat = E[v] + a*(u1 - E[u1]) + b*(u2 - E[u2])  (the colour-line prediction; intercept d folded in)
   pred[c * bin_pixels + pixel] = mean_target + slope_1 * (guide1_val - mean_guide1) + slope_2 * (guide2_val - mean_guide2);
+  // R^2 = (a*Cov(v,u1) + b*Cov(v,u2)) / Var(v): explained-variance fraction (fit quality for the vote gate)
   r2_scores[c * bin_pixels + pixel] = clamp((slope_1 * cov_1 + slope_2 * cov_2) / (var_target + 1e-12f), 0.f, 1.f);
-  done[c * bin_pixels + pixel] = 1;
+  done[c * bin_pixels + pixel] = 1;                               // cell served; coarser sigma passes skip it
 }
 
 // Single-guide fallback prediction for cells the joint regression could not serve (only one
@@ -1634,16 +1725,16 @@ hl_knee_pair_reg(global const float *binned_planes, read_only image2d_t moments_
   if(weight_sum <= min_mass) return;
   const float4 moments_b = read_imagef(moments_b_img, samplerA, (int2)(x, y));
 
-  const float inv_weight = 1.f / weight_sum;
-  const float mean_target = (target_is_a ? moments_a.y : moments_a.z) * inv_weight;
-  const float mean_guide = (target_is_a ? moments_a.z : moments_a.y) * inv_weight;
-  const float covariance = moments_b.y * inv_weight - mean_target * mean_guide;
-  const float var_guide = fmax((target_is_a ? moments_b.x : moments_a.w) * inv_weight - mean_guide * mean_guide, 0.f);
-  const float var_target = fmax((target_is_a ? moments_a.w : moments_b.x) * inv_weight - mean_target * mean_target, 0.f);
-  const float slope = covariance / (var_guide * (1.f + 1e-3f) + 1e-12f);
+  const float inv_weight = 1.f / weight_sum;                                        // 1/n
+  const float mean_target = (target_is_a ? moments_a.y : moments_a.z) * inv_weight; // E[v]
+  const float mean_guide = (target_is_a ? moments_a.z : moments_a.y) * inv_weight;  // E[u]
+  const float covariance = moments_b.y * inv_weight - mean_target * mean_guide;     // Cov(v,u) (moments_b.y = sum w*a*b)
+  const float var_guide = fmax((target_is_a ? moments_b.x : moments_a.w) * inv_weight - mean_guide * mean_guide, 0.f);  // Var(u)
+  const float var_target = fmax((target_is_a ? moments_a.w : moments_b.x) * inv_weight - mean_target * mean_target, 0.f); // Var(v)
+  const float slope = covariance / (var_guide * (1.f + 1e-3f) + 1e-12f);            // a = Cov(v,u)/Var(u), ridged
 
-  pred[target_channel * bin_pixels + pixel] = mean_target + slope * (guide_val - mean_guide);
-  r2_scores[target_channel * bin_pixels + pixel] = clamp(covariance * covariance / (var_guide * var_target + 1e-18f), 0.f, 1.f);
+  pred[target_channel * bin_pixels + pixel] = mean_target + slope * (guide_val - mean_guide); // v_hat = E[v] + a*(u-E[u])
+  r2_scores[target_channel * bin_pixels + pixel] = clamp(covariance * covariance / (var_guide * var_target + 1e-18f), 0.f, 1.f); // R^2 = Cov^2/(Var(u)Var(v))
   done[target_channel * bin_pixels + pixel] = 1;
 }
 
@@ -1670,28 +1761,30 @@ hl_knee_apply(global const float *input, global float *output,
   const float clip_rgb[3] = { clipraw.x, clipraw.y, clipraw.z };
   const int engaged_flags[3] = { engaged.x, engaged.y, engaged.z };
 
-  if(c <= 2 && engaged_flags[c])
+  if(c <= 2 && engaged_flags[c]) // only engaged channels' band pixels are corrected
   {
-    const float norm_val = raw_value / clip_rgb[c];
-    if(norm_val >= knee_lo && norm_val < knee_det)
+    const float norm_val = raw_value / clip_rgb[c]; // v in clip units
+    if(norm_val >= knee_lo && norm_val < knee_det)  // only band values [LO, DET)
     {
-      const float step = (knee_det - knee_lo) / (float)bins;
-      const float bin_pos = (norm_val - (knee_lo + 0.5f * step)) / step;
-      global const float *lift_curve = lift + c * bins;
+      // L(v) lookup, mirroring the CPU _knee_lift_of: piecewise-linear over bin-center knots,
+      // ramped in over the first half-bin, flat-extended past the last center
+      const float step = (knee_det - knee_lo) / (float)bins;              // bin width
+      const float bin_pos = (norm_val - (knee_lo + 0.5f * step)) / step;  // v in bin-center units
+      global const float *lift_curve = lift + c * bins;                   // this channel's knot array
       float lift_value;
-      if(bin_pos <= -0.5f) lift_value = 0.f;
-      else if(bin_pos <= 0.f) lift_value = lift_curve[0] * 2.f * (bin_pos + 0.5f);
-      else if(bin_pos >= (float)(bins - 1)) lift_value = lift_curve[bins - 1];
+      if(bin_pos <= -0.5f) lift_value = 0.f;                              // at/below LO: no lift
+      else if(bin_pos <= 0.f) lift_value = lift_curve[0] * 2.f * (bin_pos + 0.5f); // first half-bin ramp 0 -> lift[0]
+      else if(bin_pos >= (float)(bins - 1)) lift_value = lift_curve[bins - 1];     // past last center: flat-extend
       else
       {
-        const int i = (int)bin_pos;
-        const float frac = bin_pos - (float)i;
-        lift_value = lift_curve[i] * (1.f - frac) + lift_curve[i + 1] * frac;
+        const int i = (int)bin_pos;                                       // lower knot
+        const float frac = bin_pos - (float)i;                           // blend weight
+        lift_value = lift_curve[i] * (1.f - frac) + lift_curve[i + 1] * frac; // linear blend
       }
-      raw_value = (norm_val + lift_value) * clip_rgb[c];
+      raw_value = (norm_val + lift_value) * clip_rgb[c]; // k^-1(v) = v + L(v), back to raw units
     }
   }
-  output[idx] = raw_value;
+  output[idx] = raw_value; // out-of-band / clipped / non-engaged pixels pass through unchanged
 }
 
 
@@ -1887,10 +1980,11 @@ hl_knee_apply_interp(global float *interp, const int width, const int height,
 
   for(int c = 0; c < 3; c++)
   {
-    if(!engaged_flags[c]) continue;
-    const float norm_val = interp[pixel * 4 + c] / clip_rgb[c];
-    if(norm_val >= knee_lo && norm_val < knee_det)
+    if(!engaged_flags[c]) continue;                              // channels with no rolloff pass through
+    const float norm_val = interp[pixel * 4 + c] / clip_rgb[c];  // v in clip units
+    if(norm_val >= knee_lo && norm_val < knee_det)               // only band values
     {
+      // L(v) lookup identical to hl_knee_apply / the CPU _knee_lift_of
       const float bin_pos = (norm_val - (knee_lo + 0.5f * step)) / step;
       global const float *lift_curve = lift + c * bins;
       float lift_value;
@@ -1905,7 +1999,7 @@ hl_knee_apply_interp(global float *interp, const int width, const int height,
       }
       if(lift_value > 0.f)
       {
-        interp[pixel * 4 + c] = (norm_val + lift_value) * clip_rgb[c];
+        interp[pixel * 4 + c] = (norm_val + lift_value) * clip_rgb[c]; // k^-1(v) = v + L(v)
         touched = 1;
       }
     }
@@ -2017,6 +2111,11 @@ hl_relu(global const float *input, global float *output, const int width, const 
 // clipped pixels. Mirrors the CPU _aniso_iterate pyramid path, driven by _aniso_pyramid_cl
 // -- any change here must be mirrored there and re-validated with the HL_ANISOCL_TEST
 // self-test.
+//
+// MATHS BRIDGE -- Step 8 explicit trace-form pyramid (article §"The update rules"): the multiscale
+// solver for min int grad(r)^T D grad(r) s.t. r >= c0/L. Per level: project onto the obstacle then
+// run 240 steps of r <- max(r + 0.18*(D_xx d_xx r + 2 D_xy d_xy r + D_yy d_yy r), c0/L); coarsest
+// level first so the whole hole is seeded before refinement (bilinear prolongation between levels).
 
 // Box-downsample one pyramid level: coarse luminance dL = block mean of lsb, coarse ratios
 // dr = block means of the three chroma ratios (packed 3 floats per pixel), and coarse
@@ -2070,6 +2169,7 @@ hl_pyr_project(global float *solution, global const float *coarse_obstacle, glob
   const int y = get_global_id(1);
   if(x >= level_w || y >= level_h) return;
   const int i = y * level_w + x;
+  // r <- max(r, obstacle), obstacle = c0/L in ratio space (saturation floor of the obstacle problem)
   if(coarse_hole[i * 3 + c]) solution[i] = fmax(solution[i], coarse_obstacle[i * 3 + c]);
 }
 
@@ -2088,7 +2188,7 @@ hl_aniso_obs_full(global const float *valid_anchor, global const float *clip0, g
   const int all_clipped = (valid_anchor[i * 4 + 0] < 0.5f && valid_anchor[i * 4 + 1] < 0.5f && valid_anchor[i * 4 + 2] < 0.5f);
   for(int c = 0; c < 3; c++)
   {
-    coarse_obstacle[i * 3 + c] = clip0[i * 4 + c] / fmax(luminance[i], epsilon);
+    coarse_obstacle[i * 3 + c] = clip0[i * 4 + c] / fmax(luminance[i], epsilon); // obstacle = c0/L_sum (ratio-space floor)
     coarse_hole[i * 3 + c] = all_clipped ? 1 : 0;
   }
 }
@@ -2141,6 +2241,8 @@ hl_aniso_obs_flags(global const float *chroma, global const float *coarse_obstac
   if(x >= width || y >= height) return;
   const int i = y * width + x;
   if(!coarse_hole[i * 3]) return;
+  // active set of the obstacle problem: some pixel sits at (or below) its floor r_c <= c0/L,
+  // so the projection can still fire -- only then are the 60 polish sweeps worth running
   for(int c = 0; c < 3; c++)
     if(chroma[i * 4 + c] <= coarse_obstacle[i * 3 + c] * 1.001f) atomic_or(&flags[c], 1);
 }
@@ -2214,12 +2316,14 @@ hl_aniso_iter(global const float *source, global float *dest, global const uchar
   const int y_north = max(y - 1, 0);
   const int y_south = min(y + 1, height - 1);
   const float center = source[i];
+  // second differences (the Hessian of r): d_xx r, d_yy r, mixed d_xy r
   const float d2_xx = source[y * width + x_east] - 2.f * center + source[y * width + x_west];
   const float d2_yy = source[y_south * width + x] - 2.f * center + source[y_north * width + x];
   const float d2_xy = 0.25f * (source[y_south * width + x_east] - source[y_south * width + x_west]
                              - source[y_north * width + x_east] + source[y_north * width + x_west]);
-  // obstacle projection: the saturation floor in ratio space is enforced after every step
-  // (monotone obstacle-problem relaxation, mirrors the CPU _aniso_iterate_obs)
+  // r <- max( r + 0.18*(D_xx d_xx r + 2 D_xy d_xy r + D_yy d_yy r), c0/L ): explicit trace-form
+  // step tr(D Hess r), then obstacle projection each step (monotone obstacle-problem relaxation,
+  // mirrors the CPU _aniso_iterate_obs)
   dest[i] = fmax(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy), coarse_obstacle[i * 3 + c]);
 }
 
@@ -2258,7 +2362,8 @@ hl_aniso_iter_block(global float *buffer_a, global float *buffer_b, global const
       const float d2_yy = source[y_south * width + x] - 2.f * center + source[y_north * width + x];
       const float d2_xy = 0.25f * (source[y_south * width + x_east] - source[y_south * width + x_west]
                                  - source[y_north * width + x_east] + source[y_north * width + x_west]);
-      // obstacle projection each step (mirrors _aniso_iterate_obs)
+      // r <- max(r + 0.18*tr(D Hess r), c0/L): trace-form step + obstacle projection each step
+      // (mirrors _aniso_iterate_obs)
       dest[i] = fmax(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy),
                     coarse_obstacle[i * 3 + c]);
     }
@@ -2270,6 +2375,8 @@ hl_aniso_iter_block(global float *buffer_a, global float *buffer_b, global const
 // Write the diffused coarse ratios back to full resolution: every clipped channel
 // (vldan < 0.5) of every fine pixel takes the bilinear interpolation of the coarse ratio
 // plane dr; valid channels keep their values untouched.
+// MATHS BRIDGE -- bilinear prolongation of the coarse-level chroma r into the fine hole pixels,
+// seeding the next finer level (the coarse->fine step of the Step-8 pyramid); anchors keep their r.
 kernel void
 hl_aniso_splat(global float *chroma, global const float *valid_anchor, global const float *coarse_ratio,
                const int width, const int height, const int coarse_w, const int coarse_h, const int step)
