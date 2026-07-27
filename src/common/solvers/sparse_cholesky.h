@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_hb.h" // dt_dev_pixelpipe_t (arena alloc) — self-contained include order
 
 // Factored SPD matrix (lower-triangular Cholesky factor L, column-compressed).
 typedef struct
@@ -56,7 +57,7 @@ typedef struct
 
 
 // release a CPU sparse Cholesky factor (arrays + struct); NULL-safe
-static void _sp_chol_free(_sp_chol_t *factor)
+static inline void _sp_chol_free(_sp_chol_t *factor)
 {
   if(!factor) return;
   dt_pixelpipe_cache_free_align(factor->col_ptr);
@@ -81,7 +82,7 @@ static void _sp_chol_free(_sp_chol_t *factor)
 // only the (small) separator block fills. Recursing gives O(N log N) factor nonzeros / O(N^1.5)
 // flops, versus O(N^1.5) fill / O(N^2) flops for the natural raster order. This geometric bisection
 // replaces the generic approximate-minimum-degree heuristic a black-box sparse solver would need.
-static void _sp_nd_order(int *const restrict unknown_ids, const int count, const int *const restrict unknown_x,
+static inline void _sp_nd_order(int *const restrict unknown_ids, const int count, const int *const restrict unknown_x,
                          const int *const restrict unknown_y, const int reach)
 {
   typedef struct
@@ -178,7 +179,7 @@ static void _sp_nd_order(int *const restrict unknown_ids, const int count, const
 // column k of the factor L, i.e. the first column whose elimination consumes column k's result.
 // This forest is exactly the column-dependency DAG the GPU level schedule parallelizes (columns
 // with disjoint root-paths are independent); on the CPU it drives _sp_ereach's pattern walk.
-static void _sp_etree(const int dimension, const int *const restrict col_ptr, const int *const restrict row_index,
+static inline void _sp_etree(const int dimension, const int *const restrict col_ptr, const int *const restrict row_index,
                       int *const restrict parent, int *const restrict ancestor)
 {
   // Not OpenMP-parallelizable: `ancestor` is path-compressed across columns, so column k reads and
@@ -218,7 +219,7 @@ static void _sp_etree(const int dimension, const int *const restrict col_ptr, co
 // symbolic Cholesky pattern theorem). Those j are precisely the columns whose contribution the
 // numeric factor must subtract when forming row k -- returned deepest-ancestor-last so the numeric
 // sweep applies them in valid dependency order (each L[j,*] already finalized when read).
-static int _sp_ereach(const int dimension, const int *const restrict col_ptr, const int *const restrict row_index,
+static inline int _sp_ereach(const int dimension, const int *const restrict col_ptr, const int *const restrict row_index,
                       const int k, const int *const restrict parent, int *const restrict pattern_stack,
                       int *const restrict mark)
 {
@@ -263,7 +264,7 @@ static int _sp_ereach(const int dimension, const int *const restrict col_ptr, co
 //   L[k,j]     multiplier applied from earlier column j -> `multiplier`
 //   the dense scratch row being eliminated for column k -> `work[]`
 // Returns NULL if the matrix turns out not positive definite or on out-of-memory.
-static _sp_chol_t *_sp_chol_factor(const int dimension, const int *const restrict matrix_col_ptr,
+static inline _sp_chol_t *_sp_chol_factor(const int dimension, const int *const restrict matrix_col_ptr,
                                    const int *const restrict matrix_row_index,
                                    const double *const restrict matrix_values, const dt_dev_pixelpipe_t *pipe)
 {
@@ -384,7 +385,7 @@ fail:
 // (rhs holds b on entry, y after the forward sweep, x after the backward sweep).
 // `forward_value` = y[j]; `accum` = x[j] accumulated before its final divide by the diagonal.
 // Two triangular solves realize x = A^{-1} b via  L y = b  then  L^T x = y.
-static void _sp_chol_solve(const _sp_chol_t *const factor, double *const restrict rhs)
+static inline void _sp_chol_solve(const _sp_chol_t *const factor, double *const restrict rhs)
 {
   const int dimension = factor->dimension;
   for(int j = 0; j < dimension; j++) // forward: L y = b  (column-oriented: y_j = (b_j - sum_{i<j} L[j,i] y_i)/L[j,j])

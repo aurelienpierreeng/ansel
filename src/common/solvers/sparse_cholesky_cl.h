@@ -64,7 +64,7 @@ typedef struct
 // the right-hand side b and the solution x live in device buffers.
 
 // release a GPU sparse Cholesky factor (device buffers + host offsets); NULL-safe
-static void _sp_chol_cl_free(_sp_chol_cl_t *factor)
+static inline void _sp_chol_cl_free(_sp_chol_cl_t *factor)
 {
   if(!factor) return;
   dt_opencl_release_mem_object(factor->values);
@@ -87,7 +87,7 @@ static void _sp_chol_cl_free(_sp_chol_cl_t *factor)
 }
 
 // allocate a device buffer and upload host data into it; returns NULL on failure
-static cl_mem _sp_cl_upload(const int devid, const void *data, const size_t bytes)
+static inline cl_mem _sp_cl_upload(const int devid, const void *data, const size_t bytes)
 {
   cl_mem mem = dt_opencl_alloc_device_buffer(devid, bytes);
   if(IS_NULL_PTR(mem)) return NULL;
@@ -113,7 +113,7 @@ static cl_mem _sp_cl_upload(const int devid, const void *data, const size_t byte
 // cmod(j,k) contribution -L[i,k]*L[j,k] grouped by the destination entry it lands in, and (3) an
 // elimination-tree LEVEL SCHEDULE, so the device factors one whole level of mutually independent
 // columns at a time (article "Performance -> The OpenCL pipe": the level-scheduled factorization).
-static _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kernels_t kernels, const int dimension,
+static inline _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_cl_kernels_t kernels, const int dimension,
                                          const int *const restrict matrix_col_ptr,
                                          const int *const restrict matrix_row_index,
                                          const double *const restrict matrix_values)
@@ -514,7 +514,7 @@ fail:
 // (backward), identical to the CPU _sp_chol_solve, but each solve runs level by level (all rows/
 // columns of one level are mutually independent and solved by one work-group each). Forward uses
 // the CSR row mirror of L; backward uses the native CSC columns of L (= rows of L^T).
-static int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp_chol_cl_kernels_t kernels, cl_mem rhs)
+static inline int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp_chol_cl_kernels_t kernels, cl_mem rhs)
 {
   const int devid = factor->devid;
   const int local_size = 64;
