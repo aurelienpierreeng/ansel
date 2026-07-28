@@ -88,22 +88,6 @@
 
 // Downsampling factor for guided-laplacian
 
-// Set to one to output intermediate image steps as PFM in /tmp
-#define DEBUG_DUMP_PFM 0
-
-#if DEBUG_DUMP_PFM
-__DT_CLONE_TARGETS__
-static void dump_PFM(const char *filename, const float *out, const uint32_t w, const uint32_t h)
-{
-  FILE *f = g_fopen(filename, "wb");
-  fprintf(f, "PF\n%d %d\n-1.0\n", w, h);
-  for(int j = h - 1; j >= 0; j--)
-    for(int i = 0; i < w; i++)
-      for(int c = 0; c < 3; c++) fwrite(out + (j * w + i) * 4 + c, 1, sizeof(float), f);
-  fclose(f);
-}
-#endif
-
 DT_MODULE_INTROSPECTION(4, dt_iop_highlights_params_t)
 
 typedef struct dt_iop_highlights_gui_data_t

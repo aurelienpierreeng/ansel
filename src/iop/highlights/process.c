@@ -190,11 +190,6 @@ int process_harmonic_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
 
   if(!IS_NULL_PTR(input_corr)) dt_pixelpipe_cache_free_align(input_corr);
 
-#if DEBUG_DUMP_PFM
-  dump_PFM("/tmp/interpolated.pfm", interpolated, width, height);
-  dump_PFM("/tmp/clipping_mask.pfm", clipping_mask, width, height);
-#endif
-
 error:;
   dt_pixelpipe_cache_free_align(interpolated);
   dt_pixelpipe_cache_free_align(clipping_mask);

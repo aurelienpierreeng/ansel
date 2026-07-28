@@ -416,14 +416,6 @@ static inline int wavelets_process(const float *const restrict in, float *const 
       heat_PDE_diffusion(HF, buffer_out, clipping_mask, reconstructed, width, height, mult, current_scale_type,
                          first_order_factor);
 
-#if DEBUG_DUMP_PFM
-    char name[64];
-    sprintf(name, "/tmp/scale-input-%i.pfm", s);
-    dump_PFM(name, buffer_in, width, height);
-
-    sprintf(name, "/tmp/scale-blur-%i.pfm", s);
-    dump_PFM(name, buffer_out, width, height);
-#endif
   }
   dt_pixelpipe_cache_free_align(tempbuf);
 
@@ -518,11 +510,6 @@ int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   interpolate_bilinear(ds_interpolated, ds_width, ds_height, interpolated, width, height, 4);
   _remosaic_and_replace(input, input, interpolated, clipping_mask, output, normalization, clips, FALSE, filters,
                         width, height);
-
-#if DEBUG_DUMP_PFM
-  dump_PFM("/tmp/interpolated.pfm", interpolated, width, height);
-  dump_PFM("/tmp/clipping_mask.pfm", clipping_mask, width, height);
-#endif
 
 error:;
   dt_pixelpipe_cache_free_align(interpolated);
