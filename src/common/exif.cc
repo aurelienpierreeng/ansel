@@ -1009,7 +1009,7 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
         // Some Fuji cameras shoot in a 1.25x crop mode; account for it (upstream
         // exif.cc:1046-1051 / 1090-1095).
         if(_exif_read_exif_tag(exifData, &posm, "Exif.Fujifilm.CropMode")
-           && (posm->toInt64() == 2 || posm->toInt64() == 4))
+           && (posm->toLong() == 2 || posm->toLong() == 4))
           img->exif_correction_data.fuji.cropf = 1.25f;
         else
           img->exif_correction_data.fuji.cropf = 1.0f;
