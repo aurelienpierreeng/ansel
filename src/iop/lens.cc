@@ -1424,7 +1424,6 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   const int roi_in_y = roi_in->y;
   const int roi_out_x = roi_out->x;
   const int roi_out_y = roi_out->y;
-  const int ch = piece->dsc_in.channels;
   const int width = MAX(iwidth, owidth);
   const int height = MAX(iheight, oheight);
 
@@ -1432,7 +1431,6 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   cl_mem dev_tmp = NULL;
 
   size_t origin[] = { 0, 0, 0 };
-  size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
   size_t oregion[] = { (size_t)owidth, (size_t)oheight, 1 };
   size_t isizes[] = { (size_t)ROUNDUPDWD(iwidth, devid), (size_t)ROUNDUPDHT(iheight, devid), 1 };
   size_t osizes[] = { (size_t)ROUNDUPDWD(owidth, devid), (size_t)ROUNDUPDHT(oheight, devid), 1 };
@@ -3234,55 +3232,20 @@ static void lens_method_changed(GtkWidget *widget, gpointer user_data)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-// Per-class fine-tune slider callbacks (FR-23/24). Mirrors the deepseek pattern: each
-// slider writes its own field, marks the params as user-modified, and pushes a history
-// item so undo/redo sees the value change.
-static void cor_dist_ft_changed(GtkWidget *widget, gpointer user_data)
+// Per-class fine-tune slider callback (FR-23/24). One handler serves all 5 embedded-fine-tune
+// sliders (cor_dist_ft, cor_vig_ft, cor_ca_r_ft, cor_ca_b_ft, scale_md) -- the actual field
+// write is done by the bauhaus default callback (dt_bauhaus_value_changed_default_callback,
+// fired synchronously before this signal -- see src/bauhaus/bauhaus.c:_value_changed_timer
+// and src/develop/imageop.c:dt_bauhaus_value_changed_default_callback), which is enabled
+// automatically by dt_bauhaus_slider_from_params(). All this callback has to do is the two
+// side effects the introspection layer does not handle: mark the params as user-modified
+// (so commit_params keeps p1 over default_params on the next pipe run) and push a history
+// item so undo/redo sees the change.
+static void _embedded_fine_tune_slider_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
-  p->cor_dist_ft = dt_bauhaus_slider_get(widget);
-  p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-}
-
-static void cor_vig_ft_changed(GtkWidget *widget, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(dt_gui_widgets_suppressed()) return;
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
-  p->cor_vig_ft = dt_bauhaus_slider_get(widget);
-  p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-}
-
-static void cor_ca_r_ft_changed(GtkWidget *widget, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(dt_gui_widgets_suppressed()) return;
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
-  p->cor_ca_r_ft = dt_bauhaus_slider_get(widget);
-  p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-}
-
-static void cor_ca_b_ft_changed(GtkWidget *widget, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(dt_gui_widgets_suppressed()) return;
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
-  p->cor_ca_b_ft = dt_bauhaus_slider_get(widget);
-  p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-}
-
-static void scale_md_changed(GtkWidget *widget, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(dt_gui_widgets_suppressed()) return;
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
-  p->scale_md = dt_bauhaus_slider_get(widget);
   p->has_been_set = 0;
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -3621,24 +3584,24 @@ void gui_init(struct dt_iop_module_t *self)
     // p->method, so it is part of the widget tree but not shown/active under LENSFUN.
     g->cor_dist_ft = dt_bauhaus_slider_from_params(self, "cor_dist_ft");
     gtk_widget_set_visible(g->cor_dist_ft, FALSE);
-    g_signal_connect(G_OBJECT(g->cor_dist_ft), "value-changed", G_CALLBACK(cor_dist_ft_changed), self);
+    g_signal_connect(G_OBJECT(g->cor_dist_ft), "value-changed", G_CALLBACK(_embedded_fine_tune_slider_changed), self);
 
     g->cor_vig_ft = dt_bauhaus_slider_from_params(self, "cor_vig_ft");
     gtk_widget_set_visible(g->cor_vig_ft, FALSE);
-    g_signal_connect(G_OBJECT(g->cor_vig_ft), "value-changed", G_CALLBACK(cor_vig_ft_changed), self);
+    g_signal_connect(G_OBJECT(g->cor_vig_ft), "value-changed", G_CALLBACK(_embedded_fine_tune_slider_changed), self);
 
     g->cor_ca_r_ft = dt_bauhaus_slider_from_params(self, "cor_ca_r_ft");
     gtk_widget_set_visible(g->cor_ca_r_ft, FALSE);
-    g_signal_connect(G_OBJECT(g->cor_ca_r_ft), "value-changed", G_CALLBACK(cor_ca_r_ft_changed), self);
+    g_signal_connect(G_OBJECT(g->cor_ca_r_ft), "value-changed", G_CALLBACK(_embedded_fine_tune_slider_changed), self);
 
     g->cor_ca_b_ft = dt_bauhaus_slider_from_params(self, "cor_ca_b_ft");
     gtk_widget_set_visible(g->cor_ca_b_ft, FALSE);
-    g_signal_connect(G_OBJECT(g->cor_ca_b_ft), "value-changed", G_CALLBACK(cor_ca_b_ft_changed), self);
+    g_signal_connect(G_OBJECT(g->cor_ca_b_ft), "value-changed", G_CALLBACK(_embedded_fine_tune_slider_changed), self);
 
     g->scale_md = dt_bauhaus_slider_from_params(self, "scale_md");
     dt_bauhaus_slider_set_digits(g->scale_md, 4);
     dt_bauhaus_widget_set_quad_paint(g->scale_md, dtgtk_cairo_paint_refresh, 0, NULL);
-    g_signal_connect(G_OBJECT(g->scale_md), "value-changed", G_CALLBACK(scale_md_changed), self);
+    g_signal_connect(G_OBJECT(g->scale_md), "value-changed", G_CALLBACK(_embedded_fine_tune_slider_changed), self);
     g_signal_connect(G_OBJECT(g->scale_md), "quad-pressed", G_CALLBACK(autoscale_pressed_md), self);
     gtk_widget_set_tooltip_text(g->scale_md, _("image scale"));
     gtk_widget_set_visible(g->scale_md, FALSE);
