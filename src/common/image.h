@@ -217,6 +217,71 @@ typedef enum dt_image_orientation_t
   ORIENTATION_TRANSVERSE        = ORIENTATION_FLIP_Y | ORIENTATION_FLIP_X | ORIENTATION_SWAP_XY // 7
 } dt_image_orientation_t;
 
+/* Lens-correction data embedded in a raw file's own metadata (maker notes / DNG
+ * OpcodeList), as opposed to a Lensfun database lookup. 5 values, in upstream
+ * darktable's image.h order. NONE == 0 so a zero-initialised dt_image_t is safe. */
+typedef enum dt_image_correction_type_t
+{
+  CORRECTION_TYPE_NONE = 0,
+  CORRECTION_TYPE_SONY,   // M2 -- enum value present in M1, writer body is M2
+  CORRECTION_TYPE_FUJI,   // M2
+  CORRECTION_TYPE_DNG,    // M1 -- the only type produced in this milestone
+  CORRECTION_TYPE_OLYMPUS // M2
+} dt_image_correction_type_t;
+
+/* Sony maker-note distortion/CA/vignetting tables. Declared per upstream image.h
+ * layout (field names/sizes) so dt_image_correction_data_t's size and aliasing
+ * match; the parser body is implemented in M2. */
+typedef struct dt_image_correction_sony_t
+{
+  int nc;
+  short distortion[16], ca_r[16], ca_b[16], vignetting[16];
+} dt_image_correction_sony_t;
+
+/* Fuji maker-note distortion/CA/vignetting tables. Declared per upstream image.h
+ * layout; the parser body is implemented in M2. */
+typedef struct dt_image_correction_fuji_t
+{
+  int nc;
+  float cropf;
+  float knots[11], distortion[11], ca_r[11], ca_b[11], vignetting[11];
+} dt_image_correction_fuji_t;
+
+/* DNG OpcodeList3 payload -- the only union member with a populated body in M1.
+ * WarpRectilinear (opcode id 1): warp_planes==1 encodes distortion only;
+ * warp_planes>1 (typically 3) encodes per-channel radial+tangential polynomials,
+ * i.e. TCA. VignetteRadial (opcode id 3): a single radial vignetting polynomial. */
+typedef struct dt_image_correction_dng_t
+{
+  gboolean has_warp;        // TRUE if a WarpRectilinear (id 1) entry was parsed
+  gboolean has_vignette;    // TRUE if a VignetteRadial (id 3) entry was parsed
+  uint32_t warp_planes;     // 1..3
+  double warp_coeffs[3][6]; // [plane][kr0,kr1,kr2,kr3,kt0,kt1] radial+tangential polynomial
+  double warp_cx, warp_cy;  // normalized optical centre [0..1]
+  double vig_coeffs[5];     // k0..k4 radial vignette polynomial
+  double vig_cx, vig_cy;    // normalized optical centre [0..1]
+} dt_image_correction_dng_t;
+
+/* Olympus maker-note distortion/CA tables. Declared per upstream image.h layout;
+ * the parser body is implemented in M2. */
+typedef struct dt_image_correction_olympus_t
+{
+  gboolean has_dist;
+  float dist[4];
+  gboolean has_ca;
+  float ca[6];
+} dt_image_correction_olympus_t;
+
+/* 4 members, in upstream order. sony/fuji/olympus bodies are populated in M2; only
+ * dng is written in M1 (see dt_image_correction_type_t). */
+typedef union dt_image_correction_data_t
+{
+  dt_image_correction_sony_t sony;       // M2
+  dt_image_correction_fuji_t fuji;       // M2
+  dt_image_correction_dng_t dng;         // M1
+  dt_image_correction_olympus_t olympus; // M2
+} dt_image_correction_data_t;
+
 typedef enum dt_image_loader_t
 {
   LOADER_UNKNOWN  =  0,
@@ -366,6 +431,12 @@ typedef struct dt_image_t
 
   /* GainMaps from DNG OpcodeList2 exif tag */
   GList *dng_gain_maps;
+
+  /* Lens correction embedded in the file's own metadata (DNG OpcodeList3, maker
+   * notes), as opposed to a Lensfun database lookup. Transient: re-derived on
+   * every decode, never persisted, excluded from _image_cache_self_hash(). */
+  dt_image_correction_type_t exif_correction_type;
+  dt_image_correction_data_t exif_correction_data;
 
   /* Color labels */
   int color_labels;

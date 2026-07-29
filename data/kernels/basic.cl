@@ -3026,3 +3026,207 @@ gamma_pack(read_only image2d_t in, write_only image2d_t out, const int width, co
 
   write_imageui(out, (int2)(x, y), out_pixel);
 }
+
+
+/* Monotone linear-spline evaluator; clamps to first/last knot value.
+ * Ported verbatim from _interpolate_linear_spline() in lens.cc.
+ * Uses constant address space for the 16-element knot tables. */
+static inline float
+_linear_spline(constant float *xi, constant float *yi, const int ni, const float x)
+{
+  if(ni <= 0) return 1.0f;
+  if(x < xi[0]) return yi[0];
+
+  for(int i = 1; i < ni; i++)
+  {
+    if(x >= xi[i - 1] && x <= xi[i])
+    {
+      const float denom = xi[i] - xi[i - 1];
+      if(denom == 0.0f) return yi[i - 1];
+      const float dydx = (yi[i] - yi[i - 1]) / denom;
+      return yi[i - 1] + (x - xi[i - 1]) * dydx;
+    }
+  }
+
+  return yi[ni - 1];
+}
+
+
+/* MD (embedded-metadata) vignetting kernel.
+ * Applies the vignette gain from the knot table (knots_vig, vig, nc) to
+ * each pixel. Alpha channel passes through unchanged.
+ * Runs in input-image (roi_in) space; launched over [width x height] = roi_in dims. */
+kernel void
+md_vignette (read_only image2d_t in, write_only image2d_t out,
+             const int width, const int height,
+             const int roi_in_x, const int roi_in_y,
+             const float w2, const float h2, const float inv_rn,
+             constant float *knots_vig, constant float *vig, const int nc)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+
+  const float cx = roi_in_x + x - w2;
+  const float cy = roi_in_y + y - h2;
+  const float radius = hypot(cx, cy) * inv_rn;
+  const float sf = _linear_spline(knots_vig, vig, nc, radius);
+  const float gain = 1.0f / fmax(sf, 1e-4f);
+
+  float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
+  pixel.xyz *= gain;
+
+  pixel = all(isfinite(pixel)) ? pixel : (float4)0.0f;
+
+  write_imagef(out, (int2)(x, y), pixel);
+}
+
+
+/* MD (embedded-metadata) lens-correction resampling kernel.
+ * For each output pixel (in roi_out space), evaluates the per-channel radius-multiplier
+ * spline (cor_r_rgb / cor_g_rgb / cor_b_rgb) at the output-space radius to get dr,
+ * computes the source coordinate in roi_in space, and performs a 4x4 Mitchell-Netravali
+ * resampling. TCA-corrected: R uses cor_r_rgb, G uses cor_g_rgb, B uses cor_b_rgb.
+ * Alpha and monochrome both use the canonical (green) plane (cor_g_rgb).
+ * Launched over [width x height] = roi_out dims; reads from a roi_in-sized intermediate. */
+kernel void
+md_lens_correction (read_only image2d_t in, write_only image2d_t out,
+                    const int width, const int height,
+                    const int roi_in_x, const int roi_in_y,
+                    const int roi_out_x, const int roi_out_y,
+                    const int iwidth, const int iheight,
+                    const float w2, const float h2, const float inv_rn,
+                    constant float *knots_dist,
+                    constant float *cor_r_rgb,
+                    constant float *cor_g_rgb,
+                    constant float *cor_b_rgb,
+                    const int nc, const int monochrome)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int kwidth = 2;
+
+  if(x >= width || y >= height) return;
+
+  float4 pixel = (float4)0.0f;
+
+  const float cx = roi_out_x + x - w2;
+  const float cy = roi_out_y + y - h2;
+  const float radius = hypot(cx, cy) * inv_rn;
+
+  /* Red channel (plane 0) */
+  {
+    const float dr = _linear_spline(knots_dist, cor_r_rgb, nc, radius);
+    float sx = dr * cx + w2 - roi_in_x;
+    float sy = dr * cy + h2 - roi_in_y;
+    sx = (sx >= 0) ? sx : 0;
+    sy = (sy >= 0) ? sy : 0;
+    sx = (sx <= iwidth - 1) ? sx : iwidth - 1;
+    sy = (sy <= iheight - 1) ? sy : iheight - 1;
+
+    const int tx = sx;
+    const int ty = sy;
+
+    float sum = 0.0f, weight = 0.0f;
+    for(int jj = 1 - kwidth; jj <= kwidth; jj++)
+    {
+      for(int ii = 1 - kwidth; ii <= kwidth; ii++)
+      {
+        int i = tx + ii;
+        int j = ty + jj;
+        i = (i >= 0) ? i : 0;
+        j = (j >= 0) ? j : 0;
+        i = (i <= iwidth - 1) ? i : iwidth - 1;
+        j = (j <= iheight - 1) ? j : iheight - 1;
+
+        const float wx = interpolation_func_mitchell((float)i - sx);
+        const float wy = interpolation_func_mitchell((float)j - sy);
+        const float w = wx * wy;
+
+        sum += read_imagef(in, samplerc, (int2)(i, j)).x * w;
+        weight += w;
+      }
+    }
+    pixel.x = weight > 0.0f ? sum / weight : 0.0f;
+  }
+
+  /* Green + alpha channel (plane 1) */
+  {
+    const float dr = _linear_spline(knots_dist, cor_g_rgb, nc, radius);
+    float sx = dr * cx + w2 - roi_in_x;
+    float sy = dr * cy + h2 - roi_in_y;
+    sx = (sx >= 0) ? sx : 0;
+    sy = (sy >= 0) ? sy : 0;
+    sx = (sx <= iwidth - 1) ? sx : iwidth - 1;
+    sy = (sy <= iheight - 1) ? sy : iheight - 1;
+
+    const int tx = sx;
+    const int ty = sy;
+
+    float2 sum2 = (float2)0.0f;
+    float weight = 0.0f;
+    for(int jj = 1 - kwidth; jj <= kwidth; jj++)
+    {
+      for(int ii = 1 - kwidth; ii <= kwidth; ii++)
+      {
+        int i = tx + ii;
+        int j = ty + jj;
+        i = (i >= 0) ? i : 0;
+        j = (j >= 0) ? j : 0;
+        i = (i <= iwidth - 1) ? i : iwidth - 1;
+        j = (j <= iheight - 1) ? j : iheight - 1;
+
+        const float wx = interpolation_func_mitchell((float)i - sx);
+        const float wy = interpolation_func_mitchell((float)j - sy);
+        const float w = wx * wy;
+
+        sum2 += read_imagef(in, samplerc, (int2)(i, j)).yw * w;
+        weight += w;
+      }
+    }
+    pixel.yw = weight > 0.0f ? sum2 / weight : (float2)0.0f;
+  }
+
+  /* Blue channel (plane 2) */
+  {
+    const float dr = _linear_spline(knots_dist, cor_b_rgb, nc, radius);
+    float sx = dr * cx + w2 - roi_in_x;
+    float sy = dr * cy + h2 - roi_in_y;
+    sx = (sx >= 0) ? sx : 0;
+    sy = (sy >= 0) ? sy : 0;
+    sx = (sx <= iwidth - 1) ? sx : iwidth - 1;
+    sy = (sy <= iheight - 1) ? sy : iheight - 1;
+
+    const int tx = sx;
+    const int ty = sy;
+
+    float sum = 0.0f, weight = 0.0f;
+    for(int jj = 1 - kwidth; jj <= kwidth; jj++)
+    {
+      for(int ii = 1 - kwidth; ii <= kwidth; ii++)
+      {
+        int i = tx + ii;
+        int j = ty + jj;
+        i = (i >= 0) ? i : 0;
+        j = (j >= 0) ? j : 0;
+        i = (i <= iwidth - 1) ? i : iwidth - 1;
+        j = (j <= iheight - 1) ? j : iheight - 1;
+
+        const float wx = interpolation_func_mitchell((float)i - sx);
+        const float wy = interpolation_func_mitchell((float)j - sy);
+        const float w = wx * wy;
+
+        sum += read_imagef(in, samplerc, (int2)(i, j)).z * w;
+        weight += w;
+      }
+    }
+    pixel.z = weight > 0.0f ? sum / weight : 0.0f;
+  }
+
+  pixel = all(isfinite(pixel)) ? pixel : (float4)0.0f;
+
+  if(monochrome) pixel.x = pixel.z = pixel.y;
+
+  write_imagef(out, (int2)(x, y), pixel);
+}

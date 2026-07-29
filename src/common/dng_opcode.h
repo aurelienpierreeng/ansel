@@ -63,6 +63,13 @@ typedef struct dt_dng_gain_map_t
 
 void dt_dng_opcode_process_opcode_list_2(uint8_t *buf, uint32_t size, dt_image_t *img);
 
+/* Parses DNG OpcodeList3 (post-demosaic corrections): WarpRectilinear (id 1, distortion,
+ * or per-channel TCA when it carries more than one plane) and VignetteRadial (id 3),
+ * writing into img->exif_correction_data.dng. Independent of
+ * dt_dng_opcode_process_opcode_list_2() -- does not touch img->dng_gain_maps and does not
+ * set img->exif_correction_type (the caller owns that). */
+void dt_dng_opcode_process_opcode_list_3(uint8_t *buf, uint32_t buf_size, dt_image_t *img);
+
 #ifdef __cplusplus
 }
 #endif
