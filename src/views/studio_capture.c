@@ -369,9 +369,12 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   }
 
   dt_pthread_rwlock_wrlock(&dev->masks_mutex);
-  g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
+  // dev->forms and dev->allforms are independent claims on possibly-shared objects:
+  // release both, do not unconditionally free -- a form referenced by both only
+  // reaches refcount 0 once (mirrors dt_dev_cleanup() in develop.c).
+  g_list_free_full(dev->forms, (void (*)(void *))dt_masks_form_unref);
   dev->forms = NULL;
-  g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
+  g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_form_unref);
   dev->allforms = NULL;
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
