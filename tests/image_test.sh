@@ -30,7 +30,9 @@
 #                           auto-detected under build*/install*)
 #   --baseline <dir>       Baseline dir for delta-E diff (default: alongside the bank,
 #                          see `update-baseline` above)
-#   --jobs <n>              Parallel exports (default: nproc / --threads)
+#   --jobs <n>              Parallel exports (default: 1, sequential -- several full
+#                            pipelines in memory at once can exhaust RAM on constrained
+#                            machines; raise this only if the machine has headroom for it)
 #   --threads <n>           OpenMP threads per export (default: 2)
 #   --timeout <sec>         Per-image timeout (default: 180)
 #   --width <px>            Export width cap (default: 1024)
@@ -59,6 +61,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_DIR="$SCRIPT_DIR/image_test"
 BANK_PATH_FILE="$STATE_DIR/bank_path.conf"
 RESULTS_DIR="$STATE_DIR/results"
+# Persistent (not a mktemp -d, never wiped): OpenCL kernel binaries are cached by ansel-cli
+# under <cachedir>/cached_kernels_for_<device>_<driver>/, content-addressed by an md5sum of
+# source+build-options+driver+platform version, so a stale/mismatched entry is simply ignored
+# and rebuilt rather than loaded (see dt_opencl_load_program). Reusing this dir across images
+# and across script runs means every kernel only ever gets compiled once per device/driver
+# instead of once per tested raw file; concurrent --jobs writers are safe (worst case a losing
+# writer just falls back to recompiling for itself, per the same content-addressed logic).
+OPENCL_CACHE_DIR="$STATE_DIR/opencl_cache"
 
 RAW_EXTENSIONS=(3fr ari arw bay cr2 cr3 crw dc2 dcr dng erf fff ia iiq k25 kc2
                 kdc mdc mef mos mrw nef nrw orf pef raf raw rw2 rwl sr2 srf
@@ -507,17 +517,21 @@ process_one() {
     local cl_runlog="$RESULTS_DIR/$rel.cl.log"
     local cfg2 cache2
     cfg2="$(mktemp -d)"
-    cache2="$(mktemp -d)"
+    # Shared, persistent cache dir (see OPENCL_CACHE_DIR definition above) so kernel binaries
+    # compiled for one raw are reused by every other raw and every future run -- not a
+    # per-image mktemp -d, and deliberately not cleaned up below.
+    cache2="$OPENCL_CACHE_DIR"
+    mkdir -p "$cache2"
 
     local -a cl_args=(--width "$WIDTH" --height "$HEIGHT" --apply-custom-presets false "$raw")
     [ -n "$xmp" ] && cl_args+=("$xmp")
-    cl_args+=("$cl_out" --core --configdir "$cfg2" --cachedir "$cache2"
+    cl_args+=("$cl_out" --core -d opencl --configdir "$cfg2" --cachedir "$cache2"
               --conf host_memory_limit=8192 --conf worker_threads="$THREADS" -t "$THREADS")
 
     local cl_status
     timeout --kill-after=10 "$TIMEOUT" "$CLI_BIN" "${cl_args[@]}" >"$cl_runlog" 2>&1
     cl_status=$?
-    rm -rf "$cfg2" "$cache2"
+    rm -rf "$cfg2"
 
     if [ "$cl_status" -ne 0 ] || [ ! -s "$cl_out" ]; then
       # Never fails the run on its own: OpenCL may legitimately be unavailable on this
@@ -552,9 +566,36 @@ process_one() {
   printf '%s\0' "$record"
 }
 export -f process_one
-export CLI_BIN WIDTH HEIGHT TIMEOUT THREADS RESULTS_DIR BASELINE_DIR STRICT_CPU STRICT_OPENCL OPENCL BANK_DIR COMMAND DELTAE_SCRIPT MAX_PCT_ABOVE_TOLERANCE C_RED C_RESET
+export CLI_BIN WIDTH HEIGHT TIMEOUT THREADS RESULTS_DIR BASELINE_DIR STRICT_CPU STRICT_OPENCL OPENCL BANK_DIR COMMAND DELTAE_SCRIPT MAX_PCT_ABOVE_TOLERANCE C_RED C_RESET OPENCL_CACHE_DIR
 
 # --- driver -----------------------------------------------------------
+
+warm_opencl_cache() {
+  # Compiling an OpenCL kernel takes no inter-process lock (see the OPENCL_CACHE_DIR
+  # comment above): if several parallel process_one calls below all hit a still-cold
+  # cache for the same kernel at once, each compiles it redundantly instead of one
+  # compiling and the rest reusing it. Running exactly one export alone, first, absorbs
+  # that one-time cost so the parallel batch mostly finds a warm cache. Not exhaustive --
+  # a raw that takes a very different pipeline path (a mask, a different demosaic...) can
+  # still hit a kernel this warm-up never touched -- but it covers the common case cheaply.
+  # Never fatal: same "OpenCL may legitimately be unavailable" tolerance as process_one,
+  # left to each image's own [opencl: unavailable/failed] note to report if it matters.
+  local raw="$1"
+  mkdir -p "$OPENCL_CACHE_DIR"
+  local cfg out
+  cfg="$(mktemp -d)"
+  out="$(mktemp -u).png"
+
+  log "Warming up OpenCL kernel cache with $(basename "$raw")..."
+
+  local -a args=(--width "$WIDTH" --height "$HEIGHT" --apply-custom-presets false "$raw")
+  [ -f "$raw.xmp" ] && args+=("$raw.xmp")
+  args+=("$out" --core -d opencl --configdir "$cfg" --cachedir "$OPENCL_CACHE_DIR"
+         --conf host_memory_limit=8192 --conf worker_threads="$THREADS" -t "$THREADS")
+
+  timeout --kill-after=10 "$TIMEOUT" "$CLI_BIN" "${args[@]}" >/dev/null 2>&1
+  rm -rf "$cfg" "$out"
+}
 
 run_bank() {
   rm -rf "$RESULTS_DIR"
@@ -575,9 +616,21 @@ run_bank() {
   fi
 
   local jobs="$JOBS"
-  if [ -z "$jobs" ]; then
-    jobs=$(( $(nproc) / THREADS ))
-    [ "$jobs" -lt 1 ] && jobs=1
+  # Sequential by default: several full ansel-cli pipelines resident in memory at once
+  # (each its own decoded raw + working buffers, independent of --threads' intra-export
+  # OpenMP parallelism) can exhaust RAM on constrained machines, turning an unrelated
+  # out-of-memory condition into spurious CRASH/TIMEOUT verdicts. Pass --jobs <n> (e.g.
+  # --jobs "$(nproc)") explicitly to opt back into parallel exports if the machine has
+  # the headroom for it.
+  [ -z "$jobs" ] && jobs=1
+
+  # process_one() never runs the OpenCL leg during update-baseline (verdict is "DONE"
+  # there, not "PASS", so its `[ "$OPENCL" = yes ] && [ "$verdict" = PASS ]` guard never
+  # passes) -- skip the warm-up too, or it'd compile-and-discard an export for nothing.
+  # Also pointless with jobs=1: there's no cross-process compile race to avoid, and the
+  # sequential loop below warms the cache on its own first image for free.
+  if [ "$OPENCL" = yes ] && [ "$COMMAND" != update-baseline ] && [ "$jobs" -gt 1 ]; then
+    warm_opencl_cache "${raws[0]}"
   fi
 
   log "Testing ${#raws[@]} raw file(s) from $BANK_DIR"
