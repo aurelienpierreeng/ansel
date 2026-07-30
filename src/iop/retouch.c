@@ -1523,6 +1523,42 @@ static gboolean rt_copypaste_scale_callback(GtkToggleButton *togglebutton, GdkEv
   return TRUE;
 }
 
+// Whether some OTHER source (the generic blend-mask display) currently occupies
+// request_mask_display, as opposed to one of retouch's own preview toggles below.
+static gboolean rt_blend_mask_conflicts(dt_iop_module_t *module, dt_iop_retouch_gui_data_t *g)
+{
+  return module->request_mask_display && !g->mask_display && !g->display_wavelet_scale;
+}
+
+// Whether any of retouch's own preview toggles needs the pipeline cache bypassed for this
+// module. Combines all three (not just the caller's own flag), or clearing one would drop a
+// bypass another still needs -- bypass_cache is a single shared field, unlike
+// request_mask_display below, so no cross-module ownership concern applies here.
+static gboolean rt_any_preview_active(dt_iop_retouch_gui_data_t *g)
+{
+  return g->mask_display || g->display_wavelet_scale || g->suppress_mask;
+}
+
+// Mirrors mask_display/display_wavelet_scale into the pipeline cache key
+// (request_mask_display) -- otherwise toggling either back off keeps serving whatever was last
+// cached instead of the real image, since these GUI-only flags are invisible to the pipeline
+// hash on their own. Keep them on separate bits (mirroring the MASK-vs-PASSTHRU split
+// process_internal already applies to pipe->mask_display) rather than collapsing to one value,
+// or "show mask" and "show wavelet scale" would hash identically whenever curr_scale/params
+// haven't changed and one preview mode would reuse the other's cached buffer.
+//
+// Only call this once rt_blend_mask_conflicts() has already been checked and passed: unlike
+// bypass_cache, request_mask_display can belong to the generic blend-mask display instead of to
+// retouch, and must not be blindly overwritten. rt_suppress_callback has no such guard, so it
+// syncs bypass_cache via rt_any_preview_active() only, never this.
+static void rt_sync_mask_display_request(dt_iop_module_t *module, dt_iop_retouch_gui_data_t *g)
+{
+  dt_dev_pixelpipe_display_mask_t display_request = DT_DEV_PIXELPIPE_DISPLAY_NONE;
+  if(g->mask_display) display_request |= DT_DEV_PIXELPIPE_DISPLAY_MASK;
+  if(g->display_wavelet_scale) display_request |= DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
+  module->request_mask_display = display_request;
+}
+
 static gboolean rt_display_wavelet_scale_callback(GtkToggleButton *togglebutton, GdkEventButton *event, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return TRUE;
@@ -1531,7 +1567,7 @@ static gboolean rt_display_wavelet_scale_callback(GtkToggleButton *togglebutton,
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
 
   // if blend module is displaying mask do not display wavelet scales
-  if(self->request_mask_display && !g->mask_display)
+  if(rt_blend_mask_conflicts(self, g))
   {
     dt_control_log(_("cannot display scales when the blending mask is displayed"));
 
@@ -1545,6 +1581,8 @@ static gboolean rt_display_wavelet_scale_callback(GtkToggleButton *togglebutton,
   dt_iop_request_focus(self);
 
   g->display_wavelet_scale = !gtk_toggle_button_get_active(togglebutton);
+  rt_sync_mask_display_request(self, g);
+  dt_iop_set_cache_bypass(self, rt_any_preview_active(g));
 
   rt_show_hide_controls(self);
 
@@ -1840,7 +1878,7 @@ static gboolean rt_showmask_callback(GtkToggleButton *togglebutton, GdkEventButt
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)module->gui_data;
 
   // if blend module is displaying mask do not display it here
-  if(module->request_mask_display && !g->mask_display)
+  if(rt_blend_mask_conflicts(module, g))
   {
     dt_control_log(_("cannot display masks when the blending mask is displayed"));
 
@@ -1849,6 +1887,8 @@ static gboolean rt_showmask_callback(GtkToggleButton *togglebutton, GdkEventButt
   }
 
   g->mask_display = !gtk_toggle_button_get_active(togglebutton);
+  rt_sync_mask_display_request(module, g);
+  dt_iop_set_cache_bypass(module, rt_any_preview_active(g));
 
   if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), 1);
   dt_iop_request_focus(module);
@@ -1865,6 +1905,9 @@ static gboolean rt_suppress_callback(GtkToggleButton *togglebutton, GdkEventButt
 
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)module->gui_data;
   g->suppress_mask = !gtk_toggle_button_get_active(togglebutton);
+  // No rt_blend_mask_conflicts() guard on this button, so only bypass_cache is synced here --
+  // request_mask_display may currently belong to the blend-mask display, not to retouch.
+  dt_iop_set_cache_bypass(module, rt_any_preview_active(g));
 
   if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), 1);
   dt_iop_request_focus(module);
