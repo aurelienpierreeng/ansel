@@ -844,17 +844,12 @@ gboolean dt_exif_lens_correction_available(void)
 // type tag names), unconditionally, before any tag lookup is attempted: dt_image_t is
 // reused across re-decodes of the same image, and a stale successful match from an
 // earlier decode -- including a stale vendor-specific member no branch below happens to
-// touch this time -- must never survive a later decode that fails to match anything
-// (FR-M2-04 / MC-02).
+// touch this time -- must never survive a later decode that fails to match anything.
 //
 // The single Exiv2::testVersion(0, 27, 4) gate immediately below is hoisted here once for
-// the whole dispatcher (not per-branch): on an older Exiv2, EVERY branch -- DNG (M1) and
-// Sony/Fuji/Olympus (M2) alike -- is a runtime no-op leaving exif_correction_type == NONE,
-// and the Lensfun correction path is unaffected (FR-M2-05 / MC-03).
-//
-// Only the DNG OpcodeList3 branch (WarpRectilinear/VignetteRadial, via
-// dt_dng_opcode_process_opcode_list_3()) is implemented in M1. Sony/Fuji/Olympus
-// maker-note parsing is M2 work; this is the dispatch skeleton only.
+// the whole dispatcher (not per-branch): on an older Exiv2, EVERY branch is a runtime
+// no-op leaving exif_correction_type == NONE, and the Lensfun correction path is
+// unaffected.
 static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *img)
 {
   img->exif_correction_type = CORRECTION_TYPE_NONE;
@@ -883,13 +878,13 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
   }
 
   // Sony maker-note lens-correction data (distortion / TCA / vignetting), ported verbatim
-  // from upstream Darktable's exif.cc:987-1010 (NFR-M2-07): tag keys, the fixed-point layout
+  // from upstream Darktable's exif.cc:987-1010: tag keys, the fixed-point layout
   // (a leading element count followed by that many values), and the validation arithmetic are
   // not re-derived. Primary source is Exif.SubImage1.*; dt_exif_read_blob copies the same tag
   // numbers to Exif.Image.* (IFD0) by numeric ID on DNG round-trip conversions where no
   // SubImage1 sub-IFD exists, so that is tried as a fallback when the SubImage1 keys are
   // absent. No per-branch version gate here -- the single hoisted runtime check at the top of
-  // this function already covers this branch (FR-M2-05/06).
+  // this function already covers this branch.
   {
     Exiv2::ExifData::const_iterator posd, posc, posv;
     if((_exif_read_exif_tag(exifData, &posd, "Exif.SubImage1.DistortionCorrParams")
@@ -901,7 +896,7 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
            && _exif_read_exif_tag(exifData, &posv, "Exif.Image.0x7032")))
     {
       // Validate the element count against the fixed 16-entry destination arrays BEFORE any
-      // indexed read (FR-M2-07 / NFR-M2-04): the tag payload is [count, value0, value1, ...],
+      // indexed read: the tag payload is [count, value0, value1, ...],
       // so posd->toLong(0) is the source of truth for nc, not the tag's own count(). The CA
       // tag packs 2*nc values (R half then B half); vignetting has nc. A short-circuiting
       // `nc <= 16` first means an out-of-range nc never triggers an indexed read below.
@@ -926,14 +921,13 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
 
   // Fuji maker-note lens-correction data (distortion / TCA / vignetting monotonic knot
   // table plus a 1.25x crop-mode scale factor), ported verbatim from upstream Darktable's
-  // exif.cc:1012-1097 (NFR-M2-07): tag keys, the two on-wire shapes -- X-Trans IV/V (posd/
+  // exif.cc:1012-1097: tag keys, the two on-wire shapes -- X-Trans IV/V (posd/
   // posc/posv element counts 19/29/19, nc=9) vs X-Trans I/II/III (23/31/23, nc=11),
   // distinguished by tag count() ONLY, never camera model string -- and the index
   // arithmetic are not re-derived. Every indexed read below stays strictly below the
   // validated count() (Exiv2's ValueType<T>::toFloat(n) is documented undefined behaviour
-  // for n >= count(), FR-M2-07 / NFR-M2-04). No per-branch version gate here -- the single
-  // hoisted runtime check at the top of this function already covers this branch
-  // (FR-M2-05/06).
+  // for n >= count()). No per-branch version gate here -- the single
+  // hoisted runtime check at the top of this function already covers this branch.
   {
     Exiv2::ExifData::const_iterator posd, posc, posv, posm;
     if(_exif_read_exif_tag(exifData, &posd, "Exif.Fujifilm.GeometricDistortionParams")
@@ -1018,16 +1012,15 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
   }
 
   // Olympus maker-note lens-correction data (distortion / TCA), ported verbatim from
-  // upstream Darktable's exif.cc:1099-1144 (NFR-M2-07): tag keys and validation arithmetic
+  // upstream Darktable's exif.cc:1099-1144: tag keys and validation arithmetic
   // are not re-derived. Reads exclusively Exif.OlympusIp.* -- never Exif.OlympusEq.*/
   // Exif.OlympusCs.*, which this file already reads elsewhere (see FIND_EXIF_TAG("Exif.
   // OlympusEq.LensType") below) for lens-ID/focus-distance purposes unrelated to lens
   // correction. Distortion and CA are independent classes: either one matching alone is
-  // enough to set CORRECTION_TYPE_OLYMPUS (FR-M2-03 / EC-13 partial match); a wrong-count
-  // class is skipped -- leaving its own has_* flag FALSE -- without forcing the type back to
+  // enough to set CORRECTION_TYPE_OLYMPUS; a wrong-count class is skipped
+  // -- leaving its own has_* flag FALSE -- without forcing the type back to
   // NONE if the other class already matched. No per-branch version gate here -- the single
-  // hoisted runtime check at the top of this function already covers this branch
-  // (FR-M2-05/06).
+  // hoisted runtime check at the top of this function already covers this branch.
   {
     Exiv2::ExifData::const_iterator posip;
 
