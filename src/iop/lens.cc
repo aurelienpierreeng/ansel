@@ -602,14 +602,10 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
     if(self->dev->gui_attached)
     {
       dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
-      if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+      if(g)
       {
-        int modflags = 0;
-        if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
-        if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
-        if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
         dt_iop_gui_enter_critical_section(self);
-        g->corrections_done = modflags;
+        g->corrections_done = d->modify_flags;
         dt_iop_gui_leave_critical_section(self);
       }
     }
@@ -621,27 +617,43 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   const float rn = hypotf(w2, h2);
   const float inv_rn = (rn > 1e-6f) ? 1.0f / rn : 0.0f;
 
+  // Honour the user's per-class selection set in the "Corrections" combobox
+  // (commit_params mirrors p->modify_flags into d->modify_flags). The vendor
+  // data may carry distortion / TCA / vignetting; gating here decides which of
+  // those actually run over the buffer.
+  const gboolean apply_vignette = (d->modify_flags & LF_MODIFY_VIGNETTING) != 0;
+  const gboolean apply_dist = (d->modify_flags & LF_MODIFY_DISTORTION) != 0;
+  const gboolean apply_tca = (d->modify_flags & LF_MODIFY_TCA) != 0;
+
   const size_t n_pixels = (size_t)roi_in->width * roi_in->height * ch;
   float *const work = dt_alloc_align_float(n_pixels);
   if(IS_NULL_PTR(work)) return 1;
 
-  // Vignetting: per-pixel divisor in absolute (input) image-pixel space, applied before any
-  // geometric resample -- matches vignetting's physical origin (sensor space).
-  __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ivoid, roi_in, ch, w2, h2, inv_rn, d))
-  for(int y = 0; y < roi_in->height; y++)
+  if(apply_vignette)
   {
-    const float *const in_row = ((const float *)ivoid) + (size_t)y * roi_in->width * ch;
-    float *const work_row = work + (size_t)y * roi_in->width * ch;
-    for(int x = 0; x < roi_in->width; x++)
+    // Vignetting: per-pixel divisor in absolute (input) image-pixel space, applied before any
+    // geometric resample -- matches vignetting's physical origin (sensor space).
+    __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ivoid, roi_in, ch, w2, h2, inv_rn, d))
+    for(int y = 0; y < roi_in->height; y++)
     {
-      const float cx = roi_in->x + x - w2;
-      const float cy = roi_in->y + y - h2;
-      const float radius = hypotf(cx, cy) * inv_rn;
-      const float sf = dt_embedded_lens_linear_spline(d->knots_vig, d->vig, d->nc, radius);
-      const float gain = 1.0f / fmaxf(sf, 1e-4f);
-      for(int c = 0; c < 3 && c < ch; c++) work_row[x * ch + c] = in_row[x * ch + c] * gain;
-      for(int c = 3; c < ch; c++) work_row[x * ch + c] = in_row[x * ch + c];
+      const float *const in_row = ((const float *)ivoid) + (size_t)y * roi_in->width * ch;
+      float *const work_row = work + (size_t)y * roi_in->width * ch;
+      for(int x = 0; x < roi_in->width; x++)
+      {
+        const float cx = roi_in->x + x - w2;
+        const float cy = roi_in->y + y - h2;
+        const float radius = hypotf(cx, cy) * inv_rn;
+        const float sf = dt_embedded_lens_linear_spline(d->knots_vig, d->vig, d->nc, radius);
+        const float gain = 1.0f / fmaxf(sf, 1e-4f);
+        for(int c = 0; c < 3 && c < ch; c++) work_row[x * ch + c] = in_row[x * ch + c] * gain;
+        for(int c = 3; c < ch; c++) work_row[x * ch + c] = in_row[x * ch + c];
+      }
     }
+  }
+  else
+  {
+    // Identity vignette: pass pixels through unchanged.
+    dt_iop_image_copy_by_size(work, (float *)ivoid, roi_in->width, roi_in->height, ch);
   }
 
   const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_MITCHELL);
@@ -652,24 +664,44 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   // curve -- TCA is a no-op regardless of what cor_rgb[0]/cor_rgb[2] carry.
   const gboolean raw_monochrome = self->dev ? dt_image_is_monochrome(&self->dev->image_storage) : FALSE;
 
-  __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ovoid, roi_in, roi_out, ch, ch_width, w2, h2, inv_rn, d,
-                                        interpolation, limw, limh, raw_monochrome))
-  for(int y = 0; y < roi_out->height; y++)
+  if(!apply_dist && !apply_tca)
   {
-    float *const out_row = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
-    for(int x = 0; x < roi_out->width; x++)
+    // No geometric correction selected: pass the (possibly vignetted) work
+    // buffer straight to the output.
+    dt_iop_image_copy_by_size((float *)ovoid, work, roi_out->width, roi_out->height, ch);
+  }
+  else
+  {
+    __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ovoid, roi_in, roi_out, ch, ch_width, w2, h2, inv_rn, d,
+                                          interpolation, limw, limh, raw_monochrome,
+                                          apply_dist, apply_tca))
+    for(int y = 0; y < roi_out->height; y++)
     {
-      const float cx = roi_out->x + x - w2;
-      const float cy = roi_out->y + y - h2;
-      const float radius = hypotf(cx, cy) * inv_rn;
-      for(int c = 0; c < ch; c++)
+      float *const out_row = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
+      for(int x = 0; x < roi_out->width; x++)
       {
-        const int plane = (c < 3 && !raw_monochrome) ? c : 1; // alpha/mono sample the canonical (green) plane
-        const float dr = dt_embedded_lens_linear_spline(d->knots_dist, d->cor_rgb[plane], d->nc, radius);
-        const float sx = CLAMP(dr * cx + w2 - roi_in->x, 0.0f, limw);
-        const float sy = CLAMP(dr * cy + h2 - roi_in->y, 0.0f, limh);
-        out_row[x * ch + c] = dt_interpolation_compute_sample(interpolation, work + c, sx, sy, roi_in->width,
-                                                               roi_in->height, ch, ch_width);
+        const float cx = roi_out->x + x - w2;
+        const float cy = roi_out->y + y - h2;
+        const float radius = hypotf(cx, cy) * inv_rn;
+        for(int c = 0; c < ch; c++)
+        {
+          int plane = (c < 3 && !raw_monochrome) ? c : 1;
+          // Distortion only: force every channel onto the green plane so the
+          // shared displacement is applied uniformly and no per-channel TCA
+          // offset leaks through.
+          if(apply_dist && !apply_tca) plane = 1;
+          // Distortion on: per-channel spline lookup (or canonical for
+          // distortion-only). Distortion off: identity displacement, leaving
+          // the per-channel table unread -- the user explicitly opted out of
+          // geometric resampling for this class.
+          const float dr = apply_dist
+              ? dt_embedded_lens_linear_spline(d->knots_dist, d->cor_rgb[plane], d->nc, radius)
+              : 1.0f;
+          const float sx = CLAMP(dr * cx + w2 - roi_in->x, 0.0f, limw);
+          const float sy = CLAMP(dr * cy + h2 - roi_in->y, 0.0f, limh);
+          out_row[x * ch + c] = dt_interpolation_compute_sample(interpolation, work + c, sx, sy, roi_in->width,
+                                                                 roi_in->height, ch, ch_width);
+        }
       }
     }
   }
@@ -678,14 +710,10 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   if(self->dev->gui_attached)
   {
     dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
-    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+    if(g)
     {
-      int modflags = 0;
-      if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
-      if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
-      if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
       dt_iop_gui_enter_critical_section(self);
-      g->corrections_done = modflags;
+      g->corrections_done = d->modify_flags;
       dt_iop_gui_leave_critical_section(self);
     }
   }
@@ -916,6 +944,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   if(!d->lens || !d->lens->Maker || d->crop <= 0.0f)
   {
     dt_iop_image_copy_by_size((float*)ovoid, (float*)ivoid, roi_out->width, roi_out->height, ch);
+    if(self->dev->gui_attached && g)
+    {
+      dt_iop_gui_enter_critical_section(self);
+      g->corrections_done = 0;
+      dt_iop_gui_leave_critical_section(self);
+    }
     return 0;
   }
 
@@ -1122,7 +1156,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
   delete modifier;
 
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && g)
   {
     dt_iop_gui_enter_critical_section(self);
     g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
@@ -1164,14 +1198,50 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
     if(err == CL_SUCCESS && self->dev->gui_attached)
     {
       dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
-      if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+      if(g)
       {
-        int modflags = 0;
-        if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
-        if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
-        if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
         dt_iop_gui_enter_critical_section(self);
-        g->corrections_done = modflags;
+        g->corrections_done = d->modify_flags;
+        dt_iop_gui_leave_critical_section(self);
+      }
+    }
+    return (err == CL_SUCCESS) ? TRUE : FALSE;
+  }
+
+  // Honour the user's per-class selection from the "Corrections" combobox.
+  // commit_params mirrors p->modify_flags into d->modify_flags. The kernel pair
+  // runs as a unit and can't be told to do "distortion only" or "TCA only"
+  // individually, so partial geometric selections (one of distortion/TCA but
+  // not both) fall back to the CPU path which has the right per-class logic.
+  const gboolean apply_vignette = (d->modify_flags & LF_MODIFY_VIGNETTING) != 0;
+  const gboolean apply_dist = (d->modify_flags & LF_MODIFY_DISTORTION) != 0;
+  const gboolean apply_tca = (d->modify_flags & LF_MODIFY_TCA) != 0;
+  if(apply_dist != apply_tca)
+  {
+    if(self->dev->gui_attached)
+    {
+      dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+      if(g)
+      {
+        dt_iop_gui_enter_critical_section(self);
+        g->corrections_done = d->modify_flags;
+        dt_iop_gui_leave_critical_section(self);
+      }
+    }
+    return FALSE;
+  }
+
+  if(!apply_vignette && !apply_dist && !apply_tca)
+  {
+    // Nothing to do -- identity. Just copy and report.
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err == CL_SUCCESS && self->dev->gui_attached)
+    {
+      dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+      if(g)
+      {
+        dt_iop_gui_enter_critical_section(self);
+        g->corrections_done = d->modify_flags;
         dt_iop_gui_leave_critical_section(self);
       }
     }
@@ -1223,82 +1293,120 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   if(!d->inverse)
   {
     /* Forward (darkroom): vignette on input, then geometry on output. */
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 1, sizeof(cl_mem), (void *)&dev_tmp);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 2, sizeof(int), (void *)&iwidth);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 3, sizeof(int), (void *)&iheight);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 4, sizeof(int), (void *)&roi_in_x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 5, sizeof(int), (void *)&roi_in_y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 6, sizeof(float), (void *)&w2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 7, sizeof(float), (void *)&h2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 8, sizeof(float), (void *)&inv_rn);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 9, sizeof(cl_mem), (void *)&dev_knots_vig);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 10, sizeof(cl_mem), (void *)&dev_vig);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 11, sizeof(int), (void *)&d->nc);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_vignette, isizes);
-    if(err != CL_SUCCESS) goto error;
+    if(apply_vignette)
+    {
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 0, sizeof(cl_mem), (void *)&dev_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 1, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 2, sizeof(int), (void *)&iwidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 3, sizeof(int), (void *)&iheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 4, sizeof(int), (void *)&roi_in_x);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 5, sizeof(int), (void *)&roi_in_y);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 6, sizeof(float), (void *)&w2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 7, sizeof(float), (void *)&h2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 8, sizeof(float), (void *)&inv_rn);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 9, sizeof(cl_mem), (void *)&dev_knots_vig);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 10, sizeof(cl_mem), (void *)&dev_vig);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 11, sizeof(int), (void *)&d->nc);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_vignette, isizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      // Identity vignette: pass the input through to the intermediate.
+      size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
+      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_tmp, origin, origin, iregion);
+      if(err != CL_SUCCESS) goto error;
+    }
 
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 0, sizeof(cl_mem), (void *)&dev_tmp);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 2, sizeof(int), (void *)&owidth);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 3, sizeof(int), (void *)&oheight);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 4, sizeof(int), (void *)&roi_in_x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 5, sizeof(int), (void *)&roi_in_y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 6, sizeof(int), (void *)&roi_out_x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 7, sizeof(int), (void *)&roi_out_y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 8, sizeof(int), (void *)&iwidth);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 9, sizeof(int), (void *)&iheight);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 10, sizeof(float), (void *)&w2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 11, sizeof(float), (void *)&h2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 12, sizeof(float), (void *)&inv_rn);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 13, sizeof(cl_mem), (void *)&dev_knots_dist);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 14, sizeof(cl_mem), (void *)&dev_cor_rgb0);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 15, sizeof(cl_mem), (void *)&dev_cor_rgb1);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 16, sizeof(cl_mem), (void *)&dev_cor_rgb2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 17, sizeof(int), (void *)&d->nc);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 18, sizeof(int), (void *)&monochrome);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_lens_correction, osizes);
-    if(err != CL_SUCCESS) goto error;
+    if(apply_dist || apply_tca)
+    {
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 0, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 1, sizeof(cl_mem), (void *)&dev_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 2, sizeof(int), (void *)&owidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 3, sizeof(int), (void *)&oheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 4, sizeof(int), (void *)&roi_in_x);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 5, sizeof(int), (void *)&roi_in_y);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 6, sizeof(int), (void *)&roi_out_x);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 7, sizeof(int), (void *)&roi_out_y);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 8, sizeof(int), (void *)&iwidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 9, sizeof(int), (void *)&iheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 10, sizeof(float), (void *)&w2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 11, sizeof(float), (void *)&h2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 12, sizeof(float), (void *)&inv_rn);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 13, sizeof(cl_mem), (void *)&dev_knots_dist);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 14, sizeof(cl_mem), (void *)&dev_cor_rgb0);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 15, sizeof(cl_mem), (void *)&dev_cor_rgb1);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 16, sizeof(cl_mem), (void *)&dev_cor_rgb2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 17, sizeof(int), (void *)&d->nc);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 18, sizeof(int), (void *)&monochrome);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_lens_correction, osizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      // Identity geometry: pass the (possibly vignetted) intermediate through.
+      err = dt_opencl_enqueue_copy_image(devid, dev_tmp, dev_out, origin, origin, oregion);
+      if(err != CL_SUCCESS) goto error;
+    }
   }
   else
   {
     /* Inverse (export): geometry on input, then vignette. */
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 1, sizeof(cl_mem), (void *)&dev_tmp);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 2, sizeof(int), (void *)&iwidth);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 3, sizeof(int), (void *)&iheight);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 4, sizeof(int), (void *)&roi_in_x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 5, sizeof(int), (void *)&roi_in_y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 6, sizeof(int), (void *)&roi_out_x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 7, sizeof(int), (void *)&roi_out_y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 8, sizeof(int), (void *)&iwidth);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 9, sizeof(int), (void *)&iheight);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 10, sizeof(float), (void *)&w2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 11, sizeof(float), (void *)&h2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 12, sizeof(float), (void *)&inv_rn);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 13, sizeof(cl_mem), (void *)&dev_knots_dist);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 14, sizeof(cl_mem), (void *)&dev_cor_rgb0);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 15, sizeof(cl_mem), (void *)&dev_cor_rgb1);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 16, sizeof(cl_mem), (void *)&dev_cor_rgb2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 17, sizeof(int), (void *)&d->nc);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 18, sizeof(int), (void *)&monochrome);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_lens_correction, isizes);
-    if(err != CL_SUCCESS) goto error;
+    if(apply_dist || apply_tca)
+    {
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 0, sizeof(cl_mem), (void *)&dev_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 1, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 2, sizeof(int), (void *)&iwidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 3, sizeof(int), (void *)&iheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 4, sizeof(int), (void *)&roi_in_x);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 5, sizeof(int), (void *)&roi_in_y);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 6, sizeof(int), (void *)&roi_out_x);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 7, sizeof(int), (void *)&roi_out_y);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 8, sizeof(int), (void *)&iwidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 9, sizeof(int), (void *)&iheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 10, sizeof(float), (void *)&w2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 11, sizeof(float), (void *)&h2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 12, sizeof(float), (void *)&inv_rn);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 13, sizeof(cl_mem), (void *)&dev_knots_dist);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 14, sizeof(cl_mem), (void *)&dev_cor_rgb0);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 15, sizeof(cl_mem), (void *)&dev_cor_rgb1);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 16, sizeof(cl_mem), (void *)&dev_cor_rgb2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 17, sizeof(int), (void *)&d->nc);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 18, sizeof(int), (void *)&monochrome);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_lens_correction, isizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      // Identity geometry: pass the input through to the intermediate.
+      size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
+      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_tmp, origin, origin, iregion);
+      if(err != CL_SUCCESS) goto error;
+    }
 
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 0, sizeof(cl_mem), (void *)&dev_tmp);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 2, sizeof(int), (void *)&owidth);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 3, sizeof(int), (void *)&oheight);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 4, sizeof(int), (void *)&roi_out_x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 5, sizeof(int), (void *)&roi_out_y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 6, sizeof(float), (void *)&w2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 7, sizeof(float), (void *)&h2);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 8, sizeof(float), (void *)&inv_rn);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 9, sizeof(cl_mem), (void *)&dev_knots_vig);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 10, sizeof(cl_mem), (void *)&dev_vig);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 11, sizeof(int), (void *)&d->nc);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_vignette, osizes);
-    if(err != CL_SUCCESS) goto error;
+    if(apply_vignette)
+    {
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 0, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 1, sizeof(cl_mem), (void *)&dev_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 2, sizeof(int), (void *)&owidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 3, sizeof(int), (void *)&oheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 4, sizeof(int), (void *)&roi_out_x);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 5, sizeof(int), (void *)&roi_out_y);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 6, sizeof(float), (void *)&w2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 7, sizeof(float), (void *)&h2);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 8, sizeof(float), (void *)&inv_rn);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 9, sizeof(cl_mem), (void *)&dev_knots_vig);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 10, sizeof(cl_mem), (void *)&dev_vig);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 11, sizeof(int), (void *)&d->nc);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_md_vignette, osizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      // Identity vignette: pass the intermediate through to the output.
+      err = dt_opencl_enqueue_copy_image(devid, dev_tmp, dev_out, origin, origin, oregion);
+      if(err != CL_SUCCESS) goto error;
+    }
   }
 
   dt_opencl_release_mem_object(dev_tmp);
@@ -1312,20 +1420,26 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   if(self->dev->gui_attached)
   {
     dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
-    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+    if(g)
     {
-      int modflags = 0;
-      if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
-      if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
-      if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
       dt_iop_gui_enter_critical_section(self);
-      g->corrections_done = modflags;
+      g->corrections_done = d->modify_flags;
       dt_iop_gui_leave_critical_section(self);
     }
   }
   return TRUE;
 
 error:
+  if(self->dev->gui_attached)
+  {
+    dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+    if(g)
+    {
+      dt_iop_gui_enter_critical_section(self);
+      g->corrections_done = d->modify_flags;
+      dt_iop_gui_leave_critical_section(self);
+    }
+  }
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_knots_vig);
   dt_opencl_release_mem_object(dev_vig);
@@ -1568,7 +1682,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     }
   }
 
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  if(self->dev->gui_attached && g)
   {
     dt_iop_gui_enter_critical_section(self);
     g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
@@ -1951,6 +2065,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // and querying gd->db entirely.
   if(method == DT_IOP_LENS_METHOD_EMBEDDED_METADATA)
   {
+    d->modify_flags = p->modify_flags & LENSFUN_MODFLAG_MASK;
+    if(dt_image_is_monochrome(&self->dev->image_storage)) d->modify_flags &= ~LF_MODIFY_TCA;
     d->nc = dt_embedded_lens_init_coeffs(&self->dev->image_storage,
                                           cor_dist_ft, cor_vig_ft,
                                           cor_ca_r_ft, cor_ca_b_ft,
@@ -3479,12 +3595,54 @@ void gui_update(struct dt_iop_module_t *self)
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
   }
 
-  // reset the corrections-done message for the new image (moved here from reload_defaults so it
-  // only touches the widget on the GUI thread, when it exists)
   dt_iop_gui_enter_critical_section(self);
   g->corrections_done = -1;
   dt_iop_gui_leave_critical_section(self);
   gtk_label_set_text(g->message, "");
+
+  const dt_dev_pixelpipe_iop_t *lens_piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  const dt_iop_lensfun_data_t *lens_d
+      = (!IS_NULL_PTR(lens_piece)) ? (const dt_iop_lensfun_data_t *)lens_piece->data : NULL;
+
+  if(!IS_NULL_PTR(lens_d))
+  {
+    int modflags = 0;
+
+    if(p->method == DT_IOP_LENS_METHOD_LENSFUN)
+    {
+      if(!IS_NULL_PTR(lens_d->lens) && !IS_NULL_PTR(lens_d->lens->Maker)
+         && lens_d->crop > 0.0f && lens_piece->buf_in.width > 0 && lens_piece->buf_in.height > 0)
+      {
+        const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
+        const int used_lf_mask = raw_monochrome ? (LF_MODIFY_ALL & ~LF_MODIFY_TCA) : LF_MODIFY_ALL;
+        dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+        lfModifier *modifier = get_modifier(&modflags, lens_piece->buf_in.width, lens_piece->buf_in.height,
+                                            lens_d, used_lf_mask, FALSE);
+        delete modifier;
+        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+        modflags &= LENSFUN_MODFLAG_MASK;
+      }
+    }
+    else
+    {
+      modflags = lens_d->modify_flags & LENSFUN_MODFLAG_MASK;
+    }
+
+    dt_iop_gui_enter_critical_section(self);
+    g->corrections_done = modflags;
+    dt_iop_gui_leave_critical_section(self);
+
+    for(GList *modifiers = g->modifiers; !IS_NULL_PTR(modifiers); modifiers = g_list_next(modifiers))
+    {
+      dt_iop_lensfun_modifier_t *mm = (dt_iop_lensfun_modifier_t *)modifiers->data;
+      if(mm->modflag == g->corrections_done)
+      {
+        gtk_label_set_text(g->message, mm->name);
+        gtk_widget_set_tooltip_text(GTK_WIDGET(g->message), mm->name);
+        break;
+      }
+    }
+  }
 
   gui_changed(self, NULL, NULL);
 }
