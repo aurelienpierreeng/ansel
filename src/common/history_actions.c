@@ -18,6 +18,7 @@
 
 #include "common/history_actions.h"
 
+#include "common/collection.h"
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/exif.h"
@@ -465,13 +466,19 @@ static gboolean _history_style_apply(const int32_t imgid, void *user_data)
   int32_t newimgid = imgid;
   if(params->duplicate)
   {
-    newimgid = dt_image_duplicate(imgid);
+    // Defer exposing the duplicate to the collection/lighttable grid until its history is
+    // copied below -- otherwise the grid can generate and cache a thumbnail from the
+    // still-historyless row before the copy ever runs.
+    newimgid = dt_image_duplicate_no_reload(imgid);
     if(newimgid == UNKNOWN_IMAGE) return FALSE;
 
     // Structural copy of original history into the duplicate; no merge report needed here.
     const gboolean pasted = dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, params->mode,
                                                                dt_conf_get_bool("history/style/copy_iop_order"),
                                                                NULL) == 0;
+
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+
     return pasted;
   }
 

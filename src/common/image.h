@@ -493,6 +493,14 @@ void dt_image_remove(const int32_t imgid);
 int32_t dt_image_duplicate_with_version(const int32_t imgid, const int32_t newversion);
 /** duplicates the given image in the database. */
 int32_t dt_image_duplicate(const int32_t imgid);
+/** Same as dt_image_duplicate(), but does NOT reload the collection query, so the new image is
+ *  not yet exposed to the lighttable grid / thumbnail generation. Use when the caller still has
+ *  to populate the duplicate's history before it can be rendered meaningfully (e.g. copying the
+ *  source's history onto it): the caller MUST trigger a collection reload itself
+ *  (dt_collection_update_query(..., DT_COLLECTION_CHANGE_RELOAD, ...)) once that is done.
+ *  Skipping this and letting the plain reload happen mid-copy lets the grid generate and cache a
+ *  thumbnail from the still-historyless row before the copy lands. */
+int32_t dt_image_duplicate_no_reload(const int32_t imgid);
 /** Notify the caches and GUI that an image's development history changed.
  *  Reloads the cached image metadata from the DB (so history_items, the "altered" flag that the
  *  thumbnail regeneration uses to pick raw processing over the embedded JPEG, is correct), drops

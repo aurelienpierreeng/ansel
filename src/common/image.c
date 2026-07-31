@@ -152,7 +152,8 @@ typedef struct dt_undo_duplicate_t
 } dt_undo_duplicate_t;
 
 static void _pop_undo_execute(const int32_t imgid, const gboolean before, const gboolean after);
-static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo);
+static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo,
+                                             const gboolean reload);
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs);
 
 
@@ -907,7 +908,7 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
     {
       // restore image, note that we record the new imgid created while
       // restoring the duplicate.
-      undo->new_imgid = _image_duplicate_with_version(undo->orig_imgid, undo->version, FALSE);
+      undo->new_imgid = _image_duplicate_with_version(undo->orig_imgid, undo->version, FALSE, TRUE);
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undo->new_imgid));
     }
   }
@@ -1310,7 +1311,8 @@ static int32_t _image_duplicate_with_version_ext(const int32_t imgid, const int3
   return newid;
 }
 
-static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo)
+static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo,
+                                             const gboolean reload)
 {
   const int32_t newid = _image_duplicate_with_version_ext(imgid, newversion);
 
@@ -1335,14 +1337,24 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
     dt_image_cache_read_release(darktable.image_cache, img);
     dt_grouping_add_to_group(grpid, newid);
 
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+    // Reloading here exposes newid to the lighttable grid: it becomes eligible for thumbnail
+    // generation immediately, against whatever history it has *right now*. Callers still about
+    // to write history onto it (duplicate-with-history, style-on-duplicate) must skip this and
+    // reload themselves once that is done -- see dt_image_duplicate_no_reload().
+    if(reload)
+      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
   }
   return newid;
 }
 
 int32_t dt_image_duplicate_with_version(const int32_t imgid, const int32_t newversion)
 {
-  return _image_duplicate_with_version(imgid, newversion, TRUE);
+  return _image_duplicate_with_version(imgid, newversion, TRUE, TRUE);
+}
+
+int32_t dt_image_duplicate_no_reload(const int32_t imgid)
+{
+  return _image_duplicate_with_version(imgid, -1, TRUE, FALSE);
 }
 
 void dt_image_remove(const int32_t imgid)

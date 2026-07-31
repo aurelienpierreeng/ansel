@@ -104,6 +104,39 @@ write history straight to DB (XMP load, `dt_image_set_flip`) bypass it and need 
 Do NOT refresh the filmstrip from darkroom write paths — it competes with the realtime main
 preview pipeline. Lighttable ops may refresh both.
 
+### Duplicating an image races its own thumbnail generation against the history copy
+
+Lighttable "Duplicate" (`dt_control_duplicate_images_job_run`, `control_jobs.c`) creates the new
+DB row via `dt_image_duplicate()`, then copies the source's history onto it via
+`dt_history_copy_and_paste_on_image(..., DT_HISTORY_MERGE_REPLACE, ...)`. `dt_image_duplicate()`
+(`common/image.c`) used to call `dt_collection_update_query(..., DT_COLLECTION_CHANGE_RELOAD, ...)`
+unconditionally, right after inserting the row — i.e. *before* the caller had copied any history
+onto it. That reload makes the new image visible to the lighttable grid, which can create its
+thumbnail widget and request a render immediately, against the row's momentary real state: zero
+history.
+
+Confirmed with `-d cache -d history -d lighttable`: for a freshly duplicated image, the first
+`[mipmap_cache] compute mip size 0 ... from original file` log line landed ~650ms *before* the
+matching `[dt_dev_write_history_ext] writing history for image N` line. The mipmap cache is not
+hash-driven (previous section), so once that first, historyless render is cached, only an
+explicit `dt_mipmap_cache_remove` + refresh recovers — and even when that recovery path runs
+correctly and a second, correct render finishes and gets cached, nothing guarantees a timely
+repaint of it (the thumbnail widget can be left showing the first render under a permanent "busy"
+overlay for several seconds, until an unrelated GUI event forces a redraw). Patching the
+recovery/notification side (adding a missing GUI-thread redraw request on one early-return path
+in `dtgtk/thumbnail.c`'s `_get_image_buffer()`) did not fix this reliably and was reverted — the
+actual fix is to not let the race start in the first place.
+
+Fixed by `dt_image_duplicate_no_reload()` (`common/image.c`): same as `dt_image_duplicate()` but
+skips the immediate collection reload. Both call sites that duplicate-then-copy-history
+(`dt_control_duplicate_images_job_run` in `control_jobs.c`, `_history_style_apply`'s
+duplicate-and-apply-style branch in `history_actions.c`) now use it and trigger exactly one
+`dt_collection_update_query(..., DT_COLLECTION_CHANGE_RELOAD, ...)` themselves, after the
+history copy/delete completes — so the very first time the duplicate becomes visible, it already
+carries its final history. Any future caller of `dt_image_duplicate()` that will mutate the new
+image's history afterward (a style, a batch edit, ...) should do the same rather than let the
+default immediate reload race its own follow-up write.
+
 ### OpenCL GUI-thread materialization hazard
 
 `dt_dev_pixelpipe_cache_peek_gui` must pass `preferred_devid = -1` (CPU caller signal). Passing
@@ -192,6 +225,34 @@ mask drag). Still open. See `doc/reorganisation.md` ("History item refcounting a
 `history_mutex` contention") for the full diagnosis and status, and the named-rwlock diagnostic
 in `common/dtpthread.h` (`dt_pthread_rwlock_set_name()`, opt-in per lock, combine with
 `-d history`) to reproduce the measurement.
+
+### `_insert_default_modules` must check `dev->history` in memory, not the DB row for `dev->image_storage.id`
+
+`dt_dev_init_default_history()` (`dev_history.c`) walks every loaded module and, for each one,
+calls `_insert_default_modules()` to backfill a default-params history entry for any
+`default_enabled`/`force_enable` module "missing" from history. Its "is this module already
+covered?" check used to be `dt_history_check_module_exists(dev->image_storage.id, module->op, ...)`
+— a DB query against `main.history` for whatever image `dev->image_storage.id` currently points
+at.
+
+That's correct for the common caller, `dt_dev_read_history_ext()`: `dev->history` is empty and
+`dev->image_storage.id` is the same image whose real DB history is about to be read into it a few
+lines later, so the DB accurately reflects "not yet loaded, but will be." It's wrong for
+`dt_dev_replace_history_on_image()` (image duplication, history "replace" paste): there,
+`dev->history` is loaded from a *source* image, then `dev->image_storage` is repointed at a
+freshly created, still-DB-empty *destination* image before `dt_dev_init_default_history()` runs.
+The DB check always answers "missing" for the destination — regardless of what the just-copied
+`dev->history` already contains — so every `default_enabled` module (`temperature`, `colorin`,
+`colorout`, `demosaic`, ...) got a second, default-params history entry silently appended *after*
+the one correctly copied from the source. Since replay applies history front-to-back and the last
+entry per module wins, duplicating an image quietly reset those modules to their defaults instead
+of reproducing the source's actual settings — "duplicate" wasn't an identical copy.
+
+Fixed by checking `dt_dev_history_get_first_item_by_module(dev->history, module) != NULL` (via
+`IS_NULL_PTR`) in addition to the DB check — the in-memory list already holds the correct,
+about-to-be-persisted state for the destination in the duplicate/replace case, and is equivalent
+to the DB check (same image, nothing loaded yet) in the common case, so neither caller's
+behavior regresses.
 
 ### `piece->iwidth`/`iheight` go stale on the export pipe specifically
 
