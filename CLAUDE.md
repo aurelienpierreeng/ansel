@@ -505,6 +505,69 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
+### retouch: combining the mask/wavelet-scale/suppress preview toggles
+
+`bt_showmask` (`g->mask_display`), `bt_display_wavelet_scale` (`g->display_wavelet_scale`), and
+`bt_suppress` (`g->suppress_mask`, "temporarily switch off shapes") are three independent preview
+toggles. Getting any *pair* of them to combine correctly required three separate fixes, found only
+by adding `dt_print(DT_DEBUG_ALWAYS, ...)` traces (never raw `fprintf(stderr, ...)` — it isn't
+flushed and is easily lost if the process doesn't exit cleanly) at each stage and, for the final
+one, an actual GPU buffer readback (`dt_opencl_read_host_from_device_raw`) — reasoning about the
+hash/cache chain from source alone kept landing on plausible-but-wrong theories.
+
+**1. `bypass_cache_variant` must be gated to the FULL pipe, like `request_mask_display` already is.**
+`dt_iop_module_t.bypass_cache` is a single shared boolean: switching between combinations of the
+three toggles that all keep it `TRUE` (e.g. suppress toggled on top of an already-active
+wavelet-scale preview) doesn't change it, so the pipeline hash doesn't change either, and the
+stale pre-toggle frame keeps being served. Fixed by adding `dt_iop_module_t.bypass_cache_variant`
+(an opaque per-module int any module can set to disambiguate *which* combination is active,
+alongside `dt_iop_set_cache_bypass()`) and folding it into `dt_pixelpipe_get_global_hash()`. That
+alone still wasn't enough: retouch's actual preview effect only ever applies to `pipe ==
+self->dev->pipe` (the darkroom FULL pipe) — `preview`/`virtual-preview` always render as if none
+of the toggles were active — but `bypass_cache`/`bypass_cache_variant` live on the shared
+`dt_iop_module_t` and so read the same non-zero value for every pipe type. Left ungated, a
+preview-pipe run with the same ROI (e.g. at zoom == fit) computes the identical hash chain despite
+publishing different pixels, and the pixel cache's cross-pipe "another pipe already owns this
+exact hash" reuse path (`DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT` in
+`dt_dev_pixelpipe_cache_get_writable`) lets either pipe silently serve the other's stale content.
+`bypass_cache_variant`'s hash contribution must be zeroed for non-FULL pipes exactly like
+`request_mask_display` already is, in the same `if(pipe->type == DT_DEV_PIXELPIPE_FULL)` block in
+`dt_pixelpipe_get_global_hash()`.
+
+**2. `process_cl()`'s "expose mask" condition must match `process_internal()`'s exactly.** The CPU
+path gates on `g->mask_display || display_wavelet_scale`; the OpenCL path had drifted to
+`g->mask_display` alone. A wavelet-only OpenCL preview therefore never cleared alpha, never set
+`pipe->mask_display`, and so never made the downstream color-pipeline modules take the
+mask-display passthrough shortcut in `pixelpipe_hb.c` (~line 950) — they ran their normal
+processing (color management etc.) on the wavelet-domain buffer instead of being skipped. Same
+class of bug as the CFA-phase and highlights-reconstruction CPU/OpenCL divergences documented
+above: any GUI-only branch condition duplicated between a module's `process()` and `process_cl()`
+is a standing invitation for exactly this drift, since nothing forces the two to be reviewed
+together.
+
+**3. `rt_adjust_levels()` clobbers the alpha channel — the actual root cause of "mask + wavelet
+scale together shows nothing but checkerboard."** This function (shared verbatim by both the CPU
+path and `rt_adjust_levels_cl`, which round-trips through it on a host-side copy of the GPU
+buffer) is called whenever *any* single wavelet scale is being previewed
+(`dwt_p->return_layer > 0`), to contrast-stretch the near-zero detail coefficients into a viewable
+image. It round-trips each pixel through `dt_linearRGB_to_XYZ`/`dt_XYZ_to_Lab` (or the
+`work_profile` matrix equivalents) and back. Those conversions — like most of the
+`dt_aligned_pixel_t`-based color primitives in `colorspaces_inline_conversions.h` — store their
+result via 4-wide SIMD (`dt_apply_transposed_color_matrix`'s `dt_store_simd_aligned`), which writes
+*all four* lanes even though the color math is only 3-channel; the 4th lane ends up holding
+leftover matrix-multiply output, not the caller's original value. For most pipeline buffers that
+4th channel is meaningless padding and nobody notices. Here it is retouch's own mask-display
+alpha, painted a few lines up the call chain via `rt_copy_mask_to_alpha`/`_cl` — so every pixel's
+alpha got silently reset by the *next* operation in the same `process()` call, regardless of
+scale-matching or hash correctness upstream. This is why fixes #1 and #2 above were both real bugs
+worth fixing but neither actually resolved the reported symptom: content was being computed
+correctly and served fresh, then destroyed by `rt_adjust_levels()` before publish. Only triggers
+when previewing a wavelet scale (`return_layer > 0`) *and* something reads alpha for display
+(`show mask`, or — before fix #2 — a would-be-`PASSTHRU` OpenCL frame that never got the memo).
+Fixed by saving `img_src[i+3]` before the round trip and restoring it after. Any other per-pixel
+loop in this codebase that round-trips through these color conversion primitives on a buffer whose
+4th channel is meaningful (alpha, a mask, anything other than padding) has the same exposure.
+
 ---
 
 ## Collection / Library module

@@ -298,6 +298,13 @@ typedef struct dt_iop_module_t
   int request_mask_display;
   /** set to 1 if the pipeline cache needs to be bypassed for downstream modules starting from this module*/
   gboolean bypass_cache;
+  /** opaque, module-owned value folded into the pipeline hash next to bypass_cache. bypass_cache
+   *  is a single shared boolean, so switching between several GUI-only preview states that all
+   *  keep it TRUE (e.g. retouch's mask/wavelet-scale/suppress toggles) leaves the hash unchanged
+   *  and the displayed frame stale even though different pixels were just recomputed underneath.
+   *  Set via dt_iop_set_cache_bypass_variant() to disambiguate those states; meaningless to
+   *  generic pipeline code otherwise. */
+  int bypass_cache_variant;
   /** place to store the picked color of module input. */
   dt_aligned_pixel_t picked_color, picked_color_min, picked_color_max;
   /** place to store the picked color of module output (before blending). */
@@ -704,6 +711,12 @@ gboolean dt_iop_check_modules_equal(dt_iop_module_t *mod_1, dt_iop_module_t *mod
 */
 gboolean dt_iop_get_cache_bypass(dt_iop_module_t *module);
 void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state);
+
+/** Set the opaque per-module hash disambiguator described on dt_iop_module_t.bypass_cache_variant.
+ * Call alongside dt_iop_set_cache_bypass() whenever a module can be bypassing the cache for more
+ * than one mutually-independent GUI reason at once, so toggling one of them still changes the
+ * pipeline hash even while bypass_cache itself stays TRUE. */
+void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant);
 
 // after writing data using copy_pixel_nontemporal, it is necessary to
 // ensure that the writes have completed before attempting reads from

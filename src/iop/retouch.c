@@ -1539,6 +1539,20 @@ static gboolean rt_any_preview_active(dt_iop_retouch_gui_data_t *g)
   return g->mask_display || g->display_wavelet_scale || g->suppress_mask;
 }
 
+// Syncs bypass_cache (whether the pipe needs to bypass at all) and bypass_cache_variant (which
+// combination of the three preview toggles is active) together. bypass_cache alone cannot
+// distinguish e.g. "wavelet scale only" from "wavelet scale + suppress": both keep it TRUE, so
+// toggling suppress on top of an already-active wavelet-scale preview would not change the
+// pipeline hash and the display would keep showing the pre-toggle (still-retouched) frame even
+// though process_internal()/process_cl() had already recomputed the correct, retouch-free one.
+// bypass_cache_variant closes that gap -- see dt_iop_module_t.bypass_cache_variant.
+static void rt_sync_bypass_cache(dt_iop_module_t *module, dt_iop_retouch_gui_data_t *g)
+{
+  const int variant = (g->mask_display ? 1 : 0) | (g->display_wavelet_scale ? 2 : 0) | (g->suppress_mask ? 4 : 0);
+  dt_iop_set_cache_bypass_variant(module, variant);
+  dt_iop_set_cache_bypass(module, rt_any_preview_active(g));
+}
+
 // Mirrors mask_display/display_wavelet_scale into the pipeline cache key
 // (request_mask_display) -- otherwise toggling either back off keeps serving whatever was last
 // cached instead of the real image, since these GUI-only flags are invisible to the pipeline
@@ -1550,7 +1564,7 @@ static gboolean rt_any_preview_active(dt_iop_retouch_gui_data_t *g)
 // Only call this once rt_blend_mask_conflicts() has already been checked and passed: unlike
 // bypass_cache, request_mask_display can belong to the generic blend-mask display instead of to
 // retouch, and must not be blindly overwritten. rt_suppress_callback has no such guard, so it
-// syncs bypass_cache via rt_any_preview_active() only, never this.
+// only calls rt_sync_bypass_cache() (bypass_cache/bypass_cache_variant), never this.
 static void rt_sync_mask_display_request(dt_iop_module_t *module, dt_iop_retouch_gui_data_t *g)
 {
   dt_dev_pixelpipe_display_mask_t display_request = DT_DEV_PIXELPIPE_DISPLAY_NONE;
@@ -1582,7 +1596,7 @@ static gboolean rt_display_wavelet_scale_callback(GtkToggleButton *togglebutton,
 
   g->display_wavelet_scale = !gtk_toggle_button_get_active(togglebutton);
   rt_sync_mask_display_request(self, g);
-  dt_iop_set_cache_bypass(self, rt_any_preview_active(g));
+  rt_sync_bypass_cache(self, g);
 
   rt_show_hide_controls(self);
 
@@ -1888,7 +1902,7 @@ static gboolean rt_showmask_callback(GtkToggleButton *togglebutton, GdkEventButt
 
   g->mask_display = !gtk_toggle_button_get_active(togglebutton);
   rt_sync_mask_display_request(module, g);
-  dt_iop_set_cache_bypass(module, rt_any_preview_active(g));
+  rt_sync_bypass_cache(module, g);
 
   if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), 1);
   dt_iop_request_focus(module);
@@ -1905,9 +1919,10 @@ static gboolean rt_suppress_callback(GtkToggleButton *togglebutton, GdkEventButt
 
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)module->gui_data;
   g->suppress_mask = !gtk_toggle_button_get_active(togglebutton);
-  // No rt_blend_mask_conflicts() guard on this button, so only bypass_cache is synced here --
-  // request_mask_display may currently belong to the blend-mask display, not to retouch.
-  dt_iop_set_cache_bypass(module, rt_any_preview_active(g));
+  // No rt_blend_mask_conflicts() guard on this button, so only bypass_cache/bypass_cache_variant
+  // are synced here -- request_mask_display may currently belong to the blend-mask display, not
+  // to retouch.
+  rt_sync_bypass_cache(module, g);
 
   if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), 1);
   dt_iop_request_focus(module);
@@ -2892,6 +2907,16 @@ static void rt_adjust_levels(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pi
   __OMP_PARALLEL_FOR__()
   for(int i = 0; i < size; i += ch)
   {
+    // The RGB<->Lab/XYZ conversions below store through 4-wide SIMD (dt_apply_transposed_color_matrix
+    // et al.), which unconditionally overwrites all 4 lanes of img_src+i even though the color math
+    // itself is 3-channel -- the 4th lane ends up holding leftover matrix-multiply output, not the
+    // original value. For most pipeline buffers that 4th channel is meaningless padding, but here it
+    // is retouch's own mask-display alpha (painted a few lines up the call chain via
+    // rt_copy_mask_to_alpha), so silently clobbering it left every "mask display" pixel looking
+    // fully transparent whenever a single wavelet scale was also being previewed. Save and restore it
+    // around the round trip.
+    const float preserved_alpha = img_src[i + 3];
+
     if(!IS_NULL_PTR(work_profile))
     {
       dt_ioppr_rgb_matrix_to_lab(img_src + i, img_src + i, work_profile->matrix_in_transposed,
@@ -2934,6 +2959,8 @@ static void rt_adjust_levels(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pi
       dt_Lab_to_XYZ(img_src + i, XYZ);
       dt_XYZ_to_linearRGB(XYZ, img_src + i);
     }
+
+    img_src[i + 3] = preserved_alpha;
   }
 }
 
@@ -3261,7 +3288,15 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
   dt_develop_blend_params_t *bp = (dt_develop_blend_params_t *)piece->blendop_data;
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
   dt_iop_roi_t *roi_layer = &usr_d->roi;
-  const int mask_display = usr_d->mask_display && (scale == usr_d->display_scale);
+  // In single-scale preview (return_layer > 0), the filter above already restricted us to scale 0
+  // and the previewed scale itself -- both are exactly what this preview shows, regardless of
+  // which scale curr_scale/display_scale currently points at (scale 0's shapes always apply here,
+  // even while a *different* scale is being previewed). Requiring scale == display_scale on top,
+  // like plain mask display does, would only match when curr_scale happens to equal 0, silently
+  // dropping the highlight for a scale-0 shape as soon as the user previews any other scale --
+  // even though that same shape's effect keeps being applied and visible in "mask display" alone.
+  const int mask_display
+      = usr_d->mask_display && (wt_p->return_layer > 0 || scale == usr_d->display_scale);
 
   // when the requested scales is grather than max scales the residual image index will be different from the one
   // defined by the user,
@@ -3276,7 +3311,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
   // iterate through all forms
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return 0;
-  
+
   for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
   {
     const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
@@ -4084,7 +4119,9 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
   dt_iop_retouch_global_data_t *gd = (dt_iop_retouch_global_data_t *)self->global_data;
   const int devid = pipe->devid;
   dt_iop_roi_t *roi_layer = &usr_d->roi;
-  const int mask_display = usr_d->mask_display && (scale == usr_d->display_scale);
+  // See the CPU rt_process_forms() for why return_layer > 0 bypasses the display_scale match.
+  const int mask_display
+      = usr_d->mask_display && (wt_p->return_layer > 0 || scale == usr_d->display_scale);
 
   // when the requested scales is grather than max scales the residual image index will be different from the one
   // defined by the user,
@@ -4316,7 +4353,13 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   // check if this module should expose mask.
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL && g && g->mask_display && self->dev->gui_attached
+  // Must mirror process_internal()'s CPU condition exactly: g->mask_display OR display_wavelet_scale,
+  // not g->mask_display alone. Missing the wavelet-scale branch meant a wavelet-only OpenCL preview
+  // never cleared alpha, never set pipe->mask_display, and so never made the downstream color-pipeline
+  // modules bypass -- they ran their normal processing on the wavelet-domain buffer instead of getting
+  // skipped, corrupting the preview.
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL && g && (g->mask_display || display_wavelet_scale)
+     && self->dev->gui_attached
      && (self == self->dev->gui_module) && (pipe == self->dev->pipe))
   {
     const int kernel = gd->kernel_retouch_clear_alpha;
@@ -4328,7 +4371,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     err = dt_opencl_enqueue_kernel_2d(devid, kernel, sizes);
     if(err != CL_SUCCESS) goto cleanup;
 
-    ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_MASK;
+    ((dt_dev_pixelpipe_t *)pipe)->mask_display = g->mask_display ? DT_DEV_PIXELPIPE_DISPLAY_MASK : DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
     ((dt_dev_pixelpipe_t *)pipe)->bypass_blendif = 1;
     usr_data.mask_display = 1;
   }
