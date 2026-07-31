@@ -1,0 +1,24 @@
+#pragma once
+
+#include "common/image.h"
+
+struct dt_embedded_lens_vendor_t
+{
+  dt_image_correction_type_t id;
+  const char *name;
+
+  gboolean (*has_data)       (const dt_image_correction_data_t *cd);
+  gboolean (*has_distortion) (const dt_image_correction_data_t *cd);
+  gboolean (*has_vignetting) (const dt_image_correction_data_t *cd);
+  gboolean (*has_ca)         (const dt_image_correction_data_t *cd);
+
+  int (*populate)(const dt_image_correction_data_t *cd,
+                  float cor_dist_ft, float cor_vig_ft,
+                  float cor_ca_r_ft, float cor_ca_b_ft,
+                  float knots_dist[16], float knots_vig[16],
+                  float cor_rgb[3][16], float vig[16],
+                  float *out_scale);
+};
+
+extern const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[];
+extern const size_t dt_embedded_lens_vendors_count;

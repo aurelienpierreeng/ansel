@@ -171,7 +171,14 @@ add_iop(diffuse "diffuse.c")
 add_iop(blurs "blurs.c")
 add_iop(initialscale "initialscale.c")
 add_iop(watermark "watermark.c")
-add_iop(lens "lens.cc" DEFAULT_VISIBLE)
+add_iop(lens "lens.cc"
+        "embedded_lens/embedded_lens.cc"
+        "embedded_lens/embedded_lens_vendors.cc"
+        "embedded_lens/sony.cc"
+        "embedded_lens/fuji.cc"
+        "embedded_lens/dng.cc"
+        "embedded_lens/olympus.cc"
+        DEFAULT_VISIBLE)
 
 # fix for Mac when OpenMP is only available in C compiler
 if(APPLE)
