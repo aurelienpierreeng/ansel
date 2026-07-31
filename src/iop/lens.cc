@@ -3157,13 +3157,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   gtk_widget_set_visible(g->cor_ca_b_ft, show_embedded_panel && has_ca);
   gtk_widget_set_visible(g->scale_md, show_embedded_panel);
 
-  // The Lensfun-specific widgets (camera/lens selectors, target geometry, the
-  // Lensfun-only "scale" and "reverse" controls, the TCA override + its two sliders)
-  // are meaningless under EMBEDDED_METADATA -- they query the Lensfun DB and read
-  // lfCamera / lfLens fields that are never populated on the embedded path. Hide them
-  // when the user picks embedded; restore them under Lensfun.
   if(show_embedded_panel)
   {
+    gtk_box_reorder_child(GTK_BOX(self->widget), g->modflags, 1);
     gtk_widget_set_visible(g->camera_model, FALSE);
     gtk_widget_set_visible(g->lens_model, FALSE);
     gtk_widget_set_visible(g->find_camera_button, FALSE);
@@ -3178,6 +3174,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   }
   else
   {
+    gtk_box_reorder_child(GTK_BOX(self->widget), g->modflags, 9);
     gtk_widget_set_visible(g->camera_model, TRUE);
     gtk_widget_set_visible(g->lens_model, TRUE);
     gtk_widget_set_visible(g->find_camera_button, TRUE);
