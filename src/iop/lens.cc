@@ -599,6 +599,20 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   if(!d->nc)
   {
     dt_iop_image_copy_by_size((float *)ovoid, (float *)ivoid, roi_out->width, roi_out->height, ch);
+    if(self->dev->gui_attached)
+    {
+      dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+      if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+      {
+        int modflags = 0;
+        if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
+        if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
+        if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
+        dt_iop_gui_enter_critical_section(self);
+        g->corrections_done = modflags;
+        dt_iop_gui_leave_critical_section(self);
+      }
+    }
     return 0;
   }
 
@@ -661,6 +675,20 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   }
 
   dt_free_align(work);
+  if(self->dev->gui_attached)
+  {
+    dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+    {
+      int modflags = 0;
+      if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
+      if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
+      if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
+      dt_iop_gui_enter_critical_section(self);
+      g->corrections_done = modflags;
+      dt_iop_gui_leave_critical_section(self);
+    }
+  }
   return 0;
 }
 
@@ -1133,6 +1161,20 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   if(!d->nc)
   {
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err == CL_SUCCESS && self->dev->gui_attached)
+    {
+      dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+      if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+      {
+        int modflags = 0;
+        if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
+        if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
+        if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
+        dt_iop_gui_enter_critical_section(self);
+        g->corrections_done = modflags;
+        dt_iop_gui_leave_critical_section(self);
+      }
+    }
     return (err == CL_SUCCESS) ? TRUE : FALSE;
   }
 
@@ -1267,6 +1309,20 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   dt_opencl_release_mem_object(dev_cor_rgb1);
   dt_opencl_release_mem_object(dev_cor_rgb2);
   dt_print(DT_DEBUG_OPENCL, "[opencl_lens] embedded-metadata complete (md_vignette + md_lens_correction)\n");
+  if(self->dev->gui_attached)
+  {
+    dt_iop_lensfun_gui_data_t *const g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+    if(g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+    {
+      int modflags = 0;
+      if(dt_embedded_lens_has_distortion(&self->dev->image_storage)) modflags |= LF_MODIFY_DISTORTION;
+      if(dt_embedded_lens_has_ca(&self->dev->image_storage)) modflags |= LF_MODIFY_TCA;
+      if(dt_embedded_lens_has_vignetting(&self->dev->image_storage)) modflags |= LF_MODIFY_VIGNETTING;
+      dt_iop_gui_enter_critical_section(self);
+      g->corrections_done = modflags;
+      dt_iop_gui_leave_critical_section(self);
+    }
+  }
   return TRUE;
 
 error:
