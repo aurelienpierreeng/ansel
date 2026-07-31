@@ -727,7 +727,7 @@ static int _distort_transform_embedded_metadata_warp(dt_iop_module_t *self, cons
   (void)self;
   (void)pipe;
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
-  if(!d->nc) return 1;
+  if(!d->nc || (d->modify_flags & (LF_MODIFY_DISTORTION | LF_MODIFY_TCA)) == 0) return 1;
 
   const float w2 = 0.5f * piece->buf_in.width;
   const float h2 = 0.5f * piece->buf_in.height;
@@ -766,7 +766,7 @@ static int _distort_backtransform_embedded_metadata_warp(dt_iop_module_t *self, 
   (void)self;
   (void)pipe;
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
-  if(!d->nc) return 1;
+  if(!d->nc || (d->modify_flags & (LF_MODIFY_DISTORTION | LF_MODIFY_TCA)) == 0) return 1;
 
   const float w2 = 0.5f * piece->buf_in.width;
   const float h2 = 0.5f * piece->buf_in.height;
@@ -794,7 +794,7 @@ static void _distort_mask_embedded_metadata_warp(dt_iop_module_t *self, const dt
   (void)pipe;
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
 
-  if(!d->nc)
+  if(!d->nc || (d->modify_flags & (LF_MODIFY_DISTORTION | LF_MODIFY_TCA)) == 0)
   {
     dt_iop_image_copy_by_size(out, in, roi_out->width, roi_out->height, 1);
     return;
@@ -837,8 +837,8 @@ static void _modify_roi_in_embedded_metadata_warp(dt_iop_module_t *self, const d
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
 
   // roi_in already equals roi_out (set by the caller before delegating here); grow only if
-  // there is an active knot table to sample from.
-  if(!d->nc) return;
+  // there is an active knot table to sample from and the user requested geometric correction.
+  if(!d->nc || (d->modify_flags & (LF_MODIFY_DISTORTION | LF_MODIFY_TCA)) == 0) return;
 
   const float orig_w = roi_in->scale * piece->buf_in.width;
   const float orig_h = roi_in->scale * piece->buf_in.height;
@@ -1718,9 +1718,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     tiling->xalign = 1;
     tiling->yalign = 1;
 
-    // No active knot table -> no halo needed, matching
-    // _modify_roi_in_embedded_metadata_warp's own gate.
-    if(!d->nc)
+    // No active knot table or no geometric correction requested -> no halo needed.
+    if(!d->nc || (d->modify_flags & (LF_MODIFY_DISTORTION | LF_MODIFY_TCA)) == 0)
     {
       tiling->overlap = 0;
       return;
