@@ -263,7 +263,7 @@ Testimg *testimg_gen_grey_max_dr_neg()
   float *p = get_pixel(ti, ti->width - 1, 0);
   p[0] = p[1] = p[2] = -0.0f;
 
-  testimdt_free(tmp);
+  testimg_free(tmp);
   return ti;
 }
 
