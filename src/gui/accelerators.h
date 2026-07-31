@@ -167,7 +167,10 @@ typedef enum dt_shortcut_type_t
 typedef struct dt_shortcut_t
 {
   GtkWidget *widget;          // link to the widget being accelerated. Can be NULL.
-  GList *closure;             // GList of GClosures, aka callback + data being accelerated. Has to be non-NULL if widget is NULL.
+  GList *closure;             // GList of GClosures, aka callback + data being accelerated. Always non-NULL once
+                               // built through dt_accels_new_{widget,action,virtual}_shortcut(): accel groups are
+                               // never attached to a GtkWindow (see dt_accels_dispatch), so the internal dispatcher
+                               // is the only path that can activate a shortcut, and it always goes through this closure.
   char *path;                 // global path for that accel
   const char *signal;         // widget signal to be wired to that accel
   GtkAccelGroup *accel_group; // the accel_group to which this shortcut belongs

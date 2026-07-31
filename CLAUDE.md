@@ -612,6 +612,43 @@ skips the now-invalid widgets instead of touching freed GTK objects.
 
 ---
 
+## Keyboard shortcuts (accelerators)
+
+### Widget shortcuts need their own closure — GTK's native accel-group activation is unreachable
+
+`src/gui/accelerators.c` offers two ways to register a shortcut: a "generic" one
+(`dt_accels_new_action_shortcut`, `dt_accels_new_virtual_shortcut`/`_instance`) that builds a
+`GClosure` via `dt_shortcut_set_closure()`, and a "widget" one (`dt_accels_new_widget_shortcut`)
+that instead calls `gtk_widget_add_accelerator(widget, signal, accel_group, key, mods, flags)`,
+relying on GTK's own `gtk_window_activate_key()` to fire `widget`'s signal when the key is
+pressed — which only works if `accel_group` is attached to a `GtkWindow` via
+`gtk_window_add_accel_group()`.
+
+That attachment was intentionally removed on 2025-04-02 (`2e693e6b3`, "Accels: do not use Gtk
+window connection for accel groups... avoids crashes... Fix #484"): the app now handles every
+keystroke itself through `dt_accels_dispatch()` → `_key_pressed()` → `_call_shortcut_cclosure()`,
+which looks up `dt_shortcut_get_closure(shortcut)` and does nothing if it's `NULL` — it never
+falls back to GTK's native accel-group activation. A same-day attempt to restore just the global
+accel-group attachment (`c8770a367`, "Still connect global accels to window") was reverted two
+minutes later (`7273a1371`, commit message "Nope"). Re-attaching accel groups to the window is a
+dead end that was already tried and abandoned; it is not the way back in.
+
+`dt_accels_new_widget_shortcut()` was never updated for the migration: it still leaves
+`shortcut->closure = NULL`, so any shortcut registered only through it is keyboard-dead — clicking
+the widget still works (plain `"clicked"`/`"toggled"` GTK signal), but the accelerator silently
+does nothing, with no error anywhere. Confirmed dead in practice for the only two default-keybound
+consumers of this path in the whole codebase: `src/libs/tools/filter.c`'s "Reload current
+collection" (Ctrl+R) and "Toggle culling mode" (Ctrl+S).
+
+Fixed by giving widget shortcuts a real closure too (`_widget_shortcut_callback()`, wired via
+`dt_shortcut_set_closure()` inside `dt_accels_new_widget_shortcut()`), which just does
+`g_signal_emit_by_name(shortcut->widget, shortcut->signal)` — the same activation path every other
+shortcut type already uses. Any future direct caller of `gtk_widget_add_accelerator()` for a
+keyboard shortcut in this codebase has the same problem: it needs a closure the internal
+dispatcher can invoke, not just a GTK-level accelerator that no window will ever activate.
+
+---
+
 ## Interpolation
 
 Mitchell-Netravali (B=C=1/3) is the pipeline interpolator. Lanczos has been removed entirely.

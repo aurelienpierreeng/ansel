@@ -546,6 +546,20 @@ static void _insert_accel(dt_accels_t *accels, dt_shortcut_t *shortcut)
 }
 
 
+// Since accel groups are no longer attached to any GtkWindow (see dt_accels_dispatch,
+// which handles everything internally to avoid the crashes from issue #484), a plain
+// widget+signal shortcut needs its own closure too, or the internal dispatcher has
+// nothing to invoke: gtk_widget_add_accelerator() alone is a dead end here.
+static gboolean _widget_shortcut_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
+                                          GdkModifierType mods, gpointer user_data)
+{
+  dt_shortcut_t *shortcut = (dt_shortcut_t *)user_data;
+  if(IS_NULL_PTR(shortcut->widget) || IS_NULL_PTR(shortcut->signal)) return FALSE;
+  g_signal_emit_by_name(shortcut->widget, shortcut->signal);
+  return TRUE;
+}
+
+
 static gboolean _virtual_shortcut_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
                                        GdkModifierType mods, gpointer user_data)
 {
@@ -700,6 +714,7 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
     shortcut->virtual_shortcut = FALSE;
     shortcut->description = _("Trigger the action");
     shortcut->accels = accels;
+    dt_shortcut_set_closure(shortcut, _widget_shortcut_callback, shortcut);
     _insert_accel(accels, shortcut);
     _shortcut_set_widget_data(widget, shortcut);
     // accel is inited with empty keys so user config may set it.
