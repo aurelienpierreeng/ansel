@@ -133,15 +133,22 @@ typedef struct dt_iop_colorequal_data_t
   dt_iop_order_iccprofile_info_t *lut_profile;
   dt_iop_order_iccprofile_info_t *work_profile;
   dt_lut3d_interpolation_t interpolation;
+  // Params that `clut` was last built from, for this piece alone. The LUT is expensive
+  // enough to be worth not rebuilding on every commit, but it must never be shared across
+  // pieces/instances: see the multi-instance cache-bleed writeup for this module.
+  dt_iop_colorequal_params_t built_params;
+  gboolean clut_valid;
 } dt_iop_colorequal_data_t;
 
 typedef struct dt_iop_colorequal_global_data_t
 {
-  dt_pthread_rwlock_t lock;
-  dt_iop_colorequal_data_t cache;
-  dt_iop_colorequal_params_t params;
-  gboolean cache_valid;
-  uint64_t cache_generation;
+  // Truly global, read-only-after-init state only. Do NOT add a shared LUT/params cache
+  // here: this struct is the same instance for every module instance, every piece, and
+  // every pipe (full/preview/thumbnail/export/virtual-preview) of colorequal in the whole
+  // application -- there is exactly one of it, not one per instance. A memoized LUT stored
+  // here can only ever hold one instance's content at a time, and gets silently overwritten
+  // by whichever piece/instance last committed -- including disabled instances, since
+  // commit_params runs for disabled pieces too.
   int kernel_lut3d_tetrahedral;
   int kernel_lut3d_trilinear;
   int kernel_lut3d_pyramid;
@@ -163,7 +170,7 @@ typedef struct dt_iop_colorequal_gui_data_t
   GtkWidget *interpolation;
   dt_lut_viewer_t *viewer;
   dt_iop_colorequal_data_t viewer_lut;
-  uint64_t viewer_lut_generation;
+  dt_iop_colorequal_params_t viewer_lut_params;
   dt_iop_colorequal_params_t gui_params;
   dt_iop_colorequal_params_t cached_curve_params;
   dt_draw_curve_t *curve[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
@@ -751,7 +758,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 {
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)p1;
   dt_iop_colorequal_data_t *d = (dt_iop_colorequal_data_t *)piece->data;
-  dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   const dt_iop_order_iccprofile_info_t *lut_profile
       = self->dev ? dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
                   : NULL;
@@ -759,34 +765,31 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(lut_profile))
   {
-    d->clut = NULL;
+    // Leave d->clut's allocation (if any) alone -- it is this piece's own buffer now,
+    // not a borrowed pointer. clut_level == 0 already makes process()/process_cl() treat
+    // it as not-ready; freeing/reallocating it is cleanup_pipe's job.
     d->clut_level = 0;
+    d->clut_valid = FALSE;
     d->lut_profile = NULL;
     d->work_profile = NULL;
     d->interpolation = DT_LUT3D_INTERP_TETRAHEDRAL;
     return;
   }
 
-  dt_pthread_rwlock_wrlock(&gd->lock);
-  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p))
+  // This LUT is expensive enough to be worth memoizing, but the cache must be scoped to
+  // this piece alone -- see the dt_iop_colorequal_global_data_t comment for why a shared
+  // cache silently bleeds one instance's content into another's.
+  if(!d->clut_valid || !_lut_fields_equal(&d->built_params, p))
   {
-    _build_clut(&gd->cache, p, lut_profile);
-    memcpy(&gd->params, p, sizeof(*p));
-    gd->cache_valid = TRUE;
-    gd->cache_generation++;
+    _build_clut(d, p, lut_profile);
+    d->built_params = *p;
+    d->clut_valid = TRUE;
   }
 
-  d->clut = gd->cache.clut;
-  d->clut_level = gd->cache.clut_level;
   d->white_level = exp2f(p->white_level);
   d->lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
   d->work_profile = (dt_iop_order_iccprofile_info_t *)work_profile;
   d->interpolation = (dt_lut3d_interpolation_t)p->interpolation;
-  memcpy(d->reference_saturation, gd->cache.reference_saturation, sizeof(d->reference_saturation));
-  dt_pthread_rwlock_unlock(&gd->lock);
-
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!IS_NULL_PTR(g)) _update_gui_lut_cache(self);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -806,6 +809,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_colorequal_data_t *d = (dt_iop_colorequal_data_t *)piece->data;
+  dt_free_align(d->clut);
   d->clut = NULL;
   dt_free_align(piece->data);
   piece->data = NULL;
@@ -849,10 +853,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     goto cleanup;
   }
 
-  dt_pthread_rwlock_rdlock(&gd->lock);
   clut_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * d->clut_level * d->clut_level * d->clut_level,
-                                                   gd->cache.clut);
-  dt_pthread_rwlock_unlock(&gd->lock);
+                                                   d->clut);
   if(IS_NULL_PTR(clut_cl))
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -894,7 +896,6 @@ __DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ibuf, void *const obuf)
 {
-  dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   const dt_iop_colorequal_data_t *d = (const dt_iop_colorequal_data_t *)piece->data;
   const int width = piece->roi_in.width;
   const int height = piece->roi_in.height;
@@ -921,10 +922,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_ioppr_transform_image_colorspace_rgb((float *)obuf, (float *)obuf, width, height, d->work_profile,
                                           d->lut_profile, "colorequal work to HLG Rec2020");
 
-  dt_pthread_rwlock_rdlock(&gd->lock);
   dt_lut3d_apply((float *)obuf, (float *)obuf, (size_t)width * height, d->clut, d->clut_level, 1.f,
                  d->interpolation);
-  dt_pthread_rwlock_unlock(&gd->lock);
 
   dt_ioppr_transform_image_colorspace_rgb((float *)obuf, (float *)obuf, width, height, d->lut_profile, d->work_profile,
                                           "colorequal HLG Rec2020 to work");
@@ -940,28 +939,23 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 }
 
 /**
- * The authoritative CLUT lives in module-global data so pixelpipes and the GUI
- * can reuse the same build. The viewer only receives that shared pointer plus
- * the global read/write lock, which lets it read safely while the cache is
- * rebuilt on parameter changes.
+ * GUI-thread only (called from gui_changed()/gui_update()): g->gui_params is live GUI
+ * state and must never be read from a pipeline thread (see commit_params(), which uses
+ * the historical params it is passed instead). g->viewer_lut is this instance's own
+ * gui_data, never shared with any other instance's viewer or with the pipeline's
+ * piece->data clut.
  */
 static void _update_gui_lut_cache(dt_iop_module_t *self)
 {
   if(!self->enabled) return;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   const dt_iop_colorequal_params_t *p = g ? &g->gui_params : (const dt_iop_colorequal_params_t *)self->params;
   const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
-  uint64_t cache_generation = 0;
 
   if(IS_NULL_PTR(g->viewer)) return;
 
-  dt_pthread_rwlock_rdlock(&gd->lock);
-  cache_generation = gd->cache_generation;
-  dt_pthread_rwlock_unlock(&gd->lock);
-
-  if(!g->viewer_lut_dirty && g->viewer_lut_valid && g->viewer_lut_generation == cache_generation) return;
+  if(!g->viewer_lut_dirty && g->viewer_lut_valid && _lut_fields_equal(&g->viewer_lut_params, p)) return;
 
   const dt_iop_order_iccprofile_info_t *lut_profile
       = self->dev ? dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
@@ -976,39 +970,37 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
     dt_lut_viewer_set_control_nodes(g->viewer, NULL, 0);
     g->viewer_lut_dirty = FALSE;
     g->viewer_lut_valid = FALSE;
-    g->viewer_lut_generation = 0;
     g->viewer_control_node_count = 0;
     return;
   }
 
-  dt_pthread_rwlock_wrlock(&gd->lock);
-  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p) || IS_NULL_PTR((&gd->cache)->clut))
-  {
-    _build_clut(&gd->cache, p, lut_profile);
-    memcpy(&gd->params, p, sizeof(*p));
-    gd->cache_valid = TRUE;
-    gd->cache_generation++;
-  }
-  cache_generation = gd->cache_generation;
-
-  g->viewer_lut.clut = gd->cache.clut;
-  g->viewer_lut.clut_level = gd->cache.clut_level;
+  _build_clut(&g->viewer_lut, p, lut_profile);
+  g->viewer_lut_params = *p;
   g->viewer_lut.lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
-  memcpy(g->viewer_lut.reference_saturation, gd->cache.reference_saturation, sizeof(g->viewer_lut.reference_saturation));
   g->viewer_control_node_count = _build_viewer_control_nodes(p, lut_profile, g->viewer_control_nodes);
-  dt_lut_viewer_set_lut(g->viewer, g->viewer_lut.clut, g->viewer_lut.clut_level, &gd->lock,
+  dt_lut_viewer_set_lut(g->viewer, g->viewer_lut.clut, g->viewer_lut.clut_level, NULL,
                         g->viewer_lut.lut_profile, display_profile);
   dt_lut_viewer_set_control_nodes(g->viewer, g->viewer_control_nodes, g->viewer_control_node_count);
-  dt_pthread_rwlock_unlock(&gd->lock);
   g->viewer_lut_dirty = FALSE;
   g->viewer_lut_valid = TRUE;
-  g->viewer_lut_generation = cache_generation;
 
   dt_lut_viewer_queue_draw(g->viewer);
 
   if(log_perf)
     dt_print(DT_DEBUG_PERF, "[colorequal] gui LUT cache sync level=%u total=%.3fms\n", g->viewer_lut.clut_level,
              1000.0 * (dt_get_wtime() - start));
+}
+
+/**
+ * The curve-editing mouse handlers below don't go through gui_changed() (unlike bauhaus
+ * sliders, which the framework calls automatically) and drag motion can fire far too often
+ * to rebuild the LUT synchronously on every event -- so they queue this instead, keyed on
+ * &g->viewer_lut rather than `self`, so it coexists with the unrelated, single-slot-per-source
+ * dt_iop_throttled_history_update task already queued on `self` for the same interaction.
+ */
+static void _update_gui_lut_cache_throttled(gpointer data)
+{
+  _update_gui_lut_cache((dt_iop_module_t *)data);
 }
 
 static void _update_curve_cache(dt_iop_colorequal_gui_data_t *g, const dt_iop_colorequal_params_t *p)
@@ -1494,6 +1486,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
         dt_control_queue_redraw_center();
       }
       dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+      dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
       gtk_widget_queue_draw(widget);
     }
 
@@ -1544,6 +1537,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       dt_control_queue_redraw_center();
     }
     dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
     gtk_widget_queue_draw(widget);
     return TRUE;
   }
@@ -1566,6 +1560,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
         dt_control_queue_redraw_center();
       }
       dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+      dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
       gtk_widget_queue_draw(widget);
     }
 
@@ -1595,6 +1590,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       dt_control_queue_redraw_center();
     }
     dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
     gtk_widget_queue_draw(widget);
     return TRUE;
   }
@@ -1619,12 +1615,17 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
      * Curve drags are throttled while the pointer moves, but the final pointer
      * release must always commit the last state to history so the pixelpipes
      * recompute even if another GUI refresh happens before the throttle timer
-     * expires.
+     * expires. The LUT viewer has its own, separately-throttled task (queued on
+     * &g->viewer_lut, not `self`, so it doesn't clobber the history task above --
+     * dt_gui_throttle_queue keeps only one pending task per source); flush it the
+     * same way so the viewer doesn't lag behind the final released state either.
      */
     if(was_dragging)
     {
       dt_gui_throttle_cancel(self);
       dt_iop_throttled_history_update(self);
+      dt_gui_throttle_cancel(&g->viewer_lut);
+      _update_gui_lut_cache(self);
     }
   }
 
@@ -1782,6 +1783,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
   dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+  dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
   return 1;
 }
 
@@ -1844,6 +1846,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
   dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+  dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
   return 1;
 }
 
@@ -1977,7 +1980,6 @@ static void _switch_preview_cursor(dt_iop_module_t *self)
 static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)self->global_data;
   dt_develop_t *dev = self ? self->dev : NULL;
   if(!self->enabled || !g->cursor_valid)
   {
@@ -2046,7 +2048,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   const dt_iop_order_iccprofile_info_t *const lut_profile = g->viewer_lut.lut_profile;
   dt_aligned_pixel_t output_rgb = { input_rgb[0], input_rgb[1], input_rgb[2], 0.f };
   dt_colorrings_apply_rgb_lut(input_rgb, exp2f(g->gui_params.white_level), work_profile, lut_profile,
-                              g->viewer_lut.clut, g->viewer_lut.clut_level, &gd->lock,
+                              g->viewer_lut.clut, g->viewer_lut.clut_level, NULL,
                               (dt_lut3d_interpolation_t)g->gui_params.interpolation, output_rgb);
 
   dt_aligned_pixel_t projected_rgb = { 0.f };
@@ -2213,6 +2215,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
     if(g->cursor_valid && g->has_focus) dt_control_queue_redraw_center();
   }
+  _update_gui_lut_cache(self);
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -2273,6 +2276,7 @@ void gui_cleanup(dt_iop_module_t *self)
       g->background_surface[ring][ch] = NULL;
     }
 
+  dt_free_align(g->viewer_lut.clut);
   g->viewer_lut.clut = NULL;
 
   dt_lut_viewer_destroy(&g->viewer);
@@ -2297,7 +2301,6 @@ void gui_init(dt_iop_module_t *self)
   g->curve_cache_valid = FALSE;
   g->viewer_lut_dirty = TRUE;
   g->viewer_lut_valid = FALSE;
-  g->viewer_lut_generation = 0;
   g->preview_signal_connected = FALSE;
   g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->has_focus = FALSE;
@@ -2435,16 +2438,6 @@ void init_global(dt_iop_module_so_t *module)
 {
   dt_iop_colorequal_global_data_t *gd = malloc(sizeof(*gd));
   module->data = gd;
-  dt_pthread_rwlock_init(&gd->lock, NULL);
-  gd->cache.clut = NULL;
-  gd->cache.clut_level = 0;
-  gd->cache.white_level = 1.f;
-  memset(gd->cache.reference_saturation, 0, sizeof(gd->cache.reference_saturation));
-  gd->cache.lut_profile = NULL;
-  gd->cache.work_profile = NULL;
-  memset(&gd->params, 0, sizeof(gd->params));
-  gd->cache_valid = FALSE;
-  gd->cache_generation = 0;
   gd->kernel_lut3d_tetrahedral = -1;
   gd->kernel_lut3d_trilinear = -1;
   gd->kernel_lut3d_pyramid = -1;
@@ -2463,15 +2456,12 @@ void init_global(dt_iop_module_so_t *module)
 void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_colorequal_global_data_t *gd = (dt_iop_colorequal_global_data_t *)module->data;
-  dt_free_align(gd->cache.clut);
-  gd->cache.clut = NULL;
 #ifdef HAVE_OPENCL
   dt_opencl_free_kernel(gd->kernel_lut3d_tetrahedral);
   dt_opencl_free_kernel(gd->kernel_lut3d_trilinear);
   dt_opencl_free_kernel(gd->kernel_lut3d_pyramid);
   dt_opencl_free_kernel(gd->kernel_exposure);
 #endif
-  dt_pthread_rwlock_destroy(&gd->lock);
   dt_free(module->data);
 }
 
