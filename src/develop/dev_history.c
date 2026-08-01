@@ -1393,6 +1393,27 @@ void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
     dt_dev_pixelpipe_resync_history_all(dev);
 }
 
+gboolean dt_dev_history_is_image_in_dev(GList *imgs)
+{
+  return !IS_NULL_PTR(darktable.develop)
+    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+}
+
+void dt_apply_dev_history_update(dt_develop_t *dev)
+{
+  if(IS_NULL_PTR(dev)) return;
+
+  dt_dev_reload_history_items(dev, dev->image_storage.id);
+  dt_dev_history_gui_update(dev);
+  // Re-derive dev->roi.processed_{width,height} (and the natural scale) from the new
+  // history through the virtual pipe. Without this, a history change that alters the
+  // final image geometry (e.g. removing a crop/ashift step) still renders at the old,
+  // stale ROI -- same fix as _history_apply_history_end() in libs/history.c.
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  dt_dev_history_pixelpipe_update(dev, TRUE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+}
+
 /**
  * @brief Delete all history entries for an image from the DB.
  *

@@ -497,7 +497,7 @@ gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, g
     }
   }
 
-  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
 
   if(is_darkroom_image_in_list)
   {
@@ -509,7 +509,7 @@ gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, g
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_end_record(darktable.develop);
-    dt_menu_apply_dev_history_update(darktable.develop);
+    dt_apply_dev_history_update(darktable.develop);
   }
 
   dt_control_queue_redraw_center();

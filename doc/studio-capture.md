@@ -343,7 +343,7 @@ That said, "this viewer never initializes module GUIs" is not a hard
 guarantee elsewhere: `darktable.develop` is swapped to point at `d->dev`
 for as long as Studio Capture is active (see `enter()`/`leave()` below), and
 a few global menu actions read `darktable.develop` directly instead of a
-locally-scoped `dev` (`dt_menu_apply_dev_history_update()`'s callers in
+locally-scoped `dev` (`dt_apply_dev_history_update()`'s callers in
 `gui/actions/edit.c` and `styles.c` — e.g. "Delete history", "Compress
 history"). Running one of those while Studio Capture is active *does* call
 `dt_dev_history_gui_update()` on `d->dev`, which builds real

@@ -113,7 +113,7 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
   GList *imgs = dt_act_on_get_images();
   if(IS_NULL_PTR(imgs)) return FALSE;
 
-  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
 
   if(is_darkroom_image_in_list)
   {
@@ -121,7 +121,7 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
     dt_dev_undo_start_record(dev);
     dt_history_compress_on_image(dev->image_storage.id);
     dt_dev_undo_end_record(dev);
-    dt_menu_apply_dev_history_update(dev);
+    dt_apply_dev_history_update(dev);
 
     // Avoid running a headless compression for the current darkroom image: the history module
     // (src/libs/history.c) compresses directly from the loaded pipeline.
@@ -148,7 +148,7 @@ static gboolean copy_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
   g_list_free(imgs);
   imgs = NULL;
 
@@ -175,7 +175,7 @@ static gboolean copy_parts_callback(GtkAccelGroup *group, GObject *acceleratable
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
   g_list_free(imgs);
   imgs = NULL;
 
@@ -218,7 +218,7 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
   GList *imgs = dt_selection_get_list(darktable.selection);
 
   // We don't allow pasting on darkroom image
-  if(dt_menu_is_image_in_dev(imgs))
+  if(dt_dev_history_is_image_in_dev(imgs))
     imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 
   if(imgs) dt_history_paste_on_list(imgs);
@@ -256,7 +256,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
   }
 
   // We don't allow pasting on darkroom image
-  if(dt_menu_is_image_in_dev(imgs))
+  if(dt_dev_history_is_image_in_dev(imgs))
     imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 
   if(imgs) dt_history_paste_parts_on_list(imgs);
@@ -347,8 +347,8 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
     dt_free(dtfilename);
   }
 
-  if(dt_menu_is_image_in_dev(imgs))
-    dt_menu_apply_dev_history_update(darktable.develop);
+  if(dt_dev_history_is_image_in_dev(imgs))
+    dt_apply_dev_history_update(darktable.develop);
 
   g_object_unref(filechooser);
   g_list_free(imgs);
@@ -361,7 +361,7 @@ static gboolean duplicate_callback(GtkAccelGroup *group, GObject *acceleratable,
   if(has_active_images())
   {
     GList *imgs = dt_selection_get_list(darktable.selection);
-    if(dt_menu_is_image_in_dev(imgs))
+    if(dt_dev_history_is_image_in_dev(imgs))
     {
       // Duplication copies history from the source image into the new version.
       // When the source is the current darkroom image, persist its live history
@@ -384,7 +384,7 @@ static gboolean new_history_callback(GtkAccelGroup *group, GObject *acceleratabl
   if(has_active_images())
   {
     GList *imgs = dt_selection_get_list(darktable.selection);
-    if(dt_menu_is_image_in_dev(imgs))
+    if(dt_dev_history_is_image_in_dev(imgs))
     {
       // Creating a new duplicate version still starts from the current source
       // image state, so flush the live darkroom history before duplicating it.

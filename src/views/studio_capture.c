@@ -271,7 +271,7 @@ static void _studio_dev_setup(dt_studio_capture_t *d, const int32_t imgid)
  * though this viewer itself never calls dt_iop_gui_init(): darktable.develop
  * is swapped to point at this view's dev while active (see enter()), and
  * global menu actions that read darktable.develop directly instead of a
- * locally-scoped dev (dt_menu_apply_dev_history_update() callers in
+ * locally-scoped dev (dt_apply_dev_history_update() callers in
  * gui/actions/edit.c, styles.c) can reach dt_dev_history_gui_update() on
  * THIS dev -- gui_attached is TRUE here too, so nothing stops it from
  * running dt_iop_gui_init()/dt_iop_gui_set_expander() on these modules.

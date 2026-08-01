@@ -26,6 +26,7 @@
 #include "common/history_merge_gui.h"
 #include "common/styles.h"
 #include "common/undo.h"
+#include "develop/dev_history.h"
 #include "gui/accelerators.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -65,7 +66,7 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
 
   GList *imgs = dt_act_on_get_images();
   const gboolean duplicate = dt_conf_get_bool("ui_last/styles_create_duplicate");
-  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
 
   if(is_darkroom_image_in_list)
   {
@@ -74,7 +75,7 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
     const gboolean applied = dt_history_style_on_image(darktable.develop->image_storage.id, style_name, duplicate);
     dt_dev_undo_end_record(darktable.develop);
     if(applied)
-      dt_menu_apply_dev_history_update(darktable.develop);
+      dt_apply_dev_history_update(darktable.develop);
   }
 
   if(imgs) dt_history_style_on_list(imgs, style_name, duplicate);
