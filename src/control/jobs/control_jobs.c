@@ -626,7 +626,10 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
   while(t)
   {
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    const int newimgid = dt_image_duplicate(imgid);
+    // Defer exposing the duplicate to the collection/lighttable grid until its history is
+    // settled below -- otherwise the grid can generate and cache a thumbnail from the
+    // still-historyless row before the copy/delete below ever runs.
+    const int newimgid = dt_image_duplicate_no_reload(imgid);
     if(newimgid != UNKNOWN_IMAGE)
     {
       if(GPOINTER_TO_INT(params->data))

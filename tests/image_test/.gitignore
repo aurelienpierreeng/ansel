@@ -2,3 +2,4 @@ bank_path.conf
 results/
 baseline/
 .no-baseline-during-update/
+opencl_cache/

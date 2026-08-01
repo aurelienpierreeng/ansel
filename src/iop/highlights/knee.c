@@ -219,13 +219,13 @@ void _hl_knee_estimate(const float *const restrict input, const size_t width, co
       joint_moments[9 * bin_pixels + pixel] = weight * x_blue * x_blue;   // plane 9: sum w*B*B -> E[B^2]
     }
 
-    for(int base = 0; base < 10; base += 4)
+    for(int plane_base = 0; plane_base < 10; plane_base += 4)
     {
-      const int n_planes = MIN(4, 10 - base);
+      const int n_planes = MIN(4, 10 - plane_base);
       const float *plane_in[4] = { 0 };
       float *plane_out[4] = { 0 };
       for(int k = 0; k < n_planes; k++)
-        plane_in[k] = plane_out[k] = joint_moments + (size_t)(base + k) * bin_pixels;
+        plane_in[k] = plane_out[k] = joint_moments + (size_t)(plane_base + k) * bin_pixels;
       _knee_blur4(plane_in, plane_out, n_planes, bin_w, bin_h, sigma, pk_in, pk_out);
     }
 
@@ -321,13 +321,13 @@ void _hl_knee_estimate(const float *const restrict input, const size_t width, co
           pair_moments[5 * bin_pixels + pixel] = weight * val_a * val_b;
         }
 
-        for(int base = 0; base < 6; base += 4)
+        for(int plane_base = 0; plane_base < 6; plane_base += 4)
         {
-          const int n_planes = MIN(4, 6 - base);
+          const int n_planes = MIN(4, 6 - plane_base);
           const float *plane_in[4] = { 0 };
           float *plane_out[4] = { 0 };
           for(int k = 0; k < n_planes; k++)
-            plane_in[k] = plane_out[k] = pair_moments + (size_t)(base + k) * bin_pixels;
+            plane_in[k] = plane_out[k] = pair_moments + (size_t)(plane_base + k) * bin_pixels;
           _knee_blur4(plane_in, plane_out, n_planes, bin_w, bin_h, sigma, pk_in, pk_out);
         }
 

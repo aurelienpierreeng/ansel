@@ -1469,10 +1469,22 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
         const int revision = dt_atomic_get_int(&pipe->dev->mask_preview_settings_revision);
         local_hash = dt_hash(local_hash, (const char *)&revision, sizeof(revision));
       }
+
+      // bypass_cache_variant (see dt_iop_module_t.bypass_cache_variant) is, like
+      // request_mask_display above, module-owned GUI state whose real effect a module such as
+      // retouch applies only to this main/FULL pipe -- never to preview/virtual-preview, which
+      // always render as if none of these toggles were active. But the field itself lives on
+      // the shared dt_iop_module_t, so it reads the same non-zero value from every pipe type. Left
+      // ungated, a preview-pipe run with the same ROI/params (e.g. at zoom == fit) can compute the
+      // exact same hash chain as the FULL pipe despite publishing different pixels, and either
+      // pipe's cache entry then gets silently reused by the other via the cross-pipe "another pipe
+      // already owns this hash" exact-hit path -- exactly like request_mask_display's own hazard.
+      local_hash = dt_hash(local_hash, (const char *)&piece->module->bypass_cache_variant, sizeof(int));
     }
-    else 
+    else
     {
       const int zero = 0;
+      local_hash = dt_hash(local_hash, (const char *)&zero, sizeof(int));
       local_hash = dt_hash(local_hash, (const char *)&zero, sizeof(int));
     }
 

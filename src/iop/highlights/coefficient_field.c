@@ -2248,11 +2248,11 @@ cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
   {
     const int guide1 = (cdeep == 0) ? 1 : 0;
     const int guide2 = (cdeep == 2) ? 1 : 2;
-    cl_mem packed = dt_opencl_alloc_device(devid, size[0], size[1], sizeof(float) * 4);
+    cl_mem deep_packed = dt_opencl_alloc_device(devid, size[0], size[1], sizeof(float) * 4);
     cl_mem mask_blurred = dt_opencl_alloc_device(devid, size[0], size[1], sizeof(float) * 4);
-    if(!packed || !mask_blurred)
+    if(!deep_packed || !mask_blurred)
     {
-      dt_opencl_release_mem_object(packed);
+      dt_opencl_release_mem_object(deep_packed);
       dt_opencl_release_mem_object(mask_blurred);
       cl_err = DT_OPENCL_DEFAULT_ERROR;
       goto out;
@@ -2260,7 +2260,7 @@ cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
 
     const int kernel_mask = global_data->kernel_hl_cf_pack_deepmask;
     dt_opencl_set_kernel_arg(devid, kernel_mask, 0, sizeof(cl_mem), &valid);
-    dt_opencl_set_kernel_arg(devid, kernel_mask, 1, sizeof(cl_mem), &packed);
+    dt_opencl_set_kernel_arg(devid, kernel_mask, 1, sizeof(cl_mem), &deep_packed);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 2, sizeof(int), &region_w);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 3, sizeof(int), &region_h);
     dt_opencl_set_kernel_arg(devid, kernel_mask, 4, sizeof(int), &cdeep);
@@ -2268,8 +2268,8 @@ cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
     dt_opencl_set_kernel_arg(devid, kernel_mask, 6, sizeof(int), &guide2);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel_mask, size);
     if(cl_err == CL_SUCCESS)
-      cl_err = gaussian ? dt_gaussian_blur_cl(gaussian, packed, mask_blurred)
-                        : _region_blur_cl(devid, packed, mask_blurred, region_w, region_h, cf_sigma);
+      cl_err = gaussian ? dt_gaussian_blur_cl(gaussian, deep_packed, mask_blurred)
+                        : _region_blur_cl(devid, deep_packed, mask_blurred, region_w, region_h, cf_sigma);
 
     if(cl_err == CL_SUCCESS)
     {
@@ -2289,7 +2289,7 @@ cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
       dt_opencl_set_kernel_arg(devid, kernel_eval, 12, sizeof(int), &guide2);
       cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel_eval, size);
     }
-    dt_opencl_release_mem_object(packed);
+    dt_opencl_release_mem_object(deep_packed);
     dt_opencl_release_mem_object(mask_blurred);
   }
 

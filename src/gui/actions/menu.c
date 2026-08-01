@@ -24,7 +24,6 @@
 #include "common/collection.h"
 #include "common/selection.h"
 #include "control/conf.h"
-#include "develop/develop.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 #include "math.h"
@@ -657,18 +656,6 @@ gboolean has_active_image_in_lighttable()
   return image && lighttable;
 }
 
-gboolean dt_menu_is_image_in_dev(GList *imgs)
-{
-  return !IS_NULL_PTR(darktable.develop)
-    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
-}
-
-void dt_menu_apply_dev_history_update(dt_develop_t *dev)
-{
-  if(IS_NULL_PTR(dev)) return;
-
-  dt_dev_reload_history_items(dev, dev->image_storage.id);
-  dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
-}
+// dt_menu_is_image_in_dev() / dt_apply_dev_history_update() now live in
+// develop/dev_history.c -- they are develop/darkroom concerns, not menu concerns, and are
+// shared with common/history_actions.c and gui/actions/styles.c.

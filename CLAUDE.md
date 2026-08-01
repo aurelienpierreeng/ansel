@@ -104,6 +104,39 @@ write history straight to DB (XMP load, `dt_image_set_flip`) bypass it and need 
 Do NOT refresh the filmstrip from darkroom write paths — it competes with the realtime main
 preview pipeline. Lighttable ops may refresh both.
 
+### Duplicating an image races its own thumbnail generation against the history copy
+
+Lighttable "Duplicate" (`dt_control_duplicate_images_job_run`, `control_jobs.c`) creates the new
+DB row via `dt_image_duplicate()`, then copies the source's history onto it via
+`dt_history_copy_and_paste_on_image(..., DT_HISTORY_MERGE_REPLACE, ...)`. `dt_image_duplicate()`
+(`common/image.c`) used to call `dt_collection_update_query(..., DT_COLLECTION_CHANGE_RELOAD, ...)`
+unconditionally, right after inserting the row — i.e. *before* the caller had copied any history
+onto it. That reload makes the new image visible to the lighttable grid, which can create its
+thumbnail widget and request a render immediately, against the row's momentary real state: zero
+history.
+
+Confirmed with `-d cache -d history -d lighttable`: for a freshly duplicated image, the first
+`[mipmap_cache] compute mip size 0 ... from original file` log line landed ~650ms *before* the
+matching `[dt_dev_write_history_ext] writing history for image N` line. The mipmap cache is not
+hash-driven (previous section), so once that first, historyless render is cached, only an
+explicit `dt_mipmap_cache_remove` + refresh recovers — and even when that recovery path runs
+correctly and a second, correct render finishes and gets cached, nothing guarantees a timely
+repaint of it (the thumbnail widget can be left showing the first render under a permanent "busy"
+overlay for several seconds, until an unrelated GUI event forces a redraw). Patching the
+recovery/notification side (adding a missing GUI-thread redraw request on one early-return path
+in `dtgtk/thumbnail.c`'s `_get_image_buffer()`) did not fix this reliably and was reverted — the
+actual fix is to not let the race start in the first place.
+
+Fixed by `dt_image_duplicate_no_reload()` (`common/image.c`): same as `dt_image_duplicate()` but
+skips the immediate collection reload. Both call sites that duplicate-then-copy-history
+(`dt_control_duplicate_images_job_run` in `control_jobs.c`, `_history_style_apply`'s
+duplicate-and-apply-style branch in `history_actions.c`) now use it and trigger exactly one
+`dt_collection_update_query(..., DT_COLLECTION_CHANGE_RELOAD, ...)` themselves, after the
+history copy/delete completes — so the very first time the duplicate becomes visible, it already
+carries its final history. Any future caller of `dt_image_duplicate()` that will mutate the new
+image's history afterward (a style, a batch edit, ...) should do the same rather than let the
+default immediate reload race its own follow-up write.
+
 ### OpenCL GUI-thread materialization hazard
 
 `dt_dev_pixelpipe_cache_peek_gui` must pass `preferred_devid = -1` (CPU caller signal). Passing
@@ -192,6 +225,34 @@ mask drag). Still open. See `doc/reorganisation.md` ("History item refcounting a
 `history_mutex` contention") for the full diagnosis and status, and the named-rwlock diagnostic
 in `common/dtpthread.h` (`dt_pthread_rwlock_set_name()`, opt-in per lock, combine with
 `-d history`) to reproduce the measurement.
+
+### `_insert_default_modules` must check `dev->history` in memory, not the DB row for `dev->image_storage.id`
+
+`dt_dev_init_default_history()` (`dev_history.c`) walks every loaded module and, for each one,
+calls `_insert_default_modules()` to backfill a default-params history entry for any
+`default_enabled`/`force_enable` module "missing" from history. Its "is this module already
+covered?" check used to be `dt_history_check_module_exists(dev->image_storage.id, module->op, ...)`
+— a DB query against `main.history` for whatever image `dev->image_storage.id` currently points
+at.
+
+That's correct for the common caller, `dt_dev_read_history_ext()`: `dev->history` is empty and
+`dev->image_storage.id` is the same image whose real DB history is about to be read into it a few
+lines later, so the DB accurately reflects "not yet loaded, but will be." It's wrong for
+`dt_dev_replace_history_on_image()` (image duplication, history "replace" paste): there,
+`dev->history` is loaded from a *source* image, then `dev->image_storage` is repointed at a
+freshly created, still-DB-empty *destination* image before `dt_dev_init_default_history()` runs.
+The DB check always answers "missing" for the destination — regardless of what the just-copied
+`dev->history` already contains — so every `default_enabled` module (`temperature`, `colorin`,
+`colorout`, `demosaic`, ...) got a second, default-params history entry silently appended *after*
+the one correctly copied from the source. Since replay applies history front-to-back and the last
+entry per module wins, duplicating an image quietly reset those modules to their defaults instead
+of reproducing the source's actual settings — "duplicate" wasn't an identical copy.
+
+Fixed by checking `dt_dev_history_get_first_item_by_module(dev->history, module) != NULL` (via
+`IS_NULL_PTR`) in addition to the DB check — the in-memory list already holds the correct,
+about-to-be-persisted state for the destination in the duplicate/replace case, and is equivalent
+to the DB check (same image, nothing loaded yet) in the common case, so neither caller's
+behavior regresses.
 
 ### `piece->iwidth`/`iheight` go stale on the export pipe specifically
 
@@ -444,6 +505,69 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
+### retouch: combining the mask/wavelet-scale/suppress preview toggles
+
+`bt_showmask` (`g->mask_display`), `bt_display_wavelet_scale` (`g->display_wavelet_scale`), and
+`bt_suppress` (`g->suppress_mask`, "temporarily switch off shapes") are three independent preview
+toggles. Getting any *pair* of them to combine correctly required three separate fixes, found only
+by adding `dt_print(DT_DEBUG_ALWAYS, ...)` traces (never raw `fprintf(stderr, ...)` — it isn't
+flushed and is easily lost if the process doesn't exit cleanly) at each stage and, for the final
+one, an actual GPU buffer readback (`dt_opencl_read_host_from_device_raw`) — reasoning about the
+hash/cache chain from source alone kept landing on plausible-but-wrong theories.
+
+**1. `bypass_cache_variant` must be gated to the FULL pipe, like `request_mask_display` already is.**
+`dt_iop_module_t.bypass_cache` is a single shared boolean: switching between combinations of the
+three toggles that all keep it `TRUE` (e.g. suppress toggled on top of an already-active
+wavelet-scale preview) doesn't change it, so the pipeline hash doesn't change either, and the
+stale pre-toggle frame keeps being served. Fixed by adding `dt_iop_module_t.bypass_cache_variant`
+(an opaque per-module int any module can set to disambiguate *which* combination is active,
+alongside `dt_iop_set_cache_bypass()`) and folding it into `dt_pixelpipe_get_global_hash()`. That
+alone still wasn't enough: retouch's actual preview effect only ever applies to `pipe ==
+self->dev->pipe` (the darkroom FULL pipe) — `preview`/`virtual-preview` always render as if none
+of the toggles were active — but `bypass_cache`/`bypass_cache_variant` live on the shared
+`dt_iop_module_t` and so read the same non-zero value for every pipe type. Left ungated, a
+preview-pipe run with the same ROI (e.g. at zoom == fit) computes the identical hash chain despite
+publishing different pixels, and the pixel cache's cross-pipe "another pipe already owns this
+exact hash" reuse path (`DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT` in
+`dt_dev_pixelpipe_cache_get_writable`) lets either pipe silently serve the other's stale content.
+`bypass_cache_variant`'s hash contribution must be zeroed for non-FULL pipes exactly like
+`request_mask_display` already is, in the same `if(pipe->type == DT_DEV_PIXELPIPE_FULL)` block in
+`dt_pixelpipe_get_global_hash()`.
+
+**2. `process_cl()`'s "expose mask" condition must match `process_internal()`'s exactly.** The CPU
+path gates on `g->mask_display || display_wavelet_scale`; the OpenCL path had drifted to
+`g->mask_display` alone. A wavelet-only OpenCL preview therefore never cleared alpha, never set
+`pipe->mask_display`, and so never made the downstream color-pipeline modules take the
+mask-display passthrough shortcut in `pixelpipe_hb.c` (~line 950) — they ran their normal
+processing (color management etc.) on the wavelet-domain buffer instead of being skipped. Same
+class of bug as the CFA-phase and highlights-reconstruction CPU/OpenCL divergences documented
+above: any GUI-only branch condition duplicated between a module's `process()` and `process_cl()`
+is a standing invitation for exactly this drift, since nothing forces the two to be reviewed
+together.
+
+**3. `rt_adjust_levels()` clobbers the alpha channel — the actual root cause of "mask + wavelet
+scale together shows nothing but checkerboard."** This function (shared verbatim by both the CPU
+path and `rt_adjust_levels_cl`, which round-trips through it on a host-side copy of the GPU
+buffer) is called whenever *any* single wavelet scale is being previewed
+(`dwt_p->return_layer > 0`), to contrast-stretch the near-zero detail coefficients into a viewable
+image. It round-trips each pixel through `dt_linearRGB_to_XYZ`/`dt_XYZ_to_Lab` (or the
+`work_profile` matrix equivalents) and back. Those conversions — like most of the
+`dt_aligned_pixel_t`-based color primitives in `colorspaces_inline_conversions.h` — store their
+result via 4-wide SIMD (`dt_apply_transposed_color_matrix`'s `dt_store_simd_aligned`), which writes
+*all four* lanes even though the color math is only 3-channel; the 4th lane ends up holding
+leftover matrix-multiply output, not the caller's original value. For most pipeline buffers that
+4th channel is meaningless padding and nobody notices. Here it is retouch's own mask-display
+alpha, painted a few lines up the call chain via `rt_copy_mask_to_alpha`/`_cl` — so every pixel's
+alpha got silently reset by the *next* operation in the same `process()` call, regardless of
+scale-matching or hash correctness upstream. This is why fixes #1 and #2 above were both real bugs
+worth fixing but neither actually resolved the reported symptom: content was being computed
+correctly and served fresh, then destroyed by `rt_adjust_levels()` before publish. Only triggers
+when previewing a wavelet scale (`return_layer > 0`) *and* something reads alpha for display
+(`show mask`, or — before fix #2 — a would-be-`PASSTHRU` OpenCL frame that never got the memo).
+Fixed by saving `img_src[i+3]` before the round trip and restoring it after. Any other per-pixel
+loop in this codebase that round-trips through these color conversion primitives on a buffer whose
+4th channel is meaningful (alpha, a mask, anything other than padding) has the same exposure.
+
 ---
 
 ## Collection / Library module
@@ -548,6 +672,43 @@ the count reaches zero — whichever callback that happens to be. The "destroy" 
 NULLs every GTK widget pointer in the struct (right after removing/destroying them) instead of
 freeing the struct outright, so any other callback still queued for the same struct sees NULL and
 skips the now-invalid widgets instead of touching freed GTK objects.
+
+---
+
+## Keyboard shortcuts (accelerators)
+
+### Widget shortcuts need their own closure — GTK's native accel-group activation is unreachable
+
+`src/gui/accelerators.c` offers two ways to register a shortcut: a "generic" one
+(`dt_accels_new_action_shortcut`, `dt_accels_new_virtual_shortcut`/`_instance`) that builds a
+`GClosure` via `dt_shortcut_set_closure()`, and a "widget" one (`dt_accels_new_widget_shortcut`)
+that instead calls `gtk_widget_add_accelerator(widget, signal, accel_group, key, mods, flags)`,
+relying on GTK's own `gtk_window_activate_key()` to fire `widget`'s signal when the key is
+pressed — which only works if `accel_group` is attached to a `GtkWindow` via
+`gtk_window_add_accel_group()`.
+
+That attachment was intentionally removed on 2025-04-02 (`2e693e6b3`, "Accels: do not use Gtk
+window connection for accel groups... avoids crashes... Fix #484"): the app now handles every
+keystroke itself through `dt_accels_dispatch()` → `_key_pressed()` → `_call_shortcut_cclosure()`,
+which looks up `dt_shortcut_get_closure(shortcut)` and does nothing if it's `NULL` — it never
+falls back to GTK's native accel-group activation. A same-day attempt to restore just the global
+accel-group attachment (`c8770a367`, "Still connect global accels to window") was reverted two
+minutes later (`7273a1371`, commit message "Nope"). Re-attaching accel groups to the window is a
+dead end that was already tried and abandoned; it is not the way back in.
+
+`dt_accels_new_widget_shortcut()` was never updated for the migration: it still leaves
+`shortcut->closure = NULL`, so any shortcut registered only through it is keyboard-dead — clicking
+the widget still works (plain `"clicked"`/`"toggled"` GTK signal), but the accelerator silently
+does nothing, with no error anywhere. Confirmed dead in practice for the only two default-keybound
+consumers of this path in the whole codebase: `src/libs/tools/filter.c`'s "Reload current
+collection" (Ctrl+R) and "Toggle culling mode" (Ctrl+S).
+
+Fixed by giving widget shortcuts a real closure too (`_widget_shortcut_callback()`, wired via
+`dt_shortcut_set_closure()` inside `dt_accels_new_widget_shortcut()`), which just does
+`g_signal_emit_by_name(shortcut->widget, shortcut->signal)` — the same activation path every other
+shortcut type already uses. Any future direct caller of `gtk_widget_add_accelerator()` for a
+keyboard shortcut in this codebase has the same problem: it needs a closure the internal
+dispatcher can invoke, not just a GTK-level accelerator that no window will ever activate.
 
 ---
 
