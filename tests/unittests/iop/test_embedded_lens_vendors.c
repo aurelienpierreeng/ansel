@@ -73,6 +73,7 @@ static void assert_knots_sane(const float *knots, int n)
 
 static void test_sony_valid(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -108,6 +109,7 @@ static void test_sony_valid(void **state)
 
 static void test_sony_empty(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -130,6 +132,7 @@ static void test_sony_empty(void **state)
 
 static void test_fuji_valid(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -167,6 +170,7 @@ static void test_fuji_valid(void **state)
 
 static void test_fuji_empty(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -189,6 +193,7 @@ static void test_fuji_empty(void **state)
 
 static void test_dng_valid(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -230,6 +235,7 @@ static void test_dng_valid(void **state)
 
 static void test_dng_empty(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -253,6 +259,7 @@ static void test_dng_empty(void **state)
 
 static void test_olympus_valid(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -292,6 +299,7 @@ static void test_olympus_valid(void **state)
 
 static void test_olympus_empty(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -315,6 +323,7 @@ static void test_olympus_empty(void **state)
 
 static void test_none(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -336,6 +345,7 @@ static void test_none(void **state)
 
 static void test_sony_half_fine_tune(void **state)
 {
+  (void)state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -379,7 +389,7 @@ static void test_sony_half_fine_tune(void **state)
   int found_difference = 0;
   for(int i = 0; i < LENS_MAXKNOTS; i++)
   {
-    if(knots_dist_full[i] != knots_dist_half[i])
+    if(fabsf(knots_dist_full[i] - knots_dist_half[i]) > E)
     {
       found_difference = 1;
       break;

@@ -27,20 +27,21 @@ gboolean _olympus_has_ca(const dt_image_correction_data_t *cd)
 }
 
 int _olympus_populate(const dt_image_correction_data_t *cd,
-                       float cor_dist_ft, float cor_vig_ft,
-                       float cor_ca_r_ft, float cor_ca_b_ft,
+                       const dt_embedded_lens_finetune_t *ft,
                        float knots_dist[LENS_MAXKNOTS],
                        float knots_vig[LENS_MAXKNOTS],
                        float cor_rgb[3][LENS_MAXKNOTS],
                        float vig[LENS_MAXKNOTS],
-                       float *out_scale)
+                       const float *out_scale)
 {
-  (void)cor_vig_ft;
   (void)out_scale;
-  const dt_image_correction_olympus_t *const oly = &cd->olympus;
+  const auto *const oly = &cd->olympus;
   const int nc = LENS_MAXKNOTS;
 
-  float drs = 1.0f, dk2 = 0.0f, dk4 = 0.0f, dk6 = 0.0f;
+  float drs = 1.0f;
+  float dk2 = 0.0f;
+  float dk4 = 0.0f;
+  float dk6 = 0.0f;
   if(oly->has_dist)
   {
     dk2 = oly->dist[0];
@@ -48,7 +49,12 @@ int _olympus_populate(const dt_image_correction_data_t *cd,
     dk6 = oly->dist[2];
     drs = oly->dist[3];
   }
-  float car0 = 0.0f, car2 = 0.0f, car4 = 0.0f, cab0 = 0.0f, cab2 = 0.0f, cab4 = 0.0f;
+  float car0 = 0.0f;
+  float car2 = 0.0f;
+  float car4 = 0.0f;
+  float cab0 = 0.0f;
+  float cab2 = 0.0f;
+  float cab4 = 0.0f;
   if(oly->has_ca)
   {
     car0 = oly->ca[0];
@@ -62,7 +68,8 @@ int _olympus_populate(const dt_image_correction_data_t *cd,
   for(int i = 0; i < nc; i++)
   {
     const float r = (float)i / (float)(nc - 1);
-    knots_dist[i] = knots_vig[i] = r;
+    knots_dist[i] = r;
+    knots_vig[i] = r;
     vig[i] = 1.0f;
 
     float base = 1.0f;
@@ -70,16 +77,18 @@ int _olympus_populate(const dt_image_correction_data_t *cd,
     {
       const float rs2 = (r * drs) * (r * drs);
       const float r_cor = drs * (1.0f + rs2 * (dk2 + rs2 * (dk4 + rs2 * dk6)));
-      base = cor_dist_ft * (r_cor - 1.0f) + 1.0f;
+      base = ft->distortion * (r_cor - 1.0f) + 1.0f;
     }
-    cor_rgb[0][i] = cor_rgb[1][i] = cor_rgb[2][i] = base;
+    cor_rgb[0][i] = base;
+    cor_rgb[1][i] = base;
+    cor_rgb[2][i] = base;
 
     if(oly->has_ca && r > 0.0f)
     {
       const float rd = base * r;
       const float rd2 = rd * rd;
-      cor_rgb[0][i] += cor_ca_r_ft * (rd * (car0 + rd2 * (car2 + rd2 * car4))) / r;
-      cor_rgb[2][i] += cor_ca_b_ft * (rd * (cab0 + rd2 * (cab2 + rd2 * cab4))) / r;
+      cor_rgb[0][i] += ft->ca_red * (rd * (car0 + rd2 * (car2 + rd2 * car4))) / r;
+      cor_rgb[2][i] += ft->ca_blue * (rd * (cab0 + rd2 * (cab2 + rd2 * cab4))) / r;
     }
   }
 

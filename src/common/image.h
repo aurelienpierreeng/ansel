@@ -220,6 +220,9 @@ typedef enum dt_image_orientation_t
 /* Lens-correction data embedded in a raw file's own metadata (maker notes / DNG
  * OpcodeList), as opposed to a Lensfun database lookup. 5 values, in upstream
  * darktable's image.h order. NONE == 0 so a zero-initialised dt_image_t is safe. */
+// NOSONAR — integral array index for vtable; conversion to enum class would force
+// static_cast<int>() at 7 sites and would break the C99 designated initializer
+// (which is itself rewritten as positional in embedded_lens_vendors.cc per FR-16).
 typedef enum dt_image_correction_type_t
 {
   CORRECTION_TYPE_NONE = 0,
@@ -235,7 +238,10 @@ typedef enum dt_image_correction_type_t
 typedef struct dt_image_correction_sony_t
 {
   int nc;
-  short distortion[16], ca_r[16], ca_b[16], vignetting[16];
+  short distortion[16];
+  short ca_r[16];
+  short ca_b[16];
+  short vignetting[16];
 } dt_image_correction_sony_t;
 
 /* Fuji maker-note distortion/CA/vignetting tables. Declared per upstream image.h
@@ -244,7 +250,11 @@ typedef struct dt_image_correction_fuji_t
 {
   int nc;
   float cropf;
-  float knots[11], distortion[11], ca_r[11], ca_b[11], vignetting[11];
+  float knots[11];
+  float distortion[11];
+  float ca_r[11];
+  float ca_b[11];
+  float vignetting[11];
 } dt_image_correction_fuji_t;
 
 /* DNG OpcodeList3 payload. WarpRectilinear (opcode id 1): warp_planes==1 encodes
@@ -257,9 +267,11 @@ typedef struct dt_image_correction_dng_t
   gboolean has_vignette;    // TRUE if a VignetteRadial (id 3) entry was parsed
   uint32_t warp_planes;     // 1..3
   double warp_coeffs[3][6]; // [plane][kr0,kr1,kr2,kr3,kt0,kt1] radial+tangential polynomial
-  double warp_cx, warp_cy;  // normalized optical centre [0..1]
+  double warp_cx;  // normalized optical centre [0..1]
+  double warp_cy;
   double vig_coeffs[5];     // k0..k4 radial vignette polynomial
-  double vig_cx, vig_cy;    // normalized optical centre [0..1]
+  double vig_cx;    // normalized optical centre [0..1]
+  double vig_cy;
 } dt_image_correction_dng_t;
 
 /* Olympus maker-note distortion/CA tables. Declared per upstream image.h layout. */
@@ -598,13 +610,21 @@ uint32_t dt_image_altered(const int32_t imgid);
 void dt_image_cleanup(void);
 
 /** returns the orientation bits of the image from exif. */
+#ifdef __cplusplus
+static inline auto dt_image_orientation(const dt_image_t *img) -> dt_image_orientation_t
+#else
 static inline dt_image_orientation_t dt_image_orientation(const dt_image_t *img)
+#endif
 {
   return img->orientation != ORIENTATION_NULL ? img->orientation : ORIENTATION_NONE;
 }
 
 /** return the raw orientation, from jpg orientation. */
+#ifdef __cplusplus
+static inline auto dt_image_orientation_to_flip_bits(const int orient) -> dt_image_orientation_t
+#else
 static inline dt_image_orientation_t dt_image_orientation_to_flip_bits(const int orient)
+#endif
 {
   switch(orient)
   {

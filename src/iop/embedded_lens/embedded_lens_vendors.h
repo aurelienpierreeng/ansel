@@ -2,6 +2,13 @@
 
 #include "common/image.h"
 
+typedef struct dt_embedded_lens_finetune_t {
+  float distortion;
+  float vignette;
+  float ca_red;
+  float ca_blue;
+} dt_embedded_lens_finetune_t;
+
 struct dt_embedded_lens_vendor_t
 {
   dt_image_correction_type_t id;
@@ -13,11 +20,10 @@ struct dt_embedded_lens_vendor_t
   gboolean (*has_ca)         (const dt_image_correction_data_t *cd);
 
   int (*populate)(const dt_image_correction_data_t *cd,
-                  float cor_dist_ft, float cor_vig_ft,
-                  float cor_ca_r_ft, float cor_ca_b_ft,
+                  const dt_embedded_lens_finetune_t *ft,
                   float knots_dist[16], float knots_vig[16],
                   float cor_rgb[3][16], float vig[16],
-                  float *out_scale);
+                  const float *out_scale);
 };
 
 extern const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[];

@@ -2,6 +2,7 @@
 #include "embedded_lens_vendors.h"
 
 #include <math.h>
+#include <array>
 
 extern "C" {
 
@@ -32,22 +33,21 @@ gboolean _fuji_has_ca(const dt_image_correction_data_t *cd)
 }
 
 int _fuji_populate(const dt_image_correction_data_t *cd,
-                    float cor_dist_ft, float cor_vig_ft,
-                    float cor_ca_r_ft, float cor_ca_b_ft,
+                    const dt_embedded_lens_finetune_t *ft,
                     float knots_dist[LENS_MAXKNOTS],
                     float knots_vig[LENS_MAXKNOTS],
                     float cor_rgb[3][LENS_MAXKNOTS],
                     float vig[LENS_MAXKNOTS],
-                    float *out_scale)
+                    const float *out_scale)
 {
   (void)out_scale;
-  const dt_image_correction_fuji_t *const fuji = &cd->fuji;
+  const auto *const fuji = &cd->fuji;
   const int ncsrc = fuji->nc;
 
-  float knots_in[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb_in[LENS_MAXKNOTS];
-  float cor_ca_r_in[LENS_MAXKNOTS];
-  float cor_ca_b_in[LENS_MAXKNOTS];
+  std::array<float, LENS_MAXKNOTS> knots_in = {};
+  std::array<float, LENS_MAXKNOTS> cor_rgb_in;
+  std::array<float, LENS_MAXKNOTS> cor_ca_r_in;
+  std::array<float, LENS_MAXKNOTS> cor_ca_b_in;
 
   int j = 0;
   if(fuji->knots[0] > 0.0f)
@@ -64,12 +64,12 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
   for(int i = 0; i < ncsrc; i++, j++)
   {
     knots_in[j] = fuji->cropf * fuji->knots[i];
-    cor_rgb_in[j] = cor_dist_ft * (fuji->distortion[i] / 100.0f) + 1.0f;
-    cor_ca_r_in[j] = cor_ca_r_ft * fuji->ca_r[i];
-    cor_ca_b_in[j] = cor_ca_b_ft * fuji->ca_b[i];
+    cor_rgb_in[j] = ft->distortion * (fuji->distortion[i] / 100.0f) + 1.0f;
+    cor_ca_r_in[j] = ft->ca_red * fuji->ca_r[i];
+    cor_ca_b_in[j] = ft->ca_blue * fuji->ca_b[i];
 
     knots_vig[j] = fuji->cropf * fuji->knots[i];
-    vig[j] = 1.0f - cor_vig_ft * (1.0f - fuji->vignetting[i] / 100.0f);
+    vig[j] = 1.0f - ft->vignette * (1.0f - fuji->vignetting[i] / 100.0f);
   }
   const int ncin = j;
 
@@ -83,14 +83,16 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
   for(int i = 0; i < nc; i++)
   {
     const float rin = (float)i / (float)(nc - 1);
-    const float m = dt_embedded_lens_linear_spline(knots_in, cor_rgb_in, ncin, rin);
+    const float m = dt_embedded_lens_linear_spline(knots_in.data(), cor_rgb_in.data(), ncin, rin);
     const float r = (fabsf(m) > 1e-6f) ? rin / m : rin;
     knots_dist[i] = r;
 
-    cor_rgb[0][i] = cor_rgb[1][i] = cor_rgb[2][i] = m;
+    cor_rgb[0][i] = m;
+    cor_rgb[1][i] = m;
+    cor_rgb[2][i] = m;
 
-    const float mcar = dt_embedded_lens_linear_spline(knots_in, cor_ca_r_in, ncin, rin);
-    const float mcab = dt_embedded_lens_linear_spline(knots_in, cor_ca_b_in, ncin, rin);
+    const float mcar = dt_embedded_lens_linear_spline(knots_in.data(), cor_ca_r_in.data(), ncin, rin);
+    const float mcab = dt_embedded_lens_linear_spline(knots_in.data(), cor_ca_b_in.data(), ncin, rin);
     cor_rgb[0][i] *= mcar + 1.0f;
     cor_rgb[2][i] *= mcab + 1.0f;
   }

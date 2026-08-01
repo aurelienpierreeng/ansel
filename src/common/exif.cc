@@ -838,31 +838,9 @@ gboolean dt_exif_lens_correction_available(void)
   return Exiv2::testVersion(0, 27, 4) ? TRUE : FALSE;
 }
 
-// Reads vendor/DNG embedded lens-correction metadata (distortion, TCA, vignetting) into
-// img->exif_correction_{type,data}. img->exif_correction_type is reset to NONE and the
-// entire exif_correction_data union is zeroed (memset, not just the member the previous
-// type tag names), unconditionally, before any tag lookup is attempted: dt_image_t is
-// reused across re-decodes of the same image, and a stale successful match from an
-// earlier decode -- including a stale vendor-specific member no branch below happens to
-// touch this time -- must never survive a later decode that fails to match anything.
-//
-// The single Exiv2::testVersion(0, 27, 4) gate immediately below is hoisted here once for
-// the whole dispatcher (not per-branch): on an older Exiv2, EVERY branch is a runtime
-// no-op leaving exif_correction_type == NONE, and the Lensfun correction path is
-// unaffected.
-static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *img)
+static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *img)
 {
-  img->exif_correction_type = CORRECTION_TYPE_NONE;
-  memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
-
-  if(!Exiv2::testVersion(0, 27, 4)) return;
-
-  // DNG: OpcodeList3 (post-demosaic corrections). This is an independent Exiv2 lookup
-  // and buffer copy from the OpcodeList2 lookup in _check_dng_opcodes() above -- a
-  // different tag serving a different pipeline stage (DNG spec: OpcodeList2 runs
-  // pre-demosaic, OpcodeList3 runs post-demosaic).
   Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList3"));
-  // DNGs without an embedded preview have the opcodes under Exif.Image instead of Exif.SubImage1
   if(pos == exifData.end()) pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList3"));
   if(pos != exifData.end())
   {
@@ -876,186 +854,161 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
   {
     dt_vprint(DT_DEBUG_IMAGEIO, "DNG OpcodeList3 tag not found\n");
   }
+}
 
-  // Sony maker-note lens-correction data (distortion / TCA / vignetting), ported verbatim
-  // from upstream Darktable's exif.cc:987-1010: tag keys, the fixed-point layout
-  // (a leading element count followed by that many values), and the validation arithmetic are
-  // not re-derived. Primary source is Exif.SubImage1.*; dt_exif_read_blob copies the same tag
-  // numbers to Exif.Image.* (IFD0) by numeric ID on DNG round-trip conversions where no
-  // SubImage1 sub-IFD exists, so that is tried as a fallback when the SubImage1 keys are
-  // absent. No per-branch version gate here -- the single hoisted runtime check at the top of
-  // this function already covers this branch.
+static void _check_lens_correction_sony(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posd, posc, posv;
+  if((_exif_read_exif_tag(exifData, &posd, "Exif.SubImage1.DistortionCorrParams")
+      && _exif_read_exif_tag(exifData, &posc, "Exif.SubImage1.ChromaticAberrationCorrParams")
+      && _exif_read_exif_tag(exifData, &posv, "Exif.SubImage1.VignettingCorrParams"))
+     || (_exif_read_exif_tag(exifData, &posd, "Exif.Image.0x7037")
+         && _exif_read_exif_tag(exifData, &posc, "Exif.Image.0x7035")
+         && _exif_read_exif_tag(exifData, &posv, "Exif.Image.0x7032")))
   {
-    Exiv2::ExifData::const_iterator posd, posc, posv;
-    if((_exif_read_exif_tag(exifData, &posd, "Exif.SubImage1.DistortionCorrParams")
-        && _exif_read_exif_tag(exifData, &posc, "Exif.SubImage1.ChromaticAberrationCorrParams")
-        && _exif_read_exif_tag(exifData, &posv, "Exif.SubImage1.VignettingCorrParams"))
-       // DNG round-trip: dt_exif_read_blob copies these to IFD0 by numeric ID
-       || (_exif_read_exif_tag(exifData, &posd, "Exif.Image.0x7037")
-           && _exif_read_exif_tag(exifData, &posc, "Exif.Image.0x7035")
-           && _exif_read_exif_tag(exifData, &posv, "Exif.Image.0x7032")))
+    const int nc = posd->toLong(0);
+    if(nc <= 16 && 2 * nc == posc->toLong(0) && nc == posv->toLong(0)
+       && (int)posd->count() >= nc + 1
+       && (int)posc->count() >= 2 * nc + 1
+       && (int)posv->count() >= nc + 1)
     {
-      // Validate the element count against the fixed 16-entry destination arrays BEFORE any
-      // indexed read: the tag payload is [count, value0, value1, ...],
-      // so posd->toLong(0) is the source of truth for nc, not the tag's own count(). The CA
-      // tag packs 2*nc values (R half then B half); vignetting has nc. A short-circuiting
-      // `nc <= 16` first means an out-of-range nc never triggers an indexed read below.
-      const int nc = posd->toLong(0);
-      if(nc <= 16 && 2 * nc == posc->toLong(0) && nc == posv->toLong(0)
-         && (int)posd->count() >= nc + 1
-         && (int)posc->count() >= 2 * nc + 1
-         && (int)posv->count() >= nc + 1)
+      img->exif_correction_data.sony.nc = nc;
+      for(int i = 0; i < nc; i++)
       {
-        img->exif_correction_data.sony.nc = nc;
-        for(int i = 0; i < nc; i++)
-        {
-          img->exif_correction_data.sony.distortion[i] = posd->toLong(i + 1);
-          img->exif_correction_data.sony.ca_r[i] = posc->toLong(i + 1);
-          img->exif_correction_data.sony.ca_b[i] = posc->toLong(nc + i + 1);
-          img->exif_correction_data.sony.vignetting[i] = posv->toLong(i + 1);
-        }
-        img->exif_correction_type = CORRECTION_TYPE_SONY;
+        img->exif_correction_data.sony.distortion[i] = posd->toLong(i + 1);
+        img->exif_correction_data.sony.ca_r[i] = posc->toLong(i + 1);
+        img->exif_correction_data.sony.ca_b[i] = posc->toLong(nc + i + 1);
+        img->exif_correction_data.sony.vignetting[i] = posv->toLong(i + 1);
+      }
+      img->exif_correction_type = CORRECTION_TYPE_SONY;
+    }
+  }
+}
+
+static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posd, posc, posv, posm;
+  if(!_exif_read_exif_tag(exifData, &posd, "Exif.Fujifilm.GeometricDistortionParams")
+     || !_exif_read_exif_tag(exifData, &posc, "Exif.Fujifilm.ChromaticAberrationParams")
+     || !_exif_read_exif_tag(exifData, &posv, "Exif.Fujifilm.VignettingParams"))
+    return;
+
+  if(posd->count() == 19 && posc->count() == 29 && posv->count() == 19)
+  {
+    const int nc = 9;
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+    img->exif_correction_data.fuji.nc = nc;
+    for(int i = 0; i < nc; i++)
+    {
+      const float kd = posd->toFloat(i + 1);
+      const float kc = posc->toFloat(i + 1);
+      const float kv = posv->toFloat(i + 1);
+
+      if(kd != kc || kd != kv)
+      {
+        img->exif_correction_type = CORRECTION_TYPE_NONE;
+        return;
+      }
+
+      img->exif_correction_data.fuji.knots[i] = kd;
+      img->exif_correction_data.fuji.distortion[i] = posd->toFloat(i + 10);
+      img->exif_correction_data.fuji.ca_r[i] = posc->toFloat(i + 10);
+      img->exif_correction_data.fuji.ca_b[i] = posc->toFloat(i + 19);
+      img->exif_correction_data.fuji.vignetting[i] = posv->toFloat(i + 10);
+    }
+  }
+  else if(posd->count() == 23 && posc->count() == 31 && posv->count() == 23)
+  {
+    const int nc = 11;
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+    img->exif_correction_data.fuji.nc = nc;
+    for(int i = 0; i < nc; i++)
+    {
+      const float kd = posd->toFloat(i + 1);
+      const float kc = (i != 0) ? posc->toFloat(i) : 0.0f;
+      const float kv = posv->toFloat(i + 1);
+
+      if(kd != kc || kd != kv)
+      {
+        img->exif_correction_type = CORRECTION_TYPE_NONE;
+        return;
+      }
+
+      img->exif_correction_data.fuji.knots[i] = kd;
+      img->exif_correction_data.fuji.distortion[i] = posd->toFloat(i + 12);
+
+      if(i == 0)
+      {
+        img->exif_correction_data.fuji.ca_r[i] = 0.0f;
+        img->exif_correction_data.fuji.ca_b[i] = 0.0f;
+      }
+      else
+      {
+        img->exif_correction_data.fuji.ca_r[i] = posc->toFloat(i + 10);
+        img->exif_correction_data.fuji.ca_b[i] = posc->toFloat(i + 20);
+      }
+
+      img->exif_correction_data.fuji.vignetting[i] = posv->toFloat(i + 12);
+    }
+  }
+  else
+  {
+    return;
+  }
+
+  if(_exif_read_exif_tag(exifData, &posm, "Exif.Fujifilm.CropMode")
+     && (posm->toLong() == 2 || posm->toLong() == 4))
+    img->exif_correction_data.fuji.cropf = 1.25f;
+  else
+    img->exif_correction_data.fuji.cropf = 1.0f;
+}
+
+static void _check_lens_correction_olympus(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posip;
+
+  if(_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150a") && posip->count() == 4)
+  {
+    for(int i = 0; i < 4; i++)
+    {
+      const float kd = posip->toFloat(i);
+      img->exif_correction_data.olympus.dist[i] = kd;
+      if(kd != 0.0f && i < 3)
+      {
+        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
+        img->exif_correction_data.olympus.has_dist = TRUE;
       }
     }
   }
 
-  // Fuji maker-note lens-correction data (distortion / TCA / vignetting monotonic knot
-  // table plus a 1.25x crop-mode scale factor), ported verbatim from upstream Darktable's
-  // exif.cc:1012-1097: tag keys, the two on-wire shapes -- X-Trans IV/V (posd/
-  // posc/posv element counts 19/29/19, nc=9) vs X-Trans I/II/III (23/31/23, nc=11),
-  // distinguished by tag count() ONLY, never camera model string -- and the index
-  // arithmetic are not re-derived. Every indexed read below stays strictly below the
-  // validated count() (Exiv2's ValueType<T>::toFloat(n) is documented undefined behaviour
-  // for n >= count()). No per-branch version gate here -- the single
-  // hoisted runtime check at the top of this function already covers this branch.
+  if(_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150c") && posip->count() == 6)
   {
-    Exiv2::ExifData::const_iterator posd, posc, posv, posm;
-    if(_exif_read_exif_tag(exifData, &posd, "Exif.Fujifilm.GeometricDistortionParams")
-       && _exif_read_exif_tag(exifData, &posc, "Exif.Fujifilm.ChromaticAberrationParams")
-       && _exif_read_exif_tag(exifData, &posv, "Exif.Fujifilm.VignettingParams"))
+    for(int i = 0; i < 6; i++)
     {
-      // X-Trans IV/V
-      if(posd->count() == 19 && posc->count() == 29 && posv->count() == 19)
+      const float kc = posip->toFloat(i);
+      img->exif_correction_data.olympus.ca[i] = kc;
+      if(kc != 0.0f)
       {
-        const int nc = 9;
-        img->exif_correction_type = CORRECTION_TYPE_FUJI;
-        img->exif_correction_data.fuji.nc = nc;
-        for(int i = 0; i < nc; i++)
-        {
-          const float kd = posd->toFloat(i + 1);
-          const float kc = posc->toFloat(i + 1);
-          const float kv = posv->toFloat(i + 1);
-
-          // The three tags must agree on the knot position at this index; a mismatch means
-          // they don't describe the same correction (upstream exif.cc:1033).
-          if(kd != kc || kd != kv)
-          {
-            img->exif_correction_type = CORRECTION_TYPE_NONE;
-            break;
-          }
-
-          img->exif_correction_data.fuji.knots[i] = kd;
-          img->exif_correction_data.fuji.distortion[i] = posd->toFloat(i + 10);
-          img->exif_correction_data.fuji.ca_r[i] = posc->toFloat(i + 10);
-          img->exif_correction_data.fuji.ca_b[i] = posc->toFloat(i + 19);
-          img->exif_correction_data.fuji.vignetting[i] = posv->toFloat(i + 10);
-        }
-      }
-      // X-Trans I/II/III
-      else if(posd->count() == 23 && posc->count() == 31 && posv->count() == 23)
-      {
-        const int nc = 11;
-        img->exif_correction_type = CORRECTION_TYPE_FUJI;
-        img->exif_correction_data.fuji.nc = nc;
-        for(int i = 0; i < nc; i++)
-        {
-          const float kd = posd->toFloat(i + 1);
-          // The CA tag doesn't carry the first (radius-0) knot for this shape.
-          const float kc = (i != 0) ? posc->toFloat(i) : 0.0f;
-          const float kv = posv->toFloat(i + 1);
-
-          if(kd != kc || kd != kv)
-          {
-            img->exif_correction_type = CORRECTION_TYPE_NONE;
-            break;
-          }
-
-          img->exif_correction_data.fuji.knots[i] = kd;
-          img->exif_correction_data.fuji.distortion[i] = posd->toFloat(i + 12);
-
-          if(i == 0)
-          {
-            img->exif_correction_data.fuji.ca_r[i] = 0.0f;
-            img->exif_correction_data.fuji.ca_b[i] = 0.0f;
-          }
-          else
-          {
-            img->exif_correction_data.fuji.ca_r[i] = posc->toFloat(i + 10);
-            img->exif_correction_data.fuji.ca_b[i] = posc->toFloat(i + 20);
-          }
-
-          img->exif_correction_data.fuji.vignetting[i] = posv->toFloat(i + 12);
-        }
-      }
-
-      if(img->exif_correction_type == CORRECTION_TYPE_FUJI)
-      {
-        // Some Fuji cameras shoot in a 1.25x crop mode; account for it (upstream
-        // exif.cc:1046-1051 / 1090-1095).
-        if(_exif_read_exif_tag(exifData, &posm, "Exif.Fujifilm.CropMode")
-           && (posm->toLong() == 2 || posm->toLong() == 4))
-          img->exif_correction_data.fuji.cropf = 1.25f;
-        else
-          img->exif_correction_data.fuji.cropf = 1.0f;
+        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
+        img->exif_correction_data.olympus.has_ca = TRUE;
       }
     }
   }
+}
 
-  // Olympus maker-note lens-correction data (distortion / TCA), ported verbatim from
-  // upstream Darktable's exif.cc:1099-1144: tag keys and validation arithmetic
-  // are not re-derived. Reads exclusively Exif.OlympusIp.* -- never Exif.OlympusEq.*/
-  // Exif.OlympusCs.*, which this file already reads elsewhere (see FIND_EXIF_TAG("Exif.
-  // OlympusEq.LensType") below) for lens-ID/focus-distance purposes unrelated to lens
-  // correction. Distortion and CA are independent classes: either one matching alone is
-  // enough to set CORRECTION_TYPE_OLYMPUS; a wrong-count class is skipped
-  // -- leaving its own has_* flag FALSE -- without forcing the type back to
-  // NONE if the other class already matched. No per-branch version gate here -- the single
-  // hoisted runtime check at the top of this function already covers this branch.
-  {
-    Exiv2::ExifData::const_iterator posip;
+static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  img->exif_correction_type = CORRECTION_TYPE_NONE;
+  memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
 
-    // Olympus distortion correction
-    if(_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150a") && posip->count() == 4)
-    {
-      for(int i = 0; i < 4; i++)
-      {
-        const float kd = posip->toFloat(i);
-        img->exif_correction_data.olympus.dist[i] = kd;
-        // Assume it's valid if any of the first three elements are nonzero. Ignore the
-        // fourth element since the null value for no correction is '0 0 0 1'.
-        if(kd != 0.0f && i < 3)
-        {
-          img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
-          img->exif_correction_data.olympus.has_dist = TRUE;
-        }
-      }
-    }
+#if EXIV2_TEST_VERSION(0,28,0)
+  if(Exiv2::testVersion(0,27,99)) return;
+#endif
 
-    // Olympus CA correction
-    if(_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150c") && posip->count() == 6)
-    {
-      for(int i = 0; i < 6; i++)
-      {
-        const float kc = posip->toFloat(i);
-        img->exif_correction_data.olympus.ca[i] = kc;
-        if(kc != 0.0f)
-        {
-          img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
-          img->exif_correction_data.olympus.has_ca = TRUE;
-        }
-      }
-    }
-  }
+  _check_lens_correction_dng(exifData, img);
+  _check_lens_correction_sony(exifData, img);
+  _check_lens_correction_fuji(exifData, img);
+  _check_lens_correction_olympus(exifData, img);
 }
 
 void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
@@ -2731,7 +2684,9 @@ typedef struct history_entry_t
   double iop_order; // kept for compatibility with xmp version < 4
 
   // sanity checking
-  gboolean have_operation, have_params, have_modversion;
+  gboolean have_operation;
+  gboolean have_params;
+  gboolean have_modversion;
 } history_entry_t;
 
 // used for a hash table that maps mask_id to the mask data

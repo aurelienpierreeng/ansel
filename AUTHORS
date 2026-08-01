@@ -240,6 +240,7 @@ Frédéric Grollier
 lologor
 Kevin Vermassen
 Marcus Gama
+Paolo Santucci
 Philipp Lutz
 Robert Bridge
 Andrew Toskin
@@ -247,7 +248,6 @@ Germano Massullo
 Eckhart Pedersen
 Felipe Contreras
 Mikko Ruohola
-Paolo Santucci
 Asma
 Bernd Steinhauser
 JohnnyRun
@@ -702,6 +702,5 @@ xyz1001
 zhaowq32
 
 * Sub-module samples contributors (at least 1 commit):
-Guillaume Stutin
 
 And all those of you that made previous releases possible

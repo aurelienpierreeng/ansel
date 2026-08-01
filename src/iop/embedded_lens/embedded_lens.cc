@@ -22,8 +22,11 @@ int dt_embedded_lens_init_coeffs(const dt_image_t *img,
     const struct dt_embedded_lens_vendor_t *const v =
         &dt_embedded_lens_vendors[img->exif_correction_type];
     if(v->has_data && v->has_data(cd))
-      nc = v->populate(cd, cor_dist_ft, cor_vig_ft, cor_ca_r_ft, cor_ca_b_ft,
+    {
+      const dt_embedded_lens_finetune_t ft = { cor_dist_ft, cor_vig_ft, cor_ca_r_ft, cor_ca_b_ft };
+      nc = v->populate(cd, &ft,
                        knots_dist, knots_vig, cor_rgb, vig, out_scale);
+    }
   }
 
   if(nc <= 0) return 0;
@@ -34,11 +37,11 @@ int dt_embedded_lens_init_coeffs(const dt_image_t *img,
   const float sr = fminf(iwd2, iht2);
   const float srr = (diag > 1e-6f) ? sr / diag : 0.0f;
 
-  const float tested = 200.0f;
+  const int tested = 200;
   float scale = 0.0f;
-  for(float i = 0.0f; i < tested; i++)
+  for(int i = 0; i < tested; i++)
   {
-    const float x = srr + (1.0f - srr) * i / (tested - 1.0f);
+    const float x = srr + (1.0f - srr) * (float)i / (float)(tested - 1);
     for(int c = 0; c < 3; c++)
       scale = fmaxf(scale, dt_embedded_lens_linear_spline(knots_dist, cor_rgb[c], nc, x));
   }
