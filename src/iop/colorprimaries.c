@@ -98,15 +98,22 @@ typedef struct dt_iop_colorprimaries_data_t
   dt_iop_order_iccprofile_info_t *lut_profile;
   dt_iop_order_iccprofile_info_t *work_profile;
   dt_lut3d_interpolation_t interpolation;
+  // Params that `clut` was last built from, for this piece alone. The LUT is expensive
+  // enough to be worth not rebuilding on every commit, but it must never be shared across
+  // pieces/instances: see the multi-instance cache-bleed writeup for this module.
+  dt_iop_colorprimaries_params_t built_params;
+  gboolean clut_valid;
 } dt_iop_colorprimaries_data_t;
 
 typedef struct dt_iop_colorprimaries_global_data_t
 {
-  dt_pthread_rwlock_t lock;
-  dt_iop_colorprimaries_data_t cache;
-  dt_iop_colorprimaries_params_t params;
-  gboolean cache_valid;
-  uint64_t cache_generation;
+  // Truly global, read-only-after-init state only. Do NOT add a shared LUT/params cache
+  // here: this struct is the same instance for every module instance, every piece, and
+  // every pipe (full/preview/thumbnail/export/virtual-preview) of colorprimaries in the
+  // whole application -- there is exactly one of it, not one per instance. A memoized LUT
+  // stored here can only ever hold one instance's content at a time, and gets silently
+  // overwritten by whichever piece/instance last committed -- including disabled instances,
+  // since commit_params runs for disabled pieces too.
   int kernel_lut3d_tetrahedral;
   int kernel_lut3d_trilinear;
   int kernel_lut3d_pyramid;
@@ -128,7 +135,7 @@ typedef struct dt_iop_colorprimaries_gui_data_t
   GtkWidget *node_brightness[DT_IOP_COLORPRIMARIES_NODE_COUNT];
   dt_lut_viewer_t *viewer;
   dt_iop_colorprimaries_data_t viewer_lut;
-  uint64_t viewer_lut_generation;
+  dt_iop_colorprimaries_params_t viewer_lut_params;
   gboolean viewer_lut_dirty;
   gboolean viewer_lut_valid;
   gboolean preview_signal_connected;
@@ -781,7 +788,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 {
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)p1;
   dt_iop_colorprimaries_data_t *d = (dt_iop_colorprimaries_data_t *)piece->data;
-  dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)self->global_data;
   const dt_iop_order_iccprofile_info_t *lut_profile
       = self->dev ? dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
                   : NULL;
@@ -789,8 +795,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   if(IS_NULL_PTR(lut_profile) || IS_NULL_PTR(work_profile))
   {
-    d->clut = NULL;
+    // Leave d->clut's allocation (if any) alone -- it is this piece's own buffer now,
+    // not a borrowed pointer. clut_level == 0 already makes process()/process_cl() treat
+    // it as not-ready; freeing/reallocating it is cleanup_pipe's job.
     d->clut_level = 0;
+    d->clut_valid = FALSE;
     d->white_level = 1.f;
     d->lut_profile = NULL;
     d->work_profile = NULL;
@@ -798,25 +807,20 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     return;
   }
 
-  dt_pthread_rwlock_wrlock(&gd->lock);
-  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p))
+  // This LUT is expensive enough to be worth memoizing, but the cache must be scoped to
+  // this piece alone -- see the dt_iop_colorprimaries_global_data_t comment for why a
+  // shared cache silently bleeds one instance's content into another's.
+  if(!d->clut_valid || !_lut_fields_equal(&d->built_params, p))
   {
-    _build_clut(&gd->cache, p, lut_profile);
-    memcpy(&gd->params, p, sizeof(*p));
-    gd->cache_valid = TRUE;
-    gd->cache_generation++;
+    _build_clut(d, p, lut_profile);
+    d->built_params = *p;
+    d->clut_valid = TRUE;
   }
 
-  d->clut = gd->cache.clut;
-  d->clut_level = gd->cache.clut_level;
   d->white_level = exp2f(p->white_level);
   d->lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
   d->work_profile = (dt_iop_order_iccprofile_info_t *)work_profile;
   d->interpolation = (dt_lut3d_interpolation_t)p->interpolation;
-  dt_pthread_rwlock_unlock(&gd->lock);
-
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  if(!IS_NULL_PTR(g)) _update_gui_lut_cache(self);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -831,6 +835,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_colorprimaries_data_t *d = (dt_iop_colorprimaries_data_t *)piece->data;
+  dt_free_align(d->clut);
   d->clut = NULL;
   dt_free_align(piece->data);
   piece->data = NULL;
@@ -874,10 +879,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     goto cleanup;
   }
 
-  dt_pthread_rwlock_rdlock(&gd->lock);
   clut_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * d->clut_level * d->clut_level * d->clut_level,
-                                                   gd->cache.clut);
-  dt_pthread_rwlock_unlock(&gd->lock);
+                                                   d->clut);
   if(IS_NULL_PTR(clut_cl))
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -920,7 +923,6 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
             const void *const ibuf, void *const obuf)
 {
   const dt_iop_colorprimaries_data_t *d = (const dt_iop_colorprimaries_data_t *)piece->data;
-  dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)self->global_data;
   const int width = piece->roi_in.width;
   const int height = piece->roi_in.height;
   const int ch = piece->dsc_in.channels;
@@ -945,9 +947,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   dt_ioppr_transform_image_colorspace_rgb((float *)obuf, (float *)obuf, width, height, d->work_profile, d->lut_profile,
                                           "colorprimaries work to HLG Rec2020");
-  dt_pthread_rwlock_rdlock(&gd->lock);
   dt_lut3d_apply((float *)obuf, (float *)obuf, (size_t)width * height, d->clut, d->clut_level, 1.f, d->interpolation);
-  dt_pthread_rwlock_unlock(&gd->lock);
   dt_ioppr_transform_image_colorspace_rgb((float *)obuf, (float *)obuf, width, height, d->lut_profile, d->work_profile,
                                           "colorprimaries HLG Rec2020 to work");
   __OMP_PARALLEL_FOR__()
@@ -1073,8 +1073,11 @@ static void _refresh_slider_gradients(dt_iop_module_t *self)
 
 static void _update_gui_lut_cache(dt_iop_module_t *self)
 {
+  // GUI-thread only (called from gui_changed()/gui_update()): self->params is live GUI
+  // state and must never be read from a pipeline thread (see commit_params(), which uses
+  // the historical params it is passed instead). g->viewer_lut is this instance's own gui_data,
+  // never shared with any other instance's viewer or with the pipeline's piece->data clut.
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
-  dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)self->global_data;
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)self->params;
   const dt_iop_order_iccprofile_info_t *lut_profile
       = self->dev ? dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
@@ -1082,15 +1085,10 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   const dt_iop_order_iccprofile_info_t *display_profile
       = (self->dev && self->dev->preview_pipe) ? dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe)
                                                : NULL;
-  uint64_t cache_generation = 0;
 
   if(IS_NULL_PTR(g->viewer)) return;
 
-  dt_pthread_rwlock_rdlock(&gd->lock);
-  cache_generation = gd->cache_generation;
-  dt_pthread_rwlock_unlock(&gd->lock);
-
-  if(!g->viewer_lut_dirty && g->viewer_lut_valid && g->viewer_lut_generation == cache_generation
+  if(!g->viewer_lut_dirty && g->viewer_lut_valid && _lut_fields_equal(&g->viewer_lut_params, p)
      && g->viewer_display_profile == display_profile)
     return;
 
@@ -1100,35 +1098,22 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
     dt_lut_viewer_set_control_nodes(g->viewer, NULL, 0);
     g->viewer_lut_dirty = FALSE;
     g->viewer_lut_valid = FALSE;
-    g->viewer_lut_generation = 0;
     g->viewer_display_profile = display_profile;
     g->viewer_control_node_count = 0;
     return;
   }
 
-  dt_pthread_rwlock_wrlock(&gd->lock);
-  if(!gd->cache_valid || !_lut_fields_equal(&gd->params, p) || IS_NULL_PTR((&gd->cache)->clut))
-  {
-    _build_clut(&gd->cache, p, lut_profile);
-    memcpy(&gd->params, p, sizeof(*p));
-    gd->cache_valid = TRUE;
-    gd->cache_generation++;
-  }
-
-  cache_generation = gd->cache_generation;
-  g->viewer_lut.clut = gd->cache.clut;
-  g->viewer_lut.clut_level = gd->cache.clut_level;
+  _build_clut(&g->viewer_lut, p, lut_profile);
+  g->viewer_lut_params = *p;
   g->viewer_lut.lut_profile = (dt_iop_order_iccprofile_info_t *)lut_profile;
   g->viewer_control_node_count
       = _build_viewer_control_nodes(p, lut_profile, g->viewer_control_nodes);
-  dt_lut_viewer_set_lut(g->viewer, g->viewer_lut.clut, g->viewer_lut.clut_level, &gd->lock, g->viewer_lut.lut_profile,
+  dt_lut_viewer_set_lut(g->viewer, g->viewer_lut.clut, g->viewer_lut.clut_level, NULL, g->viewer_lut.lut_profile,
                         display_profile);
   dt_lut_viewer_set_control_nodes(g->viewer, g->viewer_control_nodes, g->viewer_control_node_count);
-  dt_pthread_rwlock_unlock(&gd->lock);
 
   g->viewer_lut_dirty = FALSE;
   g->viewer_lut_valid = TRUE;
-  g->viewer_lut_generation = cache_generation;
   g->viewer_display_profile = display_profile;
 
   dt_lut_viewer_queue_draw(g->viewer);
@@ -1139,6 +1124,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
   if(IS_NULL_PTR(g)) return;
   _refresh_slider_gradients(self);
+  _update_gui_lut_cache(self);
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -1169,6 +1155,7 @@ void gui_update(dt_iop_module_t *self)
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  dt_free_align(g->viewer_lut.clut);
   g->viewer_lut.clut = NULL;
   dt_lut_viewer_destroy(&g->viewer);
   IOP_GUI_FREE;
@@ -1232,7 +1219,6 @@ void gui_init(dt_iop_module_t *self)
 
   g->viewer_lut_dirty = TRUE;
   g->viewer_lut_valid = FALSE;
-  g->viewer_lut_generation = 0;
   g->viewer_lut.clut = NULL;
   g->viewer_lut.clut_level = 0;
   g->viewer_lut.lut_profile = NULL;
@@ -1336,7 +1322,6 @@ void init_global(dt_iop_module_so_t *module)
   dt_iop_colorprimaries_global_data_t *gd = malloc(sizeof(*gd));
   memset(gd, 0, sizeof(*gd));
   module->data = gd;
-  dt_pthread_rwlock_init(&gd->lock, NULL);
 
 #ifdef HAVE_OPENCL
   const int lut_program = 28; // lut3d.cl, from programs.conf
@@ -1351,15 +1336,12 @@ void init_global(dt_iop_module_so_t *module)
 void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)module->data;
-  dt_free_align(gd->cache.clut);
-  gd->cache.clut = NULL;
 #ifdef HAVE_OPENCL
   dt_opencl_free_kernel(gd->kernel_lut3d_tetrahedral);
   dt_opencl_free_kernel(gd->kernel_lut3d_trilinear);
   dt_opencl_free_kernel(gd->kernel_lut3d_pyramid);
   dt_opencl_free_kernel(gd->kernel_exposure);
 #endif
-  dt_pthread_rwlock_destroy(&gd->lock);
   dt_free(module->data);
 }
 
