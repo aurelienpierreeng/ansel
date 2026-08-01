@@ -3362,19 +3362,22 @@ void gui_init(struct dt_iop_module_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_widget_set_name(self->widget, "lens-module");
 
-    // Correction-method selector. Exactly 2 entries when
-    // dt_exif_lens_correction_available(), exactly 1 (lensfun only) otherwise -- the
-    // embedded-metadata entry is never added to the model at all in the degraded case,
-    // not merely disabled. See lens_method_changed() above for why this
+    // Correction-method selector. Exactly 2 entries when the loaded image carries
+    // embedded correction data (and Exiv2 >= 0.27.4), exactly 1 (lensfun only)
+    // otherwise. The embedded-metadata entry is never added to the model at all when
+    // unavailable -- not merely disabled. See lens_method_changed() above for why this
     // is built manually instead of via dt_bauhaus_combobox_from_params(); the entry list
-    // itself comes from lens_method_selector_entries() so its exactly-1-vs-exactly-2
+    // itself comes from lens_method_selector_entries() so the exactly-1-vs-exactly-2
     // contract is unit-tested independently of this GTK construction.
     g->method = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
     dt_bauhaus_widget_set_label(g->method, N_("correction method"));
     gtk_box_pack_start(GTK_BOX(self->widget), g->method, TRUE, TRUE, 0);
     gtk_widget_set_tooltip_text(g->method, _("source of the lens correction data"));
     const char *method_labels[2];
-    const int n_method_entries = lens_method_selector_entries(dt_exif_lens_correction_available(), method_labels);
+    const gboolean has_embedded = dt_exif_lens_correction_available()
+        && !IS_NULL_PTR(self->dev)
+        && dt_embedded_lens_has_data(&self->dev->image_storage);
+    const int n_method_entries = lens_method_selector_entries(has_embedded, method_labels);
     for(int i = 0; i < n_method_entries; i++) dt_bauhaus_combobox_add(g->method, _(method_labels[i]));
     g_signal_connect(G_OBJECT(g->method), "value-changed", G_CALLBACK(lens_method_changed), (gpointer)self);
 
@@ -3544,14 +3547,25 @@ void gui_update(struct dt_iop_module_t *self)
     }
   }
 
-  // Reflect the current method in the selector (this rebuild belongs
-  // here, in gui_update(), never in reload_defaults()). Position 1 ("embedded metadata")
-  // only exists in the widget's model when dt_exif_lens_correction_available() (see
-  // gui_init()); clamp to position 0 ("lensfun database") if params carry
-  // EMBEDDED_METADATA on a build/runtime where that entry was never added -- e.g. an
-  // edit made under Exiv2 >= 0.27.4, reopened after Exiv2 was downgraded.
+  // Rebuild the method selector entries if image capability changed since
+  // gui_init() or the last gui_update(). gui_init() gates the "embedded metadata"
+  // entry on the initial image's data; when the user switches to an image whose
+  // correction type differs, the entry list must be rebuilt. Clear/rebuild is
+  // only performed when the entry count is wrong -- the common case (same image,
+  // same entries) is a no-op.
+  const gboolean has_embedded
+      = dt_exif_lens_correction_available() && dt_embedded_lens_has_data(&self->dev->image_storage);
+  const int method_len = dt_bauhaus_combobox_length(g->method);
+  const int desired_len = has_embedded ? 2 : 1;
+  if(method_len != desired_len)
+  {
+    const char *method_labels[2];
+    dt_bauhaus_combobox_clear(g->method);
+    const int n = lens_method_selector_entries(has_embedded, method_labels);
+    for(int i = 0; i < n; i++) dt_bauhaus_combobox_add(g->method, _(method_labels[i]));
+  }
   const int method_pos
-      = (p->method == DT_IOP_LENS_METHOD_EMBEDDED_METADATA && dt_exif_lens_correction_available()) ? 1 : 0;
+      = (p->method == DT_IOP_LENS_METHOD_EMBEDDED_METADATA && has_embedded) ? 1 : 0;
   dt_bauhaus_combobox_set(g->method, method_pos);
 
   dt_bauhaus_combobox_set(g->target_geom, p->target_geom - LF_UNKNOWN - 1);
