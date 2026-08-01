@@ -19,6 +19,7 @@
 #pragma once
 
 #include <glib.h>
+#include <gtk/gtk.h>
 #include <inttypes.h>
 
 #include "common/history_merge.h"
@@ -46,6 +47,12 @@ void dt_history_compress_on_image(const int32_t imgid);
 
 /** delete historystack of selected images */
 gboolean dt_history_delete_on_list(const GList *list, gboolean undo);
+
+/** GUI entry point: confirm (if configured) then delete history of the active images.
+    Shared verbatim between the Edit menu's "Delete history" action and the darkroom
+    history module's reset button -- see common/history_actions.c. */
+gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods,
+                                 gpointer user_data);
 
 /** load a dt file and applies to selected images */
 int dt_history_load_and_apply_on_list(gchar *filename, const GList *list);

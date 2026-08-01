@@ -52,9 +52,9 @@
 
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/history_actions.h"
 #include "common/styles.h"
 #include "common/undo.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/masks.h"
@@ -63,12 +63,7 @@
 #include "gui/styles.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
-#include "common/history.h"
 #include <complex.h>
-
-#ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
-#endif
 
 DT_MODULE(1)
 
@@ -826,39 +821,9 @@ static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEv
 
 void gui_reset(dt_lib_module_t *self)
 {
-  const int32_t imgid = darktable.develop->image_storage.id;
-  if(!imgid) return;
-
-  gint res = GTK_RESPONSE_YES;
-
-  if(dt_conf_get_bool("ask_before_discard"))
-  {
-    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
-
-    GtkWidget *dialog = gtk_message_dialog_new(
-        GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-        _("do you really want to clear history of current image?"));
-#ifdef GDK_WINDOWING_QUARTZ
-    dt_osx_disallow_fullscreen(dialog);
-#endif
-
-    gtk_window_set_title(GTK_WINDOW(dialog), _("delete image's history?"));
-    res = gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-
-    dt_gui_refocus_parent(GTK_WINDOW(win));
-  }
-
-  if(res == GTK_RESPONSE_YES)
-  {
-    dt_dev_undo_start_record(darktable.develop);
-
-    dt_history_delete_on_image_ext(imgid, FALSE);
-
-    dt_dev_undo_end_record(darktable.develop);
-
-    dt_dev_pixelpipe_resync_history_all(darktable.develop);
-  }
+  // Same action as "Delete history" in the Edit menu -- single implementation,
+  // shared instead of duplicated (see gui/actions/edit.c).
+  delete_history_callback(NULL, NULL, 0, 0, NULL);
 }
 
 // clang-format off
