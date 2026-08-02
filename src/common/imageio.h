@@ -143,6 +143,14 @@ gboolean dt_imageio_lookup_makermodel(const char *maker, const char *model,
 // get the type of image from its extension
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension);
 
+// Coarse "camera raw format" / "generic raster format" extension lists (NULL-terminated) used
+// by the import dialog to build its GtkFileFilter entries and to replicate the same distinction
+// during its recursive folder scan (common/import.c). This is a different, coarser split than
+// dt_imageio_get_type_from_extension(): it needs a single raw-or-not answer before any decode,
+// so an ambiguous container like "dng" is listed under both.
+extern const char *dt_import_raw_extensions[];
+extern const char *dt_import_raster_extensions[];
+
 #ifdef __cplusplus
 }
 #endif

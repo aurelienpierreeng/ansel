@@ -70,6 +70,17 @@ typedef struct dt_import_scan_state_t
   gboolean closing;
 } dt_import_scan_state_t;
 
+// Mirrors the 3 GtkFileFilter entries built by _file_filters(). The recursive folder scan
+// runs on a worker thread and must not touch GtkFileFilter (Gtk objects are not thread-safe),
+// so the active filter is resolved to one of these plain values on the GUI thread, once, in
+// dt_import_init().
+typedef enum dt_import_filter_type_t
+{
+  DT_IMPORT_FILTER_ALL = 0,
+  DT_IMPORT_FILTER_RAW,
+  DT_IMPORT_FILTER_RASTER
+} dt_import_filter_type_t;
+
 typedef struct dt_import_t {
   // User-selected folders and files from the Gtk file chooser,
   // referenced by basename.
@@ -89,6 +100,9 @@ typedef struct dt_import_t {
   dt_pthread_mutex_t lock;
 
   dt_import_scan_state_t *scan_state;
+
+  // Active GUI file-type filter (All/Raw/Raster), snapshotted on the GUI thread.
+  dt_import_filter_type_t filter_type;
 
 } dt_import_t;
 
@@ -124,6 +138,12 @@ typedef struct dt_lib_import_t
   GtkWidget *test_path;
   GtkWidget *selected_files;
   guint selection_scan_timeout_id;
+
+  // The 3 filters registered in the file chooser by _file_filters(), kept around so
+  // dt_import_init() can tell which one is currently active by pointer comparison.
+  GtkFileFilter *filter_all;
+  GtkFileFilter *filter_raw;
+  GtkFileFilter *filter_raster;
 
   gboolean closing;
 
@@ -169,6 +189,27 @@ static void _gtk_label_set_and_free(GtkWidget *widget, gchar *label)
   dt_free(label);
 }
 
+// Mirrors dt_supported_image()'s case-insensitive prefix match so a file recognized as
+// importable is never rejected here for a reason unrelated to the active GUI filter.
+// dt_import_raw_extensions / dt_import_raster_extensions live in common/imageio.c, shared with
+// _file_filters() below so the GtkFileFilter patterns and this recursive-scan check can never drift.
+static gboolean _import_passes_filter(const dt_import_filter_type_t filter_type, const gchar *pathname)
+{
+  if(!dt_supported_image(pathname)) return FALSE;
+  if(filter_type == DT_IMPORT_FILTER_ALL) return TRUE;
+
+  const char *extension = g_strrstr(pathname, ".");
+  if(IS_NULL_PTR(extension)) return FALSE;
+  extension++;
+
+  const char **list = (filter_type == DT_IMPORT_FILTER_RAW) ? dt_import_raw_extensions : dt_import_raster_extensions;
+  for(const char **i = list; *i; i++)
+    if(!g_ascii_strncasecmp(extension, *i, strlen(*i)))
+      return TRUE;
+
+  return FALSE;
+}
+
 static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
 {
   if(!_scan_still_valid(import)) return;
@@ -178,8 +219,10 @@ static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
   // Check that document is a real file (not directory) and it passes the type check defined by user in GUI filters.
   // gtk_file_chooser_get_files() applies the filters on the first level of recursivity,
   // so this test is only useful for the next levels if folders are selected at the first level.
-  // We must not call GtkFileFilter from worker threads because Gtk objects are not thread-safe.
-  if(pathname && g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && dt_supported_image(pathname))
+  // We must not call GtkFileFilter from worker threads because Gtk objects are not thread-safe,
+  // so import->filter_type (a plain enum snapshotted on the GUI thread, see dt_import_init())
+  // stands in for the live GtkFileFilter here.
+  if(pathname && g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && _import_passes_filter(import->filter_type, pathname))
   {
     import->files = g_list_prepend(import->files, pathname);
     // prepend is more efficient than append. Import control reorders alphabetically anyway.
@@ -508,46 +551,38 @@ static void _build_filter(GtkFileFilter *filter, const gchar *extension)
 * Bloody GTK doesn't support regex patterns so we need to unroll
 * every combination separately, for lowercase and uppercase.
 */
-static void _file_filters(GtkWidget *file_chooser)
+static void _file_filters(dt_lib_import_t *d)
 {
+  GtkWidget *file_chooser = d->file_chooser;
   GtkFileFilter *filter;
-
-  const char *raster[] = {
-    "jpg", "jpeg", "j2c", "jp2", "tif", "tiff", "png", "exr",
-    "bmp", "dng", "heif", "heic", "avi", "avif", "webp", NULL };
-
-  const char *raw[] = {
-    "3fr", "ari", "arw", "bay", "bmq", "cap", "cine", "cr2",
-    "cr3", "crw", "cs1", "dc2", "dcr", "dng", "gpr", "erf",
-    "fff", "hdr",  "ia", "iiq", "k25", "kc2", "kdc", "mdc",
-    "mef", "mos", "mrw", "nef", "nrw", "orf", "ori", "pef",
-    "pfm", "pnm", "pxn", "qtk", "raf", "raw", "rdc", "rw2",
-    "rwl", "sr2", "srf", "srw", "sti", "x3f",  NULL };
 
   /* ALL IMAGES */
   filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, _("All image files"));
   //TODO: use dt_supported_extensions list ?
-  for(int i = 0; i < 46; i++) _build_filter(filter, raw[i]);
-  for(int i = 0; i < 14; i++) _build_filter(filter, raster[i]);
+  for(const char **i = dt_import_raw_extensions; *i; i++) _build_filter(filter, *i);
+  for(const char **i = dt_import_raster_extensions; *i; i++) _build_filter(filter, *i);
 
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
 
   // Set ALL IMAGES as default
   gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(file_chooser), filter);
+  d->filter_all = filter;
 
   /* RAW ONLY */
   filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, _("Raw image files"));
-  for(int i = 0; i < 46; i++) _build_filter(filter, raw[i]);
+  for(const char **i = dt_import_raw_extensions; *i; i++) _build_filter(filter, *i);
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
+  d->filter_raw = filter;
 
   /* RASTER ONLY */
   filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, _("Raster image files"));
-  for(int i = 0; i < 14; i++) _build_filter(filter, raster[i]);
+  for(const char **i = dt_import_raster_extensions; *i; i++) _build_filter(filter, *i);
 
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
+  d->filter_raster = filter;
 }
 
 static GtkWidget * _attach_aligned_grid_item(GtkWidget *grid, const int row, const int column,
@@ -1102,7 +1137,7 @@ static void gui_init(dt_lib_import_t *d)
   g_signal_connect(G_OBJECT(d->file_chooser), "update-preview", G_CALLBACK(update_preview_cb), d);
 
   // file extension filters
-  _file_filters(d->file_chooser);
+  _file_filters(d);
 
   // File browser toolbox (extra widgets)
   GtkWidget *toolbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -1445,6 +1480,9 @@ static void gui_cleanup(dt_lib_import_t *d)
   d->help_string = NULL;
   d->test_path = NULL;
   d->selected_files = NULL;
+  d->filter_all = NULL;
+  d->filter_raw = NULL;
+  d->filter_raster = NULL;
   for(int k = 0; k < EXIF_LAST_FIELD; k++) d->exif_info[k] = NULL;
   dt_pthread_mutex_unlock(&d->lock);
 }
@@ -1516,6 +1554,16 @@ static dt_import_t * dt_import_init(dt_lib_import_t *d, const uint32_t generatio
 
   // selection is owned here and will need to be freed.
   import->selection = gtk_file_chooser_get_uris(GTK_FILE_CHOOSER(d->file_chooser));
+
+  // Snapshot the active file-type filter here, on the GUI thread, into a plain enum: the
+  // recursive scan job runs off-thread and must never touch the live GtkFileFilter objects.
+  GtkFileFilter *active_filter = gtk_file_chooser_get_filter(GTK_FILE_CHOOSER(d->file_chooser));
+  if(!IS_NULL_PTR(active_filter) && active_filter == d->filter_raw)
+    import->filter_type = DT_IMPORT_FILTER_RAW;
+  else if(!IS_NULL_PTR(active_filter) && active_filter == d->filter_raster)
+    import->filter_type = DT_IMPORT_FILTER_RASTER;
+  else
+    import->filter_type = DT_IMPORT_FILTER_ALL;
 
   dt_pthread_mutex_unlock(&import->lock);
 
