@@ -415,8 +415,8 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
 
   GdkPixbuf *pixbuf = NULL;
   uint8_t *buffer = NULL;
-  int th_width;
-  int th_height;
+  int32_t th_width;
+  int32_t th_height;
   char *mime_type = NULL;
   const char *const extension = g_strrstr(filename, ".");
   const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
@@ -424,6 +424,12 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
   if(!dt_image_is_hdr(img)
      && !dt_imageio_large_thumbnail(filename, &buffer, &th_width, &th_height, &color_space, width, height))
   {
+    // Show the framing the camera recorded, not the wider frame it renders its previews from,
+    // so the import window matches what the lighttable and darkroom will show after import.
+    dt_boundingbox_t usercrop;
+    dt_image_get_usercrop(img, usercrop);
+    dt_imageio_crop_thumbnail(usercrop, buffer, &th_width, &th_height);
+
     const float ratio = ((float)th_height) / ((float)th_width);
 
     // Convert RGBa to RGB because GdkPixbuf doesn't do RGBa

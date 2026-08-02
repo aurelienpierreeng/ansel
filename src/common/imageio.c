@@ -357,6 +357,42 @@ error:
   return res;
 }
 
+gboolean dt_imageio_crop_thumbnail(const dt_boundingbox_t box, uint8_t *const buffer,
+                                   int32_t *width, int32_t *height)
+{
+  if(IS_NULL_PTR(buffer) || IS_NULL_PTR(width) || IS_NULL_PTR(height)) return FALSE;
+
+  const int32_t in_width = *width;
+  const int32_t in_height = *height;
+  if(in_width < 1 || in_height < 1) return FALSE;
+
+  /* The box is normalized against the frame the camera renders its previews from, which is the
+   * same DefaultCropOrigin/DefaultCropSize rectangle the tag itself references -- so it maps
+   * onto the decoded preview directly, at whatever resolution that preview happens to be. */
+  const int32_t left = CLAMP((int32_t)roundf(box[1] * in_width), 0, in_width - 1);
+  const int32_t top = CLAMP((int32_t)roundf(box[0] * in_height), 0, in_height - 1);
+  const int32_t right = CLAMP((int32_t)roundf(box[3] * in_width), left + 1, in_width);
+  const int32_t bottom = CLAMP((int32_t)roundf(box[2] * in_height), top + 1, in_height);
+
+  const int32_t out_width = right - left;
+  const int32_t out_height = bottom - top;
+  if(out_width == in_width && out_height == in_height) return FALSE;
+
+  /* Compact in place, forward: destination row j starts at 4 * j * out_width, its source at
+   * 4 * ((j + top) * in_width + left). Since out_width <= in_width and top, left >= 0, the
+   * destination never runs ahead of the source, so no row is overwritten before it is read. */
+  for(int32_t j = 0; j < out_height; j++)
+  {
+    const uint8_t *const source = buffer + 4 * ((size_t)(j + top) * in_width + left);
+    uint8_t *const destination = buffer + 4 * (size_t)j * out_width;
+    memmove(destination, source, 4 * (size_t)out_width);
+  }
+
+  *width = out_width;
+  *height = out_height;
+  return TRUE;
+}
+
 gboolean dt_imageio_has_mono_preview(const char *filename)
 {
   dt_colorspaces_color_profile_type_t color_space;

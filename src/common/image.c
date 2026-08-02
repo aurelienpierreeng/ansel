@@ -1106,15 +1106,79 @@ void dt_image_orient_boundingbox(const dt_boundingbox_t in, const dt_image_orien
   out[3] = right;
 }
 
-gboolean dt_image_get_usercrop_oriented(const dt_image_t *img, const dt_image_orientation_t orientation,
-                                        dt_boundingbox_t box)
+gboolean dt_image_get_usercrop(const dt_image_t *img, dt_boundingbox_t box)
 {
   box[0] = box[1] = 0.0f;
   box[2] = box[3] = 1.0f;
 
   if(IS_NULL_PTR(img) || img->usercrop_status != DT_IMAGE_USERCROP_VALID) return FALSE;
 
-  dt_image_orient_boundingbox(img->usercrop, orientation, box);
+  for(int i = 0; i < 4; i++) box[i] = img->usercrop[i];
+  return TRUE;
+}
+
+gboolean dt_image_resolve_usercrop(const int32_t imgid, dt_boundingbox_t box)
+{
+  box[0] = box[1] = 0.0f;
+  box[2] = box[3] = 1.0f;
+
+  if(imgid < 1 || IS_NULL_PTR(darktable.image_cache)) return FALSE;
+
+  char filename[PATH_MAX] = { 0 };
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(IS_NULL_PTR(img)) return FALSE;
+
+  if(img->usercrop_status != DT_IMAGE_USERCROP_UNKNOWN)
+  {
+    // Already answered for this image, in this session.
+    const gboolean valid = dt_image_get_usercrop(img, box);
+    dt_image_cache_read_release(darktable.image_cache, img);
+    return valid;
+  }
+
+  /* DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS is persisted and is set at import for every image that has
+   * a usable DefaultUserCrop (it also covers DNG opcodes, so it is a superset -- which is what we
+   * want here: no valid framing can hide behind a cleared bit). Images without it can be settled
+   * without touching the file at all, which keeps this off the hot path for whole libraries. */
+  if(!(img->flags & DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS))
+  {
+    // Cheap enough to redo on every call -- deliberately not memoized, so that populating a whole
+    // library's thumbnails does not take one image-cache write lock per image to record a "no".
+    dt_image_cache_read_release(darktable.image_cache, img);
+    return FALSE;
+  }
+
+  const gboolean has_file
+      = (dt_image_choose_input_path(img, filename, sizeof(filename), FALSE) != DT_IMAGE_PATH_NONE);
+  dt_image_cache_read_release(darktable.image_cache, img);
+  if(!has_file) return FALSE;
+
+  /* Parse into a throwaway image, holding no lock: the crop lives in runtime-only state, so a
+   * thumbnail worker starting from a database-loaded cache entry has to read the file itself.
+   * Two threads racing here compute the same answer from the same file, so the duplicated work
+   * is wasteful at worst -- which is cheaper than serializing file I/O behind a write lock. */
+  dt_image_t probe;
+  dt_image_init(&probe);
+  probe.id = imgid;
+  dt_exif_read_usercrop(&probe, filename);
+
+  dt_image_t *write = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(!IS_NULL_PTR(write))
+  {
+    write->usercrop_status = probe.usercrop_status;
+    for(int i = 0; i < 4; i++) write->usercrop[i] = probe.usercrop[i];
+    dt_image_cache_write_release(darktable.image_cache, write, DT_IMAGE_CACHE_RELAXED);
+  }
+
+  return dt_image_get_usercrop(&probe, box);
+}
+
+gboolean dt_image_get_usercrop_oriented(const dt_image_t *img, const dt_image_orientation_t orientation,
+                                        dt_boundingbox_t box)
+{
+  if(!dt_image_get_usercrop(img, box)) return FALSE;
+
+  dt_image_orient_boundingbox(box, orientation, box);
   return TRUE;
 }
 
@@ -2023,7 +2087,7 @@ void dt_image_init(dt_image_t *img)
   img->wb_coeffs[3] = NAN;
   img->usercrop[0] = img->usercrop[1] = 0;
   img->usercrop[2] = img->usercrop[3] = 1;
-  img->usercrop_status = DT_IMAGE_USERCROP_ABSENT;
+  img->usercrop_status = DT_IMAGE_USERCROP_UNKNOWN;
   img->dng_gain_maps = NULL;
   img->cache_entry = 0;
   img->color_labels = 0;

@@ -1481,8 +1481,9 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     }
   }
 
-  // Orientation is only needed when loading embedded JPEGs.
+  // Orientation and camera framing are only needed when loading embedded JPEGs.
   dt_image_orientation_t orientation = ORIENTATION_NONE;
+  dt_boundingbox_t usercrop = { 0.f, 0.f, 1.f, 1.f };
   if(use_embedded_jpg)
   {
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
@@ -1491,6 +1492,10 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
       orientation = (img->orientation != ORIENTATION_NULL) ? img->orientation : ORIENTATION_NONE;
       dt_image_cache_read_release(darktable.image_cache, img);
     }
+
+    // Resolve outside the read lock: this path never decodes the raw, so the framing may still
+    // have to be read from the file, and storing the answer needs the write lock.
+    dt_image_resolve_usercrop(imgid, usercrop);
   }
 
   if(res && use_embedded_jpg)
@@ -1526,6 +1531,11 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
         // Blurry is less bad than randomly inconsistent, plus user has a GUI way in lighttable to
         // change how thumbs are processed at runtime.
         dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from embedded jpeg\n", size, imgid);
+        // The camera renders its embedded previews from the full default-crop rectangle even when
+        // it recorded a narrower framing, so trim them to what the photographer actually framed.
+        // Only here: the two branches above read a separate JPEG file, which the camera already
+        // wrote cropped. This runs before the rotation below, hence the un-oriented box.
+        dt_imageio_crop_thumbnail(usercrop, tmp, &thumb_width, &thumb_height);
         dt_iop_flip_and_zoom_8(tmp, thumb_width, thumb_height, buf, wd, ht, orientation, width, height);
         dt_pixelpipe_cache_free_align(tmp);
       }

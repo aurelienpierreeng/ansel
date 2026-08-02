@@ -91,6 +91,13 @@ int dt_exif_read_blob(uint8_t **blob, const char *path, const int32_t imgid, con
 /** Reads exif tags that are not cached in the database */
 void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename);
 
+/** Reads only the DNG DefaultUserCrop tag into img->usercrop / img->usercrop_status.
+ *
+ * Narrow entry point for consumers that need the camera framing without decoding the raw and
+ * without the side effects of the full additional-tags read (DNG opcodes allocate gain maps).
+ * Always leaves a definite status, never DT_IMAGE_USERCROP_UNKNOWN. */
+void dt_exif_read_usercrop(dt_image_t *img, const char *filename);
+
 /** write blob to file exif. merges with existing exif information.*/
 int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int compressed);
 

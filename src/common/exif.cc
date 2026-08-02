@@ -914,6 +914,30 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
   return has_opcodes;
 }
 
+void dt_exif_read_usercrop(dt_image_t *img, const char *filename)
+{
+  // Leave a definite answer even when the file cannot be read, so callers that use
+  // DT_IMAGE_USERCROP_UNKNOWN as a "not looked at yet" marker do not retry on every request.
+  img->usercrop_status = DT_IMAGE_USERCROP_ABSENT;
+  img->usercrop[0] = img->usercrop[1] = 0.f;
+  img->usercrop[2] = img->usercrop[3] = 1.f;
+
+  try
+  {
+    std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
+    if(!image.get()) return;
+    read_metadata_threadsafe(image);
+    Exiv2::ExifData &exifData = image->exifData();
+    if(exifData.empty()) return;
+    _check_usercrop(exifData, img);
+  }
+  catch(const std::exception &e)
+  {
+    std::string s(e.what());
+    std::cerr << "[exiv2 dt_exif_read_usercrop] " << filename << ": " << s << std::endl;
+  }
+}
+
 void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
 {
   try

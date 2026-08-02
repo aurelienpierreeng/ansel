@@ -222,14 +222,20 @@ typedef enum dt_image_orientation_t
  * `ABSENT` and `IDENTITY` are normal, silent conditions: the file simply declares no camera
  * framing. `MALFORMED` and `CONFLICT` are failures — the tag exists but cannot be trusted, so
  * no framing is applied and the reason stays inspectable instead of being folded into `ABSENT`.
+ *
+ * `UNKNOWN` is the zero value and means "this file has not been looked at yet", which is not the
+ * same as "it has no tag": the parsed crop is runtime-only state, so a freshly cached image
+ * starts here until something reads its metadata. Consumers that must work without a raw decode
+ * (embedded-preview thumbnails) use it to know they still have to ask the file.
  */
 typedef enum dt_image_usercrop_status_t
 {
-  DT_IMAGE_USERCROP_ABSENT = 0, // no DefaultUserCrop tag in any candidate IFD
-  DT_IMAGE_USERCROP_IDENTITY,   // tag present and equal to (0, 0, 1, 1): no framing recorded
-  DT_IMAGE_USERCROP_VALID,      // tag present, well-formed and non-identity
-  DT_IMAGE_USERCROP_MALFORMED,  // tag present but violating the DNG type/count/bounds contract
-  DT_IMAGE_USERCROP_CONFLICT    // two candidate IFDs hold valid but materially different values
+  DT_IMAGE_USERCROP_UNKNOWN = 0, // not parsed yet -- says nothing about what the file contains
+  DT_IMAGE_USERCROP_ABSENT,      // no DefaultUserCrop tag in any candidate IFD
+  DT_IMAGE_USERCROP_IDENTITY,    // tag present and equal to (0, 0, 1, 1): no framing recorded
+  DT_IMAGE_USERCROP_VALID,       // tag present, well-formed and non-identity
+  DT_IMAGE_USERCROP_MALFORMED,   // tag present but violating the DNG type/count/bounds contract
+  DT_IMAGE_USERCROP_CONFLICT     // two candidate IFDs hold valid but materially different values
 } dt_image_usercrop_status_t;
 
 typedef enum dt_image_loader_t
@@ -568,6 +574,24 @@ dt_image_orientation_t dt_image_get_effective_orientation(const dt_image_t *img)
  */
 void dt_image_orient_boundingbox(const dt_boundingbox_t in, const dt_image_orientation_t orientation,
                                  dt_boundingbox_t out);
+
+/** Camera framing of `img` in the raw's own, un-oriented frame.
+ *
+ * Writes the canonical (top, left, bottom, right) box into `box` and returns TRUE only when the
+ * image carries a valid, non-identity DNG DefaultUserCrop; otherwise `box` is left at identity.
+ * Use this for buffers still in sensor orientation (embedded previews before the EXIF rotation
+ * is applied); everything downstream of `flip` wants dt_image_get_usercrop_oriented() instead.
+ */
+gboolean dt_image_get_usercrop(const dt_image_t *img, dt_boundingbox_t box);
+
+/** Camera framing for an image id, reading the file once if we have not yet.
+ *
+ * Same result as dt_image_get_usercrop(), for callers that only hold an image id and cannot rely
+ * on a prior raw decode to have populated the runtime state -- notably embedded-preview
+ * thumbnails, which never decode the raw. The answer is memoized in the image cache.
+ * Takes image-cache locks internally: never call it while already holding one.
+ */
+gboolean dt_image_resolve_usercrop(const int32_t imgid, dt_boundingbox_t box);
 
 /** Resolve the camera framing of `img` into the given orientation.
  *
