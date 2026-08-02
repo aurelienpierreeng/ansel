@@ -69,6 +69,7 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
     knots->vig[j] = 1.0f - ft->vignette * (1.0f - fuji->vignetting[i] / 100.0f);
   }
   const int ncin = j;
+  if(ncin <= 0) return 0;
 
   for(int k = ncin; k < LENS_MAXKNOTS; k++)
   {

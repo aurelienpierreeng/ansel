@@ -626,22 +626,30 @@ static void _apply_vignette_gain_3ch(float *const work_pixel, const float *const
 }
 
 typedef struct {
-  float cx, cy;
-  float w2, h2;
-  float roi_x, roi_y;
-  float limw, limh;
+  float cx;
+  float cy;
+  float w2;
+  float h2;
+  float roi_x;
+  float roi_y;
+  float limw;
+  float limh;
 } _geom_ctx_t;
 
-static void _compute_geometric_displacement_3ch(const float *const knots_dist,
-                                                 const float *const cor_rgb,
-                                                 const int nc,
+typedef struct {
+  const float *knots_dist;
+  const float *cor_rgb;
+  int nc;
+} _spline_args_t;
+
+static void _compute_geometric_displacement_3ch(const _spline_args_t *spl,
                                                  const float radius,
                                                  const gboolean apply_dist,
                                                  const _geom_ctx_t *geom,
                                                  float *const sx, float *const sy)
 {
   const float dr = apply_dist
-      ? dt_embedded_lens_linear_spline(knots_dist, cor_rgb, nc, radius)
+      ? dt_embedded_lens_linear_spline(spl->knots_dist, spl->cor_rgb, spl->nc, radius)
       : 1.0f;
   *sx = CLAMP(dr * geom->cx + geom->w2 - geom->roi_x, 0.0f, geom->limw);
   *sy = CLAMP(dr * geom->cy + geom->h2 - geom->roi_y, 0.0f, geom->limh);
@@ -660,6 +668,13 @@ typedef struct {
   gboolean apply_tca;
 } _warp_geom_domain_t;
 
+static inline int _select_warp_plane(const int c, const _warp_geom_domain_t *dom)
+{
+  if(dom->apply_dist && !dom->apply_tca) return 1;
+  if(c < 3 && !dom->raw_monochrome) return c;
+  return 1;
+}
+
 static void _warp_geom_pass(const float *work, float *ovoid,
                             const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                             const dt_iop_lensfun_data_t *d,
@@ -677,23 +692,17 @@ static void _warp_geom_pass(const float *work, float *ovoid,
       const float radius = hypotf(cx, cy) * dom->inv_rn;
       for(int c = 0; c < dom->ch; c++)
       {
-        int plane;
-        if(dom->apply_dist && !dom->apply_tca)
-          plane = 1;
-        else if(c < 3 && !dom->raw_monochrome)
-          plane = c;
-        else
-          plane = 1;
-        float sx, sy;
+        const int plane = _select_warp_plane(c, dom);
+        float sx;
+        float sy;
         const _geom_ctx_t geom = { cx, cy, dom->w2, dom->h2,
                                    (float)roi_in->x, (float)roi_in->y,
                                    dom->limw, dom->limh };
-        _compute_geometric_displacement_3ch(d->embedded.knots.knots_dist,
-                                             d->embedded.knots.cor_rgb[plane],
-                                             d->embedded.nc, radius,
-                                             dom->apply_dist,
-                                             &geom,
-                                             &sx, &sy);
+        const _spline_args_t spl = { d->embedded.knots.knots_dist,
+                                      d->embedded.knots.cor_rgb[plane],
+                                      d->embedded.nc };
+        _compute_geometric_displacement_3ch(&spl, radius, dom->apply_dist,
+                                             &geom, &sx, &sy);
         out_row[x * dom->ch + c] = dt_interpolation_compute_sample(interpolation, work + c, sx, sy,
                                                                     roi_in->width, roi_in->height,
                                                                     dom->ch, dom->ch_width);
@@ -1028,7 +1037,7 @@ static void _remap_pixel_inverse_or_not(float *out, const float *bufptr, const f
     pixel[c] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
                                                 roi_in->height, remap.ch, remap.ch_width);
   }
-  if(remap.raw_monochrome) pixel[0] = pixel[2] = pixel[1];
+  if(remap.raw_monochrome) { pixel[2] = pixel[1]; pixel[0] = pixel[1]; }
   if(remap.mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
   {
     if(remap.do_nan_checks && (!isfinite(bufptr[2]) || !isfinite(bufptr[3])))
@@ -1086,7 +1095,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   const int used_lf_mask = (raw_monochrome) ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
 
-  const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
+  const float orig_w = roi_in->scale * piece->buf_in.width;
+  const float orig_h = roi_in->scale * piece->buf_in.height;
 
   dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
 
@@ -1297,54 +1307,164 @@ static cl_int _setup_md_cl_kernels(int devid,
   return CL_SUCCESS;
 }
 
-static cl_int _run_vignette_cl(int devid, int kernel,
-                                cl_mem dev_in, cl_mem dev_out,
-                                const _cl_domain_t *dom,
-                                cl_mem knots, cl_mem coeffs,
-                                const size_t *sizes)
+typedef struct {
+  int devid;
+  dt_iop_lensfun_global_data_t *gd;
+  const _cl_domain_t *cldom;
+  cl_mem dev_in;
+  cl_mem dev_tmp;
+  cl_mem dev_out;
+  cl_mem dev_knots_vig;
+  cl_mem dev_vig;
+  cl_mem dev_knots_dist;
+  cl_mem dev_cor_rgb0;
+  cl_mem dev_cor_rgb1;
+  cl_mem dev_cor_rgb2;
+  const size_t *isizes;
+  const size_t *osizes;
+  const size_t *iregion;
+  const size_t *oregion;
+} _cl_embedded_run_ctx_t;
+
+static cl_int _cl_embedded_run_forward(const _cl_embedded_run_ctx_t *ctx)
 {
-  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&dom->iwidth);
-  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&dom->iheight);
-  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), (void *)&dom->roi_in_x);
-  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), (void *)&dom->roi_in_y);
-  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), (void *)&dom->w2);
-  dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), (void *)&dom->h2);
-  dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(float), (void *)&dom->inv_rn);
-  dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(cl_mem), (void *)&knots);
-  dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(cl_mem), (void *)&coeffs);
-  dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(int), (void *)&dom->nc);
-  return _run_md_cl_pass(devid, kernel, dev_in, dev_out, sizes);
+  cl_int err;
+  if(ctx->cldom->apply_vignette)
+  {
+    const int k = ctx->gd->kernel_md_vignette;
+    dt_opencl_set_kernel_arg(ctx->devid, k, 0, sizeof(cl_mem), (void *)&ctx->dev_in);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 1, sizeof(cl_mem), (void *)&ctx->dev_tmp);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 2, sizeof(int), (void *)&ctx->cldom->iwidth);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 3, sizeof(int), (void *)&ctx->cldom->iheight);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 4, sizeof(int), (void *)&ctx->cldom->roi_in_x);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 5, sizeof(int), (void *)&ctx->cldom->roi_in_y);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 6, sizeof(float), (void *)&ctx->cldom->w2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 7, sizeof(float), (void *)&ctx->cldom->h2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 8, sizeof(float), (void *)&ctx->cldom->inv_rn);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 9, sizeof(cl_mem), (void *)&ctx->dev_knots_vig);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 10, sizeof(cl_mem), (void *)&ctx->dev_vig);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 11, sizeof(int), (void *)&ctx->cldom->nc);
+    err = _run_md_cl_pass(ctx->devid, k, ctx->dev_in, ctx->dev_tmp, ctx->isizes);
+  }
+  else
+    err = _run_md_cl_pass(ctx->devid, 0, ctx->dev_in, ctx->dev_tmp, ctx->iregion);
+  if(err != CL_SUCCESS) return err;
+
+  if(ctx->cldom->apply_dist || ctx->cldom->apply_tca)
+  {
+    const int k = ctx->gd->kernel_md_lens_correction;
+    dt_opencl_set_kernel_arg(ctx->devid, k, 0, sizeof(cl_mem), (void *)&ctx->dev_tmp);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 1, sizeof(cl_mem), (void *)&ctx->dev_out);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 2, sizeof(int), (void *)&ctx->cldom->owidth);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 3, sizeof(int), (void *)&ctx->cldom->oheight);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 4, sizeof(int), (void *)&ctx->cldom->roi_in_x);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 5, sizeof(int), (void *)&ctx->cldom->roi_in_y);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 6, sizeof(int), (void *)&ctx->cldom->roi_out_x);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 7, sizeof(int), (void *)&ctx->cldom->roi_out_y);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 8, sizeof(int), (void *)&ctx->cldom->iwidth);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 9, sizeof(int), (void *)&ctx->cldom->iheight);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 10, sizeof(float), (void *)&ctx->cldom->w2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 11, sizeof(float), (void *)&ctx->cldom->h2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 12, sizeof(float), (void *)&ctx->cldom->inv_rn);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 13, sizeof(cl_mem), (void *)&ctx->dev_knots_dist);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 14, sizeof(cl_mem), (void *)&ctx->dev_cor_rgb0);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 15, sizeof(cl_mem), (void *)&ctx->dev_cor_rgb1);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 16, sizeof(cl_mem), (void *)&ctx->dev_cor_rgb2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 17, sizeof(int), (void *)&ctx->cldom->nc);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 18, sizeof(int), (void *)&ctx->cldom->monochrome);
+    err = _run_md_cl_pass(ctx->devid, k, ctx->dev_tmp, ctx->dev_out, ctx->osizes);
+  }
+  else
+    err = _run_md_cl_pass(ctx->devid, 0, ctx->dev_tmp, ctx->dev_out, ctx->oregion);
+  return err;
 }
 
-static cl_int _run_lens_correction_cl(int devid, int kernel,
-                                       cl_mem dev_in, cl_mem dev_out,
-                                       const _cl_domain_t *dom,
-                                       cl_mem knots,
-                                       cl_mem cor_rgb0, cl_mem cor_rgb1, cl_mem cor_rgb2,
-                                       const size_t *sizes)
+static cl_int _cl_embedded_run_inverse(const _cl_embedded_run_ctx_t *ctx)
 {
-  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&dom->owidth);
-  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&dom->oheight);
-  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), (void *)&dom->roi_in_x);
-  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), (void *)&dom->roi_in_y);
-  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), (void *)&dom->roi_out_x);
-  dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), (void *)&dom->roi_out_y);
-  dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(int), (void *)&dom->iwidth);
-  dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(int), (void *)&dom->iheight);
-  dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(float), (void *)&dom->w2);
-  dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(float), (void *)&dom->h2);
-  dt_opencl_set_kernel_arg(devid, kernel, 12, sizeof(float), (void *)&dom->inv_rn);
-  dt_opencl_set_kernel_arg(devid, kernel, 13, sizeof(cl_mem), (void *)&knots);
-  dt_opencl_set_kernel_arg(devid, kernel, 14, sizeof(cl_mem), (void *)&cor_rgb0);
-  dt_opencl_set_kernel_arg(devid, kernel, 15, sizeof(cl_mem), (void *)&cor_rgb1);
-  dt_opencl_set_kernel_arg(devid, kernel, 16, sizeof(cl_mem), (void *)&cor_rgb2);
-  dt_opencl_set_kernel_arg(devid, kernel, 17, sizeof(int), (void *)&dom->nc);
-  dt_opencl_set_kernel_arg(devid, kernel, 18, sizeof(int), (void *)&dom->monochrome);
-  return _run_md_cl_pass(devid, kernel, dev_in, dev_out, sizes);
+  cl_int err;
+  if(ctx->cldom->apply_dist || ctx->cldom->apply_tca)
+  {
+    const int k = ctx->gd->kernel_md_lens_correction;
+    dt_opencl_set_kernel_arg(ctx->devid, k, 0, sizeof(cl_mem), (void *)&ctx->dev_in);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 1, sizeof(cl_mem), (void *)&ctx->dev_tmp);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 2, sizeof(int), (void *)&ctx->cldom->owidth);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 3, sizeof(int), (void *)&ctx->cldom->oheight);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 4, sizeof(int), (void *)&ctx->cldom->roi_in_x);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 5, sizeof(int), (void *)&ctx->cldom->roi_in_y);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 6, sizeof(int), (void *)&ctx->cldom->roi_out_x);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 7, sizeof(int), (void *)&ctx->cldom->roi_out_y);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 8, sizeof(int), (void *)&ctx->cldom->iwidth);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 9, sizeof(int), (void *)&ctx->cldom->iheight);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 10, sizeof(float), (void *)&ctx->cldom->w2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 11, sizeof(float), (void *)&ctx->cldom->h2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 12, sizeof(float), (void *)&ctx->cldom->inv_rn);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 13, sizeof(cl_mem), (void *)&ctx->dev_knots_dist);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 14, sizeof(cl_mem), (void *)&ctx->dev_cor_rgb0);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 15, sizeof(cl_mem), (void *)&ctx->dev_cor_rgb1);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 16, sizeof(cl_mem), (void *)&ctx->dev_cor_rgb2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 17, sizeof(int), (void *)&ctx->cldom->nc);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 18, sizeof(int), (void *)&ctx->cldom->monochrome);
+    err = _run_md_cl_pass(ctx->devid, k, ctx->dev_in, ctx->dev_tmp, ctx->isizes);
+  }
+  else
+    err = _run_md_cl_pass(ctx->devid, 0, ctx->dev_in, ctx->dev_tmp, ctx->iregion);
+  if(err != CL_SUCCESS) return err;
+
+  if(ctx->cldom->apply_vignette)
+  {
+    const int k = ctx->gd->kernel_md_vignette;
+    dt_opencl_set_kernel_arg(ctx->devid, k, 0, sizeof(cl_mem), (void *)&ctx->dev_tmp);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 1, sizeof(cl_mem), (void *)&ctx->dev_out);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 2, sizeof(int), (void *)&ctx->cldom->iwidth);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 3, sizeof(int), (void *)&ctx->cldom->iheight);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 4, sizeof(int), (void *)&ctx->cldom->roi_in_x);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 5, sizeof(int), (void *)&ctx->cldom->roi_in_y);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 6, sizeof(float), (void *)&ctx->cldom->w2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 7, sizeof(float), (void *)&ctx->cldom->h2);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 8, sizeof(float), (void *)&ctx->cldom->inv_rn);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 9, sizeof(cl_mem), (void *)&ctx->dev_knots_vig);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 10, sizeof(cl_mem), (void *)&ctx->dev_vig);
+    dt_opencl_set_kernel_arg(ctx->devid, k, 11, sizeof(int), (void *)&ctx->cldom->nc);
+    err = _run_md_cl_pass(ctx->devid, k, ctx->dev_tmp, ctx->dev_out, ctx->osizes);
+  }
+  else
+    err = _run_md_cl_pass(ctx->devid, 0, ctx->dev_tmp, ctx->dev_out, ctx->oregion);
+  return err;
+}
+
+static cl_int _cl_embedded_try_passthrough(int devid, cl_mem dev_in, cl_mem dev_out,
+                                            size_t *origin, size_t *oregion,
+                                            const dt_iop_lensfun_data_t *d,
+                                            dt_iop_module_t *self)
+{
+  cl_int err;
+  if(!d->embedded.nc)
+  {
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err == CL_SUCCESS)
+      _report_corrections_done(self, d->lensfun.modify_flags);
+    return (err == CL_SUCCESS) ? TRUE : FALSE;
+  }
+
+  const gboolean apply_vignette = (d->lensfun.modify_flags & LF_MODIFY_VIGNETTING) != 0;
+  const gboolean apply_dist = (d->lensfun.modify_flags & LF_MODIFY_DISTORTION) != 0;
+  const gboolean apply_tca = (d->lensfun.modify_flags & LF_MODIFY_TCA) != 0;
+
+  if(apply_dist != apply_tca)
+  {
+    _report_corrections_done(self, d->lensfun.modify_flags);
+    return FALSE;
+  }
+
+  if(!apply_vignette && !apply_dist && !apply_tca)
+  {
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err == CL_SUCCESS)
+      _report_corrections_done(self, d->lensfun.modify_flags);
+    return (err == CL_SUCCESS) ? TRUE : FALSE;
+  }
+
+  return -1;
 }
 
 static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
@@ -1365,44 +1485,21 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   const int width = MAX(iwidth, owidth);
   const int height = MAX(iheight, oheight);
 
-  cl_int err = -999;
+  cl_int err;
   cl_mem dev_tmp = nullptr;
 
   size_t origin[] = { 0, 0, 0 };
-  size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
   size_t oregion[] = { (size_t)owidth, (size_t)oheight, 1 };
+  size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
   size_t isizes[] = { (size_t)ROUNDUPDWD(iwidth, devid), (size_t)ROUNDUPDHT(iheight, devid), 1 };
   size_t osizes[] = { (size_t)ROUNDUPDWD(owidth, devid), (size_t)ROUNDUPDHT(oheight, devid), 1 };
 
-  if(!d->embedded.nc)
-  {
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
-    if(err == CL_SUCCESS)
-      _report_corrections_done(self, d->lensfun.modify_flags);
-    return (err == CL_SUCCESS) ? TRUE : FALSE;
-  }
+  const int passthrough = _cl_embedded_try_passthrough(devid, dev_in, dev_out, origin, oregion, d, self);
+  if(passthrough != -1) return passthrough;
 
-  // Honour the user's per-class selection from the "Corrections" combobox.
-  // commit_params mirrors p->modify_flags into d->lensfun.modify_flags. The kernel pair
-  // runs as a unit and can't be told to do "distortion only" or "TCA only"
-  // individually, so partial geometric selections (one of distortion/TCA but
-  // not both) fall back to the CPU path which has the right per-class logic.
   const gboolean apply_vignette = (d->lensfun.modify_flags & LF_MODIFY_VIGNETTING) != 0;
   const gboolean apply_dist = (d->lensfun.modify_flags & LF_MODIFY_DISTORTION) != 0;
   const gboolean apply_tca = (d->lensfun.modify_flags & LF_MODIFY_TCA) != 0;
-  if(apply_dist != apply_tca)
-  {
-    _report_corrections_done(self, d->lensfun.modify_flags);
-    return FALSE;
-  }
-
-  if(!apply_vignette && !apply_dist && !apply_tca)
-  {
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
-    if(err == CL_SUCCESS)
-      _report_corrections_done(self, d->lensfun.modify_flags);
-    return (err == CL_SUCCESS) ? TRUE : FALSE;
-  }
 
   const float orig_w = roi_in->scale * piece->buf_in.width;
   const float orig_h = roi_in->scale * piece->buf_in.height;
@@ -1432,9 +1529,7 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
                                   &dev_knots_dist, &dev_cor_rgb0,
                                   &dev_cor_rgb1, &dev_cor_rgb2 };
 
-  err = _setup_md_cl_kernels(devid,
-                             &embufs,
-                             &d->embedded.knots);
+  err = _setup_md_cl_kernels(devid, &embufs, &d->embedded.knots);
   if(err != CL_SUCCESS) goto error;
 
   dev_tmp = (cl_mem)dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
@@ -1442,38 +1537,27 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
 
   if(!d->lensfun.inverse)
   {
-    if(cldom.apply_vignette)
-      err = _run_vignette_cl(devid, gd->kernel_md_vignette, dev_in, dev_tmp,
-                              &cldom, dev_knots_vig, dev_vig, isizes);
-    else
-      err = _run_md_cl_pass(devid, 0, dev_in, dev_tmp, iregion);
-    if(err != CL_SUCCESS) goto error;
-
-    if(cldom.apply_dist || cldom.apply_tca)
-      err = _run_lens_correction_cl(devid, gd->kernel_md_lens_correction, dev_tmp, dev_out,
-                                     &cldom, dev_knots_dist,
-                                     dev_cor_rgb0, dev_cor_rgb1, dev_cor_rgb2, osizes);
-    else
-      err = _run_md_cl_pass(devid, 0, dev_tmp, dev_out, oregion);
-    if(err != CL_SUCCESS) goto error;
+    _cl_embedded_run_ctx_t run_ctx = {
+      devid, gd, &cldom,
+      dev_in, dev_tmp, dev_out,
+      dev_knots_vig, dev_vig, dev_knots_dist,
+      dev_cor_rgb0, dev_cor_rgb1, dev_cor_rgb2,
+      isizes, osizes, iregion, oregion
+    };
+    err = _cl_embedded_run_forward(&run_ctx);
   }
   else
   {
-    if(cldom.apply_dist || cldom.apply_tca)
-      err = _run_lens_correction_cl(devid, gd->kernel_md_lens_correction, dev_in, dev_tmp,
-                                     &cldom, dev_knots_dist,
-                                     dev_cor_rgb0, dev_cor_rgb1, dev_cor_rgb2, isizes);
-    else
-      err = _run_md_cl_pass(devid, 0, dev_in, dev_tmp, iregion);
-    if(err != CL_SUCCESS) goto error;
-
-    if(cldom.apply_vignette)
-      err = _run_vignette_cl(devid, gd->kernel_md_vignette, dev_tmp, dev_out,
-                              &cldom, dev_knots_vig, dev_vig, osizes);
-    else
-      err = _run_md_cl_pass(devid, 0, dev_tmp, dev_out, oregion);
-    if(err != CL_SUCCESS) goto error;
+    _cl_embedded_run_ctx_t run_ctx = {
+      devid, gd, &cldom,
+      dev_in, dev_tmp, dev_out,
+      dev_knots_vig, dev_vig, dev_knots_dist,
+      dev_cor_rgb0, dev_cor_rgb1, dev_cor_rgb2,
+      isizes, osizes, iregion, oregion
+    };
+    err = _cl_embedded_run_inverse(&run_ctx);
   }
+  if(err != CL_SUCCESS) goto error;
 
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_knots_vig);
@@ -1536,7 +1620,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                                         * sizeof(float);
   const unsigned int pixelformat = ch == 3 ? LF_CR_3(RED, GREEN, BLUE) : LF_CR_4(RED, GREEN, BLUE, UNKNOWN);
 
-  const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
+  const float orig_w = roi_in->scale * piece->buf_in.width;
+  const float orig_h = roi_in->scale * piece->buf_in.height;
 
   size_t origin[] = { 0, 0, 0 };
   size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
@@ -1832,7 +1917,8 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   if(!d->lensfun.lens || !d->lensfun.lens->Maker || d->lensfun.crop <= 0.0f) return 0;
 
-  const float orig_w = piece->buf_in.width, orig_h = piece->buf_in.height;
+  const float orig_w = piece->buf_in.width;
+  const float orig_h = piece->buf_in.height;
   int modflags;
 
   const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage)) ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
@@ -1868,7 +1954,8 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 
   const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage)) ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
 
-  const float orig_w = piece->buf_in.width, orig_h = piece->buf_in.height;
+  const float orig_w = piece->buf_in.width;
+  const float orig_h = piece->buf_in.height;
   int modflags;
   const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
 
@@ -1910,7 +1997,8 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
     return;
   }
 
-  const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
+  const float orig_w = roi_in->scale * piece->buf_in.width;
+  const float orig_h = roi_in->scale * piece->buf_in.height;
   dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
   int modflags;
   const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, /*LF_MODIFY_TCA |*/ LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE, FALSE);
@@ -2361,7 +2449,8 @@ void reload_defaults(dt_iop_module_t *module)
   // init crop from db:
   char model[100]; // truncate often complex descriptions.
   g_strlcpy(model, img->exif_model, sizeof(model));
-  for(char cnt = 0, *c = model; c < model + 100 && *c != '\0'; c++)
+  int cnt = 0;
+  for(char *c = model; c < model + 100 && *c != '\0'; c++)
     if(*c == ' ')
       if(++cnt == 2) *c = '\0';
   if(img->exif_maker[0] || model[0])
@@ -2491,7 +2580,9 @@ static int ptr_array_insert_sorted(GPtrArray *array, const void *item, GCompareF
   g_ptr_array_set_size(array, length + 1);
   const void **root = (const void **)array->pdata;
 
-  int m = 0, l = 0, r = length - 1;
+  int m = 0;
+  int l = 0;
+  int r = length - 1;
 
   // Skip trailing NULL, if any
   if(l <= r && !root[r]) r--;
@@ -2524,8 +2615,10 @@ static int ptr_array_find_sorted(const GPtrArray *array, const void *item, GComp
   int length = array->len;
   void **root = array->pdata;
 
-  int l = 0, r = length - 1;
-  int m = 0, cmp = 0;
+  int l = 0;
+  int r = length - 1;
+  int m = 0;
+  int cmp = 0;
 
   if(!length) return -1;
 
@@ -2886,7 +2979,8 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
   /* Create the focal/aperture/distance combo boxes */
   gtk_container_foreach(GTK_CONTAINER(g->lens_selection.lens_param_box), delete_children, nullptr);
 
-  int ffi = 1, fli = -1;
+  int ffi = 1;
+  int fli = -1;
   for(i = 1; i < sizeof(focal_values) / sizeof(gdouble) - 1; i++)
   {
     if(focal_values[i] < lens->MinFocal) ffi = i + 1;
@@ -2925,7 +3019,8 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
   g->lens_selection.cbe[0] = w;
 
   // f-stop
-  ffi = 1, fli = sizeof(aperture_values) / sizeof(gdouble) - 1;
+  ffi = 1;
+  fli = sizeof(aperture_values) / sizeof(gdouble) - 1;
   for(i = 1; i < sizeof(aperture_values) / sizeof(gdouble) - 1; i++)
     if(aperture_values[i] < lens->MinAperture) ffi = i + 1;
   if(aperture_values[ffi] > lens->MinAperture)
