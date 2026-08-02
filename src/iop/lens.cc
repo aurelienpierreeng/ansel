@@ -606,7 +606,7 @@ static void _report_corrections_done(dt_iop_module_t *self, int modify_flags)
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   if(!g) return;
   dt_iop_gui_enter_critical_section(self);
-  g->status.corrections_done |= modify_flags;
+  g->status.corrections_done = modify_flags;
   dt_iop_gui_leave_critical_section(self);
 }
 
@@ -1479,6 +1479,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   {
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
     if(err != CL_SUCCESS) goto error;
+    if(self->dev->gui_attached && g)
+    {
+      dt_iop_gui_enter_critical_section(self);
+      g->status.corrections_done = 0;
+      dt_iop_gui_leave_critical_section(self);
+    }
     return TRUE;
   }
 
@@ -1494,6 +1500,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       ldkernel = gd->kernel_lens_distort_mitchell;
       break;
     default:
+      if(self->dev->gui_attached && g)
+      {
+        dt_iop_gui_enter_critical_section(self);
+        g->status.corrections_done = 0;
+        dt_iop_gui_leave_critical_section(self);
+      }
       return FALSE;
   }
 
@@ -1671,6 +1683,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   return TRUE;
 
 error:
+  if(self->dev->gui_attached && g)
+  {
+    dt_iop_gui_enter_critical_section(self);
+    g->status.corrections_done = 0;
+    dt_iop_gui_leave_critical_section(self);
+  }
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_tmpbuf);
   dt_pixelpipe_cache_free_align(tmpbuf);
@@ -3047,7 +3065,6 @@ static void lens_method_changed(GtkWidget *widget, gpointer user_data)
   p->method = (pos == 1) ? dt_iop_lens_method_t::EMBEDDED_METADATA : dt_iop_lens_method_t::LENSFUN;
   p->has_been_set = 0;
   dt_iop_gui_changed(self, widget, NULL);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 // Per-class fine-tune slider callback. One handler serves all 5 embedded-fine-tune
@@ -3091,6 +3108,7 @@ static void modflags_changed(GtkWidget *widget, gpointer user_data)
       p->modify_flags = (p->modify_flags & ~LENSFUN_MODFLAG_MASK) | mm->modflag;
       p->has_been_set = 0;
       dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      _report_corrections_done(self, mm->modflag);
       break;
     }
   }
@@ -3584,19 +3602,14 @@ void gui_update(struct dt_iop_module_t *self)
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
   }
 
-  dt_iop_gui_enter_critical_section(self);
-  g->status.corrections_done = -1;
-  dt_iop_gui_leave_critical_section(self);
-  gtk_label_set_text(g->status.message, "");
-
   const dt_dev_pixelpipe_iop_t *lens_piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   const dt_iop_lensfun_data_t *lens_d
       = (!IS_NULL_PTR(lens_piece)) ? (const dt_iop_lensfun_data_t *)lens_piece->data : NULL;
 
+  int modflags = p->modify_flags & LENSFUN_MODFLAG_MASK;
+
   if(!IS_NULL_PTR(lens_d))
   {
-    int modflags = 0;
-
     if(p->method == dt_iop_lens_method_t::LENSFUN)
     {
       if(!IS_NULL_PTR(lens_d->lensfun.lens) && !IS_NULL_PTR(lens_d->lensfun.lens->Maker)
@@ -3616,20 +3629,20 @@ void gui_update(struct dt_iop_module_t *self)
     {
       modflags = lens_d->lensfun.modify_flags & LENSFUN_MODFLAG_MASK;
     }
+  }
 
-    dt_iop_gui_enter_critical_section(self);
-    g->status.corrections_done = modflags;
-    dt_iop_gui_leave_critical_section(self);
+  dt_iop_gui_enter_critical_section(self);
+  g->status.corrections_done = modflags;
+  dt_iop_gui_leave_critical_section(self);
 
-    for(GList *modifiers = g->status.modifiers; !IS_NULL_PTR(modifiers); modifiers = g_list_next(modifiers))
+  for(GList *modifiers = g->status.modifiers; !IS_NULL_PTR(modifiers); modifiers = g_list_next(modifiers))
+  {
+    dt_iop_lensfun_modifier_t *mm = (dt_iop_lensfun_modifier_t *)modifiers->data;
+    if(mm->modflag == modflags)
     {
-      dt_iop_lensfun_modifier_t *mm = (dt_iop_lensfun_modifier_t *)modifiers->data;
-      if(mm->modflag == g->status.corrections_done)
-      {
-        gtk_label_set_text(g->status.message, mm->name);
-        gtk_widget_set_tooltip_text(GTK_WIDGET(g->status.message), mm->name);
-        break;
-      }
+      gtk_label_set_text(g->status.message, mm->name);
+      gtk_widget_set_tooltip_text(GTK_WIDGET(g->status.message), mm->name);
+      break;
     }
   }
 
