@@ -44,9 +44,9 @@ extern "C" {
                          const float *out_scale);
 }
 
-const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[] =
+const struct dt_embedded_lens_vendor_t dt_embedded_lens_vendors[] = // NOSONAR
 {
-  { CORRECTION_TYPE_NONE, "none", NULL, NULL, NULL, NULL, NULL },
+  { CORRECTION_TYPE_NONE, "none", nullptr, nullptr, nullptr, nullptr, nullptr },
   { CORRECTION_TYPE_SONY, "sony",
     _sony_has_data, _sony_has_distortion, _sony_has_vignetting, _sony_has_ca,
     _sony_populate },

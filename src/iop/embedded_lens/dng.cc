@@ -37,7 +37,7 @@ int _dng_populate(const dt_image_correction_data_t *cd,
   (void)out_scale;
   const auto *const dng = &cd->dng;
   const int nc = LENS_MAXKNOTS;
-  const int nplanes = (int)MIN(dng->warp_planes, (uint32_t)3);
+  const auto nplanes = (int)MIN(dng->warp_planes, (uint32_t)3);
   const int canonical_plane = (dng->warp_planes > 1) ? 1 : 0;
   const gboolean apply_tca = dng->warp_planes > 1;
 

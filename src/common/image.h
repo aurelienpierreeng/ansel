@@ -223,7 +223,7 @@ typedef enum dt_image_orientation_t
 // NOSONAR — integral array index for vtable; conversion to enum class would force
 // static_cast<int>() at 7 sites and would break the C99 designated initializer
 // (which is itself rewritten as positional in embedded_lens_vendors.cc per FR-16).
-typedef enum dt_image_correction_type_t
+typedef enum dt_image_correction_type_t // NOSONAR
 {
   CORRECTION_TYPE_NONE = 0,
   CORRECTION_TYPE_SONY,

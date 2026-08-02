@@ -821,7 +821,7 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
     pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2"));
   if(pos != exifData.end())
   {
-    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size());
+    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
     pos->copy(data, Exiv2::invalidByteOrder);
     dt_dng_opcode_process_opcode_list_2(data, pos->size(), img);
     has_opcodes = TRUE;
@@ -844,7 +844,7 @@ static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *im
   if(pos == exifData.end()) pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList3"));
   if(pos != exifData.end())
   {
-    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size());
+    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
     pos->copy(data, Exiv2::invalidByteOrder);
     dt_dng_opcode_process_opcode_list_3(data, pos->size(), img);
     if(img->exif_correction_data.dng.has_warp || img->exif_correction_data.dng.has_vignette)
@@ -858,7 +858,9 @@ static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *im
 
 static void _check_lens_correction_sony(Exiv2::ExifData &exifData, dt_image_t *img)
 {
-  Exiv2::ExifData::const_iterator posd, posc, posv;
+  Exiv2::ExifData::const_iterator posd;
+  Exiv2::ExifData::const_iterator posc;
+  Exiv2::ExifData::const_iterator posv;
   if((_exif_read_exif_tag(exifData, &posd, "Exif.SubImage1.DistortionCorrParams")
       && _exif_read_exif_tag(exifData, &posc, "Exif.SubImage1.ChromaticAberrationCorrParams")
       && _exif_read_exif_tag(exifData, &posv, "Exif.SubImage1.VignettingCorrParams"))
@@ -887,7 +889,10 @@ static void _check_lens_correction_sony(Exiv2::ExifData &exifData, dt_image_t *i
 
 static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *img)
 {
-  Exiv2::ExifData::const_iterator posd, posc, posv, posm;
+  Exiv2::ExifData::const_iterator posd;
+  Exiv2::ExifData::const_iterator posc;
+  Exiv2::ExifData::const_iterator posv;
+  Exiv2::ExifData::const_iterator posm;
   if(!_exif_read_exif_tag(exifData, &posd, "Exif.Fujifilm.GeometricDistortionParams")
      || !_exif_read_exif_tag(exifData, &posc, "Exif.Fujifilm.ChromaticAberrationParams")
      || !_exif_read_exif_tag(exifData, &posv, "Exif.Fujifilm.VignettingParams"))

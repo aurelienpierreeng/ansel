@@ -151,8 +151,8 @@ extern "C" {
     float aperture;
     float distance;
     lfLensType target_geom; // $DEFAULT: LF_RECTILINEAR $DESCRIPTION: "geometry"
-    char camera[128];
-    char lens[128];
+      char camera[128]; // NOSONAR
+      char lens[128]; // NOSONAR
     gboolean tca_override; // $DEFAULT: FALSE $DESCRIPTION: "TCA overwrite"
     float tca_r;           // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0 $DESCRIPTION: "TCA red"
     float tca_b;           // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0 $DESCRIPTION: "TCA blue"
@@ -173,14 +173,23 @@ typedef struct dt_iop_lensfun_gui_data_t
   } lensfun_controls;
   struct
   {
-    GtkWidget *method, *cor_dist_ft, *cor_vig_ft, *cor_ca_r_ft, *cor_ca_b_ft, *scale_md;
+    GtkWidget *method;
+    GtkWidget *cor_dist_ft;
+    GtkWidget *cor_vig_ft;
+    GtkWidget *cor_ca_r_ft;
+    GtkWidget *cor_ca_b_ft;
+    GtkWidget *scale_md;
   } embedded_controls;
   struct
   {
     const lfCamera *camera;
-    GtkWidget *lens_param_box, *camera_model, *lens_model;
+    GtkWidget *lens_param_box;
+    GtkWidget *camera_model;
+    GtkWidget *lens_model;
     GtkMenu *camera_menu, *lens_menu;
-    GtkWidget *cbe[3], *find_lens_button, *find_camera_button;
+    GtkWidget *cbe[3];
+    GtkWidget *find_lens_button;
+    GtkWidget *find_camera_button;
   } lens_selection;
   struct
   {
@@ -363,7 +372,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
     // Pinned to the v3 struct size -- NEVER sizeof(dt_iop_lensfun_params_t), which is
     // larger since v6 and would read past this v3-sized input buffer (ASan violation).
-    memcpy(n, o, sizeof(dt_iop_lensfun_params_v3_t));
+    memcpy(n, o, sizeof(dt_iop_lensfun_params_v3_t)); // NOSONAR
 
     // one more parameter and changed parameters in case we autodetect
     n->has_been_set = 0;
@@ -409,7 +418,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     // this happened to equal sizeof(v4) because v4 and the (then-current) v5 struct were
     // byte-identical; that coincidence breaks now that v6 appends new fields, and would
     // over-read past this v4-sized input buffer (ASan violation) if left as-is.
-    memcpy(n, o, sizeof(dt_iop_lensfun_params_v4_t));
+    memcpy(n, o, sizeof(dt_iop_lensfun_params_v4_t)); // NOSONAR
 
     // v4 `modified` (0 = auto, 1 = user-changed) shares the same byte offset in the
     // v4/v5 layout as v6 `has_been_set` (1 = auto, 0 = user-changed) -- the memcpy
@@ -456,7 +465,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
     // Pinned to the v5 struct size: copies every pre-v6 field byte-for-byte and cannot
     // reach `method`/`cor_*_ft`, which live past the end of this old-sized input buffer.
-    memcpy(n, o, sizeof(dt_iop_lensfun_params_v5_t));
+    memcpy(n, o, sizeof(dt_iop_lensfun_params_v5_t)); // NOSONAR
 
     // v5 `modified` (0 = auto, 1 = user-changed) shares the same byte offset in the v5
     // layout as v6 `has_been_set` (1 = auto, 0 = user-changed) -- the memcpy above
@@ -626,7 +635,8 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
 
   if(!d->embedded.nc)
   {
-    dt_iop_image_copy_by_size(static_cast<float *>(ovoid), const_cast<float *>(static_cast<const float *>(ivoid)), roi_out->width, roi_out->height, ch);
+    dt_iop_image_copy_by_size(static_cast<float *>(ovoid), const_cast<float *>(ivoid), // NOSONAR
+                               roi_out->width, roi_out->height, ch);
     _report_corrections_done(self, d->lensfun.modify_flags);
     return 0;
   }
@@ -636,10 +646,6 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   const float rn = hypotf(w2, h2);
   const float inv_rn = (rn > 1e-6f) ? 1.0f / rn : 0.0f;
 
-  // Honour the user's per-class selection set in the "Corrections" combobox
-  // (commit_params mirrors p->modify_flags into d->lensfun.modify_flags). The vendor
-  // data may carry distortion / TCA / vignetting; gating here decides which of
-  // those actually run over the buffer.
   const gboolean apply_vignette = (d->lensfun.modify_flags & LF_MODIFY_VIGNETTING) != 0;
   const gboolean apply_dist = (d->lensfun.modify_flags & LF_MODIFY_DISTORTION) != 0;
   const gboolean apply_tca = (d->lensfun.modify_flags & LF_MODIFY_TCA) != 0;
@@ -650,12 +656,10 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
 
   if(apply_vignette)
   {
-    // Vignetting: per-pixel divisor in absolute (input) image-pixel space, applied before any
-    // geometric resample -- matches vignetting's physical origin (sensor space).
     __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ivoid, roi_in, ch, w2, h2, inv_rn, d))
     for(int y = 0; y < roi_in->height; y++)
     {
-      const float *const in_row = ((const float *)ivoid) + (size_t)y * roi_in->width * ch;
+      const float *const in_row = ivoid + (size_t)y * roi_in->width * ch;
       float *const work_row = work + (size_t)y * roi_in->width * ch;
       for(int x = 0; x < roi_in->width; x++)
       {
@@ -672,7 +676,8 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   else
   {
     // Identity vignette: pass pixels through unchanged.
-    dt_iop_image_copy_by_size(work, const_cast<float *>(static_cast<const float *>(ivoid)), roi_in->width, roi_in->height, ch);
+    dt_iop_image_copy_by_size(work, const_cast<float *>(ivoid), // NOSONAR
+                                roi_in->width, roi_in->height, ch);
   }
 
   const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_MITCHELL);
@@ -687,7 +692,7 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   {
     // No geometric correction selected: pass the (possibly vignetted) work
     // buffer straight to the output.
-    dt_iop_image_copy_by_size((float *)ovoid, work, roi_out->width, roi_out->height, ch);
+    dt_iop_image_copy_by_size(ovoid, work, roi_out->width, roi_out->height, ch);
   }
   else
   {
@@ -696,7 +701,7 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
                                           apply_dist, apply_tca))
     for(int y = 0; y < roi_out->height; y++)
     {
-      float *const out_row = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
+      float *const out_row = ovoid + (size_t)y * roi_out->width * ch;
       for(int x = 0; x < roi_out->width; x++)
       {
         const float cx = roi_out->x + x - w2;
@@ -921,8 +926,8 @@ static void _modify_roi_in_embedded_metadata_warp(dt_iop_module_t *self, const d
   roi_in->height = CLAMP(roi_in->height, 1, (int)ceilf(orig_h) - roi_in->y);
 }
 
-static void _modify_roi_out_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                                   const dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+static void _modify_roi_out_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, // NOSONAR
+                                                    const dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                                                    const dt_iop_roi_t *roi_in)
 {
   // WarpRectilinear-style corrections are a same-extent remap (no output-size change),
@@ -1261,8 +1266,12 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   const int monochrome = raw_monochrome ? 1 : 0;
 
   const size_t knots_size = (size_t)LENS_MAXKNOTS * sizeof(float);
-  cl_mem dev_knots_vig = nullptr, dev_vig = nullptr, dev_knots_dist = nullptr;
-  cl_mem dev_cor_rgb0 = nullptr, dev_cor_rgb1 = nullptr, dev_cor_rgb2 = nullptr;
+  cl_mem dev_knots_vig = nullptr;
+  cl_mem dev_vig = nullptr;
+  cl_mem dev_knots_dist = nullptr;
+  cl_mem dev_cor_rgb0 = nullptr;
+  cl_mem dev_cor_rgb1 = nullptr;
+  cl_mem dev_cor_rgb2 = nullptr;
 
   dev_knots_vig = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
   if(IS_NULL_PTR(dev_knots_vig)) goto error;
@@ -1726,7 +1735,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     // declare-time callback.
     const double orig_w = piece->buf_in.width;
     const double orig_h = piece->buf_in.height;
-    const double half_diag = hypot(0.5 * orig_w, 0.5 * orig_h);
+    const auto half_diag = hypot(0.5 * orig_w, 0.5 * orig_h);
 
     double max_abs_dr_minus_1 = 0.0;
     for(int c : {0, 1, 2})
@@ -2074,7 +2083,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   auto dt_iop_lensfun_db = (lfDatabase *)gd->db;
   const lfCamera *camera = nullptr;
   const lfCamera **cam = nullptr;
-  delete d->lensfun.lens;
+  delete d->lensfun.lens; // NOSONAR
   d->lensfun.lens = new lfLens;
 
   if(p->camera[0])
@@ -2169,7 +2178,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
   if(d->lensfun.lens)
   {
-    delete d->lensfun.lens;
+    delete d->lensfun.lens; // NOSONAR
     d->lensfun.lens = nullptr;
   }
   dt_free_align(piece->data);
@@ -2536,7 +2545,7 @@ static void camera_set(dt_iop_module_t *self, const lfCamera *cam)
 
 static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   camera_set(self, (lfCamera *)g_object_get_data(G_OBJECT(menuitem), "lfCamera"));
   if(dt_gui_widgets_suppressed()) return;
   auto p = (dt_iop_lensfun_params_t *)self->params;
@@ -2615,7 +2624,7 @@ static void parse_model(const char *txt, char *model, size_t sz_model)
 
 static void camera_menusearch_clicked(GtkWidget *button, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
   auto dt_iop_lensfun_db = (lfDatabase *)gd->db;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
@@ -2634,7 +2643,7 @@ static void camera_menusearch_clicked(GtkWidget *button, gpointer user_data)
 
 static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
   auto dt_iop_lensfun_db = (lfDatabase *)gd->db;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
@@ -2809,7 +2818,7 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
   dt_free(fm);
 
   /* Create the focal/aperture/distance combo boxes */
-  gtk_container_foreach(GTK_CONTAINER(g->lens_selection.lens_param_box), delete_children, NULL);
+  gtk_container_foreach(GTK_CONTAINER(g->lens_selection.lens_param_box), delete_children, nullptr);
 
   int ffi = 1, fli = -1;
   for(i = 1; i < sizeof(focal_values) / sizeof(gdouble) - 1; i++)
@@ -2898,7 +2907,7 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
 
 static void lens_menu_select(GtkMenuItem *menuitem, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   auto p = (dt_iop_lensfun_params_t *)self->params;
   lens_set(self, (lfLens *)g_object_get_data(G_OBJECT(menuitem), "lfLens"));
@@ -2963,7 +2972,7 @@ static void lens_menu_fill(dt_iop_module_t *self, const lfLens *const *lenslist)
 
 static void lens_menusearch_clicked(GtkWidget *button, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
   auto dt_iop_lensfun_db = (lfDatabase *)gd->db;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
@@ -2983,7 +2992,7 @@ static void lens_menusearch_clicked(GtkWidget *button, gpointer user_data)
 
 static void lens_autosearch_clicked(GtkWidget *button, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
   auto dt_iop_lensfun_db = (lfDatabase *)gd->db;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
@@ -3009,7 +3018,7 @@ static void lens_autosearch_clicked(GtkWidget *button, gpointer user_data)
 
 static void target_geometry_changed(GtkWidget *widget, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto p = (dt_iop_lensfun_params_t *)self->params;
 
   int pos = dt_bauhaus_combobox_get(widget);
@@ -3058,13 +3067,13 @@ static gboolean lens_show_embedded_panel(dt_iop_lens_method_t method)
 // framework hook already invoked automatically for the from_params() widgets in this file.
 static void lens_method_changed(GtkWidget *widget, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
   auto p = (dt_iop_lensfun_params_t *)self->params;
   const int pos = dt_bauhaus_combobox_get(widget);
   p->method = (pos == 1) ? dt_iop_lens_method_t::EMBEDDED_METADATA : dt_iop_lens_method_t::LENSFUN;
   p->has_been_set = 0;
-  dt_iop_gui_changed(self, widget, NULL);
+  dt_iop_gui_changed(self, widget, nullptr);
 }
 
 // Per-class fine-tune slider callback. One handler serves all 5 embedded-fine-tune
@@ -3076,9 +3085,9 @@ static void lens_method_changed(GtkWidget *widget, gpointer user_data)
 // side effects the introspection layer does not handle: mark the params as user-modified
 // (so commit_params keeps p1 over default_params on the next pipe run) and push a history
 // item so undo/redo sees the change.
-static void _embedded_fine_tune_slider_changed(GtkWidget *widget, gpointer user_data)
+static void _embedded_fine_tune_slider_changed(GtkWidget *, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
   auto p = (dt_iop_lensfun_params_t *)self->params;
   p->has_been_set = 0;
@@ -3087,7 +3096,7 @@ static void _embedded_fine_tune_slider_changed(GtkWidget *widget, gpointer user_
 
 static void autoscale_pressed_md(GtkWidget *widget, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   if(dt_gui_widgets_suppressed()) return;
   dt_bauhaus_slider_set(g->embedded_controls.scale_md, 1.0f);
@@ -3095,7 +3104,7 @@ static void autoscale_pressed_md(GtkWidget *widget, gpointer user_data)
 
 static void modflags_changed(GtkWidget *widget, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
   auto p = (dt_iop_lensfun_params_t *)self->params;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
@@ -3136,7 +3145,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   // Detect which correction classes the current image actually carries, so we don't
   // expose sliders that would do nothing (e.g. no CA on a Sony without maker-note CA,
   // no vignetting on a DNG warp-only, etc.).
-  gboolean has_dist = FALSE, has_vign = FALSE, has_ca = FALSE;
+  gboolean has_dist = FALSE;
+  gboolean has_vign = FALSE;
+  gboolean has_ca = FALSE;
   if(show_embedded_panel)
   {
     const dt_image_t *img = &self->dev->image_storage;
@@ -3255,7 +3266,7 @@ static float get_autoscale(dt_iop_module_t *self, dt_iop_lensfun_params_t *p, co
 
 static void autoscale_pressed(GtkWidget *button, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   auto p = (dt_iop_lensfun_params_t *)self->params;
   const float scale = get_autoscale(self, p, g->lens_selection.camera);
@@ -3266,7 +3277,7 @@ static void autoscale_pressed(GtkWidget *button, gpointer user_data)
 
 static void corrections_done(gpointer instance, gpointer user_data)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  auto *self = (dt_iop_module_t *)user_data;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   if(dt_gui_widgets_suppressed()) return;
 

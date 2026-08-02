@@ -3,10 +3,14 @@
 #include "common/image.h"
 
 #ifdef __cplusplus
-extern "C" {
+constexpr int LENS_MAXKNOTS = 16;
+#else
+#define LENS_MAXKNOTS 16
 #endif
 
-#define LENS_MAXKNOTS 16
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 static inline float dt_embedded_lens_linear_spline(const float *xi, const float *yi, const int ni, const float x)
 {
