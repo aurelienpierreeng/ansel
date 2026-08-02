@@ -1001,9 +1001,7 @@ static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *i
   img->exif_correction_type = CORRECTION_TYPE_NONE;
   memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
 
-#if EXIV2_TEST_VERSION(0,28,0)
-  if(Exiv2::testVersion(0,27,99)) return;
-#endif
+  if(!Exiv2::testVersion(0, 27, 4)) return;
 
   _check_lens_correction_dng(exifData, img);
   _check_lens_correction_sony(exifData, img);
