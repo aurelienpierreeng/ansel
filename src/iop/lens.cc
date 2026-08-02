@@ -186,7 +186,8 @@ typedef struct dt_iop_lensfun_gui_data_t
     GtkWidget *lens_param_box;
     GtkWidget *camera_model;
     GtkWidget *lens_model;
-    GtkMenu *camera_menu, *lens_menu;
+    GtkMenu *camera_menu;
+    GtkMenu *lens_menu;
     GtkWidget *cbe[3];
     GtkWidget *find_lens_button;
     GtkWidget *find_camera_button;
@@ -452,8 +453,8 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     } dt_iop_lensfun_params_v5_t;
 
     const auto *o = static_cast<const dt_iop_lensfun_params_v5_t *>(old_params);
-    dt_iop_lensfun_params_t *n = (dt_iop_lensfun_params_t *)new_params;
-    dt_iop_lensfun_params_t *d = (dt_iop_lensfun_params_t *)self->default_params;
+    auto *n = (dt_iop_lensfun_params_t *)new_params;
+    auto *d = (dt_iop_lensfun_params_t *)self->default_params;
 
     *n = *d; // start with a fresh copy of default parameters (v6 defaults: method=LENSFUN, md_*)
 
@@ -624,22 +625,81 @@ static void _apply_vignette_gain_3ch(float *const work_pixel, const float *const
   for(int c = 3; c < ch; c++) work_pixel[c] = in_pixel[c];
 }
 
+typedef struct {
+  float cx, cy;
+  float w2, h2;
+  float roi_x, roi_y;
+  float limw, limh;
+} _geom_ctx_t;
+
 static void _compute_geometric_displacement_3ch(const float *const knots_dist,
                                                  const float *const cor_rgb,
                                                  const int nc,
                                                  const float radius,
                                                  const gboolean apply_dist,
-                                                 const float cx, const float cy,
-                                                 const float w2, const float h2,
-                                                 const float roi_x, const float roi_y,
-                                                 const float limw, const float limh,
+                                                 const _geom_ctx_t *geom,
                                                  float *const sx, float *const sy)
 {
   const float dr = apply_dist
       ? dt_embedded_lens_linear_spline(knots_dist, cor_rgb, nc, radius)
       : 1.0f;
-  *sx = CLAMP(dr * cx + w2 - roi_x, 0.0f, limw);
-  *sy = CLAMP(dr * cy + h2 - roi_y, 0.0f, limh);
+  *sx = CLAMP(dr * geom->cx + geom->w2 - geom->roi_x, 0.0f, geom->limw);
+  *sy = CLAMP(dr * geom->cy + geom->h2 - geom->roi_y, 0.0f, geom->limh);
+}
+
+typedef struct {
+  int ch;
+  int ch_width;
+  float w2;
+  float h2;
+  float inv_rn;
+  float limw;
+  float limh;
+  gboolean raw_monochrome;
+  gboolean apply_dist;
+  gboolean apply_tca;
+} _warp_geom_domain_t;
+
+static void _warp_geom_pass(const float *work, float *ovoid,
+                            const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
+                            const dt_iop_lensfun_data_t *d,
+                            const struct dt_interpolation *interpolation,
+                            const _warp_geom_domain_t *dom)
+{
+  __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ovoid, roi_in, roi_out, d, interpolation, dom))
+  for(int y = 0; y < roi_out->height; y++)
+  {
+    float *const out_row = ovoid + (size_t)y * roi_out->width * dom->ch;
+    for(int x = 0; x < roi_out->width; x++)
+    {
+      const float cx = roi_out->x + x - dom->w2;
+      const float cy = roi_out->y + y - dom->h2;
+      const float radius = hypotf(cx, cy) * dom->inv_rn;
+      for(int c = 0; c < dom->ch; c++)
+      {
+        int plane;
+        if(dom->apply_dist && !dom->apply_tca)
+          plane = 1;
+        else if(c < 3 && !dom->raw_monochrome)
+          plane = c;
+        else
+          plane = 1;
+        float sx, sy;
+        const _geom_ctx_t geom = { cx, cy, dom->w2, dom->h2,
+                                   (float)roi_in->x, (float)roi_in->y,
+                                   dom->limw, dom->limh };
+        _compute_geometric_displacement_3ch(d->embedded.knots.knots_dist,
+                                             d->embedded.knots.cor_rgb[plane],
+                                             d->embedded.nc, radius,
+                                             dom->apply_dist,
+                                             &geom,
+                                             &sx, &sy);
+        out_row[x * dom->ch + c] = dt_interpolation_compute_sample(interpolation, work + c, sx, sy,
+                                                                    roi_in->width, roi_in->height,
+                                                                    dom->ch, dom->ch_width);
+      }
+    }
+  }
 }
 
 static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
@@ -708,41 +768,15 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
 
   if(!apply_dist && !apply_tca)
   {
-    // No geometric correction selected: pass the (possibly vignetted) work
-    // buffer straight to the output.
     dt_iop_image_copy_by_size(ovoid, work, roi_out->width, roi_out->height, ch);
   }
   else
   {
-    __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ovoid, roi_in, roi_out, ch, ch_width, w2, h2, inv_rn, d,
-                                          interpolation, limw, limh, raw_monochrome,
-                                          apply_dist, apply_tca))
-    for(int y = 0; y < roi_out->height; y++)
-    {
-      float *const out_row = ovoid + (size_t)y * roi_out->width * ch;
-      for(int x = 0; x < roi_out->width; x++)
-      {
-        const float cx = roi_out->x + x - w2;
-        const float cy = roi_out->y + y - h2;
-        const float radius = hypotf(cx, cy) * inv_rn;
-        for(int c = 0; c < ch; c++)
-        {
-          const int plane = (apply_dist && !apply_tca)
-              ? 1
-              : ((c < 3 && !raw_monochrome) ? c : 1);
-          float sx, sy;
-          _compute_geometric_displacement_3ch(d->embedded.knots.knots_dist,
-                                               d->embedded.knots.cor_rgb[plane],
-                                               d->embedded.nc, radius, apply_dist,
-                                               cx, cy, w2, h2,
-                                               roi_in->x, roi_in->y,
-                                               limw, limh,
-                                               &sx, &sy);
-          out_row[x * ch + c] = dt_interpolation_compute_sample(interpolation, work + c, sx, sy,
-                                                                  roi_in->width, roi_in->height, ch, ch_width);
-        }
-      }
-    }
+    const _warp_geom_domain_t dom = {
+      ch, ch_width, w2, h2, inv_rn, limw, limh,
+      raw_monochrome, apply_dist, apply_tca
+    };
+    _warp_geom_pass(work, ovoid, roi_in, roi_out, d, interpolation, &dom);
   }
 
   dt_free_align(work);
@@ -858,8 +892,20 @@ static void _distort_mask_embedded_metadata_warp(dt_iop_module_t *self, const dt
   }
 }
 
-typedef struct { float px, py, w2, h2, inv_rn; } _roi_point_t;
-typedef struct { float xm, xM, ym, yM; }       _roi_bounds_t;
+typedef struct {
+  float px;
+  float py;
+  float w2;
+  float h2;
+  float inv_rn;
+} _roi_point_t;
+
+typedef struct {
+  float xm;
+  float xM;
+  float ym;
+  float yM;
+} _roi_bounds_t;
 
 static void _sweep_embedded_roi_point(_roi_point_t p,
                                       const dt_iop_lensfun_data_t *d,
@@ -955,16 +1001,23 @@ static void _modify_roi_out_embedded_metadata_warp(dt_iop_module_t *self, const 
   *roi_out = *roi_in;
 }
 
+typedef struct {
+  int ch;
+  int ch_width;
+  int do_nan_checks;
+  int raw_monochrome;
+  int mask_display;
+} _remap_ctx_t;
+
 static void _remap_pixel_inverse_or_not(float *out, const float *bufptr, const float *src,
-                                         int ch, int ch_width, int do_nan_checks,
-                                         int raw_monochrome, int mask_display,
+                                         const _remap_ctx_t remap,
                                          const dt_iop_roi_t *roi_in,
                                          const struct dt_interpolation *interpolation)
 {
   dt_aligned_pixel_simd_t pixel = { 0.f };
   for(int c = 0; c < 3; c++)
   {
-    if(do_nan_checks && (!isfinite(bufptr[c * 2]) || !isfinite(bufptr[c * 2 + 1])))
+    if(remap.do_nan_checks && (!isfinite(bufptr[c * 2]) || !isfinite(bufptr[c * 2 + 1])))
     {
       pixel[c] = 0.0f;
       continue;
@@ -973,12 +1026,12 @@ static void _remap_pixel_inverse_or_not(float *out, const float *bufptr, const f
     const float pi0 = fmaxf(fminf(bufptr[c * 2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
     const float pi1 = fmaxf(fminf(bufptr[c * 2 + 1] - roi_in->y, roi_in->height - 1.0f), 0.0f);
     pixel[c] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
-                                               roi_in->height, ch, ch_width);
+                                                roi_in->height, remap.ch, remap.ch_width);
   }
-  if(raw_monochrome) pixel[0] = pixel[2] = pixel[1];
-  if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  if(remap.raw_monochrome) pixel[0] = pixel[2] = pixel[1];
+  if(remap.mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
   {
-    if(do_nan_checks && (!isfinite(bufptr[2]) || !isfinite(bufptr[3])))
+    if(remap.do_nan_checks && (!isfinite(bufptr[2]) || !isfinite(bufptr[3])))
     {
       pixel[3] = 0.0f;
     }
@@ -988,10 +1041,10 @@ static void _remap_pixel_inverse_or_not(float *out, const float *bufptr, const f
       const float pi0 = fmaxf(fminf(bufptr[2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
       const float pi1 = fmaxf(fminf(bufptr[3] - roi_in->y, roi_in->height - 1.0f), 0.0f);
       pixel[3] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
-                                                 roi_in->height, ch, ch_width);
+                                                  roi_in->height, remap.ch, remap.ch_width);
     }
-    if(ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
-    else for(int c = 0; c < ch; c++) out[c] = pixel[c];
+    if(remap.ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
+    else for(int c = 0; c < remap.ch; c++) out[c] = pixel[c];
   }
   else
   {
@@ -1069,8 +1122,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
         for(int x = 0; x < roi_out->width; x++, bufptr += 6, out += ch)
           _remap_pixel_inverse_or_not(out, bufptr, (const float *)ivoid,
-                                       ch, ch_width, d->lensfun.do_nan_checks,
-                                       raw_monochrome, mask_display,
+                                       _remap_ctx_t{ ch, ch_width, d->lensfun.do_nan_checks,
+                                                      raw_monochrome, mask_display },
                                        roi_in, interpolation);
       }
       dt_pixelpipe_cache_free_align(buf);
@@ -1143,8 +1196,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
         for(int x = 0; x < roi_out->width; x++, buf2ptr += 6, out += ch)
           _remap_pixel_inverse_or_not(out, buf2ptr, (const float *)buf,
-                                       ch, ch_width, d->lensfun.do_nan_checks,
-                                       raw_monochrome, mask_display,
+                                       _remap_ctx_t{ ch, ch_width, d->lensfun.do_nan_checks,
+                                                      raw_monochrome, mask_display },
                                        roi_in, interpolation);
       }
       dt_pixelpipe_cache_free_align(buf2);
@@ -1167,6 +1220,34 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 }
 
 #ifdef HAVE_OPENCL
+typedef struct {
+  cl_mem *dev_knots_vig;
+  cl_mem *dev_vig;
+  cl_mem *dev_knots_dist;
+  cl_mem *dev_cor_rgb0;
+  cl_mem *dev_cor_rgb1;
+  cl_mem *dev_cor_rgb2;
+} _cl_embedded_bufs_t;
+
+typedef struct {
+  int iwidth;
+  int iheight;
+  int owidth;
+  int oheight;
+  int roi_in_x;
+  int roi_in_y;
+  int roi_out_x;
+  int roi_out_y;
+  int nc;
+  int monochrome;
+  float w2;
+  float h2;
+  float inv_rn;
+  gboolean apply_vignette;
+  gboolean apply_dist;
+  gboolean apply_tca;
+} _cl_domain_t;
+
 static int _run_md_cl_pass(int devid, int kernel,
                            cl_mem dev_src, cl_mem dev_dst,
                            const size_t *sizes)
@@ -1181,41 +1262,89 @@ static int _run_md_cl_pass(int devid, int kernel,
 }
 
 static cl_int _setup_md_cl_kernels(int devid,
-                                   cl_mem *dev_knots_vig, cl_mem *dev_vig,
-                                   cl_mem *dev_knots_dist, cl_mem *dev_cor_rgb0,
-                                   cl_mem *dev_cor_rgb1, cl_mem *dev_cor_rgb2,
-                                   dt_embedded_lens_knots_t *knots)
+                                    _cl_embedded_bufs_t *bufs,
+                                    dt_embedded_lens_knots_t *knots)
 {
   const size_t knots_size = (size_t)LENS_MAXKNOTS * sizeof(float);
 
-  *dev_knots_vig = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
-  if(IS_NULL_PTR(*dev_knots_vig)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
-  *dev_vig = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
-  if(IS_NULL_PTR(*dev_vig)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
-  *dev_knots_dist = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
-  if(IS_NULL_PTR(*dev_knots_dist)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
-  *dev_cor_rgb0 = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
-  if(IS_NULL_PTR(*dev_cor_rgb0)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
-  *dev_cor_rgb1 = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
-  if(IS_NULL_PTR(*dev_cor_rgb1)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
-  *dev_cor_rgb2 = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
-  if(IS_NULL_PTR(*dev_cor_rgb2)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+  *bufs->dev_knots_vig = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
+  if(IS_NULL_PTR(*bufs->dev_knots_vig)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+  *bufs->dev_vig = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
+  if(IS_NULL_PTR(*bufs->dev_vig)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+  *bufs->dev_knots_dist = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
+  if(IS_NULL_PTR(*bufs->dev_knots_dist)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+  *bufs->dev_cor_rgb0 = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
+  if(IS_NULL_PTR(*bufs->dev_cor_rgb0)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+  *bufs->dev_cor_rgb1 = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
+  if(IS_NULL_PTR(*bufs->dev_cor_rgb1)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
+  *bufs->dev_cor_rgb2 = (cl_mem)dt_opencl_alloc_device_buffer(devid, knots_size);
+  if(IS_NULL_PTR(*bufs->dev_cor_rgb2)) return CL_MEM_OBJECT_ALLOCATION_FAILURE;
 
   cl_int err;
-  err = dt_opencl_write_buffer_to_device(devid, knots->knots_vig, *dev_knots_vig, 0, knots_size, CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, knots->knots_vig, *bufs->dev_knots_vig, 0, knots_size, CL_TRUE);
   if(err != CL_SUCCESS) return err;
-  err = dt_opencl_write_buffer_to_device(devid, knots->vig, *dev_vig, 0, knots_size, CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, knots->vig, *bufs->dev_vig, 0, knots_size, CL_TRUE);
   if(err != CL_SUCCESS) return err;
-  err = dt_opencl_write_buffer_to_device(devid, knots->knots_dist, *dev_knots_dist, 0, knots_size, CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, knots->knots_dist, *bufs->dev_knots_dist, 0, knots_size, CL_TRUE);
   if(err != CL_SUCCESS) return err;
-  err = dt_opencl_write_buffer_to_device(devid, knots->cor_rgb[0], *dev_cor_rgb0, 0, knots_size, CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, knots->cor_rgb[0], *bufs->dev_cor_rgb0, 0, knots_size, CL_TRUE);
   if(err != CL_SUCCESS) return err;
-  err = dt_opencl_write_buffer_to_device(devid, knots->cor_rgb[1], *dev_cor_rgb1, 0, knots_size, CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, knots->cor_rgb[1], *bufs->dev_cor_rgb1, 0, knots_size, CL_TRUE);
   if(err != CL_SUCCESS) return err;
-  err = dt_opencl_write_buffer_to_device(devid, knots->cor_rgb[2], *dev_cor_rgb2, 0, knots_size, CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, knots->cor_rgb[2], *bufs->dev_cor_rgb2, 0, knots_size, CL_TRUE);
   if(err != CL_SUCCESS) return err;
 
   return CL_SUCCESS;
+}
+
+static cl_int _run_vignette_cl(int devid, int kernel,
+                                cl_mem dev_in, cl_mem dev_out,
+                                const _cl_domain_t *dom,
+                                cl_mem knots, cl_mem coeffs,
+                                const size_t *sizes)
+{
+  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&dom->iwidth);
+  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&dom->iheight);
+  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), (void *)&dom->roi_in_x);
+  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), (void *)&dom->roi_in_y);
+  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), (void *)&dom->w2);
+  dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), (void *)&dom->h2);
+  dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(float), (void *)&dom->inv_rn);
+  dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(cl_mem), (void *)&knots);
+  dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(cl_mem), (void *)&coeffs);
+  dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(int), (void *)&dom->nc);
+  return _run_md_cl_pass(devid, kernel, dev_in, dev_out, sizes);
+}
+
+static cl_int _run_lens_correction_cl(int devid, int kernel,
+                                       cl_mem dev_in, cl_mem dev_out,
+                                       const _cl_domain_t *dom,
+                                       cl_mem knots,
+                                       cl_mem cor_rgb0, cl_mem cor_rgb1, cl_mem cor_rgb2,
+                                       const size_t *sizes)
+{
+  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&dom->owidth);
+  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&dom->oheight);
+  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), (void *)&dom->roi_in_x);
+  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), (void *)&dom->roi_in_y);
+  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), (void *)&dom->roi_out_x);
+  dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), (void *)&dom->roi_out_y);
+  dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(int), (void *)&dom->iwidth);
+  dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(int), (void *)&dom->iheight);
+  dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(float), (void *)&dom->w2);
+  dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(float), (void *)&dom->h2);
+  dt_opencl_set_kernel_arg(devid, kernel, 12, sizeof(float), (void *)&dom->inv_rn);
+  dt_opencl_set_kernel_arg(devid, kernel, 13, sizeof(cl_mem), (void *)&knots);
+  dt_opencl_set_kernel_arg(devid, kernel, 14, sizeof(cl_mem), (void *)&cor_rgb0);
+  dt_opencl_set_kernel_arg(devid, kernel, 15, sizeof(cl_mem), (void *)&cor_rgb1);
+  dt_opencl_set_kernel_arg(devid, kernel, 16, sizeof(cl_mem), (void *)&cor_rgb2);
+  dt_opencl_set_kernel_arg(devid, kernel, 17, sizeof(int), (void *)&dom->nc);
+  dt_opencl_set_kernel_arg(devid, kernel, 18, sizeof(int), (void *)&dom->monochrome);
+  return _run_md_cl_pass(devid, kernel, dev_in, dev_out, sizes);
 }
 
 static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
@@ -1284,6 +1413,14 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   const int monochrome = raw_monochrome ? 1 : 0;
 
+  const _cl_domain_t cldom = {
+    iwidth, iheight, owidth, oheight,
+    roi_in_x, roi_in_y, roi_out_x, roi_out_y,
+    d->embedded.nc, monochrome,
+    w2, h2, inv_rn,
+    apply_vignette, apply_dist, apply_tca
+  };
+
   cl_mem dev_knots_vig = nullptr;
   cl_mem dev_vig = nullptr;
   cl_mem dev_knots_dist = nullptr;
@@ -1291,10 +1428,12 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   cl_mem dev_cor_rgb1 = nullptr;
   cl_mem dev_cor_rgb2 = nullptr;
 
+  _cl_embedded_bufs_t embufs = { &dev_knots_vig, &dev_vig,
+                                  &dev_knots_dist, &dev_cor_rgb0,
+                                  &dev_cor_rgb1, &dev_cor_rgb2 };
+
   err = _setup_md_cl_kernels(devid,
-                             &dev_knots_vig, &dev_vig,
-                             &dev_knots_dist, &dev_cor_rgb0,
-                             &dev_cor_rgb1, &dev_cor_rgb2,
+                             &embufs,
                              &d->embedded.knots);
   if(err != CL_SUCCESS) goto error;
 
@@ -1303,110 +1442,36 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
 
   if(!d->lensfun.inverse)
   {
-    /* Forward (darkroom): vignette on input, then geometry on output. */
-    if(apply_vignette)
-    {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 0, sizeof(cl_mem), (void *)&dev_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 1, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 2, sizeof(int), (void *)&iwidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 3, sizeof(int), (void *)&iheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 4, sizeof(int), (void *)&roi_in_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 5, sizeof(int), (void *)&roi_in_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 6, sizeof(float), (void *)&w2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 7, sizeof(float), (void *)&h2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 8, sizeof(float), (void *)&inv_rn);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 9, sizeof(cl_mem), (void *)&dev_knots_vig);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 10, sizeof(cl_mem), (void *)&dev_vig);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 11, sizeof(int), (void *)&d->embedded.nc);
-      err = _run_md_cl_pass(devid, gd->kernel_md_vignette, dev_in, dev_tmp, isizes);
-    }
+    if(cldom.apply_vignette)
+      err = _run_vignette_cl(devid, gd->kernel_md_vignette, dev_in, dev_tmp,
+                              &cldom, dev_knots_vig, dev_vig, isizes);
     else
-    {
       err = _run_md_cl_pass(devid, 0, dev_in, dev_tmp, iregion);
-    }
     if(err != CL_SUCCESS) goto error;
 
-    if(apply_dist || apply_tca)
-    {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 0, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 1, sizeof(cl_mem), (void *)&dev_out);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 2, sizeof(int), (void *)&owidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 3, sizeof(int), (void *)&oheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 4, sizeof(int), (void *)&roi_in_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 5, sizeof(int), (void *)&roi_in_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 6, sizeof(int), (void *)&roi_out_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 7, sizeof(int), (void *)&roi_out_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 8, sizeof(int), (void *)&iwidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 9, sizeof(int), (void *)&iheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 10, sizeof(float), (void *)&w2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 11, sizeof(float), (void *)&h2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 12, sizeof(float), (void *)&inv_rn);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 13, sizeof(cl_mem), (void *)&dev_knots_dist);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 14, sizeof(cl_mem), (void *)&dev_cor_rgb0);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 15, sizeof(cl_mem), (void *)&dev_cor_rgb1);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 16, sizeof(cl_mem), (void *)&dev_cor_rgb2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 17, sizeof(int), (void *)&d->embedded.nc);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 18, sizeof(int), (void *)&monochrome);
-      err = _run_md_cl_pass(devid, gd->kernel_md_lens_correction, dev_tmp, dev_out, osizes);
-    }
+    if(cldom.apply_dist || cldom.apply_tca)
+      err = _run_lens_correction_cl(devid, gd->kernel_md_lens_correction, dev_tmp, dev_out,
+                                     &cldom, dev_knots_dist,
+                                     dev_cor_rgb0, dev_cor_rgb1, dev_cor_rgb2, osizes);
     else
-    {
       err = _run_md_cl_pass(devid, 0, dev_tmp, dev_out, oregion);
-    }
     if(err != CL_SUCCESS) goto error;
   }
   else
   {
-    /* Inverse (export): geometry on input, then vignette. */
-    if(apply_dist || apply_tca)
-    {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 0, sizeof(cl_mem), (void *)&dev_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 1, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 2, sizeof(int), (void *)&iwidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 3, sizeof(int), (void *)&iheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 4, sizeof(int), (void *)&roi_in_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 5, sizeof(int), (void *)&roi_in_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 6, sizeof(int), (void *)&roi_out_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 7, sizeof(int), (void *)&roi_out_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 8, sizeof(int), (void *)&iwidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 9, sizeof(int), (void *)&iheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 10, sizeof(float), (void *)&w2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 11, sizeof(float), (void *)&h2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 12, sizeof(float), (void *)&inv_rn);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 13, sizeof(cl_mem), (void *)&dev_knots_dist);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 14, sizeof(cl_mem), (void *)&dev_cor_rgb0);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 15, sizeof(cl_mem), (void *)&dev_cor_rgb1);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 16, sizeof(cl_mem), (void *)&dev_cor_rgb2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 17, sizeof(int), (void *)&d->embedded.nc);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_lens_correction, 18, sizeof(int), (void *)&monochrome);
-      err = _run_md_cl_pass(devid, gd->kernel_md_lens_correction, dev_in, dev_tmp, isizes);
-    }
+    if(cldom.apply_dist || cldom.apply_tca)
+      err = _run_lens_correction_cl(devid, gd->kernel_md_lens_correction, dev_in, dev_tmp,
+                                     &cldom, dev_knots_dist,
+                                     dev_cor_rgb0, dev_cor_rgb1, dev_cor_rgb2, isizes);
     else
-    {
       err = _run_md_cl_pass(devid, 0, dev_in, dev_tmp, iregion);
-    }
     if(err != CL_SUCCESS) goto error;
 
-    if(apply_vignette)
-    {
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 0, sizeof(cl_mem), (void *)&dev_tmp);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 1, sizeof(cl_mem), (void *)&dev_out);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 2, sizeof(int), (void *)&owidth);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 3, sizeof(int), (void *)&oheight);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 4, sizeof(int), (void *)&roi_out_x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 5, sizeof(int), (void *)&roi_out_y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 6, sizeof(float), (void *)&w2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 7, sizeof(float), (void *)&h2);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 8, sizeof(float), (void *)&inv_rn);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 9, sizeof(cl_mem), (void *)&dev_knots_vig);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 10, sizeof(cl_mem), (void *)&dev_vig);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_md_vignette, 11, sizeof(int), (void *)&d->embedded.nc);
-      err = _run_md_cl_pass(devid, gd->kernel_md_vignette, dev_tmp, dev_out, osizes);
-    }
+    if(cldom.apply_vignette)
+      err = _run_vignette_cl(devid, gd->kernel_md_vignette, dev_tmp, dev_out,
+                              &cldom, dev_knots_vig, dev_vig, osizes);
     else
-    {
       err = _run_md_cl_pass(devid, 0, dev_tmp, dev_out, oregion);
-    }
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -1739,7 +1804,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     double max_abs_dr_minus_1 = 0.0;
     for(int c : {0, 1, 2})
     {
-      const double dr = (double)dt_embedded_lens_linear_spline(d->embedded.knots.knots_dist, d->embedded.knots.cor_rgb[c], d->embedded.nc, 1.0f);
+      const auto dr = (double)dt_embedded_lens_linear_spline(d->embedded.knots.knots_dist, d->embedded.knots.cor_rgb[c], d->embedded.nc, 1.0f);
       max_abs_dr_minus_1 = fmax(max_abs_dr_minus_1, fabs(dr - 1.0));
     }
 
@@ -2013,6 +2078,18 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   delete modifier;
 }
 
+static void _apply_tca_override_lf_legacy(lfLens *lens, float tca_r, float tca_b)
+{
+  lfLensCalibTCA tca = { LF_TCA_MODEL_NONE };
+  tca.Focal = 0;
+  tca.Model = LF_TCA_MODEL_LINEAR;
+  tca.Terms[0] = tca_r;
+  tca.Terms[1] = tca_b;
+  if(lens->CalibTCA)
+    while(lens->CalibTCA[0]) lens->RemoveCalibTCA(0);
+  lens->AddCalibTCA(&tca);
+}
+
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -2121,15 +2198,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                          }
           };
 #else
-        // add manual d->lensfun.lens stuff:
-        lfLensCalibTCA tca = { LF_TCA_MODEL_NONE };
-        tca.Focal = 0;
-        tca.Model = LF_TCA_MODEL_LINEAR;
-        tca.Terms[0] = p->tca_r;
-        tca.Terms[1] = p->tca_b;
-        if(d->lensfun.lens->CalibTCA)
-          while(d->lensfun.lens->CalibTCA[0]) d->lensfun.lens->RemoveCalibTCA(0);
-        d->lensfun.lens->AddCalibTCA(&tca);
+        _apply_tca_override_lf_legacy(d->lensfun.lens, p->tca_r, p->tca_b);
 #endif
       }
       lf_free(lens);
@@ -3091,7 +3160,7 @@ static void _embedded_fine_tune_slider_changed(GtkWidget *, gpointer user_data)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-static void autoscale_pressed_md(GtkWidget *widget, gpointer user_data)
+static void autoscale_pressed_md(GtkWidget *, gpointer user_data)
 {
   auto *self = (dt_iop_module_t *)user_data;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;

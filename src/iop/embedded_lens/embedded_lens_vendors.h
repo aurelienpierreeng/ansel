@@ -4,12 +4,13 @@
 
 struct dt_embedded_lens_knots_t;
 
-typedef struct dt_embedded_lens_finetune_t {
+struct dt_embedded_lens_finetune_t
+{
   float distortion;
   float vignette;
   float ca_red;
   float ca_blue;
-} dt_embedded_lens_finetune_t;
+};
 
 struct dt_embedded_lens_vendor_t
 {
