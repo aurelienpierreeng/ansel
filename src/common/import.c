@@ -104,6 +104,13 @@ typedef struct dt_import_t {
   // Active GUI file-type filter (All/Raw/Raster), snapshotted on the GUI thread.
   dt_import_filter_type_t filter_type;
 
+  // Number of folders that could not be enumerated (permission denied, I/O error, folder gone
+  // mid-scan...) during this recursive scan. See _recurse_folder(): GLib reports these through a
+  // GError that used to be silently discarded (NULL error arg), so a folder failure looked
+  // identical to "this folder is simply empty" -- no way to tell the user why an expected file
+  // didn't show up.
+  guint scan_errors;
+
 } dt_import_t;
 
 typedef enum exif_fields_t {
@@ -144,6 +151,11 @@ typedef struct dt_lib_import_t
   GtkFileFilter *filter_all;
   GtkFileFilter *filter_raw;
   GtkFileFilter *filter_raster;
+
+  // Mirrors the last dt_import_t::filter_type resolved by dt_import_init(), so
+  // _filelist_changed_callback() (GUI thread, only gets files/elements/finished from the signal)
+  // can word the selected-files label according to the active filter.
+  dt_import_filter_type_t last_filter_type;
 
   gboolean closing;
 
@@ -236,18 +248,36 @@ static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
   dt_free(pathname);
 }
 
+static void _report_scan_error(dt_import_t *const import, GFile *folder, GError *error)
+{
+  gchar *path = g_file_get_path(folder);
+  dt_print(DT_DEBUG_IMPORT, "[import] could not fully scan folder `%s': %s\n",
+           path ? path : "?", error->message);
+  dt_free(path);
+  g_error_free(error);
+  import->scan_errors++;
+}
+
 static void _recurse_folder(GVfs *vfs, GFile *folder, dt_import_t *const import)
 {
   // Get subfolders and files from current folder
   if(!_scan_still_valid(import)) return;
 
+  GError *error = NULL;
   GFileEnumerator *files
       = g_file_enumerate_children(folder, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE,
-                                  G_FILE_QUERY_INFO_NONE, NULL, NULL);
-  if(IS_NULL_PTR(files)) return;
+                                  G_FILE_QUERY_INFO_NONE, NULL, &error);
+  if(IS_NULL_PTR(files))
+  {
+    // e.g. permission denied, or the folder vanished mid-scan: previously silent (NULL error arg),
+    // indistinguishable from "this folder is simply empty".
+    if(error) _report_scan_error(import, folder, error);
+    return;
+  }
 
   GFile *file = NULL;
-  while(g_file_enumerator_iterate(files, NULL, &file, NULL, NULL))
+  GError *iter_error = NULL;
+  while(g_file_enumerator_iterate(files, NULL, &file, NULL, &iter_error))
   {
     // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
     // We need an ugly break here else infinite loop.
@@ -265,6 +295,10 @@ static void _recurse_folder(GVfs *vfs, GFile *folder, dt_import_t *const import)
     // Unref happens when the enumerator advances or is destroyed.
     file = NULL;
   }
+
+  // A FALSE return above without a set error just means "iteration finished normally" -- only
+  // report when GLib actually set one.
+  if(iter_error) _report_scan_error(import, folder, iter_error);
 
   g_object_unref(files);
 }
@@ -314,11 +348,18 @@ static int32_t dt_get_selected_files(dt_import_t *import)
 
   // If shutdown was triggered, we may already have no Gtk label widget to update through the callback.
   // In that case, it will segfault. So don't raise the signal at all if shutdown was set.
-  if(valid && import->files)
+  if(valid)
   {
     dt_pthread_mutex_unlock(&import->lock);
 
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, import->files, import->elements, 1);
+    // Raise even when import->files is empty (e.g. the active Raw/Raster filter matched
+    // nothing recursively): receivers need to know detection finished with zero results,
+    // otherwise the GUI label is stuck on "Detecting..." and clicking Import never fires
+    // _process_file_list, leaving the dialog looking frozen. scan_errors rides along so the
+    // label can report folders that failed to scan (permission denied, etc.) -- see
+    // _set_selected_files_label().
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, import->files, import->elements, 1,
+                                  import->scan_errors);
     // Signal receivers only observe this list. Ownership stays in dt_import_t and is released in dt_import_cleanup.
   }
   else if(import->files)
@@ -858,7 +899,60 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
   }
 }
 
-static void _filelist_changed_callback(gpointer instance, GList *files, guint elements, guint finished, gpointer user_data)
+// Words the selected-files label according to the active GUI filter (raw/raster get called out
+// explicitly; "All" is left exactly as before, per the user's request not to touch that case).
+// When scan_errors > 0, appends a warning so a permission-denied (or otherwise failed) subfolder
+// is visible right in the label instead of only in a transient dt_control_log() toast.
+static void _set_selected_files_label(dt_lib_import_t *d, const guint elements, const guint scan_errors)
+{
+  gchar *text;
+
+  if(elements == 0)
+  {
+    switch(d->last_filter_type)
+    {
+      case DT_IMPORT_FILTER_RAW:
+        text = g_strdup(_("No raw file selected"));
+        break;
+      case DT_IMPORT_FILTER_RASTER:
+        text = g_strdup(_("No raster file selected"));
+        break;
+      default:
+        text = g_strdup(_("No file selected"));
+        break;
+    }
+  }
+  else
+  {
+    switch(d->last_filter_type)
+    {
+      case DT_IMPORT_FILTER_RAW:
+        text = g_strdup_printf(_("%i raw files selected"), elements);
+        break;
+      case DT_IMPORT_FILTER_RASTER:
+        text = g_strdup_printf(_("%i raster files selected"), elements);
+        break;
+      default:
+        text = g_strdup_printf(_("%i files selected"), elements);
+        break;
+    }
+  }
+
+  if(scan_errors > 0)
+  {
+    gchar *warning = g_strdup_printf(ngettext(" -- %u folder could not be scanned (permission denied?)",
+                                              " -- %u folders could not be scanned (permission denied?)",
+                                              scan_errors), scan_errors);
+    gchar *combined = g_strconcat(text, warning, NULL);
+    dt_free(text);
+    dt_free(warning);
+    text = combined;
+  }
+
+  _gtk_label_set_and_free(d->selected_files, text);
+}
+
+static void _filelist_changed_callback(gpointer instance, GList *files, guint elements, guint finished, guint scan_errors, gpointer user_data)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)user_data;
   if(IS_NULL_PTR(d) || d->closing || IS_NULL_PTR(d->selected_files)) return;
@@ -867,13 +961,26 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
   {
     // Lock the thread to ensure we have the correct final number
     dt_pthread_mutex_lock(&d->lock);
-    _gtk_label_set_and_free(d->selected_files, g_strdup_printf(_("%i files selected"), elements));
+    _set_selected_files_label(d, elements, scan_errors);
     dt_pthread_mutex_unlock(&d->lock);
   }
   else
   {
     // We don't care for correctness, we just want to show user that we are still at it
-    _gtk_label_set_and_free(d->selected_files, g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
+    const char *fmt;
+    switch(d->last_filter_type)
+    {
+      case DT_IMPORT_FILTER_RAW:
+        fmt = _("Detection in progress... (%i raw files found so far)");
+        break;
+      case DT_IMPORT_FILTER_RASTER:
+        fmt = _("Detection in progress... (%i raster files found so far)");
+        break;
+      default:
+        fmt = _("Detection in progress... (%i files found so far)");
+        break;
+    }
+    _gtk_label_set_and_free(d->selected_files, g_strdup_printf(fmt, elements));
   }
 }
 
@@ -1007,7 +1114,7 @@ static void _file_activated(GtkFileChooser *chooser, GtkDialog *dialog)
  * @param finished
  * @param user_data data from the module.
  */
-static void _process_file_list(gpointer instance, GList *files, int elements, gboolean finished, gpointer user_data)
+static void _process_file_list(gpointer instance, GList *files, int elements, gboolean finished, guint scan_errors, gpointer user_data)
 {
   if(!finished) return; // Should be fired only when we are done detecting stuff
 
@@ -1544,6 +1651,7 @@ static dt_import_t * dt_import_init(dt_lib_import_t *d, const uint32_t generatio
   import->generation = generation;
   import->files = NULL;
   import->elements = 0;
+  import->scan_errors = 0;
   dt_pthread_mutex_init(&import->lock, NULL);
   import->scan_state = d->scan_state;
   dt_pthread_mutex_lock(&import->scan_state->lock);
@@ -1564,6 +1672,10 @@ static dt_import_t * dt_import_init(dt_lib_import_t *d, const uint32_t generatio
     import->filter_type = DT_IMPORT_FILTER_RASTER;
   else
     import->filter_type = DT_IMPORT_FILTER_ALL;
+
+  // Mirror it onto d too: _filelist_changed_callback() only gets files/elements/finished from
+  // the signal, not the dt_import_t this scan belongs to.
+  d->last_filter_type = import->filter_type;
 
   dt_pthread_mutex_unlock(&import->lock);
 

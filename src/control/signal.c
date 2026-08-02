@@ -82,7 +82,7 @@ static GType image_export_arg[]
 static GType history_will_change_arg[]
 = { G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_POINTER };
 static GType geotag_arg[] = { G_TYPE_POINTER, G_TYPE_UINT };
-static GType file_crawling_arg[] = { G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_UINT };
+static GType file_crawling_arg[] = { G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_UINT, G_TYPE_UINT };
 static GType mask_change_arg[] = { G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_UINT };
 
 // callback for the destructor of DT_SIGNAL_COLLECTION_CHANGED
@@ -241,8 +241,10 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
   { "dt-develop-masks-gui-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED
 
-  { "dt-control-filelist-update", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3, file_crawling_arg, NULL,
+  { "dt-control-filelist-update", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 4, file_crawling_arg, NULL,
     TRUE }, // DT_SIGNAL_FILELIST_UPDATED: synchronous so crawler-owned pointers stay valid until handlers return.
+    // 4th param (scan_errors) added for the import dialog's recursive-scan error count; this
+    // signal is exclusively raised/consumed by common/import.c.
 
   { "dt-folder-survey-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_FOLDER_SURVEY_CHANGED
