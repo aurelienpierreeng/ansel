@@ -139,6 +139,27 @@ static const gchar *_supported_ldr[]
 // float-only raster containers — unambiguously high dynamic range:
 static const gchar *_supported_hdr[] = { "exr", "hdr", "pfm", NULL };
 
+// Coarse "camera raw format" / "generic raster format" split for the import dialog's GUI file
+// filters (declared in imageio.h, consumed from common/import.c: both to build the GtkFileFilter
+// patterns and to replicate the same distinction during the recursive folder scan, which cannot
+// touch GtkFileFilter from its worker thread). Unlike _supported_raw/_supported_ldr/_supported_hdr
+// above, this needs a single raw-or-not answer before any decode, so an ambiguous container like
+// "dng" is listed under both.
+const char *dt_import_raw_extensions[] = {
+  "3fr", "ari", "arw", "bay", "bmq", "cap", "cine", "cr2",
+  "cr3", "crw", "cs1", "dc2", "dcr", "dng", "gpr", "erf",
+  "fff", "hdr",  "ia", "iiq", "k25", "kc2", "kdc", "mdc",
+  "mef", "mos", "mrw", "nef", "nrw", "orf", "ori", "pef",
+  "pfm", "pnm", "pxn", "qtk", "raf", "raw", "rdc", "rw2",
+  "rwl", "sr2", "srf", "srw", "sti", "x3f", NULL
+};
+
+const char *dt_import_raster_extensions[] = {
+  "jpg", "jpeg", "j2c", "jp2", "j2k", "jpc", "tif", "tiff", "png", "exr",
+  "bmp", "dng", "heif", "heic", "hif", "avi", "avif", "webp",
+  "gif", "dcm", "jng", "miff", "mng", "pbm", "ppm", "pgm", "pam", NULL
+};
+
 /**
  * @brief Map Exiv2 preview MIME types to decoder format identifiers.
  *
