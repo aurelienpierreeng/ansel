@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/image.h"
+#include "embedded_lens_vendors.h"
 
 #ifdef __cplusplus
 constexpr int LENS_MAXKNOTS = 16;
@@ -31,13 +32,16 @@ static inline float dt_embedded_lens_linear_spline(const float *xi, const float 
   return yi[ni - 1];
 }
 
+typedef struct dt_embedded_lens_knots_t {
+  float knots_dist[LENS_MAXKNOTS];
+  float knots_vig[LENS_MAXKNOTS];
+  float cor_rgb[3][LENS_MAXKNOTS];
+  float vig[LENS_MAXKNOTS];
+} dt_embedded_lens_knots_t;
+
 int dt_embedded_lens_init_coeffs(const dt_image_t *img,
-                                  float cor_dist_ft, float cor_vig_ft,
-                                  float cor_ca_r_ft, float cor_ca_b_ft,
-                                  float knots_dist[LENS_MAXKNOTS],
-                                  float knots_vig[LENS_MAXKNOTS],
-                                  float cor_rgb[3][LENS_MAXKNOTS],
-                                  float vig[LENS_MAXKNOTS],
+                                  const struct dt_embedded_lens_finetune_t *ft,
+                                  struct dt_embedded_lens_knots_t *knots,
                                   float *out_scale);
 
 gboolean dt_embedded_lens_has_data(const dt_image_t *img);

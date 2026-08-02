@@ -28,10 +28,7 @@ gboolean _olympus_has_ca(const dt_image_correction_data_t *cd)
 
 int _olympus_populate(const dt_image_correction_data_t *cd,
                        const dt_embedded_lens_finetune_t *ft,
-                       float knots_dist[LENS_MAXKNOTS],
-                       float knots_vig[LENS_MAXKNOTS],
-                       float cor_rgb[3][LENS_MAXKNOTS],
-                       float vig[LENS_MAXKNOTS],
+                       struct dt_embedded_lens_knots_t *knots,
                        const float *out_scale)
 {
   (void)out_scale;
@@ -68,9 +65,9 @@ int _olympus_populate(const dt_image_correction_data_t *cd,
   for(int i = 0; i < nc; i++)
   {
     const float r = (float)i / (float)(nc - 1);
-    knots_dist[i] = r;
-    knots_vig[i] = r;
-    vig[i] = 1.0f;
+    knots->knots_dist[i] = r;
+    knots->knots_vig[i] = r;
+    knots->vig[i] = 1.0f;
 
     float base = 1.0f;
     if(oly->has_dist)
@@ -79,16 +76,16 @@ int _olympus_populate(const dt_image_correction_data_t *cd,
       const float r_cor = drs * (1.0f + rs2 * (dk2 + rs2 * (dk4 + rs2 * dk6)));
       base = ft->distortion * (r_cor - 1.0f) + 1.0f;
     }
-    cor_rgb[0][i] = base;
-    cor_rgb[1][i] = base;
-    cor_rgb[2][i] = base;
+    knots->cor_rgb[0][i] = base;
+    knots->cor_rgb[1][i] = base;
+    knots->cor_rgb[2][i] = base;
 
     if(oly->has_ca && r > 0.0f)
     {
       const float rd = base * r;
       const float rd2 = rd * rd;
-      cor_rgb[0][i] += ft->ca_red * (rd * (car0 + rd2 * (car2 + rd2 * car4))) / r;
-      cor_rgb[2][i] += ft->ca_blue * (rd * (cab0 + rd2 * (cab2 + rd2 * cab4))) / r;
+      knots->cor_rgb[0][i] += ft->ca_red * (rd * (car0 + rd2 * (car2 + rd2 * car4))) / r;
+      knots->cor_rgb[2][i] += ft->ca_blue * (rd * (cab0 + rd2 * (cab2 + rd2 * cab4))) / r;
     }
   }
 

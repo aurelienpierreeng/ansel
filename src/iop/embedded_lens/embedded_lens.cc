@@ -4,12 +4,8 @@
 #include <math.h>
 
 int dt_embedded_lens_init_coeffs(const dt_image_t *img,
-                                  float cor_dist_ft, float cor_vig_ft,
-                                  float cor_ca_r_ft, float cor_ca_b_ft,
-                                  float knots_dist[LENS_MAXKNOTS],
-                                  float knots_vig[LENS_MAXKNOTS],
-                                  float cor_rgb[3][LENS_MAXKNOTS],
-                                  float vig[LENS_MAXKNOTS],
+                                  const struct dt_embedded_lens_finetune_t *ft,
+                                  struct dt_embedded_lens_knots_t *knots,
                                   float *out_scale)
 {
   if(out_scale) *out_scale = 1.0f;
@@ -23,9 +19,7 @@ int dt_embedded_lens_init_coeffs(const dt_image_t *img,
         &dt_embedded_lens_vendors[img->exif_correction_type];
     if(v->has_data && v->has_data(cd))
     {
-      const dt_embedded_lens_finetune_t ft = { cor_dist_ft, cor_vig_ft, cor_ca_r_ft, cor_ca_b_ft };
-      nc = v->populate(cd, &ft,
-                       knots_dist, knots_vig, cor_rgb, vig, out_scale);
+      nc = v->populate(cd, ft, knots, out_scale);
     }
   }
 
@@ -43,14 +37,14 @@ int dt_embedded_lens_init_coeffs(const dt_image_t *img,
   {
     const float x = srr + (1.0f - srr) * (float)i / (float)(tested - 1);
     for(int c = 0; c < 3; c++)
-      scale = fmaxf(scale, dt_embedded_lens_linear_spline(knots_dist, cor_rgb[c], nc, x));
+      scale = fmaxf(scale, dt_embedded_lens_linear_spline(knots->knots_dist, knots->cor_rgb[c], nc, x));
   }
   if(scale <= 1e-6f) scale = 1.0f;
 
   for(int i = 0; i < nc; i++)
   {
-    knots_dist[i] *= scale;
-    for(int c = 0; c < 3; c++) cor_rgb[c][i] /= scale;
+    knots->knots_dist[i] *= scale;
+    for(int c = 0; c < 3; c++) knots->cor_rgb[c][i] /= scale;
   }
 
   if(out_scale) *out_scale = scale;

@@ -887,6 +887,51 @@ static void _check_lens_correction_sony(Exiv2::ExifData &exifData, dt_image_t *i
   }
 }
 
+static bool _read_fuji_9coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
+                             Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+{
+  f->nc = 9;
+  for(int i = 0; i < 9; i++)
+  {
+    const float kd = posd->toFloat(i + 1);
+    const float kc = posc->toFloat(i + 1);
+    const float kv = posv->toFloat(i + 1);
+    if(kd != kc || kd != kv) return false;
+    f->knots[i] = kd;
+    f->distortion[i] = posd->toFloat(i + 10);
+    f->ca_r[i] = posc->toFloat(i + 10);
+    f->ca_b[i] = posc->toFloat(i + 19);
+    f->vignetting[i] = posv->toFloat(i + 10);
+  }
+  return true;
+}
+
+static bool _read_fuji_11coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
+                               Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+{
+  f->nc = 11;
+  for(int i = 0; i < 11; i++)
+  {
+    const float kd = posd->toFloat(i + 1);
+    const float kc = (i != 0) ? posc->toFloat(i) : 0.0f;
+    const float kv = posv->toFloat(i + 1);
+    if(kd != kc || kd != kv) return false;
+    f->knots[i] = kd;
+    f->distortion[i] = posd->toFloat(i + 12);
+    if(i == 0)
+    {
+      f->ca_r[i] = 0.0f;
+      f->ca_b[i] = 0.0f;
+    }
+    else
+    {
+      f->ca_r[i] = posc->toFloat(i + 10);
+      f->ca_b[i] = posc->toFloat(i + 20);
+    }
+    f->vignetting[i] = posv->toFloat(i + 12);
+  }
+  return true;
+}
 static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *img)
 {
   Exiv2::ExifData::const_iterator posd;
@@ -900,61 +945,21 @@ static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *i
 
   if(posd->count() == 19 && posc->count() == 29 && posv->count() == 19)
   {
-    const int nc = 9;
-    img->exif_correction_type = CORRECTION_TYPE_FUJI;
-    img->exif_correction_data.fuji.nc = nc;
-    for(int i = 0; i < nc; i++)
+    if(!_read_fuji_9coef(posd, posc, posv, &img->exif_correction_data.fuji))
     {
-      const float kd = posd->toFloat(i + 1);
-      const float kc = posc->toFloat(i + 1);
-      const float kv = posv->toFloat(i + 1);
-
-      if(kd != kc || kd != kv)
-      {
-        img->exif_correction_type = CORRECTION_TYPE_NONE;
-        return;
-      }
-
-      img->exif_correction_data.fuji.knots[i] = kd;
-      img->exif_correction_data.fuji.distortion[i] = posd->toFloat(i + 10);
-      img->exif_correction_data.fuji.ca_r[i] = posc->toFloat(i + 10);
-      img->exif_correction_data.fuji.ca_b[i] = posc->toFloat(i + 19);
-      img->exif_correction_data.fuji.vignetting[i] = posv->toFloat(i + 10);
+      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      return;
     }
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
   }
   else if(posd->count() == 23 && posc->count() == 31 && posv->count() == 23)
   {
-    const int nc = 11;
-    img->exif_correction_type = CORRECTION_TYPE_FUJI;
-    img->exif_correction_data.fuji.nc = nc;
-    for(int i = 0; i < nc; i++)
+    if(!_read_fuji_11coef(posd, posc, posv, &img->exif_correction_data.fuji))
     {
-      const float kd = posd->toFloat(i + 1);
-      const float kc = (i != 0) ? posc->toFloat(i) : 0.0f;
-      const float kv = posv->toFloat(i + 1);
-
-      if(kd != kc || kd != kv)
-      {
-        img->exif_correction_type = CORRECTION_TYPE_NONE;
-        return;
-      }
-
-      img->exif_correction_data.fuji.knots[i] = kd;
-      img->exif_correction_data.fuji.distortion[i] = posd->toFloat(i + 12);
-
-      if(i == 0)
-      {
-        img->exif_correction_data.fuji.ca_r[i] = 0.0f;
-        img->exif_correction_data.fuji.ca_b[i] = 0.0f;
-      }
-      else
-      {
-        img->exif_correction_data.fuji.ca_r[i] = posc->toFloat(i + 10);
-        img->exif_correction_data.fuji.ca_b[i] = posc->toFloat(i + 20);
-      }
-
-      img->exif_correction_data.fuji.vignetting[i] = posv->toFloat(i + 12);
+      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      return;
     }
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
   }
   else
   {

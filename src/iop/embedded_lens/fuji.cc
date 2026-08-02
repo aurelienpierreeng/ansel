@@ -34,10 +34,7 @@ gboolean _fuji_has_ca(const dt_image_correction_data_t *cd)
 
 int _fuji_populate(const dt_image_correction_data_t *cd,
                     const dt_embedded_lens_finetune_t *ft,
-                    float knots_dist[LENS_MAXKNOTS],
-                    float knots_vig[LENS_MAXKNOTS],
-                    float cor_rgb[3][LENS_MAXKNOTS],
-                    float vig[LENS_MAXKNOTS],
+                    struct dt_embedded_lens_knots_t *knots,
                     const float *out_scale)
 {
   (void)out_scale;
@@ -56,8 +53,8 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
     cor_rgb_in[j] = 1.0f;
     cor_ca_r_in[j] = 0.0f;
     cor_ca_b_in[j] = 0.0f;
-    knots_vig[j] = 0.0f;
-    vig[j] = 1.0f;
+    knots->knots_vig[j] = 0.0f;
+    knots->vig[j] = 1.0f;
     j++;
   }
 
@@ -68,15 +65,15 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
     cor_ca_r_in[j] = ft->ca_red * fuji->ca_r[i];
     cor_ca_b_in[j] = ft->ca_blue * fuji->ca_b[i];
 
-    knots_vig[j] = fuji->cropf * fuji->knots[i];
-    vig[j] = 1.0f - ft->vignette * (1.0f - fuji->vignetting[i] / 100.0f);
+    knots->knots_vig[j] = fuji->cropf * fuji->knots[i];
+    knots->vig[j] = 1.0f - ft->vignette * (1.0f - fuji->vignetting[i] / 100.0f);
   }
   const int ncin = j;
 
   for(int k = ncin; k < LENS_MAXKNOTS; k++)
   {
-    knots_vig[k] = knots_vig[ncin - 1] + (float)(k - ncin + 1);
-    vig[k] = vig[ncin - 1];
+    knots->knots_vig[k] = knots->knots_vig[ncin - 1] + (float)(k - ncin + 1);
+    knots->vig[k] = knots->vig[ncin - 1];
   }
 
   const int nc = LENS_MAXKNOTS;
@@ -85,16 +82,16 @@ int _fuji_populate(const dt_image_correction_data_t *cd,
     const float rin = (float)i / (float)(nc - 1);
     const float m = dt_embedded_lens_linear_spline(knots_in.data(), cor_rgb_in.data(), ncin, rin);
     const float r = (fabsf(m) > 1e-6f) ? rin / m : rin;
-    knots_dist[i] = r;
+    knots->knots_dist[i] = r;
 
-    cor_rgb[0][i] = m;
-    cor_rgb[1][i] = m;
-    cor_rgb[2][i] = m;
+    knots->cor_rgb[0][i] = m;
+    knots->cor_rgb[1][i] = m;
+    knots->cor_rgb[2][i] = m;
 
     const float mcar = dt_embedded_lens_linear_spline(knots_in.data(), cor_ca_r_in.data(), ncin, rin);
     const float mcab = dt_embedded_lens_linear_spline(knots_in.data(), cor_ca_b_in.data(), ncin, rin);
-    cor_rgb[0][i] *= mcar + 1.0f;
-    cor_rgb[2][i] *= mcab + 1.0f;
+    knots->cor_rgb[0][i] *= mcar + 1.0f;
+    knots->cor_rgb[2][i] *= mcab + 1.0f;
   }
 
   return nc;

@@ -2,12 +2,14 @@
 
 #include "common/image.h"
 
-struct dt_embedded_lens_finetune_t {
+struct dt_embedded_lens_knots_t;
+
+typedef struct dt_embedded_lens_finetune_t {
   float distortion;
   float vignette;
   float ca_red;
   float ca_blue;
-};
+} dt_embedded_lens_finetune_t;
 
 struct dt_embedded_lens_vendor_t
 {
@@ -21,8 +23,7 @@ struct dt_embedded_lens_vendor_t
 
   int (*populate)(const dt_image_correction_data_t *cd,
                   const dt_embedded_lens_finetune_t *ft,
-                  float knots_dist[16], float knots_vig[16], // NOSONAR
-                  float cor_rgb[3][16], float vig[16], // NOSONAR
+                  struct dt_embedded_lens_knots_t *knots,
                   const float *out_scale);
 };
 

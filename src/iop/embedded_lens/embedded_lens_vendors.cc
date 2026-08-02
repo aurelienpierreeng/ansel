@@ -9,8 +9,7 @@ extern "C" {
   gboolean _sony_has_ca(const dt_image_correction_data_t *cd);
   int _sony_populate(const dt_image_correction_data_t *cd,
                       const dt_embedded_lens_finetune_t *ft,
-                      float knots_dist[16], float knots_vig[16],
-                      float cor_rgb[3][16], float vig[16],
+                      struct dt_embedded_lens_knots_t *knots,
                       const float *out_scale);
 
   gboolean _fuji_has_data(const dt_image_correction_data_t *cd);
@@ -19,8 +18,7 @@ extern "C" {
   gboolean _fuji_has_ca(const dt_image_correction_data_t *cd);
   int _fuji_populate(const dt_image_correction_data_t *cd,
                       const dt_embedded_lens_finetune_t *ft,
-                      float knots_dist[16], float knots_vig[16],
-                      float cor_rgb[3][16], float vig[16],
+                      struct dt_embedded_lens_knots_t *knots,
                       const float *out_scale);
 
   gboolean _dng_has_data(const dt_image_correction_data_t *cd);
@@ -29,8 +27,7 @@ extern "C" {
   gboolean _dng_has_ca(const dt_image_correction_data_t *cd);
   int _dng_populate(const dt_image_correction_data_t *cd,
                      const dt_embedded_lens_finetune_t *ft,
-                     float knots_dist[16], float knots_vig[16],
-                     float cor_rgb[3][16], float vig[16],
+                     struct dt_embedded_lens_knots_t *knots,
                      const float *out_scale);
 
   gboolean _olympus_has_data(const dt_image_correction_data_t *cd);
@@ -39,8 +36,7 @@ extern "C" {
   gboolean _olympus_has_ca(const dt_image_correction_data_t *cd);
   int _olympus_populate(const dt_image_correction_data_t *cd,
                          const dt_embedded_lens_finetune_t *ft,
-                         float knots_dist[16], float knots_vig[16],
-                         float cor_rgb[3][16], float vig[16],
+                         struct dt_embedded_lens_knots_t *knots,
                          const float *out_scale);
 }
 

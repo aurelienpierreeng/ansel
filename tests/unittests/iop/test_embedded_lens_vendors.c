@@ -88,23 +88,20 @@ static void test_sony_valid(void **state)
     img.exif_correction_data.sony.vignetting[i] = (short)(i + 1);
   }
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = 0.0f;
 
   TR_STEP("Sony full data: nc=16, autoscale > 1, every knot sane");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, 16);
   assert_true(scale > 1.0f);
-  assert_knots_sane(knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
+  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
 }
 
 static void test_sony_empty(void **state)
@@ -117,15 +114,12 @@ static void test_sony_empty(void **state)
   img.exif_correction_type = CORRECTION_TYPE_SONY;
   img.exif_correction_data.sony.nc = 0;
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = -1.0f;
 
   TR_STEP("Sony empty data (nc=0): must short-circuit to nc=0, scale=1.0");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, 0);
   assert_float_equal(scale, 1.0f, E);
 }
@@ -149,23 +143,20 @@ static void test_fuji_valid(void **state)
     img.exif_correction_data.fuji.vignetting[i] = 95.0f;
   }
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = 0.0f;
 
   TR_STEP("Fuji full data: nc=16, autoscale > 0, every knot sane (Fuji knots_vig pads to ~6.9)");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, LENS_MAXKNOTS);
   assert_true(scale > 0.0f);
-  assert_knots_sane(knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
+  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
 }
 
 static void test_fuji_empty(void **state)
@@ -178,15 +169,12 @@ static void test_fuji_empty(void **state)
   img.exif_correction_type = CORRECTION_TYPE_FUJI;
   img.exif_correction_data.fuji.nc = 0;
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = -1.0f;
 
   TR_STEP("Fuji empty data (nc=0): must short-circuit to nc=0, scale=1.0");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, 0);
   assert_float_equal(scale, 1.0f, E);
 }
@@ -214,23 +202,20 @@ static void test_dng_valid(void **state)
   img.exif_correction_data.dng.vig_coeffs[3] = 0.01;
   img.exif_correction_data.dng.vig_coeffs[4] = -0.001;
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = 0.0f;
 
   TR_STEP("DNG warp+vignette: nc=16, autoscale > 0, every knot sane");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, LENS_MAXKNOTS);
   assert_true(scale > 0.0f);
-  assert_knots_sane(knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
+  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
 }
 
 static void test_dng_empty(void **state)
@@ -244,15 +229,12 @@ static void test_dng_empty(void **state)
   img.exif_correction_data.dng.has_warp = FALSE;
   img.exif_correction_data.dng.has_vignette = FALSE;
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = -1.0f;
 
   TR_STEP("DNG with no warp and no vignette: must short-circuit to nc=0, scale=1.0");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, 0);
   assert_float_equal(scale, 1.0f, E);
 }
@@ -278,23 +260,20 @@ static void test_olympus_valid(void **state)
   img.exif_correction_data.olympus.ca[4] = 0.0005f;
   img.exif_correction_data.olympus.ca[5] = -0.0001f;
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = 0.0f;
 
   TR_STEP("Olympus dist+ca: nc=16, autoscale > 0, every knot sane");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, LENS_MAXKNOTS);
   assert_true(scale > 0.0f);
-  assert_knots_sane(knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
+  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
+  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
+  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
 }
 
 static void test_olympus_empty(void **state)
@@ -308,15 +287,12 @@ static void test_olympus_empty(void **state)
   img.exif_correction_data.olympus.has_dist = FALSE;
   img.exif_correction_data.olympus.has_ca = FALSE;
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = -1.0f;
 
   TR_STEP("Olympus with no dist and no ca: must short-circuit to nc=0, scale=1.0");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, 0);
   assert_float_equal(scale, 1.0f, E);
 }
@@ -330,15 +306,12 @@ static void test_none(void **state)
   img.p_height = IMAGE_H;
   img.exif_correction_type = CORRECTION_TYPE_NONE;
 
-  float knots_dist[LENS_MAXKNOTS] = { 0 };
-  float knots_vig[LENS_MAXKNOTS] = { 0 };
-  float cor_rgb[3][LENS_MAXKNOTS] = { { 0 } };
-  float vig[LENS_MAXKNOTS] = { 0 };
+  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  dt_embedded_lens_knots_t knots = {};
   float scale = -1.0f;
 
   TR_STEP("CORRECTION_TYPE_NONE: default branch, must return nc=0, scale=1.0");
-  int nc = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                        knots_dist, knots_vig, cor_rgb, vig, &scale);
+  int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, 0);
   assert_float_equal(scale, 1.0f, E);
 }
@@ -360,28 +333,20 @@ static void test_sony_half_fine_tune(void **state)
     img.exif_correction_data.sony.vignetting[i] = (short)(i + 1);
   }
 
-  float knots_dist_full[LENS_MAXKNOTS];
-  float knots_vig_full[LENS_MAXKNOTS];
-  float cor_rgb_full[3][LENS_MAXKNOTS];
-  float vig_full[LENS_MAXKNOTS];
+  dt_embedded_lens_knots_t knots_full;
   float scale_full = 0.0f;
 
+  dt_embedded_lens_finetune_t ft_full = { 1.0f, 1.0f, 1.0f, 1.0f };
   TR_STEP("Sony full fine-tune (1.0): capture reference scale and knots");
-  int nc_full = dt_embedded_lens_init_coeffs(&img, 1.0f, 1.0f, 1.0f, 1.0f,
-                                             knots_dist_full, knots_vig_full,
-                                             cor_rgb_full, vig_full, &scale_full);
+  int nc_full = dt_embedded_lens_init_coeffs(&img, &ft_full, &knots_full, &scale_full);
   assert_int_equal(nc_full, 16);
 
-  float knots_dist_half[LENS_MAXKNOTS];
-  float knots_vig_half[LENS_MAXKNOTS];
-  float cor_rgb_half[3][LENS_MAXKNOTS];
-  float vig_half[LENS_MAXKNOTS];
+  dt_embedded_lens_knots_t knots_half;
   float scale_half = 0.0f;
 
+  dt_embedded_lens_finetune_t ft_half = { 0.5f, 0.5f, 0.5f, 0.5f };
   TR_STEP("Sony half fine-tune (0.5): nc stays 16, scale < full, knots differ");
-  int nc_half = dt_embedded_lens_init_coeffs(&img, 0.5f, 0.5f, 0.5f, 0.5f,
-                                             knots_dist_half, knots_vig_half,
-                                             cor_rgb_half, vig_half, &scale_half);
+  int nc_half = dt_embedded_lens_init_coeffs(&img, &ft_half, &knots_half, &scale_half);
   assert_int_equal(nc_half, 16);
   assert_true(scale_half > 0.0f);
   assert_true(scale_half < scale_full);
@@ -389,7 +354,7 @@ static void test_sony_half_fine_tune(void **state)
   int found_difference = 0;
   for(int i = 0; i < LENS_MAXKNOTS; i++)
   {
-    if(fabsf(knots_dist_full[i] - knots_dist_half[i]) > E)
+    if(fabsf(knots_full.knots_dist[i] - knots_half.knots_dist[i]) > E)
     {
       found_difference = 1;
       break;
