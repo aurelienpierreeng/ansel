@@ -1064,7 +1064,65 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
   dt_image_history_changed(imgid, TRUE);
 }
 
-dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
+void dt_image_orient_boundingbox(const dt_boundingbox_t in, const dt_image_orientation_t orientation,
+                                 dt_boundingbox_t out)
+{
+  float top = in[0];
+  float left = in[1];
+  float bottom = in[2];
+  float right = in[3];
+
+  /* Mirror, then swap, in the exact order iop/flip.c's distort_transform() applies to points:
+   * x -> width - x, y -> height - y, then (x, y) -> (y, x). On normalized edge coordinates a
+   * mirror exchanges the two edges of that axis, and the swap exchanges the two axes. */
+  if(orientation & ORIENTATION_FLIP_X)
+  {
+    const float new_left = 1.0f - right;
+    right = 1.0f - left;
+    left = new_left;
+  }
+
+  if(orientation & ORIENTATION_FLIP_Y)
+  {
+    const float new_top = 1.0f - bottom;
+    bottom = 1.0f - top;
+    top = new_top;
+  }
+
+  if(orientation & ORIENTATION_SWAP_XY)
+  {
+    const float swap_top = left;
+    const float swap_bottom = right;
+    left = top;
+    right = bottom;
+    top = swap_top;
+    bottom = swap_bottom;
+  }
+
+  out[0] = top;
+  out[1] = left;
+  out[2] = bottom;
+  out[3] = right;
+}
+
+gboolean dt_image_get_usercrop_oriented(const dt_image_t *img, const dt_image_orientation_t orientation,
+                                        dt_boundingbox_t box)
+{
+  box[0] = box[1] = 0.0f;
+  box[2] = box[3] = 1.0f;
+
+  if(IS_NULL_PTR(img) || img->usercrop_status != DT_IMAGE_USERCROP_VALID) return FALSE;
+
+  dt_image_orient_boundingbox(img->usercrop, orientation, box);
+  return TRUE;
+}
+
+/** Orientation committed by the flip module in this image's stored history.
+ *
+ * Returns ORIENTATION_NULL when history says nothing, leaving the caller to fall back to the
+ * EXIF orientation -- which is exactly what flip itself defaults to (see its commit_params()).
+ */
+static dt_image_orientation_t _image_get_history_orientation(const int32_t imgid)
 {
   // find the flip module -- the pointer stays valid until darktable shuts down
   static dt_iop_module_so_t *flip = NULL;
@@ -1106,9 +1164,25 @@ dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
     sqlite3_finalize(stmt);
   }
 
+  return orientation;
+}
+
+dt_image_orientation_t dt_image_get_effective_orientation(const dt_image_t *img)
+{
+  if(IS_NULL_PTR(img)) return ORIENTATION_NONE;
+
+  const dt_image_orientation_t orientation = _image_get_history_orientation(img->id);
+  return (orientation != ORIENTATION_NULL) ? orientation : dt_image_orientation(img);
+}
+
+dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
+{
+  dt_image_orientation_t orientation = _image_get_history_orientation(imgid);
+
   if(orientation == ORIENTATION_NULL)
   {
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(IS_NULL_PTR(img)) return ORIENTATION_NONE;
     orientation = dt_image_orientation(img);
     dt_image_cache_read_release(darktable.image_cache, img);
   }
@@ -1955,6 +2029,7 @@ void dt_image_init(dt_image_t *img)
   img->wb_coeffs[3] = NAN;
   img->usercrop[0] = img->usercrop[1] = 0;
   img->usercrop[2] = img->usercrop[3] = 1;
+  img->usercrop_status = DT_IMAGE_USERCROP_ABSENT;
   img->dng_gain_maps = NULL;
   img->cache_entry = 0;
   img->color_labels = 0;

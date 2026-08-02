@@ -75,6 +75,7 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
+#include "common/image.h"
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
 #include "common/math.h"
@@ -1542,10 +1543,16 @@ void reload_defaults(dt_iop_module_t *self)
 
   dt_iop_clipping_params_t *d = (dt_iop_clipping_params_t *)self->default_params;
 
-  d->cx = img->usercrop[1];
-  d->cy = img->usercrop[0];
-  d->cw = img->usercrop[3];
-  d->ch = img->usercrop[2];
+  /* Same camera-framing default as the modern crop module, through the same shared helper so the
+   * orientation mapping exists in exactly one place. This legacy module is deliberately never
+   * auto-enabled from camera metadata -- only its reset target follows the tag. */
+  dt_boundingbox_t box;
+  dt_image_get_usercrop_oriented(img, dt_image_get_effective_orientation(img), box);
+
+  d->cx = box[1];
+  d->cy = box[0];
+  d->cw = box[3];
+  d->ch = box[2];
 }
 
 gboolean has_defaults(struct dt_iop_module_t *self)

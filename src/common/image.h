@@ -217,6 +217,21 @@ typedef enum dt_image_orientation_t
   ORIENTATION_TRANSVERSE        = ORIENTATION_FLIP_Y | ORIENTATION_FLIP_X | ORIENTATION_SWAP_XY // 7
 } dt_image_orientation_t;
 
+/** Outcome of parsing the DNG `DefaultUserCrop` tag (51125 / 0xC7B5) for an image.
+ *
+ * `ABSENT` and `IDENTITY` are normal, silent conditions: the file simply declares no camera
+ * framing. `MALFORMED` and `CONFLICT` are failures — the tag exists but cannot be trusted, so
+ * no framing is applied and the reason stays inspectable instead of being folded into `ABSENT`.
+ */
+typedef enum dt_image_usercrop_status_t
+{
+  DT_IMAGE_USERCROP_ABSENT = 0, // no DefaultUserCrop tag in any candidate IFD
+  DT_IMAGE_USERCROP_IDENTITY,   // tag present and equal to (0, 0, 1, 1): no framing recorded
+  DT_IMAGE_USERCROP_VALID,      // tag present, well-formed and non-identity
+  DT_IMAGE_USERCROP_MALFORMED,  // tag present but violating the DNG type/count/bounds contract
+  DT_IMAGE_USERCROP_CONFLICT    // two candidate IFDs hold valid but materially different values
+} dt_image_usercrop_status_t;
+
 typedef enum dt_image_loader_t
 {
   LOADER_UNKNOWN  =  0,
@@ -361,8 +376,17 @@ typedef struct dt_image_t
   /* Adobe coeffs from the raw */
   float adobe_XYZ_to_CAM[4][3];
 
-  /* DefaultUserCrop */
+  /* DNG DefaultUserCrop: the framing the camera recorded, as normalized edge coordinates
+   * (top, left, bottom, right) relative to the DefaultCropOrigin/DefaultCropSize rectangle —
+   * which is exactly the frame RawSpeed hands downstream, so these numbers need no pixel
+   * arithmetic to reach the crop module, only an orientation mapping.
+   *
+   * Canonical and un-oriented: never overwrite it with display-oriented or module coordinates.
+   * Only meaningful when `usercrop_status == DT_IMAGE_USERCROP_VALID`; identity otherwise.
+   * Runtime-only (not persisted): repopulated by the decoder/EXIF read, which always runs
+   * before default history is initialized. Read it through dt_image_get_usercrop_oriented(). */
   dt_boundingbox_t usercrop;
+  dt_image_usercrop_status_t usercrop_status;
 
   /* GainMaps from DNG OpcodeList2 exif tag */
   GList *dng_gain_maps;
@@ -527,6 +551,32 @@ void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc);
 uint32_t dt_image_altered(const int32_t imgid);
 /** cleanup cached statements */
 void dt_image_cleanup(void);
+
+/** Orientation every module after `flip` sees, for an image we already hold.
+ *
+ * Same answer as dt_image_get_orientation(imgid) -- the flip module's committed history, else
+ * the EXIF orientation -- but without re-entering the image cache, so it is safe to call from
+ * contexts that already hold (or are held by) an image-cache lock, e.g. reload_defaults().
+ */
+dt_image_orientation_t dt_image_get_effective_orientation(const dt_image_t *img);
+
+/** Map a normalized (top, left, bottom, right) box through an orientation.
+ *
+ * Pure helper: `in` and `out` may alias. `orientation` uses the internal flip bits
+ * (ORIENTATION_FLIP_X/Y, ORIENTATION_SWAP_XY), applied in the same order as iop/flip.c's own
+ * coordinate transform, so the result lands in the frame every module after `flip` sees.
+ */
+void dt_image_orient_boundingbox(const dt_boundingbox_t in, const dt_image_orientation_t orientation,
+                                 dt_boundingbox_t out);
+
+/** Resolve the camera framing of `img` into the given orientation.
+ *
+ * Writes the oriented (top, left, bottom, right) box into `box` and returns TRUE only when the
+ * image carries a valid, non-identity DNG DefaultUserCrop. Otherwise `box` is left at identity
+ * and FALSE is returned, so callers can assign it unconditionally.
+ */
+gboolean dt_image_get_usercrop_oriented(const dt_image_t *img, const dt_image_orientation_t orientation,
+                                        dt_boundingbox_t box);
 
 /** returns the orientation bits of the image from exif. */
 static inline dt_image_orientation_t dt_image_orientation(const dt_image_t *img)

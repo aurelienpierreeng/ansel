@@ -34,6 +34,7 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
+#include "common/image.h"
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
 #include "common/math.h"
@@ -697,10 +698,40 @@ void reload_defaults(dt_iop_module_t *self)
 
   dt_iop_crop_params_t *d = (dt_iop_crop_params_t *)self->default_params;
 
-  d->cx = img->usercrop[1];
-  d->cy = img->usercrop[0];
-  d->cw = img->usercrop[3];
-  d->ch = img->usercrop[2];
+  /* A camera that records selected framing (Leica Q/M crop modes, and any DNG carrying the
+   * standardized DefaultUserCrop tag) declares it in the frame RawSpeed already delivers -- the
+   * DefaultCropOrigin/DefaultCropSize rectangle -- so the normalized edges need no pixel
+   * arithmetic to become crop parameters. They do need orientation: this module runs after
+   * `flip`, while the tag is expressed on the unrotated sensor.
+   *
+   * Resolve against the *current* effective orientation rather than the EXIF value alone, so a
+   * reset after the user rotated the image still lands where an equivalent manual crop would.
+   * dt_image_get_effective_orientation() reads the flip module's committed history and falls
+   * back to the EXIF orientation when there is none -- which is exactly flip's own default, and
+   * therefore the right answer when this runs while default history is still being assembled. */
+  dt_boundingbox_t box;
+  const gboolean has_camera_framing
+      = dt_image_get_usercrop_oriented(img, dt_image_get_effective_orientation(img), box);
+
+  d->cx = box[1];
+  d->cy = box[0];
+  d->cw = box[3];
+  d->ch = box[2];
+
+  /* Apply camera framing automatically, but only while Ansel's one-time default-history
+   * initialization is still open for this image -- DT_IMAGE_AUTO_PRESETS_APPLIED is the durable
+   * snapshot of that, and complete history deletion clears it on purpose.
+   *
+   * The gate is not optional: _insert_default_modules() (develop/dev_history.c) inserts *any*
+   * default_enabled module into *any* history that lacks an entry for it, on every single load,
+   * without consulting that flag itself. Reporting the module as enabled-by-default
+   * unconditionally would therefore not just affect new images -- it would silently add a crop
+   * to every already-edited image that happens to have no crop item, on next open.
+   *
+   * An explicit crop-producing auto-preset still wins: presets are applied after this entry is
+   * inserted, and history replay keeps the last item per module. */
+  const gboolean history_initialized = (img->flags & DT_IMAGE_AUTO_PRESETS_APPLIED) != 0;
+  self->default_enabled = has_camera_framing && !history_initialized;
 }
 
 gboolean has_defaults(struct dt_iop_module_t *self)
@@ -708,7 +739,7 @@ gboolean has_defaults(struct dt_iop_module_t *self)
   dt_iop_crop_params_t *d = (dt_iop_crop_params_t *)self->default_params;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
   // p->ratio_d and p->ratio_n are inited in GUI, so they are unset in d.
-  return d->cx == p->cx && d->cy == p->cy && d->cw == p->cw && d->ch && p->cw;
+  return d->cx == p->cx && d->cy == p->cy && d->cw == p->cw && d->ch == p->ch;
 }
 
 static void _float_to_fract(const char *num, int *n, int *d)
