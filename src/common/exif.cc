@@ -3186,6 +3186,9 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.iop_order_list"))) != xmpData.end())
       {
         iop_order_list = dt_ioppr_deserialize_text_iop_order_list(pos->toString().c_str());
+        // insert modules created after this edit's order was serialized, so
+        // their history entries land in the right pipeline position
+        if(iop_order_list) iop_order_list = dt_ioppr_insert_missing_modules(iop_order_list);
       }
       else
         iop_order_list = dt_ioppr_get_iop_order_list_version(iop_order_version);

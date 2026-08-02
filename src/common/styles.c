@@ -237,6 +237,9 @@ GList *dt_styles_module_order_list(const char *name)
   {
     const char *iop_list_txt = (char *)sqlite3_column_text(stmt, 0);
     iop_list = dt_ioppr_deserialize_text_iop_order_list(iop_list_txt);
+    // style saved before newer modules existed: place them so applying it
+    // does not mis-order those modules
+    if(iop_list) iop_list = dt_ioppr_insert_missing_modules(iop_list);
   }
   sqlite3_finalize(stmt);
   return iop_list;
@@ -1442,6 +1445,8 @@ static void dt_styles_style_text_handler(GMarkupParseContext *context, const gch
   else if(g_ascii_strcasecmp(elt, "iop_list") == 0)
   {
     style->info->iop_list = dt_ioppr_deserialize_text_iop_order_list(text);
+    if(style->info->iop_list)
+      style->info->iop_list = dt_ioppr_insert_missing_modules(style->info->iop_list);
   }
   else if(style->in_plugin)
   {
