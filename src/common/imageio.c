@@ -155,8 +155,9 @@ const char *dt_import_raw_extensions[] = {
 };
 
 const char *dt_import_raster_extensions[] = {
-  "jpg", "jpeg", "j2c", "jp2", "tif", "tiff", "png", "exr",
-  "bmp", "dng", "heif", "heic", "avi", "avif", "webp", NULL
+  "jpg", "jpeg", "j2c", "jp2", "j2k", "jpc", "tif", "tiff", "png", "exr",
+  "bmp", "dng", "heif", "heic", "hif", "avi", "avif", "webp",
+  "gif", "dcm", "jng", "miff", "mng", "pbm", "ppm", "pgm", "pam", NULL
 };
 
 /**

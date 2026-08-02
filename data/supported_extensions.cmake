@@ -7,6 +7,7 @@ set(DT_SUPPORTED_EXTENSIONS
     "arw"
     "avif"
     "bay"
+    "bmp"
     "bmq"
     "cap"
     "cine"
@@ -58,6 +59,7 @@ set(DT_SUPPORTED_EXTENSIONS
     "sti"
     "tif"
     "tiff"
+    "webp"
     "x3f"
     CACHE INTERNAL ""
 )
