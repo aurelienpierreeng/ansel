@@ -285,6 +285,52 @@ buffer-relative pixels and never re-derives its own absolute position from `pipe
 correctly positioned even when the base image content is offset — a mismatch between a mask and
 the image it's drawn on is a symptom of this class of bug, not of the masking code.
 
+### A "CPU vs GPU parity bug" in a tiled module is usually a tile-grid dependence
+
+`tiling->xalign`/`yalign` do more than preserve the CFA phase: `develop/tiling.c` rounds tile
+sizes *and* the overlap down/up to `lcm(xalign, yalign)`, so tile origins land on multiples of
+that value and nothing else. Every lattice a module lays over its tile — the CFA, but also any
+binning, pyramid or block grid — is anchored to the tile origin, because that is the only origin
+`process()`/`process_cl()` is handed. If `xalign` is smaller than a lattice's period, two
+different tile decompositions bin the same sensels into differently-phased cells, and the result
+changes **everywhere inside the tile**, not just near the seams. No amount of overlap fixes it.
+
+That is what looked like an OpenCL parity bug in `iop/rawdenoiseai.c`: the module's multi-scale
+model bins to superpixels (period 4 Bayer / 6 X-Trans) for its coarse guide and fuses low bands
+on a 16/32/64 px pyramid, while `xalign` was only the CFA period (2). CPU and GPU budget memory
+differently, so they tile differently — GPU tile rows started at y = 986 (`986 % 4 == 2`) — and
+the coarse guide was computed on a half-bin-shifted lattice. A second, independent defect
+compounded it: `_apply_low_band_anchor()` chose its coarsest fusion band from the *padded tile
+size* (64 if it divided, else 32), so a 2-tile grid fused at 64 while a 16-tile grid fused at 32,
+diverging structurally from the training-time reference (`cfa.fuse_low_bands`, always 16/32/64).
+Fixed by folding the lattice periods into `xalign`/`yalign` and `DT_NN_FUSION_COARSEST` into
+`dt_nn_model_alignment()`, making the level count a constant. Exported 8-bit CPU-vs-GPU went from
+mean 0.022 / max 29 to mean 0.0029 / p99 0 / max 10.
+
+The diagnostic that settles this class of bug in one measurement: **run the same export twice on
+the same device with different `host_memory_limit`.** If two CPU runs differ by the same amount
+as CPU-vs-GPU, the device is irrelevant and the tiling is the variable. Chasing it as a
+synchronisation problem instead — `dt_opencl_finish` at every plausible point, blocking readbacks
+between stages, sleeps — costs hours and moves nothing, because the arithmetic was never wrong.
+
+Two residual tile-grid dependencies in that module are known and *not* fixed: the fusion's
+per-channel mean σ² is a whole-tile reduction (the torch reference is patch-global too, so the C
+mirrors it faithfully — but at inference the "patch" is whatever tile the pipe chose), and
+`roi_in->x/y` is not itself lattice-aligned, so a non-zero ROI offset shifts every lattice
+relative to the sensor. The fully correct form is to anchor them to absolute sensor position from
+`roi_in`, the same way the CFA phase rule below does.
+
+Note *where* a non-zero RAW-domain ROI offset can come from, because the obvious guess is wrong:
+**it is never the viewport.** `iop/initialscale.c` (iop_order 15.5) is `default_enabled` with
+`IOP_FLAGS_NO_HISTORY_STACK`, so it runs in every pipe, and its `modify_roi_in()` hard-resets
+`roi_in->x = roi_in->y = 0` at `piece->buf_in` dimensions and `scale = 1.0f`. ROI planning runs
+backwards, so every module below it — `lens` (15.0), `demosaic` (8.0), `rawdenoiseai` (2.5),
+`basebuffer` (0.5) — is handed offset 0 no matter how the user pans or zooms. A non-zero offset
+reaches the RAW domain only from a module *between* it and `initialscale` that grows its own
+`roi_in` on the backward pass: in practice `iop/lens.cc` (distortion, TCA, and the `scale`
+slider). So "it only misbehaves when zoomed in" is the wrong mental model for this whole class of
+bug; "it only misbehaves with lens correction enabled" is the right one.
+
 ### CFA phase (Bayer/X-Trans) is computed fresh per crop, not snapped — demosaic and highlights alike
 
 Once `basebuffer` honors the real crop offset, that offset reaches every pre-demosaic RAW-domain

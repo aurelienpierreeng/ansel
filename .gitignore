@@ -38,3 +38,5 @@ function_declarations.txt
 .sentry-auth-orga
 # Local Sentry issue dumps fetched by tools/sentry-fetch-issue.sh - contain user/session data
 sentry-issue-*/
+# Neural network pre-trained models: hosted on external repos to not bloat the tree
+*.anselnn
