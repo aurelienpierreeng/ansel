@@ -31,6 +31,7 @@
 #include "common/import.h"
 #include "common/image.h"
 #include "common/image_cache.h"
+#include "common/image_extensions.h"
 #include "common/imageio.h"
 #include "common/metadata.h"
 #include "common/datetime.h"
@@ -201,9 +202,7 @@ static void _gtk_label_set_and_free(GtkWidget *widget, gchar *label)
   dt_free(label);
 }
 
-// Mirrors dt_supported_image()'s case-insensitive prefix match so a file recognized as
-// importable is never rejected here for a reason unrelated to the active GUI filter.
-// dt_import_raw_extensions / dt_import_raster_extensions live in common/imageio.c, shared with
+// dt_image_ext_is_gui_raw()/is_gui_raster() (common/image_extensions.c) are shared with
 // _file_filters() below so the GtkFileFilter patterns and this recursive-scan check can never drift.
 static gboolean _import_passes_filter(const dt_import_filter_type_t filter_type, const gchar *pathname)
 {
@@ -214,12 +213,8 @@ static gboolean _import_passes_filter(const dt_import_filter_type_t filter_type,
   if(IS_NULL_PTR(extension)) return FALSE;
   extension++;
 
-  const char **list = (filter_type == DT_IMPORT_FILTER_RAW) ? dt_import_raw_extensions : dt_import_raster_extensions;
-  for(const char **i = list; *i; i++)
-    if(!g_ascii_strncasecmp(extension, *i, strlen(*i)))
-      return TRUE;
-
-  return FALSE;
+  return (filter_type == DT_IMPORT_FILTER_RAW) ? dt_image_ext_is_gui_raw(extension)
+                                                : dt_image_ext_is_gui_raster(extension);
 }
 
 static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
@@ -597,12 +592,18 @@ static void _file_filters(dt_lib_import_t *d)
   GtkWidget *file_chooser = d->file_chooser;
   GtkFileFilter *filter;
 
+  // Enumerate every extension Ansel knows about (common/image_extensions.c) instead of
+  // hand-maintaining a copy here -- keeps this GUI filter and the recursive-scan check in
+  // _import_passes_filter() from ever drifting apart again.
+  const char *const *lists[] = { dt_image_ext_raw_list(), dt_image_ext_ldr_list(), dt_image_ext_hdr_list() };
+  const int n_lists = sizeof(lists) / sizeof(lists[0]);
+
   /* ALL IMAGES */
   filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, _("All image files"));
-  //TODO: use dt_supported_extensions list ?
-  for(const char **i = dt_import_raw_extensions; *i; i++) _build_filter(filter, *i);
-  for(const char **i = dt_import_raster_extensions; *i; i++) _build_filter(filter, *i);
+  for(int l = 0; l < n_lists; l++)
+    for(const char *const *i = lists[l]; *i; i++)
+      _build_filter(filter, *i);
 
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
 
@@ -613,14 +614,18 @@ static void _file_filters(dt_lib_import_t *d)
   /* RAW ONLY */
   filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, _("Raw image files"));
-  for(const char **i = dt_import_raw_extensions; *i; i++) _build_filter(filter, *i);
+  for(int l = 0; l < n_lists; l++)
+    for(const char *const *i = lists[l]; *i; i++)
+      if(dt_image_ext_is_gui_raw(*i)) _build_filter(filter, *i);
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
   d->filter_raw = filter;
 
   /* RASTER ONLY */
   filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, _("Raster image files"));
-  for(const char **i = dt_import_raster_extensions; *i; i++) _build_filter(filter, *i);
+  for(int l = 0; l < n_lists; l++)
+    for(const char *const *i = lists[l]; *i; i++)
+      if(dt_image_ext_is_gui_raster(*i)) _build_filter(filter, *i);
 
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
   d->filter_raster = filter;

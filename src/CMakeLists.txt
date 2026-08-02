@@ -89,6 +89,7 @@ FILE(GLOB SOURCE_FILES
   "common/gpx.c"
   "common/image.c"
   "common/image_cache.c"
+  "common/image_extensions.c"
   "common/imagebuf.c"
   "common/imageio.c"
   "common/imageio_jpeg.c"

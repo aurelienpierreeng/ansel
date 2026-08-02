@@ -83,6 +83,7 @@
 #include "common/history_merge.h"
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
+#include "common/image_extensions.h"
 #include "common/imageio.h"
 #include "common/imageio_rawspeed.h"
 #include "common/imageio_libraw.h"
@@ -1682,14 +1683,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     return 0;
   }
   char *ext = g_ascii_strdown(cc + 1, -1);
-  int supported = 0;
-  for(const char **i = dt_supported_extensions; !IS_NULL_PTR(*i); i++)
-    if(!strcmp(ext, *i))
-    {
-      supported = 1;
-      break;
-    }
-  if(!supported)
+  if(!dt_image_ext_is_supported(ext))
   {
     dt_free(normalized_filename);
     dt_free(ext);
