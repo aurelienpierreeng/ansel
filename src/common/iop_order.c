@@ -96,6 +96,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { { 0.5f }, "basebuffer", 0},
   { { 1.0f }, "rawprepare", 0},
   { { 2.0f }, "invert", 0},
+  { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
   { { 4.0f }, "highlights", 0},
   { { 5.0f }, "cacorrect", 0},
@@ -192,6 +193,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { { 0.5 }, "basebuffer", 0},
   { { 1.0 }, "rawprepare", 0},
   { { 2.0 }, "invert", 0},
+  { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
   { { 4.0f }, "highlights", 0},
   { { 5.0f }, "cacorrect", 0},
@@ -304,6 +306,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   { { 0.5 }, "basebuffer", 0 },
   { { 1.0 }, "rawprepare", 0 },
   { { 2.0 }, "invert", 0 },
+  { { 2.5f }, "rawdenoiseai", 0 },
   { { 3.0f }, "temperature", 0 },
   { { 4.0f }, "highlights", 0 },
   { { 5.0f }, "cacorrect", 0 },
@@ -416,6 +419,7 @@ const dt_iop_order_entry_t ansel_jpg_order[] = {
   { { 0.5f}, "basebuffer", 0 },
   { { 1.0f }, "rawprepare", 0 },
   { { 2.0f }, "invert", 0 },
+  { { 2.5f }, "rawdenoiseai", 0 },
   { { 3.0f }, "highlights", 0 },
   { { 4.0f }, "cacorrect", 0 },
   { { 5.0f }, "hotpixels", 0 },
@@ -561,6 +565,7 @@ const dt_iop_order_entry_t ansel_raw_order[] = {
   { { 0.0f }, "basebuffer", 0 },
   { { 1.0f }, "rawprepare", 0},
   { { 2.0f }, "invert", 0},
+  { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
   { { 4.0f }, "highlights", 0},
   { { 5.0f }, "cacorrect", 0},
@@ -781,6 +786,22 @@ GList *dt_ioppr_insert_missing_modules(GList *iop_order_list)
   iop_order_list = _insert_before(iop_order_list, "filmicrgb", "crystgrain");
   iop_order_list = _insert_before(iop_order_list, "mask_manager", "detailmask");
   iop_order_list = _insert_before(iop_order_list, "rawprepare", "basebuffer");
+  // rawdenoiseai denoises pre-WB CFA data: it must run before temperature
+  // AND demosaic, so insert it before whichever comes first in this order
+  // (temperature sits after demosaic in JPG-style orders)
+  {
+    const char *first = "demosaic";
+    for(const GList *l = iop_order_list; l; l = g_list_next(l))
+    {
+      const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
+      if(!strcmp(entry->operation, "temperature") || !strcmp(entry->operation, "demosaic"))
+      {
+        first = entry->operation;
+        break;
+      }
+    }
+    iop_order_list = _insert_before(iop_order_list, first, "rawdenoiseai");
+  }
   return iop_order_list;
 }
 
@@ -829,6 +850,9 @@ GList *dt_ioppr_get_iop_order_rules()
     { .op_prev = "cacorrect",   .op_next = "hotpixels"   },
     { .op_prev = "hotpixels",   .op_next = "rawdenoise"  },
     { .op_prev = "rawdenoise",  .op_next = "demosaic"    },
+    { .op_prev = "invert",      .op_next = "rawdenoiseai"},
+    { .op_prev = "rawdenoiseai",.op_next = "temperature" },
+    { .op_prev = "rawdenoiseai",.op_next = "demosaic"    },
     { .op_prev = "demosaic",    .op_next = "colorin"     },
     { .op_prev = "colorin",     .op_next = "colorout"    },
     { .op_prev = "colorout",    .op_next = "gamma"       },

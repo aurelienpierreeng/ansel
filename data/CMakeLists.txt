@@ -131,6 +131,57 @@ if(${VALIDATE_JSON})
 endif()
 install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
+#
+# Neural raw-denoise models (rawdenoiseai-<version>-<variant>.anselnn).
+#
+# Models are trained and distributed by the ansel-denoise repo; they are
+# fetched at configure time from its models/ directory, verified against the
+# sha256 in its manifest.json. An upstream override changes the manifest hash,
+# so a stale cached file fails verification and is re-downloaded — nightly
+# builds always bundle the current models. -DFETCH_NN_MODELS=OFF for offline
+# builds: the rawdenoiseai module hides itself when its model is absent.
+#
+option(FETCH_NN_MODELS "Download neural denoise models at configure time" ON)
+set(NN_MODELS_URL "https://raw.githubusercontent.com/aurelienpierreeng/ansel-denoise/master/models")
+set(NN_MODELS_DIR "${CMAKE_CURRENT_BINARY_DIR}/nn-models")
+if(FETCH_NN_MODELS)
+  file(DOWNLOAD "${NN_MODELS_URL}/manifest.json" "${NN_MODELS_DIR}/manifest.json"
+       TIMEOUT 30 STATUS _nn_status)
+  list(GET _nn_status 0 _nn_code)
+  if(_nn_code EQUAL 0)
+    file(READ "${NN_MODELS_DIR}/manifest.json" _nn_manifest)
+    string(JSON _nn_models_obj GET "${_nn_manifest}" models)
+    string(JSON _nn_count LENGTH "${_nn_models_obj}")
+    if(_nn_count GREATER 0)
+      math(EXPR _nn_last "${_nn_count} - 1")
+      foreach(_nn_i RANGE ${_nn_last})
+        string(JSON _nn_name MEMBER "${_nn_models_obj}" ${_nn_i})
+        string(JSON _nn_sha GET "${_nn_models_obj}" "${_nn_name}" sha256)
+        file(DOWNLOAD "${NN_MODELS_URL}/${_nn_name}" "${NN_MODELS_DIR}/${_nn_name}"
+             TIMEOUT 600 EXPECTED_HASH SHA256=${_nn_sha} STATUS _nn_dl)
+        list(GET _nn_dl 0 _nn_dl_code)
+        if(_nn_dl_code EQUAL 0)
+          message(STATUS "Neural denoise model ready: ${_nn_name}")
+          install(FILES "${NN_MODELS_DIR}/${_nn_name}"
+                  DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
+        else()
+          message(WARNING "Could not fetch neural model ${_nn_name}: ${_nn_dl} — "
+                          "it will be missing from this build")
+        endif()
+      endforeach()
+    endif()
+  else()
+    message(WARNING "Could not fetch neural models manifest (offline?): ${_nn_status} — "
+                    "neural denoise models will be missing from this build")
+  endif()
+endif()
+# Local developer override: a model dropped in data/ wins over the fetched one
+# (same destination filename, installed last).
+file(GLOB RAWDENOISEAI_MODELS "${CMAKE_CURRENT_SOURCE_DIR}/denoise-*.anselnn")
+if(RAWDENOISEAI_MODELS)
+  install(FILES ${RAWDENOISEAI_MODELS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
+endif()
+
 # Install AUTHORS file for splash screen credits
 install(SCRIPT "${CMAKE_BINARY_DIR}/cmake/install_generate_authors.cmake")
 install(FILES ${ANSEL_AUTHORS_FILE} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)

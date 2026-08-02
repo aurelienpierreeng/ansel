@@ -237,7 +237,7 @@ flowchart LR
   end
   subgraph runtime [RUNTIME - your machine, per image, no network access]
     G[load .anselnn once] --> H[look up camera noise profile<br/>at the image ISO]
-    H --> I[build sigma map<br/>sigma = strength * sqrt max a*y+b, 0]
+    H --> I[build sigma map<br/>sigma = noise_level * channel_corr * sqrt max a*y+b, 0]
     I --> J[tile + convolve<br/>CPU OpenMP or GPU OpenCL]
     J --> K[subtract noise estimate<br/>hand result to demosaic]
   end
@@ -254,8 +254,41 @@ At **runtime**, Ansel evaluates a fixed function. The steps, per image:
 1. `commit_params()` looks up the camera's noise profile at the image ISO
    (`dt_noiseprofile_get_matching` / `_interpolate`, generic fallback for
    unprofiled cameras) — the same infrastructure `denoiseprofile` uses.
-2. `process()` builds the five input planes; the $\sigma$ map is scaled by the
-   user's *strength* parameter (1.0 = trust the profile).
+2. `process()` builds the five input planes; the $\sigma$ map is scaled by
+   exactly two user-visible factors on top of the profile prediction
+   $\sqrt{a\,y+b}$ — **nothing multiplies the sigma behind the GUI's back**
+   (maintainer rule: conditioning factors are either baked in the model or
+   shown in the GUI, and the GUI wins):
+   - the *global correction* parameter (100% = trust the sliders as-is);
+   - the three **per-channel correction sliders**, whose defaults
+     (R 2.82, G 3.94, B 2.96) carry the whole measured calibration:
+     - an exact **×2 factor**: the profile fitting tool
+       (`tools/noise/noiseprofile.c`) estimates noise from the HH band of a
+       decimated *lifting* Haar transform whose normalization is
+       $HH = (x_{00} - x_{01} - x_{10} + x_{11})/4$, so
+       $\mathrm{std}(HH) = \sigma/2$ for iid noise; the fit squares this
+       into $(a, b)$ uncorrected, and every shipped profile carries $1/4$ of
+       the physical variance. `denoiseprofile` was historically tuned around
+       these units end to end; this module is the first consumer that needs
+       $(a, b)$ as absolute physical variance — the shared profile database
+       cannot change without invalidating a decade of community fits;
+     - times **per-channel demosaic-attenuation medians** (R 1.41, G 1.97,
+       B 1.48): the profiles are fitted on *demosaiced* pixels, and
+       interpolation averages away part of the high-frequency noise — most
+       on the dense green lattice — while this module reads the mosaic where
+       noise is at full strength. Calibrated by measuring flat-region noise
+       on raw mosaics against the profile prediction over 253 profiled
+       cameras plus 64 images across ISO 64–12800 on three local bodies;
+       the deviation is ISO-stable.
+
+   A model's cfg may document the sigma convention it was trained under
+   (`sigma_calibration`), but the C loader deliberately ignores it: a hidden
+   model-side factor stacked with visible sliders is how the calibration
+   once got applied twice (the tungsten yellow-cast field bug).
+
+   The separate *strength* parameter is the opacity of the correction — an
+   alpha blend of the inferred noise residual:
+   `out = in + strength * (denoised - in)`.
 3. The pixelpipe tiles the image (the network's measured receptive field sets
    the tile overlap) and the convolutions run on CPU
    (`src/common/nn_model.c`) or GPU (`data/kernels/rawdenoiseai.cl`) — both
@@ -328,7 +361,7 @@ actually care about: *noise is not detail*.
 | file | role |
 |---|---|
 | `src/common/nn_model.{h,c}` | `.anselnn` loader + CPU executor (self-contained, no pipeline deps) |
-| `src/iop/rawdenoiseai.c` | the IOP: profile lookup, $\sigma$ map, tiling, params (strength, version, variant) |
+| `src/iop/rawdenoiseai.c` | the IOP: profile lookup, $\sigma$ map + calibration, tiling, params (strength, noise level, per-channel corrections, version, variant) |
 | `data/kernels/rawdenoiseai.cl` | OpenCL kernels (convolution, upsampling) |
 | `data/CMakeLists.txt` | build-time hash-verified model fetch (`FETCH_NN_MODELS`) |
 | [ansel-denoise](https://github.com/aurelienpierreeng/ansel-denoise) | training pipeline, data harvesting, published models (`models/`) |
