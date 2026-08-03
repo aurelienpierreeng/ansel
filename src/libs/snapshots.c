@@ -58,6 +58,8 @@
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 
+#include <math.h>
+
 DT_MODULE(1)
 
 #define DT_LIB_SNAPSHOTS_COUNT 4
@@ -392,9 +394,18 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
       d->on_going = TRUE;
       dt_control_queue_redraw_center();
     }
-    /* do the dragging !? */
+    /* do the dragging !? -- only grab the split line if the click lands within the mouse
+       action radius of its current position, same hit-test radius (DT_GUI_MOUSE_EFFECT_RADIUS)
+       used to grab a mask node, rather than anywhere in the image */
     else
     {
+      const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
+      const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
+      const double lx = d->vp_x + d->vp_width * split_x;
+      const double ly = d->vp_y + d->vp_height * split_y;
+      const double dist_to_line = d->vertical ? fabs(x - lx) : fabs(y - ly);
+      if(dist_to_line > DT_GUI_MOUSE_EFFECT_RADIUS) return 0;
+
       d->dragging = TRUE;
       d->vp_ypointer = yp;
       d->vp_xpointer = xp;
@@ -418,25 +429,38 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
     if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
     const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);
     const double yp = CLAMP((y - d->vp_y) / d->vp_height, 0.0, 1.0);
-    d->hover_rotation = FALSE;
 
-    if(!d->dragging)
-    {
-      const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
-      const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
-      const double handle_mouse = (DT_GUI_MOUSE_EFFECT_RADIUS + HANDLE_SIZE) * 0.5;
-      const double rxc = d->vertical ? d->vp_x + d->vp_width * split_x : d->vp_x + d->vp_width * 0.5;
-      const double ryc = d->vertical ? d->vp_y + d->vp_height * 0.5 : d->vp_y + d->vp_height * split_y;
-      const double dx = x - rxc;
-      const double dy = y - ryc;
-      d->hover_rotation = (dx * dx + dy * dy) < (handle_mouse * handle_mouse);
-    }
-    else
+    if(d->dragging)
     {
       /* update pointer pos */
       d->vp_xpointer = xp;
       d->vp_ypointer = yp;
+      dt_control_queue_redraw_center();
+      return 1;
     }
+
+    // Not dragging: only claim the move event while hovering the rotate handle (it needs the
+    // "exchange" cursor feedback in gui_post_expose) -- otherwise release it, so normal pan/hover
+    // elsewhere in the darkroom isn't silently blocked for as long as a snapshot stays selected.
+    // dt_view_manager_mouse_moved() (views/view.c) only forwards the event to the darkroom view's
+    // own handler when no plugin claims it, so an unconditional `return 1` here would starve it
+    // permanently while any snapshot is toggled on.
+    const gboolean was_hovering = d->hover_rotation;
+    const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
+    const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
+    const double handle_mouse = (DT_GUI_MOUSE_EFFECT_RADIUS + HANDLE_SIZE) * 0.5;
+    const double rxc = d->vertical ? d->vp_x + d->vp_width * split_x : d->vp_x + d->vp_width * 0.5;
+    const double ryc = d->vertical ? d->vp_y + d->vp_height * 0.5 : d->vp_y + d->vp_height * split_y;
+    const double dx = x - rxc;
+    const double dy = y - ryc;
+    d->hover_rotation = (dx * dx + dy * dy) < (handle_mouse * handle_mouse);
+
+    if(!d->hover_rotation)
+    {
+      if(was_hovering) dt_control_queue_redraw_center(); // clear the stale handle highlight
+      return 0;
+    }
+
     dt_control_queue_redraw_center();
     return 1;
   }
