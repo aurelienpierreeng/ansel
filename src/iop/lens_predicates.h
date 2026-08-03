@@ -20,49 +20,63 @@ enum class dt_iop_lens_tca_source_t
 #define LENSFUN_MODFLAG_MASK (LF_MODIFY_DISTORTION | LF_MODIFY_TCA | LF_MODIFY_VIGNETTING)
 
 static inline int distortion_selector_entries(gboolean has_embedded,
-                                               const char *out_labels[3])
+                                               const char *out_labels[3],
+                                               int out_values[3])
 {
-  if(!out_labels) return 0;
+  if(!out_labels || !out_values) return 0;
 
   out_labels[0] = "off";
-  out_labels[1] = "lensfun DB";
+  out_values[0] = (int)dt_iop_lens_correction_source_t::OFF;
 
   if(has_embedded)
   {
-    out_labels[2] = out_labels[1];
     out_labels[1] = "embedded";
+    out_values[1] = (int)dt_iop_lens_correction_source_t::EMBEDDED;
+    out_labels[2] = "lensfun DB";
+    out_values[2] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
     return 3;
   }
 
+  out_labels[1] = "lensfun DB";
+  out_values[1] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
   return 2;
 }
 
 static inline int vignetting_selector_entries(gboolean has_embedded,
-                                               const char *out_labels[3])
+                                               const char *out_labels[3],
+                                               int out_values[3])
 {
-  if(!out_labels) return 0;
+  if(!out_labels || !out_values) return 0;
 
   out_labels[0] = "off";
-  out_labels[1] = "lensfun DB";
+  out_values[0] = (int)dt_iop_lens_correction_source_t::OFF;
 
   if(has_embedded)
   {
-    out_labels[2] = out_labels[1];
     out_labels[1] = "embedded";
+    out_values[1] = (int)dt_iop_lens_correction_source_t::EMBEDDED;
+    out_labels[2] = "lensfun DB";
+    out_values[2] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
     return 3;
   }
 
+  out_labels[1] = "lensfun DB";
+  out_values[1] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
   return 2;
 }
 
 static inline int tca_selector_entries(gboolean has_embedded,
-                                        const char *out_labels[3])
+                                        const char *out_labels[3],
+                                        int out_values[3])
 {
-  if(!out_labels) return 0;
+  if(!out_labels || !out_values) return 0;
 
   out_labels[0] = "off";
+  out_values[0] = (int)dt_iop_lens_tca_source_t::OFF;
   out_labels[1] = "manual";
+  out_values[1] = (int)dt_iop_lens_tca_source_t::MANUAL;
   out_labels[2] = "lensfun DB";
+  out_values[2] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
   return 3;
 }
 

@@ -96,11 +96,14 @@
  * --------------------------------------------------------------------------- */
 
 int test_distortion_selector_entries(gboolean has_embedded,
-                                     const char *out_labels[3]);
+                                     const char *out_labels[3],
+                                     int out_values[3]);
 int test_vignetting_selector_entries(gboolean has_embedded,
-                                     const char *out_labels[3]);
+                                      const char *out_labels[3],
+                                      int out_values[3]);
 int test_tca_selector_entries(gboolean has_embedded,
-                              const char *out_labels[3]);
+                               const char *out_labels[3],
+                               int out_values[3]);
 gboolean test_tca_show_manual_sliders(int tca_method);
 gboolean test_tca_show_override_sliders(int tca_method);
 int test_per_axis_modify_flags(int dist, int vig, int tca, gboolean monochrome);
@@ -115,32 +118,39 @@ static void test_distortion_selector_entries_false_returns_2_with_off_and_lensfu
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
+  int values[3] = { -1, -1, -1 };
   TR_STEP("distortion, has_embedded=FALSE -> 2 entries: [off, lensfun DB]");
-  int n = test_distortion_selector_entries(FALSE, labels);
+  int n = test_distortion_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 2);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "lensfun DB");
+  assert_int_equal(values[0], SOURCE_OFF);
+  assert_int_equal(values[1], SOURCE_LENSFUN_DB);
 }
 
 static void test_distortion_selector_entries_true_returns_3_with_embedded(void **state)
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
+  int values[3] = { -1, -1, -1 };
   TR_STEP("distortion, has_embedded=TRUE -> 3 entries: [off, embedded, lensfun DB]");
-  int n = test_distortion_selector_entries(TRUE, labels);
+  int n = test_distortion_selector_entries(TRUE, labels, values);
   assert_int_equal(n, 3);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "embedded");
   assert_string_equal(labels[2], "lensfun DB");
+  assert_int_equal(values[0], SOURCE_OFF);
+  assert_int_equal(values[1], SOURCE_EMBEDDED);
+  assert_int_equal(values[2], SOURCE_LENSFUN_DB);
 }
 
 static void test_distortion_selector_entries_null_safe(void **state)
 {
   (void)state;
-  TR_STEP("distortion, out_labels=NULL -> 0 (defensive narrowing; no deref)");
-  int n = test_distortion_selector_entries(TRUE, NULL);
+  TR_STEP("distortion, out_labels=NULL or out_values=NULL -> 0 (defensive narrowing; no deref)");
+  int n = test_distortion_selector_entries(TRUE, NULL, NULL);
   assert_int_equal(n, 0);
-  n = test_distortion_selector_entries(FALSE, NULL);
+  n = test_distortion_selector_entries(FALSE, NULL, NULL);
   assert_int_equal(n, 0);
 }
 
@@ -152,32 +162,39 @@ static void test_vignetting_selector_entries_false_returns_2(void **state)
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
+  int values[3] = { -1, -1, -1 };
   TR_STEP("vignetting, has_embedded=FALSE -> 2 entries: [off, lensfun DB]");
-  int n = test_vignetting_selector_entries(FALSE, labels);
+  int n = test_vignetting_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 2);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "lensfun DB");
+  assert_int_equal(values[0], SOURCE_OFF);
+  assert_int_equal(values[1], SOURCE_LENSFUN_DB);
 }
 
 static void test_vignetting_selector_entries_true_returns_3_with_embedded(void **state)
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
+  int values[3] = { -1, -1, -1 };
   TR_STEP("vignetting, has_embedded=TRUE -> 3 entries: [off, embedded, lensfun DB]");
-  int n = test_vignetting_selector_entries(TRUE, labels);
+  int n = test_vignetting_selector_entries(TRUE, labels, values);
   assert_int_equal(n, 3);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "embedded");
   assert_string_equal(labels[2], "lensfun DB");
+  assert_int_equal(values[0], SOURCE_OFF);
+  assert_int_equal(values[1], SOURCE_EMBEDDED);
+  assert_int_equal(values[2], SOURCE_LENSFUN_DB);
 }
 
 static void test_vignetting_selector_entries_null_safe(void **state)
 {
   (void)state;
-  TR_STEP("vignetting, out_labels=NULL -> 0 (defensive narrowing)");
-  int n = test_vignetting_selector_entries(TRUE, NULL);
+  TR_STEP("vignetting, out_labels=NULL or out_values=NULL -> 0 (defensive narrowing)");
+  int n = test_vignetting_selector_entries(TRUE, NULL, NULL);
   assert_int_equal(n, 0);
-  n = test_vignetting_selector_entries(FALSE, NULL);
+  n = test_vignetting_selector_entries(FALSE, NULL, NULL);
   assert_int_equal(n, 0);
 }
 
@@ -190,33 +207,41 @@ static void test_tca_selector_entries_false_returns_3_with_manual(void **state)
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
+  int values[3] = { -1, -1, -1 };
   TR_STEP("tca, has_embedded=FALSE -> 3 entries: [off, manual, lensfun DB]");
-  int n = test_tca_selector_entries(FALSE, labels);
+  int n = test_tca_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 3);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "manual");
   assert_string_equal(labels[2], "lensfun DB");
+  assert_int_equal(values[0], TCA_OFF);
+  assert_int_equal(values[1], TCA_MANUAL);
+  assert_int_equal(values[2], TCA_LENSFUN_DB);
 }
 
 static void test_tca_selector_entries_true_returns_3_with_manual(void **state)
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
-  TR_STEP("tca, has_embedded=TRUE -> 3 entries (FR-15: has_embedded ignored, MANUAL always at pos 1)");
-  int n = test_tca_selector_entries(TRUE, labels);
+  int values[3] = { -1, -1, -1 };
+  TR_STEP("tca, has_embedded=TRUE -> 3 entries (FR-15: has_embedded ignored, MANUAL always present)");
+  int n = test_tca_selector_entries(TRUE, labels, values);
   assert_int_equal(n, 3);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "manual");
   assert_string_equal(labels[2], "lensfun DB");
+  assert_int_equal(values[0], TCA_OFF);
+  assert_int_equal(values[1], TCA_MANUAL);
+  assert_int_equal(values[2], TCA_LENSFUN_DB);
 }
 
 static void test_tca_selector_entries_null_safe(void **state)
 {
   (void)state;
-  TR_STEP("tca, out_labels=NULL -> 0 (defensive narrowing)");
-  int n = test_tca_selector_entries(FALSE, NULL);
+  TR_STEP("tca, out_labels=NULL or out_values=NULL -> 0 (defensive narrowing)");
+  int n = test_tca_selector_entries(FALSE, NULL, NULL);
   assert_int_equal(n, 0);
-  n = test_tca_selector_entries(TRUE, NULL);
+  n = test_tca_selector_entries(TRUE, NULL, NULL);
   assert_int_equal(n, 0);
 }
 

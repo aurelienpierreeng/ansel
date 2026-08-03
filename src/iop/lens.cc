@@ -3123,8 +3123,8 @@ static void vignetting_method_changed(GtkWidget *widget, gpointer user_data)
   auto *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
   auto p = (dt_iop_lensfun_params_t *)self->params;
-  const int pos = dt_bauhaus_combobox_get(widget);
-  p->vignetting_method = (dt_iop_lens_correction_source_t)pos;
+  const int val = GPOINTER_TO_INT(dt_bauhaus_combobox_get_data(widget));
+  p->vignetting_method = (dt_iop_lens_correction_source_t)val;
   p->has_been_set = 0;
   dt_iop_gui_changed(self, widget, nullptr);
 }
@@ -3134,8 +3134,8 @@ static void distortion_method_changed(GtkWidget *widget, gpointer user_data)
   auto *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
   auto p = (dt_iop_lensfun_params_t *)self->params;
-  const int pos = dt_bauhaus_combobox_get(widget);
-  p->distortion_method = (dt_iop_lens_correction_source_t)pos;
+  const int val = GPOINTER_TO_INT(dt_bauhaus_combobox_get_data(widget));
+  p->distortion_method = (dt_iop_lens_correction_source_t)val;
   p->has_been_set = 0;
   dt_iop_gui_changed(self, widget, nullptr);
 }
@@ -3145,8 +3145,8 @@ static void tca_method_changed(GtkWidget *widget, gpointer user_data)
   auto *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
   auto p = (dt_iop_lensfun_params_t *)self->params;
-  const int pos = dt_bauhaus_combobox_get(widget);
-  p->tca_method = (dt_iop_lens_tca_source_t)pos;
+  const int val = GPOINTER_TO_INT(dt_bauhaus_combobox_get_data(widget));
+  p->tca_method = (dt_iop_lens_tca_source_t)val;
   p->has_been_set = 0;
   dt_iop_gui_changed(self, widget, nullptr);
 }
@@ -3157,9 +3157,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
 
-  dt_bauhaus_combobox_set(g->per_correction.distortion_source, (int)p->distortion_method);
-  dt_bauhaus_combobox_set(g->per_correction.vignetting_source, (int)p->vignetting_method);
-  dt_bauhaus_combobox_set(g->per_correction.tca_source,        (int)p->tca_method);
+  dt_bauhaus_combobox_set_from_value(g->per_correction.distortion_source, (int)p->distortion_method);
+  dt_bauhaus_combobox_set_from_value(g->per_correction.vignetting_source, (int)p->vignetting_method);
+  dt_bauhaus_combobox_set_from_value(g->per_correction.tca_source,        (int)p->tca_method);
 
   const gboolean tca_manual = tca_show_manual_sliders(p->tca_method) && !monochrome;
   gtk_widget_set_visible(g->lensfun_controls.tca_r, tca_manual);
@@ -3322,8 +3322,10 @@ void gui_init(struct dt_iop_module_t *self)
       gtk_widget_set_tooltip_text(g->per_correction.vignetting_source, _("source of vignetting correction"));
 
       const char *labels[3];
-      const int n = vignetting_selector_entries(has_vign, labels);
-      for(int i = 0; i < n; i++) dt_bauhaus_combobox_add(g->per_correction.vignetting_source, _(labels[i]));
+      int values[3];
+      const int n = vignetting_selector_entries(has_vign, labels, values);
+      for(int i = 0; i < n; i++) dt_bauhaus_combobox_add_full(g->per_correction.vignetting_source,
+          _(labels[i]), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, GINT_TO_POINTER(values[i]), NULL, TRUE);
       g_signal_connect(G_OBJECT(g->per_correction.vignetting_source), "value-changed",
                        G_CALLBACK(vignetting_method_changed), (gpointer)self);
     }
@@ -3339,8 +3341,10 @@ void gui_init(struct dt_iop_module_t *self)
       gtk_widget_set_tooltip_text(g->per_correction.distortion_source, _("source of distortion correction"));
 
       const char *labels[3];
-      const int n = distortion_selector_entries(has_dist, labels);
-      for(int i = 0; i < n; i++) dt_bauhaus_combobox_add(g->per_correction.distortion_source, _(labels[i]));
+      int values[3];
+      const int n = distortion_selector_entries(has_dist, labels, values);
+      for(int i = 0; i < n; i++) dt_bauhaus_combobox_add_full(g->per_correction.distortion_source,
+          _(labels[i]), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, GINT_TO_POINTER(values[i]), NULL, TRUE);
       g_signal_connect(G_OBJECT(g->per_correction.distortion_source), "value-changed",
                        G_CALLBACK(distortion_method_changed), (gpointer)self);
     }
@@ -3371,8 +3375,10 @@ void gui_init(struct dt_iop_module_t *self)
       gtk_widget_set_tooltip_text(g->per_correction.tca_source, _("source of TCA correction"));
 
       const char *labels[3];
-      const int n = tca_selector_entries(FALSE, labels);
-      for(int i = 0; i < n; i++) dt_bauhaus_combobox_add(g->per_correction.tca_source, _(labels[i]));
+      int values[3];
+      const int n = tca_selector_entries(FALSE, labels, values);
+      for(int i = 0; i < n; i++) dt_bauhaus_combobox_add_full(g->per_correction.tca_source,
+          _(labels[i]), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, GINT_TO_POINTER(values[i]), NULL, TRUE);
       g_signal_connect(G_OBJECT(g->per_correction.tca_source), "value-changed",
                        G_CALLBACK(tca_method_changed), (gpointer)self);
     }
@@ -3466,29 +3472,34 @@ void gui_update(struct dt_iop_module_t *self)
   const gboolean has_dist = dt_embedded_lens_has_distortion(img);
 
   auto rebuild_combobox = [&](GtkWidget *combobox, int desired_len,
-                               const char *labels[3], int n_labels) {
+                               const char *labels[3], const int values[3], int n_labels) {
     const int current_len = dt_bauhaus_combobox_length(combobox);
     if(current_len != desired_len)
     {
       dt_bauhaus_combobox_clear(combobox);
-      for(int i = 0; i < n_labels; i++) dt_bauhaus_combobox_add(combobox, _(labels[i]));
+      for(int i = 0; i < n_labels; i++)
+        dt_bauhaus_combobox_add_full(combobox, _(labels[i]),
+            DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, GINT_TO_POINTER(values[i]), NULL, TRUE);
     }
   };
 
   {
     const char *labels[3];
-    const int n = vignetting_selector_entries(has_vign, labels);
-    rebuild_combobox(g->per_correction.vignetting_source, n, labels, n);
+    int values[3];
+    const int n = vignetting_selector_entries(has_vign, labels, values);
+    rebuild_combobox(g->per_correction.vignetting_source, n, labels, values, n);
   }
   {
     const char *labels[3];
-    const int n = distortion_selector_entries(has_dist, labels);
-    rebuild_combobox(g->per_correction.distortion_source, n, labels, n);
+    int values[3];
+    const int n = distortion_selector_entries(has_dist, labels, values);
+    rebuild_combobox(g->per_correction.distortion_source, n, labels, values, n);
   }
   {
     const char *labels[3];
-    const int n = tca_selector_entries(FALSE, labels);
-    rebuild_combobox(g->per_correction.tca_source, n, labels, n);
+    int values[3];
+    const int n = tca_selector_entries(FALSE, labels, values);
+    rebuild_combobox(g->per_correction.tca_source, n, labels, values, n);
   }
 
   const dt_dev_pixelpipe_iop_t *lens_piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);

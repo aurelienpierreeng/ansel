@@ -4,21 +4,24 @@
 extern "C" {
 
 int test_distortion_selector_entries(gboolean has_embedded,
-                                     const char *out_labels[3])
+                                     const char *out_labels[3],
+                                     int out_values[3])
 {
-  return distortion_selector_entries(has_embedded, out_labels);
+  return distortion_selector_entries(has_embedded, out_labels, out_values);
 }
 
 int test_vignetting_selector_entries(gboolean has_embedded,
-                                      const char *out_labels[3])
+                                      const char *out_labels[3],
+                                      int out_values[3])
 {
-  return vignetting_selector_entries(has_embedded, out_labels);
+  return vignetting_selector_entries(has_embedded, out_labels, out_values);
 }
 
 int test_tca_selector_entries(gboolean has_embedded,
-                               const char *out_labels[3])
+                               const char *out_labels[3],
+                               int out_values[3])
 {
-  return tca_selector_entries(has_embedded, out_labels);
+  return tca_selector_entries(has_embedded, out_labels, out_values);
 }
 
 gboolean test_tca_show_manual_sliders(dt_iop_lens_tca_source_t tca_method)
