@@ -14,7 +14,8 @@ enum class dt_iop_lens_tca_source_t
 {
   OFF = 0,
   MANUAL = 1,
-  LENSFUN_DB = 2
+  LENSFUN_DB = 2,
+  EMBEDDED = 3
 };
 
 #define LENSFUN_MODFLAG_MASK (LF_MODIFY_DISTORTION | LF_MODIFY_TCA | LF_MODIFY_VIGNETTING)
@@ -66,8 +67,8 @@ static inline int vignetting_selector_entries(gboolean has_embedded,
 }
 
 static inline int tca_selector_entries(gboolean has_embedded,
-                                        const char *out_labels[3],
-                                        int out_values[3])
+                                        const char *out_labels[4],
+                                        int out_values[4])
 {
   if(!out_labels || !out_values) return 0;
 
@@ -77,6 +78,14 @@ static inline int tca_selector_entries(gboolean has_embedded,
   out_values[1] = (int)dt_iop_lens_tca_source_t::MANUAL;
   out_labels[2] = "lensfun DB";
   out_values[2] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
+
+  if(has_embedded)
+  {
+    out_labels[3] = "embedded";
+    out_values[3] = (int)dt_iop_lens_tca_source_t::EMBEDDED;
+    return 4;
+  }
+
   return 3;
 }
 
@@ -143,6 +152,7 @@ static inline const char *corrections_status_string(
     case dt_iop_lens_tca_source_t::OFF:        tca_label = "off"; break;
     case dt_iop_lens_tca_source_t::MANUAL:     tca_label = "manual"; break;
     case dt_iop_lens_tca_source_t::LENSFUN_DB: tca_label = "lensfun DB"; break;
+    case dt_iop_lens_tca_source_t::EMBEDDED:   tca_label = "embedded"; break;
     default:                                    tca_label = "off";
   }
 
