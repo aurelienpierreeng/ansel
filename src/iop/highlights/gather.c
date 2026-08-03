@@ -232,21 +232,39 @@ void _compute_laplacian_normalization(const float *const restrict input, const d
   float sum_G = 0.f;
   float sum_B = 0.f;
   const float n_pixels = roi_in->height * roi_in->width;
-  __OMP_PARALLEL_FOR__(collapse(2) reduction(+ : sum_R, sum_G, sum_B))
-  for(size_t i = 0; i < roi_in->height; i++)
-    for(size_t j = 0; j < roi_in->width; j++)
-    {
-      const int c = (filters == 9u) ? FCxtrans((int)i, (int)j, roi_in, xtrans) : FC(i, j, filters);
-      if(c < 0 || c > 2) continue;
+  if(filters == 0u)
+  {
+    // Non-raw / sRAW: the input is already 4-channel RGB, every pixel carries all three colours
+    // (CFA fill fraction 1), so each channel's normalization is its plain ROI average. The gather
+    // divides by these and the remosaic multiplies back, so the round-trip cancels exactly.
+    __OMP_PARALLEL_FOR__(collapse(2) reduction(+ : sum_R, sum_G, sum_B))
+    for(size_t i = 0; i < roi_in->height; i++)
+      for(size_t j = 0; j < roi_in->width; j++)
+      {
+        const size_t idx = (i * roi_in->width + j) * 4;
+        sum_R += input[idx + RED] / n_pixels;
+        sum_G += input[idx + GREEN] / n_pixels;
+        sum_B += input[idx + BLUE] / n_pixels;
+      }
+  }
+  else
+  {
+    __OMP_PARALLEL_FOR__(collapse(2) reduction(+ : sum_R, sum_G, sum_B))
+    for(size_t i = 0; i < roi_in->height; i++)
+      for(size_t j = 0; j < roi_in->width; j++)
+      {
+        const int c = (filters == 9u) ? FCxtrans((int)i, (int)j, roi_in, xtrans) : FC(i, j, filters);
+        if(c < 0 || c > 2) continue;
 
-      const float value = input[i * roi_in->width + j] / n_pixels; // accumulate value/N into its colour
-      if(c == RED)
-        sum_R += value;
-      else if(c == GREEN)
-        sum_G += value;
-      else
-        sum_B += value;
-    }
+        const float value = input[i * roi_in->width + j] / n_pixels; // accumulate value/N into its colour
+        if(c == RED)
+          sum_R += value;
+        else if(c == GREEN)
+          sum_G += value;
+        else
+          sum_B += value;
+      }
+  }
 
   normalization[RED] = sum_R;
   normalization[GREEN] = sum_G;
@@ -402,6 +420,39 @@ void _interpolate_and_mask_xtrans(const float *const restrict input, float *cons
 }
 
 __DT_CLONE_TARGETS__
+void _interpolate_and_mask_passthrough(const float *const restrict input, float *const restrict interpolated,
+                                       float *const restrict clipping_mask, const dt_aligned_pixel_t clips,
+                                       const dt_aligned_pixel_t white_balance, const size_t width,
+                                       const size_t height)
+{
+  // Non-raw / sRAW twin of _interpolate_and_mask: the input is already demosaiced 4-channel RGB, so
+  // there is nothing to interpolate. Each channel is passed through (normalized by white_balance, the
+  // tile-average, clamped >= 0) and flagged clipped against clips[]. The ALPHA slot carries the
+  // Euclidean magnitude norm; the opacity is the OR of the three per-channel flags. Masks stay binary.
+  __OMP_PARALLEL_FOR__(collapse(2))
+  for(size_t i = 0; i < height; i++)
+    for(size_t j = 0; j < width; j++)
+    {
+      const size_t idx = (i * width + j) * 4;
+      const float R = input[idx + RED];
+      const float G = input[idx + GREEN];
+      const float B = input[idx + BLUE];
+      const int R_clipped = (R > clips[RED]);
+      const int G_clipped = (G > clips[GREEN]);
+      const int B_clipped = (B > clips[BLUE]);
+
+      const dt_aligned_pixel_t RGB = { R, G, B, sqrtf(sqf(R) + sqf(G) + sqf(B)) };
+      const dt_aligned_pixel_t clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
+
+      for_each_channel(k, aligned(RGB, interpolated, clipping_mask, clipped, white_balance))
+      {
+        interpolated[idx + k] = fmaxf(RGB[k] / white_balance[k], 0.f);
+        clipping_mask[idx + k] = clipped[k]; // binary flag; per-channel for R/G/B, any-clip in ALPHA
+      }
+    }
+}
+
+__DT_CLONE_TARGETS__
 void _remosaic_and_replace(const float *const restrict input, const float *const restrict input_raw,
                            const float *const restrict interpolated, const float *const restrict clipping_mask,
                            float *const restrict output, const dt_aligned_pixel_t white_balance,
@@ -455,5 +506,35 @@ void _remosaic_and_replace_xtrans(const float *const restrict input, const float
       float base = input[idx];
       if(clip_is_floor && input_raw[idx] >= clips[c]) base = fmaxf(base, reconstructed); // floor
       output[idx] = opacity * reconstructed + (1.f - opacity) * base; // out = a*rec + (1-a)*base
+    }
+}
+
+__DT_CLONE_TARGETS__
+void _remosaic_and_replace_passthrough(const float *const restrict input, const float *const restrict input_raw,
+                                       const float *const restrict interpolated,
+                                       const float *const restrict clipping_mask, float *const restrict output,
+                                       const dt_aligned_pixel_t white_balance, const dt_aligned_pixel_t clips,
+                                       const int clip_is_floor, const size_t width, const size_t height)
+{
+  // Non-raw / sRAW twin of _remosaic_and_replace: there is no CFA to scatter onto, so each channel is
+  // composited straight back. Unlike the CFA paths (one measured colour per photosite -> a single
+  // any-clip opacity), a non-raw pixel carries all three colours, so channel c blends with its OWN clip
+  // mask clipping_mask[.. + c]: an unclipped channel keeps its measured base, only clipped channels take
+  // the reconstruction. Same clip_is_floor / compositing rule otherwise. The ALPHA slot is preserved.
+  __OMP_PARALLEL_FOR__(collapse(2))
+  for(size_t i = 0; i < height; i++)
+    for(size_t j = 0; j < width; j++)
+    {
+      const size_t idx = (i * width + j) * 4;
+      for_each_channel(c, aligned(input, input_raw, interpolated, clipping_mask, output, white_balance))
+      {
+        const float opacity = clipping_mask[idx + c]; // per-channel clip flag (0 or 1)
+        // undo local channel normalization (x tile-average white_balance[c]), clamp >= 0
+        const float reconstructed = fmaxf(interpolated[idx + c] * white_balance[c], 0.f);
+        float base = input[idx + c];
+        if(clip_is_floor && input_raw[idx + c] >= clips[c]) base = fmaxf(base, reconstructed); // floor
+        output[idx + c] = opacity * reconstructed + (1.f - opacity) * base; // out = a*rec + (1-a)*base
+      }
+      output[idx + ALPHA] = input[idx + ALPHA]; // pass the 4th channel through unchanged
     }
 }
