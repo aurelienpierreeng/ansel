@@ -59,15 +59,13 @@
 #include "develop/imageop.h"
 #include "iop/highlights/common.h"
 
-int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                            const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                            void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                            const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
-
-int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                             const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                             void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                             const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
+// Single CPU driver for guided-laplacian reconstruction, for Bayer, X-Trans and already-demosaiced
+// (non-raw / sRAW) input alike. The wavelet reconstruction is CFA-agnostic; only the disposable-demosaic
+// gather and the remosaic scatter branch on the sensor layout, selected internally via _hl_cfa_strategy().
+int process_laplacian(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                      const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+                      void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
+                      const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
 
 #ifdef HAVE_OPENCL
 cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
@@ -79,4 +77,12 @@ cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt_dev_pi
                                    const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                    const dt_aligned_pixel_t clips);
+
+// Non-raw / sRAW guided-laplacian on the GPU: the disposable-demosaic gather is a device plane copy
+// (already-RGB input) and the remosaic a per-channel device composite; the wavelet reconstruction in
+// between is the same CFA-agnostic device path as the Bayer/X-Trans drivers. Runs fully on-device.
+cl_int process_laplacian_passthrough_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                        const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                                        const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                                        const dt_aligned_pixel_t clips);
 #endif // HAVE_OPENCL

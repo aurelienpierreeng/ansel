@@ -5516,16 +5516,6 @@ void gui_init(dt_iop_module_t *self)
   // default = latitude default (with balance 0, each direct slider equals the latitude
   // fraction — see filmic_v3_legacy_to_direct), so double-click reset stays consistent
   // with the params defaults (which keep latitude/balance for compatibility)
-  g->toe = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->toe, FALSE, FALSE, 0);
-  dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
-  dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);
-  dt_bauhaus_slider_set_format(g->toe, "%");
-  gtk_widget_set_tooltip_text(g->toe,
-                              _("distance between middle gray and the start of the shadows roll-off.\n"
-                                "0% keeps the toe at middle gray, 100% pushes it to the point where the\n"
-                                "current slope would hit the output black level."));
-  g_signal_connect(G_OBJECT(g->toe), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   g->shoulder = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
   gtk_box_pack_start(GTK_BOX(self->widget), g->shoulder, FALSE, FALSE, 0);
@@ -5537,6 +5527,17 @@ void gui_init(dt_iop_module_t *self)
                                 "0% keeps the shoulder at middle gray, 100% pushes it to the point where the\n"
                                 "current slope would hit the output white level."));
   g_signal_connect(G_OBJECT(g->shoulder), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
+
+  g->toe = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->toe, FALSE, FALSE, 0);
+  dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
+  dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);
+  dt_bauhaus_slider_set_format(g->toe, "%");
+  gtk_widget_set_tooltip_text(g->toe,
+                              _("distance between middle gray and the start of the shadows roll-off.\n"
+                                "0% keeps the toe at middle gray, 100% pushes it to the point where the\n"
+                                "current slope would hit the output black level."));
+  g_signal_connect(G_OBJECT(g->toe), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   // Curve type
   g->highlights = dt_bauhaus_combobox_from_params(self, "highlights");

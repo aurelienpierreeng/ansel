@@ -1335,8 +1335,8 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)module->data;
 #ifdef HAVE_OPENCL
+  dt_iop_colorprimaries_global_data_t *gd = (dt_iop_colorprimaries_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_lut3d_tetrahedral);
   dt_opencl_free_kernel(gd->kernel_lut3d_trilinear);
   dt_opencl_free_kernel(gd->kernel_lut3d_pyramid);

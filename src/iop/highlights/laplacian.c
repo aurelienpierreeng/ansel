@@ -423,18 +423,25 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 }
 
 __DT_CLONE_TARGETS__
-int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                            const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                            void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                            const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips)
+int process_laplacian(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                      const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+                      void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
+                      const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips)
 {
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
   int err = 0;
+  (void)roi_out;
 
-  // Every helper below (normalization, gather, remosaic) reads FC(row, col, filters) with
+  // Every CFA helper below (normalization, Bayer gather, remosaic) reads FC(row, col, filters) with
   // tile-local row/col (0-based within this buffer, no roi offset added), so filters must be
   // pre-shifted for roi_in's crop position here -- mirrors demosaic.c's tile-local algorithms.
+  // dt_dev_get_roi_filters() returns the shifted Bayer word, 9u unchanged for X-Trans, and 0 for
+  // already-demosaiced (non-raw / sRAW) input. Only the gather and the remosaic branch on `cfa`; the
+  // wavelet reconstruction between them is CFA-agnostic.
   const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
+  const dt_hl_cfa_t cfa = _hl_cfa_strategy(filters);
+  const uint8_t(*const xtrans)[6]
+      = (cfa == HL_CFA_XTRANS) ? (const uint8_t(*const)[6])piece->dsc_in.xtrans : NULL;
 
   const size_t height = roi_in->height;
   const size_t width = roi_in->width;
@@ -475,10 +482,32 @@ int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe
   const float *const restrict input = (const float *const restrict)ivoid;
   float *const restrict output = (float *const restrict)ovoid;
   dt_aligned_pixel_t normalization = { 1.f, 1.f, 1.f, 1.f };
-  _compute_laplacian_normalization(input, roi_in, filters, NULL, normalization);
+  _compute_laplacian_normalization(input, roi_in, filters, xtrans, normalization);
 
-  const dt_aligned_pixel_t det_unit = { 1.f, 1.f, 1.f, 1.f };
-  _interpolate_and_mask(input, interpolated, clipping_mask, clips, det_unit, normalization, filters, width, height);
+  // FLOW step 1a (gather): the only CFA-branching endpoint before the shared wavelet reconstruction.
+  // Guided laplacians run without the knee, so det_scale is unit and both CFA gathers take `clips` directly.
+  switch(cfa)
+  {
+    case HL_CFA_BAYER:
+    {
+      const dt_aligned_pixel_t det_unit = { 1.f, 1.f, 1.f, 1.f };
+      _interpolate_and_mask(input, interpolated, clipping_mask, clips, det_unit, normalization, filters, width,
+                            height);
+      break;
+    }
+    case HL_CFA_XTRANS:
+    {
+      int32_t lookup[6][6][32] = { { { 0 } } };
+      _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
+      _interpolate_and_mask_xtrans(input, interpolated, clipping_mask, clips, normalization, roi_in, lookup,
+                                   xtrans, width, height);
+      break;
+    }
+    case HL_CFA_PASSTHROUGH:
+      // Non-raw / sRAW: no demosaic, just copy the RGB planes through + build masks.
+      _interpolate_and_mask_passthrough(input, interpolated, clipping_mask, clips, normalization, width, height);
+      break;
+  }
   if(dt_box_mean(clipping_mask, height, width, 4, 2, 1) != 0)
   {
     err = 1;
@@ -508,103 +537,25 @@ int process_laplacian_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe
 
   // Upsample
   interpolate_bilinear(ds_interpolated, ds_width, ds_height, interpolated, width, height, 4);
-  _remosaic_and_replace(input, input, interpolated, clipping_mask, output, normalization, clips, FALSE, filters,
-                        width, height);
+  // FLOW: remosaic + composite -- second and last CFA-branching endpoint (clip_is_floor = FALSE here).
+  switch(cfa)
+  {
+    case HL_CFA_BAYER:
+      _remosaic_and_replace(input, input, interpolated, clipping_mask, output, normalization, clips, FALSE,
+                            filters, width, height);
+      break;
+    case HL_CFA_XTRANS:
+      _remosaic_and_replace_xtrans(input, input, interpolated, clipping_mask, output, normalization, clips,
+                                   FALSE, roi_in, xtrans, width, height);
+      break;
+    case HL_CFA_PASSTHROUGH:
+      // Non-raw / sRAW: composite the reconstructed RGB straight back, per channel (clip_is_floor FALSE).
+      _remosaic_and_replace_passthrough(input, input, interpolated, clipping_mask, output, normalization, clips,
+                                        FALSE, width, height);
+      break;
+  }
 
 error:;
-  dt_pixelpipe_cache_free_align(interpolated);
-  dt_pixelpipe_cache_free_align(clipping_mask);
-  dt_pixelpipe_cache_free_align(temp);
-  dt_pixelpipe_cache_free_align(LF_even);
-  dt_pixelpipe_cache_free_align(LF_odd);
-  dt_pixelpipe_cache_free_align(HF);
-  dt_pixelpipe_cache_free_align(ds_interpolated);
-  dt_pixelpipe_cache_free_align(ds_clipping_mask);
-  return err;
-}
-
-__DT_CLONE_TARGETS__
-int process_laplacian_xtrans(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                             const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                             void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                             const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips)
-{
-  dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
-  int err = 0;
-  (void)roi_out;
-
-  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-
-  const size_t height = roi_in->height;
-  const size_t width = roi_in->width;
-  const size_t size = roi_in->width * roi_in->height;
-
-  const size_t ds_height = height / DS_FACTOR;
-  const size_t ds_width = width / DS_FACTOR;
-  const size_t ds_size = ds_height * ds_width;
-
-  float *const restrict interpolated = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe);
-  float *const restrict clipping_mask = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe);
-  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
-  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
-  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
-
-  const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
-  const float final_radius = (float)((int)(1 << data->scales)) / scale;
-  const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
-  const float noise_level = data->noise_level / scale;
-
-  float *restrict HF = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
-  float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
-  float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, pipe);
-
-  if(IS_NULL_PTR(interpolated) || IS_NULL_PTR(clipping_mask) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even)
-     || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || IS_NULL_PTR(ds_clipping_mask))
-  {
-    err = 1;
-    goto error;
-  }
-
-  const float *const restrict input = (const float *const restrict)ivoid;
-  float *const restrict output = (float *const restrict)ovoid;
-  dt_aligned_pixel_t normalization = { 1.f, 1.f, 1.f, 1.f };
-  int32_t lookup[6][6][32] = { { { 0 } } };
-
-  _compute_laplacian_normalization(input, roi_in, 9u, xtrans, normalization);
-  _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
-  _interpolate_and_mask_xtrans(input, interpolated, clipping_mask, clips, normalization, roi_in, lookup, xtrans,
-                               width, height);
-  if(dt_box_mean(clipping_mask, height, width, 4, 2, 1) != 0)
-  {
-    err = 1;
-    goto error;
-  }
-
-  interpolate_bilinear(clipping_mask, width, height, ds_clipping_mask, ds_width, ds_height, 4);
-  interpolate_bilinear(interpolated, width, height, ds_interpolated, ds_width, ds_height, 4);
-
-  for(int i = 0; i < data->iterations; i++)
-  {
-    const int salt = (i == data->iterations - 1);
-    if(wavelets_process(ds_interpolated, temp, ds_clipping_mask, ds_width, ds_height, scales, HF, LF_odd, LF_even,
-                        DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color))
-    {
-      err = 1;
-      goto error;
-    }
-    if(wavelets_process(temp, ds_interpolated, ds_clipping_mask, ds_width, ds_height, scales, HF, LF_odd, LF_even,
-                        DIFFUSE_RECONSTRUCT_CHROMA, noise_level, salt, data->solid_color))
-    {
-      err = 1;
-      goto error;
-    }
-  }
-
-  interpolate_bilinear(ds_interpolated, ds_width, ds_height, interpolated, width, height, 4);
-  _remosaic_and_replace_xtrans(input, input, interpolated, clipping_mask, output, normalization, clips, FALSE,
-                               roi_in, xtrans, width, height);
-
-error:
   dt_pixelpipe_cache_free_align(interpolated);
   dt_pixelpipe_cache_free_align(clipping_mask);
   dt_pixelpipe_cache_free_align(temp);
@@ -826,7 +777,7 @@ cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_dev_pix
   // kernel_highlights_normalize_reduce_first is self-correcting: it takes the raw filters
   // below PLUS roi_in->x/y as separate kernel args and adds them itself. interpolate_and_mask
   // and remosaic_and_replace have no roi offset args at all -- they need filters pre-shifted
-  // for roi_in's crop position instead (mirrors the CPU process_laplacian_bayer fix).
+  // for roi_in's crop position instead (mirrors the CPU process_laplacian fix).
   const uint32_t filters = piece->dsc_in.filters;
   const uint32_t filters_shifted = dt_dev_get_roi_filters(piece, roi_in);
 
@@ -1346,6 +1297,253 @@ error:
   dt_opencl_release_mem_object(reconstructed_scratch);
 
   dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] couldn't enqueue kernel! %i\n", err);
+  return err;
+}
+cl_int process_laplacian_passthrough_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                        const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                                        const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                                        const dt_aligned_pixel_t clips)
+{
+  // Non-raw / sRAW guided-laplacian, fully on-device: already-demosaiced RGB input, so the gather is a
+  // plane copy (interpolate_and_mask_passthrough), the normalization sums all three colours per pixel
+  // (highlights_normalize_reduce_first_passthrough), and the remosaic is a per-channel composite
+  // (remosaic_and_replace_passthrough). Between them the downsample -> a-trous wavelets -> upsample is
+  // the same CFA-agnostic device path as the Bayer/X-Trans drivers. No FC, no xtrans lookup, no roi phase.
+  dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
+  dt_iop_highlights_global_data_t *gd = (dt_iop_highlights_global_data_t *)self->global_data;
+
+  cl_int err = DT_OPENCL_DEFAULT_ERROR;
+
+  const int devid = pipe->devid;
+  const int width = roi_in->width;
+  const int height = roi_in->height;
+
+  const int ds_height = height / DS_FACTOR;
+  const int ds_width = width / DS_FACTOR;
+
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  size_t ds_sizes[] = { ROUNDUPDWD(ds_width, devid), ROUNDUPDHT(ds_height, devid), 1 };
+
+  cl_mem interpolated = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
+  cl_mem clipping_mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
+  cl_mem normalization = NULL;
+  cl_mem normalization_tmp = NULL;
+  cl_mem normalization_partials = NULL;
+  cl_mem normalization_final = NULL;
+
+  cl_mem LF_odd = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem LF_even = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem temp = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
+
+  const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
+  const float final_radius = (float)((int)(1 << data->scales)) / scale;
+  const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
+  const float noise_level = data->noise_level / scale;
+
+  cl_mem HF = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem ds_interpolated = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem ds_clipping_mask = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem reconstructed_scratch = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
+  cl_mem clips_cl = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)clips);
+
+  if(IS_NULL_PTR(interpolated) || IS_NULL_PTR(clipping_mask) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even)
+     || IS_NULL_PTR(temp) || IS_NULL_PTR(HF) || IS_NULL_PTR(ds_interpolated) || IS_NULL_PTR(ds_clipping_mask)
+     || IS_NULL_PTR(reconstructed_scratch) || IS_NULL_PTR(clips_cl))
+    goto error;
+
+  {
+    dt_opencl_local_buffer_t flocopt = (dt_opencl_local_buffer_t){ .xoffset = 0,
+                                                                   .xfactor = 1,
+                                                                   .yoffset = 0,
+                                                                   .yfactor = 1,
+                                                                   .cellsize = 4 * sizeof(float),
+                                                                   .overhead = 0,
+                                                                   .sizex = 1 << 4,
+                                                                   .sizey = 1 << 4 };
+
+    if(!dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_normalize_reduce_first_passthrough, &flocopt))
+      goto error;
+
+    const size_t bwidth = ROUNDUP(width, flocopt.sizex);
+    const size_t bheight = ROUNDUP(height, flocopt.sizey);
+    const int bufsize = (int)((bwidth / flocopt.sizex) * (bheight / flocopt.sizey));
+
+    normalization_partials = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * (size_t)bufsize);
+    normalization = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * REDUCESIZE);
+    normalization_tmp = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * REDUCESIZE);
+    if(!normalization_partials || !normalization || !normalization_tmp) goto error;
+
+    size_t fsizes[3] = { bwidth, bheight, 1 };
+    size_t flocal[3] = { flocopt.sizex, flocopt.sizey, 1 };
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_passthrough, 0, sizeof(cl_mem),
+                             &dev_in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_passthrough, 1, sizeof(int),
+                             &width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_passthrough, 2, sizeof(int),
+                             &height);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_passthrough, 3, sizeof(cl_mem),
+                             &normalization_partials);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_first_passthrough, 4,
+                             sizeof(float) * 4 * flocopt.sizex * flocopt.sizey, NULL);
+    err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_normalize_reduce_first_passthrough,
+                                                 fsizes, flocal);
+    if(err != CL_SUCCESS) goto error;
+
+    dt_opencl_local_buffer_t slocopt = (dt_opencl_local_buffer_t){ .xoffset = 0,
+                                                                   .xfactor = 1,
+                                                                   .yoffset = 0,
+                                                                   .yfactor = 1,
+                                                                   .cellsize = 4 * sizeof(float),
+                                                                   .overhead = 0,
+                                                                   .sizex = 1 << 16,
+                                                                   .sizey = 1 };
+
+    if(!dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_normalize_reduce_second, &slocopt)) goto error;
+
+    int current_length = bufsize;
+    cl_mem reduce_in = normalization_partials;
+    cl_mem reduce_out = normalization;
+
+    while(TRUE)
+    {
+      const int reducesize = MIN(REDUCESIZE, ROUNDUP(current_length, slocopt.sizex) / slocopt.sizex);
+      size_t ssizes[3] = { (size_t)reducesize * slocopt.sizex, 1, 1 };
+      size_t slocal[3] = { slocopt.sizex, 1, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 0, sizeof(cl_mem),
+                               &reduce_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 1, sizeof(cl_mem),
+                               &reduce_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 2, sizeof(int),
+                               &current_length);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_normalize_reduce_second, 3,
+                               sizeof(float) * 4 * slocopt.sizex, NULL);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_normalize_reduce_second, ssizes,
+                                                   slocal);
+      if(err != CL_SUCCESS) goto error;
+
+      if(reducesize == 1) break;
+      current_length = reducesize;
+      cl_mem swap = reduce_in;
+      reduce_in = reduce_out;
+      reduce_out = (swap == normalization_partials) ? normalization_tmp : normalization;
+    }
+
+    normalization_final = reduce_out;
+  }
+
+  // gather: plane copy + per-channel clip mask (mask written to `temp`, then 5x5-boxed into clipping_mask)
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, 0, sizeof(cl_mem),
+                           (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, 1, sizeof(cl_mem),
+                           (void *)&interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, 2, sizeof(cl_mem),
+                           (void *)&temp);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, 3, sizeof(cl_mem),
+                           (void *)&clips_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, 4, sizeof(cl_mem),
+                           (void *)&normalization_final);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, 5, sizeof(int),
+                           (void *)&roi_out->width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, 6, sizeof(int),
+                           (void *)&roi_out->height);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_bilinear_and_mask_passthrough, sizes);
+  if(err != CL_SUCCESS) goto error;
+
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_box_blur, 0, sizeof(cl_mem), (void *)&temp);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_box_blur, 1, sizeof(cl_mem), (void *)&clipping_mask);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_box_blur, 2, sizeof(int), (void *)&roi_out->width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_box_blur, 3, sizeof(int), (void *)&roi_out->height);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_box_blur, sizes);
+  if(err != CL_SUCCESS) goto error;
+
+  // Downsample
+  const int RGBa = TRUE;
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 0, sizeof(cl_mem), (void *)&clipping_mask);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 1, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 2, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 3, sizeof(cl_mem), (void *)&ds_clipping_mask);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 4, sizeof(int), (void *)&ds_width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 5, sizeof(int), (void *)&ds_height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 6, sizeof(int), (void *)&RGBa);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_interpolate_bilinear, ds_sizes);
+  if(err != CL_SUCCESS) goto error;
+
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 0, sizeof(cl_mem), (void *)&interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 1, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 2, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 3, sizeof(cl_mem), (void *)&ds_interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 4, sizeof(int), (void *)&ds_width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 5, sizeof(int), (void *)&ds_height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 6, sizeof(int), (void *)&RGBa);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_interpolate_bilinear, ds_sizes);
+  if(err != CL_SUCCESS) goto error;
+
+  for(int i = 0; i < data->iterations; i++)
+  {
+    const int salt = (i == data->iterations - 1); // add noise on the last iteration only
+    err = wavelets_process_cl(devid, ds_interpolated, temp, reconstructed_scratch, ds_clipping_mask, ds_sizes,
+                              ds_width, ds_height, gd, scales, HF, LF_odd, LF_even, DIFFUSE_RECONSTRUCT_RGB,
+                              noise_level, salt, data->solid_color);
+    if(err != CL_SUCCESS) goto error;
+
+    err = wavelets_process_cl(devid, temp, ds_interpolated, reconstructed_scratch, ds_clipping_mask, ds_sizes,
+                              ds_width, ds_height, gd, scales, HF, LF_odd, LF_even, DIFFUSE_RECONSTRUCT_CHROMA,
+                              noise_level, salt, data->solid_color);
+    if(err != CL_SUCCESS) goto error;
+  }
+
+  // Upsample
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 0, sizeof(cl_mem), (void *)&ds_interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 1, sizeof(int), (void *)&ds_width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 2, sizeof(int), (void *)&ds_height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 3, sizeof(cl_mem), (void *)&interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 4, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_interpolate_bilinear, 5, sizeof(int), (void *)&height);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_interpolate_bilinear, sizes);
+  if(err != CL_SUCCESS) goto error;
+
+  // Remosaic: per-channel composite (clip_is_floor FALSE, historical blend, mirrors the CPU path)
+  const int clip_floor_off = FALSE;
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 0, sizeof(cl_mem),
+                           (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 1, sizeof(cl_mem),
+                           (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 2, sizeof(cl_mem),
+                           (void *)&interpolated);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 3, sizeof(cl_mem),
+                           (void *)&clipping_mask);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 4, sizeof(cl_mem),
+                           (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 5, sizeof(cl_mem),
+                           (void *)&normalization_final);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 6, sizeof(cl_mem),
+                           (void *)&clips_cl);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 7, sizeof(int),
+                           (void *)&clip_floor_off);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 8, sizeof(int),
+                           (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, 9, sizeof(int),
+                           (void *)&height);
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_remosaic_and_replace_passthrough, sizes);
+  if(err != CL_SUCCESS) goto error;
+
+error:
+  dt_opencl_release_mem_object(clips_cl);
+  dt_opencl_release_mem_object(normalization_partials);
+  if(normalization_tmp != normalization_final) dt_opencl_release_mem_object(normalization_tmp);
+  if(normalization != normalization_final) dt_opencl_release_mem_object(normalization);
+  dt_opencl_release_mem_object(normalization_final);
+  dt_opencl_release_mem_object(interpolated);
+  dt_opencl_release_mem_object(clipping_mask);
+  dt_opencl_release_mem_object(temp);
+  dt_opencl_release_mem_object(LF_even);
+  dt_opencl_release_mem_object(LF_odd);
+  dt_opencl_release_mem_object(HF);
+  dt_opencl_release_mem_object(ds_clipping_mask);
+  dt_opencl_release_mem_object(ds_interpolated);
+  dt_opencl_release_mem_object(reconstructed_scratch);
+  if(err != CL_SUCCESS)
+    dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] couldn't enqueue kernel! %i\n", err);
   return err;
 }
 #endif // HAVE_OPENCL

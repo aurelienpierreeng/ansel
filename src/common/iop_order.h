@@ -296,6 +296,20 @@ char *dt_ioppr_serialize_text_iop_order_list(GList *iop_order_list);
 GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf);
 
 /**
+ * @brief Insert modules that postdate a deserialized/custom order list.
+ *
+ * Pre-existing edits carry a serialized iop-order list saved before newer
+ * modules existed; without this those modules resolve to INT_MAX and are
+ * mis-ordered. Call on every path that deserializes a custom order (DB
+ * module_order table and XMP import). @@_NEW_MODULE: register new modules in
+ * the implementation.
+ *
+ * @param iop_order_list Deserialized order list (ownership retained by caller).
+ * @return Updated list head.
+ */
+GList *dt_ioppr_insert_missing_modules(GList *iop_order_list);
+
+/**
  * @brief Ensure a module instance has an entry in dev->iop_order_list.
  *
  * Inserts a new entry if missing, keeping list consistency for subsequent

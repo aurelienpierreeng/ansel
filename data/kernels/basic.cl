@@ -1108,6 +1108,98 @@ remosaic_and_replace_xtrans(read_only image2d_t input,
   write_imagef(output, (int2)(j, i), pix_out);
 }
 
+// Non-raw / sRAW gather: the input is already demosaiced 4-channel RGB, so there is nothing to
+// interpolate -- pass each channel through (normalized by white_balance), and flag it clipped against
+// clips[]. Mirrors the CPU _interpolate_and_mask_passthrough: per-channel flags in R/G/B, any-clip in
+// the 4th slot; the norm goes in the interpolated 4th slot. No CFA, no neighbour taps, no roi offset.
+kernel void
+interpolate_and_mask_passthrough(read_only image2d_t input,
+                                 write_only image2d_t interpolated,
+                                 write_only image2d_t clipping_mask,
+                                 constant float *clips,
+                                 constant float *white_balance,
+                                 const int width, const int height)
+{
+  const int j = get_global_id(0); // = x
+  const int i = get_global_id(1); // = y
+  if(j >= width || i >= height) return;
+  const float4 rgb = read_imagef(input, sampleri, (int2)(j, i));
+  const int R_clipped = (rgb.x > clips[RED]);
+  const int G_clipped = (rgb.y > clips[GREEN]);
+  const int B_clipped = (rgb.z > clips[BLUE]);
+  const float4 rgb_pixel = { rgb.x, rgb.y, rgb.z, native_sqrt(rgb.x * rgb.x + rgb.y * rgb.y + rgb.z * rgb.z) };
+  const float4 clipped = { R_clipped, G_clipped, B_clipped, (R_clipped || G_clipped || B_clipped) };
+  const float4 wb4 = { white_balance[0], white_balance[1], white_balance[2], white_balance[3] };
+  write_imagef(interpolated, (int2)(j, i), fmax(rgb_pixel / wb4, 0.f));
+  write_imagef(clipping_mask, (int2)(j, i), clipped);
+}
+
+// Non-raw / sRAW scatter: no CFA to scatter onto -- composite each channel straight back with its OWN
+// per-channel clip mask (an unclipped channel keeps its measured value; only clipped channels take the
+// reconstruction). Mirrors the CPU _remosaic_and_replace_passthrough. The 4th (alpha) channel is passed
+// through unchanged.
+kernel void
+remosaic_and_replace_passthrough(read_only image2d_t input,
+                                 read_only image2d_t input_raw,
+                                 read_only image2d_t interpolated,
+                                 read_only image2d_t clipping_mask,
+                                 write_only image2d_t output,
+                                 constant float *white_balance,
+                                 constant float *clips,
+                                 const int clip_is_floor,
+                                 const int width, const int height)
+{
+  const int j = get_global_id(0); // = x
+  const int i = get_global_id(1); // = y
+  if(j >= width || i >= height) return;
+  const float4 wb4 = { white_balance[0], white_balance[1], white_balance[2], white_balance[3] };
+  const float4 clips4 = { clips[0], clips[1], clips[2], clips[3] };
+  const float4 in_pix = read_imagef(input, sampleri, (int2)(j, i));
+  const float4 raw_pix = read_imagef(input_raw, sampleri, (int2)(j, i));
+  const float4 opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)); // per-channel weight in x/y/z
+  const float4 reconstructed = fmax(read_imagef(interpolated, sampleri, (int2)(j, i)) * wb4, 0.f);
+  float4 base = in_pix;
+  // Refinement 2 (per channel): on a clipped photosite the raw reading is a FLOOR -> base = max(raw, rec)
+  if(clip_is_floor) base = select(base, fmax(base, reconstructed), raw_pix >= clips4);
+  float4 pix_out = opacity * reconstructed + (1.f - opacity) * base; // out = a*rec + (1-a)*base, per channel
+  pix_out.w = in_pix.w;                                              // pass the 4th channel through unchanged
+  write_imagef(output, (int2)(j, i), pix_out);
+}
+
+// Non-raw / sRAW normalization first pass: every pixel carries all three colours (CFA fill fraction 1),
+// so accumulate value/N per channel with no CFA routing and no roi offset. Mirrors the filters==0 branch
+// of the CPU _compute_laplacian_normalization; the second reduce pass is shared with the CFA path.
+kernel void
+highlights_normalize_reduce_first_passthrough(read_only image2d_t in, const int width, const int height,
+                                              global float4 *accu, local float4 *buffer)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int xlsz = get_local_size(0);
+  const int ylsz = get_local_size(1);
+  const int xlid = get_local_id(0);
+  const int ylid = get_local_id(1);
+  const int l = mad24(ylid, xlsz, xlid);
+  const float n_pixels = (float)(width * height);
+  const int inside = (x < width && y < height);
+  const float4 p = inside ? (read_imagef(in, sampleri, (int2)(x, y)) / n_pixels) : (float4)0.f;
+  buffer[l] = (float4)(p.x, p.y, p.z, 1.f);
+  barrier(CLK_LOCAL_MEM_FENCE);
+  const int lsz = mul24(xlsz, ylsz);
+  for(int offset = lsz / 2; offset > 0; offset /= 2)
+  {
+    if(l < offset) buffer[l].xyz += buffer[l + offset].xyz;
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+  if(l == 0)
+  {
+    const int xgid = get_group_id(0);
+    const int ygid = get_group_id(1);
+    const int xgsz = get_num_groups(0);
+    accu[mad24(ygid, xgsz, xgid)] = buffer[0];
+  }
+}
+
 // 5x5 box average = mask feathering (article "Feathering the mask"): smooths a binary clip mask
 // into a soft opacity in [0,1]. (In the harmonic mode the compositing masks are otherwise binary
 // end-to-end; this box blur is the sole smoothing step, shared with the 2021 mode.)

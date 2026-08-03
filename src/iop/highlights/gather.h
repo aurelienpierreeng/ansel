@@ -59,6 +59,26 @@
 #include "iop/highlights/common.h"
 #include <stdint.h>
 
+// CFA reconstruction strategy. It selects ONLY how the disposable demosaic (the gather) and the
+// remosaic (the scatter) run; everything between them -- the knee, the segmentation and the
+// per-region reconstruction -- is CFA-agnostic and shared. PASSTHROUGH is the non-raw case: the
+// input is already demosaiced RGB (a rendered image or a linear-DNG/sRAW 4-channel buffer), so the
+// gather is a plane copy and the remosaic writes the reconstructed pixels straight back.
+typedef enum dt_hl_cfa_t
+{
+  HL_CFA_BAYER = 0,   // Bayer mosaic: filters != 0 and != 9u
+  HL_CFA_XTRANS,      // X-Trans mosaic: filters == 9u
+  HL_CFA_PASSTHROUGH, // already-RGB input (non-raw / sRAW): filters == 0
+} dt_hl_cfa_t;
+
+// Map the (roi-shifted) CFA descriptor word to the gather/remosaic strategy above.
+static inline dt_hl_cfa_t _hl_cfa_strategy(const uint32_t filters)
+{
+  if(filters == 0u) return HL_CFA_PASSTHROUGH;
+  if(filters == 9u) return HL_CFA_XTRANS;
+  return HL_CFA_BAYER;
+}
+
 void _interpolate_and_mask(const float *const restrict input, float *const restrict interpolated,
                            float *const restrict clipping_mask, const dt_aligned_pixel_t clips_in,
                            const dt_aligned_pixel_t det_scale, const dt_aligned_pixel_t white_balance,
@@ -96,11 +116,37 @@ void _interpolate_and_mask_xtrans(const float *const restrict input, float *cons
                                   const int32_t lookup[6][6][32], const uint8_t (*const xtrans)[6],
                                   const size_t width, const size_t height);
 
+/** Non-raw / sRAW gather: copy the already-demosaiced 4-channel RGB through and build clip masks.
+ *
+ * The passthrough counterpart of _interpolate_and_mask: for already-RGB input there is nothing to
+ * demosaic, so each channel is passed through (normalized by white_balance) and flagged clipped
+ * against clips[]. The knee never runs in this mode, so clips is the plain detection threshold (no
+ * det_scale band override). input/interpolated/clipping_mask are all 4-channel here.
+ */
+void _interpolate_and_mask_passthrough(const float *const restrict input, float *const restrict interpolated,
+                                       float *const restrict clipping_mask, const dt_aligned_pixel_t clips,
+                                       const dt_aligned_pixel_t white_balance, const size_t width,
+                                       const size_t height);
+
 void _remosaic_and_replace(const float *const restrict input, const float *const restrict input_raw,
                            const float *const restrict interpolated, const float *const restrict clipping_mask,
                            float *const restrict output, const dt_aligned_pixel_t white_balance,
                            const dt_aligned_pixel_t clips, const int clip_is_floor, const uint32_t filters,
                            const size_t width, const size_t height);
+
+/** Non-raw / sRAW scatter: composite the reconstructed RGB straight back, per channel.
+ *
+ * The passthrough counterpart of _remosaic_and_replace. There is no CFA to scatter onto, so each
+ * channel composites with its OWN clip mask (a non-raw pixel carries all three colours, so an
+ * unclipped channel must keep its measured value while only clipped channels take the
+ * reconstruction). input/input_raw/interpolated/clipping_mask/output are all 4-channel; the ALPHA
+ * slot is passed through unchanged. clip_is_floor keeps the CFA floor semantics.
+ */
+void _remosaic_and_replace_passthrough(const float *const restrict input, const float *const restrict input_raw,
+                                       const float *const restrict interpolated,
+                                       const float *const restrict clipping_mask, float *const restrict output,
+                                       const dt_aligned_pixel_t white_balance, const dt_aligned_pixel_t clips,
+                                       const int clip_is_floor, const size_t width, const size_t height);
 
 /** Reproject the reconstructed RGB back onto the X-Trans mosaic. */
 void _remosaic_and_replace_xtrans(const float *const restrict input, const float *const restrict input_raw,

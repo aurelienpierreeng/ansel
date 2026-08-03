@@ -79,6 +79,7 @@
 // shared types (params + per-module OpenCL global data) and the high-level harmonic driver.
 #include "iop/highlights/clip.h"
 #include "iop/highlights/common.h"
+#include "iop/highlights/inpaint.h"
 #include "iop/highlights/laplacian.h"
 #include "iop/highlights/lch.h"
 #include "iop/highlights/process.h"
@@ -224,6 +225,121 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
 #ifdef HAVE_OPENCL
 
+// The per-mode OpenCL helpers below carry the kernel-argument boilerplate so process_cl() reads as a
+// clean mode switch, symmetric to process(). Each returns a cl_int (CL_SUCCESS or an error to bubble up).
+
+// Clip-visualization false-colour quad (raw only; the caller sets mask_display/bypass_blendif on success).
+static cl_int _hl_cl_visualize(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
+                               cl_mem dev_out, const int width, const int height,
+                               const dt_iop_roi_t *const roi_out, const uint32_t filters,
+                               const dt_aligned_pixel_t clips)
+{
+  cl_mem dev_clips = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)clips);
+  if(IS_NULL_PTR(dev_clips)) return DT_OPENCL_DEFAULT_ERROR;
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 4, sizeof(int), (void *)&roi_out->x);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 5, sizeof(int), (void *)&roi_out->y);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 6, sizeof(int), (void *)&filters);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 7, sizeof(cl_mem), (void *)&dev_clips);
+  const cl_int err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
+  dt_opencl_release_mem_object(dev_clips);
+  return err;
+}
+
+// Plain clip. Raw mosaic uses the single-channel kernel (roi-aware); non-raw uses the 4-channel kernel.
+// This is also the fallback for the raw-only reconstruction modes (LCh / colour inpainting) on non-raw.
+static cl_int _hl_cl_clip(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in, cl_mem dev_out,
+                          const int width, const int height, const dt_iop_roi_t *const roi_out,
+                          const uint32_t filters, const int mode, const float clip)
+{
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  if(filters)
+  {
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 0, sizeof(cl_mem), (void *)&dev_in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 1, sizeof(cl_mem), (void *)&dev_out);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 2, sizeof(int), (void *)&width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 3, sizeof(int), (void *)&height);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 4, sizeof(float), (void *)&clip);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 5, sizeof(int), (void *)&roi_out->x);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 6, sizeof(int), (void *)&roi_out->y);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 7, sizeof(int), (void *)&filters);
+    return dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_1f_clip, sizes);
+  }
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 4, sizeof(int), (void *)&mode);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 5, sizeof(float), (void *)&clip);
+  return dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_4f_clip, sizes);
+}
+
+// LCh reconstruction, Bayer.
+static cl_int _hl_cl_lch_bayer(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
+                               cl_mem dev_out, const int width, const int height,
+                               const dt_iop_roi_t *const roi_out, const uint32_t filters, const float clip)
+{
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 4, sizeof(float), (void *)&clip);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 5, sizeof(int), (void *)&roi_out->x);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 6, sizeof(int), (void *)&roi_out->y);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 7, sizeof(int), (void *)&filters);
+  return dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_1f_lch_bayer, sizes);
+}
+
+// LCh reconstruction, X-Trans (needs the local-memory tile plus a device copy of the xtrans matrix).
+static cl_int _hl_cl_lch_xtrans(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
+                                cl_mem dev_out, const int width, const int height,
+                                const dt_iop_roi_t *const roi_out, const dt_dev_pixelpipe_iop_t *piece,
+                                const float clip)
+{
+  int blocksizex, blocksizey;
+  dt_opencl_local_buffer_t locopt = (dt_opencl_local_buffer_t){ .xoffset = 2 * 2,
+                                                                .xfactor = 1,
+                                                                .yoffset = 2 * 2,
+                                                                .yfactor = 1,
+                                                                .cellsize = sizeof(float),
+                                                                .overhead = 0,
+                                                                .sizex = 1 << 8,
+                                                                .sizey = 1 << 8 };
+  if(dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_1f_lch_xtrans, &locopt))
+  {
+    blocksizex = locopt.sizex;
+    blocksizey = locopt.sizey;
+  }
+  else
+    blocksizex = blocksizey = 1;
+
+  cl_mem dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans),
+                                                             (void *)piece->dsc_in.xtrans);
+  if(IS_NULL_PTR(dev_xtrans)) return DT_OPENCL_DEFAULT_ERROR;
+
+  size_t sizes[] = { ROUNDUP(width, blocksizex), ROUNDUP(height, blocksizey), 1 };
+  size_t local[] = { blocksizex, blocksizey, 1 };
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 4, sizeof(float), (void *)&clip);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 5, sizeof(int), (void *)&roi_out->x);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 6, sizeof(int), (void *)&roi_out->y);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 7, sizeof(cl_mem), (void *)&dev_xtrans);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 8,
+                           sizeof(float) * (blocksizex + 4) * (blocksizey + 4), NULL);
+  const cl_int err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_1f_lch_xtrans, sizes,
+                                                            local);
+  dt_opencl_release_mem_object(dev_xtrans);
+  return err;
+}
+
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                cl_mem dev_in, cl_mem dev_out)
 {
@@ -241,160 +357,78 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   /* This transient preview belongs to the central darkroom view. Do not infer
    * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
    * can produce identical dimensions while both still need distinct outputs. */
-  const gboolean visualizing
-      = !IS_NULL_PTR(g) && g->show_visualize && self->dev->gui_attached && pipe == self->dev->pipe;
+  // The clip-visualization quad reads the buffer as a raw mosaic (FC / false-colour kernel), so it is
+  // raw-only; the toggle is also hidden on non-raw images in gui_update().
+  const gboolean visualizing = !IS_NULL_PTR(g) && g->show_visualize && filters && self->dev->gui_attached
+                               && pipe == self->dev->pipe;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
-  cl_mem dev_xtrans = NULL;
 
-  // this works for bayer and X-Trans sensors
   if(visualizing)
   {
-    float clips[4] = { 0.995f * d->clip * piece->dsc_in.processed_maximum[0],
-                       0.995f * d->clip * piece->dsc_in.processed_maximum[1],
-                       0.995f * d->clip * piece->dsc_in.processed_maximum[2], d->clip };
-
-    cl_mem dev_clips = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), clips);
-    if(IS_NULL_PTR(dev_clips)) goto error;
-
-    // bayer sensor raws with LCH mode
-    size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 4, sizeof(int), (void *)&roi_out->x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 5, sizeof(int), (void *)&roi_out->y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 6, sizeof(int), (void *)&filters);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 7, sizeof(cl_mem), (void *)&dev_clips);
-
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
+    const dt_aligned_pixel_t clips = { 0.995f * d->clip * piece->dsc_in.processed_maximum[0],
+                                       0.995f * d->clip * piece->dsc_in.processed_maximum[1],
+                                       0.995f * d->clip * piece->dsc_in.processed_maximum[2], d->clip };
+    err = _hl_cl_visualize(gd, devid, dev_in, dev_out, width, height, roi_out, filters, clips);
     if(err != CL_SUCCESS) goto error;
-
-    /* The clipping preview is the final output of this module. Blending would
-     * interpret PASSTHRU as a channel-display request and replace RAW output
-     * with zeroes before the downstream demosaic stage can display it. */
+    /* The clipping preview is the final output of this module. Blending would interpret PASSTHRU as a
+     * channel-display request and replace RAW output with zeroes before the downstream demosaic stage
+     * can display it. */
     ((dt_dev_pixelpipe_t *)pipe)->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
     ((dt_dev_pixelpipe_t *)pipe)->bypass_blendif = 1;
-    dt_opencl_release_mem_object(dev_clips);
     return TRUE;
   }
 
-  const float clip = d->clip
-                     * fminf(piece->dsc_in.processed_maximum[0],
-                             fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
+  // Clip white point -- default non-positive channels (non-raw, where rawprepare never set it) to 1.0,
+  // mirroring process(). Without this the non-raw clip threshold collapses to 0 and the reconstruction
+  // treats the whole frame as clipped. Raw is unchanged (rawprepare already made every channel 1.0).
+  dt_aligned_pixel_t pmax;
+  for(int c = 0; c < 4; c++)
+    pmax[c] = (piece->dsc_in.processed_maximum[c] > 0.f) ? piece->dsc_in.processed_maximum[c] : 1.0f;
+  const float clip = d->clip * fminf(pmax[0], fminf(pmax[1], pmax[2]));
+  const dt_aligned_pixel_t clips
+      = { 0.995f * d->clip * pmax[0], 0.995f * d->clip * pmax[1], 0.995f * d->clip * pmax[2], clip };
 
-  if(!filters)
+  // Mode switch, symmetric to process(). The reconstruction modes run on the GPU for raw and non-raw
+  // alike -- the non-raw passthrough drivers use their own device gather/remosaic kernels, no CPU
+  // roundtrip. The raw-only modes (LCh / colour inpainting) fall back to a device clip on non-raw input.
+  switch(d->mode)
   {
-    // non-raw images use dedicated kernel which just clips
-    size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 4, sizeof(int), (void *)&d->mode);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_4f_clip, 5, sizeof(float), (void *)&clip);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_4f_clip, sizes);
-    if(err != CL_SUCCESS) goto error;
-  }
-  else if(d->mode == DT_IOP_HIGHLIGHTS_CLIP || d->mode > DT_IOP_HIGHLIGHTS_HARMONIC)
-  {
-    // raw images with clip mode (both bayer and xtrans)
-    // This is also the fallback if d->mode is set with something invalid
-    size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 4, sizeof(float), (void *)&clip);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 5, sizeof(int), (void *)&roi_out->x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 6, sizeof(int), (void *)&roi_out->y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 7, sizeof(int), (void *)&filters);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_1f_clip, sizes);
-    if(err != CL_SUCCESS) goto error;
-  }
-  else if(d->mode == DT_IOP_HIGHLIGHTS_LCH && filters != 9u)
-  {
-    // bayer sensor raws with LCH mode
-    size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 4, sizeof(float), (void *)&clip);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 5, sizeof(int), (void *)&roi_out->x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 6, sizeof(int), (void *)&roi_out->y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_bayer, 7, sizeof(int), (void *)&filters);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_1f_lch_bayer, sizes);
-    if(err != CL_SUCCESS) goto error;
-  }
-  else if(d->mode == DT_IOP_HIGHLIGHTS_LCH && filters == 9u)
-  {
-    // xtrans sensor raws with LCH mode
-    int blocksizex, blocksizey;
-
-    dt_opencl_local_buffer_t locopt = (dt_opencl_local_buffer_t){ .xoffset = 2 * 2,
-                                                                  .xfactor = 1,
-                                                                  .yoffset = 2 * 2,
-                                                                  .yfactor = 1,
-                                                                  .cellsize = sizeof(float),
-                                                                  .overhead = 0,
-                                                                  .sizex = 1 << 8,
-                                                                  .sizey = 1 << 8 };
-
-    if(dt_opencl_local_buffer_opt(devid, gd->kernel_highlights_1f_lch_xtrans, &locopt))
-    {
-      blocksizex = locopt.sizex;
-      blocksizey = locopt.sizey;
-    }
-    else
-      blocksizex = blocksizey = 1;
-
-    dev_xtrans = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->dsc_in.xtrans),
-                                                        (void *)piece->dsc_in.xtrans);
-    if(IS_NULL_PTR(dev_xtrans)) goto error;
-
-    size_t sizes[] = { ROUNDUP(width, blocksizex), ROUNDUP(height, blocksizey), 1 };
-    size_t local[] = { blocksizex, blocksizey, 1 };
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 4, sizeof(float), (void *)&clip);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 5, sizeof(int), (void *)&roi_out->x);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 6, sizeof(int), (void *)&roi_out->y);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 7, sizeof(cl_mem), (void *)&dev_xtrans);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_lch_xtrans, 8,
-                             sizeof(float) * (blocksizex + 4) * (blocksizey + 4), NULL);
-
-    err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_highlights_1f_lch_xtrans, sizes, local);
-    if(err != CL_SUCCESS) goto error;
-  }
-  else if(d->mode == DT_IOP_HIGHLIGHTS_HARMONIC)
-  {
-    // hybrid CPU-orchestrated driver: the raw roundtrips through the host inside the module
-    // (bit-identical to the CPU path), the rest of the pipe stays on the GPU
-    const dt_aligned_pixel_t clips = { 0.995f * d->clip * piece->dsc_in.processed_maximum[0],
-                                       0.995f * d->clip * piece->dsc_in.processed_maximum[1],
-                                       0.995f * d->clip * piece->dsc_in.processed_maximum[2], clip };
-    err = process_harmonic_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
-    if(err != CL_SUCCESS) goto error;
-  }
-  else if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN)
-  {
-    const dt_aligned_pixel_t clips = { 0.995f * d->clip * piece->dsc_in.processed_maximum[0],
-                                       0.995f * d->clip * piece->dsc_in.processed_maximum[1],
-                                       0.995f * d->clip * piece->dsc_in.processed_maximum[2], clip };
-    err = (filters == 9u) ? process_laplacian_xtrans_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips)
-                          : process_laplacian_bayer_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
-    if(err != CL_SUCCESS) goto error;
+    case DT_IOP_HIGHLIGHTS_LCH:
+      if(filters == 9u)
+        err = _hl_cl_lch_xtrans(gd, devid, dev_in, dev_out, width, height, roi_out, piece, clip);
+      else if(filters)
+        err = _hl_cl_lch_bayer(gd, devid, dev_in, dev_out, width, height, roi_out, filters, clip);
+      else
+        err = _hl_cl_clip(gd, devid, dev_in, dev_out, width, height, roi_out, filters, d->mode, clip);
+      break;
+    case DT_IOP_HIGHLIGHTS_LAPLACIAN:
+      if(filters == 9u)
+        err = process_laplacian_xtrans_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
+      else if(filters)
+        err = process_laplacian_bayer_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
+      else
+        err = process_laplacian_passthrough_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
+      break;
+    case DT_IOP_HIGHLIGHTS_HARMONIC:
+      // process_harmonic_cl handles Bayer, X-Trans and non-raw passthrough (selected internally); its
+      // reconstruction middle is CFA-agnostic and reused for all three.
+      err = process_harmonic_cl(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
+      break;
+    case DT_IOP_HIGHLIGHTS_INPAINT:
+      // Colour inpainting has no device kernel; commit_params() clears process_cl_ready so this is not
+      // normally reached. Signal a CPU fallback defensively.
+      return FALSE;
+    case DT_IOP_HIGHLIGHTS_CLIP:
+    default:
+      err = _hl_cl_clip(gd, devid, dev_in, dev_out, width, height, roi_out, filters, d->mode, clip);
+      break;
   }
 
-  dt_opencl_release_mem_object(dev_xtrans);
+  if(err != CL_SUCCESS) goto error;
   return TRUE;
 
 error:
-  dt_opencl_release_mem_object(dev_xtrans);
   dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] couldn't enqueue kernel! %i\n", err);
   return FALSE;
 }
@@ -473,8 +507,34 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
 #undef SQRT3
 #undef SQRT12
 
-#ifdef HAVE_OPENCL
-#endif
+
+// Human-readable mode label (matches the $DESCRIPTION strings on dt_iop_highlights_mode_t), for the
+// non-raw fallback warning. Wrap in _() at the call site for translation.
+static const char *_highlights_mode_name(const dt_iop_highlights_mode_t mode)
+{
+  switch(mode)
+  {
+    case DT_IOP_HIGHLIGHTS_CLIP:      return N_("clip highlights");
+    case DT_IOP_HIGHLIGHTS_LCH:       return N_("reconstruct in LCh");
+    case DT_IOP_HIGHLIGHTS_INPAINT:   return N_("reconstruct color");
+    case DT_IOP_HIGHLIGHTS_LAPLACIAN: return N_("guided laplacians");
+    case DT_IOP_HIGHLIGHTS_HARMONIC:  return N_("harmonic transposition");
+  }
+  return N_("unknown");
+}
+
+// Returns TRUE when `mode` has a real path for the given (roi-shifted) CFA descriptor. Any raw mosaic
+// (filters != 0) supports every mode. On already-demosaiced input (filters == 0) CLIP thresholds each
+// channel and LAPLACIAN/HARMONIC reconstruct via their passthrough gather, but LCh and colour inpainting
+// are raw-mosaic-only and silently fall back to clip. The channels!=4 mono-raw case never reaches here:
+// it is excluded at history level by enable()/force_enable() (monochrome images are rejected). Keep in
+// sync with the process() mode switch.
+static gboolean _highlights_mode_supported(const dt_iop_highlights_mode_t mode, const uint32_t filters)
+{
+  if(filters) return TRUE; // any raw mosaic: every mode has a path
+  return (mode == DT_IOP_HIGHLIGHTS_CLIP || mode == DT_IOP_HIGHLIGHTS_LAPLACIAN
+          || mode == DT_IOP_HIGHLIGHTS_HARMONIC);
+}
 
 __DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
@@ -494,8 +554,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   /* This transient preview belongs to the central darkroom view. Do not infer
    * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
    * can produce identical dimensions while both still need distinct outputs. */
-  const gboolean visualizing
-      = !IS_NULL_PTR(g) && g->show_visualize && self->dev->gui_attached && pipe == self->dev->pipe;
+  // The clip-visualization quad reads the buffer as a raw mosaic (FC / false-colour kernel), so it is
+  // raw-only; the toggle is also hidden on non-raw images in gui_update().
+  const gboolean visualizing = !IS_NULL_PTR(g) && g->show_visualize && filters && self->dev->gui_attached
+                               && pipe == self->dev->pipe;
 
   if(visualizing)
   {
@@ -508,93 +570,70 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     return 0;
   }
 
-  const float clip = data->clip
-                     * fminf(piece->dsc_in.processed_maximum[0],
-                             fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
+  // Clip white point. rawprepare sets processed_maximum to 1.0 for raw; on non-raw it is never set and
+  // stays 0, which would collapse the clip threshold to 0 -- marking the whole image as clipped (a black
+  // "clip" and full-frame over-reconstruction / halos in laplacian & harmonic). Default any non-positive
+  // channel to 1.0 (the white point of normalized RGB) so non-raw input clips only genuinely blown
+  // highlights. Raw is unchanged: rawprepare already made every channel 1.0.
+  dt_aligned_pixel_t pmax;
+  for(int c = 0; c < 4; c++)
+    pmax[c] = (piece->dsc_in.processed_maximum[c] > 0.f) ? piece->dsc_in.processed_maximum[c] : 1.0f;
+  const float clip = data->clip * fminf(pmax[0], fminf(pmax[1], pmax[2]));
 
-  if(!filters)
-  {
-    process_clip(piece, ivoid, ovoid, roi_in, roi_out, clip);
-    return 0;
-  }
+  // Non-raw input is no longer nuked to a plain clip here: the mode switch below dispatches it too
+  // (LAPLACIAN/HARMONIC reconstruct already-demosaiced RGB via their passthrough gather, CLIP thresholds
+  // per channel, LCh/INPAINT have no non-raw path and fall back to _highlights_copy_input).
 
   switch(data->mode)
   {
     case DT_IOP_HIGHLIGHTS_INPAINT: // a1ex's (magiclantern) idea of color inpainting:
     {
-      const float clips[4] = { 0.987 * data->clip * piece->dsc_in.processed_maximum[0],
-                               0.987 * data->clip * piece->dsc_in.processed_maximum[1],
-                               0.987 * data->clip * piece->dsc_in.processed_maximum[2], clip };
-
+      const float clips[4] = { 0.987f * data->clip * pmax[0], 0.987f * data->clip * pmax[1],
+                               0.987f * data->clip * pmax[2], clip };
       if(filters == 9u)
-      {
-        const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-        __OMP_PARALLEL_FOR__()
-        for(int j = 0; j < roi_out->height; j++)
-        {
-          interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 0, 1, j, clips, xtrans, 0);
-          interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 0, -1, j, clips, xtrans, 1);
-        }
-
-        __OMP_PARALLEL_FOR__()
-        for(int i = 0; i < roi_out->width; i++)
-        {
-          interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 1, 1, i, clips, xtrans, 2);
-          interpolate_color_xtrans(ivoid, ovoid, roi_in, roi_out, 1, -1, i, clips, xtrans, 3);
-        }
-      }
+        process_inpaint_xtrans(ivoid, ovoid, roi_in, roi_out, clips,
+                               (const uint8_t(*const)[6])piece->dsc_in.xtrans);
+      else if(filters)
+        process_inpaint_bayer(ivoid, ovoid, roi_out, clips, filters);
       else
-      {
-        __OMP_PARALLEL_FOR__()
-        for(int j = 0; j < roi_out->height; j++)
-        {
-          interpolate_color(ivoid, ovoid, roi_out, 0, 1, j, clips, filters, 0);
-          interpolate_color(ivoid, ovoid, roi_out, 0, -1, j, clips, filters, 1);
-        }
-
-
-        // up/down directions
-        __OMP_PARALLEL_FOR__()
-        for(int i = 0; i < roi_out->width; i++)
-        {
-          interpolate_color(ivoid, ovoid, roi_out, 1, 1, i, clips, filters, 2);
-          interpolate_color(ivoid, ovoid, roi_out, 1, -1, i, clips, filters, 3);
-        }
-      }
+        process_clip(piece, ivoid, ovoid, roi_in, roi_out, clip); // colour inpainting is raw-mosaic only
       break;
     }
     case DT_IOP_HIGHLIGHTS_LCH:
       if(filters == 9u)
         process_lch_xtrans(self, piece, ivoid, ovoid, roi_in, roi_out, clip);
-      else
+      else if(filters)
         process_lch_bayer(self, piece, ivoid, ovoid, roi_in, roi_out, clip);
+      else
+        process_clip(piece, ivoid, ovoid, roi_in, roi_out, clip); // LCh is raw-mosaic only
       break;
     case DT_IOP_HIGHLIGHTS_LAPLACIAN:
     {
-      const dt_aligned_pixel_t clips = { 0.995f * data->clip * piece->dsc_in.processed_maximum[0],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[1],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[2], clip };
-      if((filters == 9u && process_laplacian_xtrans(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
-         || (filters != 9u && process_laplacian_bayer(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips)))
+      // process_laplacian reconstructs Bayer, X-Trans and already-demosaiced RGB (passthrough gather,
+      // selected internally from the CFA descriptor). Non-raw input reaching here is guaranteed 4-channel:
+      // the channels!=4 mono-raw case is an image-type decision made once in force_enable()/commit_params(),
+      // not per frame -- the module never runs on such images.
+      const dt_aligned_pixel_t clips = { 0.995f * data->clip * pmax[0], 0.995f * data->clip * pmax[1],
+                                         0.995f * data->clip * pmax[2], clip };
+      if(process_laplacian(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
         return 1;
       break;
     }
     case DT_IOP_HIGHLIGHTS_HARMONIC:
     {
-      const dt_aligned_pixel_t clips = { 0.995f * data->clip * piece->dsc_in.processed_maximum[0],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[1],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[2], clip };
-      if((filters == 9u && process_harmonic_xtrans(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
-         || (filters != 9u && process_harmonic_bayer(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips)))
+      const dt_aligned_pixel_t clips = { 0.995f * data->clip * pmax[0], 0.995f * data->clip * pmax[1],
+                                         0.995f * data->clip * pmax[2], clip };
+      if(process_harmonic(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
         return 1;
       break;
     }
     default:
     case DT_IOP_HIGHLIGHTS_CLIP:
-      process_clip(piece, ivoid, ovoid, roi_in, roi_out, clip);
+      process_clip(piece, ivoid, ovoid, roi_in, roi_out, clip); // handles raw + non-raw (per channel)
       break;
   }
 
+  // TODO: this should be handled in the pipeline recursion directly
   if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
@@ -608,18 +647,32 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   memcpy(d, p, sizeof(*p));
 
-  // Image-type gating (raw colorimetry, not monochrome) is handled at history level by
-  // enable()/force_enable()/reload_defaults(); nothing type-related is decided here. process()
-  // still has a dedicated !filters branch so already-demosaiced raw (sRAW / linear DNG) is
-  // processed correctly when the module is enabled.
+  // Image-type eligibility (raw colorimetry, not monochrome) is decided once at history level by
+  // enable()/force_enable()/reload_defaults(); nothing type-related is decided per frame. process()'s
+  // mode switch dispatches non-raw input too: LAPLACIAN/HARMONIC reconstruct already-demosaiced RGB
+  // (sRAW / linear DNG) via their passthrough gather, CLIP thresholds per channel, and the raw-only
+  // modes (LCh / colour inpainting) fall back to clip.
   const dt_image_t *const img = &self->dev->image_storage;
   dt_iop_fmt_log(self, "commit: class=%s filters=%u mode=%d -> enabled=%d",
                  dt_image_pipe_class_name(dt_image_pipe_class(img)), piece->dsc_in.filters, d->mode,
                  piece->enabled);
 
-  // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT. HARMONIC runs the hybrid CPU-orchestrated
-  // driver (host roundtrip inside the module keeps the pipe's CL chain intact).
+  // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT. Every other mode keeps its CL path, including the non-raw
+  // reconstruction paths (LAPLACIAN/HARMONIC on already-demosaiced RGB), which run on the GPU through
+  // their dedicated passthrough gather/remosaic kernels -- no CPU roundtrip.
   piece->process_cl_ready = (d->mode == DT_IOP_HIGHLIGHTS_INPAINT) ? 0 : 1;
+
+  // Warn once per pipe setup (not per frame) when a raw-only reconstruction mode (LCh / colour
+  // inpainting) has no path for this non-raw image and silently falls back to clipping.
+  if(!_highlights_mode_supported(d->mode, piece->dsc_in.filters))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[highlights] mode \"%s\" has no reconstruction path for this image; falling back to clipping\n",
+             _highlights_mode_name(d->mode));
+    if(self->dev->gui_attached && pipe == self->dev->pipe)
+      dt_control_log(_("highlight reconstruction: \"%s\" is not available for this image type; clipping instead"),
+                     _(_highlights_mode_name(d->mode)));
+  }
 
   if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN || d->mode == DT_IOP_HIGHLIGHTS_HARMONIC)
     piece->cache_output_on_ram = TRUE;
@@ -633,12 +686,22 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     piece->process_tiling_ready = 0;
   }
 
+  // Non-raw reconstruction (LAPLACIAN/HARMONIC passthrough) runs whole-frame too: the tiling budget in
+  // tiling_callback() is written for the single-channel raw layout, and the reconstruction downsamples
+  // internally -- keep the frame intact rather than mis-tiling it.
+  if(!piece->dsc_in.filters
+     && (d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN || d->mode == DT_IOP_HIGHLIGHTS_HARMONIC))
+    piece->process_tiling_ready = 0;
+
   if(d->mode != DT_IOP_HIGHLIGHTS_LAPLACIAN && d->mode != DT_IOP_HIGHLIGHTS_HARMONIC)
   {
     if(!piece->dsc_in.filters)
     {
-      const float m = fminf(piece->dsc_in.processed_maximum[0],
-                            fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
+      // Non-raw: processed_maximum is left at 0 upstream (no rawprepare). Default it to the normalized-RGB
+      // white point (1.0) rather than propagating 0 downstream (which collapses any later clip logic).
+      const float m0 = fminf(piece->dsc_in.processed_maximum[0],
+                             fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
+      const float m = (m0 > 0.f) ? m0 : 1.0f;
       for(int k = 0; k < 3; k++) piece->dsc_out.processed_maximum[k] = m;
     }
     else
@@ -650,19 +713,32 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 }
 
-static gboolean enable(dt_image_t *image)
+// Whether the module can run on this image at all (eligibility, NOT auto-enable). The module
+// self-disables only on a non-mosaiced image that is not 4-channel -- a mono-raw / greyscale
+// (filters==0, channels==1) has no colour to clip or reconstruct. Everything else is eligible: a
+// mosaiced raw, an already-demosaiced sRAW/linear-DNG, and a rendered RGB (all 4-channel or mosaic).
+// Monochrome is the image-level proxy for "not 4-channel"; mosaiced is filters!=0. Shared by
+// force_enable()/reload_defaults()/gui_update() so the self-disable rule lives in exactly one place.
+static gboolean _highlights_image_supported(const dt_image_t *image)
 {
-  // raw colorimetry (raw or sraw/linear-DNG), but not real monochrome. Must match the
-  // commit_params() gate above.
+  return dt_image_is_mosaiced(image) || !dt_image_is_monochrome(image);
+}
+
+// Whether the module should be enabled BY DEFAULT (auto-on). Only raw colorimetry (mosaiced raw or
+// sRAW/linear-DNG), not monochrome: on already-rendered RGB the module is available but opt-in, never
+// auto-enabled. Must match the commit_params() gate above.
+static gboolean enable(const dt_image_t *image)
+{
   return dt_image_needs_rawprepare(image) && !dt_image_is_monochrome(image);
 }
 
 gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
 {
-  // History sanitization: clamp against the SAME support rule as enable()/reload_defaults()
-  // (raw colorimetry, not monochrome). The previous version only handled the monochrome case and
-  // let a highlights entry pasted onto a non-raw image survive until commit_params() patched it.
-  const gboolean active = enable(&self->dev->image_storage);
+  // History sanitization: clamp against the eligibility rule (self-disable only on non-mosaiced &&
+  // not-4-channel). This lets an opt-in enable on a rendered RGB / sRAW survive, while still stripping
+  // a highlights entry pasted onto a mono-raw. Auto-enable (default_enabled) stays raw-only in
+  // reload_defaults()/gui_update(); this only decides whether an already-set enable may stand.
+  const gboolean active = _highlights_image_supported(&self->dev->image_storage);
   const gboolean state = current_state && active;
   dt_iop_fmt_log(self, "force_enable: class=%s supported=%d current=%d -> %d",
                  dt_image_pipe_class_name(dt_image_pipe_class(&self->dev->image_storage)), active, current_state,
@@ -772,15 +848,21 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_highlights_4f_clip = dt_opencl_create_kernel(program, "highlights_4f_clip");
   gd->kernel_highlights_bilinear_and_mask = dt_opencl_create_kernel(program, "interpolate_and_mask");
   gd->kernel_highlights_bilinear_and_mask_xtrans = dt_opencl_create_kernel(program, "interpolate_and_mask_xtrans");
+  gd->kernel_highlights_bilinear_and_mask_passthrough
+      = dt_opencl_create_kernel(program, "interpolate_and_mask_passthrough");
   gd->kernel_highlights_normalize_reduce_first
       = dt_opencl_create_kernel(program, "highlights_normalize_reduce_first");
   gd->kernel_highlights_normalize_reduce_first_xtrans
       = dt_opencl_create_kernel(program, "highlights_normalize_reduce_first_xtrans");
+  gd->kernel_highlights_normalize_reduce_first_passthrough
+      = dt_opencl_create_kernel(program, "highlights_normalize_reduce_first_passthrough");
   gd->kernel_highlights_normalize_reduce_second
       = dt_opencl_create_kernel(program, "highlights_normalize_reduce_second");
   gd->kernel_highlights_remosaic_and_replace = dt_opencl_create_kernel(program, "remosaic_and_replace");
   gd->kernel_highlights_remosaic_and_replace_xtrans
       = dt_opencl_create_kernel(program, "remosaic_and_replace_xtrans");
+  gd->kernel_highlights_remosaic_and_replace_passthrough
+      = dt_opencl_create_kernel(program, "remosaic_and_replace_passthrough");
   gd->kernel_highlights_box_blur = dt_opencl_create_kernel(program, "box_blur_5x5");
   gd->kernel_highlights_guide_laplacians = dt_opencl_create_kernel(program, "guide_laplacians");
   gd->kernel_highlights_diffuse_color = dt_opencl_create_kernel(program, "diffuse_color");
@@ -892,11 +974,14 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_highlights_1f_clip);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_xtrans);
+  dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_passthrough);
   dt_opencl_free_kernel(gd->kernel_highlights_normalize_reduce_first);
   dt_opencl_free_kernel(gd->kernel_highlights_normalize_reduce_first_xtrans);
+  dt_opencl_free_kernel(gd->kernel_highlights_normalize_reduce_first_passthrough);
   dt_opencl_free_kernel(gd->kernel_highlights_normalize_reduce_second);
   dt_opencl_free_kernel(gd->kernel_highlights_remosaic_and_replace);
   dt_opencl_free_kernel(gd->kernel_highlights_remosaic_and_replace_xtrans);
+  dt_opencl_free_kernel(gd->kernel_highlights_remosaic_and_replace_passthrough);
   dt_opencl_free_kernel(gd->kernel_highlights_box_blur);
   dt_opencl_free_kernel(gd->kernel_highlights_guide_laplacians);
   dt_opencl_free_kernel(gd->kernel_highlights_diffuse_color);
@@ -948,14 +1033,16 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 void gui_update(struct dt_iop_module_t *self)
 {
   dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
-  const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
-  // enable this per default if raw or sraw if not real monochrome
-  self->default_enabled = dt_image_needs_rawprepare(&self->dev->image_storage) && !monochrome;
+  const dt_image_t *const image = &self->dev->image_storage;
+  const gboolean supported = _highlights_image_supported(image);
+  // Auto-enable only on raw colorimetry (raw / sRAW, not monochrome); on rendered RGB it is opt-in.
+  self->default_enabled = enable(image);
 
-  // Neuter the on/off button only if not already enabled.
-  // It can be enabled by history copy & paste from a RAW image.
-  self->hide_enable_button = monochrome && !self->enabled;
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "default" : "monochrome");
+  // Show the on/off button for any eligible image (opt-in on rendered RGB / sRAW). Neuter it only where
+  // the module self-disables (mono-raw / greyscale), and even then keep it if already enabled (history
+  // copy & paste from a RAW image) so the user can turn it back off.
+  self->hide_enable_button = !supported && !self->enabled;
+  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), supported ? "default" : "monochrome");
 
   // capability entries, added once (moved here from reload_defaults so it never touches widgets off
   // the GUI thread / on a widget-less export dev)
@@ -976,12 +1063,14 @@ void reload_defaults(dt_iop_module_t *module)
   // we might be called from presets update infrastructure => there is no image
   if(!module->dev || module->dev->image_storage.id == -1) return;
 
-  // enable this per default if raw or sraw if not real monochrome
+  // Auto-enable only on raw colorimetry (raw / sRAW, not monochrome). Availability is broader: the
+  // button is shown (opt-in) for any eligible image and hidden only on a non-mosaiced non-4-channel
+  // image (mono-raw / greyscale), where the module self-disables -- there is nothing to reconstruct.
   module->default_enabled = enable(&module->dev->image_storage);
-  module->hide_enable_button = !enable(&module->dev->image_storage);
-  dt_iop_fmt_log(module, "reload_defaults: class=%s default_enabled=%d",
+  module->hide_enable_button = !_highlights_image_supported(&module->dev->image_storage);
+  dt_iop_fmt_log(module, "reload_defaults: class=%s default_enabled=%d hidden=%d",
                  dt_image_pipe_class_name(dt_image_pipe_class(&module->dev->image_storage)),
-                 module->default_enabled);
+                 module->default_enabled, module->hide_enable_button);
   // Stack visibility and the "guided laplacians" capability entry are set from default_enabled in
   // gui_update() (which already does the stack), so reload_defaults() stays params-only.
 }

@@ -376,11 +376,14 @@ typedef struct dt_iop_highlights_global_data_t
   int kernel_highlights_4f_clip;
   int kernel_highlights_bilinear_and_mask;
   int kernel_highlights_bilinear_and_mask_xtrans;
+  int kernel_highlights_bilinear_and_mask_passthrough;
   int kernel_highlights_normalize_reduce_first;
   int kernel_highlights_normalize_reduce_first_xtrans;
+  int kernel_highlights_normalize_reduce_first_passthrough;
   int kernel_highlights_normalize_reduce_second;
   int kernel_highlights_remosaic_and_replace;
   int kernel_highlights_remosaic_and_replace_xtrans;
+  int kernel_highlights_remosaic_and_replace_passthrough;
   int kernel_highlights_guide_laplacians;
   int kernel_highlights_diffuse_color;
   int kernel_highlights_box_blur;
