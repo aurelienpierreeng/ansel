@@ -28,6 +28,12 @@
 #include "config.h"
 #endif
 
+#ifdef _WIN32
+// winsock2.h must come before any windows.h, which the includes below pull
+// transitively; darktable.h (win/win.h) then re-includes it harmlessly
+#include <winsock2.h>
+#endif
+
 #include "control/conf.h"
 #include "common/fp_mode.h"
 

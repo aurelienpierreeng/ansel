@@ -664,7 +664,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
   delete modifier;
 
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  // The "corrections done" label only reports which corrections apply for the current camera/lens/
+  // params combo -- it doesn't depend on the exact preview ROI, so don't gate it on
+  // dt_dev_pixelpipe_has_preview_output(): that check can transiently reject the very first real
+  // preview-pipe pass right after darkroom entry (preview dimensions not "locked in" yet), leaving
+  // the label permanently blank until some unrelated later event forces another pipe run.
+  if(self->dev->gui_attached && !IS_NULL_PTR(g))
   {
     dt_iop_gui_enter_critical_section(self);
     g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
@@ -902,7 +907,8 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     }
   }
 
-  if(self->dev->gui_attached && g && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
+  // See the matching comment in process(): don't gate the label on has_preview_output().
+  if(self->dev->gui_attached && !IS_NULL_PTR(g))
   {
     dt_iop_gui_enter_critical_section(self);
     g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
@@ -2519,12 +2525,47 @@ void gui_update(struct dt_iop_module_t *self)
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
   }
 
-  // reset the corrections-done message for the new image (moved here from reload_defaults so it
-  // only touches the widget on the GUI thread, when it exists)
+  // Default to blank: safe fallback if the piece isn't ready yet (e.g. very first call for this
+  // image, before any pipe sync happened).
   dt_iop_gui_enter_critical_section(self);
   g->corrections_done = -1;
   dt_iop_gui_leave_critical_section(self);
   gtk_label_set_text(g->message, "");
+
+  // Which corrections are actually available/applied only depends on the current camera+lens+params
+  // combo, not on process() having just run -- so don't gate the label on the pixel pipe having
+  // (re)executed (it may not: a pixelpipe cache hit skips process() entirely, e.g. after undo/redo
+  // to a recently-rendered history state, leaving the label blank forever otherwise). commit_params()
+  // already wrote this exact lensfun data into the synced piece regardless of that; read it back the
+  // same GUI-thread-safe way ashift reads piece->buf_in from the virtual pipe.
+  const dt_dev_pixelpipe_iop_t *lens_piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  const dt_iop_lensfun_data_t *lens_d
+      = (!IS_NULL_PTR(lens_piece)) ? (const dt_iop_lensfun_data_t *)lens_piece->data : NULL;
+  if(!IS_NULL_PTR(lens_d) && !IS_NULL_PTR(lens_d->lens) && !IS_NULL_PTR(lens_d->lens->Maker) && lens_d->crop > 0.0f
+     && lens_piece->buf_in.width > 0 && lens_piece->buf_in.height > 0)
+  {
+    const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
+    const int used_lf_mask = raw_monochrome ? (LF_MODIFY_ALL & ~LF_MODIFY_TCA) : LF_MODIFY_ALL;
+    int modflags = 0;
+    lfModifier *modifier = get_modifier(&modflags, lens_piece->buf_in.width, lens_piece->buf_in.height,
+                                        lens_d, used_lf_mask, FALSE);
+    delete modifier;
+
+    dt_iop_gui_enter_critical_section(self);
+    g->corrections_done = modflags & LENSFUN_MODFLAG_MASK;
+    dt_iop_gui_leave_critical_section(self);
+
+    for(GList *modifiers = g->modifiers; !IS_NULL_PTR(modifiers); modifiers = g_list_next(modifiers))
+    {
+      dt_iop_lensfun_modifier_t *mm = (dt_iop_lensfun_modifier_t *)modifiers->data;
+      if(mm->modflag == g->corrections_done)
+      {
+        gtk_label_set_text(g->message, mm->name);
+        gtk_widget_set_tooltip_text(GTK_WIDGET(g->message), mm->name);
+        break;
+      }
+    }
+  }
 
   gui_changed(self, NULL, NULL);
 }

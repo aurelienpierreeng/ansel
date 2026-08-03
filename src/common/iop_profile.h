@@ -253,8 +253,8 @@ _apply_trc(const dt_aligned_pixel_t rgb_in, dt_aligned_pixel_t rgb_out, float *c
 {
   for(int c = 0; c < 3; c++)
   {
-    rgb_out[c] = (lut[c][0] >= 0.0f) ? dt_ioppr_eval_trc(rgb_in[c], lut[c], unbounded_coeffs[c], lutsize)
-                                     : rgb_in[c];
+    rgb_out[c] = (!IS_NULL_PTR(lut[c]) && lut[c][0] >= 0.0f) ? dt_ioppr_eval_trc(rgb_in[c], lut[c], unbounded_coeffs[c], lutsize)
+                                                              : rgb_in[c];
   }
 }
 

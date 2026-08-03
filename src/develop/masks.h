@@ -305,6 +305,7 @@ typedef enum dt_masks_interaction_t
   DT_MASKS_INTERACTION_SIZE = 1,     // property of the form (shape), explicit
   DT_MASKS_INTERACTION_HARDNESS = 2, // property of the form (shape), explicit
   DT_MASKS_INTERACTION_OPACITY = 3,  // property of the group in which the form is included, explicit
+  DT_MASKS_INTERACTION_ROTATION = 4, // property of the form (shape), explicit
   DT_MASKS_INTERACTION_LAST
 } dt_masks_interaction_t;
 
@@ -1066,6 +1067,24 @@ gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *fo
 gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
                                     dt_masks_form_gui_t *mask_gui, int form_id);
 
+/**
+ * @brief Remove the form from its current group only, keeping it around unused for potential
+ * reuse. Never asks for confirmation, since nothing is destroyed.
+ *
+ * @return gboolean TRUE if the form was removed, FALSE otherwise
+ */
+gboolean dt_masks_remove_shape_from_group(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                                          dt_masks_form_gui_t *mask_gui, int form_id);
+
+/**
+ * @brief Permanently delete the form from every group and from dev->forms. Gated by
+ * dt_masks_gui_confirm_permanent_delete() (itself gated by the "ask_before_delete_mask_shape" pref).
+ *
+ * @return gboolean TRUE if the form was deleted, FALSE otherwise (dialog cancelled)
+ */
+gboolean dt_masks_delete_shape(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                               dt_masks_form_gui_t *mask_gui, int form_id);
+
 
 // Remove a mask
 gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_t *gui);
@@ -1552,6 +1571,14 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 /** Dialogs */
 
 int dt_masks_gui_confirm_delete_form_dialog(const char *form_name);
+
+/**
+ * @brief Ask the user to confirm a permanent shape deletion, gated by the
+ * "ask_before_delete_mask_shape" pref. Shows a "Always ask" checkbox that writes back to the
+ * pref regardless of the response. Returns TRUE immediately without showing anything when the
+ * pref is off.
+ */
+gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name);
 
 #ifdef __cplusplus
 }

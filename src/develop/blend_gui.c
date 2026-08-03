@@ -2017,18 +2017,29 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
                                 active ? DT_MASKS_EVENT_REMOVE : DT_MASKS_EVENT_ADD);
 }
 
-static void _blendop_masks_all_delete_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+// Permanently delete a shape from the "all shapes" list: shared by the row's trash icon and
+// the right-click "Delete" context menu entry, both gated by dt_masks_gui_confirm_permanent_delete().
+static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
 {
   if(IS_NULL_PTR(module)) return;
 
-  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
   dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
   if(IS_NULL_PTR(mask_form)) return;
+
+  if(!dt_masks_gui_confirm_permanent_delete(mask_form->name)) return;
 
   dt_masks_change_form_gui(NULL);
   dt_masks_form_delete(module, NULL, mask_form);
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
+}
+
+static void _blendop_masks_all_delete_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module)) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  _blendop_masks_all_delete(module, formid);
 }
 
 static void _blendop_masks_all_duplicate_callback(GtkWidget *menu_item, dt_iop_module_t *module)
@@ -2108,6 +2119,23 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
   if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path,
                                     &column, NULL, NULL))
     return FALSE;
+
+  // Handle left click on the per-row delete icon column.
+  if(event->button == GDK_BUTTON_PRIMARY && !IS_NULL_PTR(column))
+  {
+    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+    if(!IS_NULL_PTR(bd) && column == bd->all_shapes_delete_col)
+    {
+      GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+      GtkTreeIter iter;
+      int formid = -1;
+      if(gtk_tree_model_get_iter(model, &iter, path))
+        gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+      gtk_tree_path_free(path);
+      if(formid > 0) _blendop_masks_all_delete(module, formid);
+      return TRUE;
+    }
+  }
 
   // Handle left click on checkbox column - toggle directly without requiring selection
   if(event->button == GDK_BUTTON_PRIMARY && !IS_NULL_PTR(column))
@@ -2443,26 +2471,6 @@ static void _blendop_masks_group_unlink(dt_iop_module_t *module, const int formi
                                 DT_MASKS_EVENT_REMOVE);
 }
 
-static gboolean _blendop_masks_confirm_delete(const char *form_name)
-{
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return FALSE;
-
-  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
-                                             GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
-                                             GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE,
-                                             _("Permanently delete the shape '%s'?"), form_name);
-  gtk_message_dialog_format_secondary_text(
-      GTK_MESSAGE_DIALOG(dialog), "%s",
-      _("It will be detached from this mask and removed from the list of available shapes."));
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Cancel"), GTK_RESPONSE_CANCEL);
-  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Delete"), GTK_RESPONSE_YES);
-  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
-
-  const int response = gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_widget_destroy(dialog);
-  return response == GTK_RESPONSE_YES;
-}
-
 // Detach the form from its parent group and remove it from dev->forms altogether.
 static void _blendop_masks_group_delete(dt_iop_module_t *module, const int formid, const int parentid)
 {
@@ -2470,7 +2478,7 @@ static void _blendop_masks_group_delete(dt_iop_module_t *module, const int formi
   dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
   if(IS_NULL_PTR(form)) return;
 
-  if(!_blendop_masks_confirm_delete(form->name)) return;
+  if(!dt_masks_gui_confirm_permanent_delete(form->name)) return;
 
   // Discard any visible overlay before mutating the masks.
   dt_masks_change_form_gui(NULL);
@@ -3999,6 +4007,20 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     gtk_tree_view_column_add_attribute(all_shapes_status_col, renderer, "sensitive",
                        BLENDOP_MASKS_ALL_COL_SENSITIVE);
 
+    // Per-row delete icon, mirroring group_delete_col above. Clicks are handled in
+    // _blendop_masks_all_button_pressed by matching the column.
+    bd->all_shapes_delete_col = gtk_tree_view_column_new();
+    renderer = gtk_cell_renderer_pixbuf_new();
+    g_object_set(renderer, "icon-name", "user-trash-symbolic", "stock-size", GTK_ICON_SIZE_MENU, NULL);
+    gtk_tree_view_column_pack_start(bd->all_shapes_delete_col, renderer, FALSE);
+    gtk_tree_view_column_set_sizing(bd->all_shapes_delete_col, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_fixed_width(bd->all_shapes_delete_col, DT_PIXEL_APPLY_DPI(24));
+    gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_treeview), bd->all_shapes_delete_col);
+
+    // Keep the name column expanding so the status text and trash icon stay flush right,
+    // same as group_shapes_col above.
+    gtk_tree_view_column_set_expand(all_shapes_name_col, TRUE);
+
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(bd->masks_treeview));
     gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
     g_signal_connect(selection, "changed", G_CALLBACK(_blendop_masks_all_selection_changed), module);
@@ -4785,6 +4807,7 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->all_shapes_store = NULL;
   bd->group_shapes_sw = NULL;
   bd->all_shapes_col = NULL;
+  bd->all_shapes_delete_col = NULL;
   bd->all_shapes_sw = NULL;
   bd->lists_stack = NULL;
   bd->all_shapes_buttons = NULL;

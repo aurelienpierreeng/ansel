@@ -40,8 +40,8 @@ static inline float normalize_laplacian(const float sigma)
   return 2.f / sqf(sigma);
 }
 
-// Normalization scaling of the wavelet to approximate a laplacian
-// from the function above for sigma = B_SPLINE_SIGMA as a constant
+// Normalization scaling of the wavelet to approximate a laplacian:
+// 2 * sqrt(pi) / B_SPLINE_SIGMA^2 (NOT normalize_laplacian() above, which is 2 / sigma^2)
 #define B_SPLINE_TO_LAPLACIAN 3.182727439285017f
 #define B_SPLINE_TO_LAPLACIAN_2 10.129753952777762f // square
 

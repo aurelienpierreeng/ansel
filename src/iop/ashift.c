@@ -141,7 +141,7 @@
 
 // For parameter optimization we are using the Nelder-Mead simplex method
 // implemented by Michael F. Hutt.
-#include "ashift_nmsimplex.c"
+#include "common/solvers/nelder_mead_simplex.h"
 
 
 DT_MODULE_INTROSPECTION(5, dt_iop_ashift_params_t)
@@ -2642,8 +2642,15 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
     pcount = 2;
   }
 
+  // NMS_CROP_EPSILON (100 px^2) is a fixed absolute tolerance, but crop_fitness's magnitude scales
+  // with the image's area (tens of millions of px^2) — near identity params, the optimum is already
+  // ~the initial guess, the landscape goes near-flat, and floating-point noise alone keeps the
+  // simplex spread above this tiny absolute value forever, burning all NMS_CROP_ITERATIONS. Scale
+  // the tolerance with image area (floored at the original constant) instead.
+  const double crop_epsilon = fmax(NMS_CROP_EPSILON, 1e-4 * (double)crop_width * (double)crop_height);
+
   // start the simplex fit
-  const int iter = simplex(crop_fitness, params, pcount, NMS_CROP_EPSILON, NMS_CROP_SCALE, NMS_CROP_ITERATIONS,
+  const int iter = simplex(crop_fitness, params, pcount, crop_epsilon, NMS_CROP_SCALE, NMS_CROP_ITERATIONS,
                            crop_constraint, (void*)&cropfit);
   // in case the fit did not converge -> failed
   if(iter >= NMS_CROP_ITERATIONS) goto failed;
@@ -2697,22 +2704,15 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   return;
 
 failed:
-  // in case of failure: reset clipping margins, set "automatic cropping" parameter
-  // to "off" state, and display warning message
-  _clear_crop_box(p);
-  p->cropmode = ASHIFT_CROP_OFF;
-  dt_gui_freeze_begin();
-  dt_bauhaus_combobox_set(g->cropmode, p->cropmode);
-  dt_gui_freeze_end();
   g->fitting = 0;
-  dt_control_log(_("automatic cropping failed"));
 
-  if(g->editing)
-  {
-    dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
-    dt_dev_get_thumbnail_size(self->dev);
-    dt_dev_pixelpipe_resync_history_all(self->dev);
-  }
+  // At rotation/lensshift (0,0,0) the target crop is trivially the full image regardless of
+  // whether the simplex formally reports convergence, so a non-convergence here is not worth
+  // reporting as a failure.
+  const gboolean identity_transform = (p->rotation == 0.0f && p->lensshift_v == 0.0f && p->lensshift_h == 0.0f);
+  if(!identity_transform)
+    dt_control_log(_("Automatic cropping failed. Keeping previous margins."));
+
   return;
 }
 
@@ -5075,6 +5075,21 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   }
 }
 
+/* The fit_v/fit_h buttons are labeled from the user's point of view, i.e. the final,
+ * post-flip image the user sees on screen. ashift itself runs upstream of the flip module in
+ * iop_order (see doc/reorganisation.md and the ashift notes in CLAUDE.md) and always fits lines
+ * in its own, pre-flip buffer space, so when the flip module rotates the image 90 degrees, the
+ * on-screen "horizontal"/"vertical" directions are swapped relative to that buffer space.
+ * dt_image_get_effective_orientation() reads the flip module's committed history, falling back
+ * to EXIF, so it reflects the real final orientation regardless of how it was set (camera EXIF,
+ * lighttable rotate, or the flip module edited directly). */
+static gboolean _ashift_orientation_swaps_axes(dt_iop_module_t *self)
+{
+  if(!self->dev) return FALSE;
+  const dt_image_orientation_t orientation = dt_image_get_effective_orientation(&self->dev->image_storage);
+  return (orientation & ORIENTATION_SWAP_XY) != 0;
+}
+
 static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -5084,19 +5099,20 @@ static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event,
   {
     dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
     dt_iop_ashift_params_t *p = _get_ashift_params(self);
+    const gboolean swap_axes = _ashift_orientation_swaps_axes(self);
 
     dt_iop_ashift_fitaxis_t fitaxis = ASHIFT_FIT_NONE;
     switch(g->fitting_mode)
     {
       case(ASHIFT_FITTING_ALL):
       case(ASHIFT_FITTING_LENS_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_VERTICALLY;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_HORIZONTALLY : ASHIFT_FIT_VERTICALLY;
         break;
       case(ASHIFT_FITTING_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_ROTATION_VERTICAL_LINES;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_ROTATION_HORIZONTAL_LINES : ASHIFT_FIT_ROTATION_VERTICAL_LINES;
         break;
       case(ASHIFT_FITTING_LENS):
-        g->lastfit = fitaxis = ASHIFT_FIT_VERTICALLY_NO_ROTATION;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_HORIZONTALLY_NO_ROTATION : ASHIFT_FIT_VERTICALLY_NO_ROTATION;
         break;
       default:
         fitaxis = ASHIFT_FIT_NONE;
@@ -5131,19 +5147,20 @@ static int _event_fit_h_button_clicked(GtkWidget *widget, GdkEventButton *event,
   {
     dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
     dt_iop_ashift_params_t *p = _get_ashift_params(self);
+    const gboolean swap_axes = _ashift_orientation_swaps_axes(self);
 
     dt_iop_ashift_fitaxis_t fitaxis = ASHIFT_FIT_NONE;
     switch(g->fitting_mode)
     {
       case(ASHIFT_FITTING_ALL):
       case(ASHIFT_FITTING_LENS_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_HORIZONTALLY;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_VERTICALLY : ASHIFT_FIT_HORIZONTALLY;
         break;
       case(ASHIFT_FITTING_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_ROTATION_HORIZONTAL_LINES;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_ROTATION_VERTICAL_LINES : ASHIFT_FIT_ROTATION_HORIZONTAL_LINES;
         break;
       case(ASHIFT_FITTING_LENS):
-        g->lastfit = fitaxis = ASHIFT_FIT_HORIZONTALLY_NO_ROTATION;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_VERTICALLY_NO_ROTATION : ASHIFT_FIT_HORIZONTALLY_NO_ROTATION;
         break;
       default:
         fitaxis = ASHIFT_FIT_NONE;

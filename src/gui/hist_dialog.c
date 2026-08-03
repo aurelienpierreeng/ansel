@@ -291,7 +291,9 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
     if(res == GTK_RESPONSE_CANCEL || res == GTK_RESPONSE_DELETE_EVENT || res == GTK_RESPONSE_OK) break;
   }
 
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(GTK_WIDGET(dialog));
+  dt_gui_refocus_parent(dialog_parent);
 
   g_object_unref(is_active_pb);
   g_object_unref(is_inactive_pb);

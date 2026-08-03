@@ -229,6 +229,15 @@ static inline int dt_pthread_rwlock_init(dt_pthread_rwlock_t *lock,
   return res;
 }
 
+// In this debug variant the name field is diagnostic scratch, overwritten
+// with the caller's file:line on every lock operation; accept the label
+// anyway so callers compile identically in both variants (the release
+// variant uses it to opt into wait-time diagnostics).
+static inline void dt_pthread_rwlock_set_name(dt_pthread_rwlock_t *lock, const char *name)
+{
+  snprintf(lock->name, sizeof(lock->name), "%s", name);
+}
+
 static inline int dt_pthread_rwlock_destroy(dt_pthread_rwlock_t *lock)
 {
   if(lock->writer_depth != 0)

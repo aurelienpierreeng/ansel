@@ -240,10 +240,12 @@ int dt_collection_get_nth(const dt_collection_t *collection, int nth);
  * unlimited */
 GList *dt_collection_get_all(const dt_collection_t *collection, int limit);
 
-/** get the list of image ids matching a single (property, text) rule, independently of the
- * currently active collection. Returns a GList of imgids (GINT_TO_POINTER), caller frees with
- * g_list_free. Used by the library module to feed batch/background operations. */
-GList *dt_collection_get_images_for_rule(const dt_collection_properties_t property, const char *text);
+/** get the list of image ids matching a single (property, text, recursive) rule, independently of
+ * the currently active collection. `recursive` only matters for DT_COLLECTION_PROP_FOLDERS.
+ * Returns a GList of imgids (GINT_TO_POINTER), caller frees with g_list_free. Used by the library
+ * module to feed batch/background operations. */
+GList *dt_collection_get_images_for_rule(const dt_collection_properties_t property, const char *text,
+                                         gboolean recursive);
 
 /** One distinct value of a collection property, for the library module's value lists. */
 typedef struct dt_collection_name_value_t

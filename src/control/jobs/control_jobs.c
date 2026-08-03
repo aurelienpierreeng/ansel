@@ -626,7 +626,10 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
   while(t)
   {
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    const int newimgid = dt_image_duplicate(imgid);
+    // Defer exposing the duplicate to the collection/lighttable grid until its history is
+    // settled below -- otherwise the grid can generate and cache a thumbnail from the
+    // still-historyless row before the copy/delete below ever runs.
+    const int newimgid = dt_image_duplicate_no_reload(imgid);
     if(newimgid != UNKNOWN_IMAGE)
     {
       if(GPOINTER_TO_INT(params->data))
@@ -766,6 +769,29 @@ static GList *_get_full_pathname(char *imgs)
   return g_list_reverse(list);  // list was built in reverse order, so un-reverse it
 }
 
+// Regenerate .xmp files for any surviving duplicate at each of `pathnames` (owned, g_strdup'd
+// full paths from _get_full_pathname(); this call takes ownership and frees them), batched into
+// a single dt_control_save_xmps() job. dt_image_synch_all_xmp() spawns one DT_JOB_QUEUE_USER_FG
+// job per path -- fine for the handful of images a normal removal/delete touches, but for a large
+// recursive folder removal it flooded that same queue (the one this job itself runs on) with one
+// tiny job per path, each spawning its own GUI progress bar: stalled the app for minutes, looking
+// like an infinite loop.
+static void _resync_xmp_duplicates(GList *pathnames)
+{
+  GList *resync_imgids = NULL;
+  if(dt_image_get_xmp_mode())
+  {
+    for(GList *l = pathnames; l; l = g_list_next(l))
+    {
+      const int32_t dup_imgid = dt_image_get_id_full_path((const char *)l->data);
+      if(dup_imgid != UNKNOWN_IMAGE) resync_imgids = g_list_prepend(resync_imgids, GINT_TO_POINTER(dup_imgid));
+    }
+  }
+  g_list_free_full(pathnames, dt_free_gpointer);
+  if(!IS_NULL_PTR(resync_imgids)) dt_control_save_xmps(resync_imgids, FALSE);
+  g_list_free(resync_imgids);
+}
+
 static int32_t dt_control_remove_images_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
@@ -822,12 +848,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
     dt_control_job_set_progress(job, fraction);
   }
 
-  while(list)
-  {
-    char *imgname = (char *)list->data;
-    dt_image_synch_all_xmp(imgname);
-    list = g_list_delete_link(list, list);
-  }
+  _resync_xmp_duplicates(list);
   dt_film_remove_empty();
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
@@ -1139,13 +1160,7 @@ delete_next_file:
 
   sqlite3_finalize(stmt);
 
-  while(list)
-  {
-    char *imgname = (char *)list->data;
-    dt_image_synch_all_xmp(imgname);
-    list = g_list_delete_link(list, list);
-  }
-  g_list_free(list);
+  _resync_xmp_duplicates(list);
   list = NULL;
   dt_film_remove_empty();
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,

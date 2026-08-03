@@ -133,6 +133,11 @@ float dt_dev_get_module_scale(const dt_dev_pixelpipe_t *const pipe, const dt_iop
   return pipe->iscale / roi_in->scale;
 }
 
+uint32_t dt_dev_get_roi_filters(const dt_dev_pixelpipe_iop_t *const piece, const dt_iop_roi_t *const roi_in)
+{
+  return dt_rawspeed_crop_dcraw_filters(piece->dsc_in.filters, roi_in->x, roi_in->y);
+}
+
 
 void dt_iop_load_default_params(dt_iop_module_t *module)
 {
@@ -489,6 +494,7 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
   module->histogram_middle_grey = FALSE;
   module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   module->bypass_cache = FALSE;
+  module->bypass_cache_variant = 0;
   module->enabled = module->default_enabled = module->workflow_enabled = 0; // all modules disabled by default.
   g_strlcpy(module->op, so->op, 20);
   module->raster_mask.source.users = g_hash_table_new(NULL, NULL);
@@ -2995,6 +3001,11 @@ void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state)
       if(current != module && current->bypass_cache) current->bypass_cache = FALSE;
     }
   }
+}
+
+void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant)
+{
+  module->bypass_cache_variant = variant;
 }
 
 

@@ -109,8 +109,24 @@ void *dt_cache_arena_alloc(dt_cache_arena_t *a,
 
   dt_pthread_mutex_unlock(&a->lock);
 
+  uint8_t *ptr = a->base + (size_t)first * a->page_size;
+
+#ifdef _WIN32
+  /* The arena is only MEM_RESERVE'd up front (see dt_cache_arena_init): commit
+   * physical/pagefile backing for just this range, on demand, so the process's
+   * commit charge tracks actual live cache usage instead of the full arena size. */
+  if(IS_NULL_PTR(VirtualAlloc(ptr, rounded_size, MEM_COMMIT, PAGE_READWRITE)))
+  {
+    const DWORD err = GetLastError();
+    fprintf(stderr, "couldn't commit cache page range (VirtualAlloc error %lu)\n", (unsigned long)err);
+    /* hand the pages back before failing so the arena stays consistent */
+    dt_cache_arena_free(a, ptr, rounded_size);
+    return NULL;
+  }
+#endif
+
   *out_size = rounded_size;
-  return a->base + (size_t)first * a->page_size;
+  return ptr;
 }
 
 
@@ -272,8 +288,17 @@ int dt_cache_arena_init(dt_cache_arena_t *a, size_t total_size)
   const size_t pages = total_size / page_size;
 
 #ifdef _WIN32
+  // Unlike Linux's mmap(MAP_PRIVATE | MAP_ANONYMOUS), which only reserves address
+  // space and lets the kernel commit physical/swap backing lazily as pages are
+  // first touched (overcommit), Windows' MEM_COMMIT charges the *entire*
+  // total_size against the system commit limit (RAM + pagefile) immediately.
+  // total_size here is sized to use most of system RAM (see
+  // dt_configure_runtime_performance() in darktable.c), so an eager commit can
+  // exceed the commit limit even though actual cache usage never does. Reserve
+  // the range only; dt_cache_arena_alloc() commits each carved-out sub-range on
+  // demand, mirroring the lazy-commit behavior mmap gives on Linux.
   a->base = (uint8_t *)VirtualAlloc(NULL, total_size,
-                                    MEM_RESERVE | MEM_COMMIT,
+                                    MEM_RESERVE,
                                     PAGE_READWRITE);
   if(IS_NULL_PTR(a->base))
   {

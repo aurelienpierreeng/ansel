@@ -530,6 +530,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   int index = 0;
   int xmps = 0; // number of xmps imported in db.
   int32_t imgid = UNKNOWN_IMAGE;
+  gint64 last_collection_refresh = 0;
 
   for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
   {
@@ -551,11 +552,27 @@ static int32_t _control_import_job_run(dt_job_t *job)
       if(index == 0)
         dt_collection_load_filmroll(darktable.collection, imgid, FALSE);
 
-      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+      // Throttled: dt_collection_update_query() fully rebuilds memory.collected_images and its
+      // DT_SIGNAL_COLLECTION_CHANGED triggers a full lighttable/thumbtable re-layout on the GUI
+      // thread. Firing it after every single image queued one such redraw per image -- for a
+      // large library each redraw is expensive enough that a multi-hundred-image import kept the
+      // GUI thread permanently busy processing the backlog, appearing fully frozen (no input
+      // handled, and even the background-job progress bar -- created and shown correctly -- never
+      // got an actual repaint) for the whole import.
+      const gint64 now = g_get_monotonic_time();
+      if(now - last_collection_refresh > 250000) // 250ms
+      {
+        dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+        last_collection_refresh = now;
+      }
 
       index++;
     }
   }
+
+  // Guarantee the final state is reflected even if the last few images landed inside the throttle window.
+  if(index > 0)
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
   if(index == 0)
   {

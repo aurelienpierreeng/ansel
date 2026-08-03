@@ -34,7 +34,7 @@
 #include "chart/common.h"
 #include "chart/deltaE.h"
 #include "chart/pfm.h"
-#include "chart/thinplate.h"
+#include "common/solvers/thinplate.h"
 #include "chart/tonecurve.h"
 #include "common/exif.h"
 

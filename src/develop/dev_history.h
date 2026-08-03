@@ -332,6 +332,21 @@ void dt_dev_history_gui_update(struct dt_develop_t *dev);
 void dt_dev_history_pixelpipe_update(struct dt_develop_t *dev, gboolean rebuild);
 
 /**
+ * @brief Check whether any image of the list is the one currently loaded in the darkroom.
+ *
+ * @param imgs List of image ids (GINT_TO_POINTER).
+ * @return TRUE if darktable.develop is attached to one of them.
+ */
+gboolean dt_dev_history_is_image_in_dev(GList *imgs);
+
+/**
+ * @brief Reload the current darkroom history and refresh every dependent GUI.
+ *
+ * @param dev Develop context attached to darkroom.
+ */
+void dt_apply_dev_history_update(struct dt_develop_t *dev);
+
+/**
  * @brief Notify the rest of the app that history changes were written.
  *
  * Updates thumbnails and emits user-visible notices when needed.

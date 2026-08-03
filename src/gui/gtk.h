@@ -516,6 +516,12 @@ int dt_gui_show_standalone_three_choice_dialog(const char *title, const char *ma
 char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup, const char *placeholder,
                                            const char *no_text, const char *yes_text);
 
+// Explicitly return keyboard focus to a just-closed modal/dialog window's parent, falling
+// back to the main window if @p parent is NULL or not a window. Call right after destroying
+// a dialog (gtk_widget_destroy / gtk_dialog_run's caller): the transient-for hint is not
+// enough to get focus back reliably on every platform (macOS/quartz in particular).
+void dt_gui_refocus_parent(GtkWindow *parent);
+
 void dt_gui_add_help_link(GtkWidget *widget, char *link);
 
 // load a CSS theme

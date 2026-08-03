@@ -24,7 +24,7 @@ declare -A PATTERNS;
 PATTERNS['src/external/rawspeed']="use --no-verify to change rawspeed";
 PATTERNS['src/external/OpenCL']="use --no-verify to change OpenCL";
 PATTERNS['src/external/whereami']="use --no-verify to change whereami";
-PATTERNS['src/tests/integration']="use --no-verify to change integration";
+PATTERNS['tests/integration']="use --no-verify to change integration";
 
 # Loop over staged files and check for any specific pattern listed in
 # PATTERNS keys.
@@ -67,6 +67,23 @@ if [ -n "$repo_root" ]; then
     else
       echo "Warning: failed to regenerate AUTHORS" >&2
       rm -f "$tmp_file"
+    fi
+  fi
+
+  # Quick image test smoke test (tests/image_test.sh): local only, uses the shared
+  # team bank (git submodule at tests/image_test/samples) if it's checked out, a
+  # personal bank (tests/image_test.sh configure <dir> / $ANSEL_IMAGE_TEST) otherwise.
+  # No-ops instantly if neither is available. --strict fails on any delta-E vs baseline,
+  # not just dE > 2.3. --keep leaves tests/image_test/results/ (per-image logs, including
+  # ones that passed) for inspection instead of wiping it on success. Run the full bank by
+  # hand before landing pipeline/IOP changes; this is only a fast sanity check (8 raws).
+  # Skip with SKIP_IMAGE_TEST=1 or --no-verify.
+  image_test_script="$repo_root/tests/image_test.sh"
+  if [ -z "${SKIP_IMAGE_TEST:-}" ] && [ -x "$image_test_script" ]; then
+    if ! "$image_test_script" run --if-configured --quiet --keep --opencl; then
+      echo -e "\033[1;31mimage_test smoke test failed -- see above, or re-run: tests/image_test.sh\033[0m"
+      echo "Skip with SKIP_IMAGE_TEST=1 git commit, or git commit --no-verify"
+      exit 1
     fi
   fi
 fi

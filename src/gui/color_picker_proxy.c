@@ -673,8 +673,25 @@ static void _color_picker_widget_destroy(GtkWidget *widget, dt_iop_color_picker_
   dt_develop_t *const dev = darktable.develop;
   if(IS_NULL_PTR(dev) || dev->color_picker.picker != picker) return;
 
+  // Mirror dt_iop_color_picker_reset()'s cleanup: the picker's own button widget is the one being
+  // destroyed here (e.g. a module GUI panel rebuild), so there is no widget left to toggle off, but
+  // every other piece of dev-wide picker state must still be cleared the same way. Leaving
+  // dev->color_picker.enabled/.module stale keeps dt_iop_color_picker_is_visible() reporting a
+  // picker "active" for a module whose picker widget no longer exists -- observed as the custom
+  // cursor in iop/toneequal.c getting stuck, fixed only by fully reloading the image (issue #1028).
+  dt_iop_module_t *const module = dev->color_picker.module;
+
+  dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-widget-destroyed-input");
+  dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-widget-destroyed-output");
+
   dev->color_picker.picker = NULL;
   dev->color_picker.widget = NULL;
+  dev->color_picker.module = NULL;
+  dev->color_picker.kind = DT_COLOR_PICKER_POINT;
+  dev->color_picker.picker_cst = IOP_CS_NONE;
+  dev->color_picker.enabled = FALSE;
+  dev->color_picker.update_pending = FALSE;
+  if(module) module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
 }
 
 void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)

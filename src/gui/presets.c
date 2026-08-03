@@ -302,7 +302,9 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 #endif
     gtk_window_set_title(GTK_WINDOW(dialog), _("delete preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
+    GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
+    dt_gui_refocus_parent(dialog_parent);
   }
 
   if(res == GTK_RESPONSE_YES)
@@ -510,7 +512,9 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
     if(g->callback) ((void (*)(dt_gui_presets_edit_dialog_t *))g->callback)(g);
   }
 
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(GTK_WIDGET(dialog));
+  dt_gui_refocus_parent(dialog_parent);
   dt_free(g->original_name);
   dt_free(g->module_name);
   dt_free(g->operation);
@@ -920,7 +924,9 @@ static void _menuitem_update_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 #endif
     gtk_window_set_title(GTK_WINDOW(dialog), _("update preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
+    GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
+    dt_gui_refocus_parent(dialog_parent);
   }
 
   if(res == GTK_RESPONSE_YES)

@@ -460,6 +460,16 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(struct dt_dev_pixelpipe_cache_t 
   ((float *)dt_pixelpipe_cache_alloc_align_cache((size_t)(pixels) * sizeof(float), (id)))
 #endif
 
+#ifndef dt_pixelpipe_cache_alloc_align_int
+#define dt_pixelpipe_cache_alloc_align_int(count, pipe) \
+  ((int *)dt_pixelpipe_cache_alloc_align((size_t)(count) * sizeof(int), (pipe)))
+#endif
+
+#ifndef dt_pixelpipe_cache_alloc_align_double
+#define dt_pixelpipe_cache_alloc_align_double(count, pipe) \
+  ((double *)dt_pixelpipe_cache_alloc_align((size_t)(count) * sizeof(double), (pipe)))
+#endif
+
 void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache, void **mem, const char *message);
 
 #define dt_pixelpipe_cache_free_align(mem) \

@@ -72,13 +72,16 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
     return;
   }
 
-  /* Map a green hexagon around each non-green pixel and vice versa:    */
+  /* Map a green hexagon around each non-green pixel and vice versa. allhex[] is later
+   * indexed by hexmap() using tile-local (roi_in-relative) row/col taken mod 3, so it
+   * must be built against that same absolute phase: pass roi_in here (not NULL) so the
+   * color lookups land on the actual sensor position, not xtrans[][]'s own local origin. */
   for(int row = 0; row < 3; row++)
     for(int col = 0; col < 3; col++)
       for(int ng = 0, d = 0; d < 10; d += 2)
       {
-        const int g = FCxtrans(row, col, NULL, xtrans) == 1;
-        if(FCxtrans(row + orth[d], col + orth[d + 2], NULL, xtrans) == 1)
+        const int g = FCxtrans(row, col, roi_in, xtrans) == 1;
+        if(FCxtrans(row + orth[d], col + orth[d + 2], roi_in, xtrans) == 1)
           ng = 0;
         else
           ng++;
@@ -1076,13 +1079,16 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
     return;
   }
 
-  /* Map a green hexagon around each non-green pixel and vice versa:    */
+  /* Map a green hexagon around each non-green pixel and vice versa. allhex[] is later
+   * indexed by hexmap() using tile-local (roi_in-relative) row/col taken mod 3, so it
+   * must be built against that same absolute phase: pass roi_in here (not NULL) so the
+   * color lookups land on the actual sensor position, not xtrans[][]'s own local origin. */
   for(int row = 0; row < 3; row++)
     for(int col = 0; col < 3; col++)
       for(int ng = 0, d = 0; d < 10; d += 2)
       {
-        int g = FCxtrans(row, col, NULL, xtrans) == 1;
-        if(FCxtrans(row + orth[d], col + orth[d + 2], NULL, xtrans) == 1)
+        int g = FCxtrans(row, col, roi_in, xtrans) == 1;
+        if(FCxtrans(row + orth[d], col + orth[d + 2], roi_in, xtrans) == 1)
           ng = 0;
         else
           ng++;
@@ -1686,13 +1692,16 @@ static int process_markesteijn_cl(struct dt_iop_module_t *self, const dt_dev_pix
   // green pixels (initialized here only to avoid compiler warning)
   char sgreen[2] = { 0 };
 
-  // Map a green hexagon around each non-green pixel and vice versa:
+  // Map a green hexagon around each non-green pixel and vice versa. allhex[] is later
+  // indexed by the GPU kernels using tile-local (roi_in-relative) row/col taken mod 3, so
+  // it must be built against that same absolute phase: pass roi_in here (not NULL) so the
+  // color lookups land on the actual sensor position, not xtrans[][]'s own local origin.
   for(int row = 0; row < 3; row++)
     for(int col = 0; col < 3; col++)
       for(int ng = 0, d = 0; d < 10; d += 2)
       {
-        const int g = FCxtrans(row, col, NULL, xtrans) == 1;
-        if(FCxtrans(row + orth[d] + 6, col + orth[d + 2] + 6, NULL, xtrans) == 1)
+        const int g = FCxtrans(row, col, roi_in, xtrans) == 1;
+        if(FCxtrans(row + orth[d] + 6, col + orth[d + 2] + 6, roi_in, xtrans) == 1)
           ng = 0;
         else
           ng++;

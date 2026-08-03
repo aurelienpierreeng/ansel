@@ -163,11 +163,14 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
       if(energy < 1e-6f) near_black++;
     }
 
+    const uint64_t content_hash = dt_hash(5381, (const char *)buffer, pixels * channels * sizeof(float));
+
     dt_print(DT_DEBUG_PIPECACHE,
-             "[pixelpipe_stats] pipe=%s module=%s phase=%s type=float ch=%u roi=%dx%d "
+             "[pixelpipe_stats] pipe=%s module=%s phase=%s type=float ch=%u roi=%dx%d ptr=%p "
+             "content_hash=%" PRIu64 " "
              "rgb_min=(%g,%g,%g) rgb_max=(%g,%g,%g) a_min=%g a_max=%g near_black=%" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT " nonfinite=%" G_GSIZE_FORMAT "\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
-             channels, roi->width, roi->height,
+             channels, roi->width, roi->height, buffer, content_hash,
              minv[0], (channels > 1) ? minv[1] : 0.0f, (channels > 2) ? minv[2] : 0.0f,
              maxv[0], (channels > 1) ? maxv[1] : 0.0f, (channels > 2) ? maxv[2] : 0.0f,
              (channels > 3) ? minv[3] : 0.0f, (channels > 3) ? maxv[3] : 0.0f,
@@ -192,11 +195,14 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
       if(energy == 0) near_black++;
     }
 
+    const uint64_t content_hash = dt_hash(5381, (const char *)buffer, pixels * channels * sizeof(uint8_t));
+
     dt_print(DT_DEBUG_PIPECACHE,
-             "[pixelpipe_stats] pipe=%s module=%s phase=%s type=u8 ch=%u roi=%dx%d "
+             "[pixelpipe_stats] pipe=%s module=%s phase=%s type=u8 ch=%u roi=%dx%d ptr=%p "
+             "content_hash=%" PRIu64 " "
              "rgb_min=(%d,%d,%d) rgb_max=(%d,%d,%d) a_min=%d a_max=%d near_black=%" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT "\n",
              dt_pixelpipe_get_pipe_name(pipe->type), module->op, phase ? phase : "-",
-             channels, roi->width, roi->height,
+             channels, roi->width, roi->height, buffer, content_hash,
              minv[0], (channels > 1) ? minv[1] : 0, (channels > 2) ? minv[2] : 0,
              maxv[0], (channels > 1) ? maxv[1] : 0, (channels > 2) ? maxv[2] : 0,
              (channels > 3) ? minv[3] : 0, (channels > 3) ? maxv[3] : 0,

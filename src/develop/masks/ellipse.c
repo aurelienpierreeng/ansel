@@ -576,6 +576,8 @@ static float _ellipse_get_interaction_value(const dt_masks_form_t *form, dt_mask
       return fmaxf(ellipse->radius[0], ellipse->radius[1]);
     case DT_MASKS_INTERACTION_HARDNESS:
       return ellipse->border;
+    case DT_MASKS_INTERACTION_ROTATION:
+      return ellipse->rotation;
     default:
       return NAN;
   }
@@ -596,13 +598,18 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
                             int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                         int index, const float amount, const dt_masks_increment_t increment, const int flow);
+static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                            int index, const float amount, const dt_masks_increment_t increment, const int flow);
 
 static float _ellipse_set_interaction_value(dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
                                             dt_masks_increment_t increment, int flow,
                                             dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(form)) return NAN;
-  const int index = 0;
+  // Mirrors _dt_masks_events_get_dispatch_form()'s form_index: this shape's position in the
+  // currently displayed group, so dt_masks_gui_form_create() below refreshes the right
+  // mask_gui->points slot instead of clobbering whatever shape sits at index 0.
+  const int index = (!IS_NULL_PTR(gui) && gui->group_selected >= 0) ? gui->group_selected : 0;
 
   switch(interaction)
   {
@@ -611,6 +618,9 @@ static float _ellipse_set_interaction_value(dt_masks_form_t *form, dt_masks_inte
       return _ellipse_get_interaction_value(form, interaction);
     case DT_MASKS_INTERACTION_HARDNESS:
       if(!_change_hardness(form, gui, module, index, value, increment, flow)) return NAN;
+      return _ellipse_get_interaction_value(form, interaction);
+    case DT_MASKS_INTERACTION_ROTATION:
+      if(!_change_rotation(form, gui, module, index, value, increment, flow)) return NAN;
       return _ellipse_get_interaction_value(form, interaction);
     default:
       return NAN;

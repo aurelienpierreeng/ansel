@@ -64,6 +64,7 @@
 #include "common/exif.h"
 #include "common/image_cache.h"
 #include "common/history.h"
+#include "common/image_extensions.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"
 #ifdef HAVE_OPENEXR
@@ -117,28 +118,6 @@
 #include <string.h>
 #include <strings.h>
 
-// These lists drive *type inference from the file extension only* (dt_imageio_get_type_from_extension).
-// They are deliberately conservative: the extension is only allowed to commit a dynamic-range flag
-// when the container's sample format is fixed. A raw extension always means sensor data; an
-// integer-only container is always LDR; a float-only container is always HDR.
-//
-// Containers that can hold EITHER integer or float / high-bit-depth data — TIFF, AVIF, HEIF/HEIC,
-// and `dng` — are NOT listed here on purpose: their dynamic range cannot be known before decoding,
-// so they stay UNKNOWN until dt_image_buffer_resolve_flags() classifies them from the decoded
-// buffer datatype (TYPE_FLOAT -> HDR, integer non-raw -> LDR). Decoder *routing* for those formats
-// lives in the separate raster_formats[] / hdr_formats[] lists below, which is a different concern.
-static const gchar *_supported_raw[]
-    = { "3fr", "ari", "arw", "bay", "cr2", "cr3", "crw", "dc2", "dcr", "erf", "fff",
-        "ia",  "iiq", "k25", "kc2", "kdc", "mdc", "mef", "mos", "mrw", "nef", "nrw",
-        "orf", "pef", "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "sti", "x3f", NULL };
-// integer-only raster containers — unambiguously low dynamic range:
-static const gchar *_supported_ldr[]
-    = { "bmp",  "bmq", "cap", "cine", "cs1", "dcm", "gif", "gpr", "j2c", "j2k", "jng", "jp2", "jpc",
-        "jpeg", "jpg", "miff", "mng", "ori", "pbm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc",
-        "webp", NULL };
-// float-only raster containers — unambiguously high dynamic range:
-static const gchar *_supported_hdr[] = { "exr", "hdr", "pfm", NULL };
-
 /**
  * @brief Map Exiv2 preview MIME types to decoder format identifiers.
  *
@@ -176,33 +155,16 @@ static const char *_preview_format_from_mime_type(const char *mime_type)
 
 // Best-effort image-type hint from the file extension. Returns DT_IMAGE_RAW / DT_IMAGE_LDR /
 // DT_IMAGE_HDR for the unambiguous extensions, or 0 ("unknown") for containers whose dynamic range
-// only the decoder can settle (TIFF, AVIF, HEIF/HEIC, DNG). Callers must treat 0 as "decode it";
-// dt_image_buffer_resolve_flags() sets the authoritative LDR/HDR/MOSAIC flags once decoded.
+// only the decoder can settle (TIFF, AVIF, HEIF/HEIC, DNG -- see dt_image_ext_is_ambiguous()).
+// Callers must treat 0 as "decode it"; dt_image_buffer_resolve_flags() sets the authoritative
+// LDR/HDR/MOSAIC flags once decoded.
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
 {
   const char *ext = g_str_has_prefix(extension, ".") ? extension + 1 : extension;
-  for(const char **i = _supported_raw; !IS_NULL_PTR(*i); i++)
-  {
-    if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
-    {
-      return DT_IMAGE_RAW;
-    }
-  }
-  for(const char **i = _supported_hdr; !IS_NULL_PTR(*i); i++)
-  {
-    if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
-    {
-      return DT_IMAGE_HDR;
-    }
-  }
-  for(const char **i = _supported_ldr; !IS_NULL_PTR(*i); i++)
-  {
-    if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
-    {
-      return DT_IMAGE_LDR;
-    }
-  }
-  // default to 0
+  if(dt_image_ext_is_ambiguous(ext)) return 0;
+  if(dt_image_ext_is_raw(ext)) return DT_IMAGE_RAW;
+  if(dt_image_ext_is_hdr(ext)) return DT_IMAGE_HDR;
+  if(dt_image_ext_is_ldr(ext)) return DT_IMAGE_LDR;
   return 0;
 }
 
@@ -395,6 +357,42 @@ error:
   return res;
 }
 
+gboolean dt_imageio_crop_thumbnail(const dt_boundingbox_t box, uint8_t *const buffer,
+                                   int32_t *width, int32_t *height)
+{
+  if(IS_NULL_PTR(buffer) || IS_NULL_PTR(width) || IS_NULL_PTR(height)) return FALSE;
+
+  const int32_t in_width = *width;
+  const int32_t in_height = *height;
+  if(in_width < 1 || in_height < 1) return FALSE;
+
+  /* The box is normalized against the frame the camera renders its previews from, which is the
+   * same DefaultCropOrigin/DefaultCropSize rectangle the tag itself references -- so it maps
+   * onto the decoded preview directly, at whatever resolution that preview happens to be. */
+  const int32_t left = CLAMP((int32_t)roundf(box[1] * in_width), 0, in_width - 1);
+  const int32_t top = CLAMP((int32_t)roundf(box[0] * in_height), 0, in_height - 1);
+  const int32_t right = CLAMP((int32_t)roundf(box[3] * in_width), left + 1, in_width);
+  const int32_t bottom = CLAMP((int32_t)roundf(box[2] * in_height), top + 1, in_height);
+
+  const int32_t out_width = right - left;
+  const int32_t out_height = bottom - top;
+  if(out_width == in_width && out_height == in_height) return FALSE;
+
+  /* Compact in place, forward: destination row j starts at 4 * j * out_width, its source at
+   * 4 * ((j + top) * in_width + left). Since out_width <= in_width and top, left >= 0, the
+   * destination never runs ahead of the source, so no row is overwritten before it is read. */
+  for(int32_t j = 0; j < out_height; j++)
+  {
+    const uint8_t *const source = buffer + 4 * ((size_t)(j + top) * in_width + left);
+    uint8_t *const destination = buffer + 4 * (size_t)j * out_width;
+    memmove(destination, source, 4 * (size_t)out_width);
+  }
+
+  *width = out_width;
+  *height = out_height;
+  return TRUE;
+}
+
 gboolean dt_imageio_has_mono_preview(const char *filename)
 {
   dt_colorspaces_color_profile_type_t color_space;
@@ -557,100 +555,32 @@ dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, d
   return DT_IMAGEIO_FILE_CORRUPTED;
 }
 
-static const char *raster_formats[] = {
-  ".jpg",  ".jpeg", ".png", ".tiff", ".tif", ".pgm", ".pbm", ".ppm",
-
-#ifdef HAVE_OPENJPEG
-  ".jp2",  ".j2k",
-#endif
-
-#ifdef HAVE_WEBP
-  ".webp",
-#endif
-
-  NULL,
-};
-
+// Decoder routing: dt_image_ext_is_ldr() drives dt_imageio_open_raster(), the generic/
+// exotic-capable chain -- kept distinct from is_hdr() (dt_imageio_open_hdr(), the dedicated
+// OpenEXR/Radiance/PFM/AVIF/HEIF chain). See the comment on dt_image_ext_is_raw/_ldr/_hdr in
+// common/image_extensions.h for why these must never be combined for routing purposes.
 gboolean dt_imageio_is_raster(const char *filename)
 {
   const char *c = filename + strlen(filename);
   while(c > filename && *c != '.') c--;
   if(*c != '.') return FALSE;
-
-  int i = 0;
-  while(raster_formats[i])
-  {
-    if(!strcasecmp(c, raster_formats[i])) return TRUE;
-    i++;
-  }
-
-  return FALSE;
+  return dt_image_ext_is_ldr(c + 1);
 }
-
-// We include DNG here since it's handled by raw libs
-static const char *raw_formats[] = {
-  ".3fr", ".ari", ".arw", ".bay", ".bmq", ".cap", ".cine", ".cr2", ".crw", ".cs1", ".dc2",
-  ".dcr", ".dng", ".gpr", ".erf", ".fff", ".ia",  ".iiq",  ".k25", ".kc2", ".kdc", ".mdc",
-  ".mef", ".mos", ".mrw", ".nef", ".nrw", ".orf", ".ori",  ".pef", ".pxn", ".qtk", ".raf",
-  ".raw", ".rdc", ".rw2", ".rwl", ".sr2", ".srf", ".srw",  ".x3f",
-
-#ifdef HAVE_LIBRAW
-  ".cr3",
-#endif
-
-  NULL
-};
-
 
 gboolean dt_imageio_is_raw(const char *filename)
 {
   const char *c = filename + strlen(filename);
   while(c > filename && *c != '.') c--;
   if(*c != '.') return FALSE;
-
-  int i = 0;
-  while(raw_formats[i])
-  {
-    if(!strcasecmp(c, raw_formats[i])) return TRUE;
-    i++;
-  }
-
-  return FALSE;
+  return dt_image_ext_is_raw(c + 1);
 }
-
-static const char *hdr_formats[] = {
-  ".pfm",  ".hdr",
-
-#ifdef HAVE_OPENEXR
-  ".exr",
-#endif
-
-#ifdef HAVE_LIBAVIF
-  ".avif",
-#endif
-
-#ifdef HAVE_LIBHEIF
-  ".heif", ".heic", ".hif",
-#endif
-
-  NULL
-};
-
 
 int dt_imageio_is_hdr(const char *filename)
 {
   const char *c = filename + strlen(filename);
   while(c > filename && *c != '.') c--;
   if(*c != '.') return FALSE;
-
-  int i = 0;
-  while(hdr_formats[i])
-  {
-    if(!strcasecmp(c, hdr_formats[i])) return TRUE;
-    i++;
-  }
-
-  return FALSE;
+  return dt_image_ext_is_hdr(c + 1);
 }
 
 static gboolean _is_in_list(char *elem, char *list)
@@ -1287,41 +1217,19 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   dt_imageio_retval_t ret = DT_IMAGEIO_FILE_CORRUPTED;
   img->loader = LOADER_UNKNOWN;
 
-  // Start with extensions that are supposed to work.
-  // If they don't, they are corrupted.
-
+  // Start with the decoder(s) the extension routes to (fast path). Unlike before, a failure here
+  // no longer aborts: an extension can route to more than one category (see
+  // dt_image_ext_is_ambiguous() -- e.g. a linear DNG that a raw decoder can't demosaic, or a
+  // renamed/mislabeled file), so let it cascade into the bruteforce section below instead of
+  // reporting "corrupted" on a file a later attempt would have opened fine.
   if(dt_imageio_is_raster(filename))
-  {
     ret = dt_imageio_open_raster(img, filename, buf);
-    if(ret != DT_IMAGEIO_OK)
-    {
-      fprintf(stderr, "[imageio] The file %s is corrupted. Abort.\n", filename);
-      dt_control_log(_("The file `%s` is corrupted."), filename);
-      return ret;
-    }
-  }
 
-  if(dt_imageio_is_raw(filename))
-  {
+  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && dt_imageio_is_raw(filename))
     ret = dt_imageio_open_raw(img, filename, buf);
-    if(ret != DT_IMAGEIO_OK)
-    {
-      fprintf(stderr, "[imageio] The file %s is corrupted. Abort.\n", filename);
-      dt_control_log(_("The file `%s` is corrupted."), filename);
-      return ret;
-    }
-  }
 
-  if(dt_imageio_is_hdr(filename))
-  {
+  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && dt_imageio_is_hdr(filename))
     ret = dt_imageio_open_hdr(img, filename, buf);
-    if(ret != DT_IMAGEIO_OK)
-    {
-      fprintf(stderr, "[imageio] The file %s is corrupted. Abort.\n", filename);
-      dt_control_log(_("The file `%s` is corrupted."), filename);
-      return ret;
-    }
-  }
 
   // fallback: bruteforce everything hoping for a miracle
   // Most likely, it's a format we never heard of.

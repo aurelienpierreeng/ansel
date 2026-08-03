@@ -71,7 +71,7 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
-#include "iop/gaussian_elimination.h"
+#include "common/solvers/gaussian_elimination.h"
 #include "iop/iop_api.h"
 
 
@@ -2614,7 +2614,14 @@ static const dt_iop_order_iccprofile_info_t *_filmic_get_output_profile(const dt
     const dt_iop_order_iccprofile_info_t *const softproof_profile = dt_ioppr_add_profile_info_to_list(
         pipe->dev, darktable.color_profiles->softproof_type, darktable.color_profiles->softproof_filename,
         darktable.color_profiles->softproof_intent);
-    if(!IS_NULL_PTR(softproof_profile)) return softproof_profile;
+    // LUT-only (non matrix-shaper) profiles - typical of printer/inkjet ICC profiles - are
+    // flagged by NAN matrices. The gamut-mapping code below only knows how to use 3x3
+    // matrices, so using a NAN one silently poisons the whole image with NaN pixels. Fall
+    // back to the pipe output profile in that case; the actual soft-proof color conversion
+    // still happens correctly downstream, in colorout, which supports full lcms2 transforms.
+    if(!IS_NULL_PTR(softproof_profile) && !isnan(softproof_profile->matrix_in[0][0])
+       && !isnan(softproof_profile->matrix_out[0][0]))
+      return softproof_profile;
   }
   return dt_ioppr_get_pipe_output_profile_info(pipe);
 }
@@ -5509,16 +5516,6 @@ void gui_init(dt_iop_module_t *self)
   // default = latitude default (with balance 0, each direct slider equals the latitude
   // fraction — see filmic_v3_legacy_to_direct), so double-click reset stays consistent
   // with the params defaults (which keep latitude/balance for compatibility)
-  g->toe = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->toe, FALSE, FALSE, 0);
-  dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
-  dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);
-  dt_bauhaus_slider_set_format(g->toe, "%");
-  gtk_widget_set_tooltip_text(g->toe,
-                              _("distance between middle gray and the start of the shadows roll-off.\n"
-                                "0% keeps the toe at middle gray, 100% pushes it to the point where the\n"
-                                "current slope would hit the output black level."));
-  g_signal_connect(G_OBJECT(g->toe), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   g->shoulder = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
   gtk_box_pack_start(GTK_BOX(self->widget), g->shoulder, FALSE, FALSE, 0);
@@ -5530,6 +5527,17 @@ void gui_init(dt_iop_module_t *self)
                                 "0% keeps the shoulder at middle gray, 100% pushes it to the point where the\n"
                                 "current slope would hit the output white level."));
   g_signal_connect(G_OBJECT(g->shoulder), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
+
+  g->toe = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->toe, FALSE, FALSE, 0);
+  dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
+  dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);
+  dt_bauhaus_slider_set_format(g->toe, "%");
+  gtk_widget_set_tooltip_text(g->toe,
+                              _("distance between middle gray and the start of the shadows roll-off.\n"
+                                "0% keeps the toe at middle gray, 100% pushes it to the point where the\n"
+                                "current slope would hit the output black level."));
+  g_signal_connect(G_OBJECT(g->toe), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   // Curve type
   g->highlights = dt_bauhaus_combobox_from_params(self, "highlights");

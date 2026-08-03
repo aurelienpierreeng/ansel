@@ -772,7 +772,9 @@ void dt_gui_preferences_show()
   (void)gtk_dialog_run(GTK_DIALOG(_preferences_dialog));
 
   dt_free(tweak_widgets);
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(_preferences_dialog));
   gtk_widget_destroy(_preferences_dialog);
+  dt_gui_refocus_parent(dialog_parent);
 
   if(restart_required)
     dt_control_log(_("Ansel needs to be restarted for settings to take effect"));

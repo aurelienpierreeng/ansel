@@ -1,1 +1,10 @@
 /CMakeLists.txt export-subst
+
+# Shebang scripts must keep LF line endings, or Windows checkouts (core.autocrlf=true)
+# turn "#!/bin/bash" into "#!/bin/bash\r", which the loader reads as a literal
+# interpreter path ending in \r and rejects with "bad interpreter: No such file or
+# directory". This only bites scripts invoked directly (relying on the shebang);
+# `bash script.sh` sidesteps it, which is why it can go unnoticed for a long time.
+*.sh text eol=lf
+.githooks/* text eol=lf
+tests/image_test/deltae text eol=lf

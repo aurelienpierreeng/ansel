@@ -217,10 +217,18 @@ typedef struct dt_lib_collect_t
 
   // Folders-tab inline controls
   GtkWidget *folders_controls; // hbox holding the widgets below
-  GtkWidget *recursive_check;  // "include sub-folders" -> '*' suffix
+  GtkWidget *recursive_check;  // "include sub-folders" -> recursive<N> conf (see collect.c doc)
   GtkWidget *sort_dir;         // ascending/descending toggle
   GtkWidget *sort_by;          // film-roll sort key (id / folder name)
   GtkWidget *folder_levels;    // show_folder_levels: levels shown in film-roll names (List only)
+
+  // Rule 0's last folder/film-roll selection (item + string + recursive), remembered across
+  // visits to other tabs so _configure_tab() can restore it when returning to Folders -- unless
+  // a real commit happened for a different property in the meantime (see _commit_colllection()).
+  gboolean has_last_folders;
+  int last_folders_item;
+  gchar *last_folders_string;
+  gboolean last_folders_recursive;
 
   // Collections-tab inline controls
   GtkWidget *collections_controls; // hbox holding the widget below
@@ -274,6 +282,8 @@ static void _populate_collect_combo(GtkWidget *w);
 static int _combo_get_active_collection(GtkWidget *combo);
 static gboolean _combo_set_active_collection(GtkWidget *combo, const int property);
 static void _op_changed(GtkWidget *w, dt_lib_collect_rule_t *dr);
+static dt_lib_collect_t *get_collect(dt_lib_collect_rule_t *r);
+static dt_lib_module_t *_self();
 
 // =====================================================================================
 // Section 0 — property predicates
@@ -487,11 +497,35 @@ static void _rule_set_mode(int n, int mode)
   dt_conf_set_int(k, mode);
 }
 
+static gboolean _rule_get_recursive(int n)
+{
+  char k[64];
+  snprintf(k, sizeof(k), "plugins/lighttable/collect/recursive%1d", n);
+  return dt_conf_get_bool(k);
+}
+
+static void _rule_set_recursive(int n, gboolean recursive)
+{
+  char k[64];
+  snprintf(k, sizeof(k), "plugins/lighttable/collect/recursive%1d", n);
+  dt_conf_set_bool(k, recursive);
+}
+
 static gchar *_rule_get_string(int n)
 {
   char k[64];
   snprintf(k, sizeof(k), "plugins/lighttable/collect/string%1d", n);
-  return dt_conf_get_string(k);
+  gchar *s = dt_conf_get_string(k);
+  // Backward compat: pre-recursive-flag conf/presets encoded "include sub-folders" as a trailing
+  // '*' on the string itself. Migrate it into the dedicated flag the first time this rule is
+  // read after upgrading; every read after this one sees a clean string.
+  if(s && _rule_get_item(n) == DT_COLLECTION_PROP_FOLDERS && g_str_has_suffix(s, "*"))
+  {
+    s[strlen(s) - 1] = '\0';
+    dt_conf_set_string(k, s);
+    _rule_set_recursive(n, TRUE);
+  }
+  return s;
 }
 
 static void _rule_set_string(int n, const char *s)
@@ -518,6 +552,14 @@ static void set_properties(dt_lib_collect_rule_t *dr)
   _rule_set_string(dr->num, s);
   dt_free(s);
   _rule_set_item(dr->num, property);
+
+  // Only the Folders tab's own rule actually owns recursive_check -- the Queries tab reuses the
+  // same rule slots and can have a FOLDERS rule with the checkbox hidden; writing its state there
+  // would stamp an unrelated rule with the Folders tab's leftover checkbox value.
+  dt_lib_collect_t *d = get_collect(dr);
+  const gboolean folders_visible = d->folders_controls && gtk_widget_get_visible(d->folders_controls);
+  if(property == DT_COLLECTION_PROP_FOLDERS && folders_visible)
+    _rule_set_recursive(dr->num, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->recursive_check)));
 }
 
 // Pull the conf state of one rule back into the GUI (without firing the change handlers).
@@ -557,6 +599,22 @@ static void get_properties(dt_lib_collect_rule_t *dr)
 // Note: _commit() would conflict with msys64/ucrt64/include/io.h namespace on Windows.
 static void _commit_colllection()
 {
+  // Every real, user-triggered change to what's being filtered goes through here (mere tab
+  // switching does not, see the NB in _on_tab_switch) -- so this is the one place that can tell
+  // "the Folders tab's selection is still the active filter" from "something else superseded
+  // it", regardless of which handler/tab actually triggered the commit.
+  dt_lib_collect_t *d = (dt_lib_collect_t *)_self()->data;
+  if(item_is_folder(_rule_get_item(0)))
+  {
+    dt_free(d->last_folders_string);
+    d->last_folders_item = _rule_get_item(0);
+    d->last_folders_string = _rule_get_string(0);
+    d->last_folders_recursive = _rule_get_recursive(0);
+    d->has_last_folders = TRUE;
+  }
+  else
+    d->has_last_folders = FALSE; // a real filter change elsewhere supersedes the remembered folder
+
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
@@ -596,7 +654,16 @@ static void _lib_collect_update_params(dt_lib_collect_t *d)
   {
     p->rule[i].item = _rule_get_item(i);
     p->rule[i].mode = _rule_get_mode(i);
-    gchar *s = _rule_get_string(i);
+    gchar *s = _rule_get_string(i); // may lazily migrate a legacy '*' + set recursive(i) as a side effect
+    // Presets fold the recursive flag back into the trailing '*' this format has always used
+    // (same trick as dt_collection_serialize/deserialize) -- no separate field, no version bump.
+    if(p->rule[i].item == DT_COLLECTION_PROP_FOLDERS && _rule_get_recursive(i) && s && s[0] != '\0'
+       && !g_str_has_suffix(s, "*") && !g_str_has_suffix(s, "%"))
+    {
+      gchar *s2 = g_strconcat(s, "*", NULL);
+      dt_free(s);
+      s = s2;
+    }
     if(s) g_strlcpy(p->rule[i].string, s, PARAM_STRING_SIZE);
     dt_free(s);
   }
@@ -622,6 +689,8 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
     _rule_set_string(i, p->rule[i].string);
   }
   _rules_set_count(p->rules);
+  // _rule_get_string()'s lazy migration (triggered below) reads any trailing '*' back into
+  // recursive<N> -- no explicit _rule_set_recursive() needed here.
   _lib_collect_update_params(self->data);
   _lib_collect_gui_update(self);
   _commit_colllection();
@@ -634,6 +703,7 @@ void gui_reset(dt_lib_module_t *self)
   _rule_set_item(0, DT_COLLECTION_PROP_FILMROLL);
   _rule_set_mode(0, DT_LIB_COLLECT_MODE_AND);
   _rule_set_string(0, "");
+  _rule_set_recursive(0, FALSE);
   dt_lib_collect_t *d = (dt_lib_collect_t *)self->data;
   d->active_rule = 0;
   d->view_rule = -1;
@@ -872,6 +942,33 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
   return FALSE;
 }
 
+// Strip the trailing recursion/wildcard marker(s) so a search string compares against a plain
+// node path/name, not a literal `*`/`%`/`|`/`:` that no real node ever contains verbatim. Shared
+// by every tree-shaped property matcher (tree_match_string, tree_expand) so they agree on what
+// "this node matches the current search text" means.
+static void _strip_recursion_marker(gchar *needle, gchar *haystack, int property)
+{
+  if(g_str_has_suffix(needle, "%")) needle[strlen(needle) - 1] = '\0';
+  if(g_str_has_suffix(haystack, "%")) haystack[strlen(haystack) - 1] = '\0';
+  if(property == DT_COLLECTION_PROP_TAG || property == DT_COLLECTION_PROP_GEOTAGGING)
+  {
+    if(g_str_has_suffix(needle, "*")) needle[strlen(needle) - 1] = '\0'; // hierarchy + sub
+    if(g_str_has_suffix(needle, "|")) needle[strlen(needle) - 1] = '\0';
+    if(g_str_has_suffix(haystack, "|")) haystack[strlen(haystack) - 1] = '\0';
+  }
+  else if(property == DT_COLLECTION_PROP_FOLDERS)
+  {
+    if(g_str_has_suffix(needle, "*")) needle[strlen(needle) - 1] = '\0';
+    if(g_str_has_suffix(needle, "/")) needle[strlen(needle) - 1] = '\0';
+    if(g_str_has_suffix(haystack, "/")) haystack[strlen(haystack) - 1] = '\0';
+  }
+  else if(DT_COLLECTION_PROP_DAY == property || is_time_property(property))
+  {
+    if(g_str_has_suffix(needle, ":")) needle[strlen(needle) - 1] = '\0';
+    if(g_str_has_suffix(haystack, ":")) haystack[strlen(haystack) - 1] = '\0';
+  }
+}
+
 // ---- search filtering (tree) ----
 static gboolean tree_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
 {
@@ -886,6 +983,7 @@ static gboolean tree_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
   {
     gchar *haystack = g_utf8_strdown(str, -1),
           *needle = g_utf8_strdown(gtk_entry_get_text(GTK_ENTRY(dr->text)), -1);
+    _strip_recursion_marker(needle, haystack, _combo_get_active_collection(dr->combo));
     visible = (g_strrstr(haystack, needle) != NULL);
     dt_free(haystack);
     dt_free(needle);
@@ -1016,25 +1114,7 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
   const gboolean reveal = dr->typing || dr->reveal;
 
   if(g_str_has_prefix(needle, "%")) startwildcard = TRUE;
-  if(g_str_has_suffix(needle, "%")) needle[strlen(needle) - 1] = '\0';
-  if(g_str_has_suffix(haystack, "%")) haystack[strlen(haystack) - 1] = '\0';
-  if(property == DT_COLLECTION_PROP_TAG || property == DT_COLLECTION_PROP_GEOTAGGING)
-  {
-    if(g_str_has_suffix(needle, "*")) needle[strlen(needle) - 1] = '\0'; // hierarchy + sub
-    if(g_str_has_suffix(needle, "|")) needle[strlen(needle) - 1] = '\0';
-    if(g_str_has_suffix(haystack, "|")) haystack[strlen(haystack) - 1] = '\0';
-  }
-  else if(property == DT_COLLECTION_PROP_FOLDERS)
-  {
-    if(g_str_has_suffix(needle, "*")) needle[strlen(needle) - 1] = '\0';
-    if(g_str_has_suffix(needle, "/")) needle[strlen(needle) - 1] = '\0';
-    if(g_str_has_suffix(haystack, "/")) haystack[strlen(haystack) - 1] = '\0';
-  }
-  else if(DT_COLLECTION_PROP_DAY == property || is_time_property(property))
-  {
-    if(g_str_has_suffix(needle, ":")) needle[strlen(needle) - 1] = '\0';
-    if(g_str_has_suffix(haystack, ":")) haystack[strlen(haystack) - 1] = '\0';
-  }
+  _strip_recursion_marker(needle, haystack, property);
 
   if(reveal && g_strrstr(txt2, needle) != NULL)
   {
@@ -1634,7 +1714,7 @@ static void row_activated(GtkTreeView *view, GtkTreePath *path, GdkEventButton *
   get_number_of_rules(d);
   dt_lib_collect_rule_t *active_rule = get_active_rule(d);
   active_rule->typing = FALSE;
-  const int item = d->view_rule;
+  const int item = _combo_get_active_collection(active_rule->combo);
 
   gchar *text;
   gboolean order_request = FALSE;
@@ -1662,13 +1742,8 @@ static void row_activated(GtkTreeView *view, GtkTreePath *path, GdkEventButton *
     }
     else if(item == DT_COLLECTION_PROP_FOLDERS)
     {
-      // recursion is driven by the explicit "include sub-folders" checkbox (#537)
-      if(d->recursive_check && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->recursive_check)))
-      {
-        gchar *n_text = g_strconcat(text, "*", NULL);
-        dt_free(text);
-        text = n_text;
-      }
+      // Recursion is a persisted flag (recursive_check / recursive{N} conf), independent of
+      // which folder was clicked -- nothing to do here, set_properties() persists it already.
     }
     else if(item == DT_COLLECTION_PROP_TAG || item == DT_COLLECTION_PROP_GEOTAGGING)
     {
@@ -1761,15 +1836,9 @@ static GList *_rows_to_imgids(int property, GList *rows, gboolean recursive)
   for(GList *l = rows; l; l = g_list_next(l))
   {
     collect_row_t *r = (collect_row_t *)l->data;
-    gchar *text;
-    if(item_is_folder(property))
-      text = recursive ? g_strconcat(r->path, "*", NULL) : g_strdup(r->path);
-    else
-      text = g_strdup(r->path);
-    // folder rows always query through FOLDERS (supports the recursive '*' suffix)
+    // folder rows always query through FOLDERS
     const int prop = item_is_folder(property) ? DT_COLLECTION_PROP_FOLDERS : property;
-    GList *ids = dt_collection_get_images_for_rule(prop, text);
-    dt_free(text);
+    GList *ids = dt_collection_get_images_for_rule(prop, r->path, item_is_folder(property) && recursive);
     for(GList *i = ids; i; i = g_list_next(i))
       if(!g_hash_table_contains(seen, i->data))
       {
@@ -1827,10 +1896,12 @@ static gchar *_ask_text(const char *title, const char *initial)
 // ---- actions ----
 static void _act_folders_remove(dt_lib_collect_t *d, GList *rows)
 {
-  // Select the images of exactly the chosen folders (non-recursive: we must not silently pull
-  // in a whole parent subtree), then hand them to dt_control_remove_images(), which already
-  // prompts "remove from library vs trash files".
-  GList *imgids = _rows_to_imgids(DT_COLLECTION_PROP_FOLDERS, rows, FALSE);
+  // Recursive, like _act_prerender() below: a folder node with only subfolder children (no
+  // images directly in it) has nothing to match non-recursively, so a non-recursive lookup here
+  // silently no-ops on any such parent folder -- most of a real, nested film-roll tree. The
+  // subtree count is shown to the user in dt_control_remove_images()'s "remove N images?"
+  // confirmation before anything is touched, so recursion doesn't skip that safety net.
+  GList *imgids = _rows_to_imgids(DT_COLLECTION_PROP_FOLDERS, rows, TRUE);
   if(!imgids) return;
   dt_selection_clear(darktable.selection);
   dt_selection_select_list(darktable.selection, imgids);
@@ -1986,6 +2057,17 @@ static gboolean _en_folders(int property, int n)
 {
   return item_is_folder(property);
 }
+// Unlike _en_folders(), also require Lighttable: dt_control_remove_images() unconditionally
+// refuses to run outside DT_VIEW_LIGHTTABLE (control/jobs/control_jobs.c), the same restriction
+// the global "File > Remove from library" menu enforces by graying itself out
+// (has_active_image_in_lighttable(), gui/actions/menu.c). This panel is also shown in the map and
+// print views (see views() above), where the context-menu action would otherwise appear enabled
+// but silently do nothing beyond a log message.
+static gboolean _en_folders_lighttable(int property, int n)
+{
+  const dt_view_t *cv = darktable.view_manager->current_view;
+  return item_is_folder(property) && cv && cv->view(cv) == DT_VIEW_LIGHTTABLE;
+}
 static gboolean _en_tags(int property, int n)
 {
   return item_is_tag(property);
@@ -2008,7 +2090,7 @@ typedef struct collect_action_t
 } collect_action_t;
 
 static const collect_action_t ACTIONS[] = {
-  { N_("remove from library..."), TRUE, _en_folders, _act_folders_remove },
+  { N_("remove from library..."), TRUE, _en_folders_lighttable, _act_folders_remove },
   { N_("relocate..."), TRUE, _en_folders, _act_folders_relocate },
   { N_("delete tag(s)..."), TRUE, _en_tags, _act_tags_remove },
   { N_("rename tag..."), FALSE, _en_tag_single, _act_tag_rename },
@@ -2374,17 +2456,9 @@ static void combo_changed(GtkWidget *combo, dt_lib_collect_rule_t *dr)
 static void entry_changed(GtkEntry *entry, dt_lib_collect_rule_t *dr)
 {
   dr->typing = TRUE;
-  dt_lib_collect_t *d = get_collect(dr);
-
-  // keep the Folders "include sub-folders" checkbox in sync with a *, % or |% typed by hand
-  if(d->recursive_check && _combo_get_active_collection(dr->combo) == DT_COLLECTION_PROP_FOLDERS)
-  {
-    const gchar *t = gtk_entry_get_text(GTK_ENTRY(dr->text));
-    const gboolean recursive = g_str_has_suffix(t, "*") || g_str_has_suffix(t, "%");
-    g_signal_handlers_block_matched(d->recursive_check, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, d);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->recursive_check), recursive);
-    g_signal_handlers_unblock_matched(d->recursive_check, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, d);
-  }
+  // The "include sub-folders" checkbox is a persisted flag now, not derived from the text --
+  // typing here must never feed back into it, or a plain edit of the search text would silently
+  // flip recursion on/off.
   update_view(dr);
 }
 
@@ -2433,18 +2507,8 @@ static void _recursive_toggled(GtkToggleButton *b, dt_lib_collect_t *d)
   dt_lib_collect_rule_t *dr = get_active_rule(d);
   if(_combo_get_active_collection(dr->combo) != DT_COLLECTION_PROP_FOLDERS) return;
 
-  gchar *t = g_strdup(gtk_entry_get_text(GTK_ENTRY(dr->text)));
-  // strip any trailing recursion markers, then re-append a single '*' if recursion is wanted
-  while(g_str_has_suffix(t, "*") || g_str_has_suffix(t, "%") || g_str_has_suffix(t, "|")) t[strlen(t) - 1] = '\0';
-  gchar *n = gtk_toggle_button_get_active(b) ? g_strconcat(t, "*", NULL) : g_strdup(t);
-  dt_free(t);
-
-  g_signal_handlers_block_matched(dr->text, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, entry_changed, NULL);
-  gtk_entry_set_text(GTK_ENTRY(dr->text), n);
-  gtk_editable_set_position(GTK_EDITABLE(dr->text), -1);
-  g_signal_handlers_unblock_matched(dr->text, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, entry_changed, NULL);
-  dt_free(n);
-
+  // Recursion is a persisted flag now (recursive{N} conf), not a marker on the search text --
+  // set_properties() reads the checkbox itself and writes it, nothing to do to dr->text here.
   set_properties(dr);
   _commit_quiet();
 }
@@ -2690,9 +2754,22 @@ static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
     int item = _rule_get_item(0);
     if(!item_is_folder(item))
     {
-      _rule_set_string(0, ""); // coming from a different property family
-      item = DT_COLLECTION_PROP_FOLDERS;
-      _rule_set_item(0, item);
+      // Coming from a different property family: restore the last real folder selection if
+      // nothing else has actually been committed since (has_last_folders), instead of always
+      // resetting to an empty search -- merely visiting another tab doesn't count as a change.
+      if(d->has_last_folders)
+      {
+        item = d->last_folders_item;
+        _rule_set_item(0, item);
+        _rule_set_string(0, d->last_folders_string ? d->last_folders_string : "");
+        _rule_set_recursive(0, d->last_folders_recursive);
+      }
+      else
+      {
+        _rule_set_string(0, "");
+        item = DT_COLLECTION_PROP_FOLDERS;
+        _rule_set_item(0, item);
+      }
     }
     _combo_as_view_toggle(d->rule[0].combo);
     _combo_set_active_collection(d->rule[0].combo, item);
@@ -2720,9 +2797,11 @@ static void _configure_tab(dt_lib_collect_t *d, dt_collect_tab_t tab)
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(d->folder_levels),
                               CLAMP(dt_conf_get_int("show_folder_levels"), 1, 5));
     gtk_widget_set_visible(d->folder_levels, item == DT_COLLECTION_PROP_FILMROLL);
-    const gchar *t = gtk_entry_get_text(GTK_ENTRY(d->rule[0].text));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->recursive_check),
-                                 g_str_has_suffix(t, "*") || g_str_has_suffix(t, "%"));
+    // Restore the checkbox from its own persisted flag (get_properties() above already ran any
+    // pending legacy-'*' migration for this rule). If this fires "toggled" (old GTK state !=
+    // restored value), _recursive_toggled() just writes the same value straight back -- harmless,
+    // not a real feedback loop, since it always re-derives from the checkbox's now-correct state.
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->recursive_check), _rule_get_recursive(0));
     d->active_rule = 0;
   }
   else if(tab == TAB_COLLECTIONS)
@@ -3057,7 +3136,9 @@ void gui_init(dt_lib_module_t *self)
   // Folders inline controls (sort + recursion), shown only on the Folders tab
   d->folders_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   d->recursive_check = gtk_check_button_new_with_label(_("include sub-folders"));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->recursive_check), TRUE);
+  // Real value comes from _configure_tab() -> _rule_get_recursive(0) before first paint (the
+  // startup _lib_collect_gui_update() call below always runs it); this is just a harmless seed.
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->recursive_check), FALSE);
   g_signal_connect(G_OBJECT(d->recursive_check), "toggled", G_CALLBACK(_recursive_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->recursive_check, FALSE, FALSE, 0);
 
@@ -3200,6 +3281,7 @@ void gui_cleanup(dt_lib_module_t *self)
   darktable.view_manager->proxy.module_collect.module = NULL;
 
   dt_free(d->params);
+  dt_free(d->last_folders_string);
   g_object_unref(d->treefilter);
   g_object_unref(d->listfilter);
   g_object_unref(d->vmonitor);

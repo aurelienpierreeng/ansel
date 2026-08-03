@@ -1393,6 +1393,27 @@ void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
     dt_dev_pixelpipe_resync_history_all(dev);
 }
 
+gboolean dt_dev_history_is_image_in_dev(GList *imgs)
+{
+  return !IS_NULL_PTR(darktable.develop)
+    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+}
+
+void dt_apply_dev_history_update(dt_develop_t *dev)
+{
+  if(IS_NULL_PTR(dev)) return;
+
+  dt_dev_reload_history_items(dev, dev->image_storage.id);
+  dt_dev_history_gui_update(dev);
+  // Re-derive dev->roi.processed_{width,height} (and the natural scale) from the new
+  // history through the virtual pipe. Without this, a history change that alters the
+  // final image geometry (e.g. removing a crop/ashift step) still renders at the old,
+  // stale ROI -- same fix as _history_apply_history_end() in libs/history.c.
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  dt_dev_history_pixelpipe_update(dev, TRUE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+}
+
 /**
  * @brief Delete all history entries for an image from the DB.
  *
@@ -1646,8 +1667,24 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
  */
 static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, gboolean is_inited)
 {
-  // Module already in history: don't prepend extra entries
-  if(dt_history_check_module_exists(dev->image_storage.id, module->op, FALSE))
+  // Module already in history: don't prepend extra entries.
+  //
+  // Two independent sources can already cover this module and both must be checked:
+  //  - dev->history in memory: dt_dev_replace_history_on_image() (image duplication, history
+  //    "replace" paste) loads dev->history from a *source* image, then points
+  //    dev->image_storage at a freshly created *destination* image whose DB history is still
+  //    empty (nothing written yet). The DB check alone always reports "missing" there, so every
+  //    default_enabled module (temperature, colorin, colorout, demosaic...) got a fresh
+  //    default-params entry silently appended after the correctly copied one, clobbering the
+  //    user's settings in the copy -- duplicating an image did not reproduce its development
+  //    identically.
+  //  - the DB row for dev->image_storage.id: dt_dev_read_history_ext() (normal darkroom/export
+  //    history load) calls this function on a freshly emptied dev->history, *before* the real
+  //    history rows are read from DB into memory. The in-memory check alone would always report
+  //    "missing" there too, causing every already-edited image to get spurious duplicate default
+  //    entries prepended ahead of its real history on every single load.
+  if(!IS_NULL_PTR(dt_dev_history_get_first_item_by_module(dev->history, module))
+     || dt_history_check_module_exists(dev->image_storage.id, module->op, FALSE))
     return;
 
   // Module has no user params: no history: don't prepend either

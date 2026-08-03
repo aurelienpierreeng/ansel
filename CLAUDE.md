@@ -104,12 +104,81 @@ write history straight to DB (XMP load, `dt_image_set_flip`) bypass it and need 
 Do NOT refresh the filmstrip from darkroom write paths — it competes with the realtime main
 preview pipeline. Lighttable ops may refresh both.
 
+### Duplicating an image races its own thumbnail generation against the history copy
+
+Lighttable "Duplicate" (`dt_control_duplicate_images_job_run`, `control_jobs.c`) creates the new
+DB row via `dt_image_duplicate()`, then copies the source's history onto it via
+`dt_history_copy_and_paste_on_image(..., DT_HISTORY_MERGE_REPLACE, ...)`. `dt_image_duplicate()`
+(`common/image.c`) used to call `dt_collection_update_query(..., DT_COLLECTION_CHANGE_RELOAD, ...)`
+unconditionally, right after inserting the row — i.e. *before* the caller had copied any history
+onto it. That reload makes the new image visible to the lighttable grid, which can create its
+thumbnail widget and request a render immediately, against the row's momentary real state: zero
+history.
+
+Confirmed with `-d cache -d history -d lighttable`: for a freshly duplicated image, the first
+`[mipmap_cache] compute mip size 0 ... from original file` log line landed ~650ms *before* the
+matching `[dt_dev_write_history_ext] writing history for image N` line. The mipmap cache is not
+hash-driven (previous section), so once that first, historyless render is cached, only an
+explicit `dt_mipmap_cache_remove` + refresh recovers — and even when that recovery path runs
+correctly and a second, correct render finishes and gets cached, nothing guarantees a timely
+repaint of it (the thumbnail widget can be left showing the first render under a permanent "busy"
+overlay for several seconds, until an unrelated GUI event forces a redraw). Patching the
+recovery/notification side (adding a missing GUI-thread redraw request on one early-return path
+in `dtgtk/thumbnail.c`'s `_get_image_buffer()`) did not fix this reliably and was reverted — the
+actual fix is to not let the race start in the first place.
+
+Fixed by `dt_image_duplicate_no_reload()` (`common/image.c`): same as `dt_image_duplicate()` but
+skips the immediate collection reload. Both call sites that duplicate-then-copy-history
+(`dt_control_duplicate_images_job_run` in `control_jobs.c`, `_history_style_apply`'s
+duplicate-and-apply-style branch in `history_actions.c`) now use it and trigger exactly one
+`dt_collection_update_query(..., DT_COLLECTION_CHANGE_RELOAD, ...)` themselves, after the
+history copy/delete completes — so the very first time the duplicate becomes visible, it already
+carries its final history. Any future caller of `dt_image_duplicate()` that will mutate the new
+image's history afterward (a style, a batch edit, ...) should do the same rather than let the
+default immediate reload race its own follow-up write.
+
 ### OpenCL GUI-thread materialization hazard
 
 `dt_dev_pixelpipe_cache_peek_gui` must pass `preferred_devid = -1` (CPU caller signal). Passing
 a real GPU id causes the GUI thread to enqueue a GPU read without owning the device, racing the
 pipeline's OpenCL events → SIGSEGV in `clReleaseEvent`. Device-only entries then report a miss
 to the GUI, which waits for the pipeline to publish a host copy instead.
+
+### A toggled-on GPU module can erase a host-cache requirement inherited from further downstream
+
+`_seal_opencl_cache_policy()` (`develop/dev_pixelpipe.c`) walks `pipe->nodes` backwards once per
+resync to decide, per module, whether its output must be copied from device to host RAM
+(`piece->cache_output_on_ram`). It threads a `current_output_must_cache_host` flag upstream: each
+enabled module recomputes it from its own properties (`!supports_opencl || active_in_gui || ...`)
+and hands the result to whichever module sits before it in pipe order. A **disabled** module is
+skipped via `continue` before that handoff, so the requirement from further downstream correctly
+keeps flowing through it untouched.
+
+The bug was in the handoff itself: it assigned (`=`) instead of combined (`||`), so an **enabled**
+GPU-capable module that itself needs no host input silently replaced — rather than passed through —
+whatever requirement was inherited from further downstream. Toggling such a module from disabled to
+enabled (e.g. `iop/rawoverexposed.c`: `IOP_FLAGS_NO_HISTORY_STACK`, GPU-capable, no GUI/histogram
+reason of its own to need host data) made it start participating in the loop and erased the
+correctly-propagated `TRUE` requirement coming from a CPU-only module further downstream (`dither`),
+even though that module's own need for host data never changed.
+
+Concretely: with the overlay enabled, `colorout`'s GPU kernel computed correct new pixels on every
+re-render (`process_cl()` ran fine), but the GPU→host readback
+(`dt_dev_pixelpipe_cache_sync_cl_buffer`, gated by `if(*cache_output)` in `pixelpipe_gpu.c`) was
+skipped because `colorout`'s `cache_output_on_ram` came out `FALSE`. Because pixelpipe cache entries
+are reused in place via hash *rekey* rather than freshly allocated
+(`_cache_try_rekey_reuse_locked`), the stale host bytes from the entry's previous life persisted
+under the new hash key. Once the overlay was disabled again, `dither` (CPU-only) read directly from
+`colorout`'s cacheline and got those stale, pre-toggle pixels — silently mismatched from the current
+pan/zoom, even though every hash and ROI in the chain was individually correct. Only reproduced with
+OpenCL enabled (`--disable-opencl` sidesteps it entirely: every module then unconditionally needs
+host data, so the flag is always `TRUE`).
+
+Fixed by propagating the OR of the inherited flag and the current module's own requirement
+(`current_output_must_cache_host = previous_output_must_cache_host || current_output_must_cache_host`),
+so a host requirement, once established anywhere downstream, survives every enabled module between
+it and whichever module's cache policy is being decided — regardless of whether any of those modules
+dynamically toggles.
 
 ### The darkroom worker thread must be joined before view `leave()` tears down pipe state
 
@@ -157,6 +226,34 @@ mask drag). Still open. See `doc/reorganisation.md` ("History item refcounting a
 in `common/dtpthread.h` (`dt_pthread_rwlock_set_name()`, opt-in per lock, combine with
 `-d history`) to reproduce the measurement.
 
+### `_insert_default_modules` must check `dev->history` in memory, not the DB row for `dev->image_storage.id`
+
+`dt_dev_init_default_history()` (`dev_history.c`) walks every loaded module and, for each one,
+calls `_insert_default_modules()` to backfill a default-params history entry for any
+`default_enabled`/`force_enable` module "missing" from history. Its "is this module already
+covered?" check used to be `dt_history_check_module_exists(dev->image_storage.id, module->op, ...)`
+— a DB query against `main.history` for whatever image `dev->image_storage.id` currently points
+at.
+
+That's correct for the common caller, `dt_dev_read_history_ext()`: `dev->history` is empty and
+`dev->image_storage.id` is the same image whose real DB history is about to be read into it a few
+lines later, so the DB accurately reflects "not yet loaded, but will be." It's wrong for
+`dt_dev_replace_history_on_image()` (image duplication, history "replace" paste): there,
+`dev->history` is loaded from a *source* image, then `dev->image_storage` is repointed at a
+freshly created, still-DB-empty *destination* image before `dt_dev_init_default_history()` runs.
+The DB check always answers "missing" for the destination — regardless of what the just-copied
+`dev->history` already contains — so every `default_enabled` module (`temperature`, `colorin`,
+`colorout`, `demosaic`, ...) got a second, default-params history entry silently appended *after*
+the one correctly copied from the source. Since replay applies history front-to-back and the last
+entry per module wins, duplicating an image quietly reset those modules to their defaults instead
+of reproducing the source's actual settings — "duplicate" wasn't an identical copy.
+
+Fixed by checking `dt_dev_history_get_first_item_by_module(dev->history, module) != NULL` (via
+`IS_NULL_PTR`) in addition to the DB check — the in-memory list already holds the correct,
+about-to-be-persisted state for the destination in the duplicate/replace case, and is equivalent
+to the DB check (same image, nothing loaded yet) in the common case, so neither caller's
+behavior regresses.
+
 ### `piece->iwidth`/`iheight` go stale on the export pipe specifically
 
 `dt_dev_pixelpipe_create_nodes()` copies `pipe->iwidth`/`iheight` into each `piece->iwidth`/`iheight`
@@ -187,6 +284,137 @@ buffer-relative pixels and never re-derives its own absolute position from `pipe
 `iheight`. Parametric masks/forms don't go through this buffer-cropping path at all, so they stay
 correctly positioned even when the base image content is offset — a mismatch between a mask and
 the image it's drawn on is a symptom of this class of bug, not of the masking code.
+
+### A "CPU vs GPU parity bug" in a tiled module is usually a tile-grid dependence
+
+`tiling->xalign`/`yalign` do more than preserve the CFA phase: `develop/tiling.c` rounds tile
+sizes *and* the overlap down/up to `lcm(xalign, yalign)`, so tile origins land on multiples of
+that value and nothing else. Every lattice a module lays over its tile — the CFA, but also any
+binning, pyramid or block grid — is anchored to the tile origin, because that is the only origin
+`process()`/`process_cl()` is handed. If `xalign` is smaller than a lattice's period, two
+different tile decompositions bin the same sensels into differently-phased cells, and the result
+changes **everywhere inside the tile**, not just near the seams. No amount of overlap fixes it.
+
+That is what looked like an OpenCL parity bug in `iop/rawdenoiseai.c`: the module's multi-scale
+model bins to superpixels (period 4 Bayer / 6 X-Trans) for its coarse guide and fuses low bands
+on a 16/32/64 px pyramid, while `xalign` was only the CFA period (2). CPU and GPU budget memory
+differently, so they tile differently — GPU tile rows started at y = 986 (`986 % 4 == 2`) — and
+the coarse guide was computed on a half-bin-shifted lattice. A second, independent defect
+compounded it: `_apply_low_band_anchor()` chose its coarsest fusion band from the *padded tile
+size* (64 if it divided, else 32), so a 2-tile grid fused at 64 while a 16-tile grid fused at 32,
+diverging structurally from the training-time reference (`cfa.fuse_low_bands`, always 16/32/64).
+Fixed by folding the lattice periods into `xalign`/`yalign` and `DT_NN_FUSION_COARSEST` into
+`dt_nn_model_alignment()`, making the level count a constant. Exported 8-bit CPU-vs-GPU went from
+mean 0.022 / max 29 to mean 0.0029 / p99 0 / max 10.
+
+The diagnostic that settles this class of bug in one measurement: **run the same export twice on
+the same device with different `host_memory_limit`.** If two CPU runs differ by the same amount
+as CPU-vs-GPU, the device is irrelevant and the tiling is the variable. Chasing it as a
+synchronisation problem instead — `dt_opencl_finish` at every plausible point, blocking readbacks
+between stages, sleeps — costs hours and moves nothing, because the arithmetic was never wrong.
+
+Two residual tile-grid dependencies in that module are known and *not* fixed: the fusion's
+per-channel mean σ² is a whole-tile reduction (the torch reference is patch-global too, so the C
+mirrors it faithfully — but at inference the "patch" is whatever tile the pipe chose), and
+`roi_in->x/y` is not itself lattice-aligned, so a non-zero ROI offset shifts every lattice
+relative to the sensor. The fully correct form is to anchor them to absolute sensor position from
+`roi_in`, the same way the CFA phase rule below does.
+
+Note *where* a non-zero RAW-domain ROI offset can come from, because the obvious guess is wrong:
+**it is never the viewport.** `iop/initialscale.c` (iop_order 15.5) is `default_enabled` with
+`IOP_FLAGS_NO_HISTORY_STACK`, so it runs in every pipe, and its `modify_roi_in()` hard-resets
+`roi_in->x = roi_in->y = 0` at `piece->buf_in` dimensions and `scale = 1.0f`. ROI planning runs
+backwards, so every module below it — `lens` (15.0), `demosaic` (8.0), `rawdenoiseai` (2.5),
+`basebuffer` (0.5) — is handed offset 0 no matter how the user pans or zooms. A non-zero offset
+reaches the RAW domain only from a module *between* it and `initialscale` that grows its own
+`roi_in` on the backward pass: in practice `iop/lens.cc` (distortion, TCA, and the `scale`
+slider). So "it only misbehaves when zoomed in" is the wrong mental model for this whole class of
+bug; "it only misbehaves with lens correction enabled" is the right one.
+
+### CFA phase (Bayer/X-Trans) is computed fresh per crop, not snapped — demosaic and highlights alike
+
+Once `basebuffer` honors the real crop offset, that offset reaches every pre-demosaic RAW-domain
+module unrounded (`demosaic` itself, but also anything upstream of it in `iop_order` that reads the
+CFA, e.g. `highlights`) — it is almost never a multiple of the sensor's repeating pattern (2 px for
+Bayer, 6×6 px for X-Trans). Getting the per-pixel color identity wrong for such an offset produces
+wrong colors or, if the wrongness compounds, fully scrambled blocks of pixels. The phase handling
+is split across two places, each owning a different, non-overlapping part of the total shift:
+
+- `iop/rawprepare.c`'s `_update_output_cfa_descriptor()` folds in only the **fixed sensor border
+  trim** (`d->x`/`d->y`, constant for a given camera/image, independent of how the user pans,
+  zooms, or crops). It writes the result to `piece->dsc_out.filters`/`xtrans`, which propagates
+  forward to demosaic's `piece->dsc_in` through the normal `input_format()`/`output_format()`
+  contract — never through a shared, pipe-wide field.
+- Every consumer's `process()`/`process_cl()` folds in the **dynamic, ROI-dependent** part, fresh
+  on every call, from the module's own current `roi_in->x/y`, via the shared helper
+  `dt_dev_get_roi_filters(piece, roi_in)` (`develop/imageop.c`, next to `dt_dev_get_module_scale()`).
+  This must happen in `process()`/`process_cl()`, not in `modify_roi_in()`/`output_format()`: those
+  ROI-planning callbacks run before `piece->dsc_in` is guaranteed to be populated for this resync —
+  and, more fundamentally, `dsc_in`/`dsc_out` are settled once by a single pipe-wide pass that runs
+  independently of per-tile ROI refinement, so a value baked in there would be correct for at most
+  one tile and silently wrong for every other tile once the piece is large enough to get tiled
+  (`IOP_FLAGS_ALLOW_TILING` modules get `process()`/`process_cl()` called once per tile, each with
+  its own `roi_in`, but `modify_roi_in()`/`output_format()` only once for the untiled request). It
+  also must never write back into `piece->dsc_in`/`dsc_out` — those are sealed contracts, read-only
+  once processing starts (see the `dt_dev_pixelpipe_iop_t` doc comment in `pixelpipe_hb.h`). The
+  result — a locally rotated `xtrans_raw`-derived table, or the `filters` word `dt_dev_get_roi_filters()`
+  returns — is a plain local variable, discarded at the end of the call, recomputed next time.
+  Call `dt_dev_get_roi_filters()` for every new tile-local consumer instead of inlining
+  `dt_rawspeed_crop_dcraw_filters(piece->dsc_in.filters, roi_in->x, roi_in->y)` again — it now has
+  two call families (demosaic's own algorithms below, and `iop/highlights.c`'s laplacian/harmonic
+  Bayer reconstruction, CPU and OpenCL) and duplicating the one-liner a third time is how this class
+  of bug keeps reappearing instead of getting fixed once.
+
+Every algorithm that reads the CFA — in demosaic or elsewhere — falls into exactly one of two
+categories, and mixing them up is the recurring failure mode here:
+
+- **Self-correcting**: the algorithm takes `roi_in`/explicit `x,y` alongside the filters/xtrans
+  table and adds the offset itself at each color lookup (`FCxtrans(row, col, roi_in, xtrans)`,
+  `FC(row + roi_in->y, col + roi_in->x, filters)`). These must receive the **unshifted**
+  `piece->dsc_in.filters`/`xtrans` (`xtrans_raw` in `process()`) — passing them an already-shifted
+  table double-applies the offset. VNG, Markesteijn/FDC, passthrough-color, the X-Trans downsample
+  path, and green-equilibration (CPU functions and their OpenCL kernel counterparts) are all in
+  this group.
+- **Tile-local**: the algorithm addresses pixels in buffer-relative coordinates with no ROI
+  awareness at all (`FC(row, col, filters)` where `row`/`col` are local loop indices). These need
+  the **fully pre-shifted** `filters` from `dt_dev_get_roi_filters(piece, roi_in)`, computed once
+  at the top of `process()`/`process_cl()`/`process_rcd_cl()` — passing them the raw, margin-only
+  table silently drops the dynamic part of the shift. RCD, LMMSE, PPG, AMaZE, and the Bayer
+  downsample path (CPU and OpenCL) are in this group, and so is `iop/highlights.c`'s laplacian and
+  harmonic-transposition Bayer reconstruction (CPU, and the OpenCL host code that feeds the shared
+  `interpolate_and_mask`/`remosaic_and_replace` kernels — those two kernels have no ROI-offset
+  argument of their own, unlike `highlights_normalize_reduce_first`, which does and stays
+  self-correcting on the raw table). Bayer has no xtrans-table equivalent of this split:
+  `dt_rawspeed_crop_dcraw_filters()` already no-ops on X-Trans (`filters == 9u`), so
+  `dt_dev_get_roi_filters()` is always safe to call regardless of sensor type.
+
+  The GPU harmonic-transposition kernels (`hl_knee_bin`/`hl_knee_apply`,
+  `data/kernels/highlights_harmonic.cl`) are a self-correcting design instead — they take the raw
+  table plus explicit `region_x`/`region_y` args (bound to `roi_in->x/y` host-side) and are meant to
+  add them at the lookup, same as `FCxtrans`. One CFA-identity ternary in each kernel
+  (`is_xtrans ? FCxtrans(region_y + row, region_x + col, xtrans) : FC(row, col, filters)`) added the
+  offset only on the X-Trans branch and left the Bayer `FC()` branch reading unshifted `row`/`col` —
+  correct by construction on X-Trans, wrong on Bayer for any `roi_in` not itself CFA-aligned. Both
+  branches of that ternary must add the same `region_y +`/`region_x +` offset.
+
+A third, narrower trap lives inside `xtrans_markesteijn_interpolate()`/`xtrans_fdc_interpolate()`
+(`iop/demosaic/markesteijn.c`, CPU and OpenCL builders alike): the `allhex[3][3][...]` neighbor-
+geometry table is precomputed once per call from `FCxtrans(row, col, ·, xtrans)` for `row`/`col` in
+`0..2`, then looked up later via `hexmap()`/`allhex[row][col]` using **tile-local** (`roi_in`-
+relative) coordinates taken mod 3. Building that table with `NULL` (no offset) puts it in a
+different phase than the tile-local lookup expects whenever `roi_in->x/y` isn't itself a multiple
+of 3 — main per-pixel colors stay correct (they go through their own `roi_in`-aware lookup), but
+the geometric neighbor relationships used to actually interpolate are wrong, producing a subtler,
+locally-blotchy color artifact rather than a full scramble. The fix is to build `allhex` with
+`roi_in` instead of `NULL`, matching the phase `hexmap()` will later assume.
+
+Because every algorithm is now verified correct for an arbitrary, unaligned crop offset, demosaic's
+`modify_roi_in()` no longer snaps the requested position to the sensor pattern (the old
+`XTRANS_SNAPPER`/`BAYER_SNAPPER` rounding is gone). That snap was never a correctness requirement
+of the phase math — it was a blunt instrument that kept the offset congruent to 0 mod its period,
+which incidentally made every one of the bugs above unreachable by construction. Removing it is
+what actually exercises non-aligned offsets and is how these bugs were found; reintroducing a
+similar snap anywhere in this path would silently mask a regression here rather than fix one.
 
 ---
 
@@ -323,6 +551,69 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
+### retouch: combining the mask/wavelet-scale/suppress preview toggles
+
+`bt_showmask` (`g->mask_display`), `bt_display_wavelet_scale` (`g->display_wavelet_scale`), and
+`bt_suppress` (`g->suppress_mask`, "temporarily switch off shapes") are three independent preview
+toggles. Getting any *pair* of them to combine correctly required three separate fixes, found only
+by adding `dt_print(DT_DEBUG_ALWAYS, ...)` traces (never raw `fprintf(stderr, ...)` — it isn't
+flushed and is easily lost if the process doesn't exit cleanly) at each stage and, for the final
+one, an actual GPU buffer readback (`dt_opencl_read_host_from_device_raw`) — reasoning about the
+hash/cache chain from source alone kept landing on plausible-but-wrong theories.
+
+**1. `bypass_cache_variant` must be gated to the FULL pipe, like `request_mask_display` already is.**
+`dt_iop_module_t.bypass_cache` is a single shared boolean: switching between combinations of the
+three toggles that all keep it `TRUE` (e.g. suppress toggled on top of an already-active
+wavelet-scale preview) doesn't change it, so the pipeline hash doesn't change either, and the
+stale pre-toggle frame keeps being served. Fixed by adding `dt_iop_module_t.bypass_cache_variant`
+(an opaque per-module int any module can set to disambiguate *which* combination is active,
+alongside `dt_iop_set_cache_bypass()`) and folding it into `dt_pixelpipe_get_global_hash()`. That
+alone still wasn't enough: retouch's actual preview effect only ever applies to `pipe ==
+self->dev->pipe` (the darkroom FULL pipe) — `preview`/`virtual-preview` always render as if none
+of the toggles were active — but `bypass_cache`/`bypass_cache_variant` live on the shared
+`dt_iop_module_t` and so read the same non-zero value for every pipe type. Left ungated, a
+preview-pipe run with the same ROI (e.g. at zoom == fit) computes the identical hash chain despite
+publishing different pixels, and the pixel cache's cross-pipe "another pipe already owns this
+exact hash" reuse path (`DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT` in
+`dt_dev_pixelpipe_cache_get_writable`) lets either pipe silently serve the other's stale content.
+`bypass_cache_variant`'s hash contribution must be zeroed for non-FULL pipes exactly like
+`request_mask_display` already is, in the same `if(pipe->type == DT_DEV_PIXELPIPE_FULL)` block in
+`dt_pixelpipe_get_global_hash()`.
+
+**2. `process_cl()`'s "expose mask" condition must match `process_internal()`'s exactly.** The CPU
+path gates on `g->mask_display || display_wavelet_scale`; the OpenCL path had drifted to
+`g->mask_display` alone. A wavelet-only OpenCL preview therefore never cleared alpha, never set
+`pipe->mask_display`, and so never made the downstream color-pipeline modules take the
+mask-display passthrough shortcut in `pixelpipe_hb.c` (~line 950) — they ran their normal
+processing (color management etc.) on the wavelet-domain buffer instead of being skipped. Same
+class of bug as the CFA-phase and highlights-reconstruction CPU/OpenCL divergences documented
+above: any GUI-only branch condition duplicated between a module's `process()` and `process_cl()`
+is a standing invitation for exactly this drift, since nothing forces the two to be reviewed
+together.
+
+**3. `rt_adjust_levels()` clobbers the alpha channel — the actual root cause of "mask + wavelet
+scale together shows nothing but checkerboard."** This function (shared verbatim by both the CPU
+path and `rt_adjust_levels_cl`, which round-trips through it on a host-side copy of the GPU
+buffer) is called whenever *any* single wavelet scale is being previewed
+(`dwt_p->return_layer > 0`), to contrast-stretch the near-zero detail coefficients into a viewable
+image. It round-trips each pixel through `dt_linearRGB_to_XYZ`/`dt_XYZ_to_Lab` (or the
+`work_profile` matrix equivalents) and back. Those conversions — like most of the
+`dt_aligned_pixel_t`-based color primitives in `colorspaces_inline_conversions.h` — store their
+result via 4-wide SIMD (`dt_apply_transposed_color_matrix`'s `dt_store_simd_aligned`), which writes
+*all four* lanes even though the color math is only 3-channel; the 4th lane ends up holding
+leftover matrix-multiply output, not the caller's original value. For most pipeline buffers that
+4th channel is meaningless padding and nobody notices. Here it is retouch's own mask-display
+alpha, painted a few lines up the call chain via `rt_copy_mask_to_alpha`/`_cl` — so every pixel's
+alpha got silently reset by the *next* operation in the same `process()` call, regardless of
+scale-matching or hash correctness upstream. This is why fixes #1 and #2 above were both real bugs
+worth fixing but neither actually resolved the reported symptom: content was being computed
+correctly and served fresh, then destroyed by `rt_adjust_levels()` before publish. Only triggers
+when previewing a wavelet scale (`return_layer > 0`) *and* something reads alpha for display
+(`show mask`, or — before fix #2 — a would-be-`PASSTHRU` OpenCL frame that never got the memo).
+Fixed by saving `img_src[i+3]` before the round trip and restoring it after. Any other per-pixel
+loop in this codebase that round-trips through these color conversion primitives on a buffer whose
+4th channel is meaningful (alpha, a mask, anything other than padding) has the same exposure.
+
 ---
 
 ## Collection / Library module
@@ -375,6 +666,95 @@ policy must be `GTK_POLICY_EXTERNAL` + `set_min_content_height(1)` +
 `last_h_scrollbar_height/last_v_scrollbar_width` to -1 so the next `size-allocate` always
 reconfigures (the table persists across view enter/leave; the guard would otherwise skip the
 reconfigure on same-size re-entry).
+
+### Modal dialogs must explicitly refocus their parent on close
+
+`gtk_window_set_transient_for()` at dialog creation is not enough to guarantee focus returns to
+the parent window once the dialog is destroyed — on macOS/quartz in particular, GTK does not
+reliably hand keyboard focus back the way X11 window managers do with transient hints.
+
+Every top-level modal dialog (one whose transient parent is the main window, not another
+still-open dialog) must call `dt_gui_refocus_parent()` (`gui/gtk.{h,c}`) right after
+`gtk_widget_destroy()`. It falls back to the main window if no valid parent is passed, and
+handles the macOS-specific `dt_osx_focus_window()` call internally. Mechanical pattern (capture
+the parent *before* destroying the dialog, since the widget is invalid afterwards):
+
+```c
+GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
+gtk_widget_destroy(dialog);
+dt_gui_refocus_parent(dialog_parent);
+```
+
+Do NOT apply this to a nested dialog (e.g. a warning/confirm popup) whose transient parent is
+another dialog still open at that point — GTK already hands focus back to a live parent window
+correctly; this only matters for the final return to the application. Also skip
+`GtkFileChooserDialog`/native choosers, which are a separate, already-correct subsystem. Any
+dialog created without a transient parent at all (e.g. a popup menu action, which cannot
+legitimately use the popup's own toplevel — see `dtgtk/thumbnail.c`'s "Active modules" dialog)
+should instead be parented directly to `dt_ui_main_window(darktable.gui->ui)` at creation time.
+
+### Worker-thread → GUI-thread deferred callbacks referencing a shared struct need a refcount
+
+The `g_main_context_invoke(NULL, callback, params)` pattern (worker thread schedules `callback` to
+run later on the GUI thread) is used throughout the codebase to touch GTK widgets safely from a
+non-GUI thread. When `params` carries a pointer into a struct that can also be torn down
+independently through the same pattern (e.g. `libs/backgroundjobs.c`'s per-job
+`dt_lib_backgroundjob_element_t`, updated via `.updated`/`.message_updated`/`.cancellable` and torn
+down via `.destroyed`, all reachable concurrently from worker threads doing pixel/import work), a
+"destroy" callback can run — and free the struct — while an "update" callback scheduled earlier for
+the same struct is still queued, waiting for its turn on the GTK main loop. The queued update then
+dereferences freed memory (Sentry issue 130394919: `EXCEPTION_ACCESS_VIOLATION` in
+`gtk_label_set_text`, called from a stale `dt_lib_backgroundjob_element_t*`).
+
+`control->progress_system.mutex` (`control/progress.c`) only serializes the *scheduling* of these
+callbacks against each other — it says nothing about their relative *execution* order on the GUI
+thread, and does not protect a struct shared across independent worker threads that don't otherwise
+synchronize with each other before calling into the progress API.
+
+Fix pattern (mirrors the forms/history-item refcounting above): give the shared struct a
+`dt_atomic_int refcount`. Every proxy function that schedules a callback referencing it takes a
+reference first; every callback drops its reference on the way out, freeing the struct only when
+the count reaches zero — whichever callback that happens to be. The "destroy" callback additionally
+NULLs every GTK widget pointer in the struct (right after removing/destroying them) instead of
+freeing the struct outright, so any other callback still queued for the same struct sees NULL and
+skips the now-invalid widgets instead of touching freed GTK objects.
+
+---
+
+## Keyboard shortcuts (accelerators)
+
+### Widget shortcuts need their own closure — GTK's native accel-group activation is unreachable
+
+`src/gui/accelerators.c` offers two ways to register a shortcut: a "generic" one
+(`dt_accels_new_action_shortcut`, `dt_accels_new_virtual_shortcut`/`_instance`) that builds a
+`GClosure` via `dt_shortcut_set_closure()`, and a "widget" one (`dt_accels_new_widget_shortcut`)
+that instead calls `gtk_widget_add_accelerator(widget, signal, accel_group, key, mods, flags)`,
+relying on GTK's own `gtk_window_activate_key()` to fire `widget`'s signal when the key is
+pressed — which only works if `accel_group` is attached to a `GtkWindow` via
+`gtk_window_add_accel_group()`.
+
+That attachment was intentionally removed on 2025-04-02 (`2e693e6b3`, "Accels: do not use Gtk
+window connection for accel groups... avoids crashes... Fix #484"): the app now handles every
+keystroke itself through `dt_accels_dispatch()` → `_key_pressed()` → `_call_shortcut_cclosure()`,
+which looks up `dt_shortcut_get_closure(shortcut)` and does nothing if it's `NULL` — it never
+falls back to GTK's native accel-group activation. A same-day attempt to restore just the global
+accel-group attachment (`c8770a367`, "Still connect global accels to window") was reverted two
+minutes later (`7273a1371`, commit message "Nope"). Re-attaching accel groups to the window is a
+dead end that was already tried and abandoned; it is not the way back in.
+
+`dt_accels_new_widget_shortcut()` was never updated for the migration: it still leaves
+`shortcut->closure = NULL`, so any shortcut registered only through it is keyboard-dead — clicking
+the widget still works (plain `"clicked"`/`"toggled"` GTK signal), but the accelerator silently
+does nothing, with no error anywhere. Confirmed dead in practice for the only two default-keybound
+consumers of this path in the whole codebase: `src/libs/tools/filter.c`'s "Reload current
+collection" (Ctrl+R) and "Toggle culling mode" (Ctrl+S).
+
+Fixed by giving widget shortcuts a real closure too (`_widget_shortcut_callback()`, wired via
+`dt_shortcut_set_closure()` inside `dt_accels_new_widget_shortcut()`), which just does
+`g_signal_emit_by_name(shortcut->widget, shortcut->signal)` — the same activation path every other
+shortcut type already uses. Any future direct caller of `gtk_widget_add_accelerator()` for a
+keyboard shortcut in this codebase has the same problem: it needs a closure the internal
+dispatcher can invoke, not just a GTK-level accelerator that no window will ever activate.
 
 ---
 

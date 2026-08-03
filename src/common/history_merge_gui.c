@@ -165,7 +165,9 @@ dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, con
 
   gtk_widget_show_all(GTK_WIDGET(dialog));
   const int res = gtk_dialog_run(dialog);
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(GTK_WIDGET(dialog));
+  dt_gui_refocus_parent(dialog_parent);
 
   dt_free(text);
   dt_free(faulty);
@@ -247,7 +249,9 @@ gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
 
   gtk_widget_show_all(GTK_WIDGET(dialog));
   const int res = gtk_dialog_run(dialog);
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(GTK_WIDGET(dialog));
+  dt_gui_refocus_parent(dialog_parent);
 
   dt_free(text);
   g_string_free(lines, TRUE);
@@ -316,7 +320,9 @@ void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
 
   gtk_widget_show_all(GTK_WIDGET(dialog));
   gtk_dialog_run(dialog);
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(GTK_WIDGET(dialog));
+  dt_gui_refocus_parent(dialog_parent);
 
   if(text) g_string_free(text, TRUE);
   if(cycle) g_string_free(cycle, TRUE);
@@ -1606,7 +1612,9 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   if(reorder_ctx->drag_path) gtk_tree_path_free(reorder_ctx->drag_path);
   dt_free(reorder_ctx);
 
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(GTK_WIDGET(dialog));
+  dt_gui_refocus_parent(dialog_parent);
 
   g_hash_table_destroy(override);
   g_ptr_array_free(src_mods, TRUE);
@@ -1729,6 +1737,8 @@ gboolean dt_gui_merge_options_dialog(const char *title, const char *mode_key,
     dt_conf_set_bool(ask_key, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ask_check)));
   }
 
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(GTK_WIDGET(dialog));
+  dt_gui_refocus_parent(dialog_parent);
   return res == GTK_RESPONSE_OK;
 }

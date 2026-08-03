@@ -1289,7 +1289,10 @@ static float _polygon_set_interaction_value(dt_masks_form_t *mask_form,
                                             dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(mask_form)) return NAN;
-  const int index = 0;
+  // Mirrors _dt_masks_events_get_dispatch_form()'s form_index: this shape's position in the
+  // currently displayed group, so dt_masks_gui_form_create() below refreshes the right
+  // mask_gui->points slot instead of clobbering whatever shape sits at index 0.
+  const int index = (!IS_NULL_PTR(mask_gui) && mask_gui->group_selected >= 0) ? mask_gui->group_selected : 0;
 
   switch(interaction)
   {

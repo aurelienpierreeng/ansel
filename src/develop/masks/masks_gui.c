@@ -20,6 +20,7 @@
 #include "develop/masks.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
+#include "control/conf.h"
 #include "control/signal.h"
 #include "develop/imageop_gui.h"
 #include "dtgtk/button.h"
@@ -460,29 +461,81 @@ int dt_masks_gui_confirm_delete_form_dialog(const char *form_name)
   return response;
 }
 
-static void _masks_gui_delete_form_callback(GtkWidget *menu, gpointer user_data)
+gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name)
+{
+  if(!dt_conf_get_bool("ask_before_delete_mask_shape")) return TRUE;
+  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return TRUE;
+
+  GtkWidget *dialog = gtk_message_dialog_new(
+      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+      GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+      _("Permanently delete the shape '%s' ?"), form_name);
+  gtk_message_dialog_format_secondary_text(
+      GTK_MESSAGE_DIALOG(dialog), "%s",
+      _("It will be removed from every mask using it and from the list of available shapes."));
+
+  GtkWidget *message_area = gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog));
+  GtkWidget *ask_check = gtk_check_button_new_with_label(_("Always ask"));
+  gtk_widget_set_tooltip_text(ask_check,
+      _("when unchecked, mask shapes will be deleted silently from now on without this confirmation.\n"
+        "you can turn it back on from preferences."));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ask_check), TRUE);
+  gtk_box_pack_start(GTK_BOX(message_area), ask_check, FALSE, FALSE, 6);
+  gtk_widget_show(ask_check);
+
+  const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+  dt_conf_set_bool("ask_before_delete_mask_shape", gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ask_check)));
+  gtk_widget_destroy(dialog);
+
+  return response == GTK_RESPONSE_YES;
+}
+
+// Resolves the group entry selected in gui to (module, sel, parentid, formid). Returns FALSE
+// if nothing usable is selected, in which case *module/*sel are left untouched.
+static gboolean _masks_gui_resolve_selected_shape(dt_masks_form_gui_t *gui, dt_iop_module_t **module,
+                                                   dt_masks_form_t **sel, int *parentid, int *formid)
+{
+  if(IS_NULL_PTR(gui) || gui->group_selected < 0) return FALSE;
+  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
+  if(IS_NULL_PTR(forms)) return FALSE;
+
+  dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
+  if(IS_NULL_PTR(fpt)) return FALSE;
+  dt_iop_module_t *mod = darktable.develop->gui_module;
+  if(IS_NULL_PTR(mod)) return FALSE;
+  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  if(IS_NULL_PTR(form)) return FALSE;
+
+  *module = mod;
+  *sel = form;
+  *parentid = fpt->parentid;
+  *formid = fpt->formid;
+  return TRUE;
+}
+
+// "Remove shape from mask": detach from the current group only, keep the form for reuse.
+static void _masks_gui_remove_from_group_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
-  if(IS_NULL_PTR(gui)) return;
-  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
-  if(IS_NULL_PTR(forms)) return;
+  dt_iop_module_t *module = NULL;
+  dt_masks_form_t *sel = NULL;
+  int parentid = 0, formid = 0;
+  if(!_masks_gui_resolve_selected_shape(gui, &module, &sel, &parentid, &formid)) return;
 
-  if(gui->group_selected >= 0)
-  {
-    // Delete shape from current group
-    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
-    if(IS_NULL_PTR(fpt)) return;
-    dt_iop_module_t *module = darktable.develop->gui_module;
-    if(IS_NULL_PTR(module)) return;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(IS_NULL_PTR(sel)) return;
+  dt_masks_remove_shape_from_group(module, sel, parentid, gui, formid);
+}
 
-    const int parentid = fpt->parentid;
-    const int formid = fpt->formid;
-  
-    dt_masks_remove_or_delete(module, sel, parentid, gui, formid);
+// "Delete shape": permanently delete, gated by dt_masks_gui_confirm_permanent_delete().
+static void _masks_gui_full_delete_callback(GtkWidget *menu, gpointer user_data)
+{
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
+  dt_iop_module_t *module = NULL;
+  dt_masks_form_t *sel = NULL;
+  int parentid = 0, formid = 0;
+  if(!_masks_gui_resolve_selected_shape(gui, &module, &sel, &parentid, &formid)) return;
 
-  }
+  dt_masks_delete_shape(module, sel, parentid, gui, formid);
 }
 
 void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
@@ -742,15 +795,55 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
   {
     const float opacity = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_OPACITY);
-    const float hardness = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_HARDNESS);
 
-    _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
-                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
-                                      gui, darktable.develop->gui_module);
-    _masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
-                                      DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
-                                      isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
-                                      gui, darktable.develop->gui_module);
+    if(form->type & DT_MASKS_GRADIENT)
+    {
+      // For gradients, DT_MASKS_INTERACTION_HARDNESS is the shape curvature and
+      // DT_MASKS_INTERACTION_SIZE is the fade extent -- expose them under their actual names.
+      const float curvature = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_HARDNESS);
+      const float fade = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_SIZE);
+      float rotation = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_ROTATION);
+      if(!isfinite(rotation)) rotation = 0.0f;
+      if(rotation > 180.0f) rotation -= 360.0f;
+
+      _masks_gui_add_interaction_slider(menu, _("Curvature"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, -2.0f, 2.0f, 0.01f,
+                                        isfinite(curvature) ? curvature : 0.0f, 3, "%", 50.0f,
+                                        gui, darktable.develop->gui_module);
+      _masks_gui_add_interaction_slider(menu, _("Fade"), op_form, DT_MASKS_INTERACTION_SIZE,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.001f,
+                                        isfinite(fade) ? fade : 1.0f, 3, "%", 100.0f,
+                                        gui, darktable.develop->gui_module);
+      _masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
+                                        rotation, 1, "\302\260", 1.0f,
+                                        gui, darktable.develop->gui_module);
+    }
+    else
+    {
+      const float hardness = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_HARDNESS);
+
+      _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
+                                        DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
+                                        gui, darktable.develop->gui_module);
+      _masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
+                                        isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
+                                        gui, darktable.develop->gui_module);
+
+      if(form->type & DT_MASKS_ELLIPSE)
+      {
+        float rotation = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_ROTATION);
+        if(!isfinite(rotation)) rotation = 0.0f;
+        if(rotation > 180.0f) rotation -= 360.0f;
+
+        _masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
+                                          DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
+                                          rotation, 1, "\302\260", 1.0f,
+                                          gui, darktable.develop->gui_module);
+      }
+    }
+
     _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
                                       isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
@@ -827,8 +920,11 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     }
     else
     {
-      menu_item = ctx_gtk_menu_item_new_with_markup(_("Remove shape from mask"), menu, _masks_gui_delete_form_callback, gui);
+      menu_item = ctx_gtk_menu_item_new_with_markup(_("Remove shape from mask"), menu, _masks_gui_remove_from_group_callback, gui);
       menu_item_set_fake_accel(menu_item, GDK_KEY_Delete, 0);
+      gtk_widget_set_sensitive(menu_item, gui->form_selected >= 0);
+
+      menu_item = ctx_gtk_menu_item_new_with_markup(_("Delete shape"), menu, _masks_gui_full_delete_callback, gui);
       gtk_widget_set_sensitive(menu_item, gui->form_selected >= 0);
     }
   }

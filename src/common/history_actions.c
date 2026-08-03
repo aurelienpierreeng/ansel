@@ -18,6 +18,8 @@
 
 #include "common/history_actions.h"
 
+#include "common/act_on.h"
+#include "common/collection.h"
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/exif.h"
@@ -35,7 +37,13 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "dtgtk/thumbtable.h"
+#include "gui/actions/menu.h"
+#include "gui/gtk.h"
 #include "gui/hist_dialog.h"
+
+#ifdef GDK_WINDOWING_QUARTZ
+#include "osx/osx.h"
+#endif
 
 static void _history_action_finalize_list(const GList *list, const gboolean changed)
 {
@@ -448,6 +456,68 @@ gboolean dt_history_delete_on_list(const GList *list, gboolean undo)
   return _history_action_on_list_with_undo(list, _history_delete_apply, &params, undo);
 }
 
+gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  if(!has_active_images()) return FALSE;
+
+  GList *imgs = dt_act_on_get_images();
+  if(IS_NULL_PTR(imgs)) return FALSE;
+
+  if(dt_conf_get_bool("ask_before_discard"))
+  {
+    const int img_count = g_list_length(imgs);
+    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *dialog = gtk_message_dialog_new(
+        GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+        ngettext("Do you really want to clear history of %d image?",
+                 "Do you really want to clear history of %d images?", img_count),
+        img_count);
+#ifdef GDK_WINDOWING_QUARTZ
+    dt_osx_disallow_fullscreen(dialog);
+#endif
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("Delete image's history?", "Delete images' history?", img_count));
+
+    GtkWidget *message_area = gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog));
+    GtkWidget *ask_check = gtk_check_button_new_with_label(_("Always ask"));
+    gtk_widget_set_tooltip_text(ask_check,
+        _("when unchecked, history will be deleted silently from now on without this confirmation.\n"
+          "you can turn it back on from preferences."));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ask_check), TRUE);
+    gtk_box_pack_start(GTK_BOX(message_area), ask_check, FALSE, FALSE, 6);
+    gtk_widget_show(ask_check);
+
+    const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
+    dt_conf_set_bool("ask_before_discard", gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ask_check)));
+    gtk_widget_destroy(dialog);
+    dt_gui_refocus_parent(GTK_WINDOW(win));
+    if(res != GTK_RESPONSE_YES)
+    {
+      g_list_free(imgs);
+      return TRUE;
+    }
+  }
+
+  gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_start_record(darktable.develop);
+  }
+
+  dt_history_delete_on_list(imgs, TRUE);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_end_record(darktable.develop);
+    dt_apply_dev_history_update(darktable.develop);
+  }
+
+  dt_control_queue_redraw_center();
+  g_list_free(imgs);
+  imgs = NULL;
+  return TRUE;
+}
+
 typedef struct dt_history_style_params_t
 {
   const char *name;
@@ -465,13 +535,19 @@ static gboolean _history_style_apply(const int32_t imgid, void *user_data)
   int32_t newimgid = imgid;
   if(params->duplicate)
   {
-    newimgid = dt_image_duplicate(imgid);
+    // Defer exposing the duplicate to the collection/lighttable grid until its history is
+    // copied below -- otherwise the grid can generate and cache a thumbnail from the
+    // still-historyless row before the copy ever runs.
+    newimgid = dt_image_duplicate_no_reload(imgid);
     if(newimgid == UNKNOWN_IMAGE) return FALSE;
 
     // Structural copy of original history into the duplicate; no merge report needed here.
     const gboolean pasted = dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, params->mode,
                                                                dt_conf_get_bool("history/style/copy_iop_order"),
                                                                NULL) == 0;
+
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+
     return pasted;
   }
 

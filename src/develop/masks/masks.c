@@ -1019,24 +1019,12 @@ done:
   return count;
 }
 
-gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
-                                    dt_masks_form_gui_t *mask_gui, int form_id)
+// Shared tail of dt_masks_remove_or_delete()/dt_masks_remove_shape_from_group()/dt_masks_delete_shape():
+// once it's decided whether the form is kept unused or fully deleted, the group-selection
+// bookkeeping, history commit and signal raising are identical.
+static gboolean _masks_remove_or_delete_finish(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                                               dt_masks_form_gui_t *mask_gui, int form_id, gboolean keep_unused)
 {
-  const int use_count = _masks_gui_form_group_use_count(darktable.develop, form_id);
-  
-  // We don't ask for confirmation if the module uses internal masks,
-  // just delete the form as it won't be visible in the shape manager.
-  const gboolean internal_masks
-      = !IS_NULL_PTR(module)
-        && ((module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS);
-
-  int response = GTK_RESPONSE_YES;
-  if(use_count <= 1 && !internal_masks)
-  {
-    response = dt_masks_gui_confirm_delete_form_dialog(sel->name);
-    if(response == GTK_RESPONSE_CANCEL) return FALSE;
-  }
-
   dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
   int next_form_index = -1;
   int next_formid = 0;
@@ -1067,7 +1055,7 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
   int signal_parent_id = 0;
   dt_masks_event_t signal_event = DT_MASKS_EVENT_REMOVE;
 
-  if(response == GTK_RESPONSE_NO)
+  if(keep_unused)
   {
     // Only remove from current group, keep the form itself for potential reuse.
     res = _masks_remove_shape(module, sel, parent_id, mask_gui, mask_gui->group_selected);
@@ -1075,7 +1063,7 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
     signal_event = DT_MASKS_EVENT_DELETE;
   }
 
-  else // Default if use count > 1, or responded YES.
+  else // Permanent delete.
   {
     if(IS_NULL_PTR(visible_form) || !(visible_form->type & DT_MASKS_GROUP))
       dt_masks_change_form_gui(NULL);
@@ -1123,6 +1111,42 @@ gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form
     dt_masks_select_form(module, dt_masks_get_from_id(darktable.develop, next_formid));
   }
   return res;
+}
+
+gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                                    dt_masks_form_gui_t *mask_gui, int form_id)
+{
+  const int use_count = _masks_gui_form_group_use_count(darktable.develop, form_id);
+
+  // We don't ask for confirmation if the module uses internal masks,
+  // just delete the form as it won't be visible in the shape manager.
+  const gboolean internal_masks
+      = !IS_NULL_PTR(module)
+        && ((module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS);
+
+  int response = GTK_RESPONSE_YES;
+  if(use_count <= 1 && !internal_masks)
+  {
+    response = dt_masks_gui_confirm_delete_form_dialog(sel->name);
+    if(response == GTK_RESPONSE_CANCEL) return FALSE;
+  }
+
+  return _masks_remove_or_delete_finish(module, sel, parent_id, mask_gui, form_id, response == GTK_RESPONSE_NO);
+}
+
+gboolean dt_masks_remove_shape_from_group(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                                          dt_masks_form_gui_t *mask_gui, int form_id)
+{
+  if(IS_NULL_PTR(sel) || IS_NULL_PTR(mask_gui)) return FALSE;
+  return _masks_remove_or_delete_finish(module, sel, parent_id, mask_gui, form_id, TRUE);
+}
+
+gboolean dt_masks_delete_shape(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
+                               dt_masks_form_gui_t *mask_gui, int form_id)
+{
+  if(IS_NULL_PTR(sel) || IS_NULL_PTR(mask_gui)) return FALSE;
+  if(!dt_masks_gui_confirm_permanent_delete(sel->name)) return FALSE;
+  return _masks_remove_or_delete_finish(module, sel, parent_id, mask_gui, form_id, FALSE);
 }
 
 gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_t *mask_gui)

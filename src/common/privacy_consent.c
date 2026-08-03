@@ -35,7 +35,7 @@
 
 // User-facing documentation describing exactly what is collected, where it goes
 // and why. Linked from the consent dialog so the decision is informed.
-#define DT_PRIVACY_DOC_URL "https://ansel.photos/en/data-privacy/"
+#define DT_PRIVACY_DOC_URL "https://ansel.photos/en/doc/data-privacy/"
 
 void dt_privacy_ask_consent(const gboolean have_gui)
 {

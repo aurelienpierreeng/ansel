@@ -1489,7 +1489,9 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   gtk_widget_show_all(dialog);
 
   res = gtk_dialog_run(GTK_DIALOG(dialog));
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(dialog);
+  dt_gui_refocus_parent(dialog_parent);
   if(res != GTK_RESPONSE_YES)
   {
     dt_free(tagname);
@@ -1615,7 +1617,9 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
                       GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE, "%s", message);
       gtk_dialog_run(GTK_DIALOG(warning_dialog));
       gtk_widget_destroy(warning_dialog);
+      GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
       gtk_widget_destroy(dialog);
+      dt_gui_refocus_parent(dialog_parent);
       dt_free(tagname);
       return;
     }
@@ -1638,7 +1642,9 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
     dt_free(new_tagname);
   }
   _init_treeview(self, 0);
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(dialog);
+  dt_gui_refocus_parent(dialog_parent);
   dt_free(tagname);
 }
 
@@ -1758,7 +1764,9 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
                         GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE, "%s", message);
         gtk_dialog_run(GTK_DIALOG(warning_dialog));
         gtk_widget_destroy(warning_dialog);
+        GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
         gtk_widget_destroy(dialog);
+        dt_gui_refocus_parent(dialog_parent);
         dt_free(tagname);
         return;
       }
@@ -1798,7 +1806,9 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
           {
             dt_free(new_prefix_tag);
           }
+          GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
           gtk_widget_destroy(dialog);
+          dt_gui_refocus_parent(dialog_parent);
           dt_free(tagname);
           return;
         };
@@ -1873,7 +1883,9 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
     }
   }
   _init_treeview(self, 0);
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(dialog);
+  dt_gui_refocus_parent(dialog_parent);
   dt_free(synonyms_list);
   dt_free(tagname);
 }
@@ -2009,13 +2021,17 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
                       GTK_MESSAGE_INFO, GTK_BUTTONS_CLOSE, "%s", message);
       gtk_dialog_run(GTK_DIALOG(warning_dialog));
       gtk_widget_destroy(warning_dialog);
+      GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
       gtk_widget_destroy(dialog);
+      dt_gui_refocus_parent(dialog_parent);
       dt_free(tagname);
       return;
     }
     _apply_rename_path(dialog, tagname, newtag, self);
   }
+  GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
   gtk_widget_destroy(dialog);
+  dt_gui_refocus_parent(dialog_parent);
   dt_free(tagname);
 }
 
@@ -2101,7 +2117,9 @@ static void _delete_tagids(GList *tagids, dt_lib_module_t *self)
 #endif
     gtk_widget_show_all(dialog);
     const int res = gtk_dialog_run(GTK_DIALOG(dialog));
+    GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
+    dt_gui_refocus_parent(dialog_parent);
     if(res != GTK_RESPONSE_YES) return;
   }
 

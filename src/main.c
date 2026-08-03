@@ -45,6 +45,14 @@ int main(int argc, char *argv[])
   dt_osx_prepare_environment();
 #endif
 #ifdef _WIN32
+  // Opening any native shell dialog (GtkFileChooserNative -> IFileDialog) loads every
+  // installed shell extension into our process; extensions shipping Intel's OpenMP
+  // runtime (libiomp5md.dll) then collide with our libomp and the Intel runtime aborts
+  // the app with OMP error #15. We never run their OpenMP code and they never run ours,
+  // so the duplicate-runtime detection is a false positive here: silence it, as the
+  // runtime's own message advises.
+  g_setenv("KMP_DUPLICATE_LIB_OK", "TRUE", TRUE);
+
   // on Windows we have a hard time showing stuff printed to stdout/stderr to the user.
   // because of that we write it to a log file.
   char datetime[DT_DATETIME_EXIF_LENGTH];

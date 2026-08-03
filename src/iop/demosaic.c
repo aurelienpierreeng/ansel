@@ -101,8 +101,10 @@
 #define DEMOSAIC_DUAL 2048   // masks for dual demosaicing methods
 #define REDUCESIZE 64
 
-#define XTRANS_SNAPPER 3
-#define BAYER_SNAPPER 2
+// X-Trans CFA tile period, still needed to align tile boundaries in tiling_callback()
+// (unrelated to the ROI crop position, which no longer needs to be pattern-aligned:
+// process() rebuilds the exact phase for any roi_in->x/y, see the top of process()).
+#define XTRANS_SNAPPER 6
 #define DOWNSAMPLE_GUIDED_SCALES 1
 
 DT_MODULE_INTROSPECTION(4, dt_iop_demosaic_params_t)
@@ -444,6 +446,18 @@ static inline __attribute__((always_inline)) const char* method2string(dt_iop_de
 static inline gboolean _is_downsample_method(const dt_iop_demosaic_method_t method)
 {
   return method == DT_IOP_DEMOSAIC_DOWNSAMPLE;
+}
+
+static inline __attribute__((always_inline)) const char *_pipe_type_string(dt_dev_pixelpipe_type_t type)
+{
+  switch(type)
+  {
+    case DT_DEV_PIXELPIPE_EXPORT:    return "export";
+    case DT_DEV_PIXELPIPE_FULL:      return "full";
+    case DT_DEV_PIXELPIPE_PREVIEW:   return "preview";
+    case DT_DEV_PIXELPIPE_THUMBNAIL: return "thumbnail";
+    default:                         return "none";
+  }
 }
 
 /**
@@ -961,20 +975,11 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
     return;
   }
 
-  // set position to closest sensor pattern snap
-  if(!passthrough)
-  {
-    // ROI planning happens during history -> pipeline resync, before recursion has initialized piece->dsc_in.
-    // The snap period must therefore come from the immutable RAW input descriptor attached to the image.
-    const int aligner = (piece->module->dev->image_storage.dsc.filters != 9u) ? BAYER_SNAPPER : XTRANS_SNAPPER;
-    const int dx = roi_in->x % aligner;
-    const int dy = roi_in->y % aligner;
-    const int shift_x = (dx > aligner / 2) ? aligner - dx : -dx;
-    const int shift_y = (dy > aligner / 2) ? aligner - dy : -dy;
-
-    roi_in->x = MAX(0, roi_in->x + shift_x);
-    roi_in->y = MAX(0, roi_in->y + shift_y);
-  }
+  // No snapping needed: process() rebuilds the exact CFA/xtrans phase for the
+  // actual roi_in->x/y on every call (see the top of process()), so demosaic can
+  // request any pixel-precise crop position from upstream instead of rounding to
+  // the nearest sensor-pattern-aligned one.
+  (void)passthrough;
 }
 
 
@@ -995,7 +1000,19 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
                          && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
-  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
+  // piece->dsc_in.filters/xtrans only carries the fixed sensor-border-trim phase shift
+  // (applied once by rawprepare, which owns that constant, and never rewritten here —
+  // process() must treat piece->dsc_in as immutable). The dynamic, ROI-dependent part of
+  // the shift (panning/zooming/cropping downstream) is NOT baked into a table here: most
+  // algorithms below (markesteijn, passthrough, VNG, the xtrans downsample path,
+  // green-equilibration, dual demosaic) already add roi_in->x/y themselves at their own
+  // call sites, working directly off the unshifted piece->dsc_in.xtrans/filters. Only the
+  // handful of algorithms that work in tile-local coordinates with no roi awareness at all
+  // (RCD, LMMSE, PPG, AMaZE, the bayer downsample path) need the dynamic offset folded into
+  // `filters` up front — passing a locally pre-shifted table to the roi-aware algorithms
+  // instead would double their own correction on top of it.
+  const uint8_t(*const xtrans_raw)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
+  const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
 
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
@@ -1009,10 +1026,16 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     if(g) showmask = (g->visual_mask);
     // take care of passthru modes
     if(pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU)
-      demosaicing_method = (piece->dsc_in.filters != 9u) ? DT_IOP_DEMOSAIC_RCD : DT_IOP_DEMOSAIC_MARKESTEIJN;
+      demosaicing_method = (filters != 9u) ? DT_IOP_DEMOSAIC_RCD : DT_IOP_DEMOSAIC_MARKESTEIJN;
     else if(pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU_MONO)
       demosaicing_method = DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
   }
+
+  dt_print(DT_DEBUG_DEMOSAIC,
+           "[demosaic] CPU pipe %p (%s) thread %lu piece %p roi_in=(%d,%d) %dx%d dsc_in.filters=0x%x -> filters=0x%x xtrans_raw=%p method=%s\n",
+           (void *)pipe, _pipe_type_string(pipe->type), (unsigned long)pthread_self(), (void *)piece,
+           roi_in->x, roi_in->y, roi_in->width, roi_in->height,
+           piece->dsc_in.filters, filters, (void *)xtrans_raw, method2string(demosaicing_method));
 
   const float *const pixels = (float *)i;
 
@@ -1021,10 +1044,10 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if(_is_downsample_method(demosaicing_method))
   {
-    if(piece->dsc_in.filters == 9u)
-      _downsample_xtrans_half_size(o, pixels, &roo, &roi, xtrans);
+    if(filters == 9u)
+      _downsample_xtrans_half_size(o, pixels, &roo, &roi, xtrans_raw);
     else
-      _downsample_bayer_half_size(o, pixels, &roo, &roi, piece->dsc_in.filters,
+      _downsample_bayer_half_size(o, pixels, &roo, &roi, filters,
                                   img->flags & DT_IMAGE_4BAYER, data->CAM_to_RGB);
 
     if(_downsample_guided_laplacian_postfilter(o, roo.width, roo.height, data->color_smoothing)) return 1;
@@ -1035,19 +1058,19 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
   else if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
   {
-    passthrough_color(o, pixels, &roo, &roi, piece->dsc_in.filters, xtrans);
+    passthrough_color(o, pixels, &roo, &roi, piece->dsc_in.filters, xtrans_raw);
   }
-  else if(piece->dsc_in.filters == 9u)
+  else if(filters == 9u)
   {
     const int passes = (demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN) ? 1 : 3;
     if(demosaicing_method == DT_IOP_DEMOSAIC_MARKEST3_VNG)
-      xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans, passes);
+      xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans_raw, passes);
     else if(demosaicing_method == DT_IOP_DEMOSAIC_FDC)
-      xtrans_fdc_interpolate(self, o, pixels, &roo, &roi, xtrans);
+      xtrans_fdc_interpolate(self, o, pixels, &roo, &roi, xtrans_raw);
     else if(demosaicing_method >= DT_IOP_DEMOSAIC_MARKESTEIJN)
-      xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans, passes);
+      xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans_raw, passes);
     else
-      if(vng_interpolate(o, pixels, &roo, &roi, piece->dsc_in.filters, xtrans, FALSE))
+      if(vng_interpolate(o, pixels, &roo, &roi, piece->dsc_in.filters, xtrans_raw, FALSE))
         return 1;
   }
   else
@@ -1093,7 +1116,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
     if(demosaicing_method == DT_IOP_DEMOSAIC_VNG4 || (img->flags & DT_IMAGE_4BAYER))
     {
-      if(vng_interpolate(o, in, &roo, &roi, piece->dsc_in.filters, xtrans, FALSE))
+      if(vng_interpolate(o, in, &roo, &roi, piece->dsc_in.filters, xtrans_raw, FALSE))
         return 1;
       if(img->flags & DT_IMAGE_4BAYER)
       {
@@ -1105,7 +1128,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
     else if((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_RCD)
     {
-      rcd_demosaic(piece, o, in, &roo, &roi, piece->dsc_in.filters);
+      rcd_demosaic(piece, o, in, &roo, &roi, filters);
     }
     else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)
     {
@@ -1133,11 +1156,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
           gd->lmmse_gamma_out[j] = (x <= 0.031746) ? x / 17.0 : exp(log((x + 0.044445) / 1.044445) * 2.4);
         }
       }
-      lmmse_demosaic(piece, o, in, &roo, &roi, piece->dsc_in.filters, data->lmmse_refine, gd->lmmse_gamma_in, gd->lmmse_gamma_out);
+      lmmse_demosaic(piece, o, in, &roo, &roi, filters, data->lmmse_refine, gd->lmmse_gamma_in, gd->lmmse_gamma_out);
     }
     else if((demosaicing_method & ~DEMOSAIC_DUAL) != DT_IOP_DEMOSAIC_AMAZE)
     {
-      if(demosaic_ppg(o, in, &roo, &roi, piece->dsc_in.filters, data->median_thrs))
+      if(demosaic_ppg(o, in, &roo, &roi, filters, data->median_thrs))
       {
         if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
           dt_pixelpipe_cache_free_align(in);
@@ -1145,7 +1168,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       }
     } // wanted ppg or zoomed out a lot and quality is limited to 1
     else
-      amaze_demosaic_RT(piece, in, o, &roi, &roo, piece->dsc_in.filters);
+      amaze_demosaic_RT(piece, in, o, &roi, &roo, filters);
 
     if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO) 
       dt_pixelpipe_cache_free_align(in);
@@ -1163,7 +1186,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   if((demosaicing_method & DEMOSAIC_DUAL))
   {
-    if(dual_demosaic(pipe, piece, o, pixels, &roo, &roi, piece->dsc_in.filters, xtrans, showmask, data->dual_thrs))
+    if(dual_demosaic(pipe, piece, o, pixels, &roo, &roi, piece->dsc_in.filters, xtrans_raw, showmask, data->dual_thrs))
       return 1;
   }
 
@@ -1192,6 +1215,10 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
 
   int width = roi_out->width;
   int height = roi_out->height;
+
+  // The PPG kernels below work in tile-local coordinates with no roi awareness, so they
+  // need the dynamic ROI offset folded into filters up front (see process()'s comment).
+  const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
 
   // green equilibration
   if(data->green_eq != DT_IOP_GREEN_EQ_NO)
@@ -1245,7 +1272,7 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
       dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 1, sizeof(cl_mem), &dev_tmp);
       dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 2, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 3, sizeof(int), (void *)&height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 4, sizeof(uint32_t), (void *)&piece->dsc_in.filters);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 4, sizeof(uint32_t), (void *)&filters);
       dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 5, sizeof(int), (void *)&myborder);
       err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_border_interpolate, sizes);
       if(err != CL_SUCCESS) goto error;
@@ -1271,7 +1298,7 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
       dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 2, sizeof(int), &width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 3, sizeof(int), &height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 4, sizeof(uint32_t),
-                                (void *)&piece->dsc_in.filters);
+                                (void *)&filters);
       dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 5, sizeof(float), (void *)&data->median_thrs);
       dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 6,
                             sizeof(float) * (locopt.sizex + 4) * (locopt.sizey + 4), NULL);
@@ -1298,7 +1325,7 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 2, sizeof(int), &width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 3, sizeof(int), &height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 4, sizeof(uint32_t),
-                                (void *)&piece->dsc_in.filters);
+                                (void *)&filters);
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 5,
                             sizeof(float) * (locopt.sizex + 2*3) * (locopt.sizey + 2*3), NULL);
 
@@ -1322,7 +1349,7 @@ static int process_default_cl(struct dt_iop_module_t *self, const dt_dev_pixelpi
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 2, sizeof(int), &width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 3, sizeof(int), &height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 4, sizeof(uint32_t),
-                                (void *)&piece->dsc_in.filters);
+                                (void *)&filters);
       dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 5,
                             sizeof(float) * 4 * (locopt.sizex + 2) * (locopt.sizey + 2), NULL);
 
@@ -1614,6 +1641,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
                          && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
+  // See the matching comment in process(): most kernels below take roi_in->x/y as an
+  // explicit argument and self-correct against the unshifted piece->dsc_in.filters/xtrans.
+  // Only the bayer downsample kernel works in tile-local coordinates with no roi awareness,
+  // so it alone needs the dynamic offset folded in up front.
+  const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
+
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
@@ -1630,6 +1663,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     else if(pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU_MONO)
       demosaicing_method = DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
   }
+
+  dt_print(DT_DEBUG_DEMOSAIC,
+           "[demosaic] CL pipe %p (%s) thread %lu piece %p devid=%d roi_in=(%d,%d) %dx%d dsc_in.filters=0x%x -> filters=0x%x method=%s\n",
+           (void *)pipe, _pipe_type_string(pipe->type), (unsigned long)pthread_self(), (void *)piece,
+           pipe->devid, roi_in->x, roi_in->y, roi_in->width, roi_in->height,
+           piece->dsc_in.filters, filters, method2string(demosaicing_method));
 
   cl_mem high_image = NULL;
   cl_mem low_image = NULL;
@@ -1693,7 +1732,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 6, sizeof(int), (void *)&roi_in->width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 7, sizeof(int), (void *)&roi_in->height);
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 8, sizeof(float), (void *)&roi_out->scale);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 9, sizeof(uint32_t), (void *)&piece->dsc_in.filters);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 9, sizeof(uint32_t), (void *)&filters);
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 10, sizeof(int), &is_4bayer);
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 11, sizeof(cam_to_rgb_0), cam_to_rgb_0);
       dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 12, sizeof(cam_to_rgb_1), cam_to_rgb_1);

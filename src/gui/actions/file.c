@@ -21,6 +21,8 @@
 #include "common/darktable.h"
 #include "gui/actions/menu.h"
 #include "common/collection.h"
+#include "common/image.h"
+#include "common/selection.h"
 #include "libs/collect.h"
 #include "common/import.h"
 #include "libs/lib.h"
@@ -200,6 +202,170 @@ static gboolean export_files_callback(GtkAccelGroup *group, GObject *acceleratab
 }
 
 
+typedef enum dt_export_list_mode_t
+{
+  DT_EXPORT_LIST_IDS = 0,
+  DT_EXPORT_LIST_FILENAMES = 1
+} dt_export_list_mode_t;
+
+// On screen and in the clipboard, both modes emit a single line ready to paste
+// as script arguments: IDs comma-separated (--ids 1,2,3), filenames
+// space-separated and shell-quoted (paths can contain spaces and
+// metacharacters; POSIX single-quote escaping also suits PowerShell — only
+// cmd.exe differs). Saved files instead get one raw item per line, unquoted:
+// files are read verbatim, not parsed by a shell.
+static gchar *_export_list_build(GList *imgids, const int mode, const gboolean one_per_line)
+{
+  GString *str = g_string_new(NULL);
+  for(GList *l = imgids; l; l = g_list_next(l))
+  {
+    const int32_t imgid = GPOINTER_TO_INT(l->data);
+    if(mode == DT_EXPORT_LIST_FILENAMES)
+    {
+      char path[PATH_MAX] = { 0 };
+      gboolean from_cache = FALSE;
+      dt_image_full_path(imgid, path, sizeof(path), &from_cache, __FUNCTION__);
+      if(one_per_line)
+        g_string_append(str, path);
+      else
+      {
+        gchar *quoted = g_shell_quote(path);
+        g_string_append(str, quoted);
+        g_free(quoted);
+      }
+    }
+    else
+      g_string_append_printf(str, "%i", imgid);
+
+    if(one_per_line)
+      g_string_append_c(str, '\n');
+    else if(l->next)
+      g_string_append_c(str, mode == DT_EXPORT_LIST_FILENAMES ? ' ' : ',');
+  }
+  return g_string_free(str, FALSE);
+}
+
+static void _export_list_fill(GtkComboBox *combo, gpointer user_data)
+{
+  GtkTextBuffer *buffer = GTK_TEXT_BUFFER(user_data);
+  GList *imgids = (GList *)g_object_get_data(G_OBJECT(buffer), "imgids");
+  gchar *text = _export_list_build(imgids, gtk_combo_box_get_active(combo), FALSE);
+  gtk_text_buffer_set_text(buffer, text, -1);
+  g_free(text);
+}
+
+static void _export_list_save(GtkWidget *dialog, GtkTextBuffer *buffer)
+{
+  GList *imgids = (GList *)g_object_get_data(G_OBJECT(buffer), "imgids");
+  GtkComboBox *combo = GTK_COMBO_BOX(g_object_get_data(G_OBJECT(buffer), "combo"));
+  const int mode = gtk_combo_box_get_active(combo);
+
+  // GtkFileChooserNative uses the platform-native save dialog on Windows and macOS
+  GtkFileChooserNative *chooser
+      = gtk_file_chooser_native_new(_("Ansel - Save image list"), GTK_WINDOW(dialog),
+                                    GTK_FILE_CHOOSER_ACTION_SAVE, _("_Save"), _("_Cancel"));
+  gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(chooser), TRUE);
+  gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(chooser),
+                                    mode == DT_EXPORT_LIST_FILENAMES ? "ansel-image-files.txt"
+                                                                     : "ansel-image-ids.txt");
+  if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT)
+  {
+    gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+    gchar *text = _export_list_build(imgids, mode, TRUE);
+    GError *error = NULL;
+    if(!g_file_set_contents(filename, text, -1, &error))
+    {
+      dt_control_log(_("could not save the image list to '%s': %s"), filename, error->message);
+      g_error_free(error);
+    }
+    g_free(text);
+    g_free(filename);
+  }
+  g_object_unref(chooser);
+}
+
+static void _export_list_response(GtkWidget *dialog, gint response_id, gpointer user_data)
+{
+  if(response_id == GTK_RESPONSE_OK)
+    _export_list_save(dialog, GTK_TEXT_BUFFER(user_data));
+  else if(response_id == GTK_RESPONSE_APPLY)
+  {
+    // GDK_SELECTION_CLIPBOARD is the explicit-copy clipboard on all backends
+    // (X11, Wayland, Windows, macOS) — as opposed to the X11-only PRIMARY selection.
+    GtkTextBuffer *buffer = GTK_TEXT_BUFFER(user_data);
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gchar *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    GtkClipboard *clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    gtk_clipboard_set_text(clipboard, text, -1);
+    gtk_clipboard_store(clipboard);
+    g_free(text);
+  }
+  else
+    gtk_widget_destroy(dialog);
+}
+
+static gboolean export_image_list_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
+{
+  static GtkWidget *dialog = NULL;
+
+  // Rebuild from scratch on each call so the content always reflects the current selection
+  if(dialog) gtk_widget_destroy(dialog);
+
+  GList *imgids = dt_selection_get_list(darktable.selection);
+  if(IS_NULL_PTR(imgids)) return TRUE;
+
+  dialog = gtk_dialog_new_with_buttons(_("Ansel - Export image list"),
+                                       GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+                                       GTK_DIALOG_DESTROY_WITH_PARENT,
+                                       _("Copy to clipboard"), GTK_RESPONSE_APPLY,
+                                       _("Save as file..."), GTK_RESPONSE_OK,
+                                       _("Close"), GTK_RESPONSE_CLOSE, NULL);
+#ifdef GDK_WINDOWING_QUARTZ
+  dt_osx_disallow_fullscreen(dialog);
+  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
+#endif
+  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+  gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
+  g_signal_connect(G_OBJECT(dialog), "destroy", G_CALLBACK(gtk_widget_destroyed), &dialog);
+
+  GtkWidget *combo = gtk_combo_box_text_new();
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Image ID"));
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Image filename"));
+
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(8));
+  gtk_box_pack_start(GTK_BOX(hbox), gtk_label_new(_("Export:")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), combo, TRUE, TRUE, 0);
+
+  GtkWidget *view = gtk_text_view_new();
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+  gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+  g_object_set_data_full(G_OBJECT(buffer), "imgids", imgids, (GDestroyNotify)g_list_free);
+  g_object_set_data(G_OBJECT(buffer), "combo", combo);
+
+  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(450));
+  gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(300));
+  gtk_container_add(GTK_CONTAINER(scroll), view);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_box_pack_start(GTK_BOX(content), hbox, FALSE, FALSE, DT_PIXEL_APPLY_DPI(4));
+  gtk_box_pack_start(GTK_BOX(content), scroll, TRUE, TRUE, 0);
+
+  g_signal_connect(G_OBJECT(combo), "changed", G_CALLBACK(_export_list_fill), buffer);
+  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_export_list_response), buffer);
+
+  // Setting the active entry fires "changed", which fills the buffer
+  gtk_combo_box_set_active(GTK_COMBO_BOX(combo), DT_EXPORT_LIST_IDS);
+
+  gtk_widget_show_all(dialog);
+  return TRUE;
+}
+
+
 MAKE_ACCEL_WRAPPER(dt_images_import)
 MAKE_ACCEL_WRAPPER(dt_control_copy_images)
 MAKE_ACCEL_WRAPPER(dt_control_move_images)
@@ -217,6 +383,9 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_sub_menu_entry(menus, lists, _("Export..."), index, NULL, export_files_callback, NULL, NULL,
                      NULL, GDK_KEY_e, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+
+  add_sub_menu_entry(menus, lists, _("Export image list..."), index, NULL, export_image_list_callback, NULL, NULL,
+                     has_selection, 0, 0);
 
   add_menu_separator(menus[index]);
 

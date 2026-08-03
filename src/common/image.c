@@ -83,6 +83,7 @@
 #include "common/history_merge.h"
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
+#include "common/image_extensions.h"
 #include "common/imageio.h"
 #include "common/imageio_rawspeed.h"
 #include "common/imageio_libraw.h"
@@ -152,7 +153,8 @@ typedef struct dt_undo_duplicate_t
 } dt_undo_duplicate_t;
 
 static void _pop_undo_execute(const int32_t imgid, const gboolean before, const gboolean after);
-static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo);
+static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo,
+                                             const gboolean reload);
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs);
 
 
@@ -907,7 +909,7 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
     {
       // restore image, note that we record the new imgid created while
       // restoring the duplicate.
-      undo->new_imgid = _image_duplicate_with_version(undo->orig_imgid, undo->version, FALSE);
+      undo->new_imgid = _image_duplicate_with_version(undo->orig_imgid, undo->version, FALSE, TRUE);
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undo->new_imgid));
     }
   }
@@ -1063,7 +1065,129 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
   dt_image_history_changed(imgid, TRUE);
 }
 
-dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
+void dt_image_orient_boundingbox(const dt_boundingbox_t in, const dt_image_orientation_t orientation,
+                                 dt_boundingbox_t out)
+{
+  float top = in[0];
+  float left = in[1];
+  float bottom = in[2];
+  float right = in[3];
+
+  /* Mirror, then swap, in the exact order iop/flip.c's distort_transform() applies to points:
+   * x -> width - x, y -> height - y, then (x, y) -> (y, x). On normalized edge coordinates a
+   * mirror exchanges the two edges of that axis, and the swap exchanges the two axes. */
+  if(orientation & ORIENTATION_FLIP_X)
+  {
+    const float new_left = 1.0f - right;
+    right = 1.0f - left;
+    left = new_left;
+  }
+
+  if(orientation & ORIENTATION_FLIP_Y)
+  {
+    const float new_top = 1.0f - bottom;
+    bottom = 1.0f - top;
+    top = new_top;
+  }
+
+  if(orientation & ORIENTATION_SWAP_XY)
+  {
+    const float swap_top = left;
+    const float swap_bottom = right;
+    left = top;
+    right = bottom;
+    top = swap_top;
+    bottom = swap_bottom;
+  }
+
+  out[0] = top;
+  out[1] = left;
+  out[2] = bottom;
+  out[3] = right;
+}
+
+gboolean dt_image_get_usercrop(const dt_image_t *img, dt_boundingbox_t box)
+{
+  box[0] = box[1] = 0.0f;
+  box[2] = box[3] = 1.0f;
+
+  if(IS_NULL_PTR(img) || img->usercrop_status != DT_IMAGE_USERCROP_VALID) return FALSE;
+
+  for(int i = 0; i < 4; i++) box[i] = img->usercrop[i];
+  return TRUE;
+}
+
+gboolean dt_image_resolve_usercrop(const int32_t imgid, dt_boundingbox_t box)
+{
+  box[0] = box[1] = 0.0f;
+  box[2] = box[3] = 1.0f;
+
+  if(imgid < 1 || IS_NULL_PTR(darktable.image_cache)) return FALSE;
+
+  char filename[PATH_MAX] = { 0 };
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(IS_NULL_PTR(img)) return FALSE;
+
+  if(img->usercrop_status != DT_IMAGE_USERCROP_UNKNOWN)
+  {
+    // Already answered for this image, in this session.
+    const gboolean valid = dt_image_get_usercrop(img, box);
+    dt_image_cache_read_release(darktable.image_cache, img);
+    return valid;
+  }
+
+  /* DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS is persisted and is set at import for every image that has
+   * a usable DefaultUserCrop (it also covers DNG opcodes, so it is a superset -- which is what we
+   * want here: no valid framing can hide behind a cleared bit). Images without it can be settled
+   * without touching the file at all, which keeps this off the hot path for whole libraries. */
+  if(!(img->flags & DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS))
+  {
+    // Cheap enough to redo on every call -- deliberately not memoized, so that populating a whole
+    // library's thumbnails does not take one image-cache write lock per image to record a "no".
+    dt_image_cache_read_release(darktable.image_cache, img);
+    return FALSE;
+  }
+
+  const gboolean has_file
+      = (dt_image_choose_input_path(img, filename, sizeof(filename), FALSE) != DT_IMAGE_PATH_NONE);
+  dt_image_cache_read_release(darktable.image_cache, img);
+  if(!has_file) return FALSE;
+
+  /* Parse into a throwaway image, holding no lock: the crop lives in runtime-only state, so a
+   * thumbnail worker starting from a database-loaded cache entry has to read the file itself.
+   * Two threads racing here compute the same answer from the same file, so the duplicated work
+   * is wasteful at worst -- which is cheaper than serializing file I/O behind a write lock. */
+  dt_image_t probe;
+  dt_image_init(&probe);
+  probe.id = imgid;
+  dt_exif_read_usercrop(&probe, filename);
+
+  dt_image_t *write = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(!IS_NULL_PTR(write))
+  {
+    write->usercrop_status = probe.usercrop_status;
+    for(int i = 0; i < 4; i++) write->usercrop[i] = probe.usercrop[i];
+    dt_image_cache_write_release(darktable.image_cache, write, DT_IMAGE_CACHE_RELAXED);
+  }
+
+  return dt_image_get_usercrop(&probe, box);
+}
+
+gboolean dt_image_get_usercrop_oriented(const dt_image_t *img, const dt_image_orientation_t orientation,
+                                        dt_boundingbox_t box)
+{
+  if(!dt_image_get_usercrop(img, box)) return FALSE;
+
+  dt_image_orient_boundingbox(box, orientation, box);
+  return TRUE;
+}
+
+/** Orientation committed by the flip module in this image's stored history.
+ *
+ * Returns ORIENTATION_NULL when history says nothing, leaving the caller to fall back to the
+ * EXIF orientation -- which is exactly what flip itself defaults to (see its commit_params()).
+ */
+static dt_image_orientation_t _image_get_history_orientation(const int32_t imgid)
 {
   // find the flip module -- the pointer stays valid until darktable shuts down
   static dt_iop_module_so_t *flip = NULL;
@@ -1105,9 +1229,25 @@ dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
     sqlite3_finalize(stmt);
   }
 
+  return orientation;
+}
+
+dt_image_orientation_t dt_image_get_effective_orientation(const dt_image_t *img)
+{
+  if(IS_NULL_PTR(img)) return ORIENTATION_NONE;
+
+  const dt_image_orientation_t orientation = _image_get_history_orientation(img->id);
+  return (orientation != ORIENTATION_NULL) ? orientation : dt_image_orientation(img);
+}
+
+dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
+{
+  dt_image_orientation_t orientation = _image_get_history_orientation(imgid);
+
   if(orientation == ORIENTATION_NULL)
   {
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(IS_NULL_PTR(img)) return ORIENTATION_NONE;
     orientation = dt_image_orientation(img);
     dt_image_cache_read_release(darktable.image_cache, img);
   }
@@ -1310,7 +1450,8 @@ static int32_t _image_duplicate_with_version_ext(const int32_t imgid, const int3
   return newid;
 }
 
-static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo)
+static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo,
+                                             const gboolean reload)
 {
   const int32_t newid = _image_duplicate_with_version_ext(imgid, newversion);
 
@@ -1335,14 +1476,24 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
     dt_image_cache_read_release(darktable.image_cache, img);
     dt_grouping_add_to_group(grpid, newid);
 
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+    // Reloading here exposes newid to the lighttable grid: it becomes eligible for thumbnail
+    // generation immediately, against whatever history it has *right now*. Callers still about
+    // to write history onto it (duplicate-with-history, style-on-duplicate) must skip this and
+    // reload themselves once that is done -- see dt_image_duplicate_no_reload().
+    if(reload)
+      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
   }
   return newid;
 }
 
 int32_t dt_image_duplicate_with_version(const int32_t imgid, const int32_t newversion)
 {
-  return _image_duplicate_with_version(imgid, newversion, TRUE);
+  return _image_duplicate_with_version(imgid, newversion, TRUE, TRUE);
+}
+
+int32_t dt_image_duplicate_no_reload(const int32_t imgid)
+{
+  return _image_duplicate_with_version(imgid, -1, TRUE, FALSE);
 }
 
 void dt_image_remove(const int32_t imgid)
@@ -1596,14 +1747,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     return 0;
   }
   char *ext = g_ascii_strdown(cc + 1, -1);
-  int supported = 0;
-  for(const char **i = dt_supported_extensions; !IS_NULL_PTR(*i); i++)
-    if(!strcmp(ext, *i))
-    {
-      supported = 1;
-      break;
-    }
-  if(!supported)
+  if(!dt_image_ext_is_supported(ext))
   {
     dt_free(normalized_filename);
     dt_free(ext);
@@ -1943,6 +2087,7 @@ void dt_image_init(dt_image_t *img)
   img->wb_coeffs[3] = NAN;
   img->usercrop[0] = img->usercrop[1] = 0;
   img->usercrop[2] = img->usercrop[3] = 1;
+  img->usercrop_status = DT_IMAGE_USERCROP_UNKNOWN;
   img->dng_gain_maps = NULL;
   img->cache_entry = 0;
   img->color_labels = 0;
@@ -2546,6 +2691,7 @@ int dt_image_local_copy_reset(const int32_t imgid)
 
   // check that a local copy exists, otherwise there is nothing to do
   dt_image_t *imgr = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!imgr) return 0;
   const gboolean local_copy_exists = (imgr->flags & DT_IMAGE_LOCAL_COPY) == DT_IMAGE_LOCAL_COPY ? TRUE : FALSE;
   dt_image_cache_read_release(darktable.image_cache, imgr);
 

@@ -1192,7 +1192,8 @@ gchar *dt_collection_get_makermodel(const char *exif_maker, const char *exif_mod
   return makermodel;
 }
 
-static gchar *get_query_string(const dt_collection_properties_t property, const gchar *text)
+static gchar *get_query_string(const dt_collection_properties_t property, const gchar *text,
+                               const gboolean recursive)
 {
   char *escaped_text = sqlite3_mprintf("%q", text);
   const unsigned int escaped_length = strlen(escaped_text);
@@ -1225,10 +1226,14 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
 
     case DT_COLLECTION_PROP_FOLDERS: // folders
       {
-        // replace * at the end with OR-clause to include subfolders
-        if ((escaped_length > 0) && (escaped_text[escaped_length-1] == '*'))
+        // Recursion is normally the explicit `recursive` flag; a still-present trailing '*' is
+        // only recognized as a fallback for collections/presets saved before that flag existed,
+        // and for the Queries tab's raw rule editor, which has no checkbox and still relies on
+        // typing '*' by hand -- so this is permanent, not a transitional shim.
+        const gboolean has_star = (escaped_length > 0) && (escaped_text[escaped_length-1] == '*');
+        if(recursive || has_star)
         {
-          escaped_text[escaped_length-1] = '\0';
+          if(has_star) escaped_text[escaped_length-1] = '\0';
           // clang-format off
           query = g_strdup_printf("(film_id IN (SELECT id FROM main.film_rolls WHERE folder LIKE '%s' OR folder LIKE '%s"
                                   G_DIR_SEPARATOR_S "%%'))",
@@ -1716,13 +1721,14 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
   return query;
 }
 
-GList *dt_collection_get_images_for_rule(const dt_collection_properties_t property, const char *text)
+GList *dt_collection_get_images_for_rule(const dt_collection_properties_t property, const char *text,
+                                         gboolean recursive)
 {
   // Build the same WHERE clause the collection would use for this single rule, then
   // enumerate the matching image ids. Independent of the currently active collection so it
   // can feed batch/background operations (remove, attach tag, pre-render thumbnails, ...).
   GList *result = NULL;
-  gchar *where = get_query_string(property, text);
+  gchar *where = get_query_string(property, text, recursive);
   if(IS_NULL_PTR(where)) return NULL;
 
   gchar *query = g_strdup_printf("SELECT id FROM main.images WHERE %s", where);
@@ -2035,10 +2041,21 @@ int dt_collection_serialize(char *buf, int bufsize)
     bufsize -= c;
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", k);
     const char *str = dt_conf_get_string_const(confname);
-    if(str && (str[0] != '\0'))
-      c = snprintf(buf, bufsize, "%s$", str);
+    // Fold the recursive flag back into the trailing '*' this wire format has always used, so
+    // dt_collection_deserialize() (and any consumer reading this string directly) sees exactly
+    // what get_query_string() expects, with no separate field to carry through.
+    gchar *str_recursive = NULL;
+    if(item == DT_COLLECTION_PROP_FOLDERS && str && str[0] != '\0' && str[strlen(str) - 1] != '*')
+    {
+      snprintf(confname, sizeof(confname), "plugins/lighttable/collect/recursive%1d", k);
+      if(dt_conf_get_bool(confname)) str_recursive = g_strconcat(str, "*", NULL);
+    }
+    const char *emit = str_recursive ? str_recursive : str;
+    if(emit && (emit[0] != '\0'))
+      c = snprintf(buf, bufsize, "%s$", emit);
     else
       c = snprintf(buf, bufsize, "%%$");
+    g_free(str_recursive);
     buf += c;
     bufsize -= c;
   }
@@ -2055,6 +2072,7 @@ void dt_collection_deserialize(const char *buf)
     dt_conf_set_int("plugins/lighttable/collect/mode0", 0);
     dt_conf_set_int("plugins/lighttable/collect/item0", 0);
     dt_conf_set_string("plugins/lighttable/collect/string0", "%");
+    dt_conf_set_bool("plugins/lighttable/collect/recursive0", FALSE);
   }
   else
   {
@@ -2072,6 +2090,17 @@ void dt_collection_deserialize(const char *buf)
         dt_conf_set_int(confname, mode);
         snprintf(confname, sizeof(confname), "plugins/lighttable/collect/item%1d", k);
         dt_conf_set_int(confname, item);
+        // A FOLDERS rule's trailing '*' is the recursion marker (see dt_collection_serialize):
+        // pull it back out into its own flag here, setting AND clearing so a rule slot never
+        // inherits a stale flag left over from whatever collection previously occupied it.
+        if(item == DT_COLLECTION_PROP_FOLDERS)
+        {
+          const size_t len = strlen(str);
+          const gboolean recursive = len > 0 && str[len - 1] == '*';
+          if(recursive) str[len - 1] = '\0';
+          snprintf(confname, sizeof(confname), "plugins/lighttable/collect/recursive%1d", k);
+          dt_conf_set_bool(confname, recursive);
+        }
         snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", k);
         dt_conf_set_string(confname, str);
       }
@@ -2083,6 +2112,8 @@ void dt_collection_deserialize(const char *buf)
         dt_conf_set_int(confname, 0);
         snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", k);
         dt_conf_set_string(confname, "%");
+        snprintf(confname, sizeof(confname), "plugins/lighttable/collect/recursive%1d", k);
+        dt_conf_set_bool(confname, FALSE);
         break;
       }
       else
@@ -2253,6 +2284,8 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
     gchar *text = dt_conf_get_string(confname);
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/mode%1d", i);
     const int mode = dt_conf_get_int(confname);
+    snprintf(confname, sizeof(confname), "plugins/lighttable/collect/recursive%1d", i);
+    const gboolean recursive = dt_conf_get_bool(confname);
 
     if(IS_NULL_PTR(text) || text[0] == '\0')
     {
@@ -2263,7 +2296,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
     }
     else
     {
-      gchar *query = get_query_string(property, text);
+      gchar *query = get_query_string(property, text, recursive);
 
       query_parts[i] =  g_strdup_printf(" %s %s", conj[mode], query);
 
@@ -2510,11 +2543,9 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
     }
   }
 
-  fprintf(stdout,"Collection: view = %s\n", Collection_view ? "Tree" : "List");
-  const char *path = g_strdup_printf("%s%s", dir, Collection_view ? "*" : "");
-  fprintf(stdout,"Collection: path = %s\n", path);
-
-  dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dir));
+  // Don't append "*": it's the legacy encoding for "recursive" and would silently
+  // override the user's current recursive/sub-folders setting on every import.
+  dt_conf_set_string("plugins/lighttable/collect/string0", dir);
   dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
 
   // Reload the collection with the current filmroll

@@ -386,7 +386,13 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
           || global_hist_output_on
           || current_output_must_cache_host;
 
-    current_output_must_cache_host = previous_output_must_cache_host;
+    // A GPU-capable module that itself needs no host copy of its input must not erase a host
+    // requirement inherited from further downstream (e.g. a CPU-only module reached through it,
+    // or through a module that is disabled right now but was enabled a moment ago and left a
+    // stale host-less cacheline behind). Once established, the requirement has to keep
+    // propagating upstream, module after module, or an intermediate GPU module silently resets
+    // it and the module before it skips the readback that a later, non-adjacent consumer needs.
+    current_output_must_cache_host = previous_output_must_cache_host || current_output_must_cache_host;
   }
 }
 
@@ -1463,10 +1469,22 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
         const int revision = dt_atomic_get_int(&pipe->dev->mask_preview_settings_revision);
         local_hash = dt_hash(local_hash, (const char *)&revision, sizeof(revision));
       }
+
+      // bypass_cache_variant (see dt_iop_module_t.bypass_cache_variant) is, like
+      // request_mask_display above, module-owned GUI state whose real effect a module such as
+      // retouch applies only to this main/FULL pipe -- never to preview/virtual-preview, which
+      // always render as if none of these toggles were active. But the field itself lives on
+      // the shared dt_iop_module_t, so it reads the same non-zero value from every pipe type. Left
+      // ungated, a preview-pipe run with the same ROI/params (e.g. at zoom == fit) can compute the
+      // exact same hash chain as the FULL pipe despite publishing different pixels, and either
+      // pipe's cache entry then gets silently reused by the other via the cross-pipe "another pipe
+      // already owns this hash" exact-hit path -- exactly like request_mask_display's own hazard.
+      local_hash = dt_hash(local_hash, (const char *)&piece->module->bypass_cache_variant, sizeof(int));
     }
-    else 
+    else
     {
       const int zero = 0;
+      local_hash = dt_hash(local_hash, (const char *)&zero, sizeof(int));
       local_hash = dt_hash(local_hash, (const char *)&zero, sizeof(int));
     }
 
@@ -1487,8 +1505,10 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
     {
       gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
-      dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n",
-               piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
+      dt_print(DT_DEBUG_PIPE,
+               "[pixelpipe] global hash for %20s (%s) in pipe %s enabled=%d bypass_cache=%d with hash %lu\n",
+               piece->module->op, piece->module->multi_name, type, piece->enabled, piece->bypass_cache,
+               (long unsigned int)hash);
       dt_free(type);
     }
     // In case of drawn masks, we would need to account only for the distortions of previous modules.

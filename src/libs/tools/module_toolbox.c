@@ -155,7 +155,7 @@ static void _lib_module_toolbox_add(dt_lib_module_t *self, GtkWidget *widget, dt
     child_data->views = views;
     d->child_views = g_list_prepend(d->child_views, child_data);
 
-    gtk_widget_show_all(d->container);
+    gtk_widget_show_all(GTK_WIDGET(widget));
     return;
   }
 
@@ -164,7 +164,7 @@ static void _lib_module_toolbox_add(dt_lib_module_t *self, GtkWidget *widget, dt
   gtk_widget_set_hexpand(GTK_WIDGET(widget), FALSE);
   gtk_widget_set_halign(GTK_WIDGET(widget), GTK_ALIGN_CENTER);
   gtk_container_add(GTK_CONTAINER(d->container), GTK_WIDGET(widget));
-  gtk_widget_show_all(d->container);
+  gtk_widget_show_all(GTK_WIDGET(widget));
 
   child_data_t *child_data = malloc(sizeof(child_data_t));
   child_data->child = widget;

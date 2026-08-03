@@ -383,6 +383,7 @@ typedef struct dt_iop_gui_blend_data_t
   GtkListStore *all_shapes_store;
   GtkWidget *group_shapes_sw;
   GtkTreeViewColumn *all_shapes_col;
+  GtkTreeViewColumn *all_shapes_delete_col;
   GtkWidget *all_shapes_sw;
   GtkWidget *lists_stack;
   GdkPixbuf *masks_ic_inverse;

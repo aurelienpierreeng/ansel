@@ -780,33 +780,115 @@ static bool _exif_read_exif_tag(Exiv2::ExifData &exifData,
 }
 #define FIND_EXIF_TAG(key) _exif_read_exif_tag(exifData, &pos, key)
 
-// Support DefaultUserCrop, what is the safe exif tag?
-// DefaultUserCrop is known by name only from 0.27.4
-// Magic-nr taken from dng specs, the specs also say it has 4 floats (top,left,bottom,right
-// We only take them if a) we find a value != the default *and* b) data are plausible
+// Two candidate copies of DefaultUserCrop are compared edge by edge with this absolute
+// tolerance: the same rectangle can be encoded as different rationals in different IFDs, so
+// bitwise equality would report a conflict where none exists.
+#define DT_IMAGE_USERCROP_EPSILON 1e-6f
+
+/** Read one DefaultUserCrop candidate and classify it.
+ *
+ * The DNG spec (tag 51125 / 0xC7B5) defines four unsigned rationals in (top, left, bottom,
+ * right) order, normalized against the DefaultCropOrigin/DefaultCropSize rectangle, with
+ * (0, 0, 1, 1) as the identity. exiv2 only knows the tag by name from 0.27.4, hence the
+ * lookup by tag number.
+ *
+ * Validation is the spec's own contract and nothing else. In particular there is deliberately
+ * no minimum-size heuristic: the inherited "each side must span more than 5%" test rejected
+ * standards-valid narrow crops while still accepting out-of-range ones, so it was never tag
+ * validation. Malformed values are reported as such, never clamped into a plausible rectangle.
+ */
+static dt_image_usercrop_status_t _read_usercrop_candidate(Exiv2::ExifData &exifData, const char *key,
+                                                           dt_boundingbox_t crop)
+{
+  crop[0] = crop[1] = 0.f;
+  crop[2] = crop[3] = 1.f;
+
+  Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey(key));
+  if(pos == exifData.end()) return DT_IMAGE_USERCROP_ABSENT;
+
+  if(pos->count() != 4 || !pos->size()) return DT_IMAGE_USERCROP_MALFORMED;
+
+  for(int i = 0; i < 4; i++)
+  {
+    crop[i] = pos->toFloat(i);
+    if(!std::isfinite(crop[i])) return DT_IMAGE_USERCROP_MALFORMED;
+  }
+
+  // 0 <= top < bottom <= 1 and 0 <= left < right <= 1
+  if(!(crop[0] >= 0.f && crop[0] < crop[2] && crop[2] <= 1.f)) return DT_IMAGE_USERCROP_MALFORMED;
+  if(!(crop[1] >= 0.f && crop[1] < crop[3] && crop[3] <= 1.f)) return DT_IMAGE_USERCROP_MALFORMED;
+
+  if(crop[0] == 0.f && crop[1] == 0.f && crop[2] == 1.f && crop[3] == 1.f)
+    return DT_IMAGE_USERCROP_IDENTITY;
+
+  return DT_IMAGE_USERCROP_VALID;
+}
+
+static bool _usercrop_candidates_agree(const dt_boundingbox_t a, const dt_boundingbox_t b)
+{
+  for(int i = 0; i < 4; i++)
+    if(fabsf(a[i] - b[i]) > DT_IMAGE_USERCROP_EPSILON) return false;
+
+  return true;
+}
+
+/** Resolve img->usercrop / img->usercrop_status from the file's DefaultUserCrop candidates.
+ *
+ * Returns TRUE only for a valid, non-identity framing — the caller uses that to decide whether
+ * to advertise the file as carrying usable crop metadata. Every other outcome leaves the box at
+ * identity, so no failure mode can produce an automatic crop.
+ */
 static bool _check_usercrop(Exiv2::ExifData &exifData, dt_image_t *img)
 {
-  Exiv2::ExifData::const_iterator pos =
-    exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.0xc7b5"));
-  // DNGs without an embedded preview have the raw image tags under
-  // Exif.Image instead of Exif.SubImage1
-  if(pos == exifData.end())
-    pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.0xc7b5"));
-  if(pos != exifData.end() && pos->count() == 4 && pos->size())
+  // Exif.SubImage1 holds the raw IFD of a DNG with an embedded preview; DNGs without one carry
+  // the raw image tags under Exif.Image instead. Both are documented compatibility candidates,
+  // neither is proof of which IFD the decoder actually selected -- so when both are present and
+  // disagree, refuse rather than silently pick one.
+  dt_boundingbox_t sub_image_crop, image_crop;
+  const dt_image_usercrop_status_t sub_image_status
+      = _read_usercrop_candidate(exifData, "Exif.SubImage1.0xc7b5", sub_image_crop);
+  const dt_image_usercrop_status_t image_status
+      = _read_usercrop_candidate(exifData, "Exif.Image.0xc7b5", image_crop);
+
+  dt_image_usercrop_status_t status;
+  const float *crop;
+
+  if(sub_image_status == DT_IMAGE_USERCROP_VALID && image_status == DT_IMAGE_USERCROP_VALID
+     && !_usercrop_candidates_agree(sub_image_crop, image_crop))
   {
-    dt_boundingbox_t crop;
-    for(int i = 0; i < 4; i++) crop[i] = pos->toFloat(i);
-    if(((crop[0] > 0)
-        ||(crop[1] > 0)
-        ||(crop[2] < 1)
-        ||(crop[3] < 1))
-       && (crop[2] - crop[0] > 0.05f)
-       && (crop[3] - crop[1] > 0.05f))
-    {
-      for (int i=0; i<4; i++) img->usercrop[i] = crop[i];
-      return TRUE;
-    }
+    status = DT_IMAGE_USERCROP_CONFLICT;
+    crop = NULL;
   }
+  else if(sub_image_status != DT_IMAGE_USERCROP_ABSENT)
+  {
+    status = sub_image_status;
+    crop = sub_image_crop;
+  }
+  else
+  {
+    status = image_status;
+    crop = image_crop;
+  }
+
+  img->usercrop_status = status;
+  img->usercrop[0] = img->usercrop[1] = 0.f;
+  img->usercrop[2] = img->usercrop[3] = 1.f;
+
+  if(status == DT_IMAGE_USERCROP_VALID)
+  {
+    for(int i = 0; i < 4; i++) img->usercrop[i] = crop[i];
+    dt_print(DT_DEBUG_IMAGEIO,
+             "[exif] image %d: DNG DefaultUserCrop (top, left, bottom, right) = (%f, %f, %f, %f)\n",
+             img->id, crop[0], crop[1], crop[2], crop[3]);
+    return TRUE;
+  }
+
+  // ABSENT and IDENTITY are the normal case for most files: stay silent about them.
+  if(status == DT_IMAGE_USERCROP_MALFORMED || status == DT_IMAGE_USERCROP_CONFLICT)
+    dt_print(DT_DEBUG_ALWAYS,
+             "[exif] image %d: ignoring DNG DefaultUserCrop, the camera framing metadata is %s\n",
+             img->id, (status == DT_IMAGE_USERCROP_CONFLICT) ? "contradictory between IFDs" : "malformed");
+
   return FALSE;
 }
 
@@ -830,6 +912,30 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
     dt_vprint(DT_DEBUG_IMAGEIO, "DNG OpcodeList2 tag not found\n");
   }
   return has_opcodes;
+}
+
+void dt_exif_read_usercrop(dt_image_t *img, const char *filename)
+{
+  // Leave a definite answer even when the file cannot be read, so callers that use
+  // DT_IMAGE_USERCROP_UNKNOWN as a "not looked at yet" marker do not retry on every request.
+  img->usercrop_status = DT_IMAGE_USERCROP_ABSENT;
+  img->usercrop[0] = img->usercrop[1] = 0.f;
+  img->usercrop[2] = img->usercrop[3] = 1.f;
+
+  try
+  {
+    std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
+    if(!image.get()) return;
+    read_metadata_threadsafe(image);
+    Exiv2::ExifData &exifData = image->exifData();
+    if(exifData.empty()) return;
+    _check_usercrop(exifData, img);
+  }
+  catch(const std::exception &e)
+  {
+    std::string s(e.what());
+    std::cerr << "[exiv2 dt_exif_read_usercrop] " << filename << ": " << s << std::endl;
+  }
 }
 
 void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
@@ -3186,6 +3292,9 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.iop_order_list"))) != xmpData.end())
       {
         iop_order_list = dt_ioppr_deserialize_text_iop_order_list(pos->toString().c_str());
+        // insert modules created after this edit's order was serialized, so
+        // their history entries land in the right pipeline position
+        if(iop_order_list) iop_order_list = dt_ioppr_insert_missing_modules(iop_order_list);
       }
       else
         iop_order_list = dt_ioppr_get_iop_order_list_version(iop_order_version);
