@@ -379,12 +379,15 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     return TRUE;
   }
 
-  const float clip = d->clip
-                     * fminf(piece->dsc_in.processed_maximum[0],
-                             fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
-  const dt_aligned_pixel_t clips = { 0.995f * d->clip * piece->dsc_in.processed_maximum[0],
-                                     0.995f * d->clip * piece->dsc_in.processed_maximum[1],
-                                     0.995f * d->clip * piece->dsc_in.processed_maximum[2], clip };
+  // Clip white point -- default non-positive channels (non-raw, where rawprepare never set it) to 1.0,
+  // mirroring process(). Without this the non-raw clip threshold collapses to 0 and the reconstruction
+  // treats the whole frame as clipped. Raw is unchanged (rawprepare already made every channel 1.0).
+  dt_aligned_pixel_t pmax;
+  for(int c = 0; c < 4; c++)
+    pmax[c] = (piece->dsc_in.processed_maximum[c] > 0.f) ? piece->dsc_in.processed_maximum[c] : 1.0f;
+  const float clip = d->clip * fminf(pmax[0], fminf(pmax[1], pmax[2]));
+  const dt_aligned_pixel_t clips
+      = { 0.995f * d->clip * pmax[0], 0.995f * d->clip * pmax[1], 0.995f * d->clip * pmax[2], clip };
 
   // Mode switch, symmetric to process(). The reconstruction modes run on the GPU for raw and non-raw
   // alike -- the non-raw passthrough drivers use their own device gather/remosaic kernels, no CPU
@@ -567,9 +570,15 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     return 0;
   }
 
-  const float clip = data->clip
-                     * fminf(piece->dsc_in.processed_maximum[0],
-                             fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
+  // Clip white point. rawprepare sets processed_maximum to 1.0 for raw; on non-raw it is never set and
+  // stays 0, which would collapse the clip threshold to 0 -- marking the whole image as clipped (a black
+  // "clip" and full-frame over-reconstruction / halos in laplacian & harmonic). Default any non-positive
+  // channel to 1.0 (the white point of normalized RGB) so non-raw input clips only genuinely blown
+  // highlights. Raw is unchanged: rawprepare already made every channel 1.0.
+  dt_aligned_pixel_t pmax;
+  for(int c = 0; c < 4; c++)
+    pmax[c] = (piece->dsc_in.processed_maximum[c] > 0.f) ? piece->dsc_in.processed_maximum[c] : 1.0f;
+  const float clip = data->clip * fminf(pmax[0], fminf(pmax[1], pmax[2]));
 
   // Non-raw input is no longer nuked to a plain clip here: the mode switch below dispatches it too
   // (LAPLACIAN/HARMONIC reconstruct already-demosaiced RGB via their passthrough gather, CLIP thresholds
@@ -579,9 +588,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     case DT_IOP_HIGHLIGHTS_INPAINT: // a1ex's (magiclantern) idea of color inpainting:
     {
-      const float clips[4] = { 0.987f * data->clip * piece->dsc_in.processed_maximum[0],
-                               0.987f * data->clip * piece->dsc_in.processed_maximum[1],
-                               0.987f * data->clip * piece->dsc_in.processed_maximum[2], clip };
+      const float clips[4] = { 0.987f * data->clip * pmax[0], 0.987f * data->clip * pmax[1],
+                               0.987f * data->clip * pmax[2], clip };
       if(filters == 9u)
         process_inpaint_xtrans(ivoid, ovoid, roi_in, roi_out, clips,
                                (const uint8_t(*const)[6])piece->dsc_in.xtrans);
@@ -605,18 +613,16 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       // selected internally from the CFA descriptor). Non-raw input reaching here is guaranteed 4-channel:
       // the channels!=4 mono-raw case is an image-type decision made once in force_enable()/commit_params(),
       // not per frame -- the module never runs on such images.
-      const dt_aligned_pixel_t clips = { 0.995f * data->clip * piece->dsc_in.processed_maximum[0],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[1],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[2], clip };
+      const dt_aligned_pixel_t clips = { 0.995f * data->clip * pmax[0], 0.995f * data->clip * pmax[1],
+                                         0.995f * data->clip * pmax[2], clip };
       if(process_laplacian(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
         return 1;
       break;
     }
     case DT_IOP_HIGHLIGHTS_HARMONIC:
     {
-      const dt_aligned_pixel_t clips = { 0.995f * data->clip * piece->dsc_in.processed_maximum[0],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[1],
-                                         0.995f * data->clip * piece->dsc_in.processed_maximum[2], clip };
+      const dt_aligned_pixel_t clips = { 0.995f * data->clip * pmax[0], 0.995f * data->clip * pmax[1],
+                                         0.995f * data->clip * pmax[2], clip };
       if(process_harmonic(self, pipe, piece, ivoid, ovoid, roi_in, roi_out, clips))
         return 1;
       break;
@@ -651,10 +657,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                  dt_image_pipe_class_name(dt_image_pipe_class(img)), piece->dsc_in.filters, d->mode,
                  piece->enabled);
 
-  // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT. Every other mode keeps its CL path: HARMONIC runs the
-  // hybrid CPU-orchestrated driver, and the non-raw reconstruction paths (LAPLACIAN/HARMONIC on
-  // already-demosaiced RGB) run through a host roundtrip inside process_cl(), so the pipe's CL chain
-  // stays intact rather than falling the whole module back to the CPU.
+  // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT. Every other mode keeps its CL path, including the non-raw
+  // reconstruction paths (LAPLACIAN/HARMONIC on already-demosaiced RGB), which run on the GPU through
+  // their dedicated passthrough gather/remosaic kernels -- no CPU roundtrip.
   piece->process_cl_ready = (d->mode == DT_IOP_HIGHLIGHTS_INPAINT) ? 0 : 1;
 
   // Warn once per pipe setup (not per frame) when a raw-only reconstruction mode (LCh / colour
@@ -682,8 +687,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // Non-raw reconstruction (LAPLACIAN/HARMONIC passthrough) runs whole-frame too: the tiling budget in
-  // tiling_callback() is written for the single-channel raw layout, and the CPU driver (also the target
-  // of process_cl()'s host roundtrip) downsamples internally -- keep the frame intact, don't mis-tile it.
+  // tiling_callback() is written for the single-channel raw layout, and the reconstruction downsamples
+  // internally -- keep the frame intact rather than mis-tiling it.
   if(!piece->dsc_in.filters
      && (d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN || d->mode == DT_IOP_HIGHLIGHTS_HARMONIC))
     piece->process_tiling_ready = 0;
@@ -692,8 +697,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
     if(!piece->dsc_in.filters)
     {
-      const float m = fminf(piece->dsc_in.processed_maximum[0],
-                            fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
+      // Non-raw: processed_maximum is left at 0 upstream (no rawprepare). Default it to the normalized-RGB
+      // white point (1.0) rather than propagating 0 downstream (which collapses any later clip logic).
+      const float m0 = fminf(piece->dsc_in.processed_maximum[0],
+                             fminf(piece->dsc_in.processed_maximum[1], piece->dsc_in.processed_maximum[2]));
+      const float m = (m0 > 0.f) ? m0 : 1.0f;
       for(int k = 0; k < 3; k++) piece->dsc_out.processed_maximum[k] = m;
     }
     else
