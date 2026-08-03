@@ -18,6 +18,8 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2026 Guillaume STUTIN.
+
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -58,7 +60,7 @@ typedef struct dt_lib_duplicate_t
 {
   GtkWidget *duplicate_box;
   int32_t imgid;                 // duplicate currently held under mouse press, UNKNOWN_IMAGE if none
-  dt_dev_snapshot_t preview;     // hold-to-preview render + pan/zoom-synced crop cache, see develop/dev_snapshot.h
+  dt_dev_snapshot_t preview;     // hold-to-preview render, ROI-scoped and recomputed on pan/zoom, see develop/dev_snapshot.h
   int32_t preview_cached_imgid;  // which imgid `preview` currently holds, UNKNOWN_IMAGE if none
 
   GList *thumbs;
@@ -148,7 +150,7 @@ static gboolean _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventB
     if(d->preview_cached_imgid != imgid)
     {
       dt_control_change_cursor_by_name_and_flush("progress");
-      const gboolean ok = dt_dev_snapshot_capture(&d->preview, imgid, 1.0f, NULL, NULL, -1);
+      const gboolean ok = dt_dev_snapshot_capture(&d->preview, dev, imgid, NULL, NULL, -1);
       dt_control_commit_cursor();
       d->preview_cached_imgid = ok ? imgid : UNKNOWN_IMAGE;
     }
