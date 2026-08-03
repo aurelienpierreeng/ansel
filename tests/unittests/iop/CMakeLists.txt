@@ -14,8 +14,22 @@ add_cmocka_mock_test(test_embedded_lens_vendors
                      LINK_LIBRARIES lib_ansel cmocka
                      MOCKS )
 
+add_cmocka_mock_test(test_lens_params_v7
+                     SOURCES test_lens_params_v7.c
+                     LINK_LIBRARIES lib_ansel cmocka
+                     MOCKS )
+
+add_cmocka_mock_test(test_lens_predicates
+                     SOURCES test_lens_predicates.c
+                             ${CMAKE_SOURCE_DIR}/src/iop/lens_predicates.cc
+                     LINK_LIBRARIES lib_ansel cmocka
+                     MOCKS )
+target_compile_definitions(test_lens_predicates PRIVATE BUILD_TESTING)
+
 # Windows: libs have to be copied next to the executable
 if(WIN32)
     _copy_required_library(test_filmicrgb lib_ansel)
     _copy_required_library(test_embedded_lens_vendors lib_ansel)
+    _copy_required_library(test_lens_params_v7 lib_ansel)
+    _copy_required_library(test_lens_predicates lib_ansel)
 endif(WIN32)

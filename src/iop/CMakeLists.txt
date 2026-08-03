@@ -172,6 +172,7 @@ add_iop(blurs "blurs.c")
 add_iop(initialscale "initialscale.c")
 add_iop(watermark "watermark.c")
 add_iop(lens "lens.cc"
+        "lens_predicates.cc"
         "embedded_lens/embedded_lens.cc"
         "embedded_lens/embedded_lens_vendors.cc"
         "embedded_lens/sony.cc"
