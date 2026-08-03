@@ -435,6 +435,67 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     return 0;
   }
 
+  if(old_version == 6 && new_version == 7)
+  {
+    typedef struct
+    {
+      int modify_flags;
+      int inverse;
+      float scale;
+      float crop;
+      float focal;
+      float aperture;
+      float distance;
+      lfLensType target_geom;
+      char camera[128];
+      char lens[128];
+      gboolean tca_override;
+      float tca_r;
+      float tca_b;
+      int has_been_set;
+      dt_iop_lens_method_t method;
+      float cor_dist_ft;
+      float cor_vig_ft;
+      float cor_ca_r_ft;
+      float cor_ca_b_ft;
+      float scale_md;
+    } dt_iop_lensfun_params_v6_t;
+
+    const dt_iop_lensfun_params_v6_t *o = (dt_iop_lensfun_params_v6_t *)old_params;
+    dt_iop_lensfun_params_t *n = (dt_iop_lensfun_params_t *)new_params;
+    dt_iop_lensfun_params_t *d = (dt_iop_lensfun_params_t *)self->default_params;
+
+    *n = *d;
+
+    n->modify_flags = o->modify_flags;
+    n->scale = o->scale;
+    n->crop = o->crop;
+    n->focal = o->focal;
+    n->aperture = o->aperture;
+    n->distance = o->distance;
+    n->target_geom = o->target_geom;
+    g_strlcpy(n->camera, o->camera, sizeof(n->camera));
+    g_strlcpy(n->lens, o->lens, sizeof(n->lens));
+    n->tca_r = o->tca_b;
+    n->tca_b = o->tca_r;
+    n->has_been_set = o->has_been_set;
+
+    if(o->method == dt_iop_lens_method_t::EMBEDDED_METADATA)
+    {
+      n->vignetting_method = dt_iop_lens_correction_source_t::EMBEDDED;
+      n->distortion_method  = dt_iop_lens_correction_source_t::EMBEDDED;
+      n->tca_method         = dt_iop_lens_tca_source_t::OFF;
+    }
+    else
+    {
+      n->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+      n->distortion_method  = dt_iop_lens_correction_source_t::LENSFUN_DB;
+      n->tca_method         = dt_iop_lens_tca_source_t::LENSFUN_DB;
+    }
+
+    return 0;
+  }
+
   return 1;
 }
 
@@ -3157,6 +3218,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
 
+  p->distortion_method  = (dt_iop_lens_correction_source_t)CLAMP((int)p->distortion_method, 0, 2);
+  p->vignetting_method  = (dt_iop_lens_correction_source_t)CLAMP((int)p->vignetting_method, 0, 2);
+  p->tca_method         = (dt_iop_lens_tca_source_t)CLAMP((int)p->tca_method, 0, 2);
   dt_bauhaus_combobox_set_from_value(g->per_correction.distortion_source, (int)p->distortion_method);
   dt_bauhaus_combobox_set_from_value(g->per_correction.vignetting_source, (int)p->vignetting_method);
   dt_bauhaus_combobox_set_from_value(g->per_correction.tca_source,        (int)p->tca_method);
@@ -3414,6 +3478,13 @@ void gui_update(struct dt_iop_module_t *self)
 
   if(p->has_been_set == 1)
   {
+    if((int)p->vignetting_method < 0 || (int)p->vignetting_method > 2)
+      p->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+    if((int)p->distortion_method < 0 || (int)p->distortion_method > 2)
+      p->distortion_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+    if((int)p->tca_method < 0 || (int)p->tca_method > 2)
+      p->tca_method = dt_iop_lens_tca_source_t::LENSFUN_DB;
+
     const dt_iop_lens_correction_source_t saved_vignetting = p->vignetting_method;
     const dt_iop_lens_correction_source_t saved_distortion = p->distortion_method;
     const dt_iop_lens_tca_source_t        saved_tca        = p->tca_method;
@@ -3470,6 +3541,15 @@ void gui_update(struct dt_iop_module_t *self)
   const dt_image_t *img = &self->dev->image_storage;
   const gboolean has_vign = dt_embedded_lens_has_vignetting(img);
   const gboolean has_dist = dt_embedded_lens_has_distortion(img);
+
+  // Downgrade EMBEDDED to LENSFUN_DB when the current image lacks embedded
+  // data for that axis. Runs unconditionally: both auto-applied (has_been_set)
+  // and user-explicit params (from v6→v7 migration) carry EMBEDDED values that
+  // may not be valid for this image.
+  if(p->vignetting_method == dt_iop_lens_correction_source_t::EMBEDDED && !has_vign)
+    p->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+  if(p->distortion_method == dt_iop_lens_correction_source_t::EMBEDDED && !has_dist)
+    p->distortion_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
 
   auto rebuild_combobox = [&](GtkWidget *combobox, int desired_len,
                                const char *labels[3], const int values[3], int n_labels) {
