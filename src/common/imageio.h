@@ -135,6 +135,29 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
                                dt_colorspaces_color_profile_type_t *color_space, const int width,
                                const int height);
 
+/**
+ * @brief Crop an 8-bit RGBA preview buffer in place to a normalized bounding box.
+ *
+ * Cameras that record selected framing (DNG DefaultUserCrop) still render their embedded
+ * previews from the full default-crop rectangle, so a preview taken straight out of the raw
+ * shows more than the photographer framed. This trims it back.
+ *
+ * The box must be expressed in the buffer's own orientation. For previews read from a raw that
+ * is the un-oriented sensor frame (dt_image_get_usercrop()), because Ansel applies the EXIF
+ * rotation afterwards, when downscaling.
+ *
+ * Only ever apply this to a preview embedded in the raw itself: a companion/sidecar JPEG is
+ * written by the camera at the framing it displayed and is already cropped.
+ *
+ * @param box normalized (top, left, bottom, right); an identity box is a no-op
+ * @param buffer 8-bit RGBA pixels, compacted in place
+ * @param width in/out buffer width, updated to the cropped width
+ * @param height in/out buffer height, updated to the cropped height
+ * @return TRUE if the buffer was cropped, FALSE if it was left untouched
+ */
+gboolean dt_imageio_crop_thumbnail(const dt_boundingbox_t box, uint8_t *const buffer,
+                                   int32_t *width, int32_t *height);
+
 // lookup maker and model, dispatch lookup to rawspeed or libraw
 gboolean dt_imageio_lookup_makermodel(const char *maker, const char *model,
                                       char *mk, int mk_len, char *md, int md_len,
@@ -142,14 +165,6 @@ gboolean dt_imageio_lookup_makermodel(const char *maker, const char *model,
 
 // get the type of image from its extension
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension);
-
-// Coarse "camera raw format" / "generic raster format" extension lists (NULL-terminated) used
-// by the import dialog to build its GtkFileFilter entries and to replicate the same distinction
-// during its recursive folder scan (common/import.c). This is a different, coarser split than
-// dt_imageio_get_type_from_extension(): it needs a single raw-or-not answer before any decode,
-// so an ambiguous container like "dng" is listed under both.
-extern const char *dt_import_raw_extensions[];
-extern const char *dt_import_raster_extensions[];
 
 #ifdef __cplusplus
 }

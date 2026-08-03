@@ -60,6 +60,8 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/histogram.h"
+#include "common/image.h"
+#include "common/imageio.h"
 #include "common/iop_profile.h"
 #include "common/imagebuf.h"
 #include "common/image_cache.h"
@@ -900,6 +902,56 @@ static gboolean _is_restricted(dt_lib_histogram_t *d)
   return restrict_active && picker_active;
 }
 
+/** A scope backbuffer, reoriented to match the darkroom view when it comes from a pre-flip
+ * pipeline stage. Every scope binning function should read `data`/`width`/`height` from here
+ * instead of the raw backbuf/cache pointer -- for already-view-oriented stages, or an identity
+ * orientation, this is a plain passthrough (no copy, no allocation).
+ *
+ * Only "initialscale" (the "Raw image" scope stage) lives upstream of the flip module in
+ * iop_order; "colorout" and "gamma" already sit downstream of it, i.e. already in the same
+ * orientation the darkroom view shows -- so those are always a passthrough regardless of the
+ * image's own orientation. */
+typedef struct dt_histogram_scope_buf_t
+{
+  const float *data;
+  size_t width;
+  size_t height;
+  gboolean owned;
+} dt_histogram_scope_buf_t;
+
+static dt_histogram_scope_buf_t _orient_scope_buf(const void *data, const dt_backbuf_t *backbuf,
+                                                   const char *op)
+{
+  dt_histogram_scope_buf_t result = { .data = (const float *)data, .width = backbuf->width,
+                                       .height = backbuf->height, .owned = FALSE };
+
+  const dt_image_orientation_t orientation = g_strcmp0(op, "initialscale")
+      ? ORIENTATION_NONE : dt_image_get_effective_orientation(&darktable.develop->image_storage);
+  if(orientation == ORIENTATION_NONE) return result;
+
+  const size_t src_w = backbuf->width;
+  const size_t src_h = backbuf->height;
+  const size_t dst_w = (orientation & ORIENTATION_SWAP_XY) ? src_h : src_w;
+  const size_t dst_h = (orientation & ORIENTATION_SWAP_XY) ? src_w : src_h;
+  const size_t bpp = 4 * sizeof(float);
+
+  float *const oriented = dt_alloc_align(dst_w * dst_h * bpp);
+  if(IS_NULL_PTR(oriented)) return result;
+
+  /* wd/ht and fwd/fht are always the *source* (pre-orientation) dimensions here -- this mirrors
+   * iop/flip.c's own process(), the only other real caller of this function with a non-identity
+   * orientation: fwd/fht only feed the internal mirror-offset math, not the output layout, which
+   * dt_imageio_flip_buffers derives on its own from wd/ht and the orientation bits. */
+  dt_imageio_flip_buffers((char *)oriented, (const char *)data, bpp, (int)src_w, (int)src_h,
+                          (int)src_w, (int)src_h, (int)(src_w * bpp), orientation);
+
+  result.data = oriented;
+  result.width = dst_w;
+  result.height = dst_h;
+  result.owned = TRUE;
+  return result;
+}
+
 static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *cr, const int width,
                                const int height, dt_lib_histogram_t *d)
 {
@@ -920,9 +972,12 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
+  dt_histogram_scope_buf_t oriented = _orient_scope_buf(data, backbuf, op);
+
   uint32_t *bins = calloc(4 * HISTOGRAM_BINS, sizeof(uint32_t));
-  if(IS_NULL_PTR(bins)) 
+  if(IS_NULL_PTR(bins))
   {
+    if(oriented.owned) dt_free_align(oriented.data);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
     return;
   }
@@ -935,20 +990,21 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
     while(samples)
     {
       dt_colorpicker_sample_t *sample = samples->data;
-      _bin_pickers_histogram(data, backbuf->width, backbuf->height,
+      _bin_pickers_histogram(oriented.data, oriented.width, oriented.height,
                              bins, sample);
       samples = g_slist_next(samples);
     }
 
     if(darktable.develop->color_picker.picker)
-      _bin_pickers_histogram(data, backbuf->width, backbuf->height,
+      _bin_pickers_histogram(oriented.data, oriented.width, oriented.height,
                              bins, darktable.develop->color_picker.primary_sample);
   }
   else
   {
-    _bin_pixels_histogram_in_roi(data, bins, 0, backbuf->width, 0, backbuf->height, width);
+    _bin_pixels_histogram_in_roi(oriented.data, bins, 0, oriented.width, 0, oriented.height, width);
   }
 
+  if(oriented.owned) dt_free_align(oriented.data);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
 
   uint32_t overall_histogram_max = _find_max_histogram(bins, 4 * HISTOGRAM_BINS);
@@ -1181,6 +1237,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
 
+  dt_histogram_scope_buf_t oriented = _orient_scope_buf(data, backbuf, op);
+
   /* The value axis must match the final drawing axis: widget height for horizontal scopes and
    * widget width for vertical scopes. Keeping it fixed forces Cairo to stretch sparse
    * value rows/columns, which shows as hatching when the scope is resized. */
@@ -1194,16 +1252,16 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   const size_t img_width = (parade) ? width : ((vertical) ? tone_bins : raster_extent);
   const size_t img_height = (parade) ? height : ((vertical) ? raster_extent : tone_bins);
   const size_t image_size = 4 * img_width * img_height;
-  const size_t source_axis = (vertical) ? backbuf->height : backbuf->width;
+  const size_t source_axis = (vertical) ? oriented.height : oriented.width;
   float source_min = INFINITY;
   float source_max = -INFINITY;
   size_t source_clipped = 0;
   size_t source_nan = 0;
-  const size_t source_step = MAX((size_t)1, (backbuf->width * backbuf->height) / 4096);
-  for(size_t pixel = 0; pixel < backbuf->width * backbuf->height; pixel += source_step)
+  const size_t source_step = MAX((size_t)1, (oriented.width * oriented.height) / 4096);
+  for(size_t pixel = 0; pixel < oriented.width * oriented.height; pixel += source_step)
     for(size_t c = 0; c < 3; c++)
     {
-      const float value = ((const float *)data)[pixel * 4 + c];
+      const float value = oriented.data[pixel * 4 + c];
       if(isnan(value))
         source_nan++;
       else
@@ -1221,7 +1279,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
             "tone_bins=%" G_GSIZE_FORMAT " raster_extent=%" G_GSIZE_FORMAT " source_axis=%" G_GSIZE_FORMAT
             " source_per_raster=%.4f binning_size=%" G_GSIZE_FORMAT " "
             "source_value=%0.6f..%0.6f clipped=%" G_GSIZE_FORMAT " nan=%" G_GSIZE_FORMAT " sample_step=%" G_GSIZE_FORMAT "\n",
-            op, parade, vertical, width, height, backbuf->width, backbuf->height,
+            op, parade, vertical, width, height, oriented.width, oriented.height,
             tone_bins, raster_extent, source_axis, (double)source_axis / (double)raster_extent,
             binning_size, source_min, source_max, source_clipped, source_nan, source_step);
   uint32_t *const restrict bins = dt_pixelpipe_cache_alloc_align_cache(
@@ -1241,7 +1299,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
   }
 
   // 1. Pixel binning along columns/rows, aka compute a column/row-wise histogram
-  _bin_pixels_waveform(data, bins, backbuf->width, backbuf->height, binning_size,
+  _bin_pixels_waveform(oriented.data, bins, oriented.width, oriented.height, binning_size,
                        tone_bins, raster_extent, vertical, _is_restricted(d));
 
   const uint32_t *render_bins = bins;
@@ -1528,6 +1586,7 @@ error:;
   dt_pixelpipe_cache_free_align(smooth_bins);
   dt_pixelpipe_cache_free_align(bins);
   dt_pixelpipe_cache_free_align(image);
+  if(oriented.owned) dt_free_align(oriented.data);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
 }
 

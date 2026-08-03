@@ -36,18 +36,24 @@
 #include <string.h>
 
 __DT_CLONE_TARGETS__
-int process_harmonic_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                           const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                           void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                           const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips)
+int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                     const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+                     void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
+                     const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips)
 {
   int err_code = 0;
 
-  // Every helper below (normalization, knee estimate/apply, gather, remosaic) reads
+  // Every CFA helper below (normalization, knee estimate/apply, Bayer gather, remosaic) reads
   // FC(row, col, filters) with tile-local row/col (0-based within this buffer, no roi offset
   // added), so filters must be pre-shifted for roi_in's crop position here -- mirrors
-  // demosaic.c's tile-local algorithms.
+  // demosaic.c's tile-local algorithms. dt_dev_get_roi_filters() returns the shifted Bayer word,
+  // 9u unchanged for X-Trans, and 0 for already-demosaiced (non-raw / sRAW) input. The
+  // reconstruction between the gather and the remosaic is CFA-agnostic; only those two endpoints
+  // branch on `cfa` below.
   const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
+  const dt_hl_cfa_t cfa = _hl_cfa_strategy(filters);
+  const uint8_t(*const xtrans)[6]
+      = (cfa == HL_CFA_XTRANS) ? (const uint8_t(*const)[6])piece->dsc_in.xtrans : NULL;
 
   const size_t height = roi_in->height;
   const size_t width = roi_in->width;
@@ -67,14 +73,17 @@ int process_harmonic_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   const float *const restrict input = (const float *const restrict)ivoid;
   float *const restrict output = (float *const restrict)ovoid;
   dt_aligned_pixel_t normalization = { 1.f, 1.f, 1.f, 1.f };
-  _compute_laplacian_normalization(input, roi_in, filters, NULL, normalization);
+  _compute_laplacian_normalization(input, roi_in, filters, xtrans, normalization);
 
   // Rolloff estimation FIRST (raw-based, mask-independent): its engagement decides, per
   // channel, whether the detection extends into the band (the band override,
   // DT_HL_BAND_OVR = 0.9, compile-time). Only channels with a
   // MEASURED rolloff get the override -- on hard-clipping sensors the band is trustworthy
-  // data and stays valid.
-  _hl_knee_curve_t knee[3];
+  // data and stays valid. The knee reads `input` as a raw mosaic; it is meaningless for
+  // already-demosaiced input and would misread a 4-channel buffer, so it never runs in the
+  // passthrough case (knee stays disengaged there, det_scale stays unit).
+  const gboolean allow_knee = (cfa != HL_CFA_PASSTHROUGH);
+  _hl_knee_curve_t knee[3] = { 0 };
   dt_aligned_pixel_t clipvaln = { 1.f, 1.f, 1.f, 1.f };
   dt_aligned_pixel_t knee_clipraw = { 1.f, 1.f, 1.f, 1.f };
   for(int c = 0; c < 3; c++)
@@ -86,17 +95,44 @@ int process_harmonic_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   // FLOW step 2 (knee): estimate the per-channel sensor-rolloff inverse from the raw mosaic (step-2 maths
   // annotated on _hl_knee_estimate below). Runs on the raw values, before the gather, so the correction
   // is mask-independent; applied to the interpolated planes just below via _hl_knee_apply_interpolated.
-  _hl_knee_estimate(input, width, height, filters, roi_in, NULL, knee_clipraw, knee, pipe);
-  const int knee_on = knee[0].engaged || knee[1].engaged || knee[2].engaged;
+  int knee_on = 0;
+  if(allow_knee)
+  {
+    _hl_knee_estimate(input, width, height, filters, roi_in, xtrans, knee_clipraw, knee, pipe);
+    knee_on = knee[0].engaged || knee[1].engaged || knee[2].engaged;
+  }
 
   dt_aligned_pixel_t det_scale = { 1.f, 1.f, 1.f, 1.f };
   for(int c = 0; c < 3; c++)
     if(knee[c].engaged) det_scale[c] = DT_HL_BAND_OVR;
 
+  dt_aligned_pixel_t eff_clips;
+  for_four_channels(c) eff_clips[c] = clips[c] * det_scale[c];
+
   // FLOW step 1a (gather): bilinear interpolation of the raw mosaic into [R, G, B, norm] planes + the
   // binary per-channel clip masks -- the article's "interpolate + masks" node, input to every later step.
-  _interpolate_and_mask(input, interpolated, clipping_mask, clips, det_scale, normalization, filters, width,
-                        height);
+  // Only this endpoint branches on the CFA: the Bayer gather multiplies clips by det_scale internally,
+  // the X-Trans gather takes the pre-multiplied eff_clips and interpolates through a 6x6 lookup.
+  switch(cfa)
+  {
+    case HL_CFA_BAYER:
+      _interpolate_and_mask(input, interpolated, clipping_mask, clips, det_scale, normalization, filters, width,
+                            height);
+      break;
+    case HL_CFA_XTRANS:
+    {
+      int32_t lookup[6][6][32] = { { { 0 } } };
+      _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
+      _interpolate_and_mask_xtrans(input, interpolated, clipping_mask, eff_clips, normalization, roi_in, lookup,
+                                   xtrans, width, height);
+      break;
+    }
+    case HL_CFA_PASSTHROUGH:
+      // Non-raw / sRAW: no demosaic, just copy the RGB planes through + build masks. Knee is off, so
+      // clips is the plain threshold (eff_clips == clips here).
+      _interpolate_and_mask_passthrough(input, interpolated, clipping_mask, clips, normalization, width, height);
+      break;
+  }
   // No mask feathering in this mode: the masks stay BINARY end to end. The per-channel
   // validity masks define measurement validity for every fit (feathering them reclassified
   // rim-clipped photosites -- raw values biased at the detection threshold -- as valid anchors
@@ -175,158 +211,34 @@ int process_harmonic_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
 
     if(!IS_NULL_PTR(input_corr))
     {
-      _hl_knee_apply_cfa(input, input_corr, width, height, filters, roi_in, NULL, knee_clipraw, knee);
+      _hl_knee_apply_cfa(input, input_corr, width, height, filters, roi_in, xtrans, knee_clipraw, knee);
       remosaic_input = input_corr;
     }
   }
 
   // FLOW: remosaic + composite (the flowchart's terminal node). Scatter the reconstructed RGB back onto
-  // the Bayer grid: out = opacity*rec + (1 - opacity)*base with opacity the binary any-clip mask, and
+  // the CFA grid: out = opacity*rec + (1 - opacity)*base with opacity the binary any-clip mask, and
   // (clip_is_floor = TRUE here) base = max(raw, rec) on a clipped photosite -- so the reconstruction can
   // only lift a rolloff-biased sample toward its true level, never pull a valid one down. remosaic_input
   // is the knee-corrected CFA when the knee engaged (so unmasked pixels match the reconstruction's basis).
-  _remosaic_and_replace(remosaic_input, input, interpolated, clipping_mask, output, normalization, clips, TRUE,
-                        filters, width, height);
-
-  if(!IS_NULL_PTR(input_corr)) dt_pixelpipe_cache_free_align(input_corr);
-
-error:;
-  dt_pixelpipe_cache_free_align(interpolated);
-  dt_pixelpipe_cache_free_align(clipping_mask);
-  _hl_gauss_cache_flush();
-  return err_code;
-}
-
-__DT_CLONE_TARGETS__
-int process_harmonic_xtrans(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                            const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                            void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                            const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips)
-{
-  // Mirror of process_harmonic_bayer: the reconstruction is CFA-agnostic (it works on the
-  // interpolated RGB planes and masks); only the gather (bilinear interpolation), the scatter
-  // (remosaic) and the knee's raw-mosaic access differ, through their X-Trans variants.
-  int err_code = 0;
-
-  const size_t height = roi_in->height;
-  const size_t width = roi_in->width;
-  const size_t size = roi_in->width * roi_in->height;
-  const uint8_t(*const xtrans)[6] = (const uint8_t(*const)[6])piece->dsc_in.xtrans;
-
-  float *const restrict interpolated = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe);
-  float *const restrict clipping_mask = dt_pixelpipe_cache_alloc_align_float(size * 4, pipe);
-
-  if(IS_NULL_PTR(interpolated) || IS_NULL_PTR(clipping_mask))
+  // Second and last CFA-branching endpoint, mirroring the gather above.
+  switch(cfa)
   {
-    err_code = 1;
-    goto error;
+    case HL_CFA_BAYER:
+      _remosaic_and_replace(remosaic_input, input, interpolated, clipping_mask, output, normalization, clips,
+                            TRUE, filters, width, height);
+      break;
+    case HL_CFA_XTRANS:
+      _remosaic_and_replace_xtrans(remosaic_input, input, interpolated, clipping_mask, output, normalization,
+                                   clips, TRUE, roi_in, xtrans, width, height);
+      break;
+    case HL_CFA_PASSTHROUGH:
+      // Non-raw / sRAW: composite the reconstructed RGB straight back, per channel. remosaic_input ==
+      // input here (the knee never ran, so no corrected CFA copy exists).
+      _remosaic_and_replace_passthrough(remosaic_input, input, interpolated, clipping_mask, output,
+                                        normalization, clips, TRUE, width, height);
+      break;
   }
-
-  const float *const restrict input = (const float *const restrict)ivoid;
-  float *const restrict output = (float *const restrict)ovoid;
-  dt_aligned_pixel_t normalization = { 1.f, 1.f, 1.f, 1.f };
-  _compute_laplacian_normalization(input, roi_in, 9u, xtrans, normalization);
-
-  int32_t lookup[6][6][32] = { { { 0 } } };
-  _build_xtrans_bilinear_lookup(lookup, roi_in, xtrans);
-  // Rolloff estimation FIRST (raw-based, mask-independent), so its per-channel engagement
-  // decides the band override of the detection -- see the Bayer path for the why.
-  _hl_knee_curve_t knee[3];
-  dt_aligned_pixel_t clipvaln = { 1.f, 1.f, 1.f, 1.f };
-  dt_aligned_pixel_t knee_clipraw = { 1.f, 1.f, 1.f, 1.f };
-  for(int c = 0; c < 3; c++)
-  {
-    clipvaln[c] = clips[c] / (DT_HL_KNEE_DET * fmaxf(normalization[c], 1e-9f));
-    knee_clipraw[c] = clips[c] / DT_HL_KNEE_DET;
-  }
-
-  // FLOW step 2 (knee): X-Trans rolloff estimate on the raw mosaic (6x6 binning), same role as the Bayer
-  // path -- applied to the interpolated planes below via _hl_knee_apply_interpolated when engaged.
-  _hl_knee_estimate(input, width, height, 9u, roi_in, xtrans, knee_clipraw, knee, pipe);
-  const int knee_on = knee[0].engaged || knee[1].engaged || knee[2].engaged;
-
-  dt_aligned_pixel_t det_scale = { 1.f, 1.f, 1.f, 1.f };
-  for(int c = 0; c < 3; c++)
-    if(knee[c].engaged) det_scale[c] = DT_HL_BAND_OVR;
-
-  dt_aligned_pixel_t eff_clips;
-  for_four_channels(c) eff_clips[c] = clips[c] * det_scale[c];
-
-  // FLOW step 1a (gather): X-Trans variant of the gather -- bilinear interpolation through the 6x6 lookup
-  // into [R, G, B, norm] planes + the binary per-channel clip masks. Feeds every later step.
-  _interpolate_and_mask_xtrans(input, interpolated, clipping_mask, eff_clips, normalization, roi_in, lookup,
-                               xtrans, width, height);
-  // No mask feathering in this mode: the masks stay BINARY end to end. The per-channel
-  // validity masks define measurement validity for every fit (feathering them reclassified
-  // rim-clipped photosites -- raw values biased at the detection threshold -- as valid anchors
-  // and dragged oblique rims toward the clip level), and the compositing alpha is a hard
-  // switch (measured equivalent to the feathered composite once validity is binary and clipped
-  // raw values are floors -- see the graveyard of the companion article).
-
-  // Rolloff pre-correction of the working planes (estimation ran before the gather; the 6x6
-  // X-Trans binning estimator is otherwise identical to the Bayer path).
-  if(knee_on) _hl_knee_apply_interpolated(interpolated, size, clipvaln, normalization, knee);
-
-  // MATHS BRIDGE -- Step 1 (segmentation + depth), same as process_harmonic_bayer: the any-clip mask's
-  // Euclidean distance transform gives each clipped pixel its depth delta(x); connected-component
-  // segmentation groups clipped pixels into regions, each carrying its reconstruction radius R = max delta.
-  const size_t npix = (size_t)width * height;
-  float *const restrict depth = dt_pixelpipe_cache_alloc_align_float(npix, pipe);
-  if(!depth)
-  {
-    err_code = 1;
-    goto error;
-  }
-  uint8_t *const restrict maskb = (uint8_t *)dt_pixelpipe_cache_alloc_align(npix, pipe);
-  if(!maskb)
-  {
-    dt_pixelpipe_cache_free_align(depth);
-    err_code = 1;
-    goto error;
-  }
-  __OMP_PARALLEL_FOR__()
-  for(size_t i = 0; i < npix; i++)
-  {
-    // seed the distance transform: clipped pixels = +inf (to be filled with delta), valid = 0
-    depth[i] = (clipping_mask[i * 4 + 3] > 0.5f) ? (float)DT_DISTANCE_TRANSFORM_MAX : 0.f;
-    maskb[i] = (clipping_mask[i * 4 + 3] >= 1e-3f); // binary any-clip mask for the connected-component pass
-  }
-  dt_image_distance_transform(NULL, depth, width, height, 0.f,
-                              DT_DISTANCE_TRANSFORM_NONE); // depth[] <- delta(x) (EDT)
-
-  const dt_iop_highlights_data_t *const data = (const dt_iop_highlights_data_t *)piece->data;
-  _hl_region_t *regions = NULL;
-  // 8-neighbour connected components; pad = ceil(1.25 * R) clamped to [8, 256] px around each region
-  const int nreg = _segment_clipped_regions(maskb, depth, width, height, 1.25f, 8, 256, &regions);
-
-
-  // FLOW steps 3-8 (per region): same CFA-agnostic per-region reconstruction as the Bayer path.
-  for(int region_index = 0; region_index < nreg; region_index++)
-    _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
-                          data->solid_color, data->iterations, data->noise_level);
-
-  free(regions);
-  dt_pixelpipe_cache_free_align(maskb);
-  dt_pixelpipe_cache_free_align(depth);
-
-  const float *remosaic_input = input;
-  float *input_corr = NULL;
-
-  if(knee_on)
-  {
-    input_corr = dt_pixelpipe_cache_alloc_align_float(size, pipe);
-
-    if(!IS_NULL_PTR(input_corr))
-    {
-      _hl_knee_apply_cfa(input, input_corr, width, height, 9u, roi_in, xtrans, knee_clipraw, knee);
-      remosaic_input = input_corr;
-    }
-  }
-
-  // FLOW: remosaic + composite (terminal node). Same rule as the Bayer path -- out = opacity*rec +
-  // (1 - opacity)*base with base = max(raw, rec) on a clipped X-Trans photosite (clip_is_floor = TRUE).
-  _remosaic_and_replace_xtrans(remosaic_input, input, interpolated, clipping_mask, output, normalization, clips,
-                               TRUE, roi_in, xtrans, width, height);
 
   if(!IS_NULL_PTR(input_corr)) dt_pixelpipe_cache_free_align(input_corr);
 
@@ -354,8 +266,8 @@ error:;
 // and GPU remosaic bracket a host middle). It runs the once-per-image steps BETWEEN the gather and the
 // remosaic on host planes the GPU already produced: step 2 knee application (_hl_knee_apply_interpolated),
 // step 1b depth + segmentation (distance transform + _segment_clipped_regions), then steps 3-8 per region
-// via the CPU _region_guided_filter. Identical code to process_harmonic_bayer/xtrans' middle (kept as a
-// separate copy to avoid touching the validated CPU drivers); it is the fallback the device middle
+// via the CPU _region_guided_filter. Identical code to process_harmonic's middle (kept as a
+// separate copy to avoid touching the validated CPU driver); it is the fallback the device middle
 // (_harmonic_reconstruct_cl) drops to when the GPU middle cannot run.
 __DT_CLONE_TARGETS__
 static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
@@ -366,7 +278,7 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
                                       float **input_corr_out, const _hl_knee_curve_t knee_pre[3])
 {
   // _hl_knee_apply_cfa below reads FC(row, col, filters) with tile-local row/col, so filters
-  // must be pre-shifted for roi_in's crop position (mirrors process_harmonic_bayer).
+  // must be pre-shifted for roi_in's crop position (mirrors process_harmonic).
   const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
   const uint8_t(*const xtrans)[6] = (filters == 9u) ? (const uint8_t(*const)[6])piece->dsc_in.xtrans : NULL;
   const size_t width = roi_in->width;
@@ -457,8 +369,9 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
 //
 // PIPELINE BRIDGE (article §"The OpenCL pipe", the bit-identical fallback): the single-channel raw
 // crosses the bus ONCE to the host (dt_opencl_copy_device_to_host), the whole CPU driver
-// (process_harmonic_bayer/xtrans -- all 8 steps, gather through remosaic) runs on it, and the result is
-// written back once (dt_opencl_write_host_to_device). No GPU kernels of this mode are used, so the output
+// (process_harmonic -- all 8 steps, gather through remosaic, CFA selected internally) runs on it, and the
+// result is written back once (dt_opencl_write_host_to_device). No GPU kernels of this mode are used, so
+// the output
 // is byte-for-byte the CPU path; the surrounding pipe still stays on the GPU (no scheduler-level fallback).
 static cl_int _harmonic_cl_roundtrip(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                      const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
@@ -466,7 +379,6 @@ static cl_int _harmonic_cl_roundtrip(struct dt_iop_module_t *self, const dt_dev_
                                      const dt_aligned_pixel_t clips)
 {
   const int devid = pipe->devid;
-  const uint32_t filters = piece->dsc_in.filters;
   const size_t n_in = (size_t)roi_in->width * roi_in->height;
   const size_t n_out = (size_t)roi_out->width * roi_out->height;
 
@@ -480,9 +392,9 @@ static cl_int _harmonic_cl_roundtrip(struct dt_iop_module_t *self, const dt_dev_
   cl_err = dt_opencl_copy_device_to_host(devid, host_in, dev_in, roi_in->width, roi_in->height, sizeof(float));
   if(cl_err != CL_SUCCESS) goto error;
 
-  // run the exact CPU driver (all 8 steps) on the host copy -> bit-identical to the CPU pipe
-  if((filters == 9u && process_harmonic_xtrans(self, pipe, piece, host_in, host_out, roi_in, roi_out, clips))
-     || (filters != 9u && process_harmonic_bayer(self, pipe, piece, host_in, host_out, roi_in, roi_out, clips)))
+  // run the exact CPU driver (all 8 steps, CFA selected internally) on the host copy -> bit-identical to
+  // the CPU pipe
+  if(process_harmonic(self, pipe, piece, host_in, host_out, roi_in, roi_out, clips))
   {
     cl_err = DT_OPENCL_DEFAULT_ERROR;
     goto error;
@@ -725,6 +637,11 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   const int height = roi_in->height;
   const size_t npix = (size_t)width * height;
   const int is_xtrans = (filters == 9u);
+  // Non-raw / sRAW passthrough: already-demosaiced 4-channel RGB input. The gather is a device plane
+  // copy, the remosaic a per-channel composite, and the knee is disabled (it would misread a 4-channel
+  // buffer as a mosaic) -- which also makes the reconstruction middle fully CFA-agnostic and reusable.
+  const int is_passthrough = (filters == 0u);
+  const size_t in_channels = is_passthrough ? 4 : 1; // channel count of dev_in for the host download below
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
@@ -766,11 +683,13 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   // max-reduce kernels are not bit-faithful to _compute_laplacian_normalization: the tiny
   // normalization difference shifted the clip mask by a few hundred pixels and the whole
   // reconstruction with it. Downloading first keeps the mask identical to the CPU path.
-  h_raw = dt_pixelpipe_cache_alloc_align_float(npix, pipe);
+  h_raw = dt_pixelpipe_cache_alloc_align_float(npix * in_channels, pipe);
   if(IS_NULL_PTR(h_raw)) goto fallback;
-  cl_err = dt_opencl_copy_device_to_host(devid, h_raw, dev_in, width, height, sizeof(float));
+  cl_err = dt_opencl_copy_device_to_host(devid, h_raw, dev_in, width, height, in_channels * sizeof(float));
   if(cl_err != CL_SUCCESS) goto fallback;
 
+  // filters_shifted is 0 for the passthrough case -> _compute_laplacian_normalization reads h_raw as a
+  // 4-channel RGB buffer (its filters==0 branch), matching the CPU passthrough path exactly.
   dt_aligned_pixel_t norm_host = { 1.f, 1.f, 1.f, 1.f };
   _compute_laplacian_normalization(h_raw, roi_in, filters_shifted,
                                    is_xtrans ? (const uint8_t(*const)[6])piece->dsc_in.xtrans : NULL, norm_host);
@@ -779,7 +698,10 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
 
   // ---- rolloff estimation FIRST (raw-based): its per-channel engagement drives the band
   //      override of the detection thresholds, exactly like the CPU drivers ----
-  _hl_knee_curve_t knee[3];
+  // Zero-initialized so the passthrough path (which skips estimation) leaves every channel disengaged;
+  // the knee is meaningless on already-demosaiced RGB and reads the raw as a mosaic, so it never runs.
+  _hl_knee_curve_t knee[3] = { 0 };
+  if(!is_passthrough)
   {
     dt_aligned_pixel_t knee_clipraw = { 1.f, 1.f, 1.f, 1.f };
     for(int c = 0; c < 3; c++) knee_clipraw[c] = clips[c] / DT_HL_KNEE_DET;
@@ -836,6 +758,27 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
                              &lookup_cl);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, global_data->kernel_highlights_bilinear_and_mask_xtrans, sizes);
   }
+  else if(is_passthrough)
+  {
+    // Non-raw / sRAW: plane copy + per-channel clip mask, written straight into clipping_mask (harmonic
+    // masks stay binary -- no 5x5 feathering). The knee is off, so det_clips_cl holds the plain clips.
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough, 0,
+                             sizeof(cl_mem), &dev_in);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough, 1,
+                             sizeof(cl_mem), &interpolated);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough, 2,
+                             sizeof(cl_mem), &clipping_mask);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough, 3,
+                             sizeof(cl_mem), &det_clips_cl);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough, 4,
+                             sizeof(cl_mem), &normalization_final);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough, 5, sizeof(int),
+                             &width);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough, 6, sizeof(int),
+                             &height);
+    cl_err = dt_opencl_enqueue_kernel_2d(devid, global_data->kernel_highlights_bilinear_and_mask_passthrough,
+                                         sizes);
+  }
   else
   {
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_bilinear_and_mask, 0, sizeof(cl_mem), &dev_in);
@@ -867,7 +810,9 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
     size_t origin[3] = { 0, 0, 0 };
     size_t region1[3] = { (size_t)width, (size_t)height, 1 };
     cl_int gpu_err = (raw_buf && interp_buf && mask_buf) ? CL_SUCCESS : DT_OPENCL_DEFAULT_ERROR;
-    if(gpu_err == CL_SUCCESS)
+    // raw_buf holds the single-channel raw mosaic for the knee; the passthrough path has no knee and no
+    // mosaic (dev_in is 4-channel), so skip this copy -- the middle never reads raw_buf when knee is off.
+    if(gpu_err == CL_SUCCESS && !is_passthrough)
       gpu_err = dt_opencl_enqueue_copy_image_to_buffer(devid, dev_in, raw_buf, origin, region1, 0);
     if(gpu_err == CL_SUCCESS)
       gpu_err = dt_opencl_enqueue_copy_image_to_buffer(devid, interpolated, interp_buf, origin, region1, 0);
@@ -1122,6 +1067,34 @@ remosaic:;
     dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_xtrans, 12, sizeof(cl_mem),
                              &dev_xtrans);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, global_data->kernel_highlights_remosaic_and_replace_xtrans, sizes);
+  }
+  else if(is_passthrough)
+  {
+    // Non-raw / sRAW: per-channel composite straight back (no CFA). remosaic_in_cl == dev_in (no knee,
+    // so no corrected copy). clip_is_floor stays TRUE, matching the CPU passthrough remosaic.
+    const int clip_floor_on = TRUE;
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 0,
+                             sizeof(cl_mem), &remosaic_in_cl);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 1,
+                             sizeof(cl_mem), &dev_in);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 2,
+                             sizeof(cl_mem), &interpolated);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 3,
+                             sizeof(cl_mem), &clipping_mask);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 4,
+                             sizeof(cl_mem), &dev_out);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 5,
+                             sizeof(cl_mem), &normalization_final);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 6,
+                             sizeof(cl_mem), &clips_cl);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 7,
+                             sizeof(int), &clip_floor_on);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 8,
+                             sizeof(int), &width);
+    dt_opencl_set_kernel_arg(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough, 9,
+                             sizeof(int), &height);
+    cl_err = dt_opencl_enqueue_kernel_2d(devid, global_data->kernel_highlights_remosaic_and_replace_passthrough,
+                                         sizes);
   }
   else
   {

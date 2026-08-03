@@ -94,6 +94,7 @@ add_iop(highlights "highlights.c"
         "highlights/gather.c"
         "highlights/clip.c"
         "highlights/lch.c"
+        "highlights/inpaint.c"
         "highlights/laplacian.c"
         "highlights/blur.c"
         "highlights/segmentation.c"
@@ -133,6 +134,7 @@ add_iop(spots "spots.c")
 add_iop(retouch "retouch.c")
 add_iop(liquify "liquify.c")
 add_iop(rawdenoise "rawdenoise.c")
+add_iop(rawdenoiseai "rawdenoiseai.c")
 add_iop(borders "borders.c")
 add_iop(nlmeans "nlmeans.c")
 add_iop(colorcontrast "colorcontrast.c")

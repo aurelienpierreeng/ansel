@@ -5075,6 +5075,21 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   }
 }
 
+/* The fit_v/fit_h buttons are labeled from the user's point of view, i.e. the final,
+ * post-flip image the user sees on screen. ashift itself runs upstream of the flip module in
+ * iop_order (see doc/reorganisation.md and the ashift notes in CLAUDE.md) and always fits lines
+ * in its own, pre-flip buffer space, so when the flip module rotates the image 90 degrees, the
+ * on-screen "horizontal"/"vertical" directions are swapped relative to that buffer space.
+ * dt_image_get_effective_orientation() reads the flip module's committed history, falling back
+ * to EXIF, so it reflects the real final orientation regardless of how it was set (camera EXIF,
+ * lighttable rotate, or the flip module edited directly). */
+static gboolean _ashift_orientation_swaps_axes(dt_iop_module_t *self)
+{
+  if(!self->dev) return FALSE;
+  const dt_image_orientation_t orientation = dt_image_get_effective_orientation(&self->dev->image_storage);
+  return (orientation & ORIENTATION_SWAP_XY) != 0;
+}
+
 static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -5084,19 +5099,20 @@ static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event,
   {
     dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
     dt_iop_ashift_params_t *p = _get_ashift_params(self);
+    const gboolean swap_axes = _ashift_orientation_swaps_axes(self);
 
     dt_iop_ashift_fitaxis_t fitaxis = ASHIFT_FIT_NONE;
     switch(g->fitting_mode)
     {
       case(ASHIFT_FITTING_ALL):
       case(ASHIFT_FITTING_LENS_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_VERTICALLY;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_HORIZONTALLY : ASHIFT_FIT_VERTICALLY;
         break;
       case(ASHIFT_FITTING_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_ROTATION_VERTICAL_LINES;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_ROTATION_HORIZONTAL_LINES : ASHIFT_FIT_ROTATION_VERTICAL_LINES;
         break;
       case(ASHIFT_FITTING_LENS):
-        g->lastfit = fitaxis = ASHIFT_FIT_VERTICALLY_NO_ROTATION;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_HORIZONTALLY_NO_ROTATION : ASHIFT_FIT_VERTICALLY_NO_ROTATION;
         break;
       default:
         fitaxis = ASHIFT_FIT_NONE;
@@ -5131,19 +5147,20 @@ static int _event_fit_h_button_clicked(GtkWidget *widget, GdkEventButton *event,
   {
     dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
     dt_iop_ashift_params_t *p = _get_ashift_params(self);
+    const gboolean swap_axes = _ashift_orientation_swaps_axes(self);
 
     dt_iop_ashift_fitaxis_t fitaxis = ASHIFT_FIT_NONE;
     switch(g->fitting_mode)
     {
       case(ASHIFT_FITTING_ALL):
       case(ASHIFT_FITTING_LENS_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_HORIZONTALLY;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_VERTICALLY : ASHIFT_FIT_HORIZONTALLY;
         break;
       case(ASHIFT_FITTING_ROTATION):
-        g->lastfit = fitaxis = ASHIFT_FIT_ROTATION_HORIZONTAL_LINES;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_ROTATION_VERTICAL_LINES : ASHIFT_FIT_ROTATION_HORIZONTAL_LINES;
         break;
       case(ASHIFT_FITTING_LENS):
-        g->lastfit = fitaxis = ASHIFT_FIT_HORIZONTALLY_NO_ROTATION;
+        g->lastfit = fitaxis = swap_axes ? ASHIFT_FIT_VERTICALLY_NO_ROTATION : ASHIFT_FIT_HORIZONTALLY_NO_ROTATION;
         break;
       default:
         fitaxis = ASHIFT_FIT_NONE;

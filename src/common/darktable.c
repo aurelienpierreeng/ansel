@@ -111,6 +111,7 @@
 #include "common/grealpath.h"
 #include "common/image.h"
 #include "common/image_cache.h"
+#include "common/image_extensions.h"
 #include "common/imageio_module.h"
 #include "common/iop_order.h"
 #include "common/l10n.h"
@@ -349,18 +350,10 @@ const char *dt_install_id(void)
 
 gboolean dt_supported_image(const gchar *filename)
 {
-  gboolean supported = FALSE;
   char *ext = g_strrstr(filename, ".");
   if(IS_NULL_PTR(ext))
     return FALSE;
-  ext++;
-  for(const char **i = dt_supported_extensions; !IS_NULL_PTR(*i); i++)
-    if(!g_ascii_strncasecmp(ext, *i, strlen(*i)))
-    {
-      supported = TRUE;
-      break;
-    }
-  return supported;
+  return dt_image_ext_is_supported(ext + 1);
 }
 
 int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean *single_image)

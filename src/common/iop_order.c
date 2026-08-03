@@ -96,6 +96,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { { 0.5f }, "basebuffer", 0},
   { { 1.0f }, "rawprepare", 0},
   { { 2.0f }, "invert", 0},
+  { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
   { { 4.0f }, "highlights", 0},
   { { 5.0f }, "cacorrect", 0},
@@ -192,6 +193,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { { 0.5 }, "basebuffer", 0},
   { { 1.0 }, "rawprepare", 0},
   { { 2.0 }, "invert", 0},
+  { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
   { { 4.0f }, "highlights", 0},
   { { 5.0f }, "cacorrect", 0},
@@ -304,6 +306,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   { { 0.5 }, "basebuffer", 0 },
   { { 1.0 }, "rawprepare", 0 },
   { { 2.0 }, "invert", 0 },
+  { { 2.5f }, "rawdenoiseai", 0 },
   { { 3.0f }, "temperature", 0 },
   { { 4.0f }, "highlights", 0 },
   { { 5.0f }, "cacorrect", 0 },
@@ -416,6 +419,7 @@ const dt_iop_order_entry_t ansel_jpg_order[] = {
   { { 0.5f}, "basebuffer", 0 },
   { { 1.0f }, "rawprepare", 0 },
   { { 2.0f }, "invert", 0 },
+  { { 2.5f }, "rawdenoiseai", 0 },
   { { 3.0f }, "highlights", 0 },
   { { 4.0f }, "cacorrect", 0 },
   { { 5.0f }, "hotpixels", 0 },
@@ -561,6 +565,7 @@ const dt_iop_order_entry_t ansel_raw_order[] = {
   { { 0.0f }, "basebuffer", 0 },
   { { 1.0f }, "rawprepare", 0},
   { { 2.0f }, "invert", 0},
+  { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
   { { 4.0f }, "highlights", 0},
   { { 5.0f }, "cacorrect", 0},
@@ -757,6 +762,49 @@ static GList *_insert_before(GList *iop_order_list, const char *module, const ch
   return iop_order_list;
 }
 
+/* @@_NEW_MODULE: When adding a new module, insert it into a deserialized/custom
+ * iop-order list here so that pre-existing edits (whose serialized order was
+ * saved before the module existed) still place it correctly instead of
+ * sanitizing its position to INT_MAX. This runs on BOTH deserialization paths:
+ * the DB module_order table (dt_ioppr_get_iop_order_list) and XMP import
+ * (dt_exif_xmp_read_data). Anchor each new module before an existing one. */
+GList *dt_ioppr_insert_missing_modules(GList *iop_order_list)
+{
+  iop_order_list = _insert_before(iop_order_list, "nlmeans", "negadoctor");
+  iop_order_list = _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
+  iop_order_list = _insert_before(iop_order_list, "negadoctor", "censorize");
+  iop_order_list = _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
+  iop_order_list = _insert_before(iop_order_list, "colorbalancergb", "colorprimaries");
+  iop_order_list = _insert_before(iop_order_list, "colorprimaries", "splittoningrgb");
+  iop_order_list = _insert_before(iop_order_list, "rgbcurve", "drawlayer");
+  iop_order_list = _insert_before(iop_order_list, "drawlayer", "colorequal");
+  iop_order_list = _insert_before(iop_order_list, "ashift", "cacorrectrgb");
+  iop_order_list = _insert_before(iop_order_list, "graduatednd", "crop");
+  iop_order_list = _insert_before(iop_order_list, "colorbalance", "diffuse");
+  iop_order_list = _insert_before(iop_order_list, "nlmeans", "blurs");
+  iop_order_list = _insert_before(iop_order_list, "ashift", "initialscale");
+  iop_order_list = _insert_before(iop_order_list, "filmicrgb", "crystgrain");
+  iop_order_list = _insert_before(iop_order_list, "mask_manager", "detailmask");
+  iop_order_list = _insert_before(iop_order_list, "rawprepare", "basebuffer");
+  // rawdenoiseai denoises pre-WB CFA data: it must run before temperature
+  // AND demosaic, so insert it before whichever comes first in this order
+  // (temperature sits after demosaic in JPG-style orders)
+  {
+    const char *first = "demosaic";
+    for(const GList *l = iop_order_list; l; l = g_list_next(l))
+    {
+      const dt_iop_order_entry_t *const restrict entry = (dt_iop_order_entry_t *)l->data;
+      if(!strcmp(entry->operation, "temperature") || !strcmp(entry->operation, "demosaic"))
+      {
+        first = entry->operation;
+        break;
+      }
+    }
+    iop_order_list = _insert_before(iop_order_list, first, "rawdenoiseai");
+  }
+  return iop_order_list;
+}
+
 
 dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid)
 {
@@ -802,6 +850,9 @@ GList *dt_ioppr_get_iop_order_rules()
     { .op_prev = "cacorrect",   .op_next = "hotpixels"   },
     { .op_prev = "hotpixels",   .op_next = "rawdenoise"  },
     { .op_prev = "rawdenoise",  .op_next = "demosaic"    },
+    { .op_prev = "invert",      .op_next = "rawdenoiseai"},
+    { .op_prev = "rawdenoiseai",.op_next = "temperature" },
+    { .op_prev = "rawdenoiseai",.op_next = "demosaic"    },
     { .op_prev = "demosaic",    .op_next = "colorin"     },
     { .op_prev = "colorin",     .op_next = "colorout"    },
     { .op_prev = "colorout",    .op_next = "gamma"       },
@@ -1131,24 +1182,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
         }
         else
         {
-          // @@_NEW_MODULE: For new module it is required to insert the new module name in the iop-order list here.
-          //                The insertion can be done depending on the current iop-order list kind.
-          iop_order_list = _insert_before(iop_order_list, "nlmeans", "negadoctor");
-          iop_order_list = _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
-          iop_order_list = _insert_before(iop_order_list, "negadoctor", "censorize");
-          iop_order_list = _insert_before(iop_order_list, "rgbcurve", "colorbalancergb");
-          iop_order_list = _insert_before(iop_order_list, "colorbalancergb", "colorprimaries");
-          iop_order_list = _insert_before(iop_order_list, "colorprimaries", "splittoningrgb");
-          iop_order_list = _insert_before(iop_order_list, "rgbcurve", "drawlayer");
-          iop_order_list = _insert_before(iop_order_list, "drawlayer", "colorequal");
-          iop_order_list = _insert_before(iop_order_list, "ashift", "cacorrectrgb");
-          iop_order_list = _insert_before(iop_order_list, "graduatednd", "crop");
-          iop_order_list = _insert_before(iop_order_list, "colorbalance", "diffuse");
-          iop_order_list = _insert_before(iop_order_list, "nlmeans", "blurs");
-          iop_order_list = _insert_before(iop_order_list, "ashift", "initialscale");
-          iop_order_list = _insert_before(iop_order_list, "filmicrgb", "crystgrain");
-          iop_order_list = _insert_before(iop_order_list, "mask_manager", "detailmask");
-          iop_order_list = _insert_before(iop_order_list, "rawprepare", "basebuffer");
+          iop_order_list = dt_ioppr_insert_missing_modules(iop_order_list);
         }
       }
       else if(version == DT_IOP_ORDER_LEGACY)

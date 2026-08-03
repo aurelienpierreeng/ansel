@@ -18,7 +18,7 @@
 
 #pragma once
 
-// Top-level Bayer/X-Trans CPU drivers and the hybrid OpenCL driver.
+// Top-level CFA-agnostic CPU driver and the hybrid OpenCL driver.
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
@@ -26,23 +26,20 @@
 #include "develop/imageop.h"
 #include "iop/highlights/common.h"
 
-int process_harmonic_bayer(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                           const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                           void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                           const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
-
-// CPU driver for Fujifilm X-Trans sensors; same start-to-finish flow as
-// process_harmonic_bayer, with X-Trans gather/scatter/knee access.
+// Single CPU driver for the harmonic-transposition reconstruction, for Bayer, X-Trans and
+// already-demosaiced (non-raw / sRAW) input alike. The reconstruction middle is CFA-agnostic (it works
+// on interpolated RGB planes and masks); only the disposable-demosaic gather and the remosaic scatter
+// branch on the sensor layout, selected internally from the roi-shifted CFA descriptor via
+// _hl_cfa_strategy().
 //
-// MATHS/FLOW BRIDGE -- identical 8-step orchestration to process_harmonic_bayer (see its header for the
-// step-by-step map): step 1a gather (_interpolate_and_mask_xtrans, through the 6x6 X-Trans bilinear
-// lookup) -> step 2 knee (_hl_knee_estimate/_apply, 6x6 binning) -> step 1b depth + segmentation
-// (annotated below) -> steps 3-8 per region (_region_guided_filter, CFA-agnostic, shared with Bayer) ->
-// remosaic + composite (_remosaic_and_replace_xtrans). Only the CFA-touching endpoints differ.
-int process_harmonic_xtrans(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                            const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
-                            void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
-                            const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
+// MATHS/FLOW BRIDGE -- 8-step orchestration: step 1a gather (_interpolate_and_mask{,_xtrans,_passthrough})
+// -> step 2 knee (_hl_knee_estimate/_apply) -> step 1b depth + segmentation -> steps 3-8 per region
+// (_region_guided_filter, CFA-agnostic) -> remosaic + composite (_remosaic_and_replace{,_xtrans,
+// _passthrough}). Only the CFA-touching endpoints differ.
+int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                     const dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+                     void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
+                     const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips);
 
 #ifdef HAVE_OPENCL
 // Top-level OpenCL entry point for the harmonic-transposition mode (called from highlights.c
@@ -66,4 +63,5 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
                            const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                            const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                            const dt_aligned_pixel_t clips);
+
 #endif

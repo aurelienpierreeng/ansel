@@ -132,15 +132,6 @@ if(USE_SENTRY)
   set(SENTRY_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(BUILD_SHARED_LIBS OFF)
 
-  # sentry derives SIZEOF_LONG via check_type_size("long"); on the Windows
-  # clang/UCRT64 toolchain that check can come back empty, which expands to
-  # "SIZEOF_LONG=" and breaks "#if SIZEOF_LONG == 8" in sentry_sync.h. On every
-  # Windows ABI (LLP64) long is 4 bytes, so pre-seed the cache to skip the check.
-  if(WIN32)
-    set(HAVE_CMAKE_SIZEOF_LONG TRUE CACHE INTERNAL "" FORCE)
-    set(CMAKE_SIZEOF_LONG 4 CACHE INTERNAL "" FORCE)
-  endif()
-
   add_subdirectory(sentry-native)
 
   set(BUILD_SHARED_LIBS "${_SENTRY_SHARED_SAVE}")

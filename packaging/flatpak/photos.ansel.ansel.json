@@ -516,7 +516,12 @@
                     "type": "dir",
                     "path": "../.."
                 }
-            ]
+            ],
+            "build-options": {
+                "build-args": [
+                    "--share=network"
+                ]
+            }
         }
     ]
 }
