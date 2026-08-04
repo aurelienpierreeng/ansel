@@ -560,15 +560,33 @@ elseif(USE_OPENCL)
   message(STATUS "Test-compilation of OpenCL programs is disabled.")
 endif()
 
-# we need jsonschema to check noiseprofiles.json
-find_program(jsonschema_BIN jsonschema)
-if(${jsonschema_BIN} STREQUAL "jsonschema_BIN-NOTFOUND")
-  message(STATUS "Missing jsonschema, problems in noiseprofiles.json might go unnoticed")
-  set(VALIDATE_JSON 0)
-else(${jsonschema_BIN} STREQUAL "jsonschema_BIN-NOTFOUND")
-  message(STATUS "Found jsonschema")
-  set(VALIDATE_JSON 1)
-endif(${jsonschema_BIN} STREQUAL "jsonschema_BIN-NOTFOUND")
+# we need the jsonschema python library to check noiseprofiles.json.
+# We call its validation API ourselves (tools/validate_json_schema.py) instead
+# of the `jsonschema` command-line tool, which is deprecated upstream in favor
+# of the separate, not-universally-packaged `check-jsonschema`.
+# On Windows/MSYS2, CMake's Python3 finder prefers registry-registered
+# installs (the standalone Windows python.org/Store build) over whatever
+# `python3` is on PATH inside the MSYS2 shell build.sh runs from — that
+# registry Python never has the MSYS2-packaged jsonschema module. Make PATH
+# win so we pick up the same interpreter the MSYS2 package manager provides.
+set(Python3_FIND_REGISTRY "LAST")
+find_package(Python3 COMPONENTS Interpreter)
+set(VALIDATE_JSON 0)
+if(Python3_Interpreter_FOUND)
+  execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import jsonschema"
+    RESULT_VARIABLE jsonschema_import_result
+    OUTPUT_QUIET ERROR_QUIET
+  )
+  if(jsonschema_import_result EQUAL 0)
+    message(STATUS "Found jsonschema")
+    set(VALIDATE_JSON 1)
+  else()
+    message(STATUS "Missing jsonschema, problems in noiseprofiles.json might go unnoticed")
+  endif()
+else()
+  message(STATUS "Missing Python3, problems in noiseprofiles.json might go unnoticed")
+endif()
 
 # we need an XSLT interpreter to generate preferences_gen.h and anselrc
 find_program(Xsltproc_BIN xsltproc)
