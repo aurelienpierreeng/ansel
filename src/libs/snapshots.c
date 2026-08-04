@@ -99,6 +99,7 @@ typedef struct dt_lib_snapshots_t
   double vp_x, vp_y, vp_width, vp_height, vp_xpointer, vp_ypointer, vp_xrotate, vp_yrotate;
   gboolean on_going;
   gboolean hover_rotation;
+  gboolean hover_line; // cursor is within DT_GUI_MOUSE_EFFECT_RADIUS of the split line itself
 
   GtkWidget *take_button;
 } dt_lib_snapshots_t;
@@ -280,15 +281,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
         cairo_line_to(cri, lx, d->vp_y + d->vp_height);
         cairo_stroke(cri);
 
-        if(!d->dragging)
-        {
-          cairo_move_to(cri, lx, center - size);
-          cairo_line_to(cri, lx - (size * 1.2), center);
-          cairo_line_to(cri, lx, center + size);
-          cairo_close_path(cri);
-          cairo_fill(cri);
-          _draw_sym(cri, lx, center, TRUE, d->inverted);
-        }
+        cairo_move_to(cri, lx, center - size);
+        cairo_line_to(cri, lx - (size * 1.2), center);
+        cairo_line_to(cri, lx, center + size);
+        cairo_close_path(cri);
+        cairo_fill(cri);
+        _draw_sym(cri, lx, center, TRUE, d->inverted);
       }
       else
       {
@@ -299,15 +297,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
         cairo_line_to(cri, d->vp_x + d->vp_width, ly);
         cairo_stroke(cri);
 
-        if(!d->dragging)
-        {
-          cairo_move_to(cri, center - size, ly);
-          cairo_line_to(cri, center, ly - (size * 1.2));
-          cairo_line_to(cri, center + size, ly);
-          cairo_close_path(cri);
-          cairo_fill(cri);
-          _draw_sym(cri, center, ly, FALSE, d->inverted);
-        }
+        cairo_move_to(cri, center - size, ly);
+        cairo_line_to(cri, center, ly - (size * 1.2));
+        cairo_line_to(cri, center + size, ly);
+        cairo_close_path(cri);
+        cairo_fill(cri);
+        _draw_sym(cri, center, ly, FALSE, d->inverted);
       }
 
       /* if mouse over control, draw center rotate handle (hidden while dragging) */
@@ -328,6 +323,7 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 
       if(d->hover_rotation) dt_control_queue_cursor_by_name("exchange");
       else if(d->dragging) dt_control_queue_cursor_by_name("grabbing");
+      else if(d->hover_line) dt_control_queue_cursor_by_name(d->vertical ? "col-resize" : "row-resize");
       else
       {
         dt_view_t *view = darktable.view_manager->proxy.darkroom.view;
@@ -439,13 +435,7 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
       return 1;
     }
 
-    // Not dragging: only claim the move event while hovering the rotate handle (it needs the
-    // "exchange" cursor feedback in gui_post_expose) -- otherwise release it, so normal pan/hover
-    // elsewhere in the darkroom isn't silently blocked for as long as a snapshot stays selected.
-    // dt_view_manager_mouse_moved() (views/view.c) only forwards the event to the darkroom view's
-    // own handler when no plugin claims it, so an unconditional `return 1` here would starve it
-    // permanently while any snapshot is toggled on.
-    const gboolean was_hovering = d->hover_rotation;
+    const gboolean was_hovering = d->hover_rotation || d->hover_line;
     const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
     const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
     const double handle_mouse = (DT_GUI_MOUSE_EFFECT_RADIUS + HANDLE_SIZE) * 0.5;
@@ -455,9 +445,14 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
     const double dy = y - ryc;
     d->hover_rotation = (dx * dx + dy * dy) < (handle_mouse * handle_mouse);
 
-    if(!d->hover_rotation)
+    const double lx = d->vp_x + d->vp_width * split_x;
+    const double ly = d->vp_y + d->vp_height * split_y;
+    const double dist_to_line = d->vertical ? fabs(x - lx) : fabs(y - ly);
+    d->hover_line = !d->hover_rotation && dist_to_line <= DT_GUI_MOUSE_EFFECT_RADIUS;
+
+    if(!d->hover_rotation && !d->hover_line)
     {
-      if(was_hovering) dt_control_queue_redraw_center(); // clear the stale handle highlight
+      if(was_hovering) dt_control_queue_redraw_center(); // clear the stale handle/line highlight
       return 0;
     }
 
@@ -474,6 +469,7 @@ void gui_reset(dt_lib_module_t *self)
   d->num_snapshots = 0;
   d->selected = 0;
   d->hover_rotation = FALSE;
+  d->hover_line = FALSE;
 
   for(uint32_t k = 0; k < d->size; k++)
   {
@@ -505,6 +501,7 @@ void gui_init(dt_lib_module_t *self)
   d->vertical = TRUE;
   d->on_going = FALSE;
   d->hover_rotation = FALSE;
+  d->hover_line = FALSE;
   /* initialize ui containers */
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   d->snapshots_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
