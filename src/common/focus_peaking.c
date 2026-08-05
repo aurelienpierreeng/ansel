@@ -25,6 +25,7 @@
 */
 
 #include "common/eigf.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "develop/openmp_maths.h"
 
 __OMP_DECLARE_SIMD__()

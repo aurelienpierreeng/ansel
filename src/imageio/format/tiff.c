@@ -41,6 +41,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"

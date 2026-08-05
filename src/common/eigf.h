@@ -22,6 +22,7 @@
 #pragma once
 
 #include "common/fast_guided_filter.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/gaussian.h"
 
 /***

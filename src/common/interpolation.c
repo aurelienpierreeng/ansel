@@ -34,6 +34,7 @@
 
 #include "common/interpolation.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/math.h"
 #include "control/conf.h"
 

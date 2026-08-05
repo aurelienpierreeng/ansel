@@ -46,6 +46,7 @@
 #include "common/collection.h"
 #include "common/datetime.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "common/focus.h"
 #include "common/focus_peaking.h"

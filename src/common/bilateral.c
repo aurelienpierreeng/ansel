@@ -30,6 +30,7 @@
 
 #include "common/bilateral.h"
 #include "common/darktable.h" // dt_print, dt_alloc_align, dt_free_align
+#include "develop/pixelpipe_cache_alloc.h" // dt_pixelpipe_cache_alloc_align_float_cache
 #include "common/math.h"      // for CLAMPS, roundf
 #include <glib.h>             // for MIN, MAX
 #include <stdlib.h>           // for size_t, free, malloc, NULL

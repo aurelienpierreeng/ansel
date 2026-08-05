@@ -30,6 +30,7 @@
 */
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/locallaplacian.h"
 #include "common/math.h"
 

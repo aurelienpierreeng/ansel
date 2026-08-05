@@ -40,6 +40,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "blend.h"
 #include "common/gaussian.h"
 #include "common/guided_filter.h"

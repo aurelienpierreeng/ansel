@@ -30,6 +30,7 @@
 #include "common/color_picker.h"
 #include "common/bspline.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/iop_profile.h"
 #include "develop/format.h"

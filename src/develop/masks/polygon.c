@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"

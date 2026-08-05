@@ -38,6 +38,7 @@
 */
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/box_filters.h"
 #include "common/guided_filter.h"
 #include "common/math.h"

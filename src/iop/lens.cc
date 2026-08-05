@@ -66,6 +66,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "glib.h"
 
 #ifdef HAVE_CONFIG_H

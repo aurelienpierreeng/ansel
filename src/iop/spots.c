@@ -43,6 +43,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
 #include "control/conf.h"

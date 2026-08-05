@@ -37,6 +37,7 @@
 #pragma once
 
 #include <math.h>
+#include "develop/pixelpipe_cache_alloc.h"
 #include <stdlib.h>
 
 // Gaussian elimination with partial vivoting

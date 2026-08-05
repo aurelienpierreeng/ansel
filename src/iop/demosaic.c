@@ -59,6 +59,7 @@
 #endif
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "common/image_cache.h"
 #include "common/interpolation.h"

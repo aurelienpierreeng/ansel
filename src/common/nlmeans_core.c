@@ -24,6 +24,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #endif
 #include "common/math.h"
 #include "common/opencl.h"

@@ -62,6 +62,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "gui/gdkkeys.h"
 #include "config.h"
 #endif

@@ -1,0 +1,88 @@
+/*
+    This file is part of Ansel,
+    Copyright (C) 2026 Aurélien PIERRE.
+
+    Ansel is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Ansel is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+*/
+#pragma once
+
+/* Debug-channel flags and the dt_print() family. The implementations live in
+ * common/darktable.c (they read the runtime `darktable.unmuted` mask), but the
+ * DECLARATIONS need nothing from the application: low-level compute units include
+ * this instead of common/darktable.h to be able to log. */
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum dt_debug_thread_t
+{
+  DT_DEBUG_ALWAYS        = 0,       // always print regardless of debug flags
+  // powers of two, masking
+  DT_DEBUG_CACHE          = 1 <<  0,
+  DT_DEBUG_CONTROL        = 1 <<  1,
+  DT_DEBUG_DEV            = 1 <<  2,
+  DT_DEBUG_GTK            = 1 <<  3,
+  DT_DEBUG_PERF           = 1 <<  4,
+  DT_DEBUG_PIPECACHE      = 1 <<  5,
+  DT_DEBUG_PWSTORAGE      = 1 <<  6,
+  DT_DEBUG_OPENCL         = 1 <<  7,
+  DT_DEBUG_SQL            = 1 <<  8,
+  DT_DEBUG_MEMORY         = 1 <<  9,
+  DT_DEBUG_LIGHTTABLE     = 1 << 10,
+  DT_DEBUG_NAN            = 1 << 11,
+  DT_DEBUG_MASKS          = 1 << 12,
+  DT_DEBUG_LUA            = 1 << 13,
+  DT_DEBUG_INPUT          = 1 << 14,
+  DT_DEBUG_PRINT          = 1 << 15,
+  DT_DEBUG_CAMERA_SUPPORT = 1 << 16,
+  DT_DEBUG_IOPORDER       = 1 << 17,
+  DT_DEBUG_IMAGEIO        = 1 << 18,
+  DT_DEBUG_UNDO           = 1 << 19,
+  DT_DEBUG_SIGNAL         = 1 << 20,
+  DT_DEBUG_PARAMS         = 1 << 21,
+  DT_DEBUG_DEMOSAIC       = 1 << 22,
+  DT_DEBUG_SHORTCUTS      = 1 << 23,
+  DT_DEBUG_TILING         = 1 << 24,
+  DT_DEBUG_HISTORY        = 1 << 25,
+  DT_DEBUG_PIPE           = 1 << 26,
+  DT_DEBUG_IMPORT         = 1 << 27,
+  DT_DEBUG_VERBOSE        = 1 << 28,
+  DT_DEBUG_COLORPROFILE   = 1 << 29,
+  DT_DEBUG_NOCACHE_REUSE  = 1 << 30,
+} dt_debug_thread_t;
+
+// Uses the top (sign) bit of the int32_t `unmuted` mask. Defined as a macro
+// because 1 << 31 is not representable as an `int` enumerator. Enables the
+// high-level event supervisor (NDJSON tracing of history/pipeline/cache state).
+// See develop/supervisor.h.
+#define DT_DEBUG_SUPERVISOR ((int32_t)(1u << 31))
+
+void dt_print(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
+/* same as above but without time stamp : nts = no time stamp */
+void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
+/* same as above but requires additional DT_DEBUG_VERBOSE flag to be true */
+void dt_vprint(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
+
+#ifdef __cplusplus
+}
+#endif
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on

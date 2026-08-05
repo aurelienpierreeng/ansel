@@ -108,6 +108,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "develop/masks.h"
 #include "common/fast_guided_filter.h"
 #include "common/eigf.h"

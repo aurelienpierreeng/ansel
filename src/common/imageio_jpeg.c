@@ -35,6 +35,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #endif
 #include "common/exif.h"
 #include "common/imageio.h"

@@ -110,6 +110,7 @@ GList darktable.develop->forms
 
 #include "common/atomic.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/opencl.h"
 #include "develop/pixelpipe.h"
 #include "dtgtk/button.h"

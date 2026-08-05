@@ -30,7 +30,8 @@
    Copyright 2004-2008 by Shawn Freeman, Udi Fuchs
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "curve_tools.h"
 
 #include <float.h>

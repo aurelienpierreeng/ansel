@@ -57,6 +57,7 @@
 */
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/eaw.h"

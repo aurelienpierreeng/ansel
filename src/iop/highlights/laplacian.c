@@ -56,6 +56,7 @@
 #include "common/box_filters.h"
 #include "common/bspline.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/dwt.h"
 #include "common/fast_guided_filter.h"
 #include "common/opencl.h"

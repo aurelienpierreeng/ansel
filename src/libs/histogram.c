@@ -58,6 +58,7 @@
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "common/histogram.h"
 #include "common/image.h"

@@ -20,6 +20,7 @@
 // API.)
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/solvers/sparse_cholesky_cl.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

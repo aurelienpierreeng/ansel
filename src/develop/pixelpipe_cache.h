@@ -86,6 +86,11 @@ typedef enum dt_dev_pixelpipe_cache_writable_status_t
   \param[out] returns 0 if fail to allocate mem cache.
 */
 dt_dev_pixelpipe_cache_t *dt_dev_pixelpipe_cache_init(size_t max_memory);
+
+/** The application-wide pixelpipe cache singleton. DECLARED here because it is this
+ * module's object; BOUND by the orchestrator (common/darktable.c), so this header
+ * never needs to see the application struct. */
+dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void);
 void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);
 
 // One pipeline-cache entry, for the GUI memory view.
@@ -582,6 +587,8 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
  * @param mem Pointer to the buffer pointer. Set to NULL on successful free.
  */
 void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void **mem, const char *message);
+
+
 
 /**
  * @brief Non-owning lookup of an existing cache line.

@@ -37,6 +37,7 @@
 #endif
 
 #include "common/darktable.h"    // for darktable, darktable_t, dt_alloc_a...
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/image.h"        // for dt_image_t, ::DT_IMAGE_4BAYER
 #include "common/imagebuf.h"     // for dt_iop_image_copy_by_size
 #include "common/mipmap_cache.h" // for dt_mipmap_buffer_t, dt_mipmap_cach...

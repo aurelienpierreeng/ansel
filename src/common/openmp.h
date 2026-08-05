@@ -1,0 +1,96 @@
+/*
+    This file is part of Ansel,
+    Copyright (C) 2026 Aurélien PIERRE.
+
+    Ansel is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Ansel is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+*/
+#pragma once
+
+/* OpenMP wrappers: the pragma shorthands used across the pixel code, with
+ * single-threaded fallbacks when OpenMP is disabled. Self-contained on purpose:
+ * low-level compute units include this instead of common/darktable.h. */
+
+#ifdef _OPENMP
+# include <omp.h>
+
+#ifndef dt_omp_nontemporal
+// Clang 10+ supports the nontemporal() OpenMP directive
+// GCC 9 recognizes it as valid, but does not do anything with it
+// GCC 10+ ???
+#if (__clang__+0 >= 10 || __GNUC__ >= 9)
+#  define dt_omp_nontemporal(...) nontemporal(__VA_ARGS__)
+#else
+// GCC7/8 only support OpenMP 4.5, which does not have the nontemporal() directive.
+#  define dt_omp_nontemporal(var, ...)
+#endif
+#endif /* dt_omp_nontemporal */
+
+#define OMP_PRAGMA(x) _Pragma(#x)
+#define __OMP_PARALLEL__(...) OMP_PRAGMA(omp parallel default(firstprivate) __VA_ARGS__)
+#define __OMP_PARALLEL_FOR__(...) OMP_PRAGMA(omp parallel for default(firstprivate) schedule(static) __VA_ARGS__)
+#define __OMP_PARALLEL_FOR_SIMD__(...) OMP_PRAGMA(omp parallel for simd default(firstprivate) schedule(simd:static) __VA_ARGS__)
+#define __OMP_FOR_SIMD__(...) OMP_PRAGMA(omp for simd schedule(simd:static) __VA_ARGS__)
+#define __OMP_FOR__(...) OMP_PRAGMA(omp for schedule(static) __VA_ARGS__)
+#define __OMP_SIMD__(...) OMP_PRAGMA(omp simd __VA_ARGS__)
+#define __OMP_DECLARE_SIMD__(...) OMP_PRAGMA(omp declare simd __VA_ARGS__)
+
+// CLang 20 supports OpenMP 5.1 default(firstprivate) but only for C files.
+// C++ files still need to use default(none) until further notice.
+// Change that when baseline CLang is upgraded.
+#define __OMP_PARALLEL_FOR_CPP__(...) OMP_PRAGMA(omp parallel for default(none) schedule(static) __VA_ARGS__)
+
+#else /* _OPENMP */
+
+# define omp_get_max_threads() 1
+# define omp_get_thread_num() 0
+
+#define __OMP_PARALLEL__(...)
+#define __OMP_PARALLEL_FOR__(...)
+#define __OMP_PARALLEL_FOR_SIMD__(...)
+#define __OMP_FOR_SIMD__(...)
+#define __OMP_FOR__(...)
+#define __OMP_SIMD__(...)
+#define __OMP_DECLARE_SIMD__(...)
+
+#define __OMP_PARALLEL_FOR_CPP__(...)
+
+#endif /* _OPENMP */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** Number of OpenMP threads the application decided to use. DECLARED here so
+ * low-level compute code can size per-thread buffers without importing
+ * common/darktable.h; BOUND by the orchestrator (common/darktable.c). */
+int dt_get_num_openmp_threads(void);
+
+static inline int dt_get_thread_num()
+{
+#ifdef _OPENMP
+  return omp_get_thread_num();
+#else
+  return 0;
+#endif
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on

@@ -20,6 +20,7 @@
 // coefficient_field.h for the public API.)
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/blur.h"

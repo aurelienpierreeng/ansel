@@ -30,6 +30,7 @@
 
 #include "common/colorspaces_inline_conversions.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "develop/imageop.h"
 

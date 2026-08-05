@@ -28,6 +28,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"
 #include "imageio/format/imageio_format_api.h"

@@ -31,6 +31,7 @@
 #pragma once
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 
 #include "common/darktable.h"
 #include "common/opencl.h"

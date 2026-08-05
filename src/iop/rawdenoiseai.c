@@ -57,6 +57,7 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/nn_model.h"

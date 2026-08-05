@@ -51,6 +51,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "common/chromatic_adaptation.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/bspline.h"
 #include "common/dwt.h"
 #include "common/image.h"

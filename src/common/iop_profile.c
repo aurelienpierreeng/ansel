@@ -42,6 +42,7 @@
 
 #include "common/colorspaces.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/iop_profile.h"
 #include "common/debug.h"
 #include "common/matrices.h"

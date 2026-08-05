@@ -23,6 +23,7 @@
 #pragma once
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #endif
 
 #include "develop/imageop.h" // for dt_iop_roi_t

@@ -24,6 +24,7 @@
 #pragma once
 
 #include "develop/imageop.h"
+#include "develop/pixelpipe_cache_alloc.h"
 
 // struct bundling all the auxiliary buffers
 // required to fill the boundary of a full res pipeline

@@ -3,6 +3,7 @@
 */
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/iop_order.h"
 #include "common/opencl.h"
 #include "develop/blend.h"

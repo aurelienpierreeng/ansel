@@ -35,6 +35,7 @@
 
 #include "common/colorspaces.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "imageio_png.h"
 #include "common/exif.h"
 #include "control/conf.h"

@@ -37,6 +37,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/bspline.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/dwt.h"
 #include "common/gaussian.h"
 #include "common/image.h"

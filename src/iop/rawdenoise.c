@@ -49,6 +49,7 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "common/dwt.h"
 #include "control/control.h"

@@ -48,6 +48,7 @@
 
 #include "common/mipmap_cache.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/file_location.h"

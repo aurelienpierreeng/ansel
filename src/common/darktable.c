@@ -479,6 +479,20 @@ void *dt_alloc_align(size_t size)
   return dt_alloc_align_internal(size);
 }
 
+/* Singleton accessors: the orchestrator BINDS the application-wide instances to the
+ * lower-level libs that declare these symbols (develop/pixelpipe_cache.h and
+ * common/openmp.h). This keeps those libs free of common/darktable.h — they link
+ * against two functions instead of importing the whole application struct. */
+struct dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void)
+{
+  return darktable.pixelpipe_cache;
+}
+
+int dt_get_num_openmp_threads(void)
+{
+  return darktable.num_openmp_threads;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

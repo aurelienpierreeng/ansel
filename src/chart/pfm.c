@@ -24,6 +24,7 @@
  */
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include <glib.h>
 #include <inttypes.h>
 #include <stdio.h>

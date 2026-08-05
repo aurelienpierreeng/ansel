@@ -23,6 +23,7 @@
 */
 
 #include "common/colorspaces_inline_conversions.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"

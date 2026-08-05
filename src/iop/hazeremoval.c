@@ -55,6 +55,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/box_filters.h"
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "common/guided_filter.h"
 #include "control/control.h"
 #include "control/signal.h"

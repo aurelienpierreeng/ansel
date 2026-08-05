@@ -31,6 +31,8 @@
 
 #pragma once
 
+#include "develop/pixelpipe_cache_alloc.h"
+
 #ifndef __SSE2__
 
 #if !defined _XOPEN_SOURCE && !defined(__DragonFly__) && !defined(__FreeBSD__) && !defined(__NetBSD__)       \

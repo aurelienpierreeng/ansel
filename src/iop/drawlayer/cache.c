@@ -17,6 +17,7 @@
 */
 
 #include "common/darktable.h"
+#include "develop/pixelpipe_cache_alloc.h"
 #include "iop/drawlayer/cache.h"
 
 #include "develop/imageop_math.h"
