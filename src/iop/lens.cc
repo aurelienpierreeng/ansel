@@ -1183,6 +1183,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   const float *src_pixels = static_cast<const float *>(ivoid);
   float *work_buf = nullptr;
+  gboolean tca_applied = FALSE;
 
   if(any_emb)
   {
@@ -1221,6 +1222,51 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         float *bufptr = work_buf + (size_t)y * roi_in->width * ch;
         modifier->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
                                          pixelformat, ch * roi_in->width);
+      }
+    }
+
+    if(emb_dist && lf_tca && !lf_dist)
+    {
+      int tca_modflags = 0;
+      lfModifier *tca_modifier = NULL;
+      dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+      tca_modifier = get_modifier(&tca_modflags,
+                                  roi_in->scale * piece->buf_in.width,
+                                  roi_in->scale * piece->buf_in.height,
+                                  d, LF_MODIFY_TCA);
+      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      if(tca_modifier)
+      {
+        const size_t tca_buf2size = (size_t)roi_in->width * 2 * 3;
+        size_t tca_padded;
+        float *const tca_buf2 = dt_pixelpipe_cache_alloc_perthread_float(tca_buf2size, &tca_padded);
+        float *const tca_out = (float *)dt_pixelpipe_cache_alloc_align_cache(
+            (size_t)roi_in->width * roi_in->height * ch * sizeof(float), pipe->type);
+        if(!IS_NULL_PTR(tca_buf2) && !IS_NULL_PTR(tca_out))
+        {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  firstprivate(roi_in, ch, tca_modifier, tca_buf2, tca_padded, tca_out, \
+               work_buf, d, raw_monochrome, mask_display, interpolation)
+#endif
+          for(int y = 0; y < roi_in->height; y++)
+          {
+            float *tca_buf2ptr = (float *)dt_get_perthread(tca_buf2, tca_padded);
+            tca_modifier->ApplySubpixelGeometryDistortion(roi_in->x, roi_in->y + y,
+                                                          roi_in->width, 1, tca_buf2ptr);
+            float *dst = tca_out + (size_t)y * roi_in->width * ch;
+            const _remap_ctx_t tca_remap = { ch, ch * roi_in->width, d->lensfun.do_nan_checks,
+                                              raw_monochrome, mask_display };
+            for(int x = 0; x < roi_in->width; x++, tca_buf2ptr += 6)
+              _remap_pixel_inverse_or_not(dst + x * ch, tca_buf2ptr, work_buf, tca_remap,
+                                          roi_in, interpolation);
+          }
+          memcpy(work_buf, tca_out, (size_t)roi_in->width * roi_in->height * ch * sizeof(float));
+          tca_applied = TRUE;
+        }
+        dt_pixelpipe_cache_free_align(tca_out);
+        dt_pixelpipe_cache_free_align(tca_buf2);
+        delete tca_modifier;
       }
     }
 
@@ -1276,7 +1322,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       }
     }
 
-    if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
+    if(!tca_applied && (modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE)))
     {
       const size_t buf2size = (size_t)roi_out->width * 2 * 3;
       size_t padded_buf2size;
@@ -2092,16 +2138,18 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   const gboolean emb_tca = (p->tca_method == dt_iop_lens_tca_source_t::EMBEDDED) && d->embedded.nc > 0
                         && dt_embedded_lens_has_ca(&self->dev->image_storage);
   const gboolean any_emb_geom = emb_dist || emb_tca;
+  const gboolean lf_tca  = (p->tca_method == dt_iop_lens_tca_source_t::LENSFUN_DB)
+                           || (p->tca_method == dt_iop_lens_tca_source_t::MANUAL);
 
   if(any_emb_geom)
   {
     _emb_axes_t axes = { FALSE, emb_dist, emb_tca };
     _modify_roi_in_embedded_metadata_warp(self, pipe, piece, roi_out, roi_in, &axes);
-    return;
   }
 
   // inverse transform with given params
   if(!d->lensfun.lens || !d->lensfun.lens->Maker || d->lensfun.crop <= 0.0f) return;
+  if(!lf_tca) return;
 
   const float orig_w = roi_in->scale * piece->buf_in.width;
   const float orig_h = roi_in->scale * piece->buf_in.height;
@@ -3466,6 +3514,11 @@ void gui_update(struct dt_iop_module_t *self)
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   auto p = (dt_iop_lensfun_params_t *)self->params;
 
+  const dt_image_t *img = &self->dev->image_storage;
+  const gboolean has_vign = dt_embedded_lens_has_vignetting(img);
+  const gboolean has_dist = dt_embedded_lens_has_distortion(img);
+  const gboolean has_ca   = dt_embedded_lens_has_ca(img);
+
   if(p->has_been_set == 1)
   {
     if((int)p->vignetting_method < 0 || (int)p->vignetting_method > 2)
@@ -3474,6 +3527,13 @@ void gui_update(struct dt_iop_module_t *self)
       p->distortion_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
     if((int)p->tca_method < 0 || (int)p->tca_method > 3)
       p->tca_method = dt_iop_lens_tca_source_t::LENSFUN_DB;
+
+    if(p->vignetting_method == dt_iop_lens_correction_source_t::OFF && has_vign)
+      p->vignetting_method = dt_iop_lens_correction_source_t::EMBEDDED;
+    if(p->distortion_method == dt_iop_lens_correction_source_t::OFF && has_dist)
+      p->distortion_method = dt_iop_lens_correction_source_t::EMBEDDED;
+    if(p->tca_method == dt_iop_lens_tca_source_t::OFF && has_ca)
+      p->tca_method = dt_iop_lens_tca_source_t::EMBEDDED;
 
     const dt_iop_lens_correction_source_t saved_vignetting = p->vignetting_method;
     const dt_iop_lens_correction_source_t saved_distortion = p->distortion_method;
@@ -3527,11 +3587,6 @@ void gui_update(struct dt_iop_module_t *self)
     lens_set(self, NULL);
     dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
   }
-
-  const dt_image_t *img = &self->dev->image_storage;
-  const gboolean has_vign = dt_embedded_lens_has_vignetting(img);
-  const gboolean has_dist = dt_embedded_lens_has_distortion(img);
-  const gboolean has_ca   = dt_embedded_lens_has_ca(img);
 
   if(p->vignetting_method == dt_iop_lens_correction_source_t::EMBEDDED && !has_vign)
     p->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
