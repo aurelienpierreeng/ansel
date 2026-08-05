@@ -26,6 +26,7 @@
 #include "common/opencl.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
+#include "common/darktable.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe.h"

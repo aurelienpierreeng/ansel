@@ -109,7 +109,10 @@ GList darktable.develop->forms
 #pragma once
 
 #include "common/atomic.h"
-#include "common/darktable.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "common/simd.h"
+#include "common/times.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/opencl.h"
 #include "develop/pixelpipe.h"
@@ -1390,7 +1393,7 @@ static inline gboolean dt_masks_center_of_gravity_from_points(const float *point
   }
 
   double start = 0.;
-  if(darktable.unmuted & DT_DEBUG_PERF) start = dt_get_wtime();
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) start = dt_get_wtime();
 
   // Points must be ordered sequentially along the polygon boundary.
   // Use the shoelace formula to compute area and centroid.
@@ -1435,7 +1438,7 @@ static inline gboolean dt_masks_center_of_gravity_from_points(const float *point
     sum_y += points[i * 2 + 1] * inv_count;
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] computing centroid took %0.04f sec\n",
              dt_get_wtime() - start);
 

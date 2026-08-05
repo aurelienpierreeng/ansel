@@ -25,6 +25,7 @@
 #include "common/opencl.h"
 #include "common/iop_profile.h"
 #include "common/math.h"
+#include "common/darktable.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/noise_generator.h"

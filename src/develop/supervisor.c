@@ -17,6 +17,7 @@
 */
 
 #include "develop/supervisor.h"
+#include "common/darktable.h"
 #include "common/image.h"            // dt_image_t
 #include "common/introspection.h"    // dt_introspection_field_t
 #include "develop/imageop.h"         // dt_iop_module_t (introspection accessors)

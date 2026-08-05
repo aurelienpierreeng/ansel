@@ -59,6 +59,7 @@
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "common/darktable.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "dtgtk/gradientslider.h"

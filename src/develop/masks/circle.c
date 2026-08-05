@@ -34,6 +34,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "bauhaus/bauhaus.h"
+#include "common/darktable.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "common/undo.h"

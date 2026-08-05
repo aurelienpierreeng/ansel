@@ -47,6 +47,7 @@
 #include "common/iop_profile.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/rgb_norms.h"
+#include "common/darktable.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"

@@ -49,6 +49,7 @@
 #include "common/bilateralcl.h"
 #include "common/locallaplacian.h"
 #include "common/locallaplaciancl.h"
+#include "common/darktable.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
