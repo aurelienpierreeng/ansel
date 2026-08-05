@@ -1337,14 +1337,14 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     cl_mem guide_src = dev_cden;
     const int KU = gd->k_upsample_n;
     const int three = 3;
-    const long dst_off = (long)plane * 5;
+    const cl_long dst_off = (cl_long)plane * 5;
     dt_opencl_set_kernel_arg(devid, KU, 0, sizeof(cl_mem), &guide_src);
     dt_opencl_set_kernel_arg(devid, KU, 1, sizeof(cl_mem), &dev_planes);
     dt_opencl_set_kernel_arg(devid, KU, 2, sizeof(int), &cw);
     dt_opencl_set_kernel_arg(devid, KU, 3, sizeof(int), &chh);
     dt_opencl_set_kernel_arg(devid, KU, 4, sizeof(int), &bin);
     dt_opencl_set_kernel_arg(devid, KU, 5, sizeof(int), &three);
-    dt_opencl_set_kernel_arg(devid, KU, 6, sizeof(long), &dst_off);
+    dt_opencl_set_kernel_arg(devid, KU, 6, sizeof(cl_long), &dst_off);
     size_t sizes_u[3] = { ROUNDUPDWD(pw, devid), ROUNDUPDHT(ph * 3, devid), 1 };
     err = dt_opencl_enqueue_kernel_2d(devid, KU, sizes_u);
     if(err != CL_SUCCESS) goto cleanup;
