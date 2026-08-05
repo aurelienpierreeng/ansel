@@ -396,6 +396,45 @@ static void _thumbnail_release(void *data)
     _thumbnail_free(thumb);
 }
 
+static gboolean _main_context_queue_draw(GtkWidget *widget);
+
+/**
+ * The widget re-requests a render only while thumb->job is NULL, so every way a job can stop
+ * existing without committing its surface must clear thumb->job, or the widget stays on the
+ * "Working..." overlay forever with an idle CPU (issue #972). The render thread handles the
+ * nominal paths, but the job system can also kill a job behind the widget's back:
+ * dt_control_add_job() silently disposes a job it deems a duplicate (equality is the
+ * description string, i.e. the image id, so two widgets or a refresh-orphaned job collide),
+ * the DT_JOB_QUEUE_SYSTEM_FG stack drops its oldest entries past DT_CONTROL_MAX_JOBS, and
+ * queue flushes cancel jobs that then get disposed without ever running. This state hook fires
+ * on every terminal transition (params are still valid on DISPOSED: dt_control_job_dispose()
+ * sets the state before destroying params), re-arms the widget when the dying job is still the
+ * gating one, and queues a redraw so the next expose re-requests.
+ */
+static void _thumb_job_state_changed(dt_job_t *job, dt_job_state_t state)
+{
+  if(state != DT_JOB_STATE_CANCELLED && state != DT_JOB_STATE_DISCARDED && state != DT_JOB_STATE_DISPOSED)
+    return;
+
+  dt_thumbnail_t *thumb = dt_control_job_get_params(job);
+  if(IS_NULL_PTR(thumb)) return;
+
+  dt_pthread_mutex_lock(&thumb->lock);
+  const gboolean was_gating = (thumb->job == job);
+  if(was_gating) thumb->job = NULL;
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  if(was_gating && !dt_atomic_get_int(&thumb->destroying) && thumb->w_image)
+  {
+    GMainContext *context = g_main_context_default();
+    g_main_context_invoke_full(context, G_PRIORITY_DEFAULT,
+                               (GSourceFunc)_main_context_queue_draw,
+                               g_object_ref(thumb->w_image),
+                               (GDestroyNotify)g_object_unref);
+    g_main_context_wakeup(context);
+  }
+}
+
 static gboolean _main_context_queue_draw(GtkWidget *widget)
 {
   if(GTK_IS_WIDGET(widget))
@@ -406,14 +445,22 @@ static gboolean _main_context_queue_draw(GtkWidget *widget)
   return G_SOURCE_REMOVE;
 }
 
-static int _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
+static int _finish_buffer_thread(dt_thumbnail_t *thumb, dt_job_t *job, gboolean success)
 {
   thumb_return_if_fails(thumb, 1);
 
+  // Only the job currently gating the widget may re-arm it: a stale job finishing after a
+  // refresh already published a newer thumb->job must not clear that newer job nor touch
+  // image_inited, or the newer render gets orphaned/duplicated.
   dt_pthread_mutex_lock(&thumb->lock);
-  thumb->image_inited = success;
-  thumb->job = NULL;
+  const gboolean was_gating = IS_NULL_PTR(job) || thumb->job == job;
+  if(was_gating)
+  {
+    thumb->image_inited = success;
+    thumb->job = NULL;
+  }
   dt_pthread_mutex_unlock(&thumb->lock);
+  if(!was_gating) return 0;
 
   // Redraw events need to be sent from the main GUI thread
   // though we may not have a target widget anymore...
@@ -485,7 +532,8 @@ int32_t _get_image_buffer(dt_job_t *job)
   }
   else
   {
-    _finish_buffer_thread(thumb, FALSE);
+    if(surface) cairo_surface_destroy(surface);
+    _finish_buffer_thread(thumb, job, FALSE);
     return 0;
   }
 
@@ -501,6 +549,8 @@ int32_t _get_image_buffer(dt_job_t *job)
       if(dt_focuspeaking(cri, rgbbuf, img_width, img_height, show_focus_peaking, &x_center, &y_center) != 0)
       {
         cairo_destroy(cri);
+        cairo_surface_destroy(surface);
+        _finish_buffer_thread(thumb, job, FALSE);
         return 1;
       }
     }
@@ -564,11 +614,15 @@ int32_t _get_image_buffer(dt_job_t *job)
 
   if(surface)
   {
+    // The commit was refused (widget destroyed/refreshed mid-render). Still run the gated
+    // cleanup: if this job somehow remains the gating one (e.g. w_image already nulled while
+    // thumb->job was not), the widget must be re-armed rather than left waiting forever.
     cairo_surface_destroy(surface);
+    _finish_buffer_thread(thumb, job, FALSE);
     return 1;
   }
 
-  _finish_buffer_thread(thumb, TRUE);
+  _finish_buffer_thread(thumb, job, TRUE);
   return 0;
 }
 
@@ -614,6 +668,8 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // so the thumbtable stays responsive.
   dt_job_t *job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->info.id);
   if(IS_NULL_PTR(job)) return 1;
+  // Re-arm thumb->job when the job system kills this job without running it (see the hook).
+  dt_control_job_set_state_callback(job, _thumb_job_state_changed);
 
   dt_pthread_mutex_lock(&thumb->lock);
   // Re-check now that we are about to publish the job pointer.
@@ -1664,6 +1720,12 @@ int dt_thumbnail_image_refresh_real(dt_thumbnail_t *thumb)
   // Cancel any in-flight render job. It was started for the old state (stale size or data).
   // The job checks thumb->job == job under the same lock before committing; clearing it here
   // makes that check fail so the old result is discarded and a fresh job can be queued.
+  // NOTE: the orphaned job is deliberately NOT dt_control_job_cancel()ed here: jobs are not
+  // refcounted, so a captured pointer can belong to a job being disposed concurrently (the
+  // state hook clears thumb->job during dispose) and cancelling it would race the free. The
+  // orphan drains on its own: it early-returns on the thumb->job != job gate, and if the
+  // replacement request collides with it in dt_control_add_job()'s duplicate check, the state
+  // hook re-arms the widget so the request is simply retried on the next expose.
   thumb->job = NULL;
   thumb->image_inited = FALSE;
   dt_pthread_mutex_unlock(&thumb->lock);
