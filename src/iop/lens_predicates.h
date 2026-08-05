@@ -33,12 +33,12 @@ static inline int distortion_selector_entries(gboolean has_embedded,
   {
     out_labels[1] = "embedded";
     out_values[1] = (int)dt_iop_lens_correction_source_t::EMBEDDED;
-    out_labels[2] = "lensfun DB";
+    out_labels[2] = "Lensfun";
     out_values[2] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
     return 3;
   }
 
-  out_labels[1] = "lensfun DB";
+  out_labels[1] = "Lensfun";
   out_values[1] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
   return 2;
 }
@@ -56,12 +56,12 @@ static inline int vignetting_selector_entries(gboolean has_embedded,
   {
     out_labels[1] = "embedded";
     out_values[1] = (int)dt_iop_lens_correction_source_t::EMBEDDED;
-    out_labels[2] = "lensfun DB";
+    out_labels[2] = "Lensfun";
     out_values[2] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
     return 3;
   }
 
-  out_labels[1] = "lensfun DB";
+  out_labels[1] = "Lensfun";
   out_values[1] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
   return 2;
 }
@@ -76,7 +76,7 @@ static inline int tca_selector_entries(gboolean has_embedded,
   out_values[0] = (int)dt_iop_lens_tca_source_t::OFF;
   out_labels[1] = "manual";
   out_values[1] = (int)dt_iop_lens_tca_source_t::MANUAL;
-  out_labels[2] = "lensfun DB";
+  out_labels[2] = "Lensfun";
   out_values[2] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
 
   if(has_embedded)
@@ -129,7 +129,7 @@ static inline const char *corrections_status_string(
   {
     case dt_iop_lens_correction_source_t::OFF:        dist_label = "off"; break;
     case dt_iop_lens_correction_source_t::EMBEDDED:   dist_label = "embedded"; break;
-    case dt_iop_lens_correction_source_t::LENSFUN_DB: dist_label = "lensfun DB"; break;
+    case dt_iop_lens_correction_source_t::LENSFUN_DB: dist_label = "Lensfun"; break;
     default:                                           dist_label = "off";
   }
 
@@ -138,7 +138,7 @@ static inline const char *corrections_status_string(
   {
     case dt_iop_lens_correction_source_t::OFF:        vig_label = "off"; break;
     case dt_iop_lens_correction_source_t::EMBEDDED:   vig_label = "embedded"; break;
-    case dt_iop_lens_correction_source_t::LENSFUN_DB: vig_label = "lensfun DB"; break;
+    case dt_iop_lens_correction_source_t::LENSFUN_DB: vig_label = "Lensfun"; break;
     default:                                           vig_label = "off";
   }
 
@@ -151,7 +151,7 @@ static inline const char *corrections_status_string(
   {
     case dt_iop_lens_tca_source_t::OFF:        tca_label = "off"; break;
     case dt_iop_lens_tca_source_t::MANUAL:     tca_label = "manual"; break;
-    case dt_iop_lens_tca_source_t::LENSFUN_DB: tca_label = "lensfun DB"; break;
+    case dt_iop_lens_tca_source_t::LENSFUN_DB: tca_label = "Lensfun"; break;
     case dt_iop_lens_tca_source_t::EMBEDDED:   tca_label = "embedded"; break;
     default:                                    tca_label = "off";
   }
