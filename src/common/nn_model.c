@@ -617,24 +617,6 @@ static void _gelu(float *x, size_t n)
   for(size_t i = 0; i < n; i++) x[i] = 0.5f * x[i] * (1.0f + erff(x[i] * (float)M_SQRT1_2));
 }
 
-__DT_CLONE_TARGETS__
-static void _upsample2x(const float *in, int ch, int w, int h, float *out)
-{
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static)
-#endif
-  for(int c = 0; c < ch; c++)
-  {
-    const float *const ip = in + (size_t)c * w * h;
-    float *const op = out + (size_t)c * 4 * w * h;
-    for(int y = 0; y < 2 * h; y++)
-    {
-      const float *const irow = ip + (size_t)(y >> 1) * w;
-      float *const orow = op + (size_t)y * 2 * w;
-      for(int x = 0; x < 2 * w; x++) orow[x] = irow[x >> 1];
-    }
-  }
-}
 
 /* Peak live scratch of one net's forward, in floats: the ledger of the EXACT
  * allocate/free sequence of the forwards. cl_variant selects which one:
