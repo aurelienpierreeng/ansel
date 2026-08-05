@@ -103,7 +103,8 @@ void _aniso_iterate_obs(float *const restrict field, const float *const restrict
                         const uint8_t *const restrict hole, const float *const restrict tensor_xx,
                         const float *const restrict tensor_xy, const float *const restrict tensor_yy,
                         float *const restrict tmp, const int region_w, const int region_h, const int iters,
-                        const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi)
+                        const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi,
+                        const float react, const float react_target)
 {
   // project the seed once so the first sweep already sees an admissible field
   // (r <- max(r, obstacle), obstacle = c0/L in ratio space -- the saturation floor)
@@ -139,9 +140,14 @@ void _aniso_iterate_obs(float *const restrict field, const float *const restrict
                             * (field[(size_t)y_hi * region_w + x_hi] - field[(size_t)y_hi * region_w + x_lo]
                                - field[(size_t)y_lo * region_w + x_hi] + field[(size_t)y_lo * region_w + x_lo]);
 
-        // r <- max( r + 0.18*(D_xx d_xx r + 2 D_xy d_xy r + D_yy d_yy r), obstacle ): explicit
-        // trace-form step tr(D Hess r) then obstacle projection (article Step 8 update rule)
-        tmp[i] = fmaxf(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy),
+        // r <- max( r + 0.18*(D_xx d_xx r + 2 D_xy d_xy r + D_yy d_yy r) - 0.18*react*(r - target),
+        // obstacle ): explicit trace-form step tr(D Hess r), the screened reaction of the
+        // "inpaint a flat color" user parameter (lambda_solid pulls the core chroma toward the
+        // mean valid colour -- same semantics as the joint core's screened-Poisson solve, applied
+        // here because THIS stage owns the final all-clip chroma), then the obstacle projection
+        // (article Step 8 update rule).
+        tmp[i] = fmaxf(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy)
+                           - 0.18f * react * (center - react_target),
                        obstacle[i]);
       }
 
@@ -154,7 +160,8 @@ void _aniso_iterate_obs(float *const restrict field, const float *const restrict
 
 int _aniso_div_solve(float *const restrict ratios, const float *const restrict valid,
                      const float *const restrict luminance, float *const restrict scratch_planes,
-                     const int region_w, const int region_h, const dt_dev_pixelpipe_t *pipe)
+                     const int region_w, const int region_h, const float react,
+                     const dt_aligned_pixel_t react_target, const dt_dev_pixelpipe_t *pipe)
 {
   const size_t region_pixels = (size_t)region_w * region_h;
   float *const restrict tensor_xx = scratch_planes;
@@ -275,11 +282,18 @@ int _aniso_div_solve(float *const restrict ratios, const float *const restrict v
               right_hand_side[(size_t)c * n_unknowns + perm_index] += (double)weight * ratios[j * 4 + c];
         }
 
-        // diagonal last (any order works: columns need not be sorted)
+        // diagonal last (any order works: columns need not be sorted). The screened reaction of
+        // the "inpaint a flat color" user parameter adds lambda_solid to the diagonal (and
+        // lambda_solid * target to each channel's RHS below): (lambda I + Op) r = lambda target
+        // + boundary terms -- the same semantics as the joint core's screened-Poisson solve,
+        // applied here because THIS stage owns the final all-clip chroma.
         if(pass == 1)
         {
           matrix_row_index[matrix_col_ptr[perm_index] + n_col_entries] = perm_index;
-          matrix_values[matrix_col_ptr[perm_index] + n_col_entries] = diagonal;
+          matrix_values[matrix_col_ptr[perm_index] + n_col_entries] = diagonal + (double)react;
+          if(react > 0.f)
+            for(int c = 0; c < 3; c++)
+              right_hand_side[(size_t)c * n_unknowns + perm_index] += (double)react * react_target[c];
         }
         n_col_entries++;
         if(pass == 0) matrix_col_ptr[perm_index] = n_col_entries;
@@ -413,9 +427,32 @@ void _aniso_chroma(_hl_region_ctx_t *const ctx)
     int aniso_done = 0;
     if(n_aniso == 0) aniso_done = 1; // nothing to diffuse: skip the whole machinery
 
+    // "inpaint a flat color": the screened reaction lambda_solid = solid_color^2 * 4 pulls the
+    // all-clip chroma toward the mean valid chromaticity. It must live in THIS stage's solves:
+    // the joint core applies the same reaction, but this stage re-solves the all-clip interior
+    // afterwards (direct solve or pyramid, both anchor-determined), so a reaction applied only
+    // there never reaches the output -- the user parameter was dead from release until this fix.
+    const float react = ctx->solid_color * ctx->solid_color * 4.f;
+    dt_aligned_pixel_t react_target = { 0.f, 0.f, 0.f, 0.f };
+    if(react > 0.f && !aniso_done)
+    {
+      double target_accum[3] = { 0.0, 0.0, 0.0 };
+      double target_count = 0.0;
+      for(size_t i = 0; i < region_pixels; i++)
+      {
+        if(!(valid[i * 4 + 0] >= 0.5f && valid[i * 4 + 1] >= 0.5f && valid[i * 4 + 2] >= 0.5f)) continue;
+        for(int c = 0; c < 3; c++) target_accum[c] += (double)plane1[i * 4 + c];
+        target_count += 1.0;
+      }
+      if(target_count > 0.0)
+        for(int c = 0; c < 3; c++) react_target[c] = (float)(target_accum[c] / target_count);
+    }
+
     // primary Step-8 estimator: exact div(D grad r)=0 direct solve (returns 0 -> fall back to
     // the coarse-to-fine pyramid below for cores too large for the sparse Cholesky)
-    if(!aniso_done) aniso_done = _aniso_div_solve(plane1, vld_an, lum_accum, blur_in, region_w, region_h, pipe);
+    if(!aniso_done)
+      aniso_done = _aniso_div_solve(plane1, vld_an, lum_accum, blur_in, region_w, region_h, react,
+                                    react_target, pipe);
 
     // pyramid depth: halve until the deepest hole spans ~8 px at the coarsest level
     int nlev = 1;
@@ -523,7 +560,7 @@ void _aniso_chroma(_hl_region_ctx_t *const ctx)
           if(n_channels == 0) continue; // no hole cell at this level for this channel
 
           _aniso_iterate_obs(dome_L, dobc, hplane, tensor_xx, tensor_xy, tensor_yy, tensor_scratch, down_w, down_h,
-                             240, box_x_lo, box_y_lo, box_x_hi, box_y_hi);
+                             240, box_x_lo, box_y_lo, box_x_hi, box_y_hi, 0.f, 0.f);
 
           __OMP_PARALLEL_FOR__()
           for(size_t cell_index = 0; cell_index < down_pixels; cell_index++)
@@ -595,9 +632,12 @@ void _aniso_chroma(_hl_region_ctx_t *const ctx)
         act1 |= (plane1[i * 4 + 1] <= clip0[i * 4 + 1] * invL * 1.001f);
         act2 |= (plane1[i * 4 + 2] <= clip0[i * 4 + 2] * invL * 1.001f);
       }
-      const int active[3] = { act0, act1, act2 };
+      // the reaction changes the fixed point everywhere in the core, not just at the active
+      // set of the obstacle: with lambda_solid > 0 the polish must always run
+      const int react_on = (react > 0.f);
+      const int active[3] = { act0 | react_on, act1 | react_on, act2 | react_on };
 
-      if(act0 | act1 | act2)
+      if(act0 | act1 | act2 | react_on)
       {
         float *const restrict otxx = blur_in + 0 * region_pixels; // `in` (rn*4) is free scratch here
         float *const restrict otxy = blur_in + 1 * region_pixels;
@@ -617,7 +657,7 @@ void _aniso_chroma(_hl_region_ctx_t *const ctx)
           }
 
           _aniso_iterate_obs(solver_field, reaction_weight, hole, otxx, otxy, otyy, flat_target, region_w,
-                             region_h, 60, abx0, aby0, abx1, aby1);
+                             region_h, 60, abx0, aby0, abx1, aby1, react, react_target[c]);
 
           HL_PFOR()
           for(size_t i = 0; i < region_pixels; i++) plane1[i * 4 + c] = solver_field[i];
@@ -630,27 +670,53 @@ void _aniso_chroma(_hl_region_ctx_t *const ctx)
     // coefficient-field stages): the magnitude is the dome luminance L split by the
     // diffused ratios. (A ladder-era magnitude-transfer branch for partially-valid pixels
     // used to live here; the anchor construction made it unreachable and it was removed.)
+    // SOFT saturation floor on the way out (same rounding as the coefficient-field floor): the
+    // hard max() prints an exactly-flat shelf at the clip level plus a gradient kink wherever the
+    // magnitude transfer under-predicts a channel near its own rim inside the core (measured on
+    // DSC00078's sun: ~10 px flat at clip0_B, then a 2x-slope break). JOINT variant blended by the
+    // clip-asymmetry gate ctx->floor_gate (see the cf Step-5 floor for the rationale): one scalar
+    // lift of the clipped subset preserves the diffused chromaticity; per-channel at gate 0.
+    const float floor_gate = ctx->floor_gate;
     __OMP_PARALLEL_FOR__()
     for(size_t i = 0; i < region_pixels; i++)
     {
       const float raccum = fmaxf(plane1[i * 4 + 0] + plane1[i * 4 + 1] + plane1[i * 4 + 2], epsilon); // sum_j r_j
+
+      float lift = 1.f;
+      if(floor_gate > 1e-6f)
+        for(int c = 0; c < 3; c++)
+          if(vld_an[i * 4 + c] < 0.5f)
+          {
+            const float ratio_c = fmaxf(plane1[i * 4 + c], 0.f);
+            const float value = fmaxf(lum_accum[i] * ratio_c / raccum, 1e-6f);
+            const float clip_floor_c = clip0[i * 4 + c];
+            const float delta = value - clip_floor_c;
+            const float weight = 0.02f * fmaxf(clip_floor_c, 1e-6f);
+            const float target = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
+            lift = fmaxf(lift, fminf(target / value, 8.f));
+          }
 
       for(int c = 0; c < 3; c++)
         if(vld_an[i * 4 + c] < 0.5f)
         {
           const float ratio_c = fmaxf(plane1[i * 4 + c], 0.f);
           const float value = lum_accum[i] * ratio_c / raccum; // recombine u_c = L_sum * r_c / sum_j r_j
-          // SOFT saturation floor (same rounding as the coefficient-field floor): the hard
-          // max() prints an exactly-flat shelf at the clip level plus a gradient kink
-          // wherever the magnitude transfer under-predicts a channel near its own rim
-          // inside the core (measured on DSC00078's sun: ~10 px flat at clip0_B, then a
-          // 2x-slope break).
           // soft saturation floor u_c <- c0 + 0.5*((u-c0) + sqrt((u-c0)^2 + w^2)), w = 0.02*c0
           // (article rule 3 / step 5 soft-max): a smooth max(u, c0) with no shelf-and-kink
           const float clip_floor_c = clip0[i * 4 + c];
-          const float delta = value - clip_floor_c;
           const float weight = 0.02f * fmaxf(clip_floor_c, 1e-6f);
-          estimate[i * 4 + c] = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
+          const float delta = value - clip_floor_c;
+          const float per_chan = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
+          if(floor_gate <= 1e-6f)
+          {
+            estimate[i * 4 + c] = per_chan; // bit-exact approved path
+            continue;
+          }
+          const float lifted = fmaxf(value, 1e-6f) * lift;
+          const float delta_joint = lifted - clip_floor_c;
+          const float joint
+              = clip_floor_c + 0.5f * (delta_joint + sqrtf(delta_joint * delta_joint + weight * weight));
+          estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
         }
     }
   }
@@ -679,6 +745,9 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
                                 const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi,
                                 const dt_dev_pixelpipe_t *pipe)
 {
+  // the pyramid levels run reaction-free; the "inpaint a flat color" pull is applied by the
+  // direct solve and the full-resolution polish only, like the CPU twin
+  const float no_react = 0.f;
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   cl_int cl_err = CL_SUCCESS;
 
@@ -842,6 +911,8 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
           dt_opencl_set_kernel_arg(devid, kernel, 12, sizeof(int), &level_x_hi);
           dt_opencl_set_kernel_arg(devid, kernel, 13, sizeof(int), &level_y_hi);
           dt_opencl_set_kernel_arg(devid, kernel, 14, sizeof(int), &iters);
+          dt_opencl_set_kernel_arg(devid, kernel, 15, sizeof(float), &no_react);
+          dt_opencl_set_kernel_arg(devid, kernel, 16, sizeof(float), &no_react);
           cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, size_block, local_block);
         }
         else
@@ -862,6 +933,8 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
             dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(int), &level_y_lo);
             dt_opencl_set_kernel_arg(devid, kernel, 12, sizeof(int), &level_x_hi);
             dt_opencl_set_kernel_arg(devid, kernel, 13, sizeof(int), &level_y_hi);
+            dt_opencl_set_kernel_arg(devid, kernel, 14, sizeof(float), &no_react);
+            dt_opencl_set_kernel_arg(devid, kernel, 15, sizeof(float), &no_react);
             cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size_box);
             cl_mem swap_buf = current_buf;
             current_buf = other_buf;
@@ -911,13 +984,21 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
 }
 
 cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem clip0,
-                       const int region_w, const int region_h, const float radius, const dt_dev_pixelpipe_t *pipe)
+                       const int region_w, const int region_h, const float radius, const float floor_gate, const float solid_color, const dt_dev_pixelpipe_t *pipe)
 {
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const size_t region_pixels = (size_t)region_w * region_h;
   cl_int cl_err = DT_OPENCL_DEFAULT_ERROR;
   size_t size[3] = { ROUNDUPDWD(region_w, devid), ROUNDUPDHT(region_h, devid), 1 };
   const float epsilon = 1e-6f;
+
+  // "inpaint a flat color": lambda_solid = solid_color^2 * 4 pulls the all-clip chroma toward
+  // the mean valid chromaticity; it lives in THIS stage's solves (see the CPU twin -- the joint
+  // core's reaction is re-solved away by this stage, so applying it only there leaves the user
+  // parameter dead). The target is reduced on the device once and reused by the direct RHS and
+  // the full-resolution polish.
+  const float react = solid_color * solid_color * 4.f;
+  float react_target[3] = { 0.f, 0.f, 0.f };
 
   if(global_data->kernel_hl_aniso_rhs < 0 || global_data->kernel_hl_aniso_scatter < 0) return cl_err; // no fp64
 
@@ -979,6 +1060,44 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
         box_y_lo = MIN(box_y_lo, y);
         box_y_hi = MAX(box_y_hi, y);
       }
+
+  if(react > 0.f)
+  {
+    // all-valid mean chromaticity (mirrors the CPU double accumulation over plane1): reuse the
+    // cmean reduction with lum_min = 0 -- estimate/max(luminance, epsilon) IS the ratios plane
+    const int local_size = 64, n_groups = 256;
+    const int n_pixels = (int)region_pixels;
+    const float lum_min = 0.f;
+    cl_mem target_partials = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * n_groups);
+    if(!target_partials)
+    {
+      cl_err = DT_OPENCL_DEFAULT_ERROR;
+      goto out;
+    }
+    const int kernel = global_data->kernel_hl_cmean_reduce;
+    size_t sizes[3] = { (size_t)n_groups * local_size, 1, 1 };
+    size_t local[3] = { local_size, 1, 1 };
+    dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
+    dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
+    dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &luminance);
+    dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &target_partials);
+    dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &n_pixels);
+    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &epsilon);
+    dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(float), &lum_min);
+    dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float) * 4 * local_size, NULL);
+    cl_err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
+    float partial_host[4 * 256];
+    if(cl_err == CL_SUCCESS)
+      cl_err = dt_opencl_read_buffer_from_device(devid, partial_host, target_partials, 0,
+                                                 sizeof(float) * 4 * n_groups, CL_TRUE);
+    dt_opencl_release_mem_object(target_partials);
+    if(cl_err != CL_SUCCESS) goto out;
+    double accum[4] = { 0.0, 0.0, 0.0, 0.0 };
+    for(int group = 0; group < n_groups; group++)
+      for(int k = 0; k < 4; k++) accum[k] += (double)partial_host[group * 4 + k];
+    if(accum[3] > 0.0)
+      for(int c = 0; c < 3; c++) react_target[c] = (float)(accum[c] / accum[3]);
+  }
 
   if(n_unknowns > DT_HL_SPARSE_MAX)
   {
@@ -1165,7 +1284,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
         if(pass == 1)
         {
           matrix_row_index[matrix_col_ptr[perm_index] + n_col_entries] = perm_index;
-          matrix_values[matrix_col_ptr[perm_index] + n_col_entries] = diag;
+          matrix_values[matrix_col_ptr[perm_index] + n_col_entries] = diag + (double)react;
         }
         n_col_entries++;
         if(pass == 0) matrix_col_ptr[perm_index] = n_col_entries;
@@ -1200,6 +1319,8 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
       dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &region_w);
       dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), &region_h);
       dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(int), &c);
+      dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(float), &react);
+      dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(float), &react_target[c]);
       cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size_1d);
       if(cl_err != CL_SUCCESS) goto out;
     }
@@ -1323,6 +1444,8 @@ reassemble:;
       if(cl_err == CL_SUCCESS)
         cl_err = dt_opencl_read_buffer_from_device(devid, active, aflags, 0, sizeof(int) * 3, CL_TRUE);
     }
+    // the reaction must run its sweeps even where the obstacle can never fire (CPU react_on)
+    if(react > 0.f) active[0] = active[1] = active[2] = 1;
 
     size_t size_box[3]
         = { ROUNDUPDWD(box_x_hi - box_x_lo + 1, devid), ROUNDUPDHT(box_y_hi - box_y_lo + 1, devid), 1 };
@@ -1371,6 +1494,8 @@ reassemble:;
         dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(int), &box_y_lo);
         dt_opencl_set_kernel_arg(devid, kernel, 12, sizeof(int), &box_x_hi);
         dt_opencl_set_kernel_arg(devid, kernel, 13, sizeof(int), &box_y_hi);
+        dt_opencl_set_kernel_arg(devid, kernel, 14, sizeof(float), &react);
+        dt_opencl_set_kernel_arg(devid, kernel, 15, sizeof(float), &react_target[c]);
         cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size_box);
         cl_mem swap_buf = current_buf;
         current_buf = other_buf;
@@ -1408,6 +1533,7 @@ reassemble:;
     dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &region_w);
     dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &region_h);
     dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(float), &epsilon);
+    dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(float), &floor_gate);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
   }
 

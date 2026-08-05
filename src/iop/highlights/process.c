@@ -193,7 +193,8 @@ int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pip
   // so this loop is embarrassingly parallel across regions and linear in the total padded area.
   for(int region_index = 0; region_index < nreg; region_index++)
     _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
-                          data->solid_color, data->iterations, data->noise_level);
+                          data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips));
+
 
   free(regions);
   dt_pixelpipe_cache_free_align(maskb);
@@ -327,7 +328,8 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
   // FLOW steps 3-8 (per region): CPU per-region reconstruction, same call as the CPU drivers.
   for(int region_index = 0; region_index < nreg; region_index++)
     _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
-                          data->solid_color, data->iterations, data->noise_level);
+                          data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips));
+
 
   free(regions);
   dt_pixelpipe_cache_free_align(maskb);
@@ -577,12 +579,12 @@ static cl_int _harmonic_reconstruct_cl(struct dt_iop_module_t *self, const dt_de
         // small region: cross the bus once and reconstruct on the CPU (bit-identical to the CPU driver)
         cl_err = _region_cpu_offload_cl(devid, global_data, interp_buf, mask_buf, depth_dev, width,
                                         &regions[region_index], pipe, data->solid_color, data->iterations,
-                                        data->noise_level);
+                                        data->noise_level, _hl_floor_gate(clips));
       }
       else
         // big region: stay device-resident for the whole rebuild
         cl_err = _region_guided_filter_cl(devid, global_data, interp_buf, mask_buf, depth_dev, width,
-                                          &regions[region_index], pipe, data->solid_color);
+                                          &regions[region_index], pipe, data->solid_color, _hl_floor_gate(clips));
     }
   }
 
@@ -622,6 +624,7 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   _joint_core_stage_cl_selftest(pipe->devid, self->global_data, pipe);
   _knee_cl_selftest(pipe->devid, self->global_data, pipe);
   _aniso_stage_cl_selftest(pipe->devid, self->global_data, pipe);
+  _chromaticity_gradient_stage_cl_selftest(pipe->devid, self->global_data, pipe);
   _region_guided_filter_cl_selftest(pipe->devid, self->global_data, pipe);
 
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)self->global_data;

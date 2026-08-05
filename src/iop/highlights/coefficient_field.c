@@ -1348,17 +1348,52 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
   // floor-binding contour as an edge wherever a weak prediction oscillates around saturation;
   // round the transition over ~2% of c0 instead. out = 1/2 (e + c0 + sqrt((e-c0)^2 + (0.02 c0)^2)),
   // a smooth max: -> e for e >> c0, -> c0 for e << c0, softened over a width 0.02*c0.
+  //
+  // JOINT (chromaticity-preserving) variant, blended by the clip-asymmetry gate ctx->floor_gate
+  // (see _hl_floor_gate in common.h): the independent per-channel floor imprints the CLIP LEVELS'
+  // chromaticity on multi-clip pixels wherever the fit under-predicts -- with real-camera WB'd
+  // clips that imprint is the inverse-WB magenta (measured on MAC25640's clipped neons: R snapped
+  // to its floor, G left low -> G the lowest channel). The joint form lifts the whole clipped
+  // subset by ONE scalar s = max_k(t_k/e_k) so the most-demanding floor is met with the fit's
+  // chromaticity preserved; identical to per-channel for 1-clip pixels; lift capped at 8x with the
+  // per-channel soft floor kept after as the degenerate-estimate safety net. At gate 0 (equal
+  // clips, the approved unit-WB behavior) the per-channel path runs verbatim.
+  const float floor_gate = ctx->floor_gate;
   HL_PFOR()
   for(size_t i = 0; i < region_pixels; i++)
+  {
+    float lift = 1.f;
+    if(floor_gate > 1e-6f)
+      for(int c = 0; c < 3; c++)
+        if(valid[i * 4 + c] < 0.5f)
+        {
+          const float e = fmaxf(estimate[i * 4 + c], 1e-6f);
+          const float clip_floor_c = clip0[i * 4 + c];
+          const float delta = e - clip_floor_c;
+          const float weight = 0.02f * fmaxf(clip_floor_c, 1e-6f);
+          const float target = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
+          lift = fmaxf(lift, fminf(target / e, 8.f));
+        }
     for(int c = 0; c < 3; c++)
       if(valid[i * 4 + c] < 0.5f)
       {
         const float clip_floor_c = clip0[i * 4 + c];             // c0, the saturated reading
-        const float delta = estimate[i * 4 + c] - clip_floor_c;  // e - c0
         const float weight = 0.02f * fmaxf(clip_floor_c, 1e-6f); // transition width = 2% of c0
+        const float delta = estimate[i * 4 + c] - clip_floor_c;  // e - c0
         // c0 + 1/2 ( (e-c0) + sqrt((e-c0)^2 + width^2) ): the rounded lower bound at c0
-        estimate[i * 4 + c] = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
+        const float per_chan = clip_floor_c + 0.5f * (delta + sqrtf(delta * delta + weight * weight));
+        if(floor_gate <= 1e-6f)
+        {
+          estimate[i * 4 + c] = per_chan; // bit-exact approved path
+          continue;
+        }
+        const float lifted = fmaxf(estimate[i * 4 + c], 1e-6f) * lift;
+        const float delta_joint = lifted - clip_floor_c;
+        const float joint
+            = clip_floor_c + 0.5f * (delta_joint + sqrtf(delta_joint * delta_joint + weight * weight));
+        estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
       }
+  }
 
   // Step 6 dome gate (article §"The algorithm" step 6): hand the dome-blend weight to the
   // self-dome block (it reads varc as Wc, uses We = Wc^2 as the keep weight). The two factors

@@ -75,6 +75,78 @@
 
 #define HL_PFOR(...) __OMP_PARALLEL_FOR__(__VA_ARGS__)
 
+// Clip-asymmetry gate for the chromaticity-preserving floor family. The per-channel saturation
+// floors imprint the CLIP LEVELS' chromaticity on multi-clip pixels wherever the solver
+// under-predicts; whether that imprint is plausible scene content depends only on the clip levels
+// themselves: with NEAR-EQUAL per-channel clips (unit WB -- every synthetic bench case) the imprint
+// is neutral and usually near the truth of a bright core, with strongly UNEQUAL clips (real cameras:
+// clips = WB coefficients) the imprint is the inverse-WB magenta, never a plausible emitter. Gate
+// the joint (hue-preserving) floor family by the clip asymmetry A = max_c/min_c.
+// The ramp starts at 1.25, NOT 1.0: clips inherit processed_maximum, which carries a ~10% non-WB
+// wiggle from the input profile handling even at unit white balance (measured A = 1.145 on the
+// unit-WB article-bench DNGs, AsShotNeutral = (1,1,1)) -- that regime must keep the approved
+// per-channel behavior exactly (g = 0). Real-camera white balance sits at A ~ 2..2.6 (the Bayer
+// green photosite is ~2x more sensitive than red/blue), so g = 1 from A >= 2 covers every real
+// raw while the dead zone below 1.25 absorbs profile wiggle.
+static inline float _hl_floor_gate(const float clips[4])
+{
+  const float mn = fminf(clips[0], fminf(clips[1], clips[2]));
+  const float mx = fmaxf(clips[0], fmaxf(clips[1], clips[2]));
+  const float asym = (mn > 1e-9f) ? mx / mn : 1.f;
+  const float t = CLAMP((asym - 1.25f) / 0.75f, 0.f, 1.f);
+  return t * t * (3.f - 2.f * t);
+}
+
+// Trusted-ring validation of the flat-mean colour prior -- the surround-importing refinements'
+// own scene assumption ("blown-core colour ~ bright-surround mean colour"). At 1-clip pixels
+// (exactly one clipped channel: reconstructed from TWO measured guides, measured
+// chromaticity-correct), compare the RING MEAN chromaticity shares to cmean's shares, normalized
+// by the ring's own dispersion: t = |ring_mean - cmean|_L1 / max(ring_std_sum, 0.02),
+// vote = exp(-(t/5)^2). A self-coloured emitter shifts the whole ring COHERENTLY (measured
+// magentasun: bias 0.21 over dispersion 0.007 -> t ~ 10 floored, vote ~ 0), while real scenes
+// scatter the ring by noise/texture AROUND the mean (measured MAC/sunrise: t = 0.3..1.5,
+// vote ~ 1). A per-pixel agreement average fails here: real-ring spread caps it at ~0.3
+// regardless of tolerance, and any tolerance wide enough for real content re-opens the emitter.
+// Mirrors py_flat_mean_vote (validate.py); the cgrad ring gate answers a DIFFERENT question
+// (continuation of the extended gradient field) and may disagree (MAC: cgrad closes, this opens).
+// Serial double accumulation on purpose: deterministic run-to-run; the ring is a small subset.
+static inline float _hl_ring_flat_mean_vote(const float *const restrict estimate,
+                                            const float *const restrict valid,
+                                            const dt_aligned_pixel_t cmean, const size_t region_pixels)
+{
+  const float cmean_sum = fmaxf(cmean[0] + cmean[1] + cmean[2], 1e-9f);
+  const float cmean_share[3]
+      = { cmean[0] / cmean_sum, cmean[1] / cmean_sum, cmean[2] / cmean_sum };
+  double share_sum[3] = { 0.0, 0.0, 0.0 };
+  double share_sq[3] = { 0.0, 0.0, 0.0 };
+  double ring_count = 0.0;
+  for(size_t i = 0; i < region_pixels; i++)
+  {
+    const int n_clipped = (valid[i * 4 + 0] < 0.5f) + (valid[i * 4 + 1] < 0.5f) + (valid[i * 4 + 2] < 0.5f);
+    if(n_clipped != 1) continue;
+    const float sum = fmaxf(estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2], 1e-9f);
+    for(int c = 0; c < 3; c++)
+    {
+      const double share = (double)(estimate[i * 4 + c] / sum);
+      share_sum[c] += share;
+      share_sq[c] += share * share;
+    }
+    ring_count += 1.0;
+  }
+  if(ring_count <= 0.0) return 0.f; // no trusted ring: the prior stays unproven
+  float bias = 0.f;
+  float dispersion = 0.f;
+  for(int c = 0; c < 3; c++)
+  {
+    const double mean = share_sum[c] / ring_count;
+    bias += fabsf((float)mean - cmean_share[c]);
+    dispersion += sqrtf(fmaxf((float)(share_sq[c] / ring_count - mean * mean), 0.f));
+  }
+  const float t = bias / fmaxf(dispersion, 0.02f);
+  const float arg = t / 5.f;
+  return expf(-arg * arg);
+}
+
 // Per-thread cache of dt_gaussian handles keyed on (width, height, channels, sigma).
 // dt_gaussian_init allocates its recursion temporaries on every call, and the region stages
 // fire dozens of same-shaped blurs per region (the knee, over a hundred per image): reusing
@@ -306,6 +378,9 @@ typedef struct _hl_region_ctx_t
   int max_cg_iter;
   float solid_color;
   float noise_level;
+  float floor_gate; // clip-asymmetry gate g in [0,1]: 0 = per-channel floors (unit-WB clips, the
+                    // approved behavior, bit-exact), 1 = joint chromaticity-preserving floors +
+                    // surround-chroma refinements (real-camera WB'd clips). See _hl_floor_gate().
   // group-A padded-window buffers (live for the whole region)
   float *estimate, *prev_scale, *valid, *blur_in;
   float *plane1, *plane2, *plane3;
@@ -429,6 +504,18 @@ typedef struct dt_iop_highlights_global_data_t
   int kernel_hl_dome_blend;
   int kernel_hl_core_floor;
   int kernel_hl_cmean_reduce;
+  int kernel_hl_ratio_cmean_blend;
+  int kernel_hl_clip0_rehue;
+  int kernel_hl_ring_vote;
+  int kernel_hl_cgrad_plateau;
+  int kernel_hl_cgrad_guard;
+  int kernel_hl_cgrad_anchor;
+  int kernel_hl_cgrad_share;
+  int kernel_hl_cgrad_store;
+  int kernel_hl_cgrad_gate;
+  int kernel_hl_cgrad_reproject;
+  int kernel_hl_cgrad_hole1c;
+  int kernel_hl_cgrad_write1c;
   int kernel_hl_pde_init;
   int kernel_hl_mask_to_img1;
   int kernel_hl_core_blend;

@@ -1357,7 +1357,7 @@ void _selfdome_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pi
        && dt_opencl_write_buffer_to_device(devid, depth, ddep, 0, sizeof(float) * region_pixels, CL_TRUE)
               == CL_SUCCESS
        && _selfdome_stage_cl(devid, gd_void, dest, dvld, dbsc, dclip, ddep, region_w, region_h, cf_sigma,
-                             reg_radius, downsample_shared, pipe)
+                             reg_radius, downsample_shared, 0.f /* gate 0: replicas are ungated */, pipe)
               == CL_SUCCESS
        && dt_opencl_read_buffer_from_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4,
                                             CL_TRUE)
@@ -1552,7 +1552,7 @@ void _joint_core_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_
               == CL_SUCCESS
        && dt_opencl_write_buffer_to_device(devid, clip0, dclip, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
               == CL_SUCCESS
-       && _joint_core_stage_cl(devid, gd_void, dest, dvld, dclip, region_w, region_h, solid_color, reg_radius, 150,
+       && _joint_core_stage_cl(devid, gd_void, dest, dvld, dclip, region_w, region_h, solid_color, reg_radius, 150, 0.f,
                                pipe)
               == CL_SUCCESS
        && dt_opencl_read_buffer_from_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4,
@@ -1650,7 +1650,8 @@ void _aniso_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pixel
       luminance[i] = pixel_lum;
       for(int c = 0; c < 3; c++) chroma[i * 4 + c] = estimate[i * 4 + c] / pixel_lum;
     }
-    if(!_aniso_div_solve(chroma, prev, luminance, planes, region_w, region_h, pipe))
+    static const dt_aligned_pixel_t no_react_target = { 0.f, 0.f, 0.f, 0.f };
+    if(!_aniso_div_solve(chroma, prev, luminance, planes, region_w, region_h, 0.f, no_react_target, pipe))
     {
       fprintf(stderr, "[hl aniso-cl selftest] CPU div solve failed, aborting\n");
       goto done_;
@@ -1708,7 +1709,7 @@ void _aniso_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pixel
               obstacle[i] = clip0[i * 4 + c] / fmaxf(luminance[i], epsilon);
             }
             _aniso_iterate_obs(solve_u, obstacle, hole_flag, tensor_xx, tensor_xy, tensor_yy, scratch, region_w,
-                               region_h, 60, box_x0, box_y0, box_x1, box_y1);
+                               region_h, 60, box_x0, box_y0, box_x1, box_y1, 0.f, 0.f);
             for(size_t i = 0; i < region_pixels; i++) chroma[i * 4 + c] = solve_u[i];
           }
       }
@@ -1748,7 +1749,7 @@ void _aniso_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pixel
               == CL_SUCCESS
        && dt_opencl_write_buffer_to_device(devid, clip0, dclip, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
               == CL_SUCCESS
-       && _aniso_stage_cl(devid, gd_void, dest, dvld, dclip, region_w, region_h, 55.f, pipe) == CL_SUCCESS
+       && _aniso_stage_cl(devid, gd_void, dest, dvld, dclip, region_w, region_h, 55.f, 0.f, 0.f, pipe) == CL_SUCCESS
        && dt_opencl_read_buffer_from_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4,
                                             CL_TRUE)
               == CL_SUCCESS)
@@ -1774,6 +1775,128 @@ done_:
   dt_pixelpipe_cache_free_align(luminance);
   dt_pixelpipe_cache_free_align(chroma);
   dt_pixelpipe_cache_free_align(planes);
+}
+
+void _chromaticity_gradient_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe_t *pipe)
+{
+  static int done = 0;
+  if(done || !getenv("HL_CGRADCL_TEST") || devid < 0) return;
+  done = 1;
+
+  const int region_w = 509;
+  const int region_h = 371;
+  const size_t region_pixels = (size_t)region_w * region_h;
+
+  float *estimate = dt_pixelpipe_cache_alloc_align_float(region_pixels * 4, pipe);
+  float *valid = dt_pixelpipe_cache_alloc_align_float(region_pixels * 4, pipe);
+  float *clip0 = dt_pixelpipe_cache_alloc_align_float(region_pixels * 4, pipe);
+  float *estimate_gpu = dt_pixelpipe_cache_alloc_align_float(region_pixels * 4, pipe);
+  float *plane2 = dt_pixelpipe_cache_alloc_align_float(region_pixels * 4, pipe);
+  float *solver_field = dt_pixelpipe_cache_alloc_align_float(region_pixels, pipe);
+  float *flat_target = dt_pixelpipe_cache_alloc_align_float(region_pixels, pipe);
+  float *reaction_weight = dt_pixelpipe_cache_alloc_align_float(region_pixels, pipe);
+  float *gate_tmp1 = dt_pixelpipe_cache_alloc_align_float(region_pixels, pipe);
+  float *gate_tmp2 = dt_pixelpipe_cache_alloc_align_float(region_pixels, pipe);
+  float *gate_res = dt_pixelpipe_cache_alloc_align_float(region_pixels, pipe);
+  float *gate_dir = dt_pixelpipe_cache_alloc_align_float(region_pixels, pipe);
+  uint8_t *hole = (uint8_t *)dt_pixelpipe_cache_alloc_align(region_pixels, pipe);
+  if(IS_NULL_PTR(estimate) || IS_NULL_PTR(valid) || IS_NULL_PTR(clip0) || IS_NULL_PTR(estimate_gpu)
+     || IS_NULL_PTR(plane2) || IS_NULL_PTR(solver_field) || IS_NULL_PTR(flat_target)
+     || IS_NULL_PTR(reaction_weight) || IS_NULL_PTR(gate_tmp1) || IS_NULL_PTR(gate_tmp2)
+     || IS_NULL_PTR(gate_res) || IS_NULL_PTR(gate_dir) || IS_NULL_PTR(hole))
+    goto done_;
+
+  // synthetic: a chromaticity-gradient sky (R share rising left->right) with a 2-clip disc and an all-clip core
+  for(int y = 0; y < region_h; y++)
+    for(int x = 0; x < region_w; x++)
+    {
+      const size_t i = (size_t)y * region_w + x;
+      const float t = (float)x / (float)region_w;
+      const float lum = 1.2f + 0.4f * sinf(0.013f * x) * cosf(0.011f * y);
+      estimate[i * 4 + 0] = lum * (0.45f + 0.2f * t);
+      estimate[i * 4 + 1] = lum * 0.33f;
+      estimate[i * 4 + 2] = lum * (0.22f - 0.2f * t + 0.2f);
+      estimate[i * 4 + 3] = 0.f;
+      const int dx = x - region_w / 2, dy = y - region_h / 2;
+      const float dist = sqrtf((float)(dx * dx + dy * dy));
+      const int rclip = dist < 120.f, gclip = dist < 95.f, bclip = dist < 40.f;
+      valid[i * 4 + 0] = rclip ? 0.f : 1.f;
+      valid[i * 4 + 1] = gclip ? 0.f : 1.f;
+      valid[i * 4 + 2] = bclip ? 0.f : 1.f;
+      valid[i * 4 + 3] = rclip ? 0.f : 1.f;
+      for(int k = 0; k < 4; k++) clip0[i * 4 + k] = 0.6f;
+      if(rclip)
+        for(int c = 0; c < 3; c++) estimate[i * 4 + c] = fmaxf(estimate[i * 4 + c], 0.62f);
+    }
+  memcpy(estimate_gpu, estimate, region_pixels * 4 * sizeof(float));
+
+  // ---- CPU: the production stage on a minimal ctx ----
+  {
+    _hl_region_t region = { 0 };
+    region.radius = 120.f; // the content-gate blur is sized from the region radius
+    _hl_region_ctx_t ctx = { 0 };
+    ctx.pipe = pipe;
+    ctx.region = &region;
+    ctx.region_w = region_w;
+    ctx.region_h = region_h;
+    ctx.region_pixels = region_pixels;
+    ctx.epsilon = 1e-6f;
+    ctx.estimate = estimate;
+    ctx.valid = valid;
+    ctx.clip0 = clip0;
+    ctx.plane2 = plane2;
+    ctx.solver_field = solver_field;
+    ctx.flat_target = flat_target;
+    ctx.reaction_weight = reaction_weight;
+    ctx.cg_tmp1 = gate_tmp1;
+    ctx.cg_tmp2 = gate_tmp2;
+    ctx.cg_residual = gate_res;
+    ctx.cg_dir = gate_dir;
+    ctx.hole = hole;
+    _chromaticity_gradient(&ctx);
+  }
+
+  // ---- GPU ----
+  {
+    cl_mem dest = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
+    cl_mem dvld = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
+    cl_mem dclip = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
+    float max_diff = -1.f;
+    if(dest && dvld && dclip
+       && dt_opencl_write_buffer_to_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
+              == CL_SUCCESS
+       && dt_opencl_write_buffer_to_device(devid, valid, dvld, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
+              == CL_SUCCESS
+       && dt_opencl_write_buffer_to_device(devid, clip0, dclip, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
+              == CL_SUCCESS
+       && _chromaticity_gradient_stage_cl(devid, gd_void, dest, dvld, dclip, region_w, region_h, 120.f, 1.f /* exercise the authored-1-clip path */, pipe)
+              == CL_SUCCESS
+       && dt_opencl_read_buffer_from_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4,
+                                            CL_TRUE)
+              == CL_SUCCESS)
+    {
+      max_diff = 0.f;
+      for(size_t i = 0; i < region_pixels; i++)
+        for(int c = 0; c < 3; c++)
+          max_diff = fmaxf(max_diff, fabsf(estimate_gpu[i * 4 + c] - estimate[i * 4 + c]));
+    }
+    fprintf(stderr, "[hl cgrad-cl selftest] %dx%d gradient sky + 3-tier disc max|gpu-cpu|=%.3e\n", region_w,
+            region_h, max_diff);
+    dt_opencl_release_mem_object(dest);
+    dt_opencl_release_mem_object(dvld);
+    dt_opencl_release_mem_object(dclip);
+  }
+
+done_:
+  dt_pixelpipe_cache_free_align(estimate);
+  dt_pixelpipe_cache_free_align(valid);
+  dt_pixelpipe_cache_free_align(clip0);
+  dt_pixelpipe_cache_free_align(estimate_gpu);
+  dt_pixelpipe_cache_free_align(plane2);
+  dt_pixelpipe_cache_free_align(solver_field);
+  dt_pixelpipe_cache_free_align(flat_target);
+  dt_pixelpipe_cache_free_align(reaction_weight);
+  dt_pixelpipe_cache_free_align(hole);
 }
 
 void _region_guided_filter_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe_t *pipe)
@@ -1832,7 +1955,7 @@ void _region_guided_filter_cl_selftest(const int devid, void *gd_void, const dt_
   region.radius = 52.f;
   const float solid_color = 0.3f;
 
-  _region_guided_filter(interp, mask, depth, width, &region, pipe, solid_color, 30, 0.f);
+  _region_guided_filter(interp, mask, depth, width, &region, pipe, solid_color, 30, 0.f, 0.7f);
 
   {
     cl_mem interp_device = dt_opencl_alloc_device_buffer(devid, sizeof(float) * n_pixels * 4);
@@ -1848,7 +1971,7 @@ void _region_guided_filter_cl_selftest(const int devid, void *gd_void, const dt_
        && dt_opencl_write_buffer_to_device(devid, depth, depth_device, 0, sizeof(float) * n_pixels, CL_TRUE)
               == CL_SUCCESS
        && _region_guided_filter_cl(devid, gd_void, interp_device, mask_device, depth_device, width, &region, pipe,
-                                   solid_color)
+                                   solid_color, 0.7f)
               == CL_SUCCESS
        && dt_opencl_read_buffer_from_device(devid, interp_gpu, interp_device, 0, sizeof(float) * n_pixels * 4,
                                             CL_TRUE)

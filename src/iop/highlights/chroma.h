@@ -49,7 +49,8 @@ void _aniso_iterate_obs(float *const restrict field, const float *const restrict
                         const uint8_t *const restrict hole, const float *const restrict tensor_xx,
                         const float *const restrict tensor_xy, const float *const restrict tensor_yy,
                         float *const restrict tmp, const int region_w, const int region_h, const int iters,
-                        const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi);
+                        const int box_x_lo, const int box_y_lo, const int box_x_hi, const int box_y_hi,
+                        const float react, const float react_target);
 
 static inline float _aniso_edge_w(const float *const restrict tensor_xx, const float *const restrict tensor_xy,
                                   const float *const restrict tensor_yy, const size_t i, const size_t j,
@@ -81,7 +82,8 @@ static inline float _aniso_edge_w(const float *const restrict tensor_xx, const f
 // larger cores take _aniso_iterate_obs on the coarse-to-fine pyramid instead.
 int _aniso_div_solve(float *const restrict ratios, const float *const restrict valid,
                      const float *const restrict luminance, float *const restrict scratch_planes,
-                     const int region_w, const int region_h, const dt_dev_pixelpipe_t *pipe);
+                     const int region_w, const int region_h, const float react,
+                     const dt_aligned_pixel_t react_target, const dt_dev_pixelpipe_t *pipe);
 
 void _aniso_chroma(_hl_region_ctx_t *const ctx);
 
@@ -103,5 +105,6 @@ void _aniso_chroma(_hl_region_ctx_t *const ctx);
 // obstacle-projected polish (r >= c0/L) since a direct factorization cannot project mid-solve.
 // Cores above DT_HL_SPARSE_MAX fall to _aniso_pyramid_cl. Reassembly RGB = L_sum * r.
 cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem clip0,
-                       const int region_w, const int region_h, const float radius, const dt_dev_pixelpipe_t *pipe);
+                       const int region_w, const int region_h, const float radius, const float floor_gate,
+                       const float solid_color, const dt_dev_pixelpipe_t *pipe);
 #endif

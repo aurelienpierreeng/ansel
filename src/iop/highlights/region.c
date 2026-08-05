@@ -149,7 +149,7 @@ static void _region_composite(_hl_region_ctx_t *const ctx)
 void _region_guided_filter(float *const restrict interp, const float *const restrict mask,
                            const float *const restrict depth, const int width, const _hl_region_t *const region,
                            const dt_dev_pixelpipe_t *pipe, const float solid_color, const int max_iter,
-                           const float noise_level)
+                           const float noise_level, const float floor_gate)
 {
   const int region_w = region->rx1 - region->rx0 + 1;
   const int region_h = region->ry1 - region->ry0 + 1;
@@ -240,6 +240,7 @@ void _region_guided_filter(float *const restrict interp, const float *const rest
     .max_cg_iter = max_cg_iter,
     .solid_color = solid_color,
     .noise_level = noise_level,
+    .floor_gate = floor_gate,
     .estimate = estimate,
     .prev_scale = prev_scale,
     .valid = valid,
@@ -274,6 +275,7 @@ void _region_guided_filter(float *const restrict interp, const float *const rest
     _selfdome(&ctx);
     _joint_core(&ctx);
     _aniso_chroma(&ctx);
+    _chromaticity_gradient(&ctx);
     // Per-region timing breakdown. Only for regions big enough to matter (small ones are noise) and
   }
   dt_pixelpipe_cache_free_align(hole);
@@ -330,7 +332,8 @@ void _region_guided_filter(float *const restrict interp, const float *const rest
 
 cl_int _region_cpu_offload_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                               const int width, const _hl_region_t *const region, const dt_dev_pixelpipe_t *pipe,
-                              const float solid_color, const int max_iter, const float noise_level)
+                              const float solid_color, const int max_iter, const float noise_level,
+                              const float floor_gate)
 {
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const int region_w = region->rx1 - region->rx0 + 1;
@@ -379,7 +382,7 @@ cl_int _region_cpu_offload_cl(const int devid, void *gd_void, cl_mem interp, cl_
     translated_region.ry0 = 0;
 
     _region_guided_filter(hw_interp, hw_mask, hw_depth, region_w, &translated_region, pipe, solid_color, max_iter,
-                          noise_level);
+                          noise_level, floor_gate);
   }
 
   cl_err = dt_opencl_write_buffer_to_device(devid, host, staging, 0, sizeof(float) * region_pixels * 4, CL_TRUE);
@@ -405,7 +408,7 @@ out:
 
 cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                                 const int width, const _hl_region_t *const region, const dt_dev_pixelpipe_t *pipe,
-                                const float solid_color)
+                                const float solid_color, const float floor_gate)
 {
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const int region_w = region->rx1 - region->rx0 + 1;
@@ -569,7 +572,7 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
   if(need_self)
   {
     cl_err = _selfdome_stage_cl(devid, gd_void, estimate, valid, model_quality, clip0, clip_depth, region_w,
-                                region_h, cf_sigma, region->radius, ds_shared, pipe);
+                                region_h, cf_sigma, region->radius, ds_shared, floor_gate, pipe);
     if(cl_err != CL_SUCCESS) goto out;
   }
   else
@@ -580,6 +583,7 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &clip0);
     dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), &region_w);
     dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_h);
+    dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(float), &floor_gate);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, work_size);
     if(cl_err != CL_SUCCESS) goto out;
   }
@@ -588,12 +592,19 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
     // Step 7: all-clip joint core (shared biharmonic dome x screened-Poisson diffused chroma)
     const int extent = MAX(region->x1 - region->x0, region->y1 - region->y0) + 1;
     cl_err = _joint_core_stage_cl(devid, gd_void, estimate, valid, clip0, region_w, region_h, solid_color,
-                                  region->radius, extent, pipe);
+                                  region->radius, extent, floor_gate, pipe);
     if(cl_err == CL_SUCCESS) dt_opencl_finish(devid);
   }
   if(cl_err != CL_SUCCESS) goto out;
   // Step 8: structure-steered chrominance coherence (div(D grad r)=0 under the obstacle r >= c0/L)
-  cl_err = _aniso_stage_cl(devid, gd_void, estimate, valid, clip0, region_w, region_h, region->radius, pipe);
+  cl_err = _aniso_stage_cl(devid, gd_void, estimate, valid, clip0, region_w, region_h, region->radius,
+                           floor_gate, solid_color, pipe);
+  if(cl_err == CL_SUCCESS) dt_opencl_finish(devid);
+  if(cl_err != CL_SUCCESS) goto out;
+
+  // Step 9: gradient-extending chroma (chromaticity-gradient continuation, article addendum)
+  cl_err = _chromaticity_gradient_stage_cl(devid, gd_void, estimate, valid, clip0, region_w, region_h,
+                                           region->radius, floor_gate, pipe);
   if(cl_err == CL_SUCCESS) dt_opencl_finish(devid);
   if(cl_err != CL_SUCCESS) goto out;
 

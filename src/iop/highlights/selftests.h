@@ -88,6 +88,9 @@ void _joint_core_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_
 // self-test (HL_ANISOCL_TEST=1): divergence-form aniso chroma GPU vs the CPU production path
 // on an all-clip disc with a textured surround, once per process
 void _aniso_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe_t *pipe);
+
+// HL_CGRADCL_TEST: gradient-extending chroma stage, GPU vs the CPU _chromaticity_gradient
+void _chromaticity_gradient_stage_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe_t *pipe);
 #endif
 
 #ifdef HAVE_OPENCL

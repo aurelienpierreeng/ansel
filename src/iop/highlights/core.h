@@ -30,6 +30,23 @@ void _selfdome(_hl_region_ctx_t *const ctx);
 
 void _joint_core(_hl_region_ctx_t *const ctx);
 
+// Chromaticity-gradient continuation (article addendum): extend the BRIGHT valid surround's
+// chromaticity shares s_c = u_c / sum_j u_j into the blown zone BIHARMONICALLY (value + gradient
+// continuation, the same operator the luminance dome uses), then reproject every multi-clip pixel's
+// clipped subset onto the extended field and re-assert the joint saturation floor. Rationale
+// (measured on a blown sunrise laced with branches): every value-continuing estimator (colour-line
+// fits, harmonic ratio fills) inherits the chromaticity of the LAST unclipped band before the
+// blow-out, which is unrepresentative (whitened fence band, occluder penumbras) -- the interior then
+// carries blotchy fence chromaticity. A C1 continuation of the bright surround's chromaticity
+// GRADIENT restores the scene's chromatic trend (e.g. warming toward a sunrise sun) and is smooth
+// across occluders by construction. 1-clip pixels (measured chromaticity-correct through the
+// 2-guide fits) are left untouched WHERE THE FIT SPOKE; where the fit landed at/below the pixel's
+// own saturation floor (floor-authored: est <= 1.03 x clip0 -- measured 92.5% of the 1-clip zone
+// on a real flare-veiled sunrise) they are reprojected like partial multi-clip pixels, gated by
+// the clip-asymmetry floor gate (WB'd clips only; unit-WB bench behavior is bit-exact) and
+// excluded from the content gate's trusted ring.
+void _chromaticity_gradient(_hl_region_ctx_t *const ctx);
+
 #if defined(HAVE_OPENCL) && DT_HL_SPARSE_SOLVE
 // The hue-coupled self-dome stage on the GPU: soft clip floor (rounded lower bound at the
 // clip level), ONE shared biharmonic brightness dome over the union hole, harmonically
@@ -50,7 +67,8 @@ void _joint_core(_hl_region_ctx_t *const ctx);
 // stops three per-channel domes drifting the hue -- the failure that kept the per-channel ancestor off.
 cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem model_quality,
                           cl_mem clip0, cl_mem depth, const int region_w, const int region_h, const float cf_sigma,
-                          const float reg_radius, const int ds_shared, const dt_dev_pixelpipe_t *pipe);
+                          const float reg_radius, const int ds_shared, const float floor_gate,
+                          const dt_dev_pixelpipe_t *pipe);
 
 // All-clipped joint core on the device (pixels where NO channel survived, so no guide
 // exists): shared biharmonic brightness dome (floored at the saturated sum) x
@@ -73,6 +91,15 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
 // gaussian-feathered core mask (no hard hand-off at the core rim).
 cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem clip0,
                             const int region_w, const int region_h, const float solid_color,
-                            const float reg_radius, const int extent, const dt_dev_pixelpipe_t *pipe);
-                            
+                            const float reg_radius, const int extent, const float floor_gate,
+                            const dt_dev_pixelpipe_t *pipe);
+
+// Gradient-extending chroma on the device (see _chromaticity_gradient above for the method).
+// Mirrors the CPU stage: any change here must be mirrored there and re-validated with the
+// HL_CGRADCL_TEST self-test (_chromaticity_gradient_stage_cl_selftest).
+cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid,
+                                       cl_mem clip0, const int region_w, const int region_h,
+                                       const float reg_radius, const float floor_gate,
+                                       const dt_dev_pixelpipe_t *pipe);
+
 #endif
