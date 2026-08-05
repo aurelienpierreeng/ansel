@@ -20,6 +20,7 @@
 #include "gui/gdkkeys.h"
 #include "common/datetime.h"
 #include "common/debug.h"
+#include "common/file_location.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/variables.h"
@@ -1082,7 +1083,7 @@ static void _queue_remote_download(dt_lib_module_t *self, dt_lib_textnotes_t *d,
     d->download_inflight = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(g_hash_table_contains(d->download_inflight, url)) return;
 
-  gchar *cache_dir = g_build_filename(darktable.cachedir, "downloads", NULL);
+  gchar *cache_dir = g_build_filename(dt_loc_cachedir(), "downloads", NULL);
   g_mkdir_with_parents(cache_dir, 0700);
   dt_free(cache_dir);
 

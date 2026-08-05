@@ -292,40 +292,80 @@ void dt_loc_init_kerneldir(const char* application_directory, const char *kernel
 #endif
 }
 
+const char *dt_loc_datadir(void)
+{
+  return darktable.datadir;
+}
+
+const char *dt_loc_sharedir(void)
+{
+  return darktable.sharedir;
+}
+
+const char *dt_loc_moduledir(void)
+{
+  return darktable.moduledir;
+}
+
+const char *dt_loc_localedir(void)
+{
+  return darktable.localedir;
+}
+
+const char *dt_loc_tmpdir(void)
+{
+  return darktable.tmpdir;
+}
+
+const char *dt_loc_configdir(void)
+{
+  return darktable.configdir;
+}
+
+const char *dt_loc_cachedir(void)
+{
+  return darktable.cachedir;
+}
+
+const char *dt_loc_kerneldir(void)
+{
+  return darktable.kerneldir;
+}
+
 void dt_loc_get_kerneldir(char *kerneldir, size_t bufsize)
 {
-  g_strlcpy(kerneldir, darktable.kerneldir, bufsize);
+  g_strlcpy(kerneldir, dt_loc_kerneldir(), bufsize);
 }
 
 void dt_loc_get_moduledir(char *moduledir, size_t bufsize)
 {
-  g_strlcpy(moduledir, darktable.moduledir, bufsize);
+  g_strlcpy(moduledir, dt_loc_moduledir(), bufsize);
 }
 
 void dt_loc_get_localedir(char *localedir, size_t bufsize)
 {
-  g_strlcpy(localedir, darktable.localedir, bufsize);
+  g_strlcpy(localedir, dt_loc_localedir(), bufsize);
 }
 
 void dt_loc_get_user_config_dir(char *configdir, size_t bufsize)
 {
-  g_strlcpy(configdir, darktable.configdir, bufsize);
+  g_strlcpy(configdir, dt_loc_configdir(), bufsize);
 }
 void dt_loc_get_user_cache_dir(char *cachedir, size_t bufsize)
 {
-  g_strlcpy(cachedir, darktable.cachedir, bufsize);
+  g_strlcpy(cachedir, dt_loc_cachedir(), bufsize);
 }
 void dt_loc_get_tmp_dir(char *tmpdir, size_t bufsize)
 {
-  g_strlcpy(tmpdir, darktable.tmpdir, bufsize);
+  g_strlcpy(tmpdir, dt_loc_tmpdir(), bufsize);
 }
 void dt_loc_get_datadir(char *datadir, size_t bufsize)
 {
-  g_strlcpy(datadir, darktable.datadir, bufsize);
+  g_strlcpy(datadir, dt_loc_datadir(), bufsize);
 }
 void dt_loc_get_sharedir(char *sharedir, size_t bufsize)
 {
-  g_strlcpy(sharedir, darktable.sharedir, bufsize);
+  g_strlcpy(sharedir, dt_loc_sharedir(), bufsize);
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
