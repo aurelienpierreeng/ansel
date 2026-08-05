@@ -38,7 +38,6 @@
 
 #pragma once
 
-#include "common/darktable.h"
 #include "common/iop_profile.h"
 #include "common/gui_module_api.h"
 #include "views/view.h"

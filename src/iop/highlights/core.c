@@ -33,6 +33,7 @@
 #include "iop/highlights/dome.h"
 #include "iop/highlights/knee.h"
 #include "iop/highlights/pde.h"
+#include <glib/gstdio.h>
 #include <math.h>
 #include <string.h>
 
