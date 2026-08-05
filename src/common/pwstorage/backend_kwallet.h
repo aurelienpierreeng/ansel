@@ -35,6 +35,7 @@
 #pragma once
 
 #include "pwstorage.h"
+#include <gio/gio.h>
 #include <glib.h>
 
 /** kwallet backend context */

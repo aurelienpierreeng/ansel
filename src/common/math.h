@@ -30,7 +30,8 @@
 #include <math.h>
 #include <stdint.h>
 
-#include "common/darktable.h"
+#include "common/openmp.h"
+#include "common/simd.h"
 
 #define NORM_MIN 1.52587890625e-05f // norm can't be < to 2^(-16)
 

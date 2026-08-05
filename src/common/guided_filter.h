@@ -30,11 +30,11 @@
 
 #pragma once
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/opencl.h"
 #include "develop/pixelpipe_cache_alloc.h"
 
-#include "common/darktable.h"
-#include "common/opencl.h"
+#include <string.h>
 
 struct dt_iop_roi_t;
 

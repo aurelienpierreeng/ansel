@@ -16,7 +16,10 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/openmp.h"
 #include <inttypes.h>
 
 #include <webp/decode.h>

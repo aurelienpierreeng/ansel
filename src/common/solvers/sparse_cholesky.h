@@ -25,12 +25,13 @@
 // highlights module). Large scratch buffers use the pipeline-cache arena, so the caller
 // passes the dt_dev_pixelpipe_t.
 
+#include <glib.h>
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/darktable.h"
+#include "common/macros.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "develop/pixelpipe_hb.h" // dt_dev_pixelpipe_t (arena alloc) — self-contained include order
 

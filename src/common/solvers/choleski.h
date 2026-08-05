@@ -23,14 +23,18 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <glib.h>
+#include <glib/gi18n.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
-#include "common/darktable.h"
 #include "common/imagebuf.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
 #include "control/control.h" // dt_control_log (OOM error toast) — self-contained include order
 #include "develop/imageop_math.h"
 

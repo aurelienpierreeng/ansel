@@ -101,6 +101,7 @@
 #include "common/times.h"
 #include "common/glib_utils.h"
 #include "common/module_versioning.h"
+#include "common/paths.h"
 #ifdef _WIN32
 #include "win/getrusage.h"
 #else
@@ -345,39 +346,9 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
 // it tells you if it was a single image or a directory in single_image (when it's not NULL)
 int dt_load_from_string(const gchar *image_to_load, gboolean open_image_in_dr, gboolean *single_image);
 
-/** define for max path/filename length */
-#define DT_MAX_FILENAME_LEN 256
-
-#ifndef PATH_MAX
-/*
- * from /usr/include/linux/limits.h (Linux 3.16.5)
- * Some systems might not define it (e.g. Hurd)
- *
- * We do NOT depend on any specific value of this env variable.
- * If you want constant value across all systems, use DT_MAX_PATH_FOR_PARAMS!
- */
-#define PATH_MAX 4096
-#endif
-
-/*
- * ONLY TO BE USED FOR PARAMS!!! (e.g. dt_imageio_disk_t)
- *
- * WARNING: this should *NEVER* be changed, as it will break params,
- *          created with previous DT_MAX_PATH_FOR_PARAMS.
- */
-#define DT_MAX_PATH_FOR_PARAMS 4096
 
 
 
-/**
- * @brief Append a constant filename to a variable, stack-based, fixed-sized, directory, 
- * and add a `/` in-between
- * 
- * @param destination 
- * @param variable 
- * @param string 
- */
-void dt_concat_path_file(char destination[PATH_MAX], const char path[PATH_MAX], const char *const file);
 
 #ifdef __cplusplus
 }

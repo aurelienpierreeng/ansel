@@ -25,7 +25,8 @@
 
 #ifdef HAVE_OPENCL
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include <stdlib.h>
 #ifndef __APPLE__
 #include <stdio.h>

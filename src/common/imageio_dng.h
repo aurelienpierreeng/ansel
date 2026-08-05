@@ -35,13 +35,16 @@
 
 // writes buffers as digital negative (dng) raw images
 
+#include <glib/gstdio.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/darktable.h"
 #include "common/exif.h"
+#include "common/imageio.h"
+#include "common/simd.h"
 
 
 #define II 1

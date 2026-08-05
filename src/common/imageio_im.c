@@ -28,7 +28,8 @@
 */
 
 #ifdef HAVE_IMAGEMAGICK
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/logging.h"
 #include "imageio.h"
 #include "imageio_gm.h"
 #include "develop/develop.h"

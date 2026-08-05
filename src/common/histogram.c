@@ -29,7 +29,10 @@
 #include <stdlib.h>
 
 #include "common/colorspaces_inline_conversions.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/openmp.h"
+#include "common/simd.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "develop/imageop.h"

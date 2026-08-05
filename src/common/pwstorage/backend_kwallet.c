@@ -69,13 +69,17 @@
 // http://websvn.kde.org/trunk/KDE/kdelibs/kdeui/util/kwallet.cpp?revision=1107541&view=markup
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
+
+#include "common/logging.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 
 #include "backend_kwallet.h"
 #include "control/conf.h"
 
+#include <gio/gio.h>
 #include <string.h>
 
 static const gchar *app_id = "ansel";

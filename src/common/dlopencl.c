@@ -32,8 +32,10 @@
 #ifdef HAVE_OPENCL
 
 #include "common/dlopencl.h"
-#include "common/darktable.h"
 #include "common/dynload.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 
 #include <assert.h>
 #include <signal.h>

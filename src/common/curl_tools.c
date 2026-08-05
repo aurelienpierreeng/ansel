@@ -27,7 +27,8 @@
     Copyright 2004-2008 by Shawn Freeman, Udi Fuchs
 */
 
-#include "common/darktable.h"
+#include "common/mem_alloc.h"
+#include "common/paths.h"
 #include "common/curl_tools.h"
 #include "common/file_location.h"
 #include "control/control.h"

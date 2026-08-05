@@ -38,7 +38,10 @@
 
 #include "control/control.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/openmp.h"
 #include "common/exif.h"
 #include "control/conf.h"
 #include "develop/develop.h"

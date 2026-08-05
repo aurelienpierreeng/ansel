@@ -36,6 +36,7 @@
 
 #include "control/conf.h"
 #include "common/fp_mode.h"
+#include "common/logging.h"
 
 #include <sched.h>
 #include <pthread.h>
@@ -121,13 +122,8 @@ int dt_pthread_create(pthread_t *thread, void *(*start_routine)(void *), void *a
   return ret;
 }
 
-// darktable.h poisons pthread_create (use dt_pthread_create instead), which dt_pthread_create()
-// itself must call above -- so this include is deliberately placed after that definition, not at
-// the top of the file: #pragma GCC poison cannot be undone within a translation unit.
-#include "common/darktable.h"
-
 // Named-rwlock wait-time diagnostics (see common/dtpthread.h). Split into this .c file, which
-// unlike dtpthread.h can include darktable.h, so the traces go through dt_print(DT_DEBUG_HISTORY,
+// unlike dtpthread.h can include common/logging.h, so the traces go through dt_print(DT_DEBUG_HISTORY,
 // ...) and respect `-d history` instead of firing unconditionally via a raw fprintf.
 void _dt_pthread_rwlock_diag_log_rdlock(const char *name, unsigned long tid, double wait_ms,
                                          unsigned long prev_holder, gboolean prev_was_writer)

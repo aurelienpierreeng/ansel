@@ -22,7 +22,8 @@
 */
 
 #ifdef HAVE_LIBRAW
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "imageio.h"
 #include "imageio_gm.h"
 #include "develop/develop.h"

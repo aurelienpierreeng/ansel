@@ -35,7 +35,7 @@
 
 #pragma once
 
-#include "common/darktable.h"
+#include <glib.h>
 
 typedef enum pw_storage_backend_t
 {

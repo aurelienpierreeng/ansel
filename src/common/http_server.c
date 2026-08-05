@@ -27,7 +27,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <libsoup/soup.h>
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
 #include "common/http_server.h"
 #ifndef LIBSOUP_VERSION_MAJOR
 #error "LIBSOUP_VERSION_MAJOR not defined by CMake"

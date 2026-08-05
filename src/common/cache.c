@@ -30,8 +30,9 @@
 #include "config.h"
 
 #include "common/cache.h"
-#include "common/darktable.h"
 #include "common/dtpthread.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 
 #include <assert.h>
 #include <inttypes.h>

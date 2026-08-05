@@ -38,7 +38,6 @@
 #pragma once
 
 #include "common/colorspaces.h"
-#include "common/darktable.h"
 #include "common/metadata_export.h"
 #include <gmodule.h>
 #include <gtk/gtk.h>

@@ -26,7 +26,7 @@
 
 #pragma once
 
-#include "common/darktable.h"
+#include <glib.h>
 
 /** save preset to file */
 void dt_presets_save_to_file(const int rowid, const char *preset_name, const char *filedir);
