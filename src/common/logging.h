@@ -71,6 +71,12 @@ typedef enum dt_debug_thread_t
 // See develop/supervisor.h.
 #define DT_DEBUG_SUPERVISOR ((int32_t)(1u << 31))
 
+/* Runtime debug-channel mask (the application's `darktable.unmuted`). Accessor
+ * declared here, implemented by the orchestrator (common/darktable.c, next to
+ * dt_print()) so header inlines can gate on debug channels without importing
+ * the application struct. Test with `dt_get_debug_flags() & DT_DEBUG_XXX`. */
+int32_t dt_get_debug_flags(void);
+
 void dt_print(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
 /* same as above but without time stamp : nts = no time stamp */
 void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));

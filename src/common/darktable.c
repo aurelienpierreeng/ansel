@@ -1624,6 +1624,11 @@ void dt_cleanup()
   }
 }
 
+int32_t dt_get_debug_flags(void)
+{
+  return darktable.unmuted;
+}
+
 void dt_print(dt_debug_thread_t thread, const char *msg, ...)
 {
   if(thread == DT_DEBUG_ALWAYS || (darktable.unmuted & thread))
