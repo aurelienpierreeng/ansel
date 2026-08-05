@@ -74,19 +74,23 @@ static inline int tca_selector_entries(gboolean has_embedded,
 
   out_labels[0] = "off";
   out_values[0] = (int)dt_iop_lens_tca_source_t::OFF;
-  out_labels[1] = "manual";
-  out_values[1] = (int)dt_iop_lens_tca_source_t::MANUAL;
-  out_labels[2] = "Lensfun";
-  out_values[2] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
+  out_labels[1] = "Lensfun";
+  out_values[1] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
 
   if(has_embedded)
   {
-    out_labels[3] = "embedded";
-    out_values[3] = (int)dt_iop_lens_tca_source_t::EMBEDDED;
+    out_labels[2] = "embedded";
+    out_values[2] = (int)dt_iop_lens_tca_source_t::EMBEDDED;
+    out_labels[3] = "manual";
+    out_values[3] = (int)dt_iop_lens_tca_source_t::MANUAL;
     return 4;
   }
-
-  return 3;
+  else
+  {
+    out_labels[2] = "manual";
+    out_values[2] = (int)dt_iop_lens_tca_source_t::MANUAL;
+    return 3;
+  }
 }
 
 static inline gboolean tca_show_manual_sliders(dt_iop_lens_tca_source_t tca_method)

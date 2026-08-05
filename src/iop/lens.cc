@@ -3528,12 +3528,15 @@ void gui_update(struct dt_iop_module_t *self)
     if((int)p->tca_method < 0 || (int)p->tca_method > 3)
       p->tca_method = dt_iop_lens_tca_source_t::LENSFUN_DB;
 
-    if(p->vignetting_method == dt_iop_lens_correction_source_t::OFF && has_vign)
-      p->vignetting_method = dt_iop_lens_correction_source_t::EMBEDDED;
-    if(p->distortion_method == dt_iop_lens_correction_source_t::OFF && has_dist)
-      p->distortion_method = dt_iop_lens_correction_source_t::EMBEDDED;
-    if(p->tca_method == dt_iop_lens_tca_source_t::OFF && has_ca)
-      p->tca_method = dt_iop_lens_tca_source_t::EMBEDDED;
+    if(p->vignetting_method == dt_iop_lens_correction_source_t::OFF)
+      p->vignetting_method = has_vign ? dt_iop_lens_correction_source_t::EMBEDDED
+                                      : dt_iop_lens_correction_source_t::LENSFUN_DB;
+    if(p->distortion_method == dt_iop_lens_correction_source_t::OFF)
+      p->distortion_method = has_dist ? dt_iop_lens_correction_source_t::EMBEDDED
+                                      : dt_iop_lens_correction_source_t::LENSFUN_DB;
+    if(p->tca_method == dt_iop_lens_tca_source_t::OFF)
+      p->tca_method = has_ca ? dt_iop_lens_tca_source_t::EMBEDDED
+                             : dt_iop_lens_tca_source_t::LENSFUN_DB;
 
     const dt_iop_lens_correction_source_t saved_vignetting = p->vignetting_method;
     const dt_iop_lens_correction_source_t saved_distortion = p->distortion_method;
