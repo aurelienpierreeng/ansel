@@ -205,6 +205,13 @@
     <shortdescription>Memory reserved for pixelpipe (modules) cache (MiB)</shortdescription>
     <longdescription>This is the amount of memory that Ansel will use to keep intermediate module outputs for the pixelpipe</longdescription>
   </dtconfig>
+  <dtconfig>
+    <name>memory_pressure_floor</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>System memory pressure floor (MiB)</shortdescription>
+    <longdescription>When the system-wide available RAM drops below this, Ansel sheds its pixelpipe cache and returns the memory to the OS, regardless of the memory budgets above, to avoid being killed by the system out-of-memory watchdog. 0 = automatic (half the OS/apps headroom).</longdescription>
+  </dtconfig>
   <dtconfig prefs="processing" section="cpugpu" restart="true">
     <name>processing/timeout</name>
     <type min="0">int</type>

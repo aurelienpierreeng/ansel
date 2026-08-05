@@ -1202,7 +1202,22 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     return 1;
   }
 
-  darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(darktable.dtresources.pixelpipe_memory);
+  // The arena is only a virtual-memory reservation (physical pages get committed on
+  // use), so init only fails on exhausted address space or a pathological requested
+  // size. Rather than aborting outright, retry smaller: a shrunken cache degrades
+  // performance, an abort loses the session.
+  size_t pipecache_size = darktable.dtresources.pixelpipe_memory;
+  darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(pipecache_size);
+  while(IS_NULL_PTR(darktable.pixelpipe_cache) && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
+  {
+    pipecache_size /= 2;
+    fprintf(stderr,
+            "WARNING: can't reserve %" G_GSIZE_FORMAT " MiB of virtual memory for the pixelpipe cache, "
+            "retrying with %" G_GSIZE_FORMAT " MiB. Check your memory settings.\n",
+            2 * pipecache_size / (1024 * 1024), pipecache_size / (1024 * 1024));
+    darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(pipecache_size);
+  }
+  darktable.dtresources.pixelpipe_memory = pipecache_size;
   if(IS_NULL_PTR(darktable.pixelpipe_cache))
   {
     fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");
@@ -1666,7 +1681,7 @@ void dt_show_times_f(const dt_times_t *start, const char *prefix, const char *su
 #if defined(_WIN32)
 #include <windows.h>
 
-size_t get_usable_memory_bytes()
+static size_t _probe_system_available_mem(void)
 {
   MEMORYSTATUSEX status;
   status.dwLength = sizeof(status);
@@ -1679,7 +1694,7 @@ size_t get_usable_memory_bytes()
 #elif defined(__APPLE__)
 #include <mach/mach.h>
 
-size_t get_usable_memory_bytes()
+static size_t _probe_system_available_mem(void)
 {
   mach_port_t host = mach_host_self();
   vm_statistics64_data_t vmstat;
@@ -1696,33 +1711,158 @@ size_t get_usable_memory_bytes()
 #elif defined(__linux__)
 #include <string.h>
 
-size_t get_usable_memory_bytes()
+// A cgroup v2 memory.max limit (container, Flatpak sandbox, systemd slice) caps us
+// before the system-wide MemAvailable does: the kernel enforces it with a per-cgroup
+// OOM kill while /proc/meminfo still reports plenty of available RAM. Walk our own
+// cgroup path up to the root and report the tightest limit (out_limit) and the
+// tightest remaining slack including reclaimable pages (out_available), each
+// SIZE_MAX when no level sets a limit.
+static void _probe_cgroup_v2(size_t *out_limit, size_t *out_available)
+{
+  size_t tightest = SIZE_MAX;
+  size_t tightest_limit = SIZE_MAX;
+  *out_limit = SIZE_MAX;
+  *out_available = SIZE_MAX;
+
+  FILE *f = g_fopen("/proc/self/cgroup", "r");
+  if(IS_NULL_PTR(f)) return;
+
+  char line[512];
+  char path[512] = "";
+  while(fgets(line, sizeof(line), f))
+  {
+    // cgroup v2 unified hierarchy entry: "0::/user.slice/..."
+    if(!strncmp(line, "0::", 3))
+    {
+      g_strlcpy(path, line + 3, sizeof(path));
+      char *newline = strchr(path, '\n');
+      if(newline) *newline = '\0';
+      break;
+    }
+  }
+  fclose(f);
+  if(path[0] == '\0') return;
+
+  while(TRUE)
+  {
+    char file[1024];
+    snprintf(file, sizeof(file), "/sys/fs/cgroup%s/memory.max", path);
+    FILE *fmax = g_fopen(file, "r");
+    if(fmax)
+    {
+      // The file contains either a byte count or the literal "max" (no limit),
+      // which simply fails the numeric scan.
+      unsigned long long max_bytes = 0;
+      if(fscanf(fmax, "%llu", &max_bytes) == 1 && max_bytes > 0)
+      {
+        unsigned long long cur_bytes = max_bytes;
+        snprintf(file, sizeof(file), "/sys/fs/cgroup%s/memory.current", path);
+        FILE *fcur = g_fopen(file, "r");
+        if(fcur)
+        {
+          if(fscanf(fcur, "%llu", &cur_bytes) != 1) cur_bytes = max_bytes;
+          fclose(fcur);
+        }
+
+        // memory.current still charges pages the kernel could drop at will: the page
+        // cache and — critically for us — our own MADV_FREE'd arena pages, which land
+        // on the cgroup's inactive file LRU. Count that list as available, the same
+        // way system-wide MemAvailable does, or the slack of a busy cgroup would read
+        // ~0 even though our own freed cache is fully reclaimable.
+        unsigned long long inactive_file = 0;
+        snprintf(file, sizeof(file), "/sys/fs/cgroup%s/memory.stat", path);
+        FILE *fstat = g_fopen(file, "r");
+        if(fstat)
+        {
+          char stat_line[256];
+          while(fgets(stat_line, sizeof(stat_line), fstat))
+            if(sscanf(stat_line, "inactive_file %llu", &inactive_file) == 1) break;
+          fclose(fstat);
+        }
+
+        const size_t slack = (max_bytes > cur_bytes) ? (size_t)(max_bytes - cur_bytes) : 0;
+        const size_t available = slack + (size_t)inactive_file;
+        if(available < tightest) tightest = available;
+        if((size_t)max_bytes < tightest_limit) tightest_limit = (size_t)max_bytes;
+      }
+      fclose(fmax);
+    }
+
+    char *slash = strrchr(path, '/');
+    if(IS_NULL_PTR(slash) || slash == path) break;
+    *slash = '\0';
+  }
+
+  *out_limit = tightest_limit;
+  *out_available = tightest;
+}
+
+static size_t _probe_system_available_mem(void)
 {
   FILE *f = g_fopen("/proc/meminfo", "r");
   if(IS_NULL_PTR(f)) return 0;
 
   char line[256];
   size_t available_kb = 0;
+  size_t available = 0;
 
   while(fgets(line, sizeof(line), f))
   {
     if(sscanf(line, "MemAvailable: %" G_GSIZE_FORMAT " kB", &available_kb) == 1)
     {
-      fclose(f);
-      return available_kb * 1024; // kB to bytes
+      available = available_kb * 1024; // kB to bytes
+      break;
     }
   }
-
   fclose(f);
-  return 0;
+
+  size_t cgroup_limit = SIZE_MAX, cgroup_available = SIZE_MAX;
+  _probe_cgroup_v2(&cgroup_limit, &cgroup_available);
+  if(cgroup_available != SIZE_MAX) available = MIN(available, cgroup_available);
+
+  return available;
 }
 
 #else
-size_t get_usable_memory_bytes()
+static size_t _probe_system_available_mem(void)
 {
-  return 0; // Unsupported platform
+  return 0; // Unsupported platform: 0 = "no information", not "out of memory"
 }
 #endif
+
+size_t dt_get_system_available_mem(void)
+{
+  // The raw probe reads several /proc and /sys files; tiling planners and the
+  // pixelpipe pressure valve may call this dozens of times per pipeline run, so
+  // serve a short-lived cached value. Two threads racing a stale entry probe
+  // twice and store equivalent values — benign.
+  static gpointer cached_value = NULL;   // a size_t stored as pointer
+  static gpointer cached_time_us = NULL; // a gint64 stored as pointer
+
+  const gint64 now = g_get_monotonic_time();
+  const gint64 last = (gint64)(gintptr)g_atomic_pointer_get(&cached_time_us);
+  if(last != 0 && now - last < 50000) // 50 ms
+    return GPOINTER_TO_SIZE(g_atomic_pointer_get(&cached_value));
+
+  const size_t available = _probe_system_available_mem();
+  g_atomic_pointer_set(&cached_value, GSIZE_TO_POINTER(available));
+  g_atomic_pointer_set(&cached_time_us, (gpointer)(gintptr)now);
+  return available;
+}
+
+// Tightest container/cgroup memory limit this process runs under, SIZE_MAX when
+// uncontained. This is the envelope the kernel actually OOM-enforces on us,
+// regardless of how much RAM the machine has.
+static size_t _get_container_mem_limit(void)
+{
+#if defined(__linux__)
+  size_t cgroup_limit = SIZE_MAX, cgroup_available = SIZE_MAX;
+  _probe_cgroup_v2(&cgroup_limit, &cgroup_available);
+  return cgroup_limit;
+#else
+  return SIZE_MAX;
+#endif
+}
 
 
 int dt_worker_threads()
@@ -1732,7 +1872,21 @@ int dt_worker_threads()
 
 size_t dt_get_available_mem()
 {
-  return darktable.pixelpipe_cache->max_memory - darktable.pixelpipe_cache->current_memory;
+  const size_t budget_left = darktable.pixelpipe_cache->max_memory - darktable.pixelpipe_cache->current_memory;
+
+  // The budget is only a startup-time plan: cap it by what the system can actually
+  // back right now without dropping under the pressure floor (issue #1083), so
+  // tiled modules plan tile sizes that will survive the allocation-time pressure
+  // valve in pixelpipe_cache.c. Half of our own current cache usage counts as
+  // room too: it is LRU-evictable, and the valve will evict it on demand — our own
+  // cache must never be what forces a module into tiling.
+  const size_t sys_available = dt_get_system_available_mem();
+  if(sys_available == 0) return budget_left; // no information on this platform
+
+  const size_t pressure_floor = dt_get_memory_pressure_floor();
+  const size_t sys_room = ((sys_available > pressure_floor) ? sys_available - pressure_floor : 0)
+                          + darktable.pixelpipe_cache->current_memory / 2;
+  return MIN(budget_left, sys_room);
 }
 
 size_t dt_get_mipmap_mem()
@@ -1740,9 +1894,28 @@ size_t dt_get_mipmap_mem()
   return darktable.dtresources.mipmap_memory;
 }
 
+size_t dt_get_memory_pressure_floor(void)
+{
+  return darktable.dtresources.pressure_floor_memory;
+}
+
 void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean init_gui)
 {
-  resources->total_memory = _get_total_memory() * 1000;
+  size_t physical_memory = _get_total_memory() * 1000;
+
+  // A container/cgroup memory limit (Flatpak sandbox, systemd slice, docker...) is
+  // the envelope the kernel actually OOM-enforces on us: inside it, the machine's
+  // physical RAM is irrelevant, so it IS our total memory for budgeting purposes.
+  const size_t container_limit = _get_container_mem_limit();
+  if(container_limit != SIZE_MAX && (physical_memory == 0 || container_limit < physical_memory))
+  {
+    dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE,
+             "[MEMORY CONFIGURATION] container/cgroup memory limit detected: %" G_GSIZE_FORMAT
+             " MiB — using it as the total RAM\n", container_limit / (1024 * 1024));
+    physical_memory = container_limit;
+  }
+
+  resources->total_memory = physical_memory;
 
   const size_t threads = darktable.num_openmp_threads;
   const size_t mem = resources->total_memory / (1024 * 1024);
@@ -1756,10 +1929,38 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   if(dt_conf_get_int64("host_memory_limit") > 0)
     resources->total_memory = dt_conf_get_int64("host_memory_limit") * 1024 * 1024;
 
+  // A host_memory_limit above the physical RAM would make us plan caches the system
+  // can never back: the OS OOM-killer, not us, would then enforce the difference by
+  // killing the app without a message (issue #1083). The user limit can only shrink
+  // the detected RAM, never grow it.
+  if(physical_memory > 0 && resources->total_memory > physical_memory)
+  {
+    fprintf(stderr,
+            "MEMORY WARNING: host_memory_limit (%" G_GSIZE_FORMAT " MiB) exceeds the physical RAM "
+            "(%" G_GSIZE_FORMAT " MiB) and was clamped to it.\n",
+            resources->total_memory / (1024 * 1024), physical_memory / (1024 * 1024));
+    resources->total_memory = physical_memory;
+  }
+
   // Keep OS headroom between 1 GB and a third of the system RAM
   resources->headroom_memory = dt_conf_get_int64("memory_os_headroom") * 1024 * 1024;
   resources->headroom_memory
       = CLAMP(resources->headroom_memory, 1024 * 1024 * 1024, resources->total_memory / 3);
+
+  // Runtime memory-pressure floor: while running, whenever the SYSTEM-wide available
+  // RAM drops below this — whether we or another application consumed it — the
+  // pixelpipe cache sheds entries and returns their pages to the OS instead of
+  // letting the system OOM-killer pick a victim (issue #1083). This is a live
+  // safety net on top of the static budgets below, which are only plans.
+  // Conf default 0 = auto: half the OS headroom.
+  // The bounds scale with the envelope: on a normal machine the floor stays within
+  // [512 MB, total/4], but inside a small container keeping 512 MB free would eat
+  // the whole allotment, so the lower bound relaxes to total/8 there.
+  int64_t pressure_floor = dt_conf_get_int64("memory_pressure_floor") * 1024 * 1024;
+  if(pressure_floor <= 0) pressure_floor = (int64_t)resources->headroom_memory / 2;
+  const int64_t floor_min = MIN((int64_t)512 * 1024 * 1024, (int64_t)resources->total_memory / 8);
+  const int64_t floor_max = MAX((int64_t)resources->total_memory / 4, floor_min);
+  resources->pressure_floor_memory = CLAMP(pressure_floor, floor_min, floor_max);
 
   // Keep mipmap cache between 256 MB and a sixth of the system RAM
   resources->mipmap_memory = dt_conf_get_int64("memory_mipmap_cache") * 1024 * 1024;
@@ -1800,6 +2001,9 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
 
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Pixelpipe cache size: %" G_GSIZE_FORMAT " MiB\n"),
            resources->pixelpipe_memory / (1024 * 1024));
+
+  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] System memory pressure floor: %" G_GSIZE_FORMAT " MiB\n"),
+           resources->pressure_floor_memory / (1024 * 1024));
 
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Worker threads: %i\n"), dt_worker_threads());
 
@@ -1851,7 +2055,7 @@ void dt_capabilities_cleanup()
 
 void dt_print_mem_usage()
 {
-  fprintf(stdout, "[memory] Currently-free and reclaimable memory detected: %lu MiB\n", get_usable_memory_bytes() / (1024 * 1024));
+  fprintf(stdout, "[memory] Currently-free and reclaimable memory detected: %lu MiB\n", dt_get_system_available_mem() / (1024 * 1024));
 
 #if defined(__linux__)
   char *line = NULL;

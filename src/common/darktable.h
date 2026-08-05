@@ -775,10 +775,11 @@ typedef enum dt_debug_thread_t
 
 typedef struct dt_sys_resources_t
 {
-  size_t total_memory;     // All RAM on system
-  size_t mipmap_memory;    // RAM allocated to mipmap cache
-  size_t headroom_memory;  // RAM left to OS & other Apps
-  size_t pixelpipe_memory; // RAM used by the pixelpipe cache (approx.)
+  size_t total_memory;          // All RAM on system
+  size_t mipmap_memory;         // RAM allocated to mipmap cache
+  size_t headroom_memory;       // RAM left to OS & other Apps
+  size_t pixelpipe_memory;      // RAM used by the pixelpipe cache (approx.)
+  size_t pressure_floor_memory; // System-wide available RAM under which we shed caches
 } dt_sys_resources_t;
 
 typedef struct darktable_t
@@ -933,6 +934,19 @@ size_t dt_get_available_mem();
 
 // Get the maximum size for the whole mipmap cache
 size_t dt_get_mipmap_mem();
+
+// Probe the system for currently-available (free + reclaimable) physical RAM, in bytes.
+// This is a live system-wide measurement, unrelated to our internal budgets: it shrinks
+// when OTHER applications allocate memory. On Linux it also honors a cgroup v2 memory
+// limit (containers, Flatpak, systemd slices) when one is set. Returns 0 when the
+// platform gives us no way to know — callers must treat 0 as "no information", not as
+// "out of memory".
+size_t dt_get_system_available_mem(void);
+
+// System-wide available RAM floor (bytes) under which caches must be shed to
+// keep the OS and other applications breathing, regardless of anselrc budgets.
+// See dt_configure_runtime_performance() for how it is derived.
+size_t dt_get_memory_pressure_floor(void);
 
 /**
  * @brief Set the memory buffer to zero as a pack of unsigned char
