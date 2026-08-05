@@ -69,6 +69,14 @@
 #include <glib.h>
 #include <inttypes.h>
 
+// Default code for imgid meaning the picture is unknown or invalid
+#define UNKNOWN_IMAGE -1
+
+// Number of database blocks per image
+#define DT_IMAGE_DBLOCKS 64
+
+typedef float dt_boundingbox_t[4];  //(x,y) of upperleft, then (x,y) of lowerright
+
 #ifdef __cplusplus
 extern "C" {
 #endif

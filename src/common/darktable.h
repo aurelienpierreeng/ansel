@@ -153,11 +153,6 @@ const char *dt_session_id(void);
  * machine or any account. */
 const char *dt_install_id(void);
 
-#define DT_IMAGE_DBLOCKS 64
-
-// Default code for imgid meaning the picture is unknown or invalid
-#define UNKNOWN_IMAGE -1
-
 #ifdef __cplusplus
 }
 #endif
@@ -185,8 +180,6 @@ struct dt_bauhaus_t;
 struct dt_undo_t;
 struct dt_colorspaces_t;
 struct dt_l10n_t;
-
-typedef float dt_boundingbox_t[4];  //(x,y) of upperleft, then (x,y) of lowerright
 
 typedef struct dt_sys_resources_t
 {
