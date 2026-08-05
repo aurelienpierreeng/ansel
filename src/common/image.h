@@ -63,10 +63,11 @@
 #include "config.h"
 #endif
 
-#include "common/colorspaces.h"
 #include "common/dtpthread.h"
+#include "common/paths.h"
 #include "develop/format.h"
 #include <glib.h>
+#include <glib/gi18n.h>
 #include <inttypes.h>
 
 // Default code for imgid meaning the picture is unknown or invalid

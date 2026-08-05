@@ -25,6 +25,7 @@
 #include "common/l10n.h"
 #include "gui/gtk.h"
 
+#include <glib/gi18n.h>
 #include <gtk/gtk.h>
 #include <math.h>
 #include <pango/pangocairo.h>
