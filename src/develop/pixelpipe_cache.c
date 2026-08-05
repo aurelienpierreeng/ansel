@@ -1460,11 +1460,15 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pix
  * for the same physical RAM. Before growing our committed footprint by `request_size`,
  * make sure the system-wide available memory keeps the configured floor
  * (dt_get_memory_pressure_floor()); when it doesn't, evict LRU entries to cover the
- * deficit — their pages return to the OS through the arena's lazy release — so the
- * system OOM-killer never has a reason to look at us.
+ * deficit, hand their pages back to the OS for real, and re-read what that actually
+ * bought — so the system OOM-killer never has a reason to look at us.
  *
  * The probe is rate-limited and the cached value is decremented by our own
  * allocations in between, so the hot path pays one probe per PROBE_PERIOD at most.
+ * That running estimate legitimately reaches 0 under sustained pressure, which is why
+ * "the platform answers at all" is tracked separately (`sys_probe_valid`) instead of
+ * being read off a 0 estimate: conflating the two would disable the valve at exactly
+ * the moment it matters.
  *
  * Returns TRUE when the allocation may proceed. Returns FALSE when, even after
  * shedding everything evictable, the system could not take `request_size` more bytes
@@ -1482,12 +1486,14 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
   const gint64 PROBE_PERIOD_US = 100000; // 100 ms
   if(cache->sys_probe_time_us == 0 || now - cache->sys_probe_time_us > PROBE_PERIOD_US)
   {
-    cache->sys_available_est = dt_get_system_available_mem();
+    const size_t probed = dt_get_system_available_mem();
+    cache->sys_probe_valid = (probed > 0);
+    cache->sys_available_est = probed;
     cache->sys_probe_time_us = now;
   }
 
-  // 0 = the platform gives us no information: pressure handling disabled.
-  if(cache->sys_available_est == 0)
+  // The platform gives us no way to know: pressure handling disabled, never refuse.
+  if(!cache->sys_probe_valid)
   {
     dt_pthread_mutex_unlock(&cache->lock);
     return TRUE;
@@ -1504,19 +1510,37 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
       freed += before - cache->current_memory;
     }
 
-    // The freed pages are reclaimable by the kernel at will (MADV_FREE), so they
-    // count as available for our own next page touches.
-    cache->sys_available_est += freed;
-
     if(freed)
+    {
+      /* Evicting only returns the pages to the ARENA. How much of that reaches the OS
+       * is not ours to guess: the per-free lazy release is a no-op on Windows until a
+       * decommit runs, and even where MADV_FREE applies, the kernel decides when those
+       * pages stop counting against us. So hand them over for real, then take the new
+       * number from the OS instead of crediting what we think we released — an
+       * over-credit here would let the allocation through on a system that is still
+       * just as full, which is precisely the OOM this valve exists to prevent.
+       * Ordering note: cache->lock is held and dt_cache_arena_trim() takes arena.lock,
+       * matching the cache->lock → arena.lock order the rest of this file already uses
+       * (see the defrag path below). */
+      dt_cache_arena_trim(&cache->arena);
+      dt_invalidate_system_available_mem();
+      const size_t probed = dt_get_system_available_mem();
+      cache->sys_probe_valid = (probed > 0);
+      cache->sys_available_est = probed;
+      cache->sys_probe_time_us = g_get_monotonic_time();
+
       dt_print(DT_DEBUG_MEMORY | DT_DEBUG_PIPECACHE,
                "[pixelpipe_cache] system memory pressure: shed %" G_GSIZE_FORMAT " MiB of cache "
-               "(%" G_GSIZE_FORMAT " MiB available, floor %" G_GSIZE_FORMAT " MiB)\n",
+               "(%" G_GSIZE_FORMAT " MiB available after trim, floor %" G_GSIZE_FORMAT " MiB)\n",
                freed / (1024 * 1024), cache->sys_available_est / (1024 * 1024),
                pressure_floor / (1024 * 1024));
+    }
   }
 
-  const gboolean allowed = cache->sys_available_est >= request_size + pressure_floor / 2;
+  // The post-trim re-probe can itself come back unanswered; absence of information is
+  // never a reason to refuse (see the dt_get_system_available_mem() header contract).
+  const gboolean allowed = !cache->sys_probe_valid
+                           || (cache->sys_available_est >= request_size + pressure_floor / 2);
 
   if(allowed)
   {
@@ -1993,6 +2017,7 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
   cache->queries = cache->hits = 0;
   cache->sys_probe_time_us = 0;
   cache->sys_available_est = 0;
+  cache->sys_probe_valid = FALSE;
 
   if(IS_NULL_PTR(cache->entries) || IS_NULL_PTR(cache->external_entries))
   {
@@ -2557,19 +2582,23 @@ static int _memory_pressure_shedder(dt_dev_pixelpipe_cache_t *cache)
     freed += before - cache->current_memory;
   }
 
-  // Refresh the valve's probe cache while we hold the lock and the data.
-  cache->sys_available_est = available + freed;
+  // Same reasoning as in the valve: hand the freed pages over for real, then let the
+  // OS — not our own bookkeeping — say what that bought, and seed the valve's probe
+  // cache with that ground truth.
+  const size_t trimmed = dt_cache_arena_trim(&cache->arena);
+  dt_invalidate_system_available_mem();
+  const size_t available_after = dt_get_system_available_mem();
+  cache->sys_probe_valid = (available_after > 0);
+  cache->sys_available_est = available_after;
   cache->sys_probe_time_us = g_get_monotonic_time();
   dt_pthread_mutex_unlock(&cache->lock);
-
-  const size_t trimmed = dt_cache_arena_trim(&cache->arena);
 
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] system memory pressure while idle: %" G_GSIZE_FORMAT " MiB available "
            "under the %" G_GSIZE_FORMAT " MiB floor — shed %" G_GSIZE_FORMAT " MiB of cache, "
-           "returned %" G_GSIZE_FORMAT " MiB to the OS\n",
+           "returned %" G_GSIZE_FORMAT " MiB to the OS, now %" G_GSIZE_FORMAT " MiB available\n",
            available / (1024 * 1024), pressure_floor / (1024 * 1024), freed / (1024 * 1024),
-           trimmed / (1024 * 1024));
+           trimmed / (1024 * 1024), available_after / (1024 * 1024));
   return G_SOURCE_CONTINUE;
 }
 

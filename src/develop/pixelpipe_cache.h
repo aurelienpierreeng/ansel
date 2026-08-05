@@ -64,9 +64,12 @@ typedef struct dt_dev_pixelpipe_cache_t
   size_t current_memory;
   // System memory-pressure probe cache, guarded by `lock` (see the pressure valve
   // in pixelpipe_cache.c): last probed system-wide available RAM, decremented by
-  // our own allocations between two rate-limited probes.
+  // our own allocations between two rate-limited probes. The estimate legitimately
+  // reaches 0 under pressure, so whether the platform answers at all is a separate
+  // flag rather than an `est == 0` sentinel.
   gint64 sys_probe_time_us;
   size_t sys_available_est;
+  gboolean sys_probe_valid;
   dt_pthread_mutex_t lock; // mutex to protect the cache entries
   dt_cache_arena_t arena;
 } dt_dev_pixelpipe_cache_t;

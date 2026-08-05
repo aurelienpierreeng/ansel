@@ -37,27 +37,6 @@ typedef struct dt_free_run_t
   uint32_t length;
 } dt_free_run_t;
 
-/* Lazily hand the physical pages backing a freed run back to the OS.
- * MADV_FREE marks them reclaimable-at-will: the kernel only takes them under actual
- * memory pressure, and re-dirtying them before that happens costs nothing — the right
- * trade for the hot per-frame alloc/free churn of module temp buffers. Without this,
- * the arena's RSS is a permanent high-water mark: LRU eviction and cache flushes never
- * relieve the system, and on a loaded machine the OOM-killer fires (issue #1083).
- * On Windows nothing is released per-free (a MEM_DECOMMIT here would force a zero-fill
- * re-commit on every hot realloc); dt_cache_arena_trim() decommits free runs instead
- * when pressure actually calls for it. */
-static inline void _arena_release_run_lazy(uint8_t *ptr, size_t size)
-{
-#if !defined(_WIN32) && defined(MADV_FREE)
-  if(madvise(ptr, size, MADV_FREE))
-    dt_print(DT_DEBUG_MEMORY, "[arena] MADV_FREE of %" G_GSIZE_FORMAT " bytes failed: %s\n",
-             size, strerror(errno));
-#else
-  (void)ptr;
-  (void)size;
-#endif
-}
-
 gboolean dt_cache_arena_calc(const dt_cache_arena_t *a,
                              size_t size,
                              uint32_t *out_pages,
@@ -193,10 +172,23 @@ void dt_cache_arena_free(dt_cache_arena_t *a,
 
   const uint32_t first = (uint32_t)first_sz;
 
-  /* Release the physical backing before the run is published to the free list:
-   * until the insert below, this range still belongs exclusively to the caller,
-   * so no concurrent alloc can be handed these pages while we drop them. */
-  _arena_release_run_lazy((uint8_t *)ptr, (size_t)pages * a->page_size);
+#if !defined(_WIN32) && defined(MADV_FREE)
+  /* Lazily hand the physical pages back to the OS, BEFORE the run is published to the
+   * free list below: until then this range still belongs exclusively to the caller, so
+   * no concurrent alloc can be handed these pages while we are dropping them.
+   * MADV_FREE marks them reclaimable-at-will — the kernel only takes them under actual
+   * memory pressure, and re-dirtying them before that costs nothing, which is the right
+   * trade for the hot per-frame alloc/free churn of module temp buffers. Without this
+   * the arena's RSS is a permanent high-water mark: LRU eviction and cache flushes never
+   * relieve the system, and on a loaded machine the OOM-killer fires (issue #1083).
+   * Windows gets nothing here on purpose (a MEM_DECOMMIT would force a zero-fill
+   * re-commit on every hot realloc); dt_cache_arena_trim() decommits free runs there
+   * when pressure actually calls for it. */
+  const size_t release_size = (size_t)pages * a->page_size;
+  if(madvise(ptr, release_size, MADV_FREE))
+    dt_print(DT_DEBUG_MEMORY, "[arena] MADV_FREE of %" G_GSIZE_FORMAT " bytes failed: %s\n",
+             release_size, strerror(errno));
+#endif
 
   dt_pthread_mutex_lock(&a->lock);
 
