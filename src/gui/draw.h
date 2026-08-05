@@ -45,7 +45,7 @@
 #endif
 
 #include "common/curve_tools.h"
-#include "common/darktable.h"
+#include "common/logging.h"
 #include "common/splines.h"
 #include "control/conf.h"
 #include "develop/develop.h"
@@ -106,13 +106,14 @@ typedef struct dt_draw_curve_t
 static inline void dt_draw_set_color_overlay(cairo_t *cr, gboolean bright, double alpha)
 {
   double amt;
+  const struct dt_gui_gtk_t *gui = dt_gui_get_global();
 
   if(bright)
-    amt = 0.5 + darktable.gui->overlay_contrast * 0.5;
+    amt = 0.5 + gui->overlay_contrast * 0.5;
   else
-    amt = (1.0 - darktable.gui->overlay_contrast) * 0.5;
+    amt = (1.0 - gui->overlay_contrast) * 0.5;
 
-  cairo_set_source_rgba(cr, darktable.gui->overlay_red * amt, darktable.gui->overlay_green * amt, darktable.gui->overlay_blue * amt, alpha);
+  cairo_set_source_rgba(cr, gui->overlay_red * amt, gui->overlay_green * amt, gui->overlay_blue * amt, alpha);
 }
 
 /** draws a rating star
@@ -623,7 +624,7 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
   cairo_stroke(cr);
 
-  if(darktable.unmuted & DT_DEBUG_MASKS)
+  if(dt_get_debug_flags() & DT_DEBUG_MASKS)
   {
     const float debug_radius = DT_GUI_MOUSE_EFFECT_RADIUS;
     cairo_arc(cr, x, y, debug_radius, 0.0, 2.0 * M_PI);
