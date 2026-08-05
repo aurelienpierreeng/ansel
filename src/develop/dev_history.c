@@ -887,7 +887,20 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   if(enable) module->enabled = TRUE;
 
   // Include masks if module supports blending and masks are in use, or if it's the mask manager.
-  const gboolean include_masks = dt_iop_module_needs_mask_history(module);
+  gboolean include_masks = dt_iop_module_needs_mask_history(module);
+
+  // That predicate requires the matching mask_mode bit (e.g. DEVELOP_MASK_SHAPE) to be set,
+  // which is a *masking policy* decision — but whether the forms must be recorded is a *state
+  // integrity* decision: as soon as blend params reference an existing, non-empty group, the
+  // forms are part of this module's state. Skipping the snapshot here makes the history item
+  // hash blind to mask edits (stale pipe cache, issue #1060 family) and loses the mask on
+  // undo/redo (dt_dev_pop_history_items_ext() rebuilds dev->forms from the last item that
+  // carries one).
+  if(!include_masks && !IS_NULL_PTR(module->blend_params) && module->blend_params->mask_id != 0)
+  {
+    dt_masks_form_t *linked_group = dt_masks_get_from_id(dev, module->blend_params->mask_id);
+    include_masks = !IS_NULL_PTR(linked_group) && !IS_NULL_PTR(linked_group->points);
+  }
 
   GList *forms_snapshot = NULL;
   if(include_masks)

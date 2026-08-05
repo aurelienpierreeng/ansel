@@ -1114,6 +1114,10 @@ void dt_masks_iop_update(struct dt_iop_module_t *module);
 void dt_masks_iop_combo_populate(GtkWidget *w, void *module);
 void dt_masks_iop_use_same_as(struct dt_iop_module_t *module, struct dt_iop_module_t *src);
 uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *form);
+/** Same as dt_masks_group_get_hash(), but resolves grouped children from the given forms list
+ * instead of the live dev->forms — mandatory when hashing a history/pipe snapshot, so the hash
+ * describes one coherent state instead of mixing the snapshot's group with live children. */
+uint64_t dt_masks_group_get_hash_ext(uint64_t hash, GList *masks, dt_masks_form_t *form);
 /** Same as dt_masks_group_get_hash(), but hashes only the form's own content: for a group,
  * member references (id/state/opacity) instead of recursing into each member's content.
  * Meant for walking a flat list where every member already gets its own top-level call. */
