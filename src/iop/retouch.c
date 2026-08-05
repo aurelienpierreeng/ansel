@@ -643,7 +643,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   // if no shapes on this scale, we hide all
   if(bd->masks_shown == DT_MASKS_EDIT_OFF || count == 0)
   {
-    dt_masks_change_form_gui(NULL);
+    dt_masks_change_form_gui(self->dev, NULL);
 
     if(g)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
@@ -655,7 +655,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   }
 
   // else, we create a new from group with the shapes and display it
-  dt_masks_form_t *grp = dt_masks_create_ext(DT_MASKS_GROUP);
+  dt_masks_form_t *grp = dt_masks_create_ext(self->dev, DT_MASKS_GROUP);
   const int grid = self->blend_params->mask_id;
 
   for(int i = 0; i < RETOUCH_NO_FORMS; i++)
@@ -675,10 +675,10 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     }
   }
 
-  dt_masks_form_t *grp2 = dt_masks_create_ext(DT_MASKS_GROUP);
+  dt_masks_form_t *grp2 = dt_masks_create_ext(self->dev, DT_MASKS_GROUP);
   grp2->formid = 0;
-  dt_masks_group_ungroup(grp2, grp);
-  dt_masks_change_form_gui(grp2);
+  dt_masks_group_ungroup(self->dev, grp2, grp);
+  dt_masks_change_form_gui(self->dev, grp2);
   self->dev->form_gui->edit_mode = bd->masks_shown;
 
   if(g)
@@ -1728,7 +1728,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
 
   //hide all shapes and free if some are in creation
   if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
-    dt_masks_change_form_gui(NULL);
+    dt_masks_change_form_gui(self->dev, NULL);
 
   dt_masks_shape_buttons_deactivate_all(NULL);
 
@@ -1858,7 +1858,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     else
       masks_type = (type | DT_MASKS_NON_CLONE);
 
-    dt_masks_creation_mode_enter(self, masks_type);
+    dt_masks_creation_mode_enter(self->dev, self, masks_type);
 
     dt_control_queue_redraw_center();
   }
@@ -2054,7 +2054,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     {
       // lost focus, hide all shapes and free if some are in creation
       if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
-        dt_masks_change_form_gui(NULL);
+        dt_masks_change_form_gui(self->dev, NULL);
 
       dt_masks_shape_buttons_deactivate_all(NULL);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks), FALSE);
@@ -2244,6 +2244,7 @@ void gui_init(dt_iop_module_t *self)
 
   GtkWidget *shape_buttons[DEVELOP_MASKS_NB_SHAPES] = { 0 };
   const dt_masks_shape_buttons_config_t shape_buttons_config = {
+    .dev = self->dev,
     .owner_module = self,
     .creation_module = self,
     .buttons = shape_buttons,
@@ -2514,7 +2515,7 @@ void gui_init(dt_iop_module_t *self)
 void gui_reset(struct dt_iop_module_t *self)
 {
   // hide the previous masks
-  dt_masks_reset_form_gui();
+  dt_masks_reset_form_gui(self->dev);
   // set the algo to the default one
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
   p->algorithm = dt_conf_get_int("plugins/darkroom/retouch/default_algo");

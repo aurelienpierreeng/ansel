@@ -716,7 +716,10 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt[2], const float zo
   cairo_restore(cr);
 }
 
-typedef void (*shape_draw_function_t)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+// dev is the develop instance owning the shape being drawn. It is threaded explicitly so shape
+// drawing code never has to reach for the darktable.develop global (which would couple every
+// shape file to the whole application and hide which instance is read).
+typedef void (*shape_draw_function_t)(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
 
 /**
  * @brief Draw the lines of a mask shape.
@@ -731,18 +734,18 @@ typedef void (*shape_draw_function_t)(cairo_t *cr, const float *points, const in
  * @param points_count the number of points in the shape
  * @param functions the functions table of the shape
  */
-static inline void dt_draw_shape_lines(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
+static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
                 const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func, const cairo_line_cap_t line_cap)
 {
   cairo_save(cr);
-  
+
   cairo_set_line_cap(cr, line_cap);
   // Are we drawing a border ?
-  const gboolean border = (dash_type != DT_MASKS_NO_DASH);  
+  const gboolean border = (dash_type != DT_MASKS_NO_DASH);
 
   // Draw the shape from the integrated function if any
   if(points && points_count >= 2 && draw_shape_func)
-    (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
+    (*draw_shape_func)(dev, cr, points, points_count, nb, border, FALSE);
 
   const dt_draw_dash_type_t dash = (dash_type && !source)
                                   ? dash_type : DT_MASKS_NO_DASH;
@@ -784,7 +787,7 @@ static inline void dt_draw_shape_lines(const dt_draw_dash_type_t dash_type, cons
 static inline void dt_draw_stroke_line(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr,
                           const gboolean selected, const float zoom_scale, const cairo_line_cap_t line_cap)
 {
-  dt_draw_shape_lines(dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap);
+  dt_draw_shape_lines(NULL, dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap);
 }
 
 static void _draw_arrow_head(cairo_t *cr, const float arrow[2], const float arrow_x_a, const float arrow_y_a,
@@ -914,16 +917,16 @@ static inline void dt_draw_cross(cairo_t *cr, const float zoom_scale, const floa
   cairo_restore(cr);
 }
 
-static inline void dt_draw_source_shape(cairo_t *cr, const float zoom_scale, const gboolean selected, 
+static inline void dt_draw_source_shape(struct dt_develop_t *dev, cairo_t *cr, const float zoom_scale, const gboolean selected,
   const float *source_pts, const int source_pts_count, const int nodes_nb, const shape_draw_function_t *draw_shape_func)
 {
   cairo_save(cr);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
   dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
-  
+
   if(draw_shape_func)
-    (*draw_shape_func)(cr, source_pts, source_pts_count, nodes_nb, FALSE, TRUE);
+    (*draw_shape_func)(dev, cr, source_pts, source_pts_count, nodes_nb, FALSE, TRUE);
 
   //dark line
   if(selected)

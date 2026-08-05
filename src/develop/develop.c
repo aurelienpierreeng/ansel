@@ -1753,7 +1753,7 @@ void dt_dev_masks_update_hash(dt_develop_t *dev)
   for(GList *form = g_list_first(dev->forms); form; form = g_list_next(form))
   {
     dt_masks_form_t *shape = (dt_masks_form_t *)form->data;
-    hash = dt_masks_form_get_own_hash(hash, shape);
+    hash = dt_masks_form_get_own_hash(hash, dev->forms, shape);
   }
 
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
