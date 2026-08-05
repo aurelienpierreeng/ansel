@@ -78,7 +78,11 @@ typedef struct dt_iop_roi_t
 }
 #endif
 
-#include "common/darktable.h"
+#include "common/dtpthread.h"
+#include "common/logging.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+
 #include "common/introspection.h"
 #include "common/gui_module_api.h"
 #include "common/opencl.h"
