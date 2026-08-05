@@ -62,6 +62,13 @@ void dt_cache_arena_stats(dt_cache_arena_t *a,
                           uint32_t *out_total_free_pages,
                           uint32_t *out_largest_free_run_pages);
 
+// Hard-release the physical pages backing every currently-free run, so the OS
+// gets them back NOW (not lazily) while the virtual reservation stays intact.
+// Complements the lazy per-free release in dt_cache_arena_free(): call this when
+// the system is under memory pressure and other applications need the RAM.
+// Thread-safe. Returns the number of bytes released.
+size_t dt_cache_arena_trim(dt_cache_arena_t *a);
+
 int dt_cache_arena_init(dt_cache_arena_t *a, size_t total_size);
 void dt_cache_arena_cleanup(dt_cache_arena_t *a);
 

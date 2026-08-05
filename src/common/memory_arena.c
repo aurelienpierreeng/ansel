@@ -37,6 +37,27 @@ typedef struct dt_free_run_t
   uint32_t length;
 } dt_free_run_t;
 
+/* Lazily hand the physical pages backing a freed run back to the OS.
+ * MADV_FREE marks them reclaimable-at-will: the kernel only takes them under actual
+ * memory pressure, and re-dirtying them before that happens costs nothing — the right
+ * trade for the hot per-frame alloc/free churn of module temp buffers. Without this,
+ * the arena's RSS is a permanent high-water mark: LRU eviction and cache flushes never
+ * relieve the system, and on a loaded machine the OOM-killer fires (issue #1083).
+ * On Windows nothing is released per-free (a MEM_DECOMMIT here would force a zero-fill
+ * re-commit on every hot realloc); dt_cache_arena_trim() decommits free runs instead
+ * when pressure actually calls for it. */
+static inline void _arena_release_run_lazy(uint8_t *ptr, size_t size)
+{
+#if !defined(_WIN32) && defined(MADV_FREE)
+  if(madvise(ptr, size, MADV_FREE))
+    dt_print(DT_DEBUG_MEMORY, "[arena] MADV_FREE of %" G_GSIZE_FORMAT " bytes failed: %s\n",
+             size, strerror(errno));
+#else
+  (void)ptr;
+  (void)size;
+#endif
+}
+
 gboolean dt_cache_arena_calc(const dt_cache_arena_t *a,
                              size_t size,
                              uint32_t *out_pages,
@@ -172,6 +193,11 @@ void dt_cache_arena_free(dt_cache_arena_t *a,
 
   const uint32_t first = (uint32_t)first_sz;
 
+  /* Release the physical backing before the run is published to the free list:
+   * until the insert below, this range still belongs exclusively to the caller,
+   * so no concurrent alloc can be handed these pages while we drop them. */
+  _arena_release_run_lazy((uint8_t *)ptr, (size_t)pages * a->page_size);
+
   dt_pthread_mutex_lock(&a->lock);
 
   /* insert a new free run, keeping free_runs sorted by start page */
@@ -252,6 +278,41 @@ void dt_cache_arena_stats(dt_cache_arena_t *a,
 
   if(out_total_free_pages) *out_total_free_pages = total;
   if(out_largest_free_run_pages) *out_largest_free_run_pages = largest;
+}
+
+size_t dt_cache_arena_trim(dt_cache_arena_t *a)
+{
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(a->base) || !a->free_runs || a->page_size == 0) return 0;
+
+  size_t released = 0;
+
+  /* The whole walk must hold the arena lock: a run released outside it could be
+   * carved out by a concurrent dt_cache_arena_alloc() and already written to by
+   * the time we drop its pages — silently destroying that consumer's pixels. */
+  dt_pthread_mutex_lock(&a->lock);
+  for(guint i = 0; i < a->free_runs->len; i++)
+  {
+    dt_free_run_t *r = &g_array_index(a->free_runs, dt_free_run_t, i);
+    uint8_t *ptr = a->base + (size_t)r->start * a->page_size;
+    const size_t size = (size_t)r->length * a->page_size;
+
+#if defined(_WIN32)
+    /* Decommitting an uncommitted page is documented as a no-op, so free runs never
+     * carved out yet are safe. dt_cache_arena_alloc() re-commits on the next use. */
+    if(VirtualFree(ptr, size, MEM_DECOMMIT)) released += size;
+#elif defined(__APPLE__) && defined(MADV_FREE)
+    /* On macOS MADV_DONTNEED doesn't actually release anonymous pages; MADV_FREE is
+     * the strongest sane option and feeds the system-wide memory-pressure machinery. */
+    if(!madvise(ptr, size, MADV_FREE)) released += size;
+#elif defined(MADV_DONTNEED)
+    if(!madvise(ptr, size, MADV_DONTNEED)) released += size;
+#endif
+  }
+  dt_pthread_mutex_unlock(&a->lock);
+
+  dt_print(DT_DEBUG_MEMORY, "[arena] trimmed %" G_GSIZE_FORMAT " MiB of free pages back to the OS\n",
+           released / (1024 * 1024));
+  return released;
 }
 
 void dt_cache_arena_cleanup(dt_cache_arena_t *a)

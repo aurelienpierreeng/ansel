@@ -273,7 +273,13 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
 
   /* calculate optimal size of tiles */
   float available = dt_get_available_mem();
-  assert(available >= 500.0f * 1024.0f * 1024.0f);
+  // Less than 500 MB of planning room is a legitimate runtime state now that
+  // dt_get_available_mem() is capped by live system availability (issue #1083):
+  // tiles just get small. Not an invariant, so no assert.
+  if(available < 500.0f * 1024.0f * 1024.0f)
+    dt_print(DT_DEBUG_TILING | DT_DEBUG_MEMORY,
+             "[tiling] low memory (%.0f MiB): tiling '%s' aggressively\n",
+             available / (1024.0f * 1024.0f), self->op);
   /* correct for size of ivoid and ovoid which are needed on top of tiling */
   available = fmaxf(available - ((float)roi_out->width * roi_out->height * out_bpp)
                    - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
@@ -527,7 +533,13 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
 
   /* calculate optimal size of tiles */
   float available = dt_get_available_mem();
-  assert(available >= 500.0f * 1024.0f * 1024.0f);
+  // Less than 500 MB of planning room is a legitimate runtime state now that
+  // dt_get_available_mem() is capped by live system availability (issue #1083):
+  // tiles just get small. Not an invariant, so no assert.
+  if(available < 500.0f * 1024.0f * 1024.0f)
+    dt_print(DT_DEBUG_TILING | DT_DEBUG_MEMORY,
+             "[tiling] low memory (%.0f MiB): tiling '%s' aggressively\n",
+             available / (1024.0f * 1024.0f), self->op);
   /* correct for size of ivoid and ovoid which are needed on top of tiling */
   available = fmaxf(available - ((float)roi_out->width * roi_out->height * out_bpp)
                    - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
@@ -1446,6 +1458,15 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
   int error = 0;
   while(!error && (available < total || (size_t)(0.9f * largest_run) < total))
   {
+    /* Stop evicting once the internal budget headroom already fits: past that
+     * point the blocker is the system-availability cap inside
+     * dt_get_available_mem() (issue #1083), which eviction cannot reliably
+     * raise — freed pages reach the OS asynchronously. Draining the whole
+     * cache would not change the answer; the caller tiles instead. */
+    size_t current = 0, max = 0;
+    dt_dev_pixelpipe_cache_get_usage(darktable.pixelpipe_cache, &current, &max);
+    if(max - current >= total && (size_t)(0.9f * largest_run) >= total) break;
+
     error = dt_dev_pixel_pipe_cache_remove_lru(darktable.pixelpipe_cache);
     available = dt_get_available_mem();
     largest_run = dt_pixelpipe_cache_get_largest_free_run(darktable.pixelpipe_cache);
