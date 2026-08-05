@@ -1487,6 +1487,22 @@ static inline void _arena_stats_bytes(dt_dev_pixelpipe_cache_t *cache, uint32_t 
   if(largest_bytes) *largest_bytes = (size_t)(*largest_pages) * page_size;
 }
 
+/* Largest contiguous free run in the arena, in bytes. The arena serves every
+ * allocation from ONE contiguous run, and pinned entries partition its
+ * address space — so at tiling-planning time this, not the byte headroom, is
+ * the number a module's working set must actually fit (see the available-
+ * memory cap in develop/tiling.c). Locked because the arena bitmap mutates
+ * under concurrent pipes. */
+size_t dt_pixelpipe_cache_get_largest_free_run(dt_dev_pixelpipe_cache_t *cache)
+{
+  uint32_t total_pages = 0, largest_pages = 0;
+  size_t total_bytes = 0, largest_bytes = 0;
+  dt_pthread_mutex_lock(&cache->lock);
+  _arena_stats_bytes(cache, &total_pages, &largest_pages, &total_bytes, &largest_bytes);
+  dt_pthread_mutex_unlock(&cache->lock);
+  return largest_bytes;
+}
+
 static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache, size_t request_size,
                                                  const char *entry_name, const char *module, uint64_t hash,
                                                  gboolean name_is_file)

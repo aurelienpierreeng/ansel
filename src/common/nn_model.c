@@ -69,6 +69,42 @@ struct dt_nn_model_t
 #endif
 };
 
+/* injected pixel-buffer allocator (see nn_model.h); malloc fallback keeps the
+ * standalone fixture test dependency-free */
+static dt_nn_alloc_f _nn_alloc_fn = NULL;
+static dt_nn_free_f _nn_free_fn = NULL;
+
+void dt_nn_set_allocator(dt_nn_alloc_f alloc_fn, dt_nn_free_f free_fn)
+{
+  _nn_alloc_fn = alloc_fn;
+  _nn_free_fn = free_fn;
+}
+
+/* Pixel buffers come from the injected arena — the pixelpipe cache memory
+ * arena in the application — and ONLY from it: the arena is the application's
+ * memory-budget control, and a malloc escape hatch would simply move the
+ * failure to the OS OOM killer, which kills the process instead of one tile.
+ * An arena refusal therefore fails the forward, and the caller falls back to
+ * an unprocessed tile — the tiling engine's job is to plan tiles small enough
+ * that this cannot happen (see dt_nn_unet_scratch_per_px and the module's
+ * tiling_callback). The malloc path below exists solely for the standalone
+ * fixture test, which runs outside the application with no allocator set. */
+
+static void *_nn_alloc(size_t floats, int long_lived)
+{
+  const size_t bytes = floats * sizeof(float);
+  return _nn_alloc_fn ? _nn_alloc_fn(bytes, long_lived) : malloc(bytes);
+}
+
+static void _nn_free(void *p)
+{
+  if(!p) return;
+  if(_nn_free_fn)
+    _nn_free_fn(p);
+  else
+    free(p);
+}
+
 static void _err(char *err, size_t err_len, const char *msg)
 {
   if(err && err_len) snprintf(err, err_len, "%s", msg);
@@ -600,113 +636,387 @@ static void _upsample2x(const float *in, int ch, int w, int h, float *out)
   }
 }
 
-// per-net scratch: depth skip buffers of base*wh floats each, plus three
-// ping-pong buffers of 2*base*wh floats (the widest tensors: level-0 concat)
-static size_t _unet_scratch_bytes(const nn_unet_t *u, size_t wh)
+/* Peak live scratch of one net's forward, in floats: the ledger of the EXACT
+ * allocate/free sequence of the forwards. cl_variant selects which one:
+ * the CPU path (cl_variant 0) reads dec1's concat in place via _conv2d_cat2
+ * and allocates neither the physical concat nor an upsample staging buffer;
+ * the CL path (cl_variant 1) materializes both (cat + us). Any edit to either
+ * forward must be reflected here, or the tiling engine plans against the
+ * wrong number. */
+static size_t _unet_peak_floats(const nn_unet_t *u, size_t wh, int cl_variant)
 {
-  return (u->depth * (size_t)u->base + 3 * 2 * (size_t)u->base) * wh * sizeof(float);
+  const size_t base = (size_t)u->base;
+  size_t live = 0, peak = 0, cur = 0;
+#define NN_LEDGER(delta)                                                                                      \
+  do                                                                                                          \
+  {                                                                                                           \
+    live += (delta);                                                                                          \
+    if(live > peak) peak = live;                                                                              \
+  } while(0)
+  // encoder
+  for(int l = 0; l < u->depth; l++)
+  {
+    const size_t lvl = base * wh >> l;
+    NN_LEDGER(lvl);      // tmp
+    NN_LEDGER(lvl);      // skips[l] — stays live until its decoder concat
+    NN_LEDGER(lvl >> 2); // next
+    live -= lvl;         // tmp freed
+    live -= cur;         // previous level's input freed
+    cur = lvl >> 2;
+  }
+  // bottleneck
+  const size_t bot = base * wh >> u->depth;
+  NN_LEDGER(bot);
+  NN_LEDGER(bot);
+  live -= bot;
+  live -= cur;
+  cur = bot;
+  // decoder
+  for(int i = 0; i < u->depth; i++)
+  {
+    const int l = u->depth - 1 - i;
+    const size_t half = base * wh >> l;
+    NN_LEDGER(half >> 2); // v (1x1 output on the coarse grid)
+    live -= cur;          // cur freed
+    if(cl_variant)
+    {
+      NN_LEDGER(2 * half); // cat
+      live -= half;        // skips[l] freed after its copy
+      NN_LEDGER(half);     // us
+      live -= half >> 2;   // v freed
+      live -= half;        // us freed
+      NN_LEDGER(half);     // d1
+      live -= 2 * half;    // cat freed
+    }
+    else
+    {
+      NN_LEDGER(half);     // d1 (dec1 reads skip + v in place)
+      live -= half >> 2;   // v freed
+      live -= half;        // skips[l] freed
+    }
+    NN_LEDGER(half); // new cur (dec2 output)
+    live -= half;    // d1 freed
+    cur = half;
+  }
+  NN_LEDGER((size_t)u->out_ch * wh); // head
+#undef NN_LEDGER
+  return peak;
+}
+
+static float _scratch_per_px(const dt_nn_model_t *m, int cl_variant)
+{
+  /* A large reference area keeps the integer ledger exact (every term is
+   * base*wh >> k); the result is the dimensionless factor of the input image
+   * size the tiling engine wants — never absolute bytes. The coarse and fine
+   * stages never run concurrently (the caller frees the coarse buffers before
+   * the fine forward), so the model peak is the MAX of the two, not the sum. */
+  const size_t ref = (size_t)1 << 24;
+  float per_px = (float)_unet_peak_floats(&m->fine, ref, cl_variant) / (float)ref;
+  if(m->has_coarse)
+  {
+    const int bin = NN_MIN(m->bin_bayer, m->bin_xtrans); // smaller bin = larger coarse buffer
+    const float coarse
+        = (float)_unet_peak_floats(&m->coarse, ref / ((size_t)bin * bin), cl_variant) / (float)ref;
+    if(coarse > per_px) per_px = coarse;
+  }
+  return per_px;
+}
+
+float dt_nn_unet_scratch_per_px(const dt_nn_model_t *m)
+{
+  return _scratch_per_px(m, 0);
+}
+
+float dt_nn_unet_scratch_per_px_cl(const dt_nn_model_t *m)
+{
+  return _scratch_per_px(m, 1);
+}
+
+float dt_nn_unet_scratch_maxblock_per_px(const dt_nn_model_t *m)
+{
+  /* Largest SINGLE scratch tensor per input pixel, host path: one base*wh
+   * plane (dec1's output / a skip / an encoder tmp — all equal at level 0).
+   * The pixelpipe arena serves contiguous runs and its address space is
+   * partitioned by entries pinned during the pipe recursion, so the largest
+   * tensor — not the total — is what an allocation can actually get; the
+   * module's tiling_callback uses this to keep it comfortably below the
+   * planned budget. */
+  float per_px = (float)m->fine.base;
+  if(m->has_coarse)
+  {
+    const int bin = NN_MIN(m->bin_bayer, m->bin_xtrans);
+    const float coarse = (float)m->coarse.base / (float)(bin * bin);
+    if(coarse > per_px) per_px = coarse;
+  }
+  return per_px;
 }
 
 size_t dt_nn_unet_scratch_bytes(const dt_nn_model_t *m, int width, int height)
 {
   const size_t wh = (size_t)width * height;
-  size_t bytes = _unet_scratch_bytes(&m->fine, wh);
+  size_t floats = _unet_peak_floats(&m->fine, wh, 0);
   if(m->has_coarse)
   {
-    // the coarse net runs on the binned planes; the smaller bin factor is
-    // the larger (worst-case) coarse buffer
     const int bin = NN_MIN(m->bin_bayer, m->bin_xtrans);
-    bytes += _unet_scratch_bytes(&m->coarse, wh / ((size_t)bin * bin));
+    const size_t coarse = _unet_peak_floats(&m->coarse, wh / ((size_t)bin * bin), 0);
+    if(coarse > floats) floats = coarse;
   }
-  return bytes;
+  return floats * sizeof(float);
 }
 
-// full forward pass of one U-Net. residual_ch > 0 subtracts the head from the
-// input's first residual_ch planes (the residual formulation, out must hold
-// residual_ch planes); residual_ch == 0 writes the raw head output.
+/* dec1 variant of _conv2d for k=3, stride=1, pad=1: the input is the channel
+ * concat [a (in_ch_a channels, full res) | b (cv->in_ch - in_ch_a channels,
+ * HALF resolution, read through a nearest-x2 upsample view)]. Reading b in
+ * place is bit-identical to materializing upsample(b) and running _conv2d on
+ * a physical concat — nearest upsampling replicates values, so every tap
+ * reads the same number in the same accumulation order — but the 2*base*wh
+ * concat tensor, the module's largest single allocation and therefore the
+ * arena's contiguity bottleneck, never exists. Keep the accumulation order
+ * identical to _conv2d: same (ic, ky, kx) nesting, same OC blocking. */
+__DT_CLONE_TARGETS__
+static void _conv2d_cat2(const nn_conv_t *cv, const float *a, int in_ch_a, const float *b, int w, int h,
+                         float *out)
+{
+  const int k = cv->k; // always 3 here, kept general for the tap arithmetic
+  const int pad = 1;
+  const int ow = w, oh = h;
+  const int bw = w / 2;
+  const size_t inhw = (size_t)w * h;
+  const size_t bhw = (size_t)bw * (h / 2);
+  const size_t wstride = (size_t)cv->in_ch * k * k;
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+  {
+    float *const acc = malloc(sizeof(float) * NN_OC_BLOCK * ow);
+#ifdef _OPENMP
+#pragma omp for collapse(2) schedule(static)
+#endif
+    for(int oy = 0; oy < oh; oy++)
+      for(int ocb = 0; ocb < cv->out_ch; ocb += NN_OC_BLOCK)
+      {
+        const int nb = NN_MIN(NN_OC_BLOCK, cv->out_ch - ocb);
+        for(int r = 0; r < nb; r++)
+        {
+          float *const ar = acc + (size_t)r * ow;
+          const float bias = cv->b[ocb + r];
+          for(int ox = 0; ox < ow; ox++) ar[ox] = bias;
+        }
+        for(int ic = 0; ic < cv->in_ch; ic++)
+        {
+          const int from_b = ic >= in_ch_a;
+          const float *const ip = from_b ? b + (size_t)(ic - in_ch_a) * bhw : a + (size_t)ic * inhw;
+          for(int ky = 0; ky < k; ky++)
+          {
+            const int iy = oy + ky - pad;
+            if(iy < 0 || iy >= h) continue;
+            const float *const irow = from_b ? ip + (size_t)(iy >> 1) * bw : ip + (size_t)iy * w;
+            for(int kx = 0; kx < k; kx++)
+            {
+              const int shift = kx - pad;
+              int ox0 = 0, ox1 = ow;
+              while(ox0 < ow && ox0 + shift < 0) ox0++;
+              while(ox1 > ox0 && (ox1 - 1) + shift >= w) ox1--;
+              const float *const wbase = cv->w + ((size_t)ocb * cv->in_ch + ic) * k * k + ky * k + kx;
+              if(nb == NN_OC_BLOCK)
+              {
+                // 4-way output-channel blocking, mirroring _conv2d's fast
+                // path: one pass over the row feeds four accumulators
+                const float w0 = wbase[0], w1 = wbase[wstride];
+                const float w2 = wbase[2 * wstride], w3 = wbase[3 * wstride];
+                float *const a0 = acc, *const a1 = acc + ow;
+                float *const a2 = acc + 2 * ow, *const a3 = acc + 3 * ow;
+                if(from_b)
+                  for(int ox = ox0; ox < ox1; ox++)
+                  {
+                    const float xv = irow[(ox + shift) >> 1];
+                    a0[ox] += w0 * xv;
+                    a1[ox] += w1 * xv;
+                    a2[ox] += w2 * xv;
+                    a3[ox] += w3 * xv;
+                  }
+                else
+                {
+                  const float *const is = irow + shift;
+#ifdef _OPENMP
+#pragma omp simd
+#endif
+                  for(int ox = ox0; ox < ox1; ox++)
+                  {
+                    const float xv = is[ox];
+                    a0[ox] += w0 * xv;
+                    a1[ox] += w1 * xv;
+                    a2[ox] += w2 * xv;
+                    a3[ox] += w3 * xv;
+                  }
+                }
+              }
+              else
+                for(int r = 0; r < nb; r++)
+                {
+                  const float wr = wbase[(size_t)r * wstride];
+                  float *const ar = acc + (size_t)r * ow;
+                  if(from_b)
+                    for(int ox = ox0; ox < ox1; ox++) ar[ox] += wr * irow[(ox + shift) >> 1];
+                  else
+                  {
+                    const float *const is = irow + shift;
+#ifdef _OPENMP
+#pragma omp simd
+#endif
+                    for(int ox = ox0; ox < ox1; ox++) ar[ox] += wr * is[ox];
+                  }
+                }
+            }
+          }
+        }
+        for(int r = 0; r < nb; r++)
+          memcpy(out + ((size_t)(ocb + r)) * inhw + (size_t)oy * ow, acc + (size_t)r * ow,
+                 sizeof(float) * ow);
+      }
+    free(acc);
+  }
+}
+
+/* Full forward pass of one U-Net.
+ *
+ * Memory discipline — this is where the module's RAM peak lives, so every
+ * tensor is allocated at its EXACT size the moment it is needed and released
+ * on its last use, instead of the former three worst-case ping-pong arenas
+ * plus all skips held to the end (7.9*base*wh floats live). The live-set peak
+ * is now dec1 at level 0: ~2.25*base*wh floats, with the largest single
+ * allocation ONE base*wh plane — the binding constraint for the pixelpipe
+ * arena, which serves contiguous runs. _unet_peak_floats()
+ * is the ledger of this exact sequence — KEEP THE TWO IN SYNC.
+ *
+ * The 1x1 up-convs are applied BEFORE their nearest x2 upsample: a 1x1 conv
+ * is per-pixel and nearest upsampling replicates pixels, so conv(up(x)) and
+ * up(conv(x)) are the same values from the same FP operations — but computed
+ * on 4x fewer pixels, and the (2*w_skip)@full-res tensor never exists.
+ *
+ * residual_ch > 0 subtracts the head from the input's first residual_ch
+ * planes; residual_ch == 0 writes the raw head output. */
 static int _unet_forward(const nn_unet_t *u, const float *in, float *out, int width, int height, int residual_ch)
 {
   const int align = 1 << u->depth;
   if(width % align || height % align || width <= 0 || height <= 0) return 1;
 
   const size_t wh = (size_t)width * height;
-  const size_t buf_floats = 2 * (size_t)u->base * wh;
+  const size_t base = (size_t)u->base;
   float *skips[NN_MAX_DEPTH] = { NULL };
-  float *A = malloc(buf_floats * sizeof(float));
-  float *B = malloc(buf_floats * sizeof(float));
-  float *C = malloc(buf_floats * sizeof(float));
-  int ok = A && B && C;
-  for(int l = 0; l < u->depth && ok; l++)
-  {
-    skips[l] = malloc((size_t)u->base * wh * sizeof(float)); // (base<<l) ch at wh>>2l
-    ok = skips[l] != NULL;
-  }
-  if(!ok)
-  {
-    for(int l = 0; l < u->depth; l++) free(skips[l]);
-    free(A);
-    free(B);
-    free(C);
-    return 1;
-  }
 
-  // encoder
+  // encoder: skip[l] = (base<<l) channels at (wh >> 2l) px = base*wh >> l floats
   const float *src = in;
   int cw = width, chh = height;
-  float *cur = A;
-  for(int l = 0; l < u->depth; l++)
+  float *cur = NULL;
+  int ok = 1;
+  for(int l = 0; l < u->depth && ok; l++)
   {
-    _conv2d(&u->enc1[l], src, cw, chh, 1, 1, B);
-    _gelu(B, (size_t)u->enc1[l].out_ch * cw * chh);
-    _conv2d(&u->enc2[l], B, cw, chh, 1, 1, skips[l]);
+    const size_t lvl = base * wh >> l;
+    float *tmp = _nn_alloc(lvl, 0);
+    skips[l] = _nn_alloc(lvl, 1);
+    float *next = _nn_alloc(lvl >> 2, 0);
+    if(!tmp || !skips[l] || !next)
+    {
+      _nn_free(tmp);
+      _nn_free(next);
+      ok = 0;
+      break;
+    }
+    _conv2d(&u->enc1[l], src, cw, chh, 1, 1, tmp);
+    _gelu(tmp, (size_t)u->enc1[l].out_ch * cw * chh);
+    _conv2d(&u->enc2[l], tmp, cw, chh, 1, 1, skips[l]);
     _gelu(skips[l], (size_t)u->enc2[l].out_ch * cw * chh);
-    _conv2d(&u->down[l], skips[l], cw, chh, 2, 0, cur);
+    _nn_free(tmp);
+    _conv2d(&u->down[l], skips[l], cw, chh, 2, 0, next);
+    _nn_free(cur); // level l's input, dead now (never frees `in`: cur is NULL then)
+    cur = next;
     cw /= 2;
     chh /= 2;
     src = cur;
   }
 
-  // bottleneck
-  _conv2d(&u->bot1, src, cw, chh, 1, 1, B);
-  _gelu(B, (size_t)u->bot1.out_ch * cw * chh);
-  _conv2d(&u->bot2, B, cw, chh, 1, 1, cur);
-  _gelu(cur, (size_t)u->bot2.out_ch * cw * chh);
-
-  // decoder: up.i / dec.i #i pairs with encoder level (depth-1-i)
-  for(int i = 0; i < u->depth; i++)
+  // bottleneck: (base<<depth) channels at wh >> 2*depth px
+  if(ok)
   {
-    const int l = u->depth - 1 - i;
-    const int w_skip = u->base << l;
-    _upsample2x(cur, u->up[i].in_ch, cw, chh, B);
-    cw *= 2;
-    chh *= 2;
-    _conv2d(&u->up[i], B, cw, chh, 1, 0, C);
-    // concat [skip, upsampled] along channels: planar layout makes this two copies
-    memcpy(B, skips[l], (size_t)w_skip * cw * chh * sizeof(float));
-    memcpy(B + (size_t)w_skip * cw * chh, C, (size_t)w_skip * cw * chh * sizeof(float));
-    _conv2d(&u->dec1[i], B, cw, chh, 1, 1, C);
-    _gelu(C, (size_t)u->dec1[i].out_ch * cw * chh);
-    _conv2d(&u->dec2[i], C, cw, chh, 1, 1, cur);
-    _gelu(cur, (size_t)u->dec2[i].out_ch * cw * chh);
+    const size_t bot = base * wh >> u->depth;
+    float *tmp = _nn_alloc(bot, 0);
+    float *bout = _nn_alloc(bot, 0);
+    if(!tmp || !bout)
+    {
+      _nn_free(tmp);
+      _nn_free(bout);
+      ok = 0;
+    }
+    else
+    {
+      _conv2d(&u->bot1, src, cw, chh, 1, 1, tmp);
+      _gelu(tmp, (size_t)u->bot1.out_ch * cw * chh);
+      _conv2d(&u->bot2, tmp, cw, chh, 1, 1, bout);
+      _gelu(bout, (size_t)u->bot2.out_ch * cw * chh);
+      _nn_free(tmp);
+      _nn_free(cur);
+      cur = bout;
+    }
   }
 
-  _conv2d(&u->head, cur, width, height, 1, 1, B);
-  if(residual_ch > 0)
+  // decoder: up.i / dec.i #i pairs with encoder level (depth-1-i). The 1x1
+  // up-conv runs on the coarse grid (see the doc comment), and dec1 reads its
+  // concat input IN PLACE via _conv2d_cat2 — skip at full resolution, the 1x1
+  // output through a nearest-upsample view — so the module's former largest
+  // tensor (the physical 2*w_skip concat) is never allocated at all.
+  for(int i = 0; i < u->depth && ok; i++)
   {
-    // residual head: out = input planes - predicted noise
+    const int l = u->depth - 1 - i;
+    const size_t w_skip = base << l;
+    const size_t half = w_skip * (size_t)(2 * cw) * (size_t)(2 * chh); // one concat half
+    float *v = _nn_alloc(half >> 2, 1); // top end: must not split the big-tensor churn area
+    if(!v) { ok = 0; break; }
+    _conv2d(&u->up[i], cur, cw, chh, 1, 0, v);
+    _nn_free(cur);
+    cur = NULL;
+    cw *= 2;
+    chh *= 2;
+    float *d1 = _nn_alloc(half, 0);
+    if(!d1) { _nn_free(v); ok = 0; break; }
+    _conv2d_cat2(&u->dec1[i], skips[l], (int)w_skip, v, cw, chh, d1);
+    _gelu(d1, w_skip * (size_t)cw * chh);
+    _nn_free(v);
+    _nn_free(skips[l]);
+    skips[l] = NULL;
+    float *d2 = _nn_alloc(half, 0);
+    if(!d2) { _nn_free(d1); ok = 0; break; }
+    _conv2d(&u->dec2[i], d1, cw, chh, 1, 1, d2);
+    _gelu(d2, w_skip * (size_t)cw * chh);
+    _nn_free(d1);
+    cur = d2;
+  }
+
+  if(ok)
+  {
+    float *head = _nn_alloc((size_t)u->out_ch * wh, 0);
+    if(!head)
+      ok = 0;
+    else
+    {
+      _conv2d(&u->head, cur, width, height, 1, 1, head);
+      if(residual_ch > 0)
+      {
+        // residual head: out = input planes - predicted noise
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
-    for(size_t i = 0; i < (size_t)residual_ch * wh; i++) out[i] = in[i] - B[i];
+        for(size_t i = 0; i < (size_t)residual_ch * wh; i++) out[i] = in[i] - head[i];
+      }
+      else
+        memcpy(out, head, (size_t)u->out_ch * wh * sizeof(float));
+      _nn_free(head);
+    }
   }
-  else
-    memcpy(out, B, (size_t)u->out_ch * wh * sizeof(float));
 
-  for(int l = 0; l < u->depth; l++) free(skips[l]);
-  free(A);
-  free(B);
-  free(C);
-  return 0;
+  for(int l = 0; l < u->depth; l++) _nn_free(skips[l]);
+  _nn_free(cur);
+  return ok ? 0 : 1;
 }
 
 int dt_nn_unet_apply(const dt_nn_model_t *m, const float *in, float *out, int width, int height)
@@ -917,6 +1227,18 @@ static int _upsample_cl(dt_nn_cl_t *cl, int devid, cl_mem in, cl_mem out, int w,
 // the fine stage's residual is applied by the caller after readback (the
 // historic CPU/CL asymmetry), and the coarse stage's residual is applied
 // host-side too so both paths share the same subtraction code bit-for-bit.
+/* Device twin of _unet_forward: the same live-set discipline — every buffer
+ * allocated at its exact size when needed and released on last use, the same
+ * 1x1-before-upsample commutation — so VRAM peaks at the level-0 concat
+ * (~3.25*base*wh floats) instead of holding three worst-case arenas plus
+ * every skip to the end. All temporaries live at function scope and are released in
+ * cleanup, so a device-OOM mid-sequence (the very case this path exists for:
+ * fall back to CPU on a full card) cannot leak. Releases happen at enqueue
+ * time and the runtime defers destruction until in-flight commands finish, so
+ * on drivers that commit at clCreateBuffer the instantaneous footprint can
+ * transiently exceed the ledger by the pending-release set; the factor_cl
+ * headroom absorbs that, and the failure mode is the graceful CPU fallback. _unet_peak_floats() is the
+ * shared ledger of this sequence: KEEP ALL THREE IN SYNC. */
 static int _unet_forward_cl(const dt_nn_model_t *m, const nn_unet_t *u, dt_nn_cl_t *cl, int devid, cl_mem dev_in,
                             cl_mem dev_out, int width, int height)
 {
@@ -927,70 +1249,108 @@ static int _unet_forward_cl(const dt_nn_model_t *m, const nn_unet_t *u, dt_nn_cl
   if(!weights) return -1;
 
   const size_t wh = (size_t)width * height;
-  const size_t buf_bytes = 2 * (size_t)u->base * wh * sizeof(float);
+  const size_t base = (size_t)u->base;
   int err = CL_SUCCESS;
-
-  cl_mem A = dt_opencl_alloc_device_buffer(devid, buf_bytes);
-  cl_mem B = dt_opencl_alloc_device_buffer(devid, buf_bytes);
-  cl_mem C = dt_opencl_alloc_device_buffer(devid, buf_bytes);
   cl_mem skips[NN_MAX_DEPTH] = { NULL };
-  int ok = A && B && C;
-  for(int l = 0; l < u->depth && ok; l++)
-  {
-    skips[l] = dt_opencl_alloc_device_buffer(devid, (size_t)u->base * wh * sizeof(float));
-    ok = skips[l] != NULL;
-  }
-  if(!ok)
-  {
-    err = -1;
-    goto cleanup;
-  }
+  cl_mem cur = NULL, tmp = NULL, v = NULL, cat = NULL, us = NULL, d1 = NULL;
+
+#define NN_CL_ALLOC(var, floats)                                                                              \
+  do                                                                                                          \
+  {                                                                                                           \
+    var = dt_opencl_alloc_device_buffer(devid, (floats) * sizeof(float));                                     \
+    if(!var)                                                                                                  \
+    {                                                                                                         \
+      err = -1;                                                                                               \
+      goto cleanup;                                                                                           \
+    }                                                                                                         \
+  } while(0)
+#define NN_CL_FREE(var)                                                                                       \
+  do                                                                                                          \
+  {                                                                                                           \
+    if(var) dt_opencl_release_mem_object(var);                                                                \
+    var = NULL;                                                                                               \
+  } while(0)
 
   // encoder
   cl_mem src = dev_in;
   int cw = width, chh = height;
-  cl_mem cur = A;
   for(int l = 0; l < u->depth && err == CL_SUCCESS; l++)
   {
-    err |= _conv_cl(cl, devid, weights, m->blob, src, B, cw, chh, &u->enc1[l], 1, 1, 1);
-    err |= _conv_cl(cl, devid, weights, m->blob, B, skips[l], cw, chh, &u->enc2[l], 1, 1, 1);
-    err |= _conv_cl(cl, devid, weights, m->blob, skips[l], cur, cw, chh, &u->down[l], 2, 0, 0);
+    const size_t lvl = base * wh >> l;
+    cl_mem next = NULL;
+    NN_CL_ALLOC(tmp, lvl);
+    NN_CL_ALLOC(skips[l], lvl);
+    NN_CL_ALLOC(next, lvl >> 2);
+    err |= _conv_cl(cl, devid, weights, m->blob, src, tmp, cw, chh, &u->enc1[l], 1, 1, 1);
+    err |= _conv_cl(cl, devid, weights, m->blob, tmp, skips[l], cw, chh, &u->enc2[l], 1, 1, 1);
+    NN_CL_FREE(tmp);
+    err |= _conv_cl(cl, devid, weights, m->blob, skips[l], next, cw, chh, &u->down[l], 2, 0, 0);
+    NN_CL_FREE(cur); // level l's input; never dev_in (cur is NULL on l == 0)
+    cur = next;
     cw /= 2;
     chh /= 2;
     src = cur;
   }
 
-  // bottleneck
-  err |= _conv_cl(cl, devid, weights, m->blob, src, B, cw, chh, &u->bot1, 1, 1, 1);
-  err |= _conv_cl(cl, devid, weights, m->blob, B, cur, cw, chh, &u->bot2, 1, 1, 1);
+  // bottleneck (bout reuses the `v` slot so cleanup covers it)
+  if(err == CL_SUCCESS)
+  {
+    const size_t bot = base * wh >> u->depth;
+    NN_CL_ALLOC(tmp, bot);
+    NN_CL_ALLOC(v, bot);
+    err |= _conv_cl(cl, devid, weights, m->blob, src, tmp, cw, chh, &u->bot1, 1, 1, 1);
+    err |= _conv_cl(cl, devid, weights, m->blob, tmp, v, cw, chh, &u->bot2, 1, 1, 1);
+    NN_CL_FREE(tmp);
+    NN_CL_FREE(cur);
+    cur = v;
+    v = NULL;
+  }
 
-  // decoder: up.i / dec.i pair with encoder level (depth-1-i)
+  // decoder: up.i / dec.i pair with encoder level l = depth-1-i; the 1x1
+  // up-conv runs on the coarse grid, then upsamples (see the doc comment)
   for(int i = 0; i < u->depth && err == CL_SUCCESS; i++)
   {
     const int l = u->depth - 1 - i;
-    const int w_skip = u->base << l;
-    err |= _upsample_cl(cl, devid, cur, B, cw, chh, u->up[i].in_ch);
+    const size_t w_skip = base << l;
+    const size_t half = w_skip * (size_t)(2 * cw) * (size_t)(2 * chh);
+    NN_CL_ALLOC(v, half >> 2);
+    err |= _conv_cl(cl, devid, weights, m->blob, cur, v, cw, chh, &u->up[i], 1, 0, 0);
+    NN_CL_FREE(cur);
+    NN_CL_ALLOC(cat, 2 * half);
+    err |= dt_opencl_enqueue_copy_buffer_to_buffer(devid, skips[l], cat, 0, 0, half * sizeof(float));
+    NN_CL_FREE(skips[l]);
+    NN_CL_ALLOC(us, half);
+    err |= _upsample_cl(cl, devid, v, us, cw, chh, u->up[i].out_ch);
+    NN_CL_FREE(v);
+    err |= dt_opencl_enqueue_copy_buffer_to_buffer(devid, us, cat, 0, half * sizeof(float),
+                                                   half * sizeof(float));
+    NN_CL_FREE(us);
     cw *= 2;
     chh *= 2;
-    err |= _conv_cl(cl, devid, weights, m->blob, B, C, cw, chh, &u->up[i], 1, 0, 0);
-    // concat [skip, upsampled-projected] -> B (channel-planar: two copies)
-    const size_t plane = (size_t)w_skip * cw * chh * sizeof(float);
-    err |= dt_opencl_enqueue_copy_buffer_to_buffer(devid, skips[l], B, 0, 0, plane);
-    err |= dt_opencl_enqueue_copy_buffer_to_buffer(devid, C, B, 0, plane, plane);
-    err |= _conv_cl(cl, devid, weights, m->blob, B, C, cw, chh, &u->dec1[i], 1, 1, 1);
-    err |= _conv_cl(cl, devid, weights, m->blob, C, cur, cw, chh, &u->dec2[i], 1, 1, 1);
+    NN_CL_ALLOC(d1, half);
+    err |= _conv_cl(cl, devid, weights, m->blob, cat, d1, cw, chh, &u->dec1[i], 1, 1, 1);
+    NN_CL_FREE(cat);
+    NN_CL_ALLOC(cur, half);
+    err |= _conv_cl(cl, devid, weights, m->blob, d1, cur, cw, chh, &u->dec2[i], 1, 1, 1);
+    NN_CL_FREE(d1);
   }
 
   // head: raw prediction (no activation) into dev_out
-  err |= _conv_cl(cl, devid, weights, m->blob, cur, dev_out, width, height, &u->head, 1, 1, 0);
+  if(err == CL_SUCCESS)
+    err |= _conv_cl(cl, devid, weights, m->blob, cur, dev_out, width, height, &u->head, 1, 1, 0);
 
 cleanup:
   for(int l = 0; l < u->depth; l++)
     if(skips[l]) dt_opencl_release_mem_object(skips[l]);
-  if(A) dt_opencl_release_mem_object(A);
-  if(B) dt_opencl_release_mem_object(B);
-  if(C) dt_opencl_release_mem_object(C);
+  NN_CL_FREE(cur);
+  NN_CL_FREE(tmp);
+  NN_CL_FREE(v);
+  NN_CL_FREE(cat);
+  NN_CL_FREE(us);
+  NN_CL_FREE(d1);
   return err;
+#undef NN_CL_ALLOC
+#undef NN_CL_FREE
 }
 
 int dt_nn_unet_apply_stage_cl(const dt_nn_model_t *m, int stage, dt_nn_cl_t *cl, int devid, cl_mem dev_in,

@@ -95,6 +95,11 @@ typedef struct dt_pixel_cache_stats_entry_t
 // Current/max bytes used by the pipeline cache (host RAM).
 void dt_dev_pixelpipe_cache_get_usage(dt_dev_pixelpipe_cache_t *cache, size_t *current, size_t *max);
 
+/* Largest contiguous free run in the arena (bytes): the real upper bound on
+ * what an allocation — and, transitively, a tiled module's working set — can
+ * get, as opposed to the byte headroom max - current. */
+size_t dt_pixelpipe_cache_get_largest_free_run(dt_dev_pixelpipe_cache_t *cache);
+
 // Total device memory across enabled OpenCL devices (0 if OpenCL is off/absent),
 // for the vRAM usage bar's denominator.
 size_t dt_dev_pixelpipe_cache_get_vram_total(void);

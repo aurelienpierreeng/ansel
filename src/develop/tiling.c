@@ -278,6 +278,17 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   available = fmaxf(available - ((float)roi_out->width * roi_out->height * out_bpp)
                    - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
                    0);
+  /* The working set of a tiled module lives in the pixelpipe cache ARENA,
+   * which serves every allocation from one CONTIGUOUS free run; entries
+   * pinned by the pipe recursion partition its address space, so the byte
+   * headroom above routinely overstates what allocations can actually get.
+   * Cap the plan by the largest free run (with a margin for runs eroding
+   * between planning and execution): the tile working set packs into that
+   * run, so a plan that exceeds it is guaranteed to fail at runtime no
+   * matter how much total memory is nominally free. */
+  const float largest_run
+      = (float)dt_pixelpipe_cache_get_largest_free_run(darktable.pixelpipe_cache);
+  available = fminf(available, 0.9f * largest_run);
 
   /* Size the tile from the memory left in the host cache.
      Using the generic singlebuffer floor here can oversize tiles for modules whose
@@ -521,6 +532,17 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   available = fmaxf(available - ((float)roi_out->width * roi_out->height * out_bpp)
                    - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
                    0);
+  /* The working set of a tiled module lives in the pixelpipe cache ARENA,
+   * which serves every allocation from one CONTIGUOUS free run; entries
+   * pinned by the pipe recursion partition its address space, so the byte
+   * headroom above routinely overstates what allocations can actually get.
+   * Cap the plan by the largest free run (with a margin for runs eroding
+   * between planning and execution): the tile working set packs into that
+   * run, so a plan that exceeds it is guaranteed to fail at runtime no
+   * matter how much total memory is nominally free. */
+  const float largest_run
+      = (float)dt_pixelpipe_cache_get_largest_free_run(darktable.pixelpipe_cache);
+  available = fminf(available, 0.9f * largest_run);
 
   /* Size the tile from the memory left in the host cache.
      Using the generic singlebuffer floor here can oversize tiles for modules whose
@@ -1412,21 +1434,24 @@ void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_p
 int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, const unsigned bpp,
                                      const float factor, const size_t overhead)
 {
-  size_t available = dt_get_available_mem();
   const size_t total = factor * width * height * bpp + overhead;
 
-  // Try to make room in cache first
+  /* The working set lives in the arena and packs into a CONTIGUOUS free run
+   * (see the cap in the tile planners): measure both the byte headroom and
+   * the largest run, evicting to make room — eviction merges adjacent free
+   * runs, but cannot merge across entries pinned by the pipe recursion. */
+  size_t available = dt_get_available_mem();
+  size_t largest_run = dt_pixelpipe_cache_get_largest_free_run(darktable.pixelpipe_cache);
+
   int error = 0;
-  while(!error && available < total)
+  while(!error && (available < total || (size_t)(0.9f * largest_run) < total))
   {
     error = dt_dev_pixel_pipe_cache_remove_lru(darktable.pixelpipe_cache);
     available = dt_get_available_mem();
+    largest_run = dt_pixelpipe_cache_get_largest_free_run(darktable.pixelpipe_cache);
   }
 
-  if(total <= available)
-    return TRUE;
-  else
-    return FALSE;
+  return total <= available && total <= (size_t)(0.9f * largest_run);
 }
 
 // clang-format off

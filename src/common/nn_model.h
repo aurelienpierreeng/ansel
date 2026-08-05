@@ -47,6 +47,24 @@ typedef struct dt_nn_model_t dt_nn_model_t;
 
 /* Load a .anselnn file. Returns NULL on failure and, if err is non-NULL,
  * writes a human-readable reason into err[0..err_len-1]. */
+/* Pixel-buffer allocator injection. The executors allocate their scratch
+ * (feature maps, skip connections) through these hooks so the buffers come
+ * from the application's pixelpipe cache arena — per the project rule that
+ * pixel buffers never come from bare malloc — WITHOUT this unit importing any
+ * pipeline header. Unset, they fall back to malloc/free (the standalone
+ * fixture test). Set once at module init, before any pipeline runs; not
+ * thread-safe against concurrent forwards. The model WEIGHTS blob stays on
+ * malloc: it is model data with session lifetime, not a pixel buffer. */
+/* long_lived: the block either survives across pipeline stages (a U-Net skip
+ * connection, held from its encoder level to its decoder level) or is a small
+ * helper that coexists with the largest tensors (the decoder's 1x1 output).
+ * A region-based arena places these at the opposite end from the big-tensor
+ * churn — simulated over the full forward, that layout reaches the ledger's
+ * live-set peak exactly, with no fragmentation slack. */
+typedef void *(*dt_nn_alloc_f)(size_t bytes, int long_lived);
+typedef void (*dt_nn_free_f)(void *ptr);
+void dt_nn_set_allocator(dt_nn_alloc_f alloc_fn, dt_nn_free_f free_fn);
+
 dt_nn_model_t *dt_nn_model_load(const char *path, char *err, size_t err_len);
 
 void dt_nn_model_free(dt_nn_model_t *model);
@@ -84,8 +102,22 @@ int dt_nn_model_anchor(const dt_nn_model_t *model);
  * and crops. */
 int dt_nn_model_alignment(const dt_nn_model_t *model);
 
-/* Peak scratch memory in bytes needed by dt_nn_unet_apply for a w x h input,
- * for the caller's tiling budget arithmetic. */
+/* Peak executor scratch as a DIMENSIONLESS factor of the input image size:
+ * floats of scratch per input pixel, i.e. multiples of a 1-float-per-pixel
+ * buffer. This is the form a tiling factor wants — never feed it absolute
+ * bytes. Includes the coarse net's share for a multi-scale model. */
+float dt_nn_unet_scratch_per_px(const dt_nn_model_t *model);
+
+/* Same, for the OpenCL executor, whose sequence differs (it materializes the
+ * decoder concat and an upsample staging buffer where the CPU reads both in
+ * place): feed this one to factor_cl, the CPU one to factor. */
+float dt_nn_unet_scratch_per_px_cl(const dt_nn_model_t *model);
+
+/* Largest single host-side scratch tensor per input pixel (the contiguity
+ * requirement an arena allocation must satisfy, as opposed to the total). */
+float dt_nn_unet_scratch_maxblock_per_px(const dt_nn_model_t *model);
+
+/* Peak scratch in absolute bytes for a w x h input (diagnostics, messages). */
 size_t dt_nn_unet_scratch_bytes(const dt_nn_model_t *model, int width, int height);
 
 /* Run the network. in: in_channels planar w*h float32 planes; out: one w*h
