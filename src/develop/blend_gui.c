@@ -1928,7 +1928,7 @@ static void _blendop_masks_all_selection_changed(GtkTreeSelection *selection, dt
   // That handler rebuilds the visible mask GUI and can be re-entered while this
   // blend list selection is still being processed.
   dt_dev_masks_selection_change(darktable.develop, NULL, formid, FALSE);
-  dt_masks_change_form_gui(mask_form);
+  dt_masks_change_form_gui(module->dev, mask_form);
   if(module->dev && module->dev->form_gui)
   {
     module->dev->form_gui->group_selected = 0;
@@ -1969,7 +1969,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
   if(active)
   {
     if(!IS_NULL_PTR(group_form))
-      dt_masks_form_delete(module, group_form, mask_form);
+      dt_masks_form_delete(module->dev, module, group_form, mask_form);
   }
   else
   {
@@ -1980,7 +1980,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
     if(!_blendop_masks_find_group_entry(group_form, mask_form->formid, NULL))
     {
       group_form = dt_masks_cow_touch(darktable.develop, group_form);
-      dt_masks_group_add_form(group_form, mask_form);
+      dt_masks_group_add_form(module->dev, group_form, mask_form);
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
     }
   }
@@ -2028,8 +2028,8 @@ static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
 
   if(!dt_masks_gui_confirm_permanent_delete(mask_form->name)) return;
 
-  dt_masks_change_form_gui(NULL);
-  dt_masks_form_delete(module, NULL, mask_form);
+  dt_masks_change_form_gui(module->dev, NULL);
+  dt_masks_form_delete(module->dev, module, NULL, mask_form);
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
 }
@@ -2318,7 +2318,7 @@ static void _blendop_masks_group_move_callback(GtkWidget *menu_item, dt_iop_modu
   dt_masks_form_t *group_form = dt_masks_get_from_id(darktable.develop, parentid);
   if(!_blendop_masks_group_move_by_index(group_form, index, move_up)) return;
 
-  dt_masks_change_form_gui(NULL);
+  dt_masks_change_form_gui(module->dev, NULL);
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, 0, parentid, DT_MASKS_EVENT_UPDATE);
 }
@@ -2351,6 +2351,7 @@ static GtkWidget *_blendop_masks_create_shape_buttons(dt_iop_module_t *module, d
   if(IS_NULL_PTR(module) || IS_NULL_PTR(bd)) return NULL;
 
   const dt_masks_shape_buttons_config_t config = {
+    .dev = module->dev,
     .owner_module = module,
     .creation_module = module,
     .buttons = bd->masks_shapes,
@@ -2460,10 +2461,10 @@ static void _blendop_masks_group_unlink(dt_iop_module_t *module, const int formi
   if(IS_NULL_PTR(parent_group) || !(parent_group->type & DT_MASKS_GROUP) || IS_NULL_PTR(form)) return;
 
   // Discard any visible overlay before mutating the group.
-  dt_masks_change_form_gui(NULL);
+  dt_masks_change_form_gui(module->dev, NULL);
 
   // Passing the parent group only detaches the form from this group.
-  dt_masks_form_delete(module, parent_group, form);
+  dt_masks_form_delete(module->dev, module, parent_group, form);
 
   _blendop_masks_apply_and_commit(module);
   _blendop_masks_refresh_lists(module);
@@ -2481,10 +2482,10 @@ static void _blendop_masks_group_delete(dt_iop_module_t *module, const int formi
   if(!dt_masks_gui_confirm_permanent_delete(form->name)) return;
 
   // Discard any visible overlay before mutating the masks.
-  dt_masks_change_form_gui(NULL);
+  dt_masks_change_form_gui(module->dev, NULL);
 
   // Passing no group permanently deletes the form from every module and dev->forms.
-  dt_masks_form_delete(module, NULL, form);
+  dt_masks_form_delete(module->dev, module, NULL, form);
 
   _blendop_masks_apply_and_commit(module);
   _blendop_masks_refresh_lists(module);

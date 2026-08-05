@@ -360,8 +360,11 @@ static gboolean _hm_history_masks_match(const dt_dev_history_item_t *a, const dt
   {
     dt_masks_form_t *a_form = dt_masks_get_from_id_ext(a->forms, a_mask_id);
     dt_masks_form_t *b_form = dt_masks_get_from_id_ext(b->forms, b_mask_id);
-    const uint64_t a_hash = dt_masks_group_get_hash(0, a_form);
-    const uint64_t b_hash = dt_masks_group_get_hash(0, b_form);
+    // Each snapshot is hashed against its OWN forms list: resolving children from the live
+    // dev->forms (what the old dt_masks_group_get_hash() wrapper did) compared two hybrid
+    // states and could declare different snapshots equal.
+    const uint64_t a_hash = dt_masks_group_get_hash_ext(0, a->forms, a_form);
+    const uint64_t b_hash = dt_masks_group_get_hash_ext(0, b->forms, b_form);
     if(a_hash != b_hash) return FALSE;
   }
 

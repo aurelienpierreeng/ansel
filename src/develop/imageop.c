@@ -2187,9 +2187,9 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
     // if a drawn mask is set, remove it from the list
     if(module->blend_params->mask_id > 0)
     {
-      dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+      dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
       // FIXME: ask the user if he wants to delete the mask, or just unlink them.
-      if(grp) dt_masks_form_delete(module, NULL, grp);
+      if(grp) dt_masks_form_delete(module->dev, module, NULL, grp);
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, -1, -1, DT_MASKS_EVENT_RESET);
     }
     /* reset to default params */
@@ -2267,7 +2267,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     gtk_widget_set_state_flags(dt_iop_gui_get_pluginui(out_focus_module), GTK_STATE_FLAG_NORMAL, TRUE);
 
     /* reset mask view */
-    dt_masks_reset_form_gui();
+    dt_masks_reset_form_gui(out_focus_module->dev);
 
     /* do stuff needed in the blending gui */
     dt_iop_gui_blending_lose_focus(out_focus_module);
