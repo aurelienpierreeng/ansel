@@ -147,7 +147,8 @@
  */
 /*----------------------------------------------------------------------------*/
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>

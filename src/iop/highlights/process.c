@@ -19,7 +19,11 @@
 // Top-level Bayer/X-Trans CPU drivers and the hybrid OpenCL driver. (implementation; see process.h for the public
 // API.)
 
-#include "common/darktable.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/simd.h"
+#include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/distance_transform.h"
 #include "common/gaussian.h"

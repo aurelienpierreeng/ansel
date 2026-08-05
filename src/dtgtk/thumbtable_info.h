@@ -18,10 +18,10 @@
 
 #pragma once
 
-#include "common/darktable.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 
+#include <glib.h>
 #include <limits.h>
 #include <stdint.h>
 #include <sqlite3.h>

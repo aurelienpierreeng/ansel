@@ -39,7 +39,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gtkentry.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+
+#include <glib/gi18n.h>
 
 /**
  * Called when the user selects an entry from the autocomplete list.

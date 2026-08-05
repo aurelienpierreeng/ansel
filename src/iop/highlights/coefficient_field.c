@@ -19,7 +19,8 @@
 // Coefficient-field colour-line transport + HF-refit stage (CPU + OpenCL). (implementation; see
 // coefficient_field.h for the public API.)
 
-#include "common/darktable.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

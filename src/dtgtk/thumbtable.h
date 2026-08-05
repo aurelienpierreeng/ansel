@@ -45,11 +45,12 @@
 
 #include "dtgtk/thumbnail.h"
 #include "common/dtpthread.h"
-#include "common/darktable.h"
 #include "common/debug.h"
+#include "common/logging.h"
 
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>
+#include <stdint.h>
 
 #pragma once
 

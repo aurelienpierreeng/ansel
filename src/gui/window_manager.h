@@ -18,8 +18,6 @@
 */
 #pragma once
 
-#include "common/darktable.h"
-
 #include <gtk/gtk.h>
 #include <stdint.h>
 

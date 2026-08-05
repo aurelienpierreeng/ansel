@@ -27,7 +27,8 @@
 */
 
 #include "control/jobs/image_jobs.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "common/image_cache.h"
 
 typedef struct dt_image_load_t

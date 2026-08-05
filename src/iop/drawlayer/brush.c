@@ -28,7 +28,8 @@
 #include "iop/drawlayer/paint.h"
 #include "iop/drawlayer/brush_profile.h"
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/simd.h"
 #include "develop/noise_generator.h"
 
 #include <math.h>

@@ -4,10 +4,11 @@
 
 #pragma once
 
-#include "common/darktable.h"
+#include "common/macros.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/tiling.h"
 
+#include <glib.h>
 #include <string.h>
 
 typedef enum dt_pixelpipe_flow_t

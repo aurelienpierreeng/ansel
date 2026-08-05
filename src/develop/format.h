@@ -31,7 +31,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "common/darktable.h"
+#include "common/simd.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -42,7 +42,11 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "common/simd.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"

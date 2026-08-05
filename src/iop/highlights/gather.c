@@ -55,7 +55,9 @@
 // and the remosaic back to the CFA. Used by both the guided-laplacian mode (highlights.c) and the
 // harmonic-transposition driver (process.c). (implementation; see gather.h for the public API.)
 
-#include "common/darktable.h"
+#include "common/openmp.h"
+#include "common/simd.h"
+#include "common/target_clones.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/gather.h"

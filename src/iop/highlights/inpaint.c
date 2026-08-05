@@ -54,7 +54,8 @@
 // for the public API.) The per-line colour interpolators live in the LCh TU (interpolate_color /
 // interpolate_color_xtrans, lch.h); this TU only drives them along the four axis directions.
 
-#include "common/darktable.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
 #include "iop/highlights/inpaint.h"
 #include "iop/highlights/lch.h"
 

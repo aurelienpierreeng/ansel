@@ -40,7 +40,11 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
 #include "common/gaussian.h"
 #include "common/imagebuf.h"
 #include "common/math.h"

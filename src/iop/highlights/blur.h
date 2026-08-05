@@ -22,10 +22,11 @@
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/darktable.h"
 #include "common/gaussian.h"
 #include "common/opencl.h"
 #include "iop/highlights/common.h"
+
+#include <string.h>
 
 dt_gaussian_t *_hl_gauss_get(const int width, const int height, const int channels, const float sigma);
 

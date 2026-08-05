@@ -18,7 +18,8 @@
 
 // Biharmonic luminance dome solve (CPU + OpenCL). (implementation; see dome.h for the public API.)
 
-#include "common/darktable.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/solvers/choleski.h"
 #include "control/control.h"

@@ -25,7 +25,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "common/openmp.h"
+#include "common/simd.h"
+#include "common/target_clones.h"
 #include "config.h"
 #endif
 // our includes go first:
