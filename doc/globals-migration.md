@@ -1,0 +1,95 @@
+# `darktable_t` globals — usage evaluation and dependency-injection migration plan
+
+Goal (2026-08): the `darktable` global must be dispatched **once** to high-level callers
+(views, main loops, job entry points); all internal modules inherit what they need through
+**function input arguments**. This document is the evaluation of how each member is actually
+used today, and the migration order derived from it. Counts are from the
+`refactor/strip-darktable-h` branch, matched as `\bdarktable\.<member>\b` (XMP keys, D-Bus
+names and `#include` lines excluded).
+
+## 1. Per-member usage (top of ~5,400 total references; top 12 ≈ 81%)
+
+| # | Member | Refs | Files | Kind |
+|---|--------|-----:|------:|------|
+| 1 | `develop` | 962 | 99 | mutated state |
+| 2 | `gui` | 934 | 113 | service handle + mutated state |
+| 3 | `signals` | 424 | 90 | service handle (100% already handle-first API) |
+| 4 | `db` | 423 | 58 | service handle (83% `dt_database_get(darktable.db)`) |
+| 5 | `bauhaus` | 356 | 68 | service handle (65% already a parameter) |
+| 6 | `pixelpipe_cache` | 299 | 30 | service handle (accessor exists) |
+| 7 | `control` | 291 | 36 | mutated state + mutexes (119 self-refs in control.c) |
+| 8 | `unmuted` | 220 | 44 | app-lifetime constant bitmask (102× DT_DEBUG_PERF) |
+| 9 | `image_cache` | 220 | 39 | service handle (95% handle-first API) |
+| 10 | `view_manager` | 214 | 36 | the dispatcher itself |
+| 11 | `opencl` | 211 | 21 | service handle (119 self-refs in opencl.c) |
+| 12 | `color_profiles` | 124 | 18 | mixed config + xprofile_lock |
+
+Then: `collection` 97/27, `undo` 91/16, `selection` 88/24, `mipmap_cache` 70/19,
+`plugin_threadsafe` 52/7, `lib` 45/11, `num_openmp_threads` 38/20 (accessor exists),
+`conf` 37/3 (fully encapsulated — the model outcome), the app-lifetime constants below.
+
+## 2. Structural observations
+
+- **Eight members are already wrapped in handle-first APIs** (`signals`, `db`, `bauhaus`,
+  `image_cache`, `selection`, `collection`, `undo`, `mipmap_cache`): the API conversion is
+  done; only the *handle source* is still the global. That is ~1,900 references of nearly
+  mechanical work.
+- **`conf` shows what "done" looks like** for a genuinely global-by-nature service: 37 refs
+  in 3 files, every consumer goes through `dt_conf_get_*()` free functions with no handle.
+- **`gui` and `control` are bundles of ~3 sub-services each**, not single dependencies:
+  `gui` = the `ui` handle (348 refs — 178 of them just `dt_ui_main_window()`/`dt_ui_center()`)
+  + the write-once `accels` registry (177) + scroll/DPI/mouse state (~200). `control` =
+  log/toast + progress system + pointer/button state. Treating them atomically is what makes
+  them look intractable.
+- **The masks precedent** (dev threaded through the masks API) is half-done by design: the
+  core API takes `dev`, but ~131 GUI call sites in masks.c still fetch it from the global —
+  call-site conversion is the remaining half.
+- **`darktable.develop` in `iop/`** (54 files, ~330 refs) has a zero-cost seam:
+  `dt_iop_module_t.dev` already exists and most files already use `self->dev` elsewhere.
+
+## 3. Migration strategies
+
+- **A — thread through existing args** (`dev`/`pipe`/`self`/`module`): the real injection.
+- **B — orchestrator-implemented accessor** (declared by the owning lib, implemented in
+  `common/darktable.c`; precedent: `dt_pixelpipe_cache_get_global()`,
+  `dt_get_num_openmp_threads()`): interim step that already frees lib headers from
+  darktable.h.
+- **C — pass at init, store in the subsystem's own struct**: for services with a natural
+  owner (bauhaus handle on `dt_gui_module_t`, pixelpipe cache handle on `dt_dev_pixelpipe_t`).
+
+## 4. Recommended order
+
+| Order | Item | Strategy | Files | Refs | Risk |
+|---|---|---|---:|---:|---|
+| 0 | path constants, `utc_tz`/`origin_gdt`, `start_wtime`, `dtresources`, startup lists | getters | ~25 | ~370 | none |
+| 0b | `unmuted*` | inline `dt_is_debug()` accessor (keep hot-path inlining) | 44 | 240 | none |
+| 1 | `develop` in `iop/` | A (`self->dev`) | 54 | ~330 | very low |
+| 2 | `image_cache`, `undo`, `selection`, `mipmap_cache` | B→C | 98 | ~470 | low |
+| 3 | `collection` | B→C | 27 | 97 | low-med (import jobs mutate from workers) |
+| 4 | `db` | B (`dt_database_get_global()` collapses 353 sites) | 58 | 423 | medium (transaction rwlock semantics untouched) |
+| 5 | `bauhaus` | A via `dt_gui_module_t` + theme getters | 68 | 356 | low |
+| 6 | `signals` | B interim + context-sourced macros where `self` exists | 90 | 424 | medium (worker-thread raises) |
+| 7 | `pixelpipe_cache` | A via `pipe` | 30 | 299 | med-high (worker hot path) |
+| 8 | `develop` outside `iop/` | A (darkroom keeps its refs: it IS a dispatch point) | 45 | ~630 | medium |
+| 9 | `opencl` | C + `dt_opencl_is_available()` for the `inited` flag | 21 | 211 | medium |
+| 10 | `color_profiles` | C (display/softproof settings + xprofile_lock move together) | 18 | 124 | med-high |
+| 11 | `gui` (3-way split: ui / accels / scroll-state) | A + C | 113 | 934 | low per-site, high volume |
+| 12 | `control` (3-way split: log-toast / progress / pointer) | C | 36 | 291 | high (job-system core) |
+| 13 | `view_manager` — fix upward references from libs/ and common/ only | A | ~16 | ~90 | low |
+| 14 | process-wide mutexes (`plugin_threadsafe`, `exiv2_threadsafe`, `readFile_mutex`, …) | relocate to owning TU as file-static + `dt_<x>_lock()` accessors — threading a process-global mutex through args only makes it easier to pass the wrong one | ~15 | ~80 | low |
+
+## 5. App-lifetime constants: getters, not parameters
+
+Written once at startup, never mutated; threading them would add parameters to hundreds of
+signatures for a value that provably cannot differ between callers:
+
+- The 9 path members (`datadir`, `sharedir`, `moduledir`, `localedir`, `tmpdir`, `configdir`,
+  `cachedir`, `kerneldir`, `progname`): each already has exactly ONE read site, inside its
+  own `dt_loc_get_*()` copy-out in `common/file_location.c`. Replace the `char*,size_t`
+  copy-out with `const char *dt_get_datadir(void)`-style interned getters. Blast radius: 2 files.
+- `utc_tz`/`origin_gdt` → `dt_datetime_utc_tz()`/`dt_datetime_origin()` in `common/datetime.c`
+  (which already owns their init). 5 files.
+- `dtresources` is near-constant with 2 getters already; 2 more close it out.
+- Startup lists (`iop`, `guides`, `themes`, `iop_order_list/rules`): getters. ~12 files.
+
+Total for §5: ~370 refs across ~25 files with ~20 trivial getters — front-load it.
