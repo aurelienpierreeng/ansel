@@ -3919,7 +3919,7 @@ void dt_masks_group_ungroup(dt_masks_form_t *dest_group, dt_masks_form_t *group_
   dt_masks_form_update_gravity_center(dest_group);
 }
 
-uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *mask_form)
+uint64_t dt_masks_group_get_hash_ext(uint64_t hash, GList *masks, dt_masks_form_t *mask_form)
 {
   if(IS_NULL_PTR(mask_form)) return hash;
 
@@ -3934,7 +3934,11 @@ uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *mask_form)
     if(mask_form->type & DT_MASKS_GROUP)
     {
       dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)point_node->data;
-      dt_masks_form_t *child_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
+      // Children must come from the SAME list the top-level group was resolved from. Resolving
+      // them from live dev->forms while hashing a history/pipe snapshot mixes two states into
+      // one hash: two genuinely different states can then hash identically (and vice versa),
+      // which defeats the cache invalidation this hash exists for.
+      dt_masks_form_t *child_form = dt_masks_get_from_id_ext(masks, group_entry->formid);
       if(child_form)
       {
         // state & opacity
@@ -3942,7 +3946,7 @@ uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *mask_form)
         hash = dt_hash(hash, (char *)&group_entry->opacity, sizeof(float));
 
         // the form itself
-        hash = dt_masks_group_get_hash(hash, child_form);
+        hash = dt_masks_group_get_hash_ext(hash, masks, child_form);
       }
     }
     else if(mask_form->functions)
@@ -3951,6 +3955,11 @@ uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *mask_form)
     }
   }
   return hash;
+}
+
+uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *mask_form)
+{
+  return dt_masks_group_get_hash_ext(hash, darktable.develop ? darktable.develop->forms : NULL, mask_form);
 }
 
 uint64_t dt_masks_form_get_own_hash(uint64_t hash, const dt_masks_form_t *mask_form)

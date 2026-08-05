@@ -2137,9 +2137,25 @@ void mouse_enter(dt_view_t *self)
   dt_masks_events_mouse_enter(dev->gui_module);
 }
 
+// The module the pending mask-edit history commit must be addressed to, captured when the
+// commit is queued (i.e. when the mask event actually happened). The commit itself fires after
+// an adaptive throttle timeout, and dev->gui_module may have moved to another module meanwhile:
+// addressing the commit to the *new* focus then records the mask edit on a module that owns no
+// forms, whose history item hash does not change — the resync takes the cheap top-item path and
+// the real owner's piece hash is never refreshed, so the pipe keeps serving the pre-edit
+// cacheline (issue #1060 family: "the mask does nothing until you nudge a slider").
+static dt_iop_module_t *_pending_mask_commit_module = NULL;
+
 static void _delayed_history_commit(gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
+
+  dt_iop_module_t *module = _pending_mask_commit_module;
+  _pending_mask_commit_module = NULL;
+  // The captured module can be gone by now (image switch, instance removal): only trust it if
+  // it is still a live member of dev->iop, else fall back to the current focus.
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(g_list_find(dev->iop, module)))
+    module = dev->gui_module;
 
   // Figure out if an history item needs to be added
   // aka drawn masks have changed somehow. This is more expensive
@@ -2149,7 +2165,17 @@ static void _delayed_history_commit(gpointer data)
   dt_dev_masks_update_hash(dev);
 
   if(dev->forms_changed)
-    dt_dev_add_history_item(dev, dev->gui_module, FALSE, TRUE);
+    dt_dev_add_history_item(dev, module, FALSE, TRUE);
+}
+
+// Queue the throttled mask-edit history commit, capturing its target module NOW. Every mask
+// event handler must use this instead of calling dt_gui_throttle_queue() directly, so the
+// commit lands on the module that owned the mask interaction, not on whichever module holds
+// the focus when the throttle fires.
+static void _queue_delayed_history_commit(dt_develop_t *dev)
+{
+  _pending_mask_commit_module = dev->gui_module;
+  dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
 }
 
 typedef struct darkroom_edge_pan_test_t
@@ -2433,7 +2459,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   {
     // There is no shape dragging in creation mode, so no need to commit history.
     if(!dev->form_gui->creation)
-      dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+      _queue_delayed_history_commit(dev);
       
     handled = TRUE;
   }
@@ -2575,7 +2601,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
      && dt_masks_events_button_released(dev->gui_module, x, y, which, state))
   {
     // Change on mask parameters and image output.
-    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+    _queue_delayed_history_commit(dev);
     dt_dev_pixelpipe_update_history_preview(dev); // Needed if mask selection changed
     dt_control_queue_redraw_center();
     return 1;
@@ -2745,7 +2771,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
      && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
     if(!darktable.develop->form_gui->creation)
-      dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+      _queue_delayed_history_commit(dev);
     return 1;
   }
   // module
@@ -2853,7 +2879,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
   {
     dt_control_queue_redraw_center();
     if(!dev->form_gui->creation)
-      dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+      _queue_delayed_history_commit(dev);
 
     return TRUE;
   }
@@ -2885,7 +2911,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
 
   if(dt_masks_get_visible_form(dev) && dt_masks_events_key_pressed(dev->gui_module, event))
   {
-    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+    _queue_delayed_history_commit(dev);
     return 1;
   }
 
@@ -2894,7 +2920,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
           && !IS_NULL_PTR(dev->gui_module->key_pressed)
           && dev->gui_module->key_pressed(dev->gui_module, event))
   {
-    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
+    _queue_delayed_history_commit(dev);
     return 1;
   }
 

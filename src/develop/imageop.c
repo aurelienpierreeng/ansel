@@ -1884,11 +1884,20 @@ void dt_iop_compute_blendop_hash(dt_iop_module_t *module, uint64_t hash, GList *
 
   if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
   {
+    // A NULL list means the caller has no forms snapshot, NOT that the module has no drawn
+    // mask: fall back to the live dev->forms so the hash of a module whose blend params
+    // reference a mask group can never come out blind to that group's content. Without this,
+    // a history item recorded without a forms snapshot hashes identically before and after a
+    // mask edit, the history hash never moves, and the pipe keeps serving the stale cacheline
+    // (issue #1060 family). With no group linked (mask_id == 0) the fallback is a no-op.
+    if(IS_NULL_PTR(masks) && !IS_NULL_PTR(module->dev))
+      masks = module->dev->forms;
+
     // Drawn masks from dev for this module
     if(!IS_NULL_PTR(masks))
     {
       dt_masks_form_t *grp = dt_masks_get_from_id_ext(masks, module->blend_params->mask_id);
-      hash = dt_masks_group_get_hash(hash, grp);
+      hash = dt_masks_group_get_hash_ext(hash, masks, grp);
     }
 
     // else : no module->dev when running from init_default_params()
@@ -1913,7 +1922,7 @@ void dt_iop_compute_blendop_hash(dt_iop_module_t *module, uint64_t hash, GList *
       if(!IS_NULL_PTR(masks))
       {
         dt_masks_form_t *raster_grp = dt_masks_get_from_id_ext(masks, raster_source->blend_params->mask_id);
-        hash = dt_masks_group_get_hash(hash, raster_grp);
+        hash = dt_masks_group_get_hash_ext(hash, masks, raster_grp);
       }
 
       // Blending
