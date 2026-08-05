@@ -41,7 +41,6 @@
 
 #pragma once
 
-#include "common/darktable.h"
 #include "common/dtpthread.h"
 
 #include "control/settings.h"
