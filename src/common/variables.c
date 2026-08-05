@@ -216,7 +216,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
 
   if(img)
   {
-    params->data->datetime = dt_datetime_img_to_gdatetime(img, darktable.utc_tz);
+    params->data->datetime = dt_datetime_img_to_gdatetime(img, dt_datetime_utc_tz());
     if(params->data->datetime)
       params->data->have_exif_dt = TRUE;
     params->data->exif_iso = img->exif_iso;
@@ -325,7 +325,7 @@ static char *_variables_get_iso_timestamp(const GTimeSpan gts)
 {
   if(gts <= 0) return NULL;
 
-  GDateTime *gdt = g_date_time_add(darktable.origin_gdt, gts);
+  GDateTime *gdt = g_date_time_add(dt_datetime_origin(), gts);
   if(IS_NULL_PTR(gdt)) return NULL;
 
   char *result = g_date_time_format(gdt, "%Y-%m-%d %H:%M:%S");

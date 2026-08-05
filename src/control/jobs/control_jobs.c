@@ -1210,7 +1210,7 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
     /* release the lock */
     dt_image_cache_read_release(darktable.image_cache, cimg);
     if(IS_NULL_PTR(exif_time)) continue;
-    GDateTime *utc_time = g_date_time_to_timezone(exif_time, darktable.utc_tz);
+    GDateTime *utc_time = g_date_time_to_timezone(exif_time, dt_datetime_utc_tz());
     g_date_time_unref(exif_time);
     if(IS_NULL_PTR(utc_time)) continue;
 
@@ -1988,7 +1988,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
 static void _add_datetime_offset(const char *odt, const long int offset, char *ndt)
 {
   // get the datetime_taken and calculate the new time
-  GDateTime *datetime_original = dt_datetime_exif_to_gdatetime(odt, darktable.utc_tz);
+  GDateTime *datetime_original = dt_datetime_exif_to_gdatetime(odt, dt_datetime_utc_tz());
   if(IS_NULL_PTR(datetime_original))
     return;
 

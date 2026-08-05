@@ -266,7 +266,7 @@ static int _count_images_per_track(dt_gpx_track_segment_t *t, dt_gpx_track_segme
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
     if(im->segid == -1)
     {
-      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, darktable.utc_tz, d->offset);
+      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, dt_datetime_utc_tz(), d->offset);
       if((g_date_time_compare(dt, t->start_dt) >= 0
           && g_date_time_compare(dt, t->end_dt) <= 0)
          || (n && g_date_time_compare(dt, t->end_dt) >= 0
@@ -324,7 +324,7 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
     if(im->segid == segid && active)
     {
-      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, darktable.utc_tz, d->offset);
+      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, dt_datetime_utc_tz(), d->offset);
       if(!dt_gpx_get_location(d->map.gpx, dt, &im->gl))
         im->gl.latitude = NAN;
       g_date_time_unref(dt);
@@ -1333,7 +1333,7 @@ static GDateTime *_read_datetime_entry(dt_lib_module_t *self)
   const int millisecond = atoi(gtk_entry_get_text(GTK_ENTRY(d->dt.widget[6])));
   const gdouble second2 = (gdouble)second + (gdouble)millisecond * 0.001;
 
-  return g_date_time_new(darktable.utc_tz, year, month, day, hour, minute, second2);
+  return g_date_time_new(dt_datetime_utc_tz(), year, month, day, hour, minute, second2);
 }
 
 static void _new_datetime(GDateTime *datetime, dt_lib_module_t *self)
@@ -1377,7 +1377,7 @@ static GDateTime *_get_image_datetime(dt_lib_module_t *self)
   char datetime_s[DT_DATETIME_LENGTH];
   dt_image_get_datetime(imgid, datetime_s);
   if(datetime_s[0] != '\0')
-    datetime = dt_datetime_exif_to_gdatetime(datetime_s, darktable.utc_tz);
+    datetime = dt_datetime_exif_to_gdatetime(datetime_s, dt_datetime_utc_tz());
   else
     datetime = NULL;
 

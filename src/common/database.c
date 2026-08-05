@@ -2009,7 +2009,7 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
       sqlite3_bind_int(stmt2, 1, sqlite3_column_int(stmt, 0));
       if(sqlite3_column_type(stmt, 1) != SQLITE_NULL)
       {
-        GDateTime *gdt = dt_datetime_exif_to_gdatetime((const char *)sqlite3_column_text(stmt, 1), darktable.utc_tz);
+        GDateTime *gdt = dt_datetime_exif_to_gdatetime((const char *)sqlite3_column_text(stmt, 1), dt_datetime_utc_tz());
         if(gdt)
         {
           sqlite3_bind_int64(stmt2, 2, dt_datetime_gdatetime_to_gtimespan(gdt));

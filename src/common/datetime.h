@@ -56,6 +56,12 @@ typedef struct dt_datetime_t
 // initialize datetime
 void dt_datetime_init(void);
 
+/** read-only getters for the app-lifetime datetime constants, written once by
+ * dt_datetime_init() and never mutated afterwards. Do not unref. */
+GTimeZone *dt_datetime_utc_tz(void);
+// the datetime origin (0001:01:01 00:00:00) GTimeSpans in db are offsets from
+GDateTime *dt_datetime_origin(void);
+
 GDateTime *dt_string_to_datetime(const char *string);
 
 // exif datetime to numbers. Returns TRUE if OK.
