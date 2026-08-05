@@ -421,15 +421,25 @@ static void _thumb_job_state_changed(dt_job_t *job, dt_job_state_t state)
 
   dt_pthread_mutex_lock(&thumb->lock);
   const gboolean was_gating = (thumb->job == job);
-  if(was_gating) thumb->job = NULL;
+  GtkWidget *redraw_widget = NULL;
+  if(was_gating)
+  {
+    thumb->job = NULL;
+    // Capture and ref the redraw target under thumb->lock: dt_thumbnail_destroy() nulls
+    // thumb->w_image (after detaching it) under this same lock, so checking it outside would
+    // be a TOCTOU race — the pointer could be nulled (or the widget finalized) between the
+    // check and the g_object_ref().
+    if(!dt_atomic_get_int(&thumb->destroying) && thumb->w_image)
+      redraw_widget = g_object_ref(thumb->w_image);
+  }
   dt_pthread_mutex_unlock(&thumb->lock);
 
-  if(was_gating && !dt_atomic_get_int(&thumb->destroying) && thumb->w_image)
+  if(redraw_widget)
   {
     GMainContext *context = g_main_context_default();
     g_main_context_invoke_full(context, G_PRIORITY_DEFAULT,
                                (GSourceFunc)_main_context_queue_draw,
-                               g_object_ref(thumb->w_image),
+                               redraw_widget,
                                (GDestroyNotify)g_object_unref);
     g_main_context_wakeup(context);
   }
@@ -454,26 +464,29 @@ static int _finish_buffer_thread(dt_thumbnail_t *thumb, dt_job_t *job, gboolean 
   // image_inited, or the newer render gets orphaned/duplicated.
   dt_pthread_mutex_lock(&thumb->lock);
   const gboolean was_gating = IS_NULL_PTR(job) || thumb->job == job;
+  GtkWidget *redraw_widget = NULL;
   if(was_gating)
   {
     thumb->image_inited = success;
     thumb->job = NULL;
+    // Redraw events need to be sent from the main GUI thread, though we may not have a target
+    // widget anymore. Capture and ref it under thumb->lock: dt_thumbnail_destroy() nulls
+    // thumb->w_image under this same lock, so a check-then-ref outside it races the teardown.
+    if(!dt_atomic_get_int(&thumb->destroying) && thumb->w_image)
+      redraw_widget = g_object_ref(thumb->w_image);
   }
   dt_pthread_mutex_unlock(&thumb->lock);
-  if(!was_gating) return 0;
 
-  // Redraw events need to be sent from the main GUI thread
-  // though we may not have a target widget anymore...
-  if(!dt_atomic_get_int(&thumb->destroying) && thumb->w_image)
+  if(redraw_widget)
   {
     GMainContext *context = g_main_context_default();
     g_main_context_invoke_full(context, G_PRIORITY_DEFAULT,
                                (GSourceFunc)_main_context_queue_draw,
-                               g_object_ref(thumb->w_image),
+                               redraw_widget,
                                (GDestroyNotify)g_object_unref);
     g_main_context_wakeup(context);
   }
-  
+
   return 0;
 }
 

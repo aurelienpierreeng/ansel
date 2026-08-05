@@ -211,7 +211,12 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
     memcpy(module->params, hist->params, module->params_size);
   dt_iop_commit_blend_params(module, hist->blend_params);
 
-  dt_iop_compute_module_hash(module, hist->forms);
+  // Committing a new/updated item: when no forms snapshot was taken (include_masks declined),
+  // the live dev->forms IS the state being persisted, so hash against it — a module whose
+  // blend params link a mask group must never hash blind to that group's content (#1060).
+  // History REPLAY must not use this helper's fallback: it hashes via _history_to_module()
+  // against the snapshot accumulated at the item's position instead.
+  dt_iop_compute_module_hash(module, !IS_NULL_PTR(hist->forms) ? hist->forms : dev->forms);
   hist->hash = module->hash;
 
   return TRUE;
@@ -1273,7 +1278,8 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
  * @param hist History item.
  * @param module Module instance.
  */
-static inline void _history_to_module(const dt_dev_history_item_t *const hist, dt_iop_module_t *module)
+static inline void _history_to_module(const dt_dev_history_item_t *const hist, dt_iop_module_t *module,
+                                      GList *current_forms)
 {
   module->enabled = (hist->enabled != 0);
 
@@ -1288,8 +1294,12 @@ static inline void _history_to_module(const dt_dev_history_item_t *const hist, d
   memcpy(module->params, hist->params, module->params_size);
   dt_iop_commit_blend_params(module, hist->blend_params);
 
-  // Get the module hash
-  dt_iop_compute_module_hash(module, hist->forms);
+  // Get the module hash. An item without its own forms snapshot must be hashed against the
+  // snapshot accumulated up to its position in the replay (current_forms) — NOT against the
+  // live dev->forms of the state being left: dt_iop_compute_blendop_hash()'s NULL fallback
+  // reads the live list, and during replay that list is only replaced with the target
+  // snapshot after this loop, so the restored hash would be tied to the wrong mask content.
+  dt_iop_compute_module_hash(module, !IS_NULL_PTR(hist->forms) ? hist->forms : current_forms);
 }
 
 
@@ -1316,11 +1326,13 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     dt_iop_module_t *module = hist->module;
-    if(module) _history_to_module(hist, module);
 
     // Update the reference to the form snapshot that doesn't belong
-    // conceptually to history items
+    // conceptually to history items. Advance it before applying the item so the
+    // item's hash is computed against the masks state at its own position.
     if(hist->forms) forms = hist->forms;
+
+    if(module) _history_to_module(hist, module, forms);
 
     history = g_list_next(history);
   }
@@ -2219,6 +2231,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   // Now we have fully-populated history items:
   // Commit params to modules and publish the masks on the raster stack for other modules to find
+  GList *accumulated_forms = NULL;
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
@@ -2234,8 +2247,12 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
       continue;
     }
 
+    // Same accumulation rule as dt_dev_pop_history_items_ext(): an item without its own forms
+    // snapshot is hashed against the last snapshot recorded at or before its position.
+    if(hist->forms) accumulated_forms = hist->forms;
+
     dt_iop_module_t *module = hist->module;
-    _history_to_module(hist, module);
+    _history_to_module(hist, module, accumulated_forms);
     hist->hash = hist->module->hash;
 
     // Register the freshly-read history item now (its hash is final), so the
