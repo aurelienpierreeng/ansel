@@ -35,7 +35,6 @@
 
 #pragma once
 
-#include "common/darktable.h"
 #include "common/history_merge.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"

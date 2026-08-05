@@ -29,7 +29,6 @@
 
 #pragma once
 
-#include "common/darktable.h"
 #include "gui/gtk.h"
 
 #ifdef __cplusplus

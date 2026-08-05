@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "common/darktable.h"
+#include "common/simd.h"
 
 float dt_colorspaces_deltaE_1976(dt_aligned_pixel_t Lab0, dt_aligned_pixel_t Lab1);
 float dt_colorspaces_deltaE_2000(dt_aligned_pixel_t Lab0, dt_aligned_pixel_t Lab1);

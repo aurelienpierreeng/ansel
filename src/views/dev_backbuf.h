@@ -16,8 +16,9 @@
 #pragma once
 
 #include <cairo.h>
+#include <glib.h>
 
-#include "common/darktable.h"
+#include "common/simd.h"
 // dev_pixelpipe.h uses dt_dev_pixelpipe_t/dt_dev_pixelpipe_change_t (defined in pixelpipe_hb.h)
 // without including it itself - include it first so this header is self-contained regardless
 // of what a caller happened to include before it.

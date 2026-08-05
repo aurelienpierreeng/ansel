@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "common/darktable.h"
 #include "control/crawler.h"
 #include "common/collection.h"
 #include "common/mipmap_cache.h"
