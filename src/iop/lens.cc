@@ -1233,7 +1233,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       const float limw = (float)roi_in->width - 1.0f;
       const float limh = (float)roi_in->height - 1.0f;
 
-      float *const work_ovoid = (float *)dt_pixelpipe_cache_alloc_align_cache(bufsize, pipe->type);
+      const size_t ov_bufsize = (size_t)roi_out->width * roi_out->height * ch * sizeof(float);
+      float *const work_ovoid = (float *)dt_pixelpipe_cache_alloc_align_cache(ov_bufsize, pipe->type);
       if(IS_NULL_PTR(work_ovoid))
       {
         dt_pixelpipe_cache_free_align(work_buf);
@@ -1254,10 +1255,15 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
 
   {
+    const gboolean was_warped = any_emb && (emb_dist || emb_tca);
+    const size_t read_size = was_warped
+        ? (size_t)roi_out->width * roi_out->height * ch * sizeof(float)
+        : (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
     const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
     void *buf = dt_pixelpipe_cache_alloc_align_cache(bufsize, pipe->type);
     if(IS_NULL_PTR(buf)) { delete modifier; dt_pixelpipe_cache_free_align(work_buf); return 1; }
-    memcpy(buf, src_pixels, bufsize);
+    memcpy(buf, src_pixels, read_size);
+    if(read_size < bufsize) memset((char *)buf + read_size, 0, bufsize - read_size);
 
     if((modflags & LF_MODIFY_VIGNETTING) && !any_emb)
     {
@@ -1303,7 +1309,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     }
     else
     {
-      memcpy(ovoid, buf, bufsize);
+      memcpy(ovoid, buf, read_size);
     }
     dt_pixelpipe_cache_free_align(buf);
   }
@@ -2899,7 +2905,6 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
     gtk_widget_set_sensitive(GTK_WIDGET(g->lensfun_controls.scale), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(g->lensfun_controls.tca_r), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(g->lensfun_controls.tca_b), FALSE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->status.message), FALSE);
 
     g->status.trouble = TRUE;
     return;
@@ -2913,7 +2918,6 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
     gtk_widget_set_sensitive(GTK_WIDGET(g->lensfun_controls.scale), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(g->lensfun_controls.tca_r), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(g->lensfun_controls.tca_b), TRUE);
-    gtk_widget_set_sensitive(GTK_WIDGET(g->status.message), TRUE);
 
     g->status.trouble = FALSE;
   }
@@ -3325,23 +3329,6 @@ static void autoscale_pressed(GtkWidget *button, gpointer user_data)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-static void corrections_done(gpointer instance, gpointer user_data)
-{
-  auto *self = (dt_iop_module_t *)user_data;
-  auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g)) return;
-  if(!IS_NULL_PTR(self->dev) && self->dev->gui_attached)
-  {
-    auto p = (dt_iop_lensfun_params_t *)self->params;
-    const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
-    const char *status = corrections_status_string(
-        p->distortion_method, p->vignetting_method, p->tca_method, monochrome);
-    dt_iop_gui_enter_critical_section(self);
-    gtk_label_set_text(g->status.message, status);
-    dt_iop_gui_leave_critical_section(self);
-  }
-}
-
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_lensfun_gui_data_t *g = IOP_GUI_ALLOC(lensfun);
@@ -3472,19 +3459,6 @@ void gui_init(struct dt_iop_module_t *self)
     dt_bauhaus_slider_set_digits(g->lensfun_controls.tca_b, 5);
     gtk_widget_set_tooltip_text(g->lensfun_controls.tca_b, _("Transversal Chromatic Aberration blue"));
 
-    // Position 9: Status label
-    GtkBox *hbox1 = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
-    GtkWidget *label = gtk_label_new(_("corrections done: "));
-    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
-    gtk_widget_set_tooltip_text(label, _("which corrections have actually been done"));
-    gtk_box_pack_start(GTK_BOX(hbox1), label, FALSE, FALSE, 0);
-    g->status.message = GTK_LABEL(gtk_label_new(""));
-    gtk_label_set_ellipsize(GTK_LABEL(g->status.message), PANGO_ELLIPSIZE_MIDDLE);
-    gtk_box_pack_start(GTK_BOX(hbox1), GTK_WIDGET(g->status.message), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox1), TRUE, TRUE, 0);
-
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                              G_CALLBACK(corrections_done), self);
 }
 
 void gui_update(struct dt_iop_module_t *self)
@@ -3631,7 +3605,6 @@ void gui_update(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(corrections_done), self);
   IOP_GUI_FREE;
 }
 
