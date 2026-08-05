@@ -98,6 +98,9 @@
 #include "common/simd.h"
 #include "common/hash.h"
 #include "common/logging.h"
+#include "common/times.h"
+#include "common/glib_utils.h"
+#include "common/module_versioning.h"
 #ifdef _WIN32
 #include "win/getrusage.h"
 #else
@@ -129,7 +132,6 @@
 extern "C" {
 #endif
 
-#define DT_MODULE_VERSION 23 // version of dt's module interface
 
 // version of current performance configuration version
 // if you want to run an updated version of the performance configuration later
@@ -137,43 +139,6 @@ extern "C" {
 #define DT_CURRENT_PERFORMANCE_CONFIGURE_VERSION 11
 #define DT_PERF_INFOSIZE 4096
 
-// every module has to define this:
-#ifdef _DEBUG
-#define DT_MODULE(MODVER)                                                                                    \
-  int dt_module_dt_version()                                                                                 \
-  {                                                                                                          \
-    return -DT_MODULE_VERSION;                                                                               \
-  }                                                                                                          \
-  int dt_module_mod_version()                                                                                \
-  {                                                                                                          \
-    return MODVER;                                                                                           \
-  }
-#else
-#define DT_MODULE(MODVER)                                                                                    \
-  int dt_module_dt_version()                                                                                 \
-  {                                                                                                          \
-    return DT_MODULE_VERSION;                                                                                \
-  }                                                                                                          \
-  int dt_module_mod_version()                                                                                \
-  {                                                                                                          \
-    return MODVER;                                                                                           \
-  }
-#endif
-
-#define DT_MODULE_INTROSPECTION(MODVER, PARAMSTYPE) DT_MODULE(MODVER)
-
-// ..to be able to compare it against this:
-static inline int dt_version()
-{
-#ifdef _DEBUG
-  return -DT_MODULE_VERSION;
-#else
-  return DT_MODULE_VERSION;
-#endif
-}
-
-// returns the darktable version as <major>.<minor>
-char *dt_version_major_minor();
 
 /** Stable, anonymous identifier for the current process/run (a random UUID
  * generated once). Sent to both crash reporting (Sentry) and usage analytics
@@ -315,50 +280,12 @@ typedef struct darktable_t
   char *main_message;
 } darktable_t;
 
-typedef struct
-{
-  double clock;
-  double user;
-} dt_times_t;
 
 extern darktable_t darktable;
 
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data);
 void dt_cleanup();
 
-/* ------------------------------------------------------------------------------------------
- * Widget-callback suppression (replaces the legacy raw `darktable.gui->reset` counter).
- *
- * Programmatic widget updates must not re-trigger their own "value-changed" handlers. Bracket
- * such updates with dt_gui_freeze_begin()/dt_gui_freeze_end() (or the dt_gui_widget_freeze()
- * scope guard), and open every widget callback with `if(dt_gui_widgets_suppressed()) return;`.
- *
- * The depth is managed centrally: it is mutated only on the GUI thread (off-thread begin/end
- * are no-ops, so worker threads -- e.g. thumbnail/export reload_defaults -- can never race or
- * drift it), clamped at >= 0, and any unbalanced end is logged with its file:line rather than
- * silently drifting negative and disabling suppression for the rest of the session.
- * ------------------------------------------------------------------------------------------ */
-gboolean dt_gui_widgets_suppressed(void);
-void dt_gui_freeze_begin_(const char *file, int line);
-void dt_gui_freeze_end_(const char *file, int line);
-void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)
-#define dt_gui_freeze_begin() dt_gui_freeze_begin_(__FILE__, __LINE__)
-#define dt_gui_freeze_end()   dt_gui_freeze_end_(__FILE__, __LINE__)
-
-typedef struct { const char *file; int line; } dt_gui_freeze_token_t;
-static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
-{
-  dt_gui_freeze_end_(t->file, t->line);
-}
-// Scope guard: begins a freeze that is automatically ended when the enclosing block exits,
-// including via early return/goto/break. Use it for spans that contain an early exit (the
-// raw begin/end pair would leak the depth on such paths).
-#define DT_FREEZE_CAT_(a, b) a##b
-#define DT_FREEZE_CAT(a, b) DT_FREEZE_CAT_(a, b)
-#define dt_gui_widget_freeze()                                                       \
-  dt_gui_freeze_token_t DT_FREEZE_CAT(_dt_freeze_guard_, __LINE__)                    \
-      __attribute__((cleanup(dt_gui_freeze_release_))) = { __FILE__, __LINE__ };      \
-  dt_gui_freeze_begin_(__FILE__, __LINE__)
 
 // Number of workers, on top of reserved workers (1 for main preview, 1 for thumbnail in darkroom)
 // This is currently set to 2, so 4 workers total, without user config.
@@ -399,83 +326,16 @@ void dt_invalidate_system_available_mem(void);
 // See dt_configure_runtime_performance() for how it is derived.
 size_t dt_get_memory_pressure_floor(void);
 
-// check whether the specified mask of modifier keys exactly matches, among the set Shift+Control+(Alt/Meta).
-// ignores the state of any other shifting keys
-static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
-{
-  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
-//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
-  return (state & modifiers) == desired_modifier_mask;
-}
-
-// check whether the given modifier state includes AT LEAST the specified mask of modifier keys
-static inline gboolean dt_modifiers_include(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
-{
-//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
-  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
-  // check whether all modifier bits of interest are turned on
-  return (state & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
-}
 
 int dt_capabilities_check(char *capability);
 void dt_capabilities_add(char *capability);
 void dt_capabilities_remove(char *capability);
 void dt_capabilities_cleanup();
 
-static inline double dt_get_wtime(void)
-{
-  struct timeval time;
-  gettimeofday(&time, NULL);
-  return time.tv_sec - 1290608000 + (1.0 / 1000000.0) * time.tv_usec;
-}
-
-static inline void dt_get_times(dt_times_t *t)
-{
-  struct rusage ru;
-
-  getrusage(RUSAGE_SELF, &ru);
-  t->clock = dt_get_wtime();
-  t->user = ru.ru_utime.tv_sec + ru.ru_utime.tv_usec * (1.0 / 1000000.0);
-}
-
-void dt_show_times(const dt_times_t *start, const char *prefix);
-
-void dt_show_times_f(const dt_times_t *start, const char *prefix, const char *suffix, ...) __attribute__((format(printf, 3, 4)));
 
 /** \brief check if file is a supported image */
 gboolean dt_supported_image(const gchar *filename);
 
-// a few macros and helper functions to speed up certain frequently-used GLib operations
-#define g_list_is_singleton(list) ((list) && (!(list)->next))
-static inline gboolean g_list_shorter_than(const GList *list, unsigned len)
-{
-  // instead of scanning the full list to compute its length and then comparing against the limit,
-  // bail out as soon as the limit is reached.  Usage: g_list_shorter_than(l,4) instead of g_list_length(l)<4
-  while (len-- > 0)
-  {
-    if (!list) return TRUE;
-    list = g_list_next(list);
-  }
-  return FALSE;
-}
-
-// advance the list by one position, unless already at the final node
-static inline GList *g_list_next_bounded(GList *list)
-{
-  return g_list_next(list) ? g_list_next(list) : list;
-}
-
-static inline const GList *g_list_next_wraparound(const GList *list, const GList *head)
-{
-  return g_list_next(list) ? g_list_next(list) : head;
-}
-
-static inline const GList *g_list_prev_wraparound(const GList *list)
-{
-  // return the prior element of the list, unless already on the first element; in that case, return the last
-  // element of the list.
-  return g_list_previous(list) ? g_list_previous(list) : g_list_last((GList*)list);
-}
 
 void dt_print_mem_usage();
 
@@ -507,43 +367,7 @@ int dt_load_from_string(const gchar *image_to_load, gboolean open_image_in_dr, g
  */
 #define DT_MAX_PATH_FOR_PARAMS 4096
 
-static inline gchar *dt_string_replace(const char *string, const char *to_replace)
-{
-  if(IS_NULL_PTR(string) || IS_NULL_PTR(to_replace)) return NULL;
-  gchar **split = g_strsplit(string, to_replace, -1);
-  gchar *text = g_strjoinv("", split);
-  g_strfreev(split);
-  return text;
-}
 
-// Remove underscore from GUI labels containing mnemonics
-static inline gchar *delete_underscore(const char *s)
-{
-  return dt_string_replace(s, "_");
-}
-
-/**
- * @brief Remove Pango/Gtk markup and accels mnemonics from text labels.
- * If the markup parsing fails, fallback to returning a copy of the original string.
- *
- * @param s Original string to clean
- * @return gchar* Newly-allocated string. The caller is responsible for freeing it.
- */
-static inline gchar *strip_markup(const char *s)
-{
-  if(IS_NULL_PTR(s)) return g_strdup("");
-
-  PangoAttrList *attrs = NULL;
-  gchar *plain = NULL;
-
-  const gchar *underscore = "_";
-  gunichar mnemonic = underscore[0];
-  if(!pango_parse_markup(s, -1, mnemonic, &attrs, &plain, NULL, NULL))
-    plain = delete_underscore(s);
-
-  pango_attr_list_unref(attrs);
-  return plain;
-}
 
 /**
  * @brief Append a constant filename to a variable, stack-based, fixed-sized, directory, 

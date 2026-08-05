@@ -62,6 +62,94 @@
 #include <gtk/gtk.h>
 #include <stdint.h>
 
+/* --- Moved from common/darktable.h: GUI-flavored helpers belong to the GUI layer, and
+ * the orchestrator header must not export GTK/Pango API to the whole application. --- */
+
+/* ------------------------------------------------------------------------------------------
+ * Widget-callback suppression (replaces the legacy raw `darktable.gui->reset` counter).
+ *
+ * Programmatic widget updates must not re-trigger their own "value-changed" handlers. Bracket
+ * such updates with dt_gui_freeze_begin()/dt_gui_freeze_end() (or the dt_gui_widget_freeze()
+ * scope guard), and open every widget callback with `if(dt_gui_widgets_suppressed()) return;`.
+ *
+ * The depth is managed centrally: it is mutated only on the GUI thread (off-thread begin/end
+ * are no-ops, so worker threads -- e.g. thumbnail/export reload_defaults -- can never race or
+ * drift it), clamped at >= 0, and any unbalanced end is logged with its file:line rather than
+ * silently drifting negative and disabling suppression for the rest of the session.
+ * ------------------------------------------------------------------------------------------ */
+gboolean dt_gui_widgets_suppressed(void);
+void dt_gui_freeze_begin_(const char *file, int line);
+void dt_gui_freeze_end_(const char *file, int line);
+void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)
+#define dt_gui_freeze_begin() dt_gui_freeze_begin_(__FILE__, __LINE__)
+#define dt_gui_freeze_end()   dt_gui_freeze_end_(__FILE__, __LINE__)
+
+typedef struct { const char *file; int line; } dt_gui_freeze_token_t;
+static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
+{
+  dt_gui_freeze_end_(t->file, t->line);
+}
+// Scope guard: begins a freeze that is automatically ended when the enclosing block exits,
+// including via early return/goto/break. Use it for spans that contain an early exit (the
+// raw begin/end pair would leak the depth on such paths).
+#define DT_FREEZE_CAT_(a, b) a##b
+#define DT_FREEZE_CAT(a, b) DT_FREEZE_CAT_(a, b)
+#define dt_gui_widget_freeze()                                                       \
+  dt_gui_freeze_token_t DT_FREEZE_CAT(_dt_freeze_guard_, __LINE__)                    \
+      __attribute__((cleanup(dt_gui_freeze_release_))) = { __FILE__, __LINE__ };      \
+  dt_gui_freeze_begin_(__FILE__, __LINE__)
+
+// check whether the specified mask of modifier keys exactly matches, among the set Shift+Control+(Alt/Meta).
+// ignores the state of any other shifting keys
+static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+{
+  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
+//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
+  return (state & modifiers) == desired_modifier_mask;
+}
+
+// check whether the given modifier state includes AT LEAST the specified mask of modifier keys
+static inline gboolean dt_modifiers_include(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+{
+//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
+  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
+  // check whether all modifier bits of interest are turned on
+  return (state & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
+}
+
+/**
+ * @brief Remove underscore from GUI labels containing mnemonics
+ */
+// Remove underscore from GUI labels containing mnemonics
+static inline gchar *delete_underscore(const char *s)
+{
+  return dt_string_replace(s, "_");
+}
+
+/**
+ * @brief Remove Pango/Gtk markup and accels mnemonics from text labels.
+ * If the markup parsing fails, fallback to returning a copy of the original string.
+ *
+ * @param s Original string to clean
+ * @return gchar* Newly-allocated string. The caller is responsible for freeing it.
+ */
+static inline gchar *strip_markup(const char *s)
+{
+  if(IS_NULL_PTR(s)) return g_strdup("");
+
+  PangoAttrList *attrs = NULL;
+  gchar *plain = NULL;
+
+  const gchar *underscore = "_";
+  gunichar mnemonic = underscore[0];
+  if(!pango_parse_markup(s, -1, mnemonic, &attrs, &plain, NULL, NULL))
+    plain = delete_underscore(s);
+
+  pango_attr_list_unref(attrs);
+  return plain;
+}
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
