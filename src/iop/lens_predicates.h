@@ -3,6 +3,10 @@
 #include <glib.h>
 #include <lensfun.h>
 
+#if !defined(N_)
+#define N_(String) (String)
+#endif
+
 enum class dt_iop_lens_correction_source_t
 {
   OFF = 0,
@@ -26,19 +30,19 @@ static inline int distortion_selector_entries(gboolean has_embedded,
 {
   if(!out_labels || !out_values) return 0;
 
-  out_labels[0] = "off";
+  out_labels[0] = N_("off");
   out_values[0] = (int)dt_iop_lens_correction_source_t::OFF;
 
   if(has_embedded)
   {
-    out_labels[1] = "embedded";
+    out_labels[1] = N_("embedded");
     out_values[1] = (int)dt_iop_lens_correction_source_t::EMBEDDED;
-    out_labels[2] = "Lensfun";
+    out_labels[2] = N_("Lensfun");
     out_values[2] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
     return 3;
   }
 
-  out_labels[1] = "Lensfun";
+  out_labels[1] = N_("Lensfun");
   out_values[1] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
   return 2;
 }
@@ -49,19 +53,19 @@ static inline int vignetting_selector_entries(gboolean has_embedded,
 {
   if(!out_labels || !out_values) return 0;
 
-  out_labels[0] = "off";
+  out_labels[0] = N_("off");
   out_values[0] = (int)dt_iop_lens_correction_source_t::OFF;
 
   if(has_embedded)
   {
-    out_labels[1] = "embedded";
+    out_labels[1] = N_("embedded");
     out_values[1] = (int)dt_iop_lens_correction_source_t::EMBEDDED;
-    out_labels[2] = "Lensfun";
+    out_labels[2] = N_("Lensfun");
     out_values[2] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
     return 3;
   }
 
-  out_labels[1] = "Lensfun";
+  out_labels[1] = N_("Lensfun");
   out_values[1] = (int)dt_iop_lens_correction_source_t::LENSFUN_DB;
   return 2;
 }
@@ -72,22 +76,24 @@ static inline int tca_selector_entries(gboolean has_embedded,
 {
   if(!out_labels || !out_values) return 0;
 
-  out_labels[0] = "off";
+  out_labels[0] = N_("off");
   out_values[0] = (int)dt_iop_lens_tca_source_t::OFF;
-  out_labels[1] = "Lensfun";
-  out_values[1] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
 
   if(has_embedded)
   {
-    out_labels[2] = "embedded";
-    out_values[2] = (int)dt_iop_lens_tca_source_t::EMBEDDED;
-    out_labels[3] = "manual";
+    out_labels[1] = N_("embedded");
+    out_values[1] = (int)dt_iop_lens_tca_source_t::EMBEDDED;
+    out_labels[2] = N_("Lensfun");
+    out_values[2] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
+    out_labels[3] = N_("manual");
     out_values[3] = (int)dt_iop_lens_tca_source_t::MANUAL;
     return 4;
   }
   else
   {
-    out_labels[2] = "manual";
+    out_labels[1] = N_("Lensfun");
+    out_values[1] = (int)dt_iop_lens_tca_source_t::LENSFUN_DB;
+    out_labels[2] = N_("manual");
     out_values[2] = (int)dt_iop_lens_tca_source_t::MANUAL;
     return 3;
   }
