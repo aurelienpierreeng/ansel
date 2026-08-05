@@ -57,7 +57,9 @@
 #define DT_OPENCL_DEFAULT_ERROR -999
 #define DT_OPENCL_SYSMEM_ALLOCATION -998
 
-#include "common/darktable.h"
+#include "common/logging.h"
+
+#include <stdint.h>
 
 #ifdef HAVE_OPENCL
 
