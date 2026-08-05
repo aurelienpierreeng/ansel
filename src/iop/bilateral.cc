@@ -53,6 +53,7 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
+#include "common/darktable.h"
 #include "common/imagebuf.h"
 #include "control/control.h"
 #include "develop/develop.h"

@@ -55,6 +55,8 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
+#include "common/module_versioning.h"
+#include "common/target_clones.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "control/control.h"

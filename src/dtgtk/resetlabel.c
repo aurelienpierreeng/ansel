@@ -27,6 +27,7 @@
 */
 
 #include "dtgtk/resetlabel.h"
+#include "common/darktable.h"
 #include "develop/develop.h"
 
 static void _reset_label_class_init(GtkDarktableResetLabelClass *klass);

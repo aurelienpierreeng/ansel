@@ -40,6 +40,7 @@
 #endif
 
 #include "common/imagebuf.h"
+#include "common/module_versioning.h"
 #include "develop/develop.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_mask_manager_params_t)

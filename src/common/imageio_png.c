@@ -29,6 +29,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <memory.h>
+#include <glib/gstdio.h>
 #include <png.h>
 #include <stdio.h>
 #include <strings.h>

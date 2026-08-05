@@ -51,8 +51,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "common/atomic.h"
 #include "common/debug.h"
-#include "common/darktable.h"
+#include "common/logging.h"
 #include "common/dtpthread.h"
 #include "common/image.h"
 #include "control/settings.h"

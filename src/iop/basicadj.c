@@ -49,6 +49,7 @@
 #endif
 
 #include "bauhaus/bauhaus.h"
+#include "common/darktable.h"
 #include "control/control.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/math.h"

@@ -48,6 +48,7 @@
 #include <stdlib.h>
 
 #include "common/colorspaces.h"
+#include "common/darktable.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

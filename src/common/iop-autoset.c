@@ -17,6 +17,7 @@
 */
 
 #include "iop-autoset.h"
+#include "common/darktable.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
