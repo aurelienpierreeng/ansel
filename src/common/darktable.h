@@ -941,7 +941,14 @@ size_t dt_get_mipmap_mem();
 // limit (containers, Flatpak, systemd slices) when one is set. Returns 0 when the
 // platform gives us no way to know — callers must treat 0 as "no information", not as
 // "out of memory".
+// The value is cached for a few tens of milliseconds (the probe reads several /proc and
+// /sys files), so it may lag reality by that much.
 size_t dt_get_system_available_mem(void);
+
+// Drop the cached probe value so the next dt_get_system_available_mem() re-reads the OS.
+// For callers that just changed the situation themselves (freeing caches) and need the
+// resulting number to be ground truth rather than a pre-change snapshot.
+void dt_invalidate_system_available_mem(void);
 
 // System-wide available RAM floor (bytes) under which caches must be shed to
 // keep the OS and other applications breathing, regardless of anselrc budgets.

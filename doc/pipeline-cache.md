@@ -618,10 +618,24 @@ The defense has four layers, from planning to last resort:
    slack including its reclaimable `inactive_file`, where our own MADV_FREE'd pages land —
    `ullAvailPhys` on Windows, free+inactive on macOS; `0` means "no information", which disables
    the valve, not the allocation). If the allocation would push available RAM under the floor,
-   LRU entries are evicted until the deficit is covered. If even shedding everything cannot keep
+   LRU entries are evicted until the deficit is covered, the arena is hard-trimmed, and the probe
+   is then **re-read from the OS** rather than credited with the bytes we think we released: how
+   much of an eviction actually reaches the system is not ours to guess (the per-free `MADV_FREE`
+   is a no-op on Windows, and elsewhere the kernel decides when those pages stop counting against
+   us), and an over-credit would wave the allocation through on a system that is still just as
+   full. If even shedding everything cannot keep
    HALF the floor, the allocation is refused: the pipeline fails with a clear message, which
    beats a silent SIGKILL. A 5-second GUI timer (`_memory_pressure_shedder()`) covers the case
    where *another* application creates the pressure while we sit idle and never allocate.
+
+   Two traps live in this valve. The probe costs ~61 µs (16 µs `/proc/meminfo` + 45 µs walking
+   the cgroup tree) — enough that the tiling planners alone would spend ~1.8 ms of a 16 ms
+   realtime frame on it — so `dt_get_system_available_mem()` caches its answer for 50 ms, and any
+   caller that just changed the situation itself must call `dt_invalidate_system_available_mem()`
+   first or it reads back its own pre-change snapshot. And the valve's running estimate (last
+   probe, minus our own allocations since) legitimately reaches 0 under sustained pressure, so
+   "does this platform answer at all" is a separate `sys_probe_valid` flag: deriving it from an
+   `est == 0` sentinel would silently disable the valve at exactly the moment it matters most.
 
 4. **Pressure-aware tiling** (`dt_get_available_mem()`, `common/darktable.c`). The planning value
    tiled modules size their working set from is capped by the live system availability (plus half

@@ -1816,7 +1816,8 @@ static size_t _probe_system_available_mem(void)
   }
   fclose(f);
 
-  size_t cgroup_limit = SIZE_MAX, cgroup_available = SIZE_MAX;
+  size_t cgroup_limit = SIZE_MAX;
+  size_t cgroup_available = SIZE_MAX;
   _probe_cgroup_v2(&cgroup_limit, &cgroup_available);
   if(cgroup_available != SIZE_MAX) available = MIN(available, cgroup_available);
 
@@ -1830,24 +1831,43 @@ static size_t _probe_system_available_mem(void)
 }
 #endif
 
+/* Short-lived cache of the system probe. Measured at 61 µs per probe (16 µs for
+ * /proc/meminfo, 45 µs walking the cgroup tree), which the tiling planners alone
+ * would pay ~30 times per pipeline run — 1.8 ms of a 16 ms realtime frame. The
+ * cached value is at most DT_SYS_MEM_PROBE_PERIOD_US old; callers that just changed
+ * the situation themselves (the pixelpipe pressure valve, right after shedding
+ * cache) call dt_invalidate_system_available_mem() to force the next read to be
+ * ground truth. */
+#define DT_SYS_MEM_PROBE_PERIOD_US 50000 // 50 ms
+
+static GMutex _sys_mem_probe_lock;
+static size_t _sys_mem_probe_value = 0;
+static gint64 _sys_mem_probe_time_us = 0;
+
 size_t dt_get_system_available_mem(void)
 {
-  // The raw probe reads several /proc and /sys files; tiling planners and the
-  // pixelpipe pressure valve may call this dozens of times per pipeline run, so
-  // serve a short-lived cached value. Two threads racing a stale entry probe
-  // twice and store equivalent values — benign.
-  static gpointer cached_value = NULL;   // a size_t stored as pointer
-  static gpointer cached_time_us = NULL; // a gint64 stored as pointer
+  g_mutex_lock(&_sys_mem_probe_lock);
 
   const gint64 now = g_get_monotonic_time();
-  const gint64 last = (gint64)(gintptr)g_atomic_pointer_get(&cached_time_us);
-  if(last != 0 && now - last < 50000) // 50 ms
-    return GPOINTER_TO_SIZE(g_atomic_pointer_get(&cached_value));
+  if(_sys_mem_probe_time_us != 0 && now - _sys_mem_probe_time_us < DT_SYS_MEM_PROBE_PERIOD_US)
+  {
+    const size_t cached = _sys_mem_probe_value;
+    g_mutex_unlock(&_sys_mem_probe_lock);
+    return cached;
+  }
 
   const size_t available = _probe_system_available_mem();
-  g_atomic_pointer_set(&cached_value, GSIZE_TO_POINTER(available));
-  g_atomic_pointer_set(&cached_time_us, (gpointer)(gintptr)now);
+  _sys_mem_probe_value = available;
+  _sys_mem_probe_time_us = now;
+  g_mutex_unlock(&_sys_mem_probe_lock);
   return available;
+}
+
+void dt_invalidate_system_available_mem(void)
+{
+  g_mutex_lock(&_sys_mem_probe_lock);
+  _sys_mem_probe_time_us = 0;
+  g_mutex_unlock(&_sys_mem_probe_lock);
 }
 
 // Tightest container/cgroup memory limit this process runs under, SIZE_MAX when
@@ -1856,7 +1876,8 @@ size_t dt_get_system_available_mem(void)
 static size_t _get_container_mem_limit(void)
 {
 #if defined(__linux__)
-  size_t cgroup_limit = SIZE_MAX, cgroup_available = SIZE_MAX;
+  size_t cgroup_limit = SIZE_MAX;
+  size_t cgroup_available = SIZE_MAX;
   _probe_cgroup_v2(&cgroup_limit, &cgroup_available);
   return cgroup_limit;
 #else

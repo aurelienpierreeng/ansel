@@ -1463,9 +1463,10 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
      * dt_get_available_mem() (issue #1083), which eviction cannot reliably
      * raise — freed pages reach the OS asynchronously. Draining the whole
      * cache would not change the answer; the caller tiles instead. */
-    size_t current = 0, max = 0;
-    dt_dev_pixelpipe_cache_get_usage(darktable.pixelpipe_cache, &current, &max);
-    if(max - current >= total && (size_t)(0.9f * largest_run) >= total) break;
+    size_t cache_current = 0;
+    size_t cache_max = 0;
+    dt_dev_pixelpipe_cache_get_usage(darktable.pixelpipe_cache, &cache_current, &cache_max);
+    if(cache_max - cache_current >= total && (size_t)(0.9f * largest_run) >= total) break;
 
     error = dt_dev_pixel_pipe_cache_remove_lru(darktable.pixelpipe_cache);
     available = dt_get_available_mem();
