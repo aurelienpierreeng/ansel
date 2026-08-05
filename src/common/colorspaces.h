@@ -39,10 +39,13 @@
 
 #pragma once
 
-#include "common/darktable.h"
 #include "common/matrices.h"
+#include "common/simd.h"
 
+#include <glib.h>
 #include <lcms2.h>
+#include <pthread.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

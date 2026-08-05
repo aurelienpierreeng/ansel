@@ -41,6 +41,7 @@
 #include "common/imageio.h"
 #include "common/imageio_jpeg.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
+#include <glib/gstdio.h>
 #include <setjmp.h>
 
 // error functions

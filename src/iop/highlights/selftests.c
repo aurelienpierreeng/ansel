@@ -33,6 +33,7 @@
 #include "iop/highlights/pde.h"
 #include "iop/highlights/region.h"
 #include "iop/highlights/selftests.h"
+#include <glib/gstdio.h>
 #include <math.h>
 #include <string.h>
 

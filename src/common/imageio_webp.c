@@ -20,6 +20,7 @@
 #include "common/mem_alloc.h"
 #include "common/logging.h"
 #include "common/openmp.h"
+#include <glib/gstdio.h>
 #include <inttypes.h>
 
 #include <webp/decode.h>

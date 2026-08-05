@@ -31,6 +31,7 @@
 #include "common/imageio_rgbe.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 #include <ctype.h>
+#include <glib/gstdio.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

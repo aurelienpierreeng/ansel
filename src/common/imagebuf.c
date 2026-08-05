@@ -20,6 +20,7 @@
 */
 
 #include <stdarg.h>
+#include "common/darktable.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 

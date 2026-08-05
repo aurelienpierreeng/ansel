@@ -30,6 +30,7 @@
 #include "develop/imageop.h" // for IOP_CS_RGB
 
 #include <assert.h>
+#include <glib/gstdio.h>
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
