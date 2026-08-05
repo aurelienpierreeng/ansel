@@ -437,8 +437,8 @@ static void *_region_alloc(nn_region_t *r, size_t bytes, int long_lived)
       gap = r->blocks[i].off + r->blocks[i].len;
     }
     dt_print(DT_DEBUG_ALWAYS,
-             "[rawdenoiseai] region alloc failed: %zu bytes (%s), region %zu, live %zu in %d blocks, "
-             "largest gap %zu\n",
+             "[rawdenoiseai] region alloc failed: %" G_GSIZE_FORMAT " bytes (%s), region %" G_GSIZE_FORMAT
+             ", live %" G_GSIZE_FORMAT " in %d blocks, largest gap %" G_GSIZE_FORMAT "\n",
              bytes, long_lived ? "long-lived" : "churn", r->size, live, r->n_blocks, largest_gap);
     return NULL;
   }
