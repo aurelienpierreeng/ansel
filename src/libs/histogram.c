@@ -840,10 +840,14 @@ static inline void _sample_raw_point_to_image_norm(const dt_colorpicker_sample_t
 }
 
 
+// `stride` is the row length of `image` in pixels (the source buffer width). Callers must never
+// pass a widget/panel dimension here: the binning window [min_x;max_x]×[min_y;max_y] is expressed
+// in source-buffer coordinates, and a foreign stride silently re-samples a sheared subset of the
+// image (issue #828: the histogram shape used to change with the left panel width).
 static inline void _bin_pixels_histogram_in_roi(const float *const restrict image, uint32_t *const restrict bins,
                                                 const size_t min_x, const size_t max_x,
                                                 const size_t min_y, const size_t max_y,
-                                                const size_t width)
+                                                const size_t stride)
 {
   //fprintf(stdout, "computing histogram from x = [%lu;%lu], y = [%lu;%lu]\n", min_x, max_x, min_y, max_y);
   // Process
@@ -858,7 +862,7 @@ __OMP_PARALLEL_FOR__(shared(bins)  collapse(3))
     for(size_t j = min_x; j < max_x; j++)
       for(size_t c = 0; c < 3; c++)
       {
-        const float value = image[(i * width + j) * 4 + c];
+        const float value = image[(i * stride + j) * 4 + c];
         const size_t index = (size_t)CLAMP(roundf(value * (HISTOGRAM_BINS - 1)), 0, HISTOGRAM_BINS - 1);
         bins[index * 4 + c]++;
       }
@@ -1001,7 +1005,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   }
   else
   {
-    _bin_pixels_histogram_in_roi(oriented.data, bins, 0, oriented.width, 0, oriented.height, width);
+    _bin_pixels_histogram_in_roi(oriented.data, bins, 0, oriented.width, 0, oriented.height, oriented.width);
   }
 
   if(oriented.owned) dt_free_align(oriented.data);
