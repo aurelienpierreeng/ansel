@@ -420,7 +420,7 @@ static void _culling_mode(GtkWidget *widget, gpointer data)
   if(!darktable.gui->culling_mode) dt_culling_mode_to_selection();
 
   // Anchor the re-scrollings to the right image
-  const int32_t imgid = dt_selection_get_first_id(darktable.selection);
+  const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
 

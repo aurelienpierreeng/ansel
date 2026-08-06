@@ -629,7 +629,7 @@ GtkWidget * get_last_widget(GList **list)
 gboolean has_selection()
 {
   // Can be used to set menu items sensitivity when image(s) is/are selected
-  return dt_selection_get_length(darktable.selection) > 0;
+  return dt_selection_get_length(dt_selection_get_global()) > 0;
 }
 
 gboolean has_active_images()

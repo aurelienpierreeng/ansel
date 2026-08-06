@@ -638,8 +638,8 @@ static void _all_tracks_toggled(GtkTreeViewColumn *column, dt_lib_module_t *self
 static void _select_images(GtkWidget *widget, dt_lib_module_t *self)
 {
   GList *imgs = _get_images_on_active_tracks(self);
-  dt_selection_clear(darktable.selection);
-  dt_selection_select_list(darktable.selection, imgs);
+  dt_selection_clear(dt_selection_get_global());
+  dt_selection_select_list(dt_selection_get_global(), imgs);
   g_list_free(imgs);
   imgs = NULL;
 }

@@ -63,9 +63,9 @@ static int32_t preload_image_cache(dt_job_t *job)
   const dt_mipmap_size_t max_mipmap_size = (params) ? params->max_mipmap_size : DT_MIPMAP_2;
 
   // Load the mipmap cache sizes 0 to max_mipmap_size of the current selection
-  GList *selection = dt_selection_get_list(darktable.selection);
+  GList *selection = dt_selection_get_list(dt_selection_get_global());
   int i = 0;
-  float imgs = (float)dt_selection_get_length(darktable.selection) * (max_mipmap_size + 1);
+  float imgs = (float)dt_selection_get_length(dt_selection_get_global()) * (max_mipmap_size + 1);
   GList *img = g_list_first(selection);
 
   while(img && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED)
@@ -180,7 +180,7 @@ static gboolean preload_auto_callback(GtkAccelGroup *group, GObject *acceleratab
 
 static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  GList *selection = dt_selection_get_list(darktable.selection);
+  GList *selection = dt_selection_get_list(dt_selection_get_global());
 
   for(GList *img = g_list_first(selection); img; img = g_list_next(img))
   {

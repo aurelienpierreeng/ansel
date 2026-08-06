@@ -1903,8 +1903,8 @@ static void _act_folders_remove(dt_lib_collect_t *d, GList *rows)
   // confirmation before anything is touched, so recursion doesn't skip that safety net.
   GList *imgids = _rows_to_imgids(DT_COLLECTION_PROP_FOLDERS, rows, TRUE);
   if(!imgids) return;
-  dt_selection_clear(darktable.selection);
-  dt_selection_select_list(darktable.selection, imgids);
+  dt_selection_clear(dt_selection_get_global());
+  dt_selection_select_list(dt_selection_get_global(), imgids);
   g_list_free(imgids);
   if(dt_control_remove_images()) _force_refresh(d);
 }

@@ -516,7 +516,7 @@ static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *i
 
 static void _concatenate_multiple_images(gboolean skip[md_size], int count)
 {
-  gchar *images = dt_selection_ids_to_string(darktable.selection);
+  gchar *images = dt_selection_ids_to_string(dt_selection_get_global());
   sqlite3_stmt *stmt = NULL;
   // clang-format off
   gchar *query = g_strdup_printf("SELECT COUNT(DISTINCT film_id), "
@@ -618,10 +618,10 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
   {
     count = 1;
   }
-  else if(dt_selection_get_length(darktable.selection) > 1)
+  else if(dt_selection_get_length(dt_selection_get_global()) > 1)
   {
-    count = dt_selection_get_length(darktable.selection);
-    img_id = dt_selection_get_first_id(darktable.selection);
+    count = dt_selection_get_length(dt_selection_get_global());
+    img_id = dt_selection_get_first_id(dt_selection_get_global());
   }
   else if(dt_act_on_get_first_image() > -1)
   {

@@ -312,7 +312,7 @@ static gboolean export_image_list_callback(GtkAccelGroup *group, GObject *accele
   // Rebuild from scratch on each call so the content always reflects the current selection
   if(dialog) gtk_widget_destroy(dialog);
 
-  GList *imgids = dt_selection_get_list(darktable.selection);
+  GList *imgids = dt_selection_get_list(dt_selection_get_global());
   if(IS_NULL_PTR(imgids)) return TRUE;
 
   dialog = gtk_dialog_new_with_buttons(_("Ansel - Export image list"),

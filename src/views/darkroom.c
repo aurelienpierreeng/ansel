@@ -1120,7 +1120,7 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   dt_image_check_camera_missing_sample(&dev->image_storage);
 
   // clear selection, we don't want selections in darkroom
-  dt_selection_clear(darktable.selection);
+  dt_selection_clear(dt_selection_get_global());
 
   // change active image for global actions (menu)
   dt_view_active_images_reset(FALSE);
@@ -1137,7 +1137,7 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
 
 int try_enter(dt_view_t *self)
 {
-  uint32_t num_selected = dt_selection_get_length(darktable.selection);
+  uint32_t num_selected = dt_selection_get_length(dt_selection_get_global());
   int32_t imgid = dt_control_get_mouse_over_id();
   (void)self;
 
@@ -1162,7 +1162,7 @@ int try_enter(dt_view_t *self)
   else
   {
     // Needed to open image at startup
-    imgid = dt_selection_get_first_id(darktable.selection);
+    imgid = dt_selection_get_first_id(dt_selection_get_global());
   }
 
   dt_view_active_images_reset(FALSE);
@@ -1951,7 +1951,7 @@ void leave(dt_view_t *self)
   dt_accels_disconnect_active_group(darktable.gui->accels);
 
   // Restore the previous selection
-  dt_selection_select_single(darktable.selection, dt_view_active_images_get_first());
+  dt_selection_select_single(dt_selection_get_global(), dt_view_active_images_get_first());
   dt_view_active_images_reset(FALSE);
 
   dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);

@@ -2357,14 +2357,14 @@ void dt_selection_to_culling_mode()
                         NULL, NULL, NULL);
 
   // Backup and reset current selection
-  dt_selection_push(darktable.selection);
-  dt_selection_clear(darktable.selection);
+  dt_selection_push(dt_selection_get_global());
+  dt_selection_clear(dt_selection_get_global());
 }
 
 void dt_culling_mode_to_selection()
 {
   // Restore everything as before
-  dt_selection_pop(darktable.selection);
+  dt_selection_pop(dt_selection_get_global());
   dt_pop_collection();
 }
 
@@ -2382,12 +2382,12 @@ void dt_collection_hint_message(const dt_collection_t *collection)
   gchar *message;
 
   const int c = dt_collection_get_count(collection);
-  const int cs = dt_selection_get_length(darktable.selection);
+  const int cs = dt_selection_get_length(dt_selection_get_global());
 
   if(cs == 1)
   {
     /* determine offset of the single selected image */
-    GList *selected_imgids = dt_selection_get_list(darktable.selection);
+    GList *selected_imgids = dt_selection_get_list(dt_selection_get_global());
     int selected = -1;
 
     if(selected_imgids)
@@ -2556,7 +2556,7 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
 
   // To scroll the lighttable automatically to this image,
   // it needs to be selected.
-  dt_selection_select(darktable.selection, imgid);
+  dt_selection_select(dt_selection_get_global(), imgid);
 
   // New images are untagged, that may need an update of the collection module for untagged count
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);

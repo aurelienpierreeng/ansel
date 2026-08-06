@@ -861,9 +861,9 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
      && thumb->table && thumb->table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
     if(dt_modifier_is(event->state, 0))
-      dt_selection_select_single(darktable.selection, thumb->info.id);
+      dt_selection_select_single(dt_selection_get_global(), thumb->info.id);
     else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-      dt_selection_toggle(darktable.selection, thumb->info.id);
+      dt_selection_toggle(dt_selection_get_global(), thumb->info.id);
     else if(dt_modifier_is(event->state, GDK_SHIFT_MASK) && thumb->table)
       dt_thumbtable_select_range(thumb->table, thumb->rowid);
     // Because selection might include several images, we handle styling globally
@@ -1436,7 +1436,7 @@ dt_thumbnail_t *dt_thumbnail_new(int rowid, dt_thumbnail_overlay_t over, dt_thum
   dt_thumbnail_update_gui(thumb);
 
   // This will then only run on "selection_changed" event
-  dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.id));
+  dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(dt_selection_get_global(), thumb->info.id));
 
   return thumb;
 }

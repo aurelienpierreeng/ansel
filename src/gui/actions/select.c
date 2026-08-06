@@ -25,7 +25,7 @@
 
 gboolean select_all_sensitive_callback()
 {
-  return dt_collection_get_count(darktable.collection) > dt_selection_get_length(darktable.selection)
+  return dt_collection_get_count(darktable.collection) > dt_selection_get_length(dt_selection_get_global())
     && _is_lighttable();
 }
 
@@ -40,7 +40,7 @@ static gboolean select_all_callback(GtkAccelGroup *group, GObject *acceleratable
 
 gboolean clear_selection_sensitive_callback()
 {
-  return dt_selection_get_length(darktable.selection) > 0
+  return dt_selection_get_length(dt_selection_get_global()) > 0
     && _is_lighttable();
 }
 
@@ -48,7 +48,7 @@ gboolean clear_selection_sensitive_callback()
 static gboolean clear_selection_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(!clear_selection_sensitive_callback()) return FALSE;
-  dt_selection_clear(darktable.selection);
+  dt_selection_clear(dt_selection_get_global());
   return TRUE;
 }
 

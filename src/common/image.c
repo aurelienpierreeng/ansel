@@ -1707,7 +1707,7 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
       dt_image_cache_read_release(dt_image_cache_get_global(), img);
     }
     // make sure newid is not selected
-    if(clear_selection) dt_selection_clear(darktable.selection);
+    if(clear_selection) dt_selection_clear(dt_selection_get_global());
 
     dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), newid, 'w');
     (void)dt_exif_xmp_read(img, xmpfilename, 0);

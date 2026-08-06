@@ -303,7 +303,7 @@ static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
       _metadata_set_list(i, &key_value, d);
   }
 
-  GList *imgs = dt_selection_get_list(darktable.selection);
+  GList *imgs = dt_selection_get_list(dt_selection_get_global());
 
   dt_metadata_set_list(imgs, key_value, TRUE);
 

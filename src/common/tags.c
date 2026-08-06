@@ -642,7 +642,7 @@ uint32_t dt_tag_get_attached(const int32_t imgid, GList **result, const gboolean
   }
   else
   {
-    nb_selected = dt_selection_get_length(darktable.selection);
+    nb_selected = dt_selection_get_length(dt_selection_get_global());
   }
   uint32_t count = 0;
   if(imgid > 0 || nb_selected > 0)
@@ -921,7 +921,7 @@ static GList *_tag_get_tags(const int32_t imgid, const dt_tag_type_t type)
   else
   {
     // we get the query used to retrieve the list of select images
-    images = dt_selection_ids_to_string(darktable.selection);
+    images = dt_selection_ids_to_string(dt_selection_get_global());
   }
 
   sqlite3_stmt *stmt;
@@ -1142,7 +1142,7 @@ uint32_t dt_tag_get_suggestions(GList **result)
 {
   sqlite3_stmt *stmt;
 
-  const uint32_t nb_selected = dt_selection_get_length(darktable.selection);
+  const uint32_t nb_selected = dt_selection_get_length(dt_selection_get_global());
   const int nb_recent = dt_conf_get_int("plugins/lighttable/tagging/nb_recent_tags");
   const uint32_t confidence = dt_conf_get_int("plugins/lighttable/tagging/confidence");
   const char *slist = dt_conf_get_string_const("plugins/lighttable/tagging/recent_tags");
@@ -1390,7 +1390,7 @@ uint32_t dt_tag_get_with_usage(GList **result)
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  const uint32_t nb_selected = dt_selection_get_length(darktable.selection);
+  const uint32_t nb_selected = dt_selection_get_length(dt_selection_get_global());
 
   /* Now put all the bits together */
   // clang-format off

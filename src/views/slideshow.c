@@ -338,7 +338,7 @@ int try_enter(dt_view_t *self)
 {
   dt_slideshow_t *d = (dt_slideshow_t *)self->data;
   g_list_free(d->incoming_selection);
-  d->incoming_selection = dt_selection_get_list(darktable.selection);
+  d->incoming_selection = dt_selection_get_list(dt_selection_get_global());
   if(!d->incoming_selection && dt_view_active_images_get_all())
     d->incoming_selection = g_list_copy((GList *)dt_view_active_images_get_all());
 
@@ -423,7 +423,7 @@ void enter(dt_view_t *self)
   d->delay = dt_conf_get_int("slideshow_delay");
   dt_pthread_mutex_unlock(&d->lock);
 
-  dt_selection_clear(darktable.selection);
+  dt_selection_clear(dt_selection_get_global());
 
   dt_gui_refocus_center();
   _refresh_display(d);
@@ -442,9 +442,9 @@ void leave(dt_view_t *self)
   d->auto_advance = FALSE;
   dt_accels_disconnect_active_group(darktable.gui->accels);
 
-  dt_selection_clear(darktable.selection);
+  dt_selection_clear(dt_selection_get_global());
   if(dt_view_active_images_get_all())
-    dt_selection_select_list(darktable.selection, dt_view_active_images_get_all());
+    dt_selection_select_list(dt_selection_get_global(), dt_view_active_images_get_all());
   dt_view_active_images_reset(FALSE);
   g_list_free(d->incoming_selection);
   d->incoming_selection = NULL;

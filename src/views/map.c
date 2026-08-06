@@ -727,7 +727,7 @@ int try_enter(dt_view_t *self)
 {
   dt_map_t *lib = (dt_map_t *)self->data;
   g_list_free(lib->incoming_selection);
-  lib->incoming_selection = dt_selection_get_list(darktable.selection);
+  lib->incoming_selection = dt_selection_get_list(dt_selection_get_global());
   return 0;
 }
 
@@ -1933,7 +1933,7 @@ static gboolean _view_map_button_press_callback(GtkWidget *w, GdkEventButton *e,
     if(lib->selected_images)
     {
       const int32_t imgid = GPOINTER_TO_INT(lib->selected_images->data);
-      dt_selection_select_single(darktable.selection, imgid);
+      dt_selection_select_single(dt_selection_get_global(), imgid);
       dt_control_set_mouse_over_id(imgid);
       dt_control_set_keyboard_over_id(imgid);
       g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
@@ -2588,10 +2588,10 @@ static void _view_map_selection_changed(gpointer instance, gpointer user_data)
   if(darktable.view_manager->proxy.map.view)
   {
     dt_view_active_images_reset(FALSE);
-    GList *selection = dt_selection_get_list(darktable.selection);
+    GList *selection = dt_selection_get_list(dt_selection_get_global());
     if(selection) dt_view_active_images_set(selection, FALSE);
 
-    const int32_t imgid = dt_selection_get_first_id(darktable.selection);
+    const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
     dt_control_set_mouse_over_id(imgid);
     dt_control_set_keyboard_over_id(imgid);
     g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
@@ -2683,14 +2683,14 @@ static gboolean _view_map_center_on_image_list(dt_view_t *self, const char* tabl
 static void _view_map_filmstrip_activate_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
   dt_view_t *self = (dt_view_t *)user_data;
-  dt_selection_select_single(darktable.selection, imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
   g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
   _view_map_center_on_image(self, imgid);
 }
 
 static void _view_map_filmstrip_drag_begin_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
-  dt_selection_select_single(darktable.selection, imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
 }

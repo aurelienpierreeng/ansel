@@ -84,7 +84,7 @@ static void _film_strip_activated(const int32_t imgid, void *data)
   dt_print_t *prt = (dt_print_t *)self->data;
 
   prt->last_selected = imgid;
-  dt_selection_select_single(darktable.selection, imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
   g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
@@ -99,7 +99,7 @@ static void _view_print_filmstrip_activate_callback(gpointer instance, int32_t i
 static void _view_print_filmstrip_drag_begin_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
   if(imgid <= 0) return;
-  dt_selection_select_single(darktable.selection, imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
 }
@@ -283,7 +283,7 @@ static void _print_setup_initial_image(dt_print_t *prt)
 
   int32_t imgid = prt->pending_imgid;
   if(imgid <= UNKNOWN_IMAGE) imgid = prt->imgs->imgid_to_load;
-  if(imgid <= UNKNOWN_IMAGE) imgid = dt_selection_get_first_id(darktable.selection);
+  if(imgid <= UNKNOWN_IMAGE) imgid = dt_selection_get_first_id(dt_selection_get_global());
   if(imgid <= UNKNOWN_IMAGE) imgid = dt_view_active_images_get_first();
 
   if(imgid <= UNKNOWN_IMAGE) return;
@@ -438,12 +438,12 @@ int try_enter(dt_view_t *self)
 {
   dt_print_t *prt = (dt_print_t*)self->data;
   g_list_free(prt->incoming_selection);
-  prt->incoming_selection = dt_selection_get_list(darktable.selection);
+  prt->incoming_selection = dt_selection_get_list(dt_selection_get_global());
 
   //  now check that there is at least one selected image
 
   const int32_t imgid = prt->incoming_selection ? GPOINTER_TO_INT(prt->incoming_selection->data)
-                                                : dt_selection_get_first_id(darktable.selection);
+                                                : dt_selection_get_first_id(dt_selection_get_global());
 
   if(imgid < 0)
   {
@@ -488,7 +488,7 @@ void enter(dt_view_t *self)
   /* scroll filmstrip to the first selected image */
   int32_t startup_imgid = prt->pending_imgid;
   if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = prt->imgs->imgid_to_load;
-  if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = dt_selection_get_first_id(darktable.selection);
+  if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = dt_selection_get_first_id(dt_selection_get_global());
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_view_print_filmstrip_activate_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,

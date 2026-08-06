@@ -508,6 +508,11 @@ struct dt_mipmap_cache_t *dt_mipmap_cache_get_global(void)
   return darktable.mipmap_cache;
 }
 
+struct dt_selection_t *dt_selection_get_global(void)
+{
+  return darktable.selection;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

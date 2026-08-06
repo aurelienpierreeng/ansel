@@ -414,7 +414,7 @@ static void _studio_set_image(dt_studio_capture_t *d, const int32_t imgid)
     // (a new import, a filmstrip activate...): darkroom's try_enter() falls
     // back to the selection, not to our own active-image tracking, and the
     // user expects "what's shown" and "what's selected" to be the same thing.
-    dt_selection_select_single(darktable.selection, imgid);
+    dt_selection_select_single(dt_selection_get_global(), imgid);
     // darkroom's try_enter() checks mouse_over_id BEFORE falling back to the
     // selection, and its own enter() sets both mouse_over_id and
     // keyboard_over_id to the image it is about to load. Mirror that here so
@@ -550,7 +550,7 @@ void enter(dt_view_t *self)
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 
   // Start from the current selection when there is one.
-  const int32_t imgid = dt_selection_get_first_id(darktable.selection);
+  const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
   if(imgid > UNKNOWN_IMAGE) _studio_set_image(d, imgid);
 
   g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
@@ -1234,7 +1234,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     {
       if(d->imgid > UNKNOWN_IMAGE)
       {
-        // _studio_set_image() already synced darktable.selection to d->imgid.
+        // _studio_set_image() already synced the global selection to d->imgid.
         dt_view_manager_switch(darktable.view_manager, "darkroom");
       }
       else

@@ -443,7 +443,7 @@ int dt_thumbtable_scroll_to_active_rowid(dt_thumbtable_t *table)
 
 int dt_thumbtable_scroll_to_selection(dt_thumbtable_t *table)
 {
-  int id = dt_selection_get_first_id(darktable.selection);
+  int id = dt_selection_get_first_id(dt_selection_get_global());
   if(id < 0) id = dt_control_get_keyboard_over_id();
   if(id < 0) id = dt_control_get_mouse_over_id();
   //fprintf(stdout, "scrolling to %i\n", id);
@@ -1017,7 +1017,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
       // because it's unexpected that unvisible items might be selected,
       // and selection sanitization only deals with imgids outside of current collection,
       // but group members are always within the collection.
-      dt_selection_deselect(darktable.selection, imgid);
+      dt_selection_deselect(dt_selection_get_global(), imgid);
       continue;
     }
 
@@ -1537,7 +1537,7 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
   // so they always take precedence.
   int32_t imgid = dt_control_get_keyboard_over_id();
   if(imgid < 0) imgid = dt_control_get_mouse_over_id();
-  if(imgid < 0) imgid = dt_selection_get_first_id(darktable.selection);
+  if(imgid < 0) imgid = dt_selection_get_first_id(dt_selection_get_global());
   if(imgid < 0 && table->lut)
   {
     dt_pthread_mutex_lock(&table->lock);
@@ -2047,7 +2047,7 @@ void dt_thumbtable_select_all(dt_thumbtable_t *table)
 
   if(img)
   {
-    dt_selection_select_list(darktable.selection, img);
+    dt_selection_select_list(dt_selection_get_global(), img);
     g_list_free(img);
     img = NULL;
   }
@@ -2068,7 +2068,7 @@ void dt_thumbtable_select_range(dt_thumbtable_t *table, const int rowid)
   // Find the bounds of the current selection
   size_t rowid_end = 0;
   size_t rowid_start = table->collection_count - 1;
-  GList *selected = dt_selection_get_list(darktable.selection);
+  GList *selected = dt_selection_get_list(dt_selection_get_global());
 
   if(selected)
   {
@@ -2117,7 +2117,7 @@ void dt_thumbtable_select_range(dt_thumbtable_t *table, const int rowid)
 
   if(img)
   {
-    dt_selection_select_list(darktable.selection, img);
+    dt_selection_select_list(dt_selection_get_global(), img);
     g_list_free(img);
     img = NULL;
   }
@@ -2128,11 +2128,11 @@ void dt_thumbtable_invert_selection(dt_thumbtable_t *table)
   if(!table->collection_inited || table->collection_count == 0) return;
 
   // Record initial selection, select all, then deselect initial selection
-  GList *to_deselect = dt_selection_get_list(darktable.selection);
+  GList *to_deselect = dt_selection_get_list(dt_selection_get_global());
   if(to_deselect)
   {
     dt_thumbtable_select_all(table);
-    dt_selection_deselect_list(darktable.selection, to_deselect);
+    dt_selection_deselect_list(dt_selection_get_global(), to_deselect);
     g_list_free(to_deselect);
     to_deselect = NULL;
   }
