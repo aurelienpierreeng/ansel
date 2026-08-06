@@ -1012,10 +1012,10 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
   items = NULL;
 
-  dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
-  grp2->formid = 0;
-  dt_masks_group_ungroup(darktable.develop, grp2, grp);
-  dt_masks_change_form_gui(darktable.develop, grp2);
+  dt_masks_form_t *grp_dest = dt_masks_create(DT_MASKS_GROUP);
+  grp_dest->formid = 0;
+  dt_masks_group_ungroup(darktable.develop, grp_dest, grp);
+  dt_masks_change_form_gui(darktable.develop, grp_dest);
   darktable.develop->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
   if(nb == 1 && !IS_NULL_PTR(selected_form))
     dt_masks_center_view_on_form(darktable.develop, selected_form);

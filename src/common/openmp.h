@@ -68,6 +68,10 @@
 
 #endif /* _OPENMP */
 
+#if defined(__x86_64__) || defined(__i386__)
+#include <immintrin.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -75,10 +79,6 @@ extern "C" {
 /** Number of OpenMP threads the application decided to use. DECLARED here so
  * low-level compute code can size per-thread buffers without importing
  * common/darktable.h; BOUND by the orchestrator (common/darktable.c). */
-#if defined(__x86_64__) || defined(__i386__)
-#include <immintrin.h>
-#endif
-
 int dt_get_num_openmp_threads(void);
 
 static inline int dt_get_thread_num()

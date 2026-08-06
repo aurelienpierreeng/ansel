@@ -414,7 +414,7 @@ typedef struct dt_iop_ashift_points_idx_t
 {
   size_t offset;
   int length;
-  int near;
+  int is_near;
   int bounded;
   dt_iop_ashift_linetype_t type;
   dt_iop_ashift_linecolor_t color;
@@ -2651,7 +2651,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   }
 
   // NMS_CROP_EPSILON (100 px^2) is a fixed absolute tolerance, but crop_fitness's magnitude scales
-  // with the image's area (tens of millions of px^2) — near identity params, the optimum is already
+  // with the image's area (tens of millions of px^2) — is_near identity params, the optimum is already
   // ~the initial guess, the landscape goes near-flat, and floating-point noise alone keeps the
   // simplex spread above this tiny absolute value forever, burning all NMS_CROP_ITERATIONS. Scale
   // the tolerance with image area (floored at the original constant) instead.
@@ -3450,7 +3450,7 @@ error:
 }
 #endif
 
-// gather information about "near"-ness in g->points_idx
+// gather information about "is_near"-ness in g->points_idx
 static void _get_near(const float *points, dt_iop_ashift_points_idx_t *points_idx, const int lines_count, float pzx,
                       float pzy, float delta, gboolean multiple)
 {
@@ -3458,7 +3458,7 @@ static void _get_near(const float *points, dt_iop_ashift_points_idx_t *points_id
 
   for(int n = 0; n < lines_count; n++)
   {
-    points_idx[n].near = 0;
+    points_idx[n].is_near = 0;
 
     // skip irrelevant lines
     if(points_idx[n].type == ASHIFT_LINE_IRRELEVANT)
@@ -3486,12 +3486,12 @@ static void _get_near(const float *points, dt_iop_ashift_points_idx_t *points_id
 
       if(dx * dx + dy * dy < delta2)
       {
-        points_idx[n].near = 1;
+        points_idx[n].is_near = 1;
         break;
       }
     }
     // if we don't want multiple selection, stop here
-    if(!multiple && points_idx[n].near) break;
+    if(!multiple && points_idx[n].is_near) break;
   }
 }
 
@@ -3522,8 +3522,8 @@ static void _get_bounded_inside(const float *points, dt_iop_ashift_points_idx_t 
 
   for(int n = 0; n < points_lines_count; n++)
   {
-    // mark line as "not near" and "not bounded"
-    points_idx[n].near = 0;
+    // mark line as "not is_near" and "not bounded"
+    points_idx[n].is_near = 0;
     points_idx[n].bounded = 0;
 
     // skip irrelevant lines
@@ -3536,8 +3536,8 @@ static void _get_bounded_inside(const float *points, dt_iop_ashift_points_idx_t 
        && points_idx[n].bbY >= ay && points_idx[n].bbY <= by)
     {
       points_idx[n].bounded = 1;
-      // only mark "near"-ness of those lines we are interested in
-      points_idx[n].near = ((points_idx[n].type & mask) != state) ? 0 : 1;
+      // only mark "is_near"-ness of those lines we are interested in
+      points_idx[n].is_near = ((points_idx[n].type & mask) != state) ? 0 : 1;
     }
   }
 }
@@ -3617,7 +3617,7 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
     total_points += length;
 
     my_points_idx[n].length = length;
-    my_points_idx[n].near = 0;
+    my_points_idx[n].is_near = 0;
     my_points_idx[n].bounded = 0;
 
     const dt_iop_ashift_linetype_t type = lines[n].type;
@@ -3700,7 +3700,7 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
       my_extremas[i] *= gui_scale;
   }
 
-  // fourth step: get bounding box in final coordinates (used later for checking "near"-ness to mouse pointer)
+  // fourth step: get bounding box in final coordinates (used later for checking "is_near"-ness to mouse pointer)
   for(int n = 0; n < lines_count; n++)
   {
     float xmin = FLT_MAX, xmax = FLT_MIN, ymin = FLT_MAX, ymax = FLT_MIN;
@@ -4075,8 +4075,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
        && g->points_idx[n].type != ASHIFT_LINE_HORIZONTAL_SELECTED
        && g->points_idx[n].type != ASHIFT_LINE_VERTICAL_SELECTED)
       continue;
-    // is the near flag set? -> draw line a bit thicker
-    if(g->points_idx[n].near)
+    // is the is_near flag set? -> draw line a bit thicker
+    if(g->points_idx[n].is_near)
       cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
     else
       cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5) / zoom_scale);
@@ -4151,7 +4151,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     cairo_stroke(cr);
   }
 
-  // indicate which area is used for "near"-ness detection when selecting/deselecting lines
+  // indicate which area is used for "is_near"-ness detection when selecting/deselecting lines
   if(g->near_delta > 0)
   {
     float pzxpy[2] = { (float)pointerx, (float)pointery };
@@ -4197,7 +4197,7 @@ static void _update_lines_count(const dt_iop_ashift_line_t *lines, const int lin
   *horizontal_count = hlines;
 }
 
-// determine if we are near a drawn line extrema
+// determine if we are is_near a drawn line extrema
 static int _draw_near_point(dt_develop_t *dev, const float x, const float y, const float *points, const int limit)
 {
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
@@ -4400,7 +4400,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
     return TRUE;
   }
-  // if we are in draw mode, we check if we are near a corner
+  // if we are in draw mode, we check if we are is_near a corner
   if(g->draw_points
      && ((g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines_count >= 4)
          || g->current_structure_method == ASHIFT_METHOD_LINES))
@@ -4409,7 +4409,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     g->draw_near_point = _draw_near_point(self->dev, pzx * wd, pzy * ht, g->draw_points, limit);
   }
 
-  // if in rectangle selecting mode adjust "near"-ness of lines according to
+  // if in rectangle selecting mode adjust "is_near"-ness of lines according to
   // the rectangular selection
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
@@ -4424,7 +4424,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     return FALSE;
   }
 
-  // gather information about "near"-ness in g->points_idx
+  // gather information about "is_near"-ness in g->points_idx
   if(selectable_lines_count > 0)
     _get_near(
         g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->near_delta,
@@ -4436,7 +4436,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     // Loop over displayed lines close to the pointer and update the matching live line flags.
     for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near == 0)
+      if(g->points_idx[n].is_near == 0)
         continue;
 
       if(g->isdeselecting)
@@ -4552,7 +4552,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   else
     g->near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta");
 
-  // gather information about "near"-ness in g->points_idx
+  // gather information about "is_near"-ness in g->points_idx
   if(selectable_lines_count > 0)
     _get_near(g->points, g->points_idx, selectable_lines_count,
               pzx * wd, pzy * ht, g->near_delta,
@@ -4565,7 +4565,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     // we search the selected line and mark it as the moved line
     for(int n = 0; n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near)
+      if(g->points_idx[n].is_near)
       {
         const float pd_w = self->dev->roi.processed_width;
         const float pd_h = self->dev->roi.processed_height;
@@ -4588,7 +4588,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     // left-click selects and right-click deselects the line
     for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near == 0) continue;
+      if(g->points_idx[n].is_near == 0) continue;
 
       if(which == 3)
       {
@@ -4939,7 +4939,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     if(g->current_structure_method == ASHIFT_METHOD_QUAD || g->current_structure_method == ASHIFT_METHOD_LINES)
       return TRUE;
 
-    // gather information about "near"-ness in g->points_idx
+    // gather information about "is_near"-ness in g->points_idx
     const int selectable_lines_count = (!IS_NULL_PTR(g->points) && !IS_NULL_PTR(g->points_idx))
                                        ? MIN(g->points_lines_count, g->lines_count)
                                        : 0;
@@ -4949,7 +4949,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     // iterate over all lines close to the pointer and change "selected" state.
     for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near == 0)
+      if(g->points_idx[n].is_near == 0)
         continue;
 
       if(g->isdeselecting)

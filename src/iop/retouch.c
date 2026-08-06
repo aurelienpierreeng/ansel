@@ -685,10 +685,10 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     }
   }
 
-  dt_masks_form_t *grp2 = dt_masks_create_ext(self->dev, DT_MASKS_GROUP);
-  grp2->formid = 0;
-  dt_masks_group_ungroup(self->dev, grp2, grp);
-  dt_masks_change_form_gui(self->dev, grp2);
+  dt_masks_form_t *grp_dest = dt_masks_create_ext(self->dev, DT_MASKS_GROUP);
+  grp_dest->formid = 0;
+  dt_masks_group_ungroup(self->dev, grp_dest, grp);
+  dt_masks_change_form_gui(self->dev, grp_dest);
   self->dev->form_gui->edit_mode = bd->masks_shown;
 
   if(g)
