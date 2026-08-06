@@ -17,6 +17,8 @@
 */
 
 #include "develop/pixelpipe_cache.h"
+#include "iop/drawlayer/cache.h"
+#include "iop/drawlayer/common.h"
 #include "control/control.h"
 #include "iop/drawlayer/runtime.h"
 #include "develop/develop.h"

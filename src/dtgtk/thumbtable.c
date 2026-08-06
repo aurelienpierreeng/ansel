@@ -41,6 +41,8 @@
 /** a class to manage a table of thumbnail for lighttable and filmstrip.  */
 
 #include "common/image_extensions.h"
+#include "common/act_on.h"
+#include "control/settings.h"
 #include "control/conf.h"
 #include "control/jobs/control_jobs.h"
 #include "gui/gdkkeys.h"

@@ -72,6 +72,8 @@
 */
 
 #include "common/image.h"
+#include "common/act_on.h"
+#include "common/history_actions.h"
 #include "develop/imageop.h"
 #include "common/collection.h"
 #include "common/debug.h"

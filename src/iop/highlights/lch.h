@@ -57,7 +57,6 @@
 // Public API of this highlights mode (a compiled TU); internals are static in the .c.
 
 #include "develop/imageop.h"
-#include "iop/highlights/common.h"
 
 void interpolate_color_xtrans(const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                               const dt_iop_roi_t *const roi_out, int dim, int dir, int other,

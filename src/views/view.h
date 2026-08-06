@@ -47,7 +47,6 @@
 #ifndef DT_VIEWS_VIEW_H
 #define DT_VIEWS_VIEW_H
 
-#include "common/act_on.h"
 #include "common/atomic.h"
 
 #include "common/history.h"

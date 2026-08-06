@@ -21,6 +21,7 @@
 */
 
 #include "common/eaw.h"
+#include "common/iop_profile.h"
 #include "common/openmp.h"
 #include "common/simd.h"
 #include "common/math.h"

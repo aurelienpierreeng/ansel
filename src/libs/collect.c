@@ -124,6 +124,7 @@
 */
 
 #include "libs/collect.h"
+#include "control/settings.h"
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
 #include "common/datetime.h"

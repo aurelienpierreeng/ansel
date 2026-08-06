@@ -17,6 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "common/act_on.h"
 #include "control/jobs/control_jobs.h"
 #include "common/database.h"
 #include "common/image.h"

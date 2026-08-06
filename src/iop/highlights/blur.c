@@ -20,6 +20,7 @@
 // see blur.h for the public API.)
 
 #include "iop/highlights/blur.h"
+#include "iop/highlights/common.h"
 #include <string.h>
 
 static __thread _hl_gauss_slot_t _hl_gauss_cache[HL_GAUSS_SLOTS] = { { 0 } };

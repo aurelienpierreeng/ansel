@@ -116,7 +116,6 @@ GList dev->forms
 #include "common/times.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "develop/pixelpipe.h"
-#include "dtgtk/button.h"
 #include "gui/draw.h"
 #include "control/control.h"
 

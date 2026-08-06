@@ -35,6 +35,7 @@
 */
 
 #include "common/geo.h"
+#include "control/settings.h"
 #include "common/curl_tools.h"
 #include "common/glib_utils.h"
 #include "common/macros.h"

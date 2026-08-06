@@ -54,6 +54,7 @@
 // lch.h for the public API.)
 
 #include "common/openmp.h"
+#include "iop/highlights/common.h"
 #include "common/simd.h"
 #include "common/target_clones.h"
 #include "develop/imageop_math.h"

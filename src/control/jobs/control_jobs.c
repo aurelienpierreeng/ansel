@@ -78,6 +78,8 @@
 */
 
 #include "control/jobs/control_jobs.h"
+#include "common/act_on.h"
+#include "common/history_actions.h"
 #include "control/control.h"
 #include "common/collection.h"
 #include "common/debug.h"

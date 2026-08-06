@@ -55,6 +55,7 @@
 // interpolate_color_xtrans, lch.h); this TU only drives them along the four axis directions.
 
 #include "common/openmp.h"
+#include "iop/highlights/common.h"
 #include "common/target_clones.h"
 #include "iop/highlights/inpaint.h"
 #include "iop/highlights/lch.h"

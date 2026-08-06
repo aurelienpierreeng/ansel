@@ -17,6 +17,7 @@
 */
 
 #include "common/macros.h"
+#include "common/act_on.h"
 #include "common/openmp.h"
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"

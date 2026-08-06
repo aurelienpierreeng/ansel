@@ -56,7 +56,6 @@
 // Shared CFA gather/remosaic helpers (bilinear interpolation + clip masks, laplacian
 // normalization channel, remosaic to CFA). Public API of the gather TU; see gather.c.
 
-#include "iop/highlights/common.h"
 #include <stdint.h>
 
 // CFA reconstruction strategy. It selects ONLY how the disposable demosaic (the gather) and the

@@ -38,6 +38,7 @@
 #include <string.h>
 
 #include "common/logging.h"
+#include "common/history_actions.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/paths.h"

@@ -44,6 +44,7 @@
 */
 
 #include "common/utility.h"
+#include "common/history_actions.h"
 #include "control/conf.h"
 #include <glib/gstdio.h>
 #include "common/database.h"

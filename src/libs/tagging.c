@@ -47,6 +47,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/collection.h"
+#include "common/act_on.h"
 #include "dtgtk/togglebutton.h"
 #include "common/selection.h"
 #include "common/macros.h"
