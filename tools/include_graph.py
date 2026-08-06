@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Static analysis of the project's #include graph.
+
+Run from the repository root:  python3 tools/include_graph.py
+
+Builds the DIRECT include graph from source (project includes only), then reports:
+  1. cycles (strongly connected components > 1) -- these are exactly what #pragma once
+     hides; the guards can only be removed once this section reports none;
+  2. layering violations against the declared layer order below;
+  3. god-headers by transitive fan-in (how many files rebuild when you touch it);
+  4. headers with the largest transitive closure (what including one costs).
+
+It reads sources, not the build, so it needs no compilation and covers every
+configuration at once -- including the #ifdef branches your own build does not take.
+The trade-off is that it counts includes inside conditional blocks unconditionally.
+For a single translation unit's REAL expansion, use the compiler instead:
+    gcc -H -fsyntax-only <flags from build/compile_commands.json> file.c
+and for unused includes, clang-include-cleaner or include-what-you-use.
+"""
+import os, re, sys
+from collections import defaultdict
+
+SRC = 'src'
+INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
+
+# layer order: a file may include its own layer and any layer BELOW it (higher index = higher level)
+# GUI toolkit code (gui/, dtgtk/, bauhaus/) is INFRASTRUCTURE used by modules, so it sits
+# below them, not above: an iop's gui_init() legitimately calls gtk/bauhaus helpers.
+LAYERS = [
+    ('external', 0), ('win', 0),
+    ('common', 1),
+    ('control', 2),
+    ('gui', 3), ('dtgtk', 3), ('bauhaus', 3),
+    ('develop', 4),
+    ('iop', 5), ('imageio', 5),
+    ('libs', 6), ('views', 6), ('chart', 6),
+    ('cli', 7), ('generate-cache', 7), ('cltest', 7),
+]
+LAYER = dict(LAYERS)
+
+def layer_of(path):
+    parts = path.split(os.sep)
+    if len(parts) < 2:
+        return None
+    return LAYER.get(parts[1])
+
+def collect():
+    files = {}
+    for root, _, names in os.walk(SRC):
+        if 'external' in root.split(os.sep):
+            continue
+        for n in names:
+            if n.endswith(('.c', '.h', '.cc', '.cpp', '.hpp')):
+                p = os.path.join(root, n)
+                try:
+                    files[p] = open(p, encoding='utf-8', errors='replace').read()
+                except OSError:
+                    pass
+    return files
+
+def resolve(inc, from_path, known):
+    # includes are written relative to src/, or occasionally to the including file's dir
+    cand = os.path.normpath(os.path.join(SRC, inc))
+    if cand in known:
+        return cand
+    cand2 = os.path.normpath(os.path.join(os.path.dirname(from_path), inc))
+    if cand2 in known:
+        return cand2
+    return None
+
+def tarjan(graph, nodes):
+    index, low, on, stack, out, counter = {}, {}, set(), [], [], [0]
+    def strong(v):
+        work = [(v, 0)]
+        while work:
+            node, pi = work[-1]
+            if pi == 0:
+                index[node] = low[node] = counter[0]; counter[0] += 1
+                stack.append(node); on.add(node)
+            recurse = False
+            succs = list(graph.get(node, ()))
+            for i in range(pi, len(succs)):
+                w = succs[i]
+                if w not in index:
+                    work[-1] = (node, i + 1); work.append((w, 0)); recurse = True; break
+                elif w in on:
+                    low[node] = min(low[node], index[w])
+            if recurse:
+                continue
+            if low[node] == index[node]:
+                comp = []
+                while True:
+                    w = stack.pop(); on.discard(w); comp.append(w)
+                    if w == node: break
+                out.append(comp)
+            work.pop()
+            if work:
+                parent = work[-1][0]
+                low[parent] = min(low[parent], low[node])
+    for n in nodes:
+        if n not in index:
+            strong(n)
+    return out
+
+def main():
+    files = collect()
+    known = set(files)
+    graph = defaultdict(set)
+    for p, text in files.items():
+        for inc in INCLUDE_RE.findall(text):
+            t = resolve(inc, p, known)
+            if t and t != p:
+                graph[p].add(t)
+
+    headers = [f for f in files if f.endswith(('.h', '.hpp'))]
+
+    print(f"nodes: {len(files)}  ({len(headers)} headers)   direct edges: {sum(len(v) for v in graph.values())}\n")
+
+    # 1. cycles
+    comps = [c for c in tarjan(graph, list(files)) if len(c) > 1]
+    print(f"=== 1. INCLUDE CYCLES: {len(comps)} ===")
+    for c in sorted(comps, key=len, reverse=True)[:10]:
+        print(f"  cycle of {len(c)}:")
+        for f in sorted(c)[:8]:
+            print(f"     {f}")
+        if len(c) > 8: print(f"     ... +{len(c)-8}")
+    if not comps:
+        print("  none — the include graph is a DAG")
+
+    # 2. layering violations
+    print("\n=== 2. LAYERING VIOLATIONS (a file including something from a HIGHER layer) ===")
+    viol = defaultdict(list)
+    for a, targets in graph.items():
+        la = layer_of(a)
+        if la is None: continue
+        for b in targets:
+            lb = layer_of(b)
+            if lb is None: continue
+            if lb > la:
+                viol[(a.split(os.sep)[1], b.split(os.sep)[1])].append((a, b))
+    for (da, db), items in sorted(viol.items(), key=lambda kv: -len(kv[1])):
+        print(f"  {da}/ -> {db}/ : {len(items)}")
+        for a, b in items[:3]:
+            print(f"      {a}  ->  {b}")
+    if not viol:
+        print("  none")
+
+    # 3/4. transitive closures
+    memo = {}
+    def closure(n, seen=None):
+        if n in memo: return memo[n]
+        out, stack = set(), [n]
+        while stack:
+            cur = stack.pop()
+            for w in graph.get(cur, ()):
+                if w not in out:
+                    out.add(w); stack.append(w)
+        memo[n] = out
+        return out
+
+    fan_in = defaultdict(int)
+    for f in files:
+        for h in closure(f):
+            fan_in[h] += 1
+    print("\n=== 3. GOD-HEADERS by transitive fan-in (TUs+headers that pull it in) ===")
+    for h, n in sorted(fan_in.items(), key=lambda kv: -kv[1])[:15]:
+        if h.endswith(('.h', '.hpp')):
+            print(f"  {n:5d}  {h}   (drags in {len(closure(h))} project headers)")
+
+    print("\n=== 4. HEAVIEST HEADERS by transitive closure (what including it costs) ===")
+    for h in sorted(headers, key=lambda x: -len(closure(x)))[:12]:
+        print(f"  {len(closure(h)):5d}  {h}")
+
+if __name__ == '__main__':
+    main()
