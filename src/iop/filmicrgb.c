@@ -3398,7 +3398,7 @@ static void apply_auto_grey(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_auto_black(dt_iop_module_t *self,
@@ -3424,7 +3424,7 @@ static void apply_auto_black(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 
@@ -3451,7 +3451,7 @@ static void apply_auto_white_point_source(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_autotune(dt_iop_module_t *self,
@@ -3490,7 +3490,7 @@ static void apply_autotune(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
@@ -4089,7 +4089,7 @@ static void toe_shoulder_callback(GtkWidget *slider, gpointer user_data)
   filmic_v3_direct_to_legacy(p, dt_bauhaus_slider_get(g->toe), dt_bauhaus_slider_get(g->shoulder),
                              &p->latitude, &p->balance);
   gui_changed(self, slider, NULL);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_update(dt_iop_module_t *self)

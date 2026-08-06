@@ -468,7 +468,7 @@ order_changed (GtkComboBox *combo, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_lowpass_params_t *p = (dt_iop_lowpass_params_t *)self->params;
   p->order = gtk_combo_box_get_active(combo);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 #endif
 

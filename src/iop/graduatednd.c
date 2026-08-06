@@ -425,7 +425,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   update_saturation_slider_end_color(g->saturation, p->hue);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -607,7 +607,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     p->rotation = rotation;
     p->offset = offset;
     g->dragging = 0;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   g->dragging = 0;

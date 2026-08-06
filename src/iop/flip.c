@@ -530,7 +530,7 @@ static void do_rotate(dt_iop_module_t *self, uint32_t cw)
   orientation ^= ORIENTATION_SWAP_XY;
 
   p->orientation = orientation;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 static void rotate_cw(GtkWidget *widget, dt_iop_module_t *self)
 {
@@ -552,7 +552,7 @@ static void _flip_h(GtkWidget *widget, dt_iop_module_t *self)
   else
     p->orientation = orientation ^ ORIENTATION_FLIP_HORIZONTALLY;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 static void _flip_v(GtkWidget *widget, dt_iop_module_t *self)
 {
@@ -566,7 +566,7 @@ static void _flip_v(GtkWidget *widget, dt_iop_module_t *self)
   else
     p->orientation = orientation ^ ORIENTATION_FLIP_VERTICALLY;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_init(struct dt_iop_module_t *self)

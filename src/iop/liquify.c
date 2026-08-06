@@ -2887,7 +2887,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
     // something definitive has happened like button release ... so
     // redraw pipe
     memcpy(module->params, &g->params, sizeof(dt_iop_liquify_params_t));
-    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+    dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   }
   else
   {
@@ -2911,7 +2911,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
   float pts[2] = { (float)x, (float)y };
-  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pts, 1);
+  dt_dev_coordinates_widget_to_image_norm(module->dev, pts, 1);
   dt_dev_coordinates_image_norm_to_image_abs(module->dev, pts, 1);
   dt_dev_distort_backtransform_plus(module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
