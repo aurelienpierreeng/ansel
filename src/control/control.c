@@ -55,15 +55,9 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/colorspaces.h"
 #include "common/darktable.h"
-#include "common/debug.h"
-#include "common/image_cache.h"
-#include "common/imageio.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "develop/imageop.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"

@@ -41,10 +41,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/macros.h"
-#include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
 #include "common/hash.h"
 #include "common/logging.h"
 #include "common/times.h"
@@ -62,9 +60,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/math.h"
-#include "common/mipmap_cache.h"
 #include "control/conf.h"
-#include "common/undo.h"
 #include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"

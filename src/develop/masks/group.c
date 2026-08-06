@@ -38,8 +38,6 @@
 #include "common/times.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "gui/gdkkeys.h"
-#include "common/debug.h"
-#include "control/conf.h"
 #include"control/control.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"

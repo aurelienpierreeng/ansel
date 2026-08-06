@@ -32,8 +32,6 @@
 #include "bauhaus/bauhaus.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
-#include "common/image.h"
-#include "common/image_cache.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"
 #include "common/metadata.h"

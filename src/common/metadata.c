@@ -36,10 +36,8 @@
 #include "common/debug.h"
 #include "common/collection.h"
 #include "common/undo.h"
-#include "common/grouping.h"
 #include "control/conf.h"
 #include "views/view.h"
-#include "control/signal.h"
 
 #include <stdlib.h>
 #include "common/utility.h"

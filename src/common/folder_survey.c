@@ -19,7 +19,6 @@
 
 #include "common/datetime.h"
 #include "common/file_location.h"
-#include "common/imageio.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"

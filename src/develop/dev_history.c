@@ -62,7 +62,6 @@
 #include "common/history.h"
 
 #include "common/undo.h"
-#include "common/history_snapshot.h"
 #include "common/image_cache.h"
 #include "common/history_merge.h"
 #include "common/iop_order.h"

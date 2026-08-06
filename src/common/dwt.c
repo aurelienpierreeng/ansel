@@ -32,8 +32,6 @@
 #include "common/simd.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
-#include "control/control.h"
-#include "develop/imageop.h"
 #include "dwt.h"
 
 /* Based on the original source code of GIMP's Wavelet Decompose plugin, by Marco Rossini

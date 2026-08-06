@@ -43,7 +43,6 @@
 #include "common/paths.h"
 #include "control/signal.h"
 #include "common/utility.h"
-#include "common/debug.h"
 #include "common/history.h"
 #include "common/iop_order.h"
 #include "common/ratings.h"

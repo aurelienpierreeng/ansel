@@ -45,7 +45,6 @@
 #include "common/image_cache.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/pixelpipe.h"
 
 #include <stdio.h>
 #include <stdlib.h>

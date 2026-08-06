@@ -19,7 +19,6 @@
 #include <glib.h>
 #include <stdio.h>
 
-#include "debug.h"
 #include "dng_opcode.h"
 #include "logging.h"
 

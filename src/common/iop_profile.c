@@ -43,7 +43,6 @@
 #include "common/colorspaces.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/iop_profile.h"
-#include "common/debug.h"
 #include "common/matrices.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

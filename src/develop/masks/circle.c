@@ -40,8 +40,6 @@
 #include "common/times.h"
 #include "gui/gtk.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/debug.h"
-#include "common/undo.h"
 #include "control/conf.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"

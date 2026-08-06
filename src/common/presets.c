@@ -27,9 +27,6 @@
 #include "common/mem_alloc.h"
 #include "common/debug.h"
 #include "common/exif.h"
-#include "common/file_location.h"
-#include "develop/blend.h"
-#include "develop/imageop.h"
 #include "libs/lib.h"
 
 #include <libxml/encoding.h>

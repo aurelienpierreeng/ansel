@@ -48,7 +48,6 @@
 #include <glib/gstdio.h>
 #include "common/database.h"
 #include "common/styles.h"
-#include "common/collection.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/logging.h"
@@ -59,8 +58,6 @@
 #include "common/file_location.h"
 #include "common/history.h"
 #include "common/history_snapshot.h"
-#include "common/image_cache.h"
-#include "common/imageio.h"
 #include "common/iop_order.h"
 #include "common/tags.h"
 #include "control/control.h"

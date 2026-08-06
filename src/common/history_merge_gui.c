@@ -22,7 +22,6 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/logging.h"
-#include "common/debug.h"
 #include "common/iop_order.h"
 #include "common/topological_sort.h"
 #include "develop/blend.h"

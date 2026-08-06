@@ -69,13 +69,9 @@
 #include <unistd.h>
 
 #include "common/atomic.h"
-#include "common/datetime.h"
-#include "common/debug.h"
 #include "common/history.h"
 #include "common/image_cache.h"
-#include "common/imageio.h"
 #include "common/mipmap_cache.h"
-#include "common/opencl.h"
 #include "common/tags.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -89,7 +85,6 @@
 #include "develop/pixelpipe_cache.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
-#include "gui/presets.h"
 #include "libs/colorpicker.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)

@@ -53,7 +53,6 @@
 #include "common/image.h"
 #include "common/imageio.h"
 #include "common/datetime.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"

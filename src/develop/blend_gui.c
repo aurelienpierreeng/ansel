@@ -53,10 +53,8 @@
 #include "common/usermanual_url.h"
 #include "develop/blend.h"
 #include "bauhaus/bauhaus.h"
-#include "common/debug.h"
 #include "common/dtpthread.h"
 #include "common/math.h"
-#include "common/opencl.h"
 #include "common/iop_profile.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -70,7 +68,6 @@
 
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "libs/colorpicker.h"
 
 #include <assert.h>

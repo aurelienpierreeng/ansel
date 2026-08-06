@@ -49,7 +49,6 @@
 #include "common/module_versioning.h"
 #include "common/exif.h"
 #include "common/imageio.h"
-#include "common/imageio_exr.h"
 #include "common/imageio_module.h"
 #include "control/conf.h"
 #include "control/control.h"

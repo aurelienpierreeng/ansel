@@ -41,10 +41,7 @@
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/undo.h"
-#include "common/grouping.h"
-#include "control/conf.h"
 #include "control/control.h"
-#include "gui/gtk.h"
 
 #include <gdk/gdkkeysyms.h>
 #include "bauhaus/bauhaus.h"

@@ -9,7 +9,6 @@
 #include "common/iop_order.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe_cpu.h"
-#include "develop/pixelpipe_gpu.h"
 
 #include <assert.h>
 #include <math.h>

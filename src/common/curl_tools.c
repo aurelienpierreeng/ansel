@@ -31,7 +31,6 @@
 #include "common/paths.h"
 #include "common/curl_tools.h"
 #include "common/file_location.h"
-#include "control/control.h"
 
 void dt_curl_init(CURL *curl, gboolean verbose)
 {

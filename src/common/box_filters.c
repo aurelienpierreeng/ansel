@@ -36,8 +36,6 @@
 #include "common/simd.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/math.h"
-#include "develop/imageop.h"
-#include "develop/imageop_math.h"
 
 #if defined(__x86_64__) || defined(__i386__)
 #define DT_PREFETCH(addr) _mm_prefetch(addr, _MM_HINT_T2)

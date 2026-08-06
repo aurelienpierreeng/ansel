@@ -34,9 +34,6 @@
 #include "common/mem_alloc.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
-#include "common/selection.h"
-#include "control/signal.h"
-#include "gui/gtk.h"
 
 int32_t dt_grouping_get_image_group(const int32_t image_id)
 {

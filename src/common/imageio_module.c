@@ -43,7 +43,6 @@
 #include "common/file_location.h"
 #include "common/imageio.h"
 #include "control/conf.h"
-#include "control/control.h"
 #include "control/signal.h"
 #include <stdlib.h>
 static gint dt_imageio_sort_modules_storage(gconstpointer a, gconstpointer b)

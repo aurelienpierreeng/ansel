@@ -25,7 +25,6 @@
 #include "common/mem_alloc.h"
 #include "common/openmp.h"
 #include "common/printprof.h"
-#include "common/colorspaces.h"
 #include "lcms2.h"
 #include <glib.h>
 #include <unistd.h>

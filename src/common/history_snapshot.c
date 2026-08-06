@@ -23,7 +23,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/logging.h"
 #include "common/database.h"
 #include "common/history_snapshot.h"
 #include "common/mem_alloc.h"

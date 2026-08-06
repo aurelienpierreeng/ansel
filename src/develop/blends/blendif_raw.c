@@ -23,7 +23,6 @@
 
 #include "common/imagebuf.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/math.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/openmp_maths.h"
