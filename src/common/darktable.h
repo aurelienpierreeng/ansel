@@ -97,13 +97,10 @@
 #include <json-glib/json-glib.h>
 #include <stdint.h>
 
-#if defined _WIN32
-/* windows.h/psapi, plus the #undef of the legacy `near`/`interface` macros it defines.
- * The orchestrator carries it because app-level TUs (darktable.c, main.c) call Win32
- * APIs directly. Low-level code must NOT rely on inheriting this: identifiers colliding
- * with those macros are renamed at the source instead. */
-#include "win/win.h"
-#endif
+/* win/win.h (windows.h/psapi + the #undef of the legacy `near`/`grp2`/`interface`
+ * macros) now comes in through common/macros.h, which every TU includes. It used to
+ * live here, which meant dropping this header silently dropped the shim too --
+ * a MinGW-only breakage, far from its cause. Nothing to do here any more. */
 
 #ifndef _RELEASE
 /* poison.h #pragma-poisons malloc/fopen/... so they cannot be used unqualified. It

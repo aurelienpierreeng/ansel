@@ -51,6 +51,7 @@
 #ifdef HAVE_OPENCL
 
 #include "common/opencl.h"
+#include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
 #include "common/capabilities.h"
 #include "common/bilateralcl.h"
 #include "common/darktable.h"

@@ -84,11 +84,24 @@ never remove in bulk without the verify pass.
    expensive way — see `CLAUDE.md`.
 3. **Transitive reach**, above.
 4. **NOT defended: platform-conditional use.** An include used only under `#ifdef _WIN32`
-   looks unused on a Linux build and compiles fine without it — then breaks Windows CI. The
-   tool flags files containing any conditional as `platform_guarded`, which is coarse.
-   **Any removal in a file with platform conditionals must be checked on all three CI
-   targets**, not on a local Linux build. The `near` / `grp2` / `immintrin.h` breakages in
-   this series were all of exactly this shape: green locally, broken on MinGW.
+   or `#ifdef __APPLE__` looks unused on a Linux build and compiles fine without it — then
+   breaks that platform's CI. The tool flags files containing any conditional as
+   `platform_guarded`, which is coarse. **Any removal in a file with platform conditionals
+   must be checked on all three CI targets**, not on a local Linux build.
+
+   Every cross-platform breakage in this series was this shape, and none was visible on
+   Linux:
+
+   | symptom | real cause |
+   |---|---|
+   | macOS: `dt_util_str_replace` undeclared in `common/opencl.c` | called only inside the `#else` of `#ifndef __APPLE__`; dead code on Linux |
+   | MinGW: parse error at a `#define` in `common/points.h` | its only includer that dropped `darktable.h` also dropped the `win/win.h` shim |
+   | MinGW: `near` / `grp2` as identifiers | same lost shim; the `#undef` came from `darktable.h` |
+   | MinGW: unrelated parse errors | `<immintrin.h>` accidentally placed inside an `extern "C"` block |
+
+   The structural fix applied: the Windows legacy-macro shim moved from `common/darktable.h`
+   to `common/macros.h`, so it sits at the bottom of the stack where every TU reaches it,
+   instead of riding on the orchestrator that low-level code is supposed to stop including.
 
 ### Suggested staging for the follow-up PR
 
