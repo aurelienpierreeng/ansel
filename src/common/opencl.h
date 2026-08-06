@@ -394,11 +394,6 @@ int dt_opencl_enqueue_kernel_2d_with_local(const int dev, const int kernel, cons
 /** check if opencl is inited */
 int dt_opencl_is_inited(void);
 
-/* Process-wide singleton with no per-call context to ride on: this accessor is the
- * intended end state (same category as dt_conf_*), implemented by the orchestrator.
- * NOTE: common/opencl.c keeps direct access to the global for now; relocating ownership into the
- * subsystem itself (a file-static set at init) is the follow-up, not an accessor. */
-struct dt_opencl_t *dt_opencl_get_global(void);
 
 /** check if opencl is enabled */
 int dt_opencl_is_enabled(void);
@@ -785,6 +780,23 @@ static inline void dt_opencl_events_profiling(const int devid, const int aggrega
 }
 #endif
 
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Process-wide singleton with no per-call context to ride on: this accessor is the intended
+ * end state (same category as dt_conf_*), implemented by the orchestrator. Declared OUTSIDE the
+ * HAVE_OPENCL split on purpose: dt_opencl_t exists in both configurations and darktable.c
+ * defines the accessor unconditionally, so callers that merely pass the handle around keep
+ * compiling in no-OpenCL builds exactly as they did when they read the global directly.
+ * NOTE: common/opencl.c keeps direct access for now; relocating ownership into the subsystem
+ * itself (a file-static set at init) is the follow-up, not an accessor. */
+struct dt_opencl_t *dt_opencl_get_global(void);
+
+#ifdef __cplusplus
+}
 #endif
 
 // clang-format off
