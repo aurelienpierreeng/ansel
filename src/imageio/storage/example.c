@@ -44,11 +44,8 @@
 #include "common/image_cache.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"
-#include "control/conf.h"
 #include "control/control.h"
-#include "dtgtk/button.h"
 #include "dtgtk/paint.h"
-#include "gui/gtk.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <stdio.h>
 #include <stdlib.h>

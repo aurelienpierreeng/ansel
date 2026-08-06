@@ -34,16 +34,12 @@
 #include <stdio.h>
 #include <strings.h>
 
-#include "common/colorspaces.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "imageio_png.h"
 #include "common/exif.h"
-#include "control/conf.h"
 #include "develop/develop.h"
-#include "imageio.h"
-#include "imageio_tiff.h"
 
 int read_header(const char *filename, dt_imageio_png_t *png)
 {

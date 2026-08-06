@@ -30,7 +30,6 @@
 #include "control/control.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "common/image_cache.h"
 
 typedef struct dt_image_load_t
 {

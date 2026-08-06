@@ -33,7 +33,6 @@
 #include "common/file_location.h"
 #include "common/module.h"
 #include "control/conf.h"
-#include "gui/splash.h"
 
 GList *dt_module_load_modules(const char *subdir, size_t module_size,
                               int (*load_module_so)(void *module, const char *libname, const char *plugin_name),

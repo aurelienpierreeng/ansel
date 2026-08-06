@@ -44,7 +44,6 @@
 #include "common/image.h"
 #include "control/signal.h"
 #include "gui/gtk.h"
-#include "views/view.h"
 
 static sqlite3_stmt *_selection_database_to_glist_stmt = NULL;
 

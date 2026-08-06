@@ -21,7 +21,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/logging.h"
 #include "common/database.h"
 #include "common/geo.h"
 #include "common/map_locations.h"

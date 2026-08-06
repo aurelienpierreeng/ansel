@@ -32,10 +32,8 @@
 #include "common/simd.h"
 #include "common/math.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "develop/tiling.h"
 #include "iop/iop_api.h"
 #include "common/nlmeans_core.h"
 #include <stdbool.h>

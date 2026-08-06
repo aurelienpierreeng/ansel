@@ -77,7 +77,6 @@
 #include "common/mem_alloc.h"
 
 #include "backend_kwallet.h"
-#include "control/conf.h"
 
 #include <gio/gio.h>
 #include <string.h>

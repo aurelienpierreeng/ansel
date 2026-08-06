@@ -36,15 +36,12 @@
 */
 #include "common/collection.h"
 #include "common/glib_utils.h"
-#include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/ratings.h"
 #include "common/undo.h"
 #include "common/grouping.h"
 #include "views/view.h"
-#include "control/conf.h"
 #include "control/control.h"
-#include "gui/gtk.h"
 
 
 #define DT_RATINGS_UPGRADE -1

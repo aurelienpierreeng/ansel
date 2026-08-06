@@ -16,5 +16,4 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "fp_mode.h"
 

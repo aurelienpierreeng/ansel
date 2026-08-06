@@ -30,7 +30,6 @@
 #include "common/mem_alloc.h"
 #include "common/simd.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/openmp_maths.h"
 #include "heal.h"

@@ -27,7 +27,6 @@
 #include <webp/mux.h>
 
 #include "common/image.h"
-#include "common/imageio.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 
 dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *mbuf)

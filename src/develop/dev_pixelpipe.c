@@ -17,7 +17,6 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/debug.h"
 #include "control/conf.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
@@ -25,7 +24,6 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/paths.h"
-#include "develop/pixelpipe_cache_alloc.h"
 #include "gui/gtk.h"
 #include "common/dtpthread.h"
 #include "develop/imageop.h"

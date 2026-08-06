@@ -24,8 +24,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/usermanual_url.h"
-#include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/l10n.h"
 

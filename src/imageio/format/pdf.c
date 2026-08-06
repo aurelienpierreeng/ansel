@@ -41,8 +41,6 @@
 #include "common/imageio_module.h"
 #include "common/variables.h"
 #include "control/control.h"
-#include "dtgtk/button.h"
-#include "gui/gtkentry.h"
 #include "imageio/format/imageio_format_api.h"
 
 #include <strings.h>

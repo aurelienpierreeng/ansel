@@ -41,7 +41,6 @@
 
 #include "common/database.h"
 #include "common/history.h"
-#include "common/collection.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/logging.h"
@@ -49,15 +48,10 @@
 #include "common/dtpthread.h"
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
-#include "common/imageio.h"
 #include "common/mipmap_cache.h"
 #include "common/tags.h"
 #include "common/undo.h"
 #include "common/utility.h"
-#include "control/control.h"
-#include "develop/blend.h"
-#include "develop/dev_history.h"
-#include "develop/develop.h"
 #include "develop/masks.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)

@@ -36,7 +36,6 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/iop_profile.h"
 #include "develop/format.h"
 #include "develop/imageop.h"

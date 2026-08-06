@@ -81,7 +81,6 @@
 #include "common/history_merge.h"
 #include "common/history_merge_gui.h"
 
-#include "common/debug.h"
 #include "common/iop_order.h"
 #include "common/topological_sort.h"
 #include "control/control.h"

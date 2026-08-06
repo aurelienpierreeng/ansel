@@ -31,7 +31,6 @@
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
-#include "common/debug.h"
 #include "common/exif.h"
 #include "common/image_cache.h"
 #include "common/imageio_module.h"
