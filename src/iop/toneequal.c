@@ -121,7 +121,6 @@
 #include "common/eigf.h"
 #include "common/interpolation.h"
 #include "common/luminance_mask.h"
-#include "common/opencl.h"
 #include "common/collection.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -131,8 +130,6 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe_cache.h"
-#include "dtgtk/drawingarea.h"
-#include "dtgtk/expander.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"

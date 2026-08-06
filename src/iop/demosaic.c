@@ -86,7 +86,6 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
-#include "control/conf.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/bspline.h"
 

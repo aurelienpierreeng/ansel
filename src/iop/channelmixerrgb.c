@@ -68,7 +68,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/openmp_maths.h"
-#include "dtgtk/drawingarea.h"
 #include "common/solvers/gaussian_elimination.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"

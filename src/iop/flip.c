@@ -59,8 +59,6 @@
 #include "common/debug.h"
 #include "common/imageio.h"
 #include "common/opencl.h"
-#include "control/conf.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

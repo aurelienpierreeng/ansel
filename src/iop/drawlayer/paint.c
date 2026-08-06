@@ -29,11 +29,9 @@
 
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/math.h"
-#include "develop/noise_generator.h"
 
 #include <math.h>
 #include <string.h>

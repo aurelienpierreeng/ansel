@@ -59,8 +59,6 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/bilateral.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/debug.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
@@ -72,12 +70,9 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 #include "dtgtk/button.h"
-#include "dtgtk/expander.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include "gui/guides.h"

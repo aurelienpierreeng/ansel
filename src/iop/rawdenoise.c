@@ -57,12 +57,10 @@
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "common/dwt.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/openmp_maths.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"

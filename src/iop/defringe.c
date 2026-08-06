@@ -47,12 +47,10 @@
 #include "common/target_clones.h"
 #include "common/gaussian.h"
 #include "common/imagebuf.h"
-#include "common/math.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "gui/gtk.h"
 
 #include "iop/iop_api.h"
 #include <gtk/gtk.h>

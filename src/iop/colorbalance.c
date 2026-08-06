@@ -54,21 +54,14 @@ http://www.youtube.com/watch?v=JVoUgR6bhBc
 #endif
 // our includes go first:
 #include "bauhaus/bauhaus.h"
-#include "common/macros.h"
-#include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
-#include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/exif.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/opencl.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/gradientslider.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

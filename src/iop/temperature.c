@@ -66,7 +66,6 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -81,7 +80,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
-#include "dtgtk/expander.h"
 
 #include "gui/gtk.h"
 #include "gui/color_picker_proxy.h"

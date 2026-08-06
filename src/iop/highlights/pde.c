@@ -23,8 +23,6 @@
 #include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
-#include "iop/highlights/blur.h"
 #include "iop/highlights/pde.h"
 #include <math.h>
 #include <stdlib.h>
@@ -458,7 +456,6 @@ void _region_pde_solve(float *const restrict field, const uint8_t *const restric
 
 // ============================ OpenCL ============================
 
-#include "common/solvers/sparse_cholesky_cl.h"
 #ifdef HAVE_OPENCL
 #endif // HAVE_OPENCL
 

@@ -45,7 +45,6 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/iop_profile.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/rgb_norms.h"
 #include "common/macros.h"
 #include "common/openmp.h"
@@ -56,7 +55,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gdkkeys.h"

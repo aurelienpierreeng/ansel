@@ -24,8 +24,6 @@
 #include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
-#include "iop/highlights/blur.h"
 #include "iop/highlights/chroma.h"
 #include "iop/highlights/pde.h"
 #include <string.h>

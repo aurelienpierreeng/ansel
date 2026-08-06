@@ -37,7 +37,6 @@
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/openmp_maths.h"
 #include "gui/color_picker_proxy.h"

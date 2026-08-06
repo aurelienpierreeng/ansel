@@ -36,7 +36,6 @@
 #include "common/module_versioning.h"
 #include "common/imagebuf.h"
 #include "common/lut_viewer.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

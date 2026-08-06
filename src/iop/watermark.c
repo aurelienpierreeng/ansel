@@ -68,8 +68,6 @@
 #include "common/imagebuf.h"
 #include "common/tags.h"
 #include "common/variables.h"
-#include "common/datetime.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
@@ -94,7 +92,6 @@
 #endif
 
 #include "common/file_location.h"
-#include "common/metadata.h"
 #include "common/utility.h"
 
 DT_MODULE_INTROSPECTION(5, dt_iop_watermark_params_t)

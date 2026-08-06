@@ -54,7 +54,6 @@
 #include "common/module_versioning.h"
 #include "common/colorspaces.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

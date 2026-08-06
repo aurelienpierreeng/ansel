@@ -26,7 +26,6 @@
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/gaussian.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "develop/noise_generator.h"
 #include "iop/highlights/blur.h"
 #include "iop/highlights/chroma.h"

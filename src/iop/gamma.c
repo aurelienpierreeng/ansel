@@ -52,7 +52,6 @@
 
 #include "common/colorspaces_inline_conversions.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 
 #include "gui/gtk.h"

@@ -60,8 +60,6 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "common/macros.h"
@@ -74,13 +72,11 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/openmp_maths.h"
-#include "dtgtk/drawingarea.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 
 #include "gui/presets.h"
 #include "iop/iop_api.h"
-#include "libs/colorpicker.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 #define DT_GUI_CURVE_INFL .3f
