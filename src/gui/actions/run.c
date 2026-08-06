@@ -169,9 +169,9 @@ static gboolean preload_to_mipmap_8_callback(GtkAccelGroup *group, GObject *acce
 
 static gboolean preload_auto_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
-  const int width = ceilf(table->thumb_width * darktable.gui->ppd);
-  const int height = ceilf(table->thumb_height * darktable.gui->ppd);
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
+  const int width = ceilf(table->thumb_width * dt_gui_get_global()->ppd);
+  const int height = ceilf(table->thumb_height * dt_gui_get_global()->ppd);
   dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   dt_mipmap_size_t mip = dt_mipmap_cache_get_matching_size(cache, width, height, UNKNOWN_IMAGE);
   fprintf(stdout, "mipmap %i\n", mip);
@@ -192,7 +192,7 @@ static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, 
   selection = NULL;
 
   // Redraw thumbnails
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);
+  dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);
   return TRUE;
 }
 

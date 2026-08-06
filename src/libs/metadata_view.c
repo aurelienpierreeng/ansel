@@ -504,11 +504,11 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
 
 static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *info)
 {
-  if(imgid <= 0 || IS_NULL_PTR(info) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return FALSE;
+  if(imgid <= 0 || IS_NULL_PTR(info) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return FALSE;
 
-  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_lighttable, imgid, info))
+  if(dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_lighttable, imgid, info))
     return TRUE;
-  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_filmstrip, imgid, info))
+  if(dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_filmstrip, imgid, info))
     return TRUE;
 
   return FALSE;
@@ -1182,7 +1182,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
 {
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("metadata settings"), GTK_WINDOW(win),
                                        GTK_DIALOG_DESTROY_WITH_PARENT, _("default"), GTK_RESPONSE_YES,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);

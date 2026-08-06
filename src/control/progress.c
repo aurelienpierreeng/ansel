@@ -105,7 +105,7 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
 
   if(control->progress_system.taskbarlist)
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)));
+    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(ITaskbarList3_SetProgressState(control->progress_system.taskbarlist, hwnd, TBPF_NORMAL) != S_OK)
       fprintf(stderr, "[progress_create] SetProgressState failed\n");
     if(ITaskbarList3_SetProgressValue(control->progress_system.taskbarlist, hwnd, control->progress_system.global_progress * 100, 100) != S_OK)
@@ -148,7 +148,7 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
 
   if(control->progress_system.taskbarlist)
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)));
+    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(ITaskbarList3_SetProgressValue(control->progress_system.taskbarlist, hwnd, control->progress_system.global_progress * 100, 100) != S_OK)
       fprintf(stderr, "[progress_create] SetProgressValue failed\n");
   }
@@ -204,7 +204,7 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
 
   if(control->progress_system.taskbarlist)
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)));
+    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(control->progress_system.n_progress_bar == 0)
     {
       if(ITaskbarList3_SetProgressState(control->progress_system.taskbarlist, hwnd, TBPF_NOPROGRESS) != S_OK)

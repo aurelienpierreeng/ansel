@@ -1151,7 +1151,7 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(IS_NULL_PTR(g) || widget_radius <= 0.0f) return;
 
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   float display_rgb[3] = { 0.0f };
   _conf_display_color(display_rgb);
   const int shape = _conf_brush_shape();
@@ -1204,10 +1204,10 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
 static drawlayer_wait_dialog_t _show_drawlayer_wait_dialog(const char *title, const char *message)
 {
   drawlayer_wait_dialog_t wait = { 0 };
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(title) || !title[0] || IS_NULL_PTR(message) || !message[0]) return wait;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()) || IS_NULL_PTR(title) || !title[0] || IS_NULL_PTR(message) || !message[0]) return wait;
 
   GtkWidget *dialog = gtk_dialog_new();
-  GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *main = dt_gui_main_window();
   if(main) gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main));
   gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
@@ -1287,9 +1287,9 @@ void dt_drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t
 
 static void _show_drawlayer_modal_message(const GtkMessageType type, const char *primary, const char *secondary)
 {
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(primary) || primary[0] == '\0') return;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()) || IS_NULL_PTR(primary) || primary[0] == '\0') return;
 
-  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_gui_main_window()),
                                              GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                              type, GTK_BUTTONS_OK, "%s", primary);
   if(secondary && secondary[0] != '\0')
@@ -1301,10 +1301,10 @@ static void _show_drawlayer_modal_message(const GtkMessageType type, const char 
 static gboolean _prompt_layer_name_dialog(const char *title, const char *message, const char *initial_name,
                                           char *name, const size_t name_size)
 {
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(title) || title[0] == '\0' || IS_NULL_PTR(name) || name_size == 0) return FALSE;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()) || IS_NULL_PTR(title) || title[0] == '\0' || IS_NULL_PTR(name) || name_size == 0) return FALSE;
 
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
-      title, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      title, GTK_WINDOW(dt_gui_main_window()),
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("Cancel"), GTK_RESPONSE_CANCEL,
       _("Confirm"), GTK_RESPONSE_ACCEPT, NULL);
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -1352,7 +1352,7 @@ static gboolean _color_picker_draw(GtkWidget *widget, cairo_t *cr, gpointer user
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   return dt_drawlayer_widgets_draw_picker(g->ui.widgets, widget, cr, ppd);
 }
 
@@ -1392,7 +1392,7 @@ static gboolean _brush_profile_draw(GtkWidget *widget, cairo_t *cr, gpointer use
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   return dt_drawlayer_widgets_draw_brush_profiles(g->ui.widgets, widget, cr, ppd);
 }
 
@@ -1949,7 +1949,7 @@ static gboolean _confirm_delete_layer(dt_iop_module_t *self, const gboolean remo
   if(!_layer_name_non_empty(params->layer_name)) return removing_module;
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+      GTK_WINDOW(dt_gui_main_window()), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s",
       removing_module
           ? _("Delete the linked drawing layer from the sidecar TIFF before removing this module instance?")
@@ -2262,7 +2262,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed())) return;
+  if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
   _sync_params_from_gui(self, FALSE);
 
@@ -2320,7 +2320,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed())) return;
+  if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
   const int active = dt_bauhaus_combobox_get(widget);
   if(active < 0) return;
@@ -2498,7 +2498,7 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
   }
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+      GTK_WINDOW(dt_gui_main_window()), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s", _("Save the drawing sidecar now?"));
   gtk_message_dialog_format_secondary_text(
       GTK_MESSAGE_DIALOG(dialog), "%s",
@@ -2574,7 +2574,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed()) || !gtk_toggle_button_get_active(button))
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed()) || !gtk_toggle_button_get_active(button))
     return;
 
   if(GTK_WIDGET(button) == g->controls.preview_bg_white)
@@ -3793,7 +3793,7 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
   }
 
-  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
+  gtk_widget_queue_draw(dt_gui_center_widget());
   return g->manager.painting_active ? 1 : 0;
 }
 

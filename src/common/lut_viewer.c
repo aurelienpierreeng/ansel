@@ -942,7 +942,7 @@ static void _render_surface(dt_lut_viewer_t *viewer, const int width, const int 
 {
   const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   if(viewer->clut_lock) dt_pthread_rwlock_rdlock(viewer->clut_lock);
   _invalidate_surface(viewer);
   viewer->surface = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
@@ -1028,7 +1028,7 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_dat
   const float zoom = viewer->zoom;
   const int gamut = dt_bauhaus_combobox_get(viewer->gamut);
   const gboolean show_control_nodes = _show_control_nodes(viewer);
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
 
   if(!viewer->surface
      || viewer->cached_width != allocation.width
@@ -1202,7 +1202,7 @@ static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
     return;
   }
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("save 3D LUT"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SAVE,
         _("_save"), _("_cancel"));

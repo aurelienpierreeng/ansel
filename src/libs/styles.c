@@ -332,7 +332,7 @@ gboolean _ask_before_delete_style(const gint style_cnt)
 
   if(dt_conf_get_bool("plugins/lighttable/style/ask_before_delete_style"))
   {
-    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    const GtkWidget *win = dt_gui_main_window();
     GtkWidget *dialog = gtk_message_dialog_new
       (GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
        ngettext("do you really want to remove %d style?", "do you really want to remove %d styles?", style_cnt),
@@ -410,7 +410,7 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
   gint overwrite_check_button = 0;
   gint overwrite = 0;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_save"), _("_cancel"));
@@ -546,7 +546,7 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
   gint overwrite_check_button = 0;
   gint overwrite = 0;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select style"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_open"), _("_cancel"));

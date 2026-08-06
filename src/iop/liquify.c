@@ -3165,7 +3165,7 @@ static float dt_conf_get_sanitize_float(const char *name, float min, float max, 
 
 static void get_stamp_params(dt_iop_module_t *module, float *radius, float *r_strength, float *phi)
 {
-  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *widget = dt_gui_main_window();
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
   const int last_win_min = MIN(allocation.width, allocation.height);

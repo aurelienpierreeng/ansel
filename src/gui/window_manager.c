@@ -240,7 +240,7 @@ static int _panel_handle_resize(int requested_size, gboolean finished, gpointer 
 {
   GtkWidget *widget = GTK_WIDGET(user_data);
   const char *name = gtk_widget_get_name(widget);
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   int win_w = 0, win_h = 0;
   gtk_window_get_size(GTK_WINDOW(window), &win_w, &win_h);
 
@@ -335,20 +335,20 @@ static void _ui_panel_size_changed(GtkAdjustment *adjustment, GParamSpec *pspec,
   if(height == last_height[side]) return;
   last_height[side] = height;
 
-  if(IS_NULL_PTR(darktable.gui->scroll_to[side])) return;
-  if(!_ui_scroll_target_is_live_widget(darktable.gui->scroll_to[side], side))
+  if(IS_NULL_PTR(dt_gui_get_global()->scroll_to[side])) return;
+  if(!_ui_scroll_target_is_live_widget(dt_gui_get_global()->scroll_to[side], side))
   {
-    darktable.gui->scroll_to[side] = NULL;
+    dt_gui_get_global()->scroll_to[side] = NULL;
     return;
   }
 
-  if(GTK_IS_WIDGET(darktable.gui->scroll_to[side]))
+  if(GTK_IS_WIDGET(dt_gui_get_global()->scroll_to[side]))
   {
-    gtk_widget_get_allocation(darktable.gui->scroll_to[side], &allocation);
+    gtk_widget_get_allocation(dt_gui_get_global()->scroll_to[side], &allocation);
     gtk_adjustment_set_value(adjustment, allocation.y);
   }
 
-  darktable.gui->scroll_to[side] = NULL;
+  dt_gui_get_global()->scroll_to[side] = NULL;
 }
 
 /* initialize the center container of panel */
@@ -555,7 +555,7 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   gtk_widget_set_app_paintable(cda, TRUE);
   gtk_widget_set_events(cda, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK
                              | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
-                             | darktable.gui->scroll_mask);
+                             | dt_gui_get_global()->scroll_mask);
   // The center canvas is the MAIN child of the overlay (gtk_container_add), NOT an overlay child.
   // GtkOverlay renders overlay children through their own offscreen GdkWindow; on Wayland that
   // path goes stale until a pointer event invalidates it, and because the canvas is the heavily,
@@ -660,7 +660,7 @@ void _iconify_callback(GtkWidget *w, gpointer data)
 
 void _open_accel_search_callback(GtkWidget *w, gpointer data)
 {
-  dt_accels_search(darktable.gui->accels, GTK_WINDOW(darktable.gui->ui->main_window), w);
+  dt_accels_search(dt_gui_get_accels(), GTK_WINDOW(dt_gui_get_ui()->main_window), w);
 }
 
 void dt_ui_init_global_menu(dt_ui_t *ui)

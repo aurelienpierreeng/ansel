@@ -204,12 +204,12 @@ static void _selection_deselect(dt_selection_t *selection, int32_t imgid)
 void dt_selection_push(dt_selection_t *selection)
 {
   // Backup current selection
-  if(!darktable.gui->selection_stacked)
+  if(!dt_gui_get_global()->selection_stacked)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.selected_backup", NULL, NULL, NULL);
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO memory.selected_backup"
                                                          " SELECT * FROM main.selected_images", NULL, NULL, NULL);
-    darktable.gui->selection_stacked = TRUE;
+    dt_gui_get_global()->selection_stacked = TRUE;
 
     // Commit from DB to GList of imgids
     dt_selection_reload_from_database(selection);
@@ -221,12 +221,12 @@ void dt_selection_push(dt_selection_t *selection)
 void dt_selection_pop(dt_selection_t *selection)
 {
   // Restore current selection
-  if(darktable.gui->selection_stacked)
+  if(dt_gui_get_global()->selection_stacked)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM main.selected_images", NULL, NULL, NULL);
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO main.selected_images"
                                                          " SELECT * FROM memory.selected_backup", NULL, NULL, NULL);
-    darktable.gui->selection_stacked = FALSE;
+    dt_gui_get_global()->selection_stacked = FALSE;
 
     // Commit from DB to GList of imgids
     dt_selection_reload_from_database(selection);

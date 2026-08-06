@@ -319,7 +319,7 @@ static void _draw_preview_fallback(dt_dev_snapshot_engine_t *engine, dt_develop_
     return;
   if(IS_NULL_PTR(engine->preview_locked.surface) || IS_NULL_PTR(engine->preview_locked.entry)) return;
 
-  const float ppd = darktable.gui->ppd;
+  const float ppd = dt_gui_get_global()->ppd;
   const float preview_wd = engine->preview_locked.width / ppd;
   const float preview_ht = engine->preview_locked.height / ppd;
   const float preview_scale = dev->roi.scaling;

@@ -689,8 +689,8 @@ static void _open_uri(const char *uri)
   if(IS_NULL_PTR(uri) || !*uri) return;
 
   GtkWindow *win = NULL;
-  if(darktable.gui && darktable.gui->ui)
-    win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  if(dt_gui_get_global() && dt_gui_get_ui())
+    win = GTK_WINDOW(dt_gui_main_window());
 
   GError *error = NULL;
   const gboolean ok = gtk_show_uri_on_window(win, uri, GDK_CURRENT_TIME, &error);

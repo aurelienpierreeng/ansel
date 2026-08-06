@@ -336,7 +336,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
     confirm_message = mstorage->ask_user_confirmation(mstorage);
   if(confirm_message)
   {
-    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    const GtkWidget *win = dt_gui_main_window();
     GtkWidget *dialog = gtk_message_dialog_new(
         GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
         "%s", confirm_message);

@@ -605,7 +605,7 @@ static void _history_apply_history_end(const int history_end)
 
   dt_dev_undo_start_record(dev);
 
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_set_history_end_ext(dev, history_end);
   dt_dev_pop_history_items_ext(dev);
@@ -614,7 +614,7 @@ static void _history_apply_history_end(const int history_end)
   // darkroom geometry and the virtual preview pipe must be refreshed only
   // after releasing history_mutex to avoid lock inversions with GUI users.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
 
   dt_dev_undo_end_record(dev);
 

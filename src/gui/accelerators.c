@@ -134,9 +134,9 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   if(IS_NULL_PTR(shortcut))
   {
     const char *accel_path = g_object_get_data(G_OBJECT(widget), "accel-path");
-    if(accel_path && darktable.gui && darktable.gui->accels)
+    if(accel_path && dt_gui_get_global() && dt_gui_get_accels())
     {
-      dt_accels_t *accels = darktable.gui->accels;
+      dt_accels_t *accels = dt_gui_get_accels();
       dt_pthread_mutex_lock(&accels->lock);
       shortcut = (dt_shortcut_t *)g_hash_table_lookup(accels->acceleratables, accel_path);
       dt_pthread_mutex_unlock(&accels->lock);
@@ -2601,7 +2601,7 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   GtkWidget *focused_widget = NULL;
   if(!IS_NULL_PTR(state->main_window))
     focused_widget = gtk_window_get_focus(state->main_window);
-  GtkWidget *scroll_focused_widget = !IS_NULL_PTR(darktable.gui) ? darktable.gui->has_scroll_focus : NULL;
+  GtkWidget *scroll_focused_widget = !IS_NULL_PTR(dt_gui_get_global()) ? dt_gui_get_global()->has_scroll_focus : NULL;
 
   gboolean target_focused_gtk = FALSE;
   gboolean target_focused_scroll = FALSE;
@@ -3184,9 +3184,9 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
     gtk_window_get_position(main_window, &main_x, &main_y);
 
   gint top_panel_height = 0;
-  if(!IS_NULL_PTR(darktable.gui) && !IS_NULL_PTR(darktable.gui->ui))
+  if(!IS_NULL_PTR(dt_gui_get_global()) && !IS_NULL_PTR(dt_gui_get_ui()))
   {
-    GtkWidget *top_panel = darktable.gui->ui->panels[DT_UI_PANEL_TOP];
+    GtkWidget *top_panel = dt_gui_get_ui()->panels[DT_UI_PANEL_TOP];
     if(!IS_NULL_PTR(top_panel) && gtk_widget_get_visible(top_panel))
       top_panel_height = gtk_widget_get_allocated_height(top_panel);
   }
@@ -3210,7 +3210,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
     dispatch->path = g_strdup(state.selected->path);
     dispatch->accels = !IS_NULL_PTR(state.selected->accels)
                        ? state.selected->accels
-                       : (!IS_NULL_PTR(darktable.gui) ? darktable.gui->accels : NULL);
+                       : (!IS_NULL_PTR(dt_gui_get_global()) ? dt_gui_get_accels() : NULL);
     dispatch->main_window = main_window;
     g_idle_add(_dispatch_selected_shortcut_idle, dispatch);
   }

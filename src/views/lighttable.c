@@ -150,7 +150,7 @@ static void _view_lighttable_activate_callback(gpointer instance, int32_t imgid,
 
 void configure(dt_view_t *self, int width, int height)
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
   dt_thumbtable_set_active_rowid(table);
   dt_thumbtable_redraw(table);
   g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_active_rowid, table);
@@ -164,16 +164,16 @@ void enter(dt_view_t *self)
   dt_undo_clear(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   dt_gui_refocus_center();
   dt_collection_hint_message(dt_collection_get_global());
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM, FALSE, TRUE);
 
   // Attach shortcuts
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "lighttable");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "lighttable");
 
-  gtk_widget_hide(dt_ui_center(darktable.gui->ui));
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_lighttable);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_lighttable);
+  gtk_widget_hide(dt_gui_center_widget());
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_lighttable);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_lighttable);
 
   /* connect signal for thumbnail image activate */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
@@ -192,14 +192,14 @@ void init(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   // Detach shortcuts
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
 
   // ensure we have no active image remaining
   dt_view_active_images_reset(FALSE);
 
-  dt_thumbtable_stop(darktable.gui->ui->thumbtable_lighttable);
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_lighttable);
-  gtk_widget_show(dt_ui_center(darktable.gui->ui));
+  dt_thumbtable_stop(dt_gui_get_ui()->thumbtable_lighttable);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_lighttable);
+  gtk_widget_show(dt_gui_center_widget());
 
   /* disconnect from filmstrip image activate */
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_lighttable_activate_callback),

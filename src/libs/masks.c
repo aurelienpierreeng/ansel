@@ -2013,7 +2013,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_window_set_modal(GTK_WINDOW(d->popup_window), FALSE);
   gtk_window_set_focus_on_map(GTK_WINDOW(d->popup_window), FALSE);
   gtk_window_set_accept_focus(GTK_WINDOW(d->popup_window), FALSE);
-  gtk_window_set_transient_for(GTK_WINDOW(d->popup_window), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(d->popup_window), GTK_WINDOW(dt_gui_main_window()));
 
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(d->popup_window);

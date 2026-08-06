@@ -828,7 +828,7 @@ static void _folder_survey_offer_pending_import()
   const int new_files = dt_folder_survey_count_new_files();
   if(new_files <= 0) return;
 
-  GtkWindow *parent = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *parent = GTK_WINDOW(dt_gui_main_window());
   GtkWidget *dialog = gtk_message_dialog_new(
       parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
       ngettext("%d image in the surveyed folder is not in the library yet.\nImport it now?",
@@ -1041,7 +1041,7 @@ gboolean dt_folder_survey_propose_resume()
   _folder_survey.was_active_last_session = FALSE;
 
   char *folder = dt_conf_get_string("studio_capture/folder");
-  GtkWindow *parent = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *parent = GTK_WINDOW(dt_gui_main_window());
 
   GtkWidget *dialog = gtk_message_dialog_new(
       parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,

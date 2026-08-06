@@ -819,7 +819,7 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
     /* add module to right panel */
     dt_iop_gui_set_expander(module);
-    darktable.gui->scroll_to_header_once = module->expander;
+    dt_gui_get_global()->scroll_to_header_once = module->expander;
 
     dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
 
@@ -1159,7 +1159,7 @@ static void _iop_panel_label(dt_iop_module_t *module)
   if(mod->instance_name)
   {
     char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(darktable.gui->accels, instance_path);
+    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
     dt_free(instance_path);
     dt_free(mod->instance_name);
   }
@@ -1170,8 +1170,8 @@ static void _iop_panel_label(dt_iop_module_t *module)
   mod->instance_name
       = g_strdup_printf("%s/%s", clean_name, (module->multi_name[0] != '\0') ? module->multi_name : "0");
 
-  dt_accels_new_virtual_instance_shortcut(darktable.gui->accels, _iop_plugin_focus_accel, module,
-                                          darktable.gui->accels->darkroom_accels, _("Darkroom/Modules/Instances"),
+  dt_accels_new_virtual_instance_shortcut(dt_gui_get_accels(), _iop_plugin_focus_accel, module,
+                                          dt_gui_get_accels()->darkroom_accels, _("Darkroom/Modules/Instances"),
                                           mod->instance_name);
 
   dt_free(clean_name);
@@ -1520,7 +1520,7 @@ static void _init_module_so(void *m)
   _init_presets(module);
 
   // do not init accelerators if there is no gui
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     // create a gui and have the widgets register their accelerators
     dt_iop_module_t *module_instance = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
@@ -2032,11 +2032,11 @@ static void _iop_gui_widget_gone(gpointer user_data, GObject *where_the_object_w
   if(module->header == (GtkWidget *)where_the_object_was) module->header = NULL;
   if(module->expander == (GtkWidget *)where_the_object_was) module->expander = NULL;
 
-  if(IS_NULL_PTR(darktable.gui)) return;
+  if(IS_NULL_PTR(dt_gui_get_global())) return;
 
-  if(darktable.gui->scroll_to[0] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[0] = NULL;
-  if(darktable.gui->scroll_to[1] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[1] = NULL;
-  if(darktable.gui->scroll_to_header_once == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to_header_once = NULL;
+  if(dt_gui_get_global()->scroll_to[0] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[0] = NULL;
+  if(dt_gui_get_global()->scroll_to[1] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[1] = NULL;
+  if(dt_gui_get_global()->scroll_to_header_once == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to_header_once = NULL;
 }
 
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
@@ -2056,14 +2056,14 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   // a GLib-CRITICAL for each one.
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED) && !IS_NULL_PTR(mod->accel_path))
   {
-    dt_accels_remove_accel(darktable.gui->accels, mod->accel_path, module);
+    dt_accels_remove_accel(dt_gui_get_accels(), mod->accel_path, module);
     dt_free(mod->accel_path);
   }
 
   if(mod->instance_name)
   {
     char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(darktable.gui->accels, instance_path);
+    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
     dt_free(instance_path);
   }
 
@@ -2091,14 +2091,14 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   dt_iop_gui_cleanup_blending(module);
 
   // size-allocate callbacks can still read scroll targets while GTK tears down widgets
-  if(!IS_NULL_PTR(darktable.gui))
+  if(!IS_NULL_PTR(dt_gui_get_global()))
   {
-    if(darktable.gui->scroll_to[0] == module->header || darktable.gui->scroll_to[0] == module->expander)
-      darktable.gui->scroll_to[0] = NULL;
-    if(darktable.gui->scroll_to[1] == module->header || darktable.gui->scroll_to[1] == module->expander)
-      darktable.gui->scroll_to[1] = NULL;
-    if(darktable.gui->scroll_to_header_once == module->expander)
-      darktable.gui->scroll_to_header_once = NULL;
+    if(dt_gui_get_global()->scroll_to[0] == module->header || dt_gui_get_global()->scroll_to[0] == module->expander)
+      dt_gui_get_global()->scroll_to[0] = NULL;
+    if(dt_gui_get_global()->scroll_to[1] == module->header || dt_gui_get_global()->scroll_to[1] == module->expander)
+      dt_gui_get_global()->scroll_to[1] = NULL;
+    if(dt_gui_get_global()->scroll_to_header_once == module->expander)
+      dt_gui_get_global()->scroll_to_header_once = NULL;
   }
 
   /* Release the transient widget tree explicitly. In normal GUI lifetime, these
@@ -2213,15 +2213,15 @@ static void _presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
 
   dt_gui_presets_popup_menu_show_for_module(module);
 
-  if(!IS_NULL_PTR(module->expander) && !IS_NULL_PTR(darktable.gui->presets_popup_menu))
+  if(!IS_NULL_PTR(module->expander) && !IS_NULL_PTR(dt_gui_get_global()->presets_popup_menu))
   {
     g_object_set_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_OPEN, GINT_TO_POINTER(TRUE));
-    g_signal_connect_data(G_OBJECT(darktable.gui->presets_popup_menu), "deactivate",
+    g_signal_connect_data(G_OBJECT(dt_gui_get_global()->presets_popup_menu), "deactivate",
                           G_CALLBACK(_iop_plugin_header_menu_deactivate),
                           g_object_ref(module->expander), (GClosureNotify)g_object_unref, 0);
   }
 
-  dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
+  dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 }
 
 void dt_iop_request_focus(dt_iop_module_t *module)
@@ -2234,19 +2234,19 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(!IS_NULL_PTR(module))
   {
     const gboolean scroll_new_instance_to_header
-      = (darktable.gui->scroll_to_header_once == module->expander
+      = (dt_gui_get_global()->scroll_to_header_once == module->expander
          && !IS_NULL_PTR(module->header) && GTK_IS_WIDGET(module->header));
-    darktable.gui->scroll_to[1] = scroll_new_instance_to_header ? module->header : module->expander;
+    dt_gui_get_global()->scroll_to[1] = scroll_new_instance_to_header ? module->header : module->expander;
   }
 
   /* lets lose the focus of previous focus module*/
   if(out_focus_module)
   {
     GtkWidget *out_focus_widget = dt_iop_gui_get_pluginui(out_focus_module);
-    GtkWidget *scroll_focus = darktable.gui->has_scroll_focus;
+    GtkWidget *scroll_focus = dt_gui_get_global()->has_scroll_focus;
     if(scroll_focus && out_focus_widget && gtk_widget_is_ancestor(scroll_focus, out_focus_widget))
     {
-      darktable.gui->has_scroll_focus = NULL;
+      dt_gui_get_global()->has_scroll_focus = NULL;
       gtk_widget_queue_draw(scroll_focus);
     }
 
@@ -2343,7 +2343,7 @@ static void _gui_set_single_expanded(dt_iop_module_t *module, gboolean expanded)
 
     /* focus the current module */
     for(int k = 0; k < DT_UI_CONTAINER_SIZE; k++)
-      dt_ui_container_focus_widget(darktable.gui->ui, k, module->expander);
+      dt_ui_container_focus_widget(dt_gui_get_ui(), k, module->expander);
 
     /* redraw center, iop might have post expose */
     dt_control_queue_redraw_center();
@@ -2416,7 +2416,7 @@ static gboolean _iop_plugin_body_button_press(GtkWidget *w, GdkEventButton *e, g
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   gboolean handled = FALSE;
 
@@ -2508,7 +2508,7 @@ static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   if(e->button == 1)
   {
@@ -2962,7 +2962,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   gtk_widget_set_hexpand(module->widget, FALSE);
   gtk_widget_set_vexpand(module->widget, FALSE);
 
-  dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+  dt_ui_container_add_widget(dt_gui_get_ui(), DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
 }
 
 GtkWidget *dt_iop_gui_get_widget(dt_iop_module_t *module)

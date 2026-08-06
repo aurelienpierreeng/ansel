@@ -1039,14 +1039,14 @@ void dt_image_history_changed(const int32_t imgid, const gboolean refresh_filmst
   // never by comparing history hashes, so this is mandatory after any development change.
   dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
 
-  if(!darktable.gui) return;
+  if(!dt_gui_get_global()) return;
 
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+  dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, imgid, TRUE);
 
   // The filmstrip is best-effort: refreshing it spawns an export thread that competes with the
   // realtime darkroom main preview. Darkroom write paths pass FALSE; lighttable ops pass TRUE.
   if(refresh_filmstrip)
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
+    dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_filmstrip, imgid, TRUE);
 }
 
 void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orientation)

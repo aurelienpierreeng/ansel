@@ -466,7 +466,7 @@ gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, g
   if(dt_conf_get_bool("ask_before_discard"))
   {
     const int img_count = g_list_length(imgs);
-    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    const GtkWidget *win = dt_gui_main_window();
     GtkWidget *dialog = gtk_message_dialog_new(
         GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
         ngettext("Do you really want to clear history of %d image?",

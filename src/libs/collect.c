@@ -1854,7 +1854,7 @@ static GList *_rows_to_imgids(int property, GList *rows, gboolean recursive)
 // ---- small dialog helpers ----
 static gboolean _confirm(const char *title, const char *message)
 {
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                              GTK_BUTTONS_YES_NO, "%s", message);
   gtk_window_set_title(GTK_WINDOW(dialog), title);
@@ -1868,7 +1868,7 @@ static gboolean _confirm(const char *title, const char *message)
 
 static gchar *_ask_text(const char *title, const char *initial)
 {
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog
       = gtk_dialog_new_with_buttons(title, GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, _("_cancel"),
                                     GTK_RESPONSE_CANCEL, _("_ok"), GTK_RESPONSE_ACCEPT, NULL);
@@ -1911,7 +1911,7 @@ static void _act_folders_remove(dt_lib_collect_t *d, GList *rows)
 
 static void _act_folders_relocate(dt_lib_collect_t *d, GList *rows)
 {
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   const int n = g_list_length(rows);
   const gboolean single = (n == 1);
   collect_row_t *first = (collect_row_t *)rows->data;

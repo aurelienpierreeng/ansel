@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
 #endif
 
   if(dt_init(argc, argv, TRUE, TRUE)) exit(1);
-  dt_gui_gtk_run(darktable.gui);
+  dt_gui_gtk_run(dt_gui_get_global());
 
 #ifdef _WIN32
   if(redirect_output)

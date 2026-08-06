@@ -3007,10 +3007,10 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
   if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
 
   GtkWidget *mi;
-  GtkMenu *menu = darktable.gui->presets_popup_menu;
+  GtkMenu *menu = dt_gui_get_global()->presets_popup_menu;
   if(menu) gtk_widget_destroy(GTK_WIDGET(menu));
-  darktable.gui->presets_popup_menu = GTK_MENU(gtk_menu_new());
-  menu = darktable.gui->presets_popup_menu;
+  dt_gui_get_global()->presets_popup_menu = GTK_MENU(gtk_menu_new());
+  menu = dt_gui_get_global()->presets_popup_menu;
 
   // add a section to switch blending color spaces
   const dt_develop_blend_colorspace_t module_cst = dt_develop_blend_default_module_blend_colorspace(module);
@@ -3078,7 +3078,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
     }
   }
 
-  dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
+  dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
   dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
 }

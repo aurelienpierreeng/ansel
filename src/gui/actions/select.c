@@ -33,7 +33,7 @@ gboolean select_all_sensitive_callback()
 static gboolean select_all_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(!select_all_sensitive_callback()) return FALSE;
-  dt_thumbtable_select_all(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_select_all(dt_gui_get_ui()->thumbtable_lighttable);
   return TRUE;
 }
 
@@ -56,14 +56,14 @@ static gboolean clear_selection_callback(GtkAccelGroup *group, GObject *accelera
 static gboolean invert_selection_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(!clear_selection_sensitive_callback()) return FALSE;
-  dt_thumbtable_invert_selection(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_invert_selection(dt_gui_get_ui()->thumbtable_lighttable);
   return TRUE;
 }
 
 static gboolean scroll_to_selection_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_scroll_to_selection(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_scroll_to_selection(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_scroll_to_selection(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_scroll_to_selection(dt_gui_get_ui()->thumbtable_lighttable);
   return TRUE;
 }
 

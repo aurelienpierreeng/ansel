@@ -87,7 +87,7 @@ static void _film_strip_activated(const int32_t imgid, void *data)
   dt_selection_select_single(dt_selection_get_global(), imgid);
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   dt_control_queue_redraw_center();
 }
 
@@ -358,7 +358,7 @@ void expose(dt_view_t *self, cairo_t *cri, int32_t width_i, int32_t height_i, in
 
     const dt_view_surface_value_t res =
       dt_view_image_get_surface_async(&prt->screen_fetchers[k], img->imgid, screen_width, screen_height,
-                                      &prt->screen_surfaces[k], dt_ui_center(darktable.gui->ui),
+                                      &prt->screen_surfaces[k], dt_gui_center_widget(),
                                       DT_THUMBTABLE_ZOOM_FIT);
 
     if(res != DT_VIEW_SURFACE_OK)
@@ -420,7 +420,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
 
   switch(event->keyval)
   {
@@ -479,11 +479,11 @@ void enter(dt_view_t *self)
 {
   dt_print_t *prt=(dt_print_t*)self->data;
 
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "print");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "print");
 
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
 
   /* scroll filmstrip to the first selected image */
   int32_t startup_imgid = prt->pending_imgid;
@@ -496,7 +496,7 @@ void enter(dt_view_t *self)
 
   dt_gui_refocus_center();
 
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  GtkWidget *widget = dt_gui_center_widget();
 
   gtk_drag_dest_set(widget, GTK_DEST_DEFAULT_ALL,
                     target_list_all, n_targets_all, GDK_ACTION_MOVE);
@@ -506,7 +506,7 @@ void enter(dt_view_t *self)
   dt_control_set_mouse_over_id(startup_imgid);
   dt_control_set_keyboard_over_id(startup_imgid);
   prt->last_selected = startup_imgid;
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   g_list_free(prt->incoming_selection);
   prt->incoming_selection = NULL;
 }
@@ -514,11 +514,11 @@ void enter(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   dt_print_t *prt=(dt_print_t*)self->data;
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
   if(prt->busy) dt_control_log_busy_leave();
   prt->busy = FALSE;
 
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
 
   /* disconnect from filmstrip image activate */
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),

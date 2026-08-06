@@ -366,7 +366,7 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
         if(dt_modifier_is(event->state, 0))
         {
           _update(self);
-          gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+          gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
           d->editing = FALSE;
           return TRUE;
         }
@@ -512,7 +512,7 @@ static void _private_toggled_callback(GtkCellRendererToggle *cell_renderer, gcha
 
 void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
 {
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("metadata settings"), GTK_WINDOW(win),
                                        GTK_DIALOG_DESTROY_WITH_PARENT, _("default"), GTK_RESPONSE_YES,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);

@@ -232,7 +232,7 @@ uint32_t view(const dt_view_t *self)
 
 static void _reset_edge_pan()
 {
-  dt_gui_gtk_t *gui = darktable.gui;
+  dt_gui_gtk_t *gui = dt_gui_get_global();
   if(IS_NULL_PTR(gui)) return;
   if(gui->pan_edge.timeout_source)
   {
@@ -545,7 +545,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   const int ht = image_box[3];
   cairo_translate(cr, image_box[0], image_box[1]);
   if(dev->iso_12646.enabled) dt_dev_draw_iso12646_border(cr, wd, ht, border);
-  cairo_surface_set_device_scale(surface, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_surface_set_device_scale(surface, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, surface, 0, 0);
   cairo_fill(cr);
@@ -620,7 +620,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
 
   const int wd = _darkroom_preview_locked.width;
   const int ht = _darkroom_preview_locked.height;
-  const float ppd = darktable.gui->ppd;
+  const float ppd = dt_gui_get_global()->ppd;
   const float preview_wd = wd / ppd;
   const float preview_ht = ht / ppd;
   const float preview_scale = dev->roi.scaling;
@@ -1342,7 +1342,7 @@ static void _toggle_mask_visibility_callback(dt_action_t *action)
 gboolean _focus_main_image(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                            GdkModifierType modifier, gpointer data)
 {
-  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+  gtk_widget_grab_focus(dt_gui_center_widget());
   return TRUE;
 }
 
@@ -1427,8 +1427,8 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
     const gboolean autoset_just_finished = autoset_running_before && !autoset_running_after;
     if(!autoset_running_before || autoset_just_finished)
     {
-      dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
-      dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_filmstrip, imgid, TRUE);
+      dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, imgid, TRUE);
+      dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_filmstrip, imgid, TRUE);
     }
   }
 }
@@ -1515,78 +1515,78 @@ void gui_init(dt_view_t *self)
                                 N_("Switch to the previous picture"), GDK_KEY_Left, GDK_MOD1_MASK, _("Triggers the action"));
 
   gchar *path = dt_accels_build_path(_("Darkroom/Actions"), _("Give focus to the main image"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Return, 0);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Return, 0);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, 0);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Up, 0);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up (coarse step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, GDK_SHIFT_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Up, GDK_SHIFT_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up (fine step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, GDK_CONTROL_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Up, GDK_CONTROL_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, 0);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Down, 0);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down (coarse step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, GDK_SHIFT_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Down, GDK_SHIFT_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down (fine step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, GDK_CONTROL_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Down, GDK_CONTROL_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, 0);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Left, 0);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left (coarse step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, GDK_SHIFT_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Left, GDK_SHIFT_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left (fine step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, GDK_CONTROL_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Left, GDK_CONTROL_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, 0);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Right, 0);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right (coarse step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, GDK_SHIFT_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Right, GDK_SHIFT_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right (fine step)"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, GDK_CONTROL_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_Right, GDK_CONTROL_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom in"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_plus, GDK_CONTROL_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_plus, GDK_CONTROL_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom out"));
-  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
-                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_minus, GDK_CONTROL_MASK);
+  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+                                 path, dt_gui_center_widget(), GDK_KEY_minus, GDK_CONTROL_MASK);
   dt_free(path);
   /*
    * Add view specific tool buttons
@@ -1597,7 +1597,7 @@ void gui_init(dt_view_t *self)
           DT_DEV_TOOLBOX_OVEREXPOSED, DT_DEV_TOOLBOX_SOFTPROOF, DT_DEV_TOOLBOX_GAMUT };
   dt_dev_toolbox_create(dev, DT_VIEW_DARKROOM, darkroom_toolbox_buttons,
                         G_N_ELEMENTS(darkroom_toolbox_buttons));
-  dt_dev_toolbox_add_accels(dev, darktable.gui->accels->darkroom_accels, N_("Darkroom/Toolbox"),
+  dt_dev_toolbox_add_accels(dev, dt_gui_get_accels()->darkroom_accels, N_("Darkroom/Toolbox"),
                             darkroom_toolbox_buttons, G_N_ELEMENTS(darkroom_toolbox_buttons));
 
   /* display background options: dt_dev_toolbox_create() already built the
@@ -1758,11 +1758,11 @@ void gui_init(dt_view_t *self)
 
 static gboolean _is_scroll_captured_by_widget()
 {
-  dt_accels_t *accels = darktable.gui->accels;
-  if(!darktable.gui->has_scroll_focus || accels->active_key.accel_key == 0) return FALSE;
+  dt_accels_t *accels = dt_gui_get_accels();
+  if(!dt_gui_get_global()->has_scroll_focus || accels->active_key.accel_key == 0) return FALSE;
 
   // When declaring shortcuts, bauhaus widgets write their accel path into a private data field
-  gchar *accel_path = g_object_get_data(G_OBJECT(darktable.gui->has_scroll_focus), "accel-path");
+  gchar *accel_path = g_object_get_data(G_OBJECT(dt_gui_get_global()->has_scroll_focus), "accel-path");
 
   // Find if the registered accel keys matches currently pressed keys
   GtkAccelKey key = { 0 };
@@ -1782,7 +1782,7 @@ gboolean _scroll_on_focus(GdkEventScroll event, void *data)
   {
     // Pass-through the scrolling event to the scrolling handler of the widget
     gboolean ret;
-    g_signal_emit_by_name(G_OBJECT(darktable.gui->has_scroll_focus), "scroll-event", &event, &ret);
+    g_signal_emit_by_name(G_OBJECT(dt_gui_get_global()->has_scroll_focus), "scroll-event", &event, &ret);
     return ret;
   }
 
@@ -1842,30 +1842,30 @@ void enter(dt_view_t *self)
   dt_gui_refocus_center();
 
   // Attach shortcuts to new widgets
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "darkroom");
-  dt_accels_attach_scroll_handler(darktable.gui->accels, _scroll_on_focus, dev);
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "darkroom");
+  dt_accels_attach_scroll_handler(dt_gui_get_accels(), _scroll_on_focus, dev);
 
   // Attach bauhaus default signal callback to IOP
   dt_bauhaus_get_global()->default_value_changed_callback = dt_bauhaus_value_changed_default_callback;
 
   // This gets the first selected ID to scroll where relevant, so
   // runs it before clearing the selection
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
-  gtk_widget_show(dt_ui_center(darktable.gui->ui));
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
+  gtk_widget_show(dt_gui_center_widget());
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
 
   /* connect signal for filmstrip image activate */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                                   G_CALLBACK(_view_darkroom_filmstrip_activate_callback), self);
 
-  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui)); // ensure the center view has focus for keybindings to work
+  gtk_widget_grab_focus(dt_gui_center_widget()); // ensure the center view has focus for keybindings to work
 
   const int32_t imgid = _darkroom_pending_imgid;
   _darkroom_pending_imgid = UNKNOWN_IMAGE;
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   int ret = dt_dev_load_image(darktable.develop, imgid);
   _darkroom_image_loaded_callback(NULL, imgid, ret, self);
 }
@@ -1936,7 +1936,7 @@ void leave(dt_view_t *self)
   gtk_widget_hide(dev->profile.floating_window);
 
   // Detach the default callback for bauhaus widgets
-  dt_accels_detach_scroll_handler(darktable.gui->accels);
+  dt_accels_detach_scroll_handler(dt_gui_get_accels());
 
   /* disconnect from filmstrip image activate */
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_darkroom_filmstrip_activate_callback),
@@ -1948,14 +1948,14 @@ void leave(dt_view_t *self)
     dt_iop_color_picker_reset(darktable.develop->color_picker.picker->module, FALSE);
 
   // Detach shortcuts
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
 
   // Restore the previous selection
   dt_selection_select_single(dt_selection_get_global(), dt_view_active_images_get_first());
   dt_view_active_images_reset(FALSE);
 
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
-  gtk_widget_hide(dt_ui_center(darktable.gui->ui));
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
+  gtk_widget_hide(dt_gui_center_widget());
 
   // Pipeline nodes reference modules from dev->iop
   // we need to destroy objects referencing modules
@@ -2029,7 +2029,7 @@ void leave(dt_view_t *self)
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
   // Fetch the new thumbnail if needed. Ensure it runs after we save history.
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, darktable.develop->image_storage.id, TRUE);
+  dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, darktable.develop->image_storage.id, TRUE);
   darktable.develop->image_storage.id = -1;
 
   // Release the cache entries for histogram buffers
@@ -2055,7 +2055,7 @@ void mouse_leave(dt_view_t *self)
   // if we are not hovering over a thumbnail in the filmstrip -> show metadata of opened image.
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_t *ctl = darktable.control;
-  dt_gui_gtk_t *gui = darktable.gui;
+  dt_gui_gtk_t *gui = dt_gui_get_global();
   dt_control_mouse_is_dragging(FALSE);
   dt_control_mouse_is_painting(FALSE);
 
@@ -2202,7 +2202,7 @@ static float _darkroom_edge_pan_velocity(const double position, const double siz
 
 static gboolean _darkroom_edge_pan_enable_check(dt_develop_t *dev)
 {
-  dt_gui_gtk_t *gui = darktable.gui;
+  dt_gui_gtk_t *gui = dt_gui_get_global();
   if(IS_NULL_PTR(gui) || IS_NULL_PTR(dev)) return FALSE;
 
   dt_masks_form_gui_t *form_gui = dev->form_gui;
@@ -2226,7 +2226,7 @@ static void _darkroom_edge_pan_update_state(dt_view_t *self,
                                             const int height,
                                             darkroom_edge_pan_test_t *edge)
 {
-  dt_gui_gtk_t *gui = darktable.gui;
+  dt_gui_gtk_t *gui = dt_gui_get_global();
   dt_control_t *ctl = darktable.control;
   if(IS_NULL_PTR(gui) || IS_NULL_PTR(ctl) || IS_NULL_PTR(self)) return;
 
@@ -2270,7 +2270,7 @@ static void _darkroom_edge_pan_update_state(dt_view_t *self,
 /**
  * @brief Apply one edge-pan step when the current drag is still eligible.
  *
- * Edge-pan is gated by `darktable.gui->pan_edge.enabled`, then by the live
+ * Edge-pan is gated by `dt_gui_get_global()->pan_edge.enabled`, then by the live
  * pointer position in the displayed image edge band. The timeout calls this
  * repeatedly because the ROI must keep moving even when the mouse is still.
  */
@@ -2280,7 +2280,7 @@ static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
                                          const int width,
                                          const int height)
 {
-  dt_gui_gtk_t *gui = darktable.gui;
+  dt_gui_gtk_t *gui = dt_gui_get_global();
   dt_control_t *ctl = darktable.control;
   darkroom_edge_pan_test_t edge = { 0 };
   _darkroom_edge_pan_update_state(self, pointer_x, pointer_y, width, height, &edge);
@@ -2361,7 +2361,7 @@ static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
  */
 static gboolean _darkroom_edge_pan_tick(gpointer user_data)
 {
-  dt_gui_gtk_t *gui = darktable.gui;
+  dt_gui_gtk_t *gui = dt_gui_get_global();
   if(IS_NULL_PTR(gui))
     return FALSE;
 
@@ -2369,7 +2369,7 @@ static gboolean _darkroom_edge_pan_tick(gpointer user_data)
   // Read the live pointer position instead of ctl->button_x/y: the latter only
   // stores the last mouse event, while the timeout must stop even if no event follows.
   dt_view_t *self = gui->pan_edge.view;
-  GtkWidget *center = dt_ui_center(darktable.gui->ui);
+  GtkWidget *center = dt_gui_center_widget();
   GdkWindow *window = IS_NULL_PTR(center) ? NULL : gtk_widget_get_window(center);
   GdkDisplay *display = IS_NULL_PTR(window) ? NULL : gdk_window_get_display(window);
   GdkSeat *seat = IS_NULL_PTR(display) ? NULL : gdk_display_get_default_seat(display);
@@ -2395,7 +2395,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_t *ctl = darktable.control;
-  dt_gui_gtk_t *gui = darktable.gui;
+  dt_gui_gtk_t *gui = dt_gui_get_global();
 
   const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
 
@@ -2628,7 +2628,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
            which, type, x, y, pressure);
 
   // Grab focus on any click so we can interact from keyboard
-  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+  gtk_widget_grab_focus(dt_gui_center_widget());
   if(which == 1)
   {
     _darkroom_center_pan_drag = FALSE;
@@ -2905,7 +2905,7 @@ static void _key_scroll(dt_develop_t *dev)
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
 

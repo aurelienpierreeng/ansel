@@ -46,7 +46,7 @@ void dt_privacy_ask_consent(const gboolean have_gui)
   // until the user is shown the dialog on a future GUI launch.
   if(!have_gui) return;
 
-  GtkWidget *parent = (darktable.gui && darktable.gui->ui) ? dt_ui_main_window(darktable.gui->ui) : NULL;
+  GtkWidget *parent = (dt_gui_get_global() && dt_gui_get_ui()) ? dt_gui_main_window() : NULL;
 
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
       _("Help us improve Ansel"), GTK_WINDOW(parent),

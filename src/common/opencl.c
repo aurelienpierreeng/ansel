@@ -88,7 +88,7 @@ static gboolean _opencl_splash_active = FALSE;
 static inline void _opencl_splash_update_compile(const char *programname)
 {
   if(IS_NULL_PTR(programname)) return;
-  if(IS_NULL_PTR(darktable.gui)) return;
+  if(IS_NULL_PTR(dt_gui_get_global())) return;
 
   if(!_opencl_splash_active)
   {

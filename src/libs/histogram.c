@@ -2477,7 +2477,7 @@ static int _scope_resize_handle_resize(int requested_size, gboolean finished, gp
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)user_data;
   int window_height;
-  gtk_window_get_size(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL, &window_height);
+  gtk_window_get_size(GTK_WINDOW(dt_gui_main_window()), NULL, &window_height);
 
   const int min_height = DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT);
   const int max_height = MAX(min_height, MIN(DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT),
@@ -3009,7 +3009,7 @@ void gui_init(dt_lib_module_t *self)
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   d->scope_draw = gtk_drawing_area_new();
-  gtk_widget_add_events(GTK_WIDGET(d->scope_draw), darktable.gui->scroll_mask);
+  gtk_widget_add_events(GTK_WIDGET(d->scope_draw), dt_gui_get_global()->scroll_mask);
   d->scope_height = dt_conf_key_exists(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
       ? dt_conf_get_int(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
       : DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_DEFAULT_HEIGHT);

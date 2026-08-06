@@ -241,9 +241,9 @@ static void _control_set_cursor_on_widget(GtkWidget *widget, GdkCursor *cursor)
 
 static void _control_apply_cursor(GdkCursor *cursor)
 {
-  GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
-  GtkWidget *center_base = dt_ui_center_base(darktable.gui->ui);
-  GtkWidget *center = dt_ui_center(darktable.gui->ui);
+  GtkWidget *main_window = dt_gui_main_window();
+  GtkWidget *center_base = dt_ui_center_base(dt_gui_get_ui());
+  GtkWidget *center = dt_gui_center_widget();
 
   _control_set_cursor_on_widget(main_window, cursor);
 
@@ -422,12 +422,12 @@ void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int l
 
 void dt_control_mouse_is_dragging(gboolean state)
 {
-  darktable.gui->mouse.is_dragging = state;
+  dt_gui_get_global()->mouse.is_dragging = state;
 }
 
 void dt_control_mouse_is_painting(gboolean state)
 {
-  darktable.gui->mouse.is_painting = state;
+  dt_gui_get_global()->mouse.is_painting = state;
 }
 
 int dt_control_running()
@@ -550,10 +550,10 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
 void *dt_control_expose(void *voidptr)
 {
   int pointerx, pointery;
-  if(IS_NULL_PTR(darktable.gui->surface)) return NULL;
-  const int width = dt_cairo_image_surface_get_width(darktable.gui->surface);
-  const int height = dt_cairo_image_surface_get_height(darktable.gui->surface);
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  if(IS_NULL_PTR(dt_gui_get_global()->surface)) return NULL;
+  const int width = dt_cairo_image_surface_get_width(dt_gui_get_global()->surface);
+  const int height = dt_cairo_image_surface_get_height(dt_gui_get_global()->surface);
+  GtkWidget *widget = dt_gui_center_widget();
   gdk_window_get_device_position(gtk_widget_get_window(widget),
       gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(widget))),
       &pointerx, &pointery, NULL);
@@ -608,7 +608,7 @@ void *dt_control_expose(void *voidptr)
   }
   cairo_destroy(cr);
 
-  cairo_t *cr_pixmap = cairo_create(darktable.gui->surface);
+  cairo_t *cr_pixmap = cairo_create(dt_gui_get_global()->surface);
   cairo_set_source_surface(cr_pixmap, cst, 0, 0);
   cairo_paint(cr_pixmap);
   cairo_destroy(cr_pixmap);
@@ -649,8 +649,8 @@ static void _dt_ctl_switch_mode_prepare()
 {
   darktable.control->button_down = 0;
   darktable.control->button_down_which = 0;
-  darktable.gui->center_tooltip = 0;
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  dt_gui_get_global()->center_tooltip = 0;
+  GtkWidget *widget = dt_gui_center_widget();
   gtk_widget_set_tooltip_text(widget, "");
 }
 
@@ -933,7 +933,7 @@ void dt_control_queue_redraw_widget(GtkWidget *widget)
 
 void dt_control_hinter_message(const struct dt_control_t *s, const char *message)
 {
-  dt_hinter_set_message(darktable.gui->ui, message);
+  dt_hinter_set_message(dt_gui_get_ui(), message);
 }
 
 int32_t dt_control_get_mouse_over_id()

@@ -640,7 +640,7 @@ static int _discarded_files_popup(dt_control_image_enumerator_t *params)
 
   // Create the window
   GtkWidget *dialog = gtk_dialog_new_with_buttons("Message",
-    GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+    GTK_WINDOW(dt_gui_main_window()),
     GTK_DIALOG_DESTROY_WITH_PARENT,
     _("_OK"),
     GTK_RESPONSE_NONE,

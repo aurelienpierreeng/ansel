@@ -226,7 +226,7 @@ static void dpi_scaling_changed_callback(GtkWidget *widget, gpointer user_data)
   if(dpi > 0.0) dpi = fmax(64, dpi); // else <= 0 -> use system default
   dt_conf_set_float("screen_dpi_overwrite", dpi);
   restart_required = TRUE;
-  dt_configure_ppd_dpi(darktable.gui);
+  dt_configure_ppd_dpi(dt_gui_get_global());
   dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
@@ -526,11 +526,11 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
 gboolean preferences_window_deleted(GtkWidget *widget, GdkEvent *event, gpointer data)
 {
   // redraw the whole UI in case sizes have changed
-  gtk_widget_queue_resize(dt_ui_center(darktable.gui->ui));
-  gtk_widget_queue_resize(dt_ui_main_window(darktable.gui->ui));
+  gtk_widget_queue_resize(dt_gui_center_widget());
+  gtk_widget_queue_resize(dt_gui_main_window());
 
-  gtk_widget_queue_draw(dt_ui_main_window(darktable.gui->ui));
-  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
+  gtk_widget_queue_draw(dt_gui_main_window());
+  gtk_widget_queue_draw(dt_gui_center_widget());
 
   gtk_widget_hide(widget);
   return TRUE;
@@ -547,7 +547,7 @@ static void _resize_dialog(GtkWidget *widget)
 
 void dt_gui_preferences_show()
 {
-  GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *win = GTK_WINDOW(dt_gui_main_window());
   _preferences_dialog = gtk_dialog_new_with_buttons(_("Ansel preferences"), win,
                                                     GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                                     NULL, NULL);

@@ -172,7 +172,7 @@ void dt_preview_window_spawn(const int32_t imgid)
 
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_default_size(GTK_WINDOW(dialog), 350, 350);
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), NULL);
   g_signal_connect(G_OBJECT(dialog), "destroy", G_CALLBACK(_preview_window_destroy), preview);

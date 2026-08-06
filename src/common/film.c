@@ -284,7 +284,7 @@ static gboolean ask_and_delete(gpointer user_data)
   const int n_empty_dirs = g_list_length(empty_dirs);
 
   GtkWidget *dialog;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
 
   dialog = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                   GTK_BUTTONS_YES_NO,

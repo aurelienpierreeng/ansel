@@ -893,7 +893,7 @@ static gboolean _dt_delete_dialog_main_thread(gpointer user_data)
   dt_pthread_mutex_lock(&modal_dialog->mutex);
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_WINDOW(dt_gui_main_window()),
       GTK_DIALOG_DESTROY_WITH_PARENT,
       GTK_MESSAGE_QUESTION,
       GTK_BUTTONS_NONE,
@@ -1638,7 +1638,7 @@ gboolean dt_control_remove_images()
   if(dt_conf_get_bool("ask_before_remove"))
   {
     GtkWidget *dialog;
-    GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *win = dt_gui_main_window();
 
     const dt_control_image_enumerator_t *e = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
     const int number = g_list_length(e->index);
@@ -1684,7 +1684,7 @@ void dt_control_delete_images()
   if(dt_conf_get_bool("ask_before_delete"))
   {
     GtkWidget *dialog;
-    GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *win = dt_gui_main_window();
 
     const dt_control_image_enumerator_t *e = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
     const int number = g_list_length(e->index);
@@ -1731,7 +1731,7 @@ void dt_control_delete_image(int32_t imgid)
   if(dt_conf_get_bool("ask_before_delete"))
   {
     GtkWidget *dialog;
-    GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *win = dt_gui_main_window();
 
     // Do not show the dialog if no valid image
     if(imgid < 1)
@@ -1764,7 +1764,7 @@ void dt_control_move_images()
 {
   // Open file chooser dialog
   gchar *dir = NULL;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
 
   dt_job_t *job = dt_control_generic_images_job_create(&dt_control_move_images_job_run, N_("move images"), 0, dir,
                                                        PROGRESS_CANCELLABLE, FALSE);
@@ -1827,7 +1827,7 @@ void dt_control_copy_images()
 {
   // Open file chooser dialog
   gchar *dir = NULL;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   dt_job_t *job = dt_control_generic_images_job_create(&dt_control_copy_images_job_run, N_("copy images"), 0, dir,
                                                        PROGRESS_CANCELLABLE, FALSE);
   const dt_control_image_enumerator_t *e = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);

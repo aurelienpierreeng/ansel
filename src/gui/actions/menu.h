@@ -78,7 +78,7 @@ typedef struct dt_menu_entry_t
 /** How to use:
  *  1. write callback functions returning a gboolean that will check the context to decide if
  *  the menu item should be insensitive, checked, active. These should only use the content of
- *  globally accessible structures like `darktable.gui` since they take no arguments.
+ *  globally accessible structures like `dt_gui_get_global()` since they take no arguments.
  *
  *  2. re-use the action callback functions already used for global keyboard shortcuts (actions/accels).
  *  Again, all inputs and internal functions should be globally accessible, for example using proxies.

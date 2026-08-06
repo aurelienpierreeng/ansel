@@ -191,6 +191,29 @@ static inline gboolean _dt_on_gui_thread(void)
   return darktable.control && pthread_equal(darktable.control->gui_thread, pthread_self());
 }
 
+/* Sub-handle accessors for the GUI singleton (declared in gui/gtk.h). The orchestrator
+ * binds darktable.gui via dt_gui_get_global(); these narrow it to the parts callers
+ * actually want, so they stop walking the application struct. */
+struct dt_ui_t *dt_gui_get_ui(void)
+{
+  return dt_gui_get_global()->ui;
+}
+
+struct dt_accels_t *dt_gui_get_accels(void)
+{
+  return dt_gui_get_global()->accels;
+}
+
+GtkWidget *dt_gui_main_window(void)
+{
+  return dt_ui_main_window(dt_gui_get_global()->ui);
+}
+
+GtkWidget *dt_gui_center_widget(void)
+{
+  return dt_ui_center(dt_gui_get_global()->ui);
+}
+
 gboolean dt_gui_widgets_suppressed(void)
 {
   return darktable.gui && darktable.gui->_widget_suppress_depth > 0;

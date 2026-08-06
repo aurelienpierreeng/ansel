@@ -179,7 +179,7 @@ tree_on_row_activated(GtkTreeView        *treeview,
 int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean iscopy)
 {
   int res;
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
 
   GtkDialog *dialog = GTK_DIALOG(gtk_dialog_new_with_buttons(
                                    iscopy ? _("Select development parts to copy") : _("Select development parts to paste"),

@@ -208,7 +208,7 @@ void dt_collection_memory_update()
   if(IS_NULL_PTR(query)) return;
 
   // Handle culling mode across re-queryings : re-restrict collection to selection
-  if(darktable.gui && darktable.gui->culling_mode)
+  if(dt_gui_get_global() && dt_gui_get_global()->culling_mode)
     dt_culling_mode_to_selection();
 
   // 1. drop previous data
@@ -237,7 +237,7 @@ void dt_collection_memory_update()
   dt_free(ins_query);
 
   // Handle culling mode across re-queryings : re-restrict collection to selection
-  if(darktable.gui && darktable.gui->culling_mode)
+  if(dt_gui_get_global() && dt_gui_get_global()->culling_mode)
     dt_selection_to_culling_mode();
 
   _dt_collection_compute_count(dt_collection_get_global());
@@ -2131,8 +2131,8 @@ void dt_collection_deserialize(const char *buf)
 /* Store the n most recent collections in config for re-use in menu */
 static void _update_recentcollections()
 {
-  if(IS_NULL_PTR(darktable.gui)) return;
-  if(IS_NULL_PTR(darktable.gui->ui)) return;
+  if(IS_NULL_PTR(dt_gui_get_global())) return;
+  if(IS_NULL_PTR(dt_gui_get_ui())) return;
 
   // Serialize current request
   char confname[200] = { 0 };

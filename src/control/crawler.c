@@ -780,7 +780,7 @@ void dt_control_crawler_show_image_list(GList *images)
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 
   // build a dialog window that contains the list of images
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons
     (_("updated XMP sidecar files found"), GTK_WINDOW(win),
      GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("_close"),

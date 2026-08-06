@@ -277,7 +277,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   if(IS_NULL_PTR(imgs)) return FALSE;
 
   const int act_on_one = g_list_is_singleton(imgs); // list length == 1?
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
           _("open sidecar file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
           _("_open"), _("_cancel"));
@@ -404,7 +404,7 @@ static gboolean new_history_callback(GtkAccelGroup *group, GObject *acceleratabl
 
 static gboolean shortcuts_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_accels_window(darktable.gui->accels, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  dt_accels_window(dt_gui_get_accels(), GTK_WINDOW(dt_gui_main_window()));
   return TRUE;
 }
 

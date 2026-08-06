@@ -178,7 +178,7 @@ void gui_init(dt_view_t *self)
   // Accelerators for the same buttons, bound to the accel group this view
   // actually connects (see enter(): dt_accels_connect_active_group(...,
   // "lighttable")) instead of darkroom's darkroom_accels.
-  dt_dev_toolbox_add_accels(d->dev, darktable.gui->accels->lighttable_accels, N_("Studio capture/Toolbox"),
+  dt_dev_toolbox_add_accels(d->dev, dt_gui_get_accels()->lighttable_accels, N_("Studio capture/Toolbox"),
                             studio_capture_toolbox_buttons, G_N_ELEMENTS(studio_capture_toolbox_buttons));
 }
 
@@ -528,17 +528,17 @@ void enter(dt_view_t *self)
 
   dt_view_active_images_reset(FALSE);
 
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, TRUE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, TRUE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_LEFT, TRUE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM, TRUE, TRUE);
 
   // Attach shortcuts
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "lighttable");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "lighttable");
 
-  gtk_widget_show(dt_ui_center(darktable.gui->ui));
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+  gtk_widget_show(dt_gui_center_widget());
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                                   G_CALLBACK(_studio_filmstrip_activate_callback), self);
@@ -553,7 +553,7 @@ void enter(dt_view_t *self)
   const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
   if(imgid > UNKNOWN_IMAGE) _studio_set_image(d, imgid);
 
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   dt_gui_refocus_center();
 }
 
@@ -595,9 +595,9 @@ void leave(dt_view_t *self)
   dt_view_image_surface_fetcher_invalidate(&d->fetcher, &d->surface);
   d->panning = FALSE;
 
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
 
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
   dt_view_active_images_reset(FALSE);
 }
 
@@ -854,7 +854,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   // is a cached async fetch, not a re-decode, on frames where nothing relevant changed.
   const dt_view_surface_value_t res
       = dt_view_image_get_surface_async(&d->fetcher, d->imgid, MAX(2, width), MAX(2, height), &d->surface,
-                                        dt_ui_center(darktable.gui->ui), d->zoom);
+                                        dt_gui_center_widget(), d->zoom);
   if(res != DT_VIEW_SURFACE_OK || IS_NULL_PTR(d->surface))
   {
     dt_control_draw_busy_msg(cr, width, height);
@@ -908,7 +908,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     if(d->zoom == DT_THUMBTABLE_ZOOM_FIT && d->dev->iso_12646.enabled)
       dt_dev_draw_iso12646_border(cr, logical_width, logical_height, d->dev->roi.border_size);
     cairo_set_source_surface(cr, d->surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);

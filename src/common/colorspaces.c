@@ -2122,7 +2122,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   /* let's have a look at the xatom, just in case ... */
   if(use_xatom)
   {
-    GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+    GtkWidget *widget = dt_gui_center_widget();
     GdkWindow *window = gtk_widget_get_window(widget);
     GdkScreen *screen = gtk_widget_get_screen(widget);
     if(IS_NULL_PTR(screen)) screen = gdk_screen_get_default();
@@ -2150,7 +2150,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   if(use_colord)
   {
     CdWindow *window = cd_window_new();
-    GtkWidget *center_widget = dt_ui_center(darktable.gui->ui);
+    GtkWidget *center_widget = dt_gui_center_widget();
     cd_window_get_profile(window, center_widget, NULL, dt_colorspaces_get_display_profile_colord_callback,
                           GINT_TO_POINTER(profile_type));
   }
@@ -2158,7 +2158,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
 
 #elif defined GDK_WINDOWING_QUARTZ
 #if 0
-  GtkWidget *widget = (profile_type == DT_COLORSPACE_DISPLAY2) ? darktable.develop->second_window.second_wnd : dt_ui_center(darktable.gui->ui);
+  GtkWidget *widget = (profile_type == DT_COLORSPACE_DISPLAY2) ? darktable.develop->second_window.second_wnd : dt_gui_center_widget();
   GdkScreen *screen = gtk_widget_get_screen(widget);
   if(IS_NULL_PTR(screen)) screen = gdk_screen_get_default();
   int monitor = gdk_screen_get_monitor_at_window(screen, gtk_widget_get_window(widget));
@@ -2186,7 +2186,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
 #endif
 #elif defined G_OS_WIN32
   //HDC hdc = GetDC(NULL);
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  GtkWidget *widget = dt_gui_center_widget();
   GdkWindow *window = gtk_widget_get_window(widget);
   HWND hwnd = (HWND)gdk_win32_window_get_handle(window);  // get window handle
   HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST); // get monitor handle

@@ -126,10 +126,10 @@ dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, con
                                                           const char *dst_prev, const char *dst_next)
 {
   /* Ask the user how to resolve incompatible adjacency constraints between source and destination. */
-  if(IS_NULL_PTR(darktable.gui)) return DT_HM_CONSTRAINTS_PREFER_DEST;
+  if(IS_NULL_PTR(dt_gui_get_global())) return DT_HM_CONSTRAINTS_PREFER_DEST;
   if(!g_main_context_is_owner(g_main_context_default())) return DT_HM_CONSTRAINTS_PREFER_DEST;
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   if(IS_NULL_PTR(window)) return DT_HM_CONSTRAINTS_PREFER_DEST;
 
   gchar *faulty = _hm_pretty_id_from_id_ht(faulty_id, id_ht, TRUE);
@@ -183,10 +183,10 @@ dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, con
 gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
 {
   /* Warn the user when pasted modules rely on raster masks that will be missing. */
-  if(IS_NULL_PTR(darktable.gui)) return TRUE;
+  if(IS_NULL_PTR(dt_gui_get_global())) return TRUE;
   if(!g_main_context_is_owner(g_main_context_default())) return TRUE;
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   if(IS_NULL_PTR(window)) return TRUE;
 
   GHashTable *mods = g_hash_table_new(g_direct_hash, g_direct_equal);
@@ -263,10 +263,10 @@ void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
 {
   /* Present a detected ordering cycle as a GTK modal popup. */
   if(IS_NULL_PTR(cycle_nodes)) return;
-  if(IS_NULL_PTR(darktable.gui)) return;
+  if(IS_NULL_PTR(dt_gui_get_global())) return;
   if(!g_main_context_is_owner(g_main_context_default())) return;
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   if(IS_NULL_PTR(window)) return;
 
   GPtrArray *labels = g_ptr_array_new_with_free_func(g_free);
@@ -1281,10 +1281,10 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
                                      dt_hm_batch_state_t *batch)
 {
   /* Present a merge report with source/destination pipelines and override markers. */
-  if(IS_NULL_PTR(darktable.gui)) return FALSE;
+  if(IS_NULL_PTR(dt_gui_get_global())) return FALSE;
   if(!g_main_context_is_owner(g_main_context_default())) return FALSE;
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   if(IS_NULL_PTR(window)) return FALSE;
 
   const char *merge_mode = merge_iop_order ? _("merge") : _("destination");
@@ -1638,10 +1638,10 @@ gboolean dt_gui_merge_options_dialog(const char *title, const char *mode_key,
                                      const char *iop_order_key, const char *ask_key,
                                      const gboolean iop_order_available)
 {
-  if(IS_NULL_PTR(darktable.gui)) return TRUE;
+  if(IS_NULL_PTR(dt_gui_get_global())) return TRUE;
   if(!g_main_context_is_owner(g_main_context_default())) return TRUE;
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   if(IS_NULL_PTR(window)) return TRUE;
 
   const dt_history_merge_strategy_t cur_mode = dt_conf_get_int(mode_key);

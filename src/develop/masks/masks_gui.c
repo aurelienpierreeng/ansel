@@ -155,7 +155,7 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
     {
       data->config.started(button, module, type, data->config.user_data);
       // Force focus back to the drawing area after creation mode enabling
-      gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+      gtk_widget_grab_focus(dt_gui_center_widget());
     }
   }
   else
@@ -442,10 +442,10 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
 
 int dt_masks_gui_confirm_delete_form_dialog(const char *form_name)
 {
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return GTK_RESPONSE_NO;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return GTK_RESPONSE_NO;
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_WINDOW(dt_gui_main_window()),
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, _("Delete the shape '%s' ?"), form_name);
   gtk_message_dialog_format_secondary_text(
@@ -467,10 +467,10 @@ int dt_masks_gui_confirm_delete_form_dialog(const char *form_name)
 gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name)
 {
   if(!dt_conf_get_bool("ask_before_delete_mask_shape")) return TRUE;
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return TRUE;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return TRUE;
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_WINDOW(dt_gui_main_window()),
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
       _("Permanently delete the shape '%s' ?"), form_name);

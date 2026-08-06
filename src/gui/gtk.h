@@ -75,7 +75,7 @@ extern "C" {
  * the orchestrator header must not export GTK/Pango API to the whole application. --- */
 
 /* ------------------------------------------------------------------------------------------
- * Widget-callback suppression (replaces the legacy raw `darktable.gui->reset` counter).
+ * Widget-callback suppression (replaces the legacy raw `dt_gui_get_global()->reset` counter).
  *
  * Programmatic widget updates must not re-trigger their own "value-changed" handlers. Bracket
  * such updates with dt_gui_freeze_begin()/dt_gui_freeze_end() (or the dt_gui_widget_freeze()
@@ -160,10 +160,21 @@ static inline gchar *strip_markup(const char *s)
 
 /* Application-wide GUI singleton accessor: declared here by the owning lib, implemented by
  * the orchestrator (common/darktable.c, next to dt_pixelpipe_cache_get_global()). It binds
- * this header's macros and inline helpers to the `darktable.gui` instance without importing
+ * this header's macros and inline helpers to the `dt_gui_get_global()` instance without importing
  * common/darktable.h into every GUI translation unit. */
 struct dt_gui_gtk_t;
 struct dt_gui_gtk_t *dt_gui_get_global(void);
+
+/* Sub-handles of the GUI singleton, and the two window lookups that dominate its use.
+ * The census behind doc/globals-migration.md showed dt_gui_get_global() is not one dependency
+ * but three -- the dt_ui_t handle, the write-once accelerator registry, and gtk.c's own
+ * scroll/DPI state -- so expose the first two directly instead of making every caller
+ * walk the application struct. dt_ui_main_window()/dt_ui_center() were called with the
+ * very same argument at 178 sites; these give them a name. */
+struct dt_ui_t *dt_gui_get_ui(void);
+struct dt_accels_t *dt_gui_get_accels(void);
+GtkWidget *dt_gui_main_window(void);
+GtkWidget *dt_gui_center_widget(void);
 
 // Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.
 #define DT_GUI_MOUSE_EFFECT_RADIUS dt_gui_get_global()->mouse.effect_radius_clamped

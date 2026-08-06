@@ -264,11 +264,11 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
   dt_control_change_cursor(GDK_LEFT_PTR);
 
   /* Reset Gtk focus */
-  gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
-  darktable.gui->has_scroll_focus = NULL;
+  gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   // also ignore what scrolling there was previously happening
-  memset(darktable.gui->scroll_to, 0, sizeof(darktable.gui->scroll_to));
+  memset(dt_gui_get_global()->scroll_to, 0, sizeof(dt_gui_get_global()->scroll_to));
 
   // destroy old module list
 
@@ -303,9 +303,9 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
     }
 
     /* remove all widgets in all containers */
-    dt_ui_cleanup_main_table(darktable.gui->ui);
+    dt_ui_cleanup_main_table(dt_gui_get_ui());
     for(int l = 0; l < DT_UI_CONTAINER_SIZE; l++)
-      dt_ui_container_destroy_children(darktable.gui->ui, l);
+      dt_ui_container_destroy_children(dt_gui_get_ui(), l);
     vm->current_view = NULL;
 
     return 0;
@@ -344,14 +344,14 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
 
     /* remove all widets in all containers */
     for(int l = 0; l < DT_UI_CONTAINER_SIZE; l++)
-      dt_ui_container_foreach(darktable.gui->ui, l,(GtkCallback)_remove_child);
+      dt_ui_container_foreach(dt_gui_get_ui(), l,(GtkCallback)_remove_child);
   }
 
   /* change current view to the new view */
   vm->current_view = new_view;
 
   /* restore visible stat of panels for the new view */
-  dt_ui_restore_panels(darktable.gui->ui);
+  dt_ui_restore_panels(dt_gui_get_ui());
 
   /* lets add plugins related to new view into panels.
    * this has to be done in reverse order to have the lowest position at the bottom! */
@@ -381,7 +381,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
 
 
       /* add module to its container */
-      dt_ui_container_add_widget(darktable.gui->ui, plugin->container(plugin), w);
+      dt_ui_container_add_widget(dt_gui_get_ui(), plugin->container(plugin), w);
     }
   }
 
@@ -601,8 +601,8 @@ int dt_view_manager_button_pressed(dt_view_manager_t *vm, double x, double y, do
   dt_view_t *v = vm->current_view;
 
   /* Reset Gtk focus */
-  gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
-  darktable.gui->has_scroll_focus = NULL;
+  gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   /* lets check if any plugins want to handle button press */
   gboolean handled = FALSE;
@@ -745,7 +745,7 @@ static gboolean _view_surface_commit_main(gpointer user_data)
     GtkWidget *widget = g_weak_ref_get(&fetcher->widget_ref);
     if(widget)
     {
-      if(widget == dt_ui_center(darktable.gui->ui))
+      if(widget == dt_gui_center_widget())
       {
         dt_control_queue_redraw_center();
       }
@@ -1059,7 +1059,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   if(zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    mip = dt_mipmap_cache_get_matching_size(cache, ceilf(width * darktable.gui->ppd), ceilf(height * darktable.gui->ppd), imgid);
+    mip = dt_mipmap_cache_get_matching_size(cache, ceilf(width * dt_gui_get_global()->ppd), ceilf(height * dt_gui_get_global()->ppd), imgid);
   }
   else
   {
@@ -1110,7 +1110,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   if(zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    scale = fminf((float)width / (float)buf_wd, (float)height / (float)buf_ht) * darktable.gui->ppd;
+    scale = fminf((float)width / (float)buf_wd, (float)height / (float)buf_ht) * dt_gui_get_global()->ppd;
     img_width = roundf(buf_wd * scale);
     img_height = roundf(buf_ht * scale);
 
@@ -1209,7 +1209,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   /* The async/shared surface path returns pixel-sized Cairo image surfaces.
    * Publish the widget PPD on the finished surface so GUI callers can place it
    * in logical coordinates without re-deriving HiDPI scaling on every draw. */
-  cairo_surface_set_device_scale(*surface, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_surface_set_device_scale(*surface, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
 
   // we consider skull as ok as the image hasn't to be reloaded
   if(buf_wd <= 8 && buf_ht <= 8)
@@ -1504,7 +1504,7 @@ void dt_view_image_info_update(int32_t imgid)
 
   if(imgid == UNKNOWN_IMAGE)
   {
-    dt_ui_set_image_info_label(darktable.gui->ui, "");
+    dt_ui_set_image_info_label(dt_gui_get_ui(), "");
     return;
   }
 
@@ -1526,7 +1526,7 @@ void dt_view_image_info_update(int32_t imgid)
   dt_free(pattern);
   dt_variables_params_destroy(vp);
 
-  dt_ui_set_image_info_label(darktable.gui->ui, msg);
+  dt_ui_set_image_info_label(dt_gui_get_ui(), msg);
 
   dt_free(msg);
 }

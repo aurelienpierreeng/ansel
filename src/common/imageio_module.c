@@ -90,7 +90,7 @@ static int dt_imageio_load_module_format(dt_imageio_module_format_t *module, con
 #define INCLUDE_API_FROM_MODULE_LOAD "imageio_load_module_format"
 #include "imageio/format/imageio_format_api.h"
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     if(IS_NULL_PTR(module->gui_init)) goto api_h_error;
   }
@@ -143,9 +143,9 @@ static int dt_imageio_load_modules_format(dt_imageio_t *iio)
       continue;
     }
     module->gui_data = NULL;
-    if(darktable.gui) dt_gui_freeze_begin();
+    if(dt_gui_get_global()) dt_gui_freeze_begin();
     module->gui_init(module);
-    if(darktable.gui) dt_gui_freeze_end();
+    if(dt_gui_get_global()) dt_gui_freeze_end();
     if(module->widget) g_object_ref_sink(module->widget);
     dt_free(libname);
     res = g_list_insert_sorted(res, module, dt_imageio_sort_modules_format);
@@ -181,7 +181,7 @@ static int dt_imageio_load_module_storage(dt_imageio_module_storage_t *module, c
 #define INCLUDE_API_FROM_MODULE_LOAD "imageio_load_module_storage"
 #include "imageio/storage/imageio_storage_api.h"
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     if(IS_NULL_PTR(module->gui_init)) goto api_h_error;
   }

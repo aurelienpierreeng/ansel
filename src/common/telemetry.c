@@ -357,10 +357,10 @@ static JsonObject *_telemetry_system_properties(void)
   if(desktop && *desktop) json_object_set_string_member(p, "desktop_environment", desktop);
 #endif
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
-    json_object_set_double_member(p, "dpi", darktable.gui->dpi);
-    json_object_set_double_member(p, "ppd", darktable.gui->ppd);
+    json_object_set_double_member(p, "dpi", dt_gui_get_global()->dpi);
+    json_object_set_double_member(p, "ppd", dt_gui_get_global()->ppd);
     GdkDisplay *display = gdk_display_get_default();
     GdkMonitor *mon = display ? gdk_display_get_primary_monitor(display) : NULL;
     if(!mon && display && gdk_display_get_n_monitors(display) > 0) mon = gdk_display_get_monitor(display, 0);

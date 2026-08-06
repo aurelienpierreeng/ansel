@@ -194,7 +194,7 @@ static dt_view_surface_value_t _slideshow_request_slot(dt_slideshow_t *d, const 
   const int height = MAX(2, (int)d->height);
   const dt_view_surface_value_t res =
       dt_view_image_get_surface_async(&buffer->cache->fetcher, imgid, width, height, &buffer->cache->surface,
-                                      dt_ui_center(darktable.gui->ui), DT_THUMBTABLE_ZOOM_FIT);
+                                      dt_gui_center_widget(), DT_THUMBTABLE_ZOOM_FIT);
   buffer->invalidated = (res != DT_VIEW_SURFACE_OK);
   return res;
 }
@@ -356,18 +356,18 @@ void enter(dt_view_t *self)
   d->mouse_timeout = 0;
   d->auto_advance_timeout = 0;
 
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "slideshow");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "slideshow");
 
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_LEFT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_TOP, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM, FALSE, TRUE);
 
   // also hide arrows
   dt_control_queue_redraw();
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   GdkRectangle rect;
 
   GdkDisplay *display = gtk_widget_get_display(window);
@@ -440,7 +440,7 @@ void leave(dt_view_t *self)
   d->auto_advance_timeout = 0;
   dt_control_change_cursor(GDK_LEFT_PTR);
   d->auto_advance = FALSE;
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
 
   dt_selection_clear(dt_selection_get_global());
   if(dt_view_active_images_get_all())
@@ -489,7 +489,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     cairo_save(cr);
     cairo_translate(cr, tr_width, tr_height);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);
@@ -503,7 +503,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
   
   switch(event->keyval)
   {

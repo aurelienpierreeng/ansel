@@ -51,7 +51,7 @@ static gboolean show_about_dialog(GtkAccelGroup *group, GObject *acceleratable, 
   gtk_about_dialog_add_credit_section (GTK_ABOUT_DIALOG(dialog), _("and..."), final);
   gtk_about_dialog_set_translator_credits(GTK_ABOUT_DIALOG(dialog), _("translator-credits"));
 
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_gui_main_window()));
   gtk_dialog_run(GTK_DIALOG(dialog));
   gtk_widget_destroy(dialog);
 
@@ -61,27 +61,27 @@ static gboolean show_about_dialog(GtkAccelGroup *group, GObject *acceleratable, 
 static gboolean open_doc_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   // TODO: use translated URL when doc gets translated
-  gtk_show_uri_on_window(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), "https://ansel.photos/en/doc", GDK_CURRENT_TIME, NULL);
+  gtk_show_uri_on_window(GTK_WINDOW(dt_gui_main_window()), "https://ansel.photos/en/doc", GDK_CURRENT_TIME, NULL);
   return TRUE;
 }
 
 static gboolean open_chat_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  gtk_show_uri_on_window(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+  gtk_show_uri_on_window(GTK_WINDOW(dt_gui_main_window()),
   "https://app.element.io/#/room/#ansel:matrix.org", GDK_CURRENT_TIME, NULL);
   return TRUE;
 }
 
 static gboolean open_search_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  gtk_show_uri_on_window(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+  gtk_show_uri_on_window(GTK_WINDOW(dt_gui_main_window()),
   "https://chantal.aurelienpierre.com", GDK_CURRENT_TIME, NULL);
   return TRUE;
 }
 
 static gboolean open_forum_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  gtk_show_uri_on_window(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+  gtk_show_uri_on_window(GTK_WINDOW(dt_gui_main_window()),
   "https://community.ansel.photos", GDK_CURRENT_TIME, NULL);
   return TRUE;
 }
@@ -132,7 +132,7 @@ static void _main_do_event_help(GdkEvent *event, gpointer data)
         {
           _restore_default_cursor();
 
-          GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+          GtkWidget *win = dt_gui_main_window();
           dt_print(DT_DEBUG_CONTROL, "[context help] opening '%s'\n", help_url);
 
           // ask the user if the website may be accessed
@@ -213,8 +213,8 @@ static gboolean contextual_help_callback(GtkAccelGroup *group, GObject *accelera
 
 static gboolean search_accels_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
-  dt_accels_search(darktable.gui->accels, GTK_WINDOW(main), main);
+  GtkWidget *main = dt_gui_main_window();
+  dt_accels_search(dt_gui_get_accels(), GTK_WINDOW(main), main);
   return TRUE;
 }
 

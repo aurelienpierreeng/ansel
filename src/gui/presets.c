@@ -108,7 +108,7 @@ static const char *_gui_presets_format_value_str[5]
 static const int _gui_presets_format_flag[5] = { FOR_LDR, FOR_RAW, FOR_HDR, FOR_NOT_MONO, FOR_NOT_COLOR };
 
 // this is also called for non-gui applications linking to libansel!
-// so beware, don't use any darktable.gui stuff here .. (or change this behaviour in darktable.c)
+// so beware, don't use any dt_gui_get_global() stuff here .. (or change this behaviour in darktable.c)
 void dt_gui_presets_init()
 {
   // Avoid regenerating all auto-presets on every startup when the build and UI language are unchanged.
@@ -293,7 +293,7 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 
   if(dt_conf_get_bool("plugins/lighttable/preset/ask_before_delete_preset"))
   {
-    GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                GTK_BUTTONS_YES_NO, _("do you really want to delete the preset `%s'?"), name);
@@ -898,7 +898,7 @@ static void _edit_preset(const char *name_in, dt_iop_module_t *module)
     name = g_strdup(name_in);
 
   dt_gui_presets_show_iop_edit_dialog(name, module, (GCallback)_edit_preset_final_callback, NULL, TRUE, TRUE,
-                                      FALSE, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+                                      FALSE, GTK_WINDOW(dt_gui_main_window()));
   dt_free(name);
 }
 
@@ -915,7 +915,7 @@ static void _menuitem_update_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 
   if(dt_conf_get_bool("plugins/lighttable/preset/ask_before_delete_preset"))
   {
-    GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                GTK_BUTTONS_YES_NO, _("do you really want to update the preset `%s'?"), name);
@@ -1147,10 +1147,10 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
                                                   void (*pick_callback)(GtkMenuItem *, void *),
                                                   void *callback_data)
 {
-  GtkMenu *menu = darktable.gui->presets_popup_menu;
+  GtkMenu *menu = dt_gui_get_global()->presets_popup_menu;
   if(menu) gtk_widget_destroy(GTK_WIDGET(menu));
-  darktable.gui->presets_popup_menu = GTK_MENU(gtk_menu_new());
-  menu = darktable.gui->presets_popup_menu;
+  dt_gui_get_global()->presets_popup_menu = GTK_MENU(gtk_menu_new());
+  menu = dt_gui_get_global()->presets_popup_menu;
   const gboolean hide_default = dt_conf_get_bool("plugins/darkroom/hide_default_presets");
   const gboolean default_first = dt_conf_get_bool("modules/default_presets_first");
 
@@ -1258,7 +1258,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
     const char *name = (char *)sqlite3_column_text(stmt, 0);
     gboolean isdefault = FALSE;
 
-    if(darktable.gui->last_preset && strcmp(darktable.gui->last_preset, name) == 0)
+    if(dt_gui_get_global()->last_preset && strcmp(dt_gui_get_global()->last_preset, name) == 0)
       found = TRUE;
 
     if(module
@@ -1351,13 +1351,13 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_new_preset), module);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
-      if(darktable.gui->last_preset && found)
+      if(dt_gui_get_global()->last_preset && found)
       {
         char *markup = g_markup_printf_escaped("%s <span weight='bold'>%s</span>", _("update preset"),
-                                               darktable.gui->last_preset);
+                                               dt_gui_get_global()->last_preset);
         mi = gtk_menu_item_new_with_label("");
         gtk_label_set_markup(GTK_LABEL(gtk_bin_get_child(GTK_BIN(mi))), markup);
-        g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(darktable.gui->last_preset), g_free);
+        g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(dt_gui_get_global()->last_preset), g_free);
         g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_update_preset), module);
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
         dt_free(markup);

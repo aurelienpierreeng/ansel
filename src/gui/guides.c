@@ -667,22 +667,22 @@ void dt_guides_set_overlay_colors()
 {
   const int overlay_color = dt_conf_get_int("darkroom/ui/overlay_color");
 
-  darktable.gui->overlay_contrast = dt_conf_get_float("darkroom/ui/overlay_contrast");
+  dt_gui_get_global()->overlay_contrast = dt_conf_get_float("darkroom/ui/overlay_contrast");
 
-  darktable.gui->overlay_red = darktable.gui->overlay_green = darktable.gui->overlay_blue = 0.0f;
+  dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_green = dt_gui_get_global()->overlay_blue = 0.0f;
 
   if(overlay_color == DT_DEV_OVERLAY_GRAY)
-    darktable.gui->overlay_red = darktable.gui->overlay_green = darktable.gui->overlay_blue = 1.0f;
+    dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_green = dt_gui_get_global()->overlay_blue = 1.0f;
   else if(overlay_color == DT_DEV_OVERLAY_RED)
-    darktable.gui->overlay_red = 1.0f;
+    dt_gui_get_global()->overlay_red = 1.0f;
   else if(overlay_color == DT_DEV_OVERLAY_GREEN)
-    darktable.gui->overlay_green = 1.0f;
+    dt_gui_get_global()->overlay_green = 1.0f;
   else if(overlay_color == DT_DEV_OVERLAY_YELLOW)
-    darktable.gui->overlay_red = darktable.gui->overlay_green = 1.0f;
+    dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_green = 1.0f;
   else if(overlay_color == DT_DEV_OVERLAY_CYAN)
-    darktable.gui->overlay_green = darktable.gui->overlay_blue = 1.0f;
+    dt_gui_get_global()->overlay_green = dt_gui_get_global()->overlay_blue = 1.0f;
   else if(overlay_color == DT_DEV_OVERLAY_MAGENTA)
-    darktable.gui->overlay_red = darktable.gui->overlay_blue = 1.0f;
+    dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_blue = 1.0f;
 }
 
 static void _settings_colors_changed(GtkWidget *combo, _guides_settings_t *gw)

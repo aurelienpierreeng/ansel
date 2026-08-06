@@ -441,12 +441,12 @@ static void _sentry_set_context(void)
   // from the GUI, already computed during dt_gui_gtk_init(). The window size is
   // read from conf, which holds the restored/last geometry and is kept up to date
   // live on every resize - more reliable than the not-yet-mapped window here.
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     sentry_value_t scr = sentry_value_new_object();
-    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(darktable.gui->dpi));
-    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(darktable.gui->dpi_factor));
-    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(darktable.gui->ppd));
+    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(dt_gui_get_global()->dpi));
+    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(dt_gui_get_global()->dpi_factor));
+    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(dt_gui_get_global()->ppd));
 
     const int win_w = dt_conf_get_int("ui_last/window_width");
     const int win_h = dt_conf_get_int("ui_last/window_height");

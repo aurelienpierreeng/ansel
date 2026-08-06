@@ -267,7 +267,7 @@ int dt_focuspeaking(cairo_t *cr,
                                                                  cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, buf_width));
   cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
   cairo_set_source_surface(cr, surface, 0.0, 0.0);
-  cairo_pattern_set_filter(cairo_get_source (cr), darktable.gui->filter_image);
+  cairo_pattern_set_filter(cairo_get_source (cr), dt_gui_get_global()->filter_image);
   cairo_fill(cr);
   cairo_restore(cr);
 

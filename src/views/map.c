@@ -228,7 +228,7 @@ static void _free_map_image(gpointer data)
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
 
   switch(event->keyval)
   {
@@ -326,7 +326,7 @@ static GdkPixbuf *_view_map_images_count(const int nb_images, const gboolean sam
 
   dt_gui_gtk_set_source_rgb(cr, same_loc ? DT_GUI_COLOR_MAP_COUNT_SAME_LOC
                                          : DT_GUI_COLOR_MAP_COUNT_DIFF_LOC);
-  cairo_set_font_size(cr, 12 * (1 + (darktable.gui->dpi_factor - 1) / 2));
+  cairo_set_font_size(cr, 12 * (1 + (dt_gui_get_global()->dpi_factor - 1) / 2));
   cairo_text_extents_t te;
   cairo_text_extents(cr, text, &te);
   *count_width = te.width + 4 * te.x_bearing;
@@ -579,7 +579,7 @@ void init(dt_view_t *self)
 
   dt_map_t *lib = (dt_map_t *)self->data;
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     lib->image_pin = _init_image_pin();
     lib->place_pin = _init_place_pin();
@@ -677,7 +677,7 @@ void cleanup(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_changed), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     g_object_unref(G_OBJECT(lib->image_pin));
     g_object_unref(G_OBJECT(lib->place_pin));
@@ -1936,7 +1936,7 @@ static gboolean _view_map_button_press_callback(GtkWidget *w, GdkEventButton *e,
       dt_selection_select_single(dt_selection_get_global(), imgid);
       dt_control_set_mouse_over_id(imgid);
       dt_control_set_keyboard_over_id(imgid);
-      g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+      g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
     }
     if(e->type == GDK_BUTTON_PRESS)
     {
@@ -2064,11 +2064,11 @@ void enter(dt_view_t *self)
   lib->loc.drag = FALSE;
   lib->entering = TRUE;
 
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "map");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "map");
 
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
 
   dt_view_active_images_reset(FALSE);
   if(lib->incoming_selection)
@@ -2084,7 +2084,7 @@ void enter(dt_view_t *self)
    * every entry before it can receive allocations and paint over the center. */
   if(!gtk_widget_get_parent(GTK_WIDGET(lib->map)))
   {
-    gtk_overlay_add_overlay(GTK_OVERLAY(dt_ui_center_base(darktable.gui->ui)), GTK_WIDGET(lib->map));
+    gtk_overlay_add_overlay(GTK_OVERLAY(dt_ui_center_base(dt_gui_get_ui())), GTK_WIDGET(lib->map));
   }
   gtk_widget_show_all(GTK_WIDGET(lib->map));
 
@@ -2111,16 +2111,16 @@ void enter(dt_view_t *self)
   const int32_t active_imgid = dt_view_active_images_get_first();
   dt_control_set_mouse_over_id(active_imgid);
   dt_control_set_keyboard_over_id(active_imgid);
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   g_timeout_add(250, _view_map_display_selected, self);
 }
 
 void leave(dt_view_t *self)
 {
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
   dt_view_active_images_reset(FALSE);
 
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
 
   /* disable the map source again. no need to risk network traffic while we are not in map mode. */
   _view_map_set_map_source_g_object(self, OSM_GPS_MAP_SOURCE_NULL);
@@ -2139,8 +2139,8 @@ void leave(dt_view_t *self)
     lib->selected_images = NULL;
   }
   gtk_widget_hide(GTK_WIDGET(lib->map));
-  if(gtk_widget_get_parent(GTK_WIDGET(lib->map)) == dt_ui_center_base(darktable.gui->ui))
-    gtk_container_remove(GTK_CONTAINER(dt_ui_center_base(darktable.gui->ui)), GTK_WIDGET(lib->map));
+  if(gtk_widget_get_parent(GTK_WIDGET(lib->map)) == dt_ui_center_base(dt_gui_get_ui()))
+    gtk_container_remove(GTK_CONTAINER(dt_ui_center_base(dt_gui_get_ui())), GTK_WIDGET(lib->map));
 
   /* reset proxy */
   darktable.view_manager->proxy.map.view = NULL;
@@ -2594,7 +2594,7 @@ static void _view_map_selection_changed(gpointer instance, gpointer user_data)
     const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
     dt_control_set_mouse_over_id(imgid);
     dt_control_set_keyboard_over_id(imgid);
-    g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+    g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
     g_signal_emit_by_name(lib->map, "changed");
   }
 }
@@ -2684,7 +2684,7 @@ static void _view_map_filmstrip_activate_callback(gpointer instance, int32_t img
 {
   dt_view_t *self = (dt_view_t *)user_data;
   dt_selection_select_single(dt_selection_get_global(), imgid);
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   _view_map_center_on_image(self, imgid);
 }
 

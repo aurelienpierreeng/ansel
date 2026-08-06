@@ -352,7 +352,7 @@ static void _modulegroups_track_widget(GtkWidget **slot, GtkWidget *widget)
 static void _ensure_page_widgets(dt_lib_module_t *self)
 {
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
-  GtkBox *root = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
+  GtkBox *root = dt_ui_get_container(dt_gui_get_ui(), DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
   if(IS_NULL_PTR(root)) return;
 
   // Prepare tab pages
@@ -569,8 +569,8 @@ static void _modulegroups_drag_begin(GtkWidget *widget, GdkDragContext *context,
   gtk_widget_draw(module_src->header, cr);
   dt_gui_remove_class(module_src->header, "iop_drag_icon");
 
-  cairo_surface_set_device_offset(surface, -allocation.width * darktable.gui->ppd / 2,
-                                  -allocation.height * darktable.gui->ppd / 2);
+  cairo_surface_set_device_offset(surface, -allocation.width * dt_gui_get_global()->ppd / 2,
+                                  -allocation.height * dt_gui_get_global()->ppd / 2);
   gtk_drag_set_icon_surface(context, surface);
 
   cairo_destroy(cr);
@@ -768,7 +768,7 @@ static gboolean _focus_previous_module(GtkAccelGroup *accel_group, GObject *acce
   dt_iop_module_t *focused = darktable.develop->gui_module;
 
   // When filmstrip owns keyboard focus, keep PageUp routed to filmstrip navigation.
-  dt_thumbtable_t *filmstrip = darktable.gui->ui->thumbtable_filmstrip;
+  dt_thumbtable_t *filmstrip = dt_gui_get_ui()->thumbtable_filmstrip;
   if(!IS_NULL_PTR(filmstrip) && !IS_NULL_PTR(filmstrip->grid) && gtk_widget_has_focus(filmstrip->grid))
     return FALSE;
   if(d->visible_expanders_tab != _get_current_tab(self))
@@ -816,7 +816,7 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
   dt_iop_module_t *focused = darktable.develop->gui_module;
 
   // When filmstrip owns keyboard focus, keep PageDown routed to filmstrip navigation.
-  dt_thumbtable_t *filmstrip = darktable.gui->ui->thumbtable_filmstrip;
+  dt_thumbtable_t *filmstrip = dt_gui_get_ui()->thumbtable_filmstrip;
   if(!IS_NULL_PTR(filmstrip) && !IS_NULL_PTR(filmstrip->grid) && gtk_widget_has_focus(filmstrip->grid))
     return FALSE;
   if(d->visible_expanders_tab != _get_current_tab(self))
@@ -933,7 +933,7 @@ static GList *_find_previous_visible_widget(GList *widgets)
 static void _focus_widget(GtkWidget *widget)
 {
   gtk_widget_grab_focus(widget);
-  darktable.gui->has_scroll_focus = widget;
+  dt_gui_get_global()->has_scroll_focus = widget;
 }
 
 
@@ -943,7 +943,7 @@ static gboolean _focus_next_control()
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
-  GtkWidget *current_widget = darktable.gui->has_scroll_focus;
+  GtkWidget *current_widget = dt_gui_get_global()->has_scroll_focus;
   GList *first_item = _find_next_visible_widget(g_list_first(m->widget_list));
 
   if(!current_widget && first_item)
@@ -973,7 +973,7 @@ static gboolean _focus_previous_control()
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
-  GtkWidget *current_widget = darktable.gui->has_scroll_focus;
+  GtkWidget *current_widget = dt_gui_get_global()->has_scroll_focus;
   GList *last_item = _find_previous_visible_widget(g_list_last(m->widget_list));
 
   if(!current_widget && last_item)
@@ -1044,7 +1044,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_notebook_set_scrollable(GTK_NOTEBOOK(d->notebook), TRUE);
   g_signal_connect(G_OBJECT(d->notebook), "switch_page", G_CALLBACK(_switch_page), self);
   g_signal_connect(G_OBJECT(d->notebook), "scroll-event", G_CALLBACK(_scroll_event), self);
-  gtk_widget_add_events(GTK_WIDGET(d->notebook), darktable.gui->scroll_mask);
+  gtk_widget_add_events(GTK_WIDGET(d->notebook), dt_gui_get_global()->scroll_mask);
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->notebook), TRUE, TRUE, 0);
   gtk_widget_show_all(self->widget);
@@ -1091,7 +1091,7 @@ void gui_cleanup(dt_lib_module_t *self)
     dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
     _modulegroups_clear_visible_expanders_cache(d);
     _modulegroups_clear_drop_state(d);
-    GtkBox *root = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
+    GtkBox *root = dt_ui_get_container(dt_gui_get_ui(), DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
     if(darktable.develop && root)
     {
       /* Hand module expanders back to the right-panel root before destroying
@@ -1205,15 +1205,15 @@ static gboolean _update_iop_visibility(gpointer user_data)
   dt_iop_module_t *active = darktable.develop->gui_module;
   if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander))
   {
-    if(darktable.gui->scroll_to[1] != active->header)
+    if(dt_gui_get_global()->scroll_to[1] != active->header)
     {
       const gboolean scroll_new_instance_to_header
-        = (darktable.gui->scroll_to_header_once == active->expander
+        = (dt_gui_get_global()->scroll_to_header_once == active->expander
            && !IS_NULL_PTR(active->header) && GTK_IS_WIDGET(active->header));
 
-      darktable.gui->scroll_to[1] = scroll_new_instance_to_header ? active->header : active->expander;
+      dt_gui_get_global()->scroll_to[1] = scroll_new_instance_to_header ? active->header : active->expander;
 
-      if(scroll_new_instance_to_header) darktable.gui->scroll_to_header_once = NULL;
+      if(scroll_new_instance_to_header) dt_gui_get_global()->scroll_to_header_once = NULL;
     }
   }
 

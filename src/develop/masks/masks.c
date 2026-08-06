@@ -4460,7 +4460,7 @@ gboolean dt_masks_creation_mode_enter(dt_develop_t *dev, dt_iop_module_t *module
   dev->form_gui->creation_last_formid = 0;
 
   // Give focus to central view to allow using shortcuts for mask creation right after selecting a mask type in the manager
-  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+  gtk_widget_grab_focus(dt_gui_center_widget());
   return TRUE;
 }
 

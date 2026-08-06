@@ -474,7 +474,7 @@ static cairo_surface_t *_util_get_svg_img(gchar *logo, const float size)
     RsvgDimensionData dimension;
     dimension = dt_get_svg_dimension(svg);
 
-    const float ppd = darktable.gui ? darktable.gui->ppd : 1.0;
+    const float ppd = dt_gui_get_global() ? dt_gui_get_global()->ppd : 1.0;
 
     const float svg_size = MAX(dimension.width, dimension.height);
     const float factor = size > 0.0 ? size / svg_size : -1.0 * size;
@@ -483,10 +483,10 @@ static cairo_surface_t *_util_get_svg_img(gchar *logo, const float size)
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, final_width);
 
     guint8 *image_buffer = (guint8 *)calloc(stride * final_height, sizeof(guint8));
-    if(darktable.gui)
+    if(dt_gui_get_global())
       surface = dt_cairo_image_surface_create_for_data(image_buffer, CAIRO_FORMAT_ARGB32, final_width,
                                                       final_height, stride);
-    else // during startup we don't know ppd yet and darktable.gui isn't initialized yet.
+    else // during startup we don't know ppd yet and dt_gui_get_global() isn't initialized yet.
       surface = cairo_image_surface_create_for_data(image_buffer, CAIRO_FORMAT_ARGB32, final_width,
                                                        final_height, stride);
     if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)

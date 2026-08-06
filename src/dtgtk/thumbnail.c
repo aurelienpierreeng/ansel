@@ -259,7 +259,7 @@ static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
   // (setting the menu's toplevel as parent triggers GTK parent warnings, since it is
   // unmapped by the time this dialog shows). Without a transient parent, GTK/the window
   // manager has nothing to return focus to when the dialog closes.
-  GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *main_window = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Active modules"),
                                                   GTK_IS_WINDOW(main_window) ? GTK_WINDOW(main_window) : NULL,
                                                   GTK_DIALOG_DESTROY_WITH_PARENT,

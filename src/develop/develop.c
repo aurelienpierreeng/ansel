@@ -496,7 +496,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
-            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
+            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, dt_gui_get_global()->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
 */
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
@@ -1040,7 +1040,7 @@ void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *po
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
 
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   if(scale == 0.0f) return;
 
   // Widget deltas are measured in Gtk logical pixels. Convert them to processed-image
@@ -1063,7 +1063,7 @@ void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, s
   // Widget events are expressed in GUI logical coordinates, while the pipeline
   // zoom lives in raster pixels. Convert back to the same GUI-space zoom used
   // by dt_dev_rescale_roi() so event hit-testing and overlay drawing stay aligned.
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   const float roi_x = (float)dev->roi.x;
   const float roi_y = (float)dev->roi.y;
   const float center_x = 0.5f * (float)dev->roi.orig_width;
@@ -1090,7 +1090,7 @@ void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, s
 
   // GUI overlays are drawn in logical widget coordinates, so use the same
   // GUI-space zoom that the Cairo darkroom transform applies.
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   const float roi_x = (float)dev->roi.x;
   const float roi_y = (float)dev->roi.y;
   const float scaled_width = processed_width * scale;
@@ -1702,9 +1702,9 @@ gboolean dt_masks_get_lock_mode(dt_develop_t *dev)
 {
   if(dev->gui_attached)
   {
-    dt_pthread_mutex_lock(&darktable.gui->mutex);
+    dt_pthread_mutex_lock(&dt_gui_get_global()->mutex);
     const gboolean state = dev->mask_lock;
-    dt_pthread_mutex_unlock(&darktable.gui->mutex);
+    dt_pthread_mutex_unlock(&dt_gui_get_global()->mutex);
     return state;
   }
   return FALSE;
@@ -1714,9 +1714,9 @@ void dt_masks_set_lock_mode(dt_develop_t *dev, gboolean mode)
 {
   if(dev->gui_attached)
   {
-    dt_pthread_mutex_lock(&darktable.gui->mutex);
+    dt_pthread_mutex_lock(&dt_gui_get_global()->mutex);
     dev->mask_lock = mode;
-    dt_pthread_mutex_unlock(&darktable.gui->mutex);
+    dt_pthread_mutex_unlock(&dt_gui_get_global()->mutex);
   }
 }
 
@@ -1777,7 +1777,7 @@ float dt_dev_get_natural_scale(dt_develop_t *dev)
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return 1.0f;
-  return dev->roi.scaling / darktable.gui->ppd;
+  return dev->roi.scaling / dt_gui_get_global()->ppd;
 }
 
 float dt_dev_get_overlay_scale(dt_develop_t *dev)
@@ -1788,7 +1788,7 @@ float dt_dev_get_overlay_scale(dt_develop_t *dev)
 float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, const float scaling)
 {
   if(IS_NULL_PTR(dev)) return 1.0f;
-  return scaling * dev->roi.natural_scale / darktable.gui->ppd;
+  return scaling * dev->roi.natural_scale / dt_gui_get_global()->ppd;
 }
 
 void dt_dev_get_widget_center(const dt_develop_t *dev, float *point)
@@ -1802,7 +1802,7 @@ void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(box)) return;
 
-  const float scale = dev->roi.scaling / darktable.gui->ppd;
+  const float scale = dev->roi.scaling / dt_gui_get_global()->ppd;
   const float roi_width = fminf(width, dev->roi.preview_width * scale);
   const float roi_height = fminf(height, dev->roi.preview_height * scale);
   const float border = dev->roi.border_size;
@@ -1836,8 +1836,8 @@ void dt_dev_convert_roi(const dt_develop_t *dev, const dt_iop_roi_t *roi_in, dt_
   if(from == to) return;
 
   const float factor = (from == DT_DEV_ROI_GUI_LOGICAL && to == DT_DEV_ROI_PIPELINE)
-                           ? darktable.gui->ppd
-                           : 1.0f / darktable.gui->ppd;
+                           ? dt_gui_get_global()->ppd
+                           : 1.0f / dt_gui_get_global()->ppd;
 
   // x/y/width/height belong to the GUI/pipeline geometry boundary and therefore
   // follow the ppd factor. roi->scale stays unchanged because it expresses the
@@ -1883,7 +1883,7 @@ static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width
   if(proc_wd == 0.f || proc_ht == 0.f) return TRUE;
 
   // Get image's origin position and scale
-  const float zoom_scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float zoom_scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   const float tx = 0.5f * width - dev->roi.x * proc_wd * zoom_scale;
   const float ty = 0.5f * height - dev->roi.y * proc_ht * zoom_scale;
 
@@ -1906,7 +1906,7 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 {
   if(_dev_translate_roi(dev, cr, width, height))
     return TRUE;
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   cairo_scale(cr, scale, scale);
   
   return FALSE;
@@ -1944,14 +1944,14 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
 
   // Keep mouse hit-tests usable across zoom levels by bounding the selection
   // radius once it is expressed in image-space pixels.
-  darktable.gui->mouse.effect_radius_clamped = CLAMP(darktable.gui->mouse.effect_radius, 
+  dt_gui_get_global()->mouse.effect_radius_clamped = CLAMP(dt_gui_get_global()->mouse.effect_radius, 
                                                     DT_PIXEL_APPLY_DPI(4.0f) / zoom_level,
                                                     DT_PIXEL_APPLY_DPI(15.0f) / zoom_level);
 
   dt_print(DT_DEBUG_MASKS,
            "[mouse] effect_radius=%0.3f effect_radius_clamped=%0.3f zoom_level=%0.4f ppd=%0.4f\n",
-           darktable.gui->mouse.effect_radius, darktable.gui->mouse.effect_radius_clamped,
-           zoom_level, darktable.gui->ppd);
+           dt_gui_get_global()->mouse.effect_radius, dt_gui_get_global()->mouse.effect_radius_clamped,
+           zoom_level, dt_gui_get_global()->ppd);
 }
 
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 

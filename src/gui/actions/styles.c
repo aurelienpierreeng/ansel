@@ -103,30 +103,30 @@ static gboolean _styles_create_callback(GtkAccelGroup *group, GObject *accelerat
 
 static void _close_styles_popup(GtkWidget *dialog, gint response_id, gpointer data)
 {
-  darktable.gui->styles_popup.module = (GtkWidget *)g_object_ref(darktable.gui->styles_popup.module);
-  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(darktable.gui->styles_popup.window));
-  gtk_container_remove(GTK_CONTAINER(content), darktable.gui->styles_popup.module);
-  darktable.gui->styles_popup.window = NULL;
+  dt_gui_get_global()->styles_popup.module = (GtkWidget *)g_object_ref(dt_gui_get_global()->styles_popup.module);
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dt_gui_get_global()->styles_popup.window));
+  gtk_container_remove(GTK_CONTAINER(content), dt_gui_get_global()->styles_popup.module);
+  dt_gui_get_global()->styles_popup.window = NULL;
 }
 
 static gboolean _styles_open_popup_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
                                             GdkModifierType mods, gpointer user_data)
 {
-  if(darktable.gui->styles_popup.window)
+  if(dt_gui_get_global()->styles_popup.window)
   {
-    gtk_window_present_with_time(GTK_WINDOW(darktable.gui->styles_popup.window), GDK_CURRENT_TIME);
+    gtk_window_present_with_time(GTK_WINDOW(dt_gui_get_global()->styles_popup.window), GDK_CURRENT_TIME);
     return TRUE;
   }
 
   dt_lib_module_t *module = dt_lib_get_module("styles");
   if(IS_NULL_PTR(module)) return TRUE;
 
-  GtkWidget *w = darktable.gui->styles_popup.module
-                  ? darktable.gui->styles_popup.module
+  GtkWidget *w = dt_gui_get_global()->styles_popup.module
+                  ? dt_gui_get_global()->styles_popup.module
                   : dt_lib_gui_get_expander(module);
   if(IS_NULL_PTR(w)) return TRUE;
 
-  darktable.gui->styles_popup.module = w;
+  dt_gui_get_global()->styles_popup.module = w;
 
   GtkWidget *dialog = gtk_dialog_new();
 #ifdef GDK_WINDOWING_QUARTZ
@@ -135,7 +135,7 @@ static gboolean _styles_open_popup_callback(GtkAccelGroup *group, GObject *accel
 #endif
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_title(GTK_WINDOW(dialog), _("Ansel - Styles"));
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_styles_popup), NULL);
 
@@ -148,7 +148,7 @@ static gboolean _styles_open_popup_callback(GtkAccelGroup *group, GObject *accel
   gtk_widget_set_visible(w, TRUE);
   gtk_widget_show_all(dialog);
 
-  darktable.gui->styles_popup.window = dialog;
+  dt_gui_get_global()->styles_popup.window = dialog;
   return TRUE;
 }
 
@@ -193,7 +193,7 @@ static GtkWidget *_styles_get_submenu(GtkWidget **menus, GList **lists, GHashTab
   if(IS_NULL_PTR(menu_label)) menu_label = g_strdup("");
 
   submenu = gtk_menu_new();
-  gtk_menu_set_accel_group(GTK_MENU(submenu), darktable.gui->accels->global_accels);
+  gtk_menu_set_accel_group(GTK_MENU(submenu), dt_gui_get_accels()->global_accels);
 
   gchar *clean_label = strip_markup(menu_label);
   if(g_strrstr(clean_label, "/") != NULL)
@@ -205,7 +205,7 @@ static GtkWidget *_styles_get_submenu(GtkWidget **menus, GList **lists, GHashTab
 
   dt_menu_entry_t *entry = set_menu_entry(menus, lists, menu_label, index, GTK_MENU(parent), NULL,
                                           NULL, NULL, NULL, NULL, 0, 0,
-                                          darktable.gui->accels->global_accels);
+                                          dt_gui_get_accels()->global_accels);
   gtk_menu_item_set_submenu(GTK_MENU_ITEM(entry->widget), submenu);
   gtk_menu_shell_append(GTK_MENU_SHELL(parent), entry->widget);
 
@@ -219,7 +219,7 @@ static void _styles_add_menu_entry(GtkWidget **menus, GList **lists, GtkWidget *
 {
   dt_menu_entry_t *entry = set_menu_entry(menus, lists, label, index, GTK_MENU(parent), NULL,
                                           _styles_apply_callback, NULL, NULL, has_active_images,
-                                          0, 0, darktable.gui->accels->global_accels);
+                                          0, 0, dt_gui_get_accels()->global_accels);
 
   gtk_menu_shell_append(GTK_MENU_SHELL(parent), entry->widget);
   gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(entry->widget), TRUE);

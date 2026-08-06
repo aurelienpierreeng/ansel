@@ -833,7 +833,7 @@ static gboolean _row_tooltip_setup(GtkWidget *view, gint x, gint y, gboolean kb_
 static void _preview_gpx_file(GtkWidget *widget, dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
             _("GPX file track segments"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
             _("done"), GTK_RESPONSE_CANCEL, NULL);
@@ -951,7 +951,7 @@ static void _choose_gpx_callback(GtkWidget *widget, dt_lib_module_t *self)
 {
   // bring a filechooser to select the gpx file to apply to selection
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *filechooser = gtk_file_chooser_dialog_new(
             _("open GPX file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
             _("preview"), GTK_RESPONSE_ACCEPT,
@@ -1533,7 +1533,7 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
       gtk_box_pack_start(box, dt->widget[i], FALSE, FALSE, 0);
       if(type == 0)
       {
-        gtk_widget_add_events(dt->widget[i], darktable.gui->scroll_mask);
+        gtk_widget_add_events(dt->widget[i], dt_gui_get_global()->scroll_mask);
       }
       else
       {
@@ -1577,7 +1577,7 @@ static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_l
       if(dt_conf_get_bool("/views/map/enable") && d->map.view)
         _refresh_track_list(self);
 #endif
-      gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+      gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
       d->editing = FALSE;
       return FALSE;
     }
@@ -1631,7 +1631,7 @@ static void _timezone_save(dt_lib_module_t *self)
   gtk_entry_set_text(GTK_ENTRY(d->timezone), name ? name : "UTC");
   gtk_label_set_text(GTK_LABEL (d->timezone_changed), "");
 
-  gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+  gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
 #ifdef HAVE_MAP
   if(dt_conf_get_bool("/views/map/enable") && d->map.view)
     _refresh_track_list(self);
@@ -1649,7 +1649,7 @@ static gboolean _timezone_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_l
       _timezone_save(self);
       return TRUE;
     case GDK_KEY_Escape:
-      gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+      gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
       return TRUE;
     default: ;
       dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;

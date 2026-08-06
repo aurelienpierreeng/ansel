@@ -742,7 +742,7 @@ static void _ioporder_node_show_presets(GtkButton *button, gpointer user_data)
   if(!node || !node->module) return;
 
   dt_gui_presets_popup_menu_show_for_module(node->module);
-  dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button),
+  dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button),
                     GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
   if(DTGTK_IS_BUTTON(button)) dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
@@ -1021,7 +1021,7 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
     GdkDisplay *display = gtk_widget_get_display(d->window);
     GdkWindow *window = gtk_widget_get_window(d->window);
     if(IS_NULL_PTR(window))
-      window = gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui));
+      window = gtk_widget_get_window(dt_gui_main_window());
 
     GdkMonitor *monitor = (display && window) ? gdk_display_get_monitor_at_window(display, window) : NULL;
     if(IS_NULL_PTR(monitor) && display)
@@ -1532,7 +1532,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
-  GtkWindow *parent = GTK_WINDOW(d->window ? d->window : dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *parent = GTK_WINDOW(d->window ? d->window : dt_gui_main_window());
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("save module order preset"), parent,
                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
                                                   _("_cancel"), GTK_RESPONSE_CANCEL,
@@ -1627,7 +1627,7 @@ static void _ioporder_init_popup(dt_lib_module_t *self)
 
   gtk_window_set_title(GTK_WINDOW(window), _("module order"));
   gtk_window_set_default_size(GTK_WINDOW(window), DT_PIXEL_APPLY_DPI(1120), DT_PIXEL_APPLY_DPI(440));
-  gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_destroy_with_parent(GTK_WINDOW(window), TRUE);
   gtk_container_set_border_width(GTK_CONTAINER(root), DT_PIXEL_APPLY_DPI(8));
 

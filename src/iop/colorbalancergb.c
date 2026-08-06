@@ -1975,7 +1975,7 @@ void gui_init(dt_iop_module_t *self)
                      dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
                                                   "plugins/darkroom/colorbalancergb/graphheight", 200, 100),
                      FALSE, FALSE, 0);
-  gtk_widget_add_events(GTK_WIDGET(g->area), darktable.gui->scroll_mask | GDK_ENTER_NOTIFY_MASK);
+  gtk_widget_add_events(GTK_WIDGET(g->area), dt_gui_get_global()->scroll_mask | GDK_ENTER_NOTIFY_MASK);
   g_signal_connect(G_OBJECT(g->area), "scroll-event", G_CALLBACK(area_scroll_callback), self);
 
   g->shadows_weight = dt_bauhaus_slider_from_params(self, "shadows_weight");

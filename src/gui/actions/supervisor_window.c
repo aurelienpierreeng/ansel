@@ -798,7 +798,7 @@ void dt_gui_supervisor_window_show(void)
   _g.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(_g.window), _("Event supervisor"));
   gtk_window_set_default_size(GTK_WINDOW(_g.window), 1000, 640);
-  gtk_window_set_transient_for(GTK_WINDOW(_g.window), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(_g.window), GTK_WINDOW(dt_gui_main_window()));
   g_signal_connect(_g.window, "destroy", G_CALLBACK(_on_destroy), NULL);
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);

@@ -64,9 +64,9 @@ void dt_dev_toolbox_create(struct dt_develop_t *dev, dt_view_type_flags_t views,
  * indication", "Focus softproof options"...) are the same regardless of
  * which view/accel group they're bound to, since the buttons themselves are
  * shared — only the accelerator group and category differ per caller (e.g.
- * darkroom passes darktable.gui->accels->darkroom_accels and
+ * darkroom passes dt_gui_get_accels()->darkroom_accels and
  * N_("Darkroom/Toolbox"); Studio Capture passes
- * darktable.gui->accels->lighttable_accels, the group it actually connects,
+ * dt_gui_get_accels()->lighttable_accels, the group it actually connects,
  * and its own category). Call after dt_dev_toolbox_create() so the buttons
  * (and popovers) already exist. */
 void dt_dev_toolbox_add_accels(struct dt_develop_t *dev, GtkAccelGroup *accel_group, const char *category,

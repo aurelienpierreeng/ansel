@@ -1335,7 +1335,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
     dt_free(lutfolder);
     return;
   }
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select lut file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_select"), _("_cancel"));

@@ -215,7 +215,7 @@ static void edit_preset(const char *name_in, dt_lib_module_info_t *minfo)
   // if we don't have a valid rowid, just exit, there's a problem !
   if(rowid < 0) return;
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   dt_gui_presets_show_edit_dialog(name, minfo->plugin_name, rowid, NULL, NULL, TRUE, TRUE, FALSE,
                                   GTK_WINDOW(window));
 }
@@ -228,7 +228,7 @@ static void menuitem_update_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
 
   if(dt_conf_get_bool("plugins/lighttable/preset/ask_before_delete_preset"))
   {
-    GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                GTK_BUTTONS_YES_NO, _("do you really want to update the preset `%s'?"), name);
@@ -313,7 +313,7 @@ static void menuitem_delete_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
 
   if(dt_conf_get_bool("plugins/lighttable/preset/ask_before_delete_preset"))
   {
-    GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                GTK_BUTTONS_YES_NO, _("do you really want to delete the preset `%s'?"), name);
@@ -501,10 +501,10 @@ static void free_module_info(GtkWidget *widget, gpointer user_data)
 
 static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
 {
-  GtkMenu *menu = darktable.gui->presets_popup_menu;
+  GtkMenu *menu = dt_gui_get_global()->presets_popup_menu;
   if(menu) gtk_widget_destroy(GTK_WIDGET(menu));
-  darktable.gui->presets_popup_menu = GTK_MENU(gtk_menu_new());
-  menu = darktable.gui->presets_popup_menu;
+  dt_gui_get_global()->presets_popup_menu = GTK_MENU(gtk_menu_new());
+  menu = dt_gui_get_global()->presets_popup_menu;
 
   const gboolean hide_default = dt_conf_get_bool("plugins/lighttable/hide_default_presets");
   const gboolean default_first = dt_conf_get_bool("modules/default_presets_first");
@@ -554,7 +554,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
     int32_t op_params_size = sqlite3_column_bytes(stmt, 1);
     const char *name = (char *)sqlite3_column_text(stmt, 0);
 
-    if(darktable.gui->last_preset && strcmp(darktable.gui->last_preset, name) == 0) found = 1;
+    if(dt_gui_get_global()->last_preset && strcmp(dt_gui_get_global()->last_preset, name) == 0) found = 1;
 
     // selected in bold:
     // printf("comparing %d bytes to %d\n", op_params_size, minfo->params_size);
@@ -623,14 +623,14 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_new_preset), minfo);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
-    if(darktable.gui->last_preset && found)
+    if(dt_gui_get_global()->last_preset && found)
     {
       char *markup = g_markup_printf_escaped("%s <span weight=\"bold\">%s</span>", _("update preset"),
-                                             darktable.gui->last_preset);
+                                             dt_gui_get_global()->last_preset);
       mi = gtk_menu_item_new_with_label("");
       gtk_widget_set_sensitive(GTK_WIDGET(mi), minfo->params_size > 0);
       gtk_label_set_markup(GTK_LABEL(gtk_bin_get_child(GTK_BIN(mi))), markup);
-      g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(darktable.gui->last_preset), g_free);
+      g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(dt_gui_get_global()->last_preset), g_free);
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_update_preset), minfo);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
       dt_free(markup);
@@ -680,7 +680,7 @@ static int _lib_plugin_body_button_press(GtkWidget *w, GdkEventButton *e, gpoint
 {
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
   int handled = FALSE;
   return handled;
 }
@@ -900,7 +900,7 @@ static void dt_lib_init_module(void *m)
   dt_lib_module_t *module = (dt_lib_module_t *)m;
   dt_lib_init_presets(module);
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     module->gui_init(module);
     if(module->widget) g_object_ref_sink(module->widget);
@@ -926,32 +926,32 @@ static void dt_lib_init_module(void *m)
       gchar *label = NULL;
       if(!g_strcmp0(*view, "darkroom"))
       {
-        accel_group = darktable.gui->accels->darkroom_accels;
+        accel_group = dt_gui_get_accels()->darkroom_accels;
         label = g_strdup("Darkroom/Toolboxes");
       }
       else if(!g_strcmp0(*view, "lighttable"))
       {
-        accel_group = darktable.gui->accels->lighttable_accels;
+        accel_group = dt_gui_get_accels()->lighttable_accels;
         label = g_strdup("Lighttable/Toolboxes");
       }
       else if(!g_strcmp0(*view, "map"))
       {
-        accel_group = darktable.gui->accels->map_accels;
+        accel_group = dt_gui_get_accels()->map_accels;
         label = g_strdup("Map/Toolboxes");
       }
       else if(!g_strcmp0(*view, "print"))
       {
-        accel_group = darktable.gui->accels->print_accels;
+        accel_group = dt_gui_get_accels()->print_accels;
         label = g_strdup("Print/Toolboxes");
       }
       else if(!g_strcmp0(*view, "slideshow"))
       {
-        accel_group = darktable.gui->accels->slideshow_accels;
+        accel_group = dt_gui_get_accels()->slideshow_accels;
         label = g_strdup("Slideshow/Toolboxes");
       }
 
       if(accel_group && label)
-        dt_accels_new_action_shortcut(darktable.gui->accels, _lib_plugin_focus_accel, m,
+        dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_plugin_focus_accel, m,
                                       accel_group, label, clean_name, 0, 0, FALSE,
                                       _("Focuses the module"));
       dt_free(label);
@@ -965,7 +965,7 @@ void dt_lib_unload_module(dt_lib_module_t *module)
 {
   GtkWidget *retained_widget = module->widget;
 
-  if(darktable.gui && darktable.gui->accels && module->views)
+  if(dt_gui_get_global() && dt_gui_get_accels() && module->views)
   {
     gchar *clean_name = delete_underscore(module->name(module));
     dt_capitalize_label(clean_name);
@@ -983,7 +983,7 @@ void dt_lib_unload_module(dt_lib_module_t *module)
       if(scope)
       {
         gchar *path = dt_accels_build_path(scope, clean_name);
-        dt_accels_remove_shortcut(darktable.gui->accels, path);
+        dt_accels_remove_shortcut(dt_gui_get_accels(), path);
         dt_free(path);
       }
     }
@@ -1043,7 +1043,7 @@ static void presets_popup_callback(GtkButton *button, dt_lib_module_t *module)
   }
   dt_lib_presets_popup_menu_show(mi);
 
-  dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
+  dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
   if(button) dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
 }
@@ -1053,10 +1053,10 @@ static void _lib_module_expander_gone(gpointer user_data, GObject *where_the_obj
   dt_lib_module_t *module = (dt_lib_module_t *)user_data;
   if(IS_NULL_PTR(module)) return;
   if(module->expander == (GtkWidget *)where_the_object_was) module->expander = NULL;
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
-    if(darktable.gui->scroll_to[0] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[0] = NULL;
-    if(darktable.gui->scroll_to[1] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[1] = NULL;
+    if(dt_gui_get_global()->scroll_to[0] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[0] = NULL;
+    if(dt_gui_get_global()->scroll_to[1] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[1] = NULL;
   }
 }
 
@@ -1084,7 +1084,7 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
   {
     /* register to receive draw events */
     dt_lib_get_global()->gui_module = module;
-    darktable.gui->scroll_to[1] = module->expander;
+    dt_gui_get_global()->scroll_to[1] = module->expander;
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
   }
   else
@@ -1188,7 +1188,7 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   if(e->button == 1)
   {
@@ -1198,9 +1198,9 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
     // make gtk scroll to the module once it updated its allocation size
     uint32_t container = module->container(module);
     if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-      darktable.gui->scroll_to[0] = module->expander;
+      dt_gui_get_global()->scroll_to[0] = module->expander;
     else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-      darktable.gui->scroll_to[1] = module->expander;
+      dt_gui_get_global()->scroll_to[1] = module->expander;
 
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
 
@@ -1228,9 +1228,9 @@ static void show_module_callback(dt_lib_module_t *module)
   // make gtk scroll to the module once it updated its allocation size
   uint32_t container = module->container(module);
   if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-    darktable.gui->scroll_to[0] = module->expander;
+    dt_gui_get_global()->scroll_to[0] = module->expander;
   else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-    darktable.gui->scroll_to[1] = module->expander;
+    dt_gui_get_global()->scroll_to[1] = module->expander;
 
   dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
 }

@@ -414,10 +414,10 @@ static gboolean _unaltered_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_modul
 
 static void _culling_mode(GtkWidget *widget, gpointer data)
 {
-  darktable.gui->culling_mode = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+  dt_gui_get_global()->culling_mode = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
 
   // If we are exiting culling mode, we need to pop the selection before resetting the thumbtable collection
-  if(!darktable.gui->culling_mode) dt_culling_mode_to_selection();
+  if(!dt_gui_get_global()->culling_mode) dt_culling_mode_to_selection();
 
   // Anchor the re-scrollings to the right image
   const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
@@ -425,7 +425,7 @@ static void _culling_mode(GtkWidget *widget, gpointer data)
   dt_control_set_keyboard_over_id(imgid);
 
   // Force-rebuild the whole thumbtable on the next collection update
-  dt_thumbtable_reset_collection(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_reset_collection(dt_gui_get_ui()->thumbtable_lighttable);
 
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED);
@@ -583,8 +583,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->refresh), FALSE, FALSE, 0);
 
   gchar *path = dt_accels_build_path(_("Lighttable/Actions"), _("Reload current collection"));
-  dt_accels_new_widget_shortcut(darktable.gui->accels, d->refresh, "activate",
-                                darktable.gui->accels->lighttable_accels, path, GDK_KEY_r, GDK_CONTROL_MASK,
+  dt_accels_new_widget_shortcut(dt_gui_get_accels(), d->refresh, "activate",
+                                dt_gui_get_accels()->lighttable_accels, path, GDK_KEY_r, GDK_CONTROL_MASK,
                                 FALSE);
   dt_free(path);
 
@@ -688,8 +688,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_name(d->culling, "quickfilter-culling");
 
   path = dt_accels_build_path(_("Lighttable/Actions"), _("Toggle culling mode"));
-  dt_accels_new_widget_shortcut(darktable.gui->accels, d->culling, "activate",
-                                darktable.gui->accels->lighttable_accels, path, GDK_KEY_s, GDK_CONTROL_MASK,
+  dt_accels_new_widget_shortcut(dt_gui_get_accels(), d->culling, "activate",
+                                dt_gui_get_accels()->lighttable_accels, path, GDK_KEY_s, GDK_CONTROL_MASK,
                                 FALSE);
   dt_free(path);
 
@@ -769,8 +769,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_menu_shell_append(GTK_MENU_SHELL(d->menu), first_entry);
   g_signal_connect(G_OBJECT(first_entry), "activate", G_CALLBACK(_select_all_callback), self);
   path = dt_accels_build_path(_("Lighttable/Actions"), _("Select all filters"));
-  dt_accels_new_widget_shortcut(darktable.gui->accels, first_entry, "activate",
-                                darktable.gui->accels->lighttable_accels, path, 0, 0,
+  dt_accels_new_widget_shortcut(dt_gui_get_accels(), first_entry, "activate",
+                                dt_gui_get_accels()->lighttable_accels, path, 0, 0,
                                 FALSE);
   dt_free(path);
 
@@ -778,8 +778,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_menu_shell_append(GTK_MENU_SHELL(d->menu), second_entry);
   g_signal_connect(G_OBJECT(second_entry), "activate", G_CALLBACK(_select_none_callback), self);
   path = dt_accels_build_path(_("Lighttable/Actions"), _("Deselect all filters"));
-  dt_accels_new_widget_shortcut(darktable.gui->accels, second_entry, "activate",
-                                darktable.gui->accels->lighttable_accels, path, 0, 0,
+  dt_accels_new_widget_shortcut(dt_gui_get_accels(), second_entry, "activate",
+                                dt_gui_get_accels()->lighttable_accels, path, 0, 0,
                                 FALSE);
   dt_free(path);
 
@@ -789,19 +789,19 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   gchar *path = dt_accels_build_path(_("Lighttable/Actions"), _("Reload current collection"));
-  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_accels_remove_shortcut(dt_gui_get_accels(), path);
   dt_free(path);
 
   path = dt_accels_build_path(_("Lighttable/Actions"), _("Toggle culling mode"));
-  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_accels_remove_shortcut(dt_gui_get_accels(), path);
   dt_free(path);
 
   path = dt_accels_build_path(_("Lighttable/Actions"), _("Select all filters"));
-  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_accels_remove_shortcut(dt_gui_get_accels(), path);
   dt_free(path);
 
   path = dt_accels_build_path(_("Lighttable/Actions"), _("Deselect all filters"));
-  dt_accels_remove_shortcut(darktable.gui->accels, path);
+  dt_accels_remove_shortcut(dt_gui_get_accels(), path);
   dt_free(path);
 
   dt_collection_set_text_filter(dt_collection_get_global(), NULL);
