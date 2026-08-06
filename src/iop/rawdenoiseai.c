@@ -1696,7 +1696,7 @@ static void _custom_model_callback(GtkWidget *w, dt_iop_module_t *self)
     g_strlcpy(p->custom_model, txt, sizeof(p->custom_model));
   else
     p->custom_model[0] = '\0';
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void _custom_model_populate(dt_iop_module_t *self)

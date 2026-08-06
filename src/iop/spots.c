@@ -205,7 +205,7 @@ static void _resynch_params(struct dt_iop_module_t *self)
   int nalgo[64] = { 2 };
 
   // we go through all forms in blend params
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     int i = 0;
@@ -280,7 +280,7 @@ static int _shape_is_being_added(dt_iop_module_t *self, const int shape_type)
         dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
         if(grpt)
         {
-          const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
+          const dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
           if(!IS_NULL_PTR(form)) being_added = (form->type & shape_type);
         }
       }
@@ -369,7 +369,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
 
   // update edit shapes status
   dt_develop_blend_params_t *bp = self->blend_params;
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   //only toggle shape show button if shapes exist
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
@@ -744,7 +744,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
       // update edit shapes status
       dt_develop_blend_params_t *bp = self->blend_params;
-      dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
+      dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
       //only toggle shape show button if shapes exist
       if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
       {

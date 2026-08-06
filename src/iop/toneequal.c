@@ -620,7 +620,7 @@ static inline __attribute__((always_inline)) int sanity_check(dt_iop_module_t *s
     dt_control_log(_("tone equalizer needs to be after distortion modules in the pipeline - disabled"));
     fprintf(stdout, "tone equalizer needs to be after distortion modules in the pipeline - disabled\n");
     self->enabled = 0;
-    dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+    dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
 
     if(self->dev->gui_attached)
     {
@@ -1762,7 +1762,7 @@ static void smoothing_callback(GtkWidget *slider, gpointer user_data)
   // Redraw graph before launching computation
   update_curve_lut(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   // Unlock the colour picker so we can display our own custom cursor
   dt_iop_color_picker_reset(self, TRUE);
@@ -2118,7 +2118,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     // Update GUI with new params
     update_exposure_sliders(g, p);
 
-    dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+    dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
   }
 
   return 1;
@@ -2836,7 +2836,7 @@ static gboolean area_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gp
     // cursor left area : force commit to avoid glitches
     update_exposure_sliders(g, p);
 
-    dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+    dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
   }
   g->area_x = (event->x - g->inset);
   g->area_y = (event->y - g->inset);
@@ -2879,7 +2879,7 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
 
     // Redraw graph
     gtk_widget_queue_draw(self->widget);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     return TRUE;
   }
   else if(event->button == 1)
@@ -2891,7 +2891,7 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
     }
     else
     {
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
     return TRUE;
   }
@@ -2966,7 +2966,7 @@ static gboolean area_button_release(GtkWidget *widget, GdkEventButton *event, gp
     {
       // Update GUI with new params
       update_exposure_sliders(g, p);
-      dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+      dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
       g->area_dragging= 0;
       return TRUE;
     }
@@ -3172,16 +3172,16 @@ void gui_reset(struct dt_iop_module_t *self)
   dt_iop_request_focus(self);
   dt_bauhaus_widget_set_quad_active(g->exposure_boost, FALSE);
   dt_bauhaus_widget_set_quad_active(g->contrast_boost, FALSE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   // Redraw graph
   gtk_widget_queue_draw(self->widget);
 }
 
-static gboolean _sample_picker_luminance_mask(const float *const buffer, const size_t width, const size_t height,
+static gboolean _sample_picker_luminance_mask(const dt_develop_t *const dev, const float *const buffer,
+                                              const size_t width, const size_t height,
                                               float *const picked, float *const picked_min, float *const picked_max)
 {
-  const dt_develop_t *const dev = darktable.develop;
   const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(buffer) || IS_NULL_PTR(sample) || width < 1 || height < 1 || IS_NULL_PTR(picked) || IS_NULL_PTR(picked_min) || IS_NULL_PTR(picked_max)) return FALSE;
 
@@ -3298,7 +3298,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   float picked = NAN;
   float picked_min = NAN;
   float picked_max = NAN;
-  const gboolean sampled = _sample_picker_luminance_mask(preview_buf, preview_width, preview_height,
+  const gboolean sampled = _sample_picker_luminance_mask(self->dev, preview_buf, preview_width, preview_height,
                                                          &picked, &picked_min, &picked_max);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
@@ -3323,7 +3323,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       dt_bauhaus_slider_set(g->exposure_boost, p->exposure_boost);
       dt_gui_freeze_end();
       invalidate_luminance_cache(self);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,
                "[picker/toneequal] exposure picker=%p luminance=%g set=%g pipe=%p hash=%" PRIu64 "\n",
                (void *)picker, picked, p->exposure_boost, (void *)pipe, piece ? piece->global_hash : 0);
@@ -3368,7 +3368,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       dt_bauhaus_slider_set(g->contrast_boost, p->contrast_boost);
       dt_gui_freeze_end();
       invalidate_luminance_cache(self);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,
                "[picker/toneequal] contrast picker=%p min=%g max=%g set=%g pipe=%p hash=%" PRIu64 "\n",
                (void *)picker, fd_old, ld_old, p->contrast_boost, (void *)pipe,

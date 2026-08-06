@@ -592,7 +592,7 @@ static void _commit_gui_change(dt_iop_module_t *self, GtkWidget *changed)
   g->preview_width = 0;
   g->preview_height = 0;
   _queue_preview_redraw(self);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 /**
