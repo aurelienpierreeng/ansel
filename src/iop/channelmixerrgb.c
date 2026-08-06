@@ -42,6 +42,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "develop/pixelpipe_cache_alloc.h"
+#include "dtgtk/button.h"
 #include "control/conf.h"
 #include "config.h"
 #endif

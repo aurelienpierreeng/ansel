@@ -65,7 +65,6 @@
 #ifdef HAVE_OPENCL
 
 #include "common/dlopencl.h"
-#include "common/dtpthread.h"
 #include "common/iop_profile.h"
 #include "control/conf.h"
 

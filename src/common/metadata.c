@@ -33,6 +33,7 @@
 */
 
 #include "common/metadata.h"
+#include "common/act_on.h"
 #include "common/debug.h"
 #include "common/collection.h"
 #include "common/undo.h"

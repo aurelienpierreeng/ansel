@@ -42,9 +42,7 @@
 #ifndef DT_CONTROL_CONTROL_H
 #define DT_CONTROL_CONTROL_H
 
-#include "common/dtpthread.h"
 
-#include "control/settings.h"
 
 #include <gtk/gtk.h>
 #include <inttypes.h>

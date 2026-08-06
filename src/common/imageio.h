@@ -37,7 +37,6 @@
 #include "common/image.h"
 #include "common/imageio_module.h"
 #include "common/mipmap_cache.h"
-#include "common/tags.h"
 #include <glib.h>
 #include <stdio.h>
 #include <inttypes.h>

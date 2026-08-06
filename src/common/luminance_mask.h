@@ -32,7 +32,6 @@
 
 #include "common/openmp.h"
 #include "common/target_clones.h"
-#include "develop/imageop_math.h"
 
 
 #define MIN_FLOAT exp2f(-16.0f)

@@ -39,7 +39,6 @@
 #ifndef DT_LIBS_LIB_H
 #define DT_LIBS_LIB_H
 
-#include "common/iop_profile.h"
 #include "common/gui_module_api.h"
 #include "views/view.h"
 #include <gmodule.h>

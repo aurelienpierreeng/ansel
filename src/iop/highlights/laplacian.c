@@ -54,6 +54,7 @@
 // public API.)
 
 #include "common/box_filters.h"
+#include "iop/highlights/common.h"
 #include "common/bspline.h"
 #include "common/logging.h"
 #include "common/macros.h"

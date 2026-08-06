@@ -17,6 +17,7 @@
 */
 
 #include "gui/actions/menu.h"
+#include "common/history_actions.h"
 #include "gui/gtk.h"
 #include "gui/styles.h"
 #include "common/act_on.h"

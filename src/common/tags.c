@@ -41,6 +41,8 @@
 */
 #include <glib/gstdio.h>
 #include "common/database.h"
+#include "common/act_on.h"
+#include "control/settings.h"
 #include "common/metadata.h"
 #include "common/metadata_export.h"
 #include "common/utility.h"

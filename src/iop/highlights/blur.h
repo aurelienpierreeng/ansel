@@ -24,7 +24,6 @@
 // this header to call into the module; internals are static in the .c. See common.h.
 
 #include "common/gaussian.h"
-#include "iop/highlights/common.h"
 
 #include <string.h>
 

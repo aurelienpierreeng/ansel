@@ -14,6 +14,7 @@
 */
 
 #include "common/folder_survey.h"
+#include "control/settings.h"
 #include <glib/gstdio.h>
 #include "common/image_extensions.h"
 

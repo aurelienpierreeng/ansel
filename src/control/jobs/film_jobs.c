@@ -32,6 +32,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/jobs/film_jobs.h"
+#include "control/settings.h"
 #include "common/image_extensions.h"
 #include "control/control.h"
 #include "control/conf.h"

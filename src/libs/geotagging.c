@@ -39,6 +39,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/control.h"
+#include "common/act_on.h"
+#include "control/settings.h"
 #include "control/jobs/control_jobs.h"
 #include "dtgtk/togglebutton.h"
 #include "libs/lib.h"

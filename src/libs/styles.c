@@ -43,6 +43,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "bauhaus/bauhaus.h"
+#include "common/act_on.h"
+#include "common/history_actions.h"
 #include "common/collection.h"
 #include "common/history.h"
 #include "common/styles.h"

@@ -25,6 +25,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/tags.h"
+#include "control/settings.h"
 #include "dtgtk/togglebutton.h"
 #include "dtgtk/paint.h"
 #include "common/collection.h"

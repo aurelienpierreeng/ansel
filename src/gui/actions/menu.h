@@ -21,7 +21,6 @@
 #include <glib.h>
 
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #ifndef DT_GUI_ACTIONS_MENU_H

@@ -29,9 +29,7 @@
 
 #include <glib.h>
 #include <inttypes.h>
-#include "common/pdf.h"
 #include "common/cups_print.h"
-#include "common/image.h"
 
 
 #define MAX_IMAGE_PER_PAGE 20

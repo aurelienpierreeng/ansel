@@ -38,7 +38,6 @@
 #include <inttypes.h>
 #include <sqlite3.h>
 
-#include "common/history_actions.h"
 #include "common/image_cache.h"
 
 #ifdef __cplusplus

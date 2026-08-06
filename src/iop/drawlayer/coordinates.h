@@ -1,8 +1,6 @@
 #ifndef DT_IOP_DRAWLAYER_COORDINATES_H
 #define DT_IOP_DRAWLAYER_COORDINATES_H
 
-#include "iop/drawlayer/common.h"
-#include "iop/drawlayer/cache.h"
 
 /** @file
  *  @brief Shared coordinate transforms and geometry computations for drawlayer.

@@ -41,6 +41,7 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/film.h"
+#include "control/settings.h"
 #include "common/collection.h"
 #include "common/mipmap_cache.h"
 #include "common/debug.h"
