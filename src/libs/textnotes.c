@@ -591,13 +591,14 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   if(IS_NULL_PTR(pixbuf)) return;
 
   cmsHTRANSFORM transform = NULL;
-  pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+  pthread_rwlock_rdlock(&profiles->xprofile_lock);
   if(dt_colorspaces_get_global()->transform_srgb_to_display)
     transform = dt_colorspaces_get_global()->transform_srgb_to_display;
 
   if(IS_NULL_PTR(transform))
   {
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
@@ -607,14 +608,14 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   const int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
   if(width <= 0 || height <= 0 || n_channels < 3)
   {
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
   guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
   if(IS_NULL_PTR(pixels))
   {
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
@@ -639,7 +640,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
       _free_row_buffers(rows_in[i], rows_out[i]);
     dt_free(rows_in);
     dt_free(rows_out);
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
@@ -666,7 +667,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   guchar *row_out = NULL;
   if(!_alloc_row_buffers(width, &row_in, &row_out))
   {
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
   for(int y = 0; y < height; y++)
@@ -677,7 +678,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   _free_row_buffers(row_in, row_out);
 #endif
 
-  pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+  pthread_rwlock_unlock(&profiles->xprofile_lock);
 }
 
 static void _toggle_mode(GtkToggleButton *button, dt_lib_module_t *self);

@@ -611,8 +611,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   uint32_t transformFlags = 0;
 
   /* creating output profile */
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
   if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
 
   const dt_colorspaces_color_profile_t *out_profile
       = dt_colorspaces_get_profile(out_type, out_filename,
@@ -757,7 +758,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
   // now try to initialize unbounded mode:
   // we do extrapolation for input values above 1.0f.

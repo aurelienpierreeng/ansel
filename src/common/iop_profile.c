@@ -82,8 +82,9 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   cmsHPROFILE *rgb_profile = NULL;
   cmsHPROFILE *lab_profile = NULL;
 
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
 
   if(type != DT_COLORSPACE_NONE)
   {
@@ -136,7 +137,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
   if(xform)
   {
@@ -158,8 +159,9 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
   cmsHPROFILE *from_rgb_profile = NULL;
   cmsHPROFILE *to_rgb_profile = NULL;
 
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
   if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
 
   if(type_from != DT_COLORSPACE_NONE)
   {
@@ -220,7 +222,7 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
     xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
   if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
   if(xform)
   {
@@ -628,15 +630,16 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
   g_strlcpy(profile_info->filename, filename, sizeof(profile_info->filename));
   profile_info->intent = intent;
 
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
 
   const dt_colorspaces_color_profile_t *profile
       = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
   if(profile) rgb_profile = profile->profile;
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
   // we only allow rgb profiles
   if(rgb_profile)

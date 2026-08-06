@@ -1190,7 +1190,8 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
 
     // Color convert
     cmsHTRANSFORM transform = NULL;
-    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
     gboolean alloc = FALSE;
 
     if(profile == DT_COLORSPACE_DISPLAY)
@@ -1216,7 +1217,7 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
     // it's still only swapping R <-> B.
     dt_colorspaces_transform_rgba8_to_bgra8(transform, buf, buf, dsc->width, dsc->height);
     if(alloc) cmsDeleteTransform(transform);
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
     dsc->color_space = DT_COLORSPACE_ADOBERGB;
     dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
