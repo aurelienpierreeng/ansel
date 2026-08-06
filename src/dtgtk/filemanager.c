@@ -23,6 +23,7 @@
  */
 
 #include "common/darktable.h"
+#include "control/conf.h"
 #include "common/collection.h"
 #include "common/selection.h"
 #include "control/control.h"

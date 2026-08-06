@@ -35,7 +35,12 @@
 #include "common/image.h"
 #include "common/imageio.h"
 #include "common/iop_order.h"
-#include "develop/imageop.h"
+/* develop/imageop.h is deliberately NOT included: it includes this header back.
+ * dt_iop_module_t is only ever used through a pointer here (tag-declared below);
+ * the concrete types needed by value (dt_iop_roi_t, dt_iop_buffer_dsc_t) live in
+ * develop/format.h. */
+#include "develop/format.h"
+#include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
 
 

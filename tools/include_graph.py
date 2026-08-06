@@ -192,6 +192,42 @@ def summary(files, graph, headers, closure, comps, viol):
     tot = sum(len(closure(f)) for f in files)
     print(f"total_transitive_edges\t{tot}")
 
+    # Per-TU cost is the metric that actually tracks compile-time coupling. The raw
+    # totals above are SUMS over all nodes, so splitting one god-header into several
+    # small ones inflates them even as every individual file gets cheaper -- use these
+    # for before/after comparison instead.
+    tus = [f for f in files if f.endswith(('.c', '.cc', '.cpp'))]
+    tu_costs = sorted(len(closure(f)) for f in tus)
+    if tu_costs:
+        print(f"tus\t{len(tus)}")
+        print(f"tu_mean_closure\t{sum(tu_costs) / len(tu_costs):.1f}")
+        print(f"tu_median_closure\t{tu_costs[len(tu_costs) // 2]}")
+        print(f"tu_max_closure\t{tu_costs[-1]}")
+
+    # Counting NODES rewards monoliths: one 1300-line god-header is a single node,
+    # while the same content split into 11 honest headers counts as up to 11. Weigh
+    # each header by its own line count to measure what the compiler actually eats.
+    lines = {}
+    for f in files:
+        try:
+            lines[f] = sum(1 for _ in open(f, encoding='utf-8', errors='replace'))
+        except OSError:
+            lines[f] = 0
+    tu_line_costs = sorted(sum(lines.get(h, 0) for h in closure(f)) for f in tus)
+    if tu_line_costs:
+        print(f"tu_mean_closure_lines\t{sum(tu_line_costs) // len(tu_line_costs)}")
+        print(f"tu_median_closure_lines\t{tu_line_costs[len(tu_line_costs) // 2]}")
+        print(f"tu_max_closure_lines\t{tu_line_costs[-1]}")
+
+    # How far the application orchestrator still reaches.
+    dt_h = os.path.join(SRC, 'common', 'darktable.h')
+    if dt_h in files:
+        reach = sum(1 for f in files if dt_h in closure(f))
+        direct = sum(1 for f in files if dt_h in graph.get(f, ()))
+        print(f"darktable_h_reach\t{reach}")
+        print(f"darktable_h_direct_includers\t{direct}")
+        print(f"darktable_h_closure\t{len(closure(dt_h))}")
+
 def mermaid(graph, viol_pairs):
     """Directory-level aggregate, renderable inline in a GitHub comment."""
     agg = defaultdict(int)

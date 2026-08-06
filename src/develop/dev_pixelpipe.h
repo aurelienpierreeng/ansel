@@ -21,6 +21,8 @@
 #include <stdint.h>
 #include <glib.h>
 
+#include "develop/pixelpipe_hb.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

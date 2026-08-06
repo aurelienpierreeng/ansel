@@ -41,6 +41,8 @@
 */
 #include <glib/gstdio.h>
 #include "common/database.h"
+#include "common/metadata.h"
+#include "common/metadata_export.h"
 #include "common/utility.h"
 #include "common/tags.h"
 #include "common/collection.h"

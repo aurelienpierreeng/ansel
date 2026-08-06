@@ -17,6 +17,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "control/conf.h"
+#include "control/jobs/control_jobs.h"
 #include "gui/actions/menu.h"
 #include "gui/preferences.h"
 #include "common/undo.h"

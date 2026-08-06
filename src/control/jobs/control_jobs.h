@@ -39,7 +39,7 @@
 
 #include "common/imageio_module.h"
 #include "common/image.h"
-#include "control/control.h"
+#include "control/jobs.h"
 #include "common/variables.h"
 #include <inttypes.h>
 

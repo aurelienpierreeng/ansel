@@ -74,6 +74,10 @@ extern "C" {
 /** Number of OpenMP threads the application decided to use. DECLARED here so
  * low-level compute code can size per-thread buffers without importing
  * common/darktable.h; BOUND by the orchestrator (common/darktable.c). */
+#if defined(__x86_64__) || defined(__i386__)
+#include <immintrin.h>
+#endif
+
 int dt_get_num_openmp_threads(void);
 
 static inline int dt_get_thread_num()
@@ -84,6 +88,35 @@ static inline int dt_get_thread_num()
   return 0;
 #endif
 }
+
+// after writing data using copy_pixel_nontemporal, it is necessary to
+// ensure that the writes have completed before attempting reads from
+// a different core.  This function produces the required memory
+// fence to ensure proper visibility
+static inline void dt_sfence()
+{
+#if defined(__x86_64__) || defined(__i386__)
+  _mm_sfence();
+#else
+  // the following generates an MFENCE instruction on x86/x64.  We
+  // only really need SFENCE, which is less expensive, but none of the
+  // other memory orders generate *any* fence instructions on x64.
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+#endif
+}
+
+// if the copy_pixel_nontemporal() writes were inside an OpenMP
+// parallel loop, the OpenMP parallelization will have performed a
+// memory fence before resuming single-threaded operation, so a
+// dt_sfence would be superfluous.  But if compiled without OpenMP
+// parallelization, we should play it safe and emit a memory fence.
+// This function should be used right after a parallelized for loop,
+// where it will produce a barrier only if needed.
+#ifdef _OPENMP
+#define dt_omploop_sfence()
+#else
+#define dt_omploop_sfence() dt_sfence()
+#endif
 
 #ifdef __cplusplus
 }

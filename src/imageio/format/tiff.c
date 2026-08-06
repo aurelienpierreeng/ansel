@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "bauhaus/bauhaus.h"
+#include "develop/imageop.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"

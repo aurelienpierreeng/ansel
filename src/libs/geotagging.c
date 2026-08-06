@@ -39,6 +39,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "control/control.h"
+#include "control/jobs/control_jobs.h"
+#include "dtgtk/togglebutton.h"
+#include "libs/lib.h"
 #include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "common/file_location.h"

@@ -54,6 +54,7 @@
 #include "common/file_location.h"
 #include "common/grealpath.h"
 #include "common/image_cache.h"
+#include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 #include "common/history.h"
 #include "common/imageio.h"

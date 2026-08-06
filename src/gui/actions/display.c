@@ -18,6 +18,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "control/conf.h"
 #include "common/mipmap_cache.h"
 #include "common/collection.h"
 #include "control/control.h"

@@ -32,6 +32,9 @@
 #include "config.h"
 #endif
 
+struct dt_dev_pixelpipe_t;
+struct dt_dev_pixelpipe_iop_t;
+
 typedef enum dt_dev_pixelpipe_type_t
 {
   DT_DEV_PIXELPIPE_NONE      = 0,
@@ -78,7 +81,10 @@ typedef void dt_iop_params_t;
 
 const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe);
 
-#include "develop/pixelpipe_hb.h"
+/* No trailing #include of develop/pixelpipe_hb.h: that header includes
+ * develop/imageop.h, which includes this one back. This file is the small shared
+ * TYPE header (pipe type/request enums, histogram params); consumers that need the
+ * full pipeline API include develop/pixelpipe_hb.h explicitly. */
 
 /**
  * @brief Build the shared cache key for one raster mask published by a module.

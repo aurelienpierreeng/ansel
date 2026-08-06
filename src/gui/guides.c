@@ -32,6 +32,7 @@
 #include <glib.h>
 
 #include "bauhaus/bauhaus.h"
+#include "control/conf.h"
 #include "common/darktable.h"
 #include "develop/imageop_gui.h"
 #include "dtgtk/button.h"

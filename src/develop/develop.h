@@ -58,6 +58,7 @@
 #include "common/image.h"
 #include "control/settings.h"
 #include "develop/imageop.h"
+#include "develop/pixelpipe_hb.h"
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 

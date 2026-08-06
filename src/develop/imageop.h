@@ -58,26 +58,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * @brief Region of interest passed through the pixelpipe.
- *
- * @details `scale` must stay consistent with `x`, `y`, `width` and `height`,
- * which all describe the same raster ROI seen by the current pipeline stage.
- */
-typedef struct dt_iop_roi_t
-{
-  int x, y, width, height;
-  double scale;
-} dt_iop_roi_t;
-
-#ifdef __cplusplus
-}
-#endif
-
 #include "common/dtpthread.h"
 #include "common/logging.h"
 #include "common/mem_alloc.h"
@@ -88,7 +68,8 @@ typedef struct dt_iop_roi_t
 #include "common/opencl.h"
 
 #include "control/settings.h"
-#include "develop/pixelpipe.h"
+#include "develop/format.h"
+#include "develop/pixelpipe_hb.h"
 #include "dtgtk/togglebutton.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
@@ -722,34 +703,6 @@ void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state);
  * pipeline hash even while bypass_cache itself stays TRUE. */
 void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant);
 
-// after writing data using copy_pixel_nontemporal, it is necessary to
-// ensure that the writes have completed before attempting reads from
-// a different core.  This function produces the required memory
-// fence to ensure proper visibility
-static inline void dt_sfence()
-{
-#if defined(__x86_64__) || defined(__i386__)
-  _mm_sfence();
-#else
-  // the following generates an MFENCE instruction on x86/x64.  We
-  // only really need SFENCE, which is less expensive, but none of the
-  // other memory orders generate *any* fence instructions on x64.
-  __atomic_thread_fence(__ATOMIC_SEQ_CST);
-#endif
-}
-
-// if the copy_pixel_nontemporal() writes were inside an OpenMP
-// parallel loop, the OpenMP parallelization will have performed a
-// memory fence before resuming single-threaded operation, so a
-// dt_sfence would be superfluous.  But if compiled without OpenMP
-// parallelization, we should play it safe and emit a memory fence.
-// This function should be used right after a parallelized for loop,
-// where it will produce a barrier only if needed.
-#ifdef _OPENMP
-#define dt_omploop_sfence()
-#else
-#define dt_omploop_sfence() dt_sfence()
-#endif
 
 #ifdef __cplusplus
 }

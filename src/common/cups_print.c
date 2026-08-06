@@ -28,6 +28,7 @@
 */
 
 #include "common/utility.h"
+#include "control/control.h"
 #include <glib/gstdio.h>
 #include "common/macros.h"
 #include "common/mem_alloc.h"

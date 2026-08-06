@@ -22,6 +22,7 @@
 */
 
 #include "develop/imageop_gui.h"
+#include "control/conf.h"
 #include "develop/imageop.h"
 #include "bauhaus/bauhaus.h"
 #include "dtgtk/button.h"

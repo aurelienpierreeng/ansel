@@ -71,6 +71,7 @@
 */
 
 #include "views/view.h"
+#include "common/variables.h"
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
 #include "common/darktable.h"

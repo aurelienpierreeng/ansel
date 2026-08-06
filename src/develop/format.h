@@ -41,6 +41,18 @@ struct dt_dev_pixelpipe_iop_t;
 struct dt_dev_pixelpipe_t;
 struct dt_iop_module_t;
 
+/**
+ * @brief Region of interest passed through the pixelpipe.
+ *
+ * @details `scale` must stay consistent with `x`, `y`, `width` and `height`,
+ * which all describe the same raster ROI seen by the current pipeline stage.
+ */
+typedef struct dt_iop_roi_t
+{
+  int x, y, width, height;
+  double scale;
+} dt_iop_roi_t;
+
 typedef enum dt_iop_buffer_type_t {
   TYPE_UNKNOWN,
   TYPE_FLOAT,

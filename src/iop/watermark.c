@@ -57,6 +57,7 @@
 */
 
 #include "common/darktable.h"
+#include "control/conf.h"
 #include "bauhaus/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/tags.h"

@@ -25,6 +25,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "common/tags.h"
+#include "dtgtk/togglebutton.h"
+#include "dtgtk/paint.h"
 #include "common/collection.h"
 #include "common/debug.h"
 #include "common/map_locations.h"

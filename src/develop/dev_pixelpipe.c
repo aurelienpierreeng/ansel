@@ -18,6 +18,7 @@
 */
 
 #include "common/debug.h"
+#include "control/conf.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/hash.h"

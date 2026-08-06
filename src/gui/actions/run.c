@@ -16,6 +16,9 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "control/conf.h"
+#include "control/control.h"
+#include "control/jobs/control_jobs.h"
 #include "common/darktable.h"
 #include "control/crawler.h"
 #include "common/collection.h"

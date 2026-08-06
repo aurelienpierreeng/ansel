@@ -59,6 +59,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "gui/gdkkeys.h"
+#include "control/conf.h"
 #include "config.h"
 #endif
 

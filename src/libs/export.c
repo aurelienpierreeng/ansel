@@ -58,6 +58,7 @@
 */
 
 #include "bauhaus/bauhaus.h"
+#include "control/jobs/control_jobs.h"
 #include "common/collection.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"

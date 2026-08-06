@@ -38,6 +38,7 @@
 */
 
 #include "common/darktable.h"
+#include "control/conf.h"
 #include "common/mipmap_cache.h"
 #include <glib.h>
 

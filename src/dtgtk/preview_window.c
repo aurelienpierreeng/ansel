@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/logging.h"
+#include "control/conf.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/simd.h"

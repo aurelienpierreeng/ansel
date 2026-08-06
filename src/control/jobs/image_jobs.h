@@ -27,7 +27,7 @@
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
-#include "control/control.h"
+#include "control/jobs.h"
 #include <inttypes.h>
 
 dt_job_t *dt_image_import_job_create(uint32_t filmid, const char *filename);

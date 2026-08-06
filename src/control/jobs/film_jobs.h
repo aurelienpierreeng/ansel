@@ -27,7 +27,7 @@
 #pragma once
 
 #include "common/film.h"
-#include "control/control.h"
+#include "control/jobs.h"
 #include <inttypes.h>
 
 dt_job_t *dt_film_import1_create(dt_film_t *film);

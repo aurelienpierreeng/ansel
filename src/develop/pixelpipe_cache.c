@@ -41,6 +41,8 @@
 #include <string.h>
 
 #include "control/control.h"
+#include "develop/imageop.h"
+#include "develop/pixelpipe_hb.h"
 #include "control/signal.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe.h"

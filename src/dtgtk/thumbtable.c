@@ -41,6 +41,8 @@
 /** a class to manage a table of thumbnail for lighttable and filmstrip.  */
 
 #include "common/darktable.h"
+#include "control/conf.h"
+#include "control/jobs/control_jobs.h"
 #include "gui/gdkkeys.h"
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/thumbtable_internal.h"

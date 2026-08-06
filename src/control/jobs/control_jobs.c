@@ -78,6 +78,7 @@
 */
 
 #include "control/jobs/control_jobs.h"
+#include "control/control.h"
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/debug.h"

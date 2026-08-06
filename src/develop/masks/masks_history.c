@@ -17,6 +17,7 @@
 */
 
 #include "develop/masks/masks_history.h"
+#include "develop/masks.h"
 
 #include "common/atomic.h"
 #include "develop/develop.h"
