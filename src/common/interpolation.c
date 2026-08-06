@@ -1155,7 +1155,7 @@ int dt_interpolation_resample_cl(const struct dt_interpolation *itor,
   // a number of parallel work items each taking care of one horizontal convolution,
   // then sum over work items to do the vertical convolution
 
-  const int kernel = darktable.opencl->interpolation->kernel_interpolation_resample;
+  const int kernel = dt_opencl_get_global()->interpolation->kernel_interpolation_resample;
   const int width = roi_out->width;
   const int height = roi_out->height;
 

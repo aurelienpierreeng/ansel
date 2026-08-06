@@ -2610,11 +2610,11 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
 
 static const dt_iop_order_iccprofile_info_t *_filmic_get_output_profile(const dt_dev_pixelpipe_t *pipe)
 {
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL && darktable.color_profiles->mode != DT_PROFILE_NORMAL)
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL && dt_colorspaces_get_global()->mode != DT_PROFILE_NORMAL)
   {
     const dt_iop_order_iccprofile_info_t *const softproof_profile = dt_ioppr_add_profile_info_to_list(
-        pipe->dev, darktable.color_profiles->softproof_type, darktable.color_profiles->softproof_filename,
-        darktable.color_profiles->softproof_intent);
+        pipe->dev, dt_colorspaces_get_global()->softproof_type, dt_colorspaces_get_global()->softproof_filename,
+        dt_colorspaces_get_global()->softproof_intent);
     // LUT-only (non matrix-shaper) profiles - typical of printer/inkjet ICC profiles - are
     // flagged by NAN matrices. The gamut-mapping code below only knows how to use 3x3
     // matrices, so using a NAN one silently poisons the whole image with NaN pixels. Fall
@@ -3978,13 +3978,13 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   // See _filmic_get_output_profile(): soft-proofing only applies to the interactive
   // full pipe. Zero the profile identity when inactive so toggling other pipe types
   // or preferences unrelated to soft-proofing never perturbs the hash.
-  d->softproof_mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? darktable.color_profiles->mode : DT_PROFILE_NORMAL;
+  d->softproof_mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? dt_colorspaces_get_global()->mode : DT_PROFILE_NORMAL;
 
   memset(d->softproof_filename, 0, sizeof(d->softproof_filename));
   if(d->softproof_mode != DT_PROFILE_NORMAL)
   {
-    d->softproof_type = darktable.color_profiles->softproof_type;
-    g_strlcpy(d->softproof_filename, darktable.color_profiles->softproof_filename,
+    d->softproof_type = dt_colorspaces_get_global()->softproof_type;
+    g_strlcpy(d->softproof_filename, dt_colorspaces_get_global()->softproof_filename,
              sizeof(d->softproof_filename));
   }
   else

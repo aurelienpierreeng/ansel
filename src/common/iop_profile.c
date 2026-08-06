@@ -83,7 +83,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   cmsHPROFILE *lab_profile = NULL;
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   if(type != DT_COLORSPACE_NONE)
   {
@@ -136,7 +136,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   if(xform)
   {
@@ -159,7 +159,7 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
   cmsHPROFILE *to_rgb_profile = NULL;
 
   if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   if(type_from != DT_COLORSPACE_NONE)
   {
@@ -220,7 +220,7 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
     xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
   if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   if(xform)
   {
@@ -629,14 +629,14 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
   profile_info->intent = intent;
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   const dt_colorspaces_color_profile_t *profile
       = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
   if(profile) rgb_profile = profile->profile;
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   // we only allow rgb profiles
   if(rgb_profile)
@@ -1296,11 +1296,11 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
 
     if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
     {
-      kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_lab;
+      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_lab;
     }
     else if(cst_from == IOP_CS_LAB && dt_iop_colorspace_is_rgb(cst_to))
     {
-      kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_lab_to_rgb_matrix;
+      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_lab_to_rgb_matrix;
     }
     else
     {
@@ -1455,7 +1455,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
     size_t origin[] = { 0, 0, 0 };
     size_t region[] = { width, height, 1 };
 
-    kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_rgb;
+    kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_rgb;
 
     dt_ioppr_get_profile_info_cl(profile_info_from, &profile_info_from_cl);
     lut_from_cl = dt_ioppr_get_trc_cl(profile_info_from);

@@ -573,6 +573,16 @@ JsonParser *dt_noiseprofile_get_parser_global(void)
   return darktable.noiseprofile_parser;
 }
 
+struct dt_opencl_t *dt_opencl_get_global(void)
+{
+  return darktable.opencl;
+}
+
+struct dt_colorspaces_t *dt_colorspaces_get_global(void)
+{
+  return darktable.color_profiles;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

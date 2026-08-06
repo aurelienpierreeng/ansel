@@ -252,7 +252,7 @@ struct dt_colorspaces_cl_global_t; // colorspaces transform
 struct dt_guided_filter_cl_global_t;
 
 /**
- * main struct, stored in darktable.opencl.
+ * main struct, stored in dt_opencl_get_global().
  * holds pointers to all
  */
 typedef struct dt_opencl_t
@@ -393,6 +393,12 @@ int dt_opencl_enqueue_kernel_2d_with_local(const int dev, const int kernel, cons
 
 /** check if opencl is inited */
 int dt_opencl_is_inited(void);
+
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator.
+ * NOTE: common/opencl.c keeps direct access to the global for now; relocating ownership into the
+ * subsystem itself (a file-static set at init) is the follow-up, not an accessor. */
+struct dt_opencl_t *dt_opencl_get_global(void);
 
 /** check if opencl is enabled */
 int dt_opencl_is_enabled(void);

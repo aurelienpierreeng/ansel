@@ -1190,13 +1190,13 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
 
     // Color convert
     cmsHTRANSFORM transform = NULL;
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
     gboolean alloc = FALSE;
 
     if(profile == DT_COLORSPACE_DISPLAY)
     { 
       // Convert to whatever display space to save thumbnails into Adobe RGB
-      transform = darktable.color_profiles->transform_display_to_adobe_rgb;
+      transform = dt_colorspaces_get_global()->transform_display_to_adobe_rgb;
     }
     else
     {
@@ -1216,7 +1216,7 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
     // it's still only swapping R <-> B.
     dt_colorspaces_transform_rgba8_to_bgra8(transform, buf, buf, dsc->width, dsc->height);
     if(alloc) cmsDeleteTransform(transform);
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
 
     dsc->color_space = DT_COLORSPACE_ADOBERGB;
     dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;

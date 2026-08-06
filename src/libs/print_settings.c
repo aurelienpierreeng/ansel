@@ -1314,7 +1314,7 @@ static GList* _get_profiles()
   list = g_list_prepend(list, prof);
 
   // add the profiles from datadir/color/out/*.icc
-  for(GList *iter = darktable.color_profiles->profiles; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_colorspaces_get_global()->profiles; iter; iter = g_list_next(iter))
   {
     dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
     if(p->type == DT_COLORSPACE_FILE)

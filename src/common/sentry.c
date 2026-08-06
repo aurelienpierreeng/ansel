@@ -396,18 +396,18 @@ static void _sentry_set_context(void)
 
 #ifdef HAVE_OPENCL
   // Device enumeration fields (num_devs/dev) only exist in HAVE_OPENCL builds.
-  if(darktable.opencl && darktable.opencl->inited && darktable.opencl->num_devs > 0 && darktable.opencl->dev)
+  if(dt_opencl_get_global() && dt_opencl_is_inited() && dt_opencl_get_global()->num_devs > 0 && dt_opencl_get_global()->dev)
   {
     sentry_value_t gpus = sentry_value_new_list();
-    for(int i = 0; i < darktable.opencl->num_devs; i++)
+    for(int i = 0; i < dt_opencl_get_global()->num_devs; i++)
     {
-      const char *name = darktable.opencl->dev[i].name;
+      const char *name = dt_opencl_get_global()->dev[i].name;
       if(name) sentry_value_append(gpus, sentry_value_new_string(name));
     }
     sentry_value_set_by_key(device, "opencl_devices", gpus);
 
     // Tag with the first device so events are filterable by GPU.
-    if(darktable.opencl->dev[0].name) sentry_set_tag("opencl_device", darktable.opencl->dev[0].name);
+    if(dt_opencl_get_global()->dev[0].name) sentry_set_tag("opencl_device", dt_opencl_get_global()->dev[0].name);
   }
 #endif
   sentry_set_context("device", device);

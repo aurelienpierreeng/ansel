@@ -231,7 +231,7 @@ void dt_dev_toolbox_add_accels(dt_develop_t *dev, GtkAccelGroup *accel_group, co
 
 static void _button_clicked(GtkWidget *w, gpointer user_data);
 
-/* Keep both buttons' active state in sync with darktable.color_profiles->mode,
+/* Keep both buttons' active state in sync with dt_colorspaces_get_global()->mode,
    since enabling one implicitly disables the other. */
 static void _update_softproof_gamut_checking(dt_develop_t *dev)
 {
@@ -239,9 +239,9 @@ static void _update_softproof_gamut_checking(dt_develop_t *dev)
   g_signal_handlers_block_by_func(dev->profile.gamut_button, _button_clicked, dev);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dev->profile.softproof_button),
-                               darktable.color_profiles->mode == DT_PROFILE_SOFTPROOF);
+                               dt_colorspaces_get_global()->mode == DT_PROFILE_SOFTPROOF);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dev->profile.gamut_button),
-                               darktable.color_profiles->mode == DT_PROFILE_GAMUTCHECK);
+                               dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK);
 
   g_signal_handlers_unblock_by_func(dev->profile.softproof_button, _button_clicked, dev);
   g_signal_handlers_unblock_by_func(dev->profile.gamut_button, _button_clicked, dev);
@@ -274,15 +274,15 @@ static void _button_clicked(GtkWidget *w, gpointer user_data)
       break;
 
     case DT_DEV_TOOLBOX_SOFTPROOF:
-      darktable.color_profiles->mode
-          = (darktable.color_profiles->mode == DT_PROFILE_SOFTPROOF) ? DT_PROFILE_NORMAL : DT_PROFILE_SOFTPROOF;
+      dt_colorspaces_get_global()->mode
+          = (dt_colorspaces_get_global()->mode == DT_PROFILE_SOFTPROOF) ? DT_PROFILE_NORMAL : DT_PROFILE_SOFTPROOF;
       _update_softproof_gamut_checking(dev);
       dt_dev_pixelpipe_resync_history_main(dev);
       break;
 
     case DT_DEV_TOOLBOX_GAMUT:
-      darktable.color_profiles->mode
-          = (darktable.color_profiles->mode == DT_PROFILE_GAMUTCHECK) ? DT_PROFILE_NORMAL : DT_PROFILE_GAMUTCHECK;
+      dt_colorspaces_get_global()->mode
+          = (dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK) ? DT_PROFILE_NORMAL : DT_PROFILE_GAMUTCHECK;
       _update_softproof_gamut_checking(dev);
       dt_dev_pixelpipe_resync_history_main(dev);
       break;
@@ -454,18 +454,18 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
   dt_develop_t *dev = (dt_develop_t *)user_data;
   gboolean profile_changed = FALSE;
   const int pos = dt_bauhaus_combobox_get(combo);
-  for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
+  for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
   {
     dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
     if(pp->out_pos == pos)
     {
-      if(darktable.color_profiles->softproof_type != pp->type
-        || (darktable.color_profiles->softproof_type == DT_COLORSPACE_FILE
-            && strcmp(darktable.color_profiles->softproof_filename, pp->filename)))
+      if(dt_colorspaces_get_global()->softproof_type != pp->type
+        || (dt_colorspaces_get_global()->softproof_type == DT_COLORSPACE_FILE
+            && strcmp(dt_colorspaces_get_global()->softproof_filename, pp->filename)))
       {
-        darktable.color_profiles->softproof_type = pp->type;
-        g_strlcpy(darktable.color_profiles->softproof_filename, pp->filename,
-                 sizeof(darktable.color_profiles->softproof_filename));
+        dt_colorspaces_get_global()->softproof_type = pp->type;
+        g_strlcpy(dt_colorspaces_get_global()->softproof_filename, pp->filename,
+                 sizeof(dt_colorspaces_get_global()->softproof_filename));
         profile_changed = TRUE;
       }
       goto end;
@@ -474,9 +474,9 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
 
   // profile not found, fall back to sRGB. shouldn't happen
   fprintf(stderr, "can't find softproof profile `%s', using sRGB instead\n", dt_bauhaus_combobox_get_text(combo));
-  profile_changed = darktable.color_profiles->softproof_type != DT_COLORSPACE_SRGB;
-  darktable.color_profiles->softproof_type = DT_COLORSPACE_SRGB;
-  darktable.color_profiles->softproof_filename[0] = '\0';
+  profile_changed = dt_colorspaces_get_global()->softproof_type != DT_COLORSPACE_SRGB;
+  dt_colorspaces_get_global()->softproof_type = DT_COLORSPACE_SRGB;
+  dt_colorspaces_get_global()->softproof_filename[0] = '\0';
 
 end:
   if(profile_changed)
@@ -512,15 +512,15 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
   dt_bauhaus_combobox_set_entries_ellipsis(softproof_profile, PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(vbox), softproof_profile, TRUE, TRUE, 0);
 
-  for(const GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     // the system display profile is only suitable for display purposes
     if(prof->out_pos > -1)
     {
       dt_bauhaus_combobox_add(softproof_profile, prof->name);
-      if(prof->type == darktable.color_profiles->softproof_type
-        && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, darktable.color_profiles->softproof_filename)))
+      if(prof->type == dt_colorspaces_get_global()->softproof_type
+        && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, dt_colorspaces_get_global()->softproof_filename)))
         dt_bauhaus_combobox_set(softproof_profile, prof->out_pos);
     }
   }

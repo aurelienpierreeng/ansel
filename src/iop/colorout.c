@@ -508,7 +508,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   cmsHPROFILE softproof = NULL;
   cmsUInt32Number output_format = TYPE_RGBA_FLT;
 
-  d->mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? darktable.color_profiles->mode : DT_PROFILE_NORMAL;
+  d->mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? dt_colorspaces_get_global()->mode : DT_PROFILE_NORMAL;
 
   // Softproof and gamut check take input from GUI and don't write it in internal parameters.
   // The cacheline integrity hash will not be meaningful in this scenario,
@@ -567,14 +567,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
     out_type = DT_COLORSPACE_ADOBERGB;
     out_filename = "";
-    out_intent = darktable.color_profiles->display_intent;
+    out_intent = dt_colorspaces_get_global()->display_intent;
   }
   else
   {
     /* we are not exporting, using display profile as output */
-    out_type = darktable.color_profiles->display_type;
-    out_filename = darktable.color_profiles->display_filename;
-    out_intent = darktable.color_profiles->display_intent;
+    out_type = dt_colorspaces_get_global()->display_type;
+    out_filename = dt_colorspaces_get_global()->display_filename;
+    out_intent = dt_colorspaces_get_global()->display_intent;
   }
 
   // when the output type is Lab then process is a nop, so we can avoid creating a transform
@@ -612,7 +612,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   /* creating output profile */
   if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   const dt_colorspaces_color_profile_t *out_profile
       = dt_colorspaces_get_profile(out_type, out_filename,
@@ -661,8 +661,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(d->mode != DT_PROFILE_NORMAL && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     const dt_colorspaces_color_profile_t *prof = dt_colorspaces_get_profile
-      (darktable.color_profiles->softproof_type,
-       darktable.color_profiles->softproof_filename,
+      (dt_colorspaces_get_global()->softproof_type,
+       dt_colorspaces_get_global()->softproof_filename,
        DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
 
     if(!IS_NULL_PTR(prof))
@@ -675,8 +675,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                       ->profile;
       dt_control_log(_("missing softproof profile has been replaced by sRGB!"));
       fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",
-              dt_colorspaces_get_name(darktable.color_profiles->softproof_type,
-                                      darktable.color_profiles->softproof_filename));
+              dt_colorspaces_get_name(dt_colorspaces_get_global()->softproof_type,
+                                      dt_colorspaces_get_global()->softproof_filename));
     }
 
     // some of our internal profiles are what lcms considers ideal profiles as they have a parametric TRC so
@@ -757,7 +757,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
 
   // now try to initialize unbounded mode:
   // we do extrapolation for input values above 1.0f.

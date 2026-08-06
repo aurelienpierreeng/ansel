@@ -378,7 +378,7 @@ dt_gaussian_cl_t *dt_gaussian_init_cl(const int devid,
   dt_gaussian_cl_t *g = (dt_gaussian_cl_t *)malloc(sizeof(dt_gaussian_cl_t));
   if(IS_NULL_PTR(g)) return NULL;
 
-  g->global = darktable.opencl->gaussian;
+  g->global = dt_opencl_get_global()->gaussian;
   g->devid = devid;
   g->width = width;
   g->height = height;

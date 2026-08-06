@@ -275,9 +275,9 @@ static gboolean filmstrip_checked_callback(GtkWidget *widget)
 static gboolean profile_checked_callback(GtkWidget *widget)
 {
   dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)get_custom_data(widget);
-  return (prof->type == darktable.color_profiles->display_type
+  return (prof->type == dt_colorspaces_get_global()->display_type
           && (prof->type != DT_COLORSPACE_FILE
-              || !strcmp(prof->filename, darktable.color_profiles->display_filename)));
+              || !strcmp(prof->filename, dt_colorspaces_get_global()->display_filename)));
 }
 
 static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
@@ -285,13 +285,13 @@ static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, g
   dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)get_custom_data(GTK_WIDGET(user_data));
 
   gboolean profile_changed = FALSE;
-  if(darktable.color_profiles->display_type != pp->type
-      || (darktable.color_profiles->display_type == DT_COLORSPACE_FILE
-           && strcmp(darktable.color_profiles->display_filename, pp->filename)))
+  if(dt_colorspaces_get_global()->display_type != pp->type
+      || (dt_colorspaces_get_global()->display_type == DT_COLORSPACE_FILE
+           && strcmp(dt_colorspaces_get_global()->display_filename, pp->filename)))
   {
-    darktable.color_profiles->display_type = pp->type;
-    g_strlcpy(darktable.color_profiles->display_filename, pp->filename,
-              sizeof(darktable.color_profiles->display_filename));
+    dt_colorspaces_get_global()->display_type = pp->type;
+    g_strlcpy(dt_colorspaces_get_global()->display_filename, pp->filename,
+              sizeof(dt_colorspaces_get_global()->display_filename));
     profile_changed = TRUE;
   }
 
@@ -299,16 +299,16 @@ static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, g
   {
     // profile not found, fall back to system display profile. shouldn't happen
     fprintf(stderr, "can't find display profile `%s', using system display profile instead\n", pp->filename);
-    profile_changed = darktable.color_profiles->display_type != DT_COLORSPACE_DISPLAY;
-    darktable.color_profiles->display_type = DT_COLORSPACE_DISPLAY;
-    darktable.color_profiles->display_filename[0] = '\0';
+    profile_changed = dt_colorspaces_get_global()->display_type != DT_COLORSPACE_DISPLAY;
+    dt_colorspaces_get_global()->display_type = DT_COLORSPACE_DISPLAY;
+    dt_colorspaces_get_global()->display_filename[0] = '\0';
   }
 
   if(profile_changed)
   {
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
   return TRUE;
@@ -337,14 +337,14 @@ dt_iop_color_intent_t string_to_color_intent(const char *string)
 
 static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_iop_color_intent_t old_intent = darktable.color_profiles->display_intent;
+  dt_iop_color_intent_t old_intent = dt_colorspaces_get_global()->display_intent;
   dt_iop_color_intent_t new_intent = string_to_color_intent(get_custom_data(GTK_WIDGET(user_data)));
   if(new_intent != old_intent)
   {
-    darktable.color_profiles->display_intent = new_intent;
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    dt_colorspaces_get_global()->display_intent = new_intent;
+    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
   return TRUE;
@@ -352,7 +352,7 @@ static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, gu
 
 static gboolean intent_checked_callback(GtkWidget *widget)
 {
-  return darktable.color_profiles->display_intent == string_to_color_intent(get_custom_data(widget));
+  return dt_colorspaces_get_global()->display_intent == string_to_color_intent(get_custom_data(widget));
 }
 
 static gboolean always_hide_overlays_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
@@ -456,7 +456,7 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   GtkWidget *parent = get_last_widget(lists);
 
   // Add available color profiles to the sub-menu
-  for(const GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     if(prof->display_pos > -1)

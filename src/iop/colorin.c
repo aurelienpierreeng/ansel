@@ -221,7 +221,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 
 static void _resolve_work_profile(dt_colorspaces_color_profile_type_t *work_type, char *work_filename)
 {
-  for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     if(prof->work_pos > -1 && *work_type == prof->type
@@ -521,7 +521,7 @@ static void profile_changed(GtkWidget *widget, gpointer user_data)
     prof = g->image_profiles;
   else
   {
-    prof = darktable.color_profiles->profiles;
+    prof = dt_colorspaces_get_global()->profiles;
     pos -= g->n_image_profiles;
   }
   for(; prof; prof = g_list_next(prof))
@@ -554,7 +554,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
   char filename_work[DT_IOP_COLOR_ICC_LEN];
 
   int pos = dt_bauhaus_combobox_get(widget);
-  for(const GList *prof = darktable.color_profiles->profiles; prof; prof = g_list_next(prof))
+  for(const GList *prof = dt_colorspaces_get_global()->profiles; prof; prof = g_list_next(prof))
   {
     dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
     if(pp->work_pos == pos)
@@ -1458,7 +1458,7 @@ void gui_update(struct dt_iop_module_t *self)
 
   // working profile
   int idx = -1;
-  for(const GList *prof = darktable.color_profiles->profiles; prof; prof = g_list_next(prof))
+  for(const GList *prof = dt_colorspaces_get_global()->profiles; prof; prof = g_list_next(prof))
   {
     dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
     if(pp->work_pos > -1
@@ -1489,7 +1489,7 @@ void gui_update(struct dt_iop_module_t *self)
     }
   }
 
-  for(const GList *prof = darktable.color_profiles->profiles; prof; prof = g_list_next(prof))
+  for(const GList *prof = dt_colorspaces_get_global()->profiles; prof; prof = g_list_next(prof))
   {
     dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
     if(pp->in_pos > -1
@@ -1634,7 +1634,7 @@ static void update_profile_list(dt_iop_module_t *self)
   }
   gboolean input_system_profile_separator_added = FALSE;
   gboolean input_file_profile_separator_added = FALSE;
-  for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     if(prof->in_pos > -1)
@@ -1660,7 +1660,7 @@ static void update_profile_list(dt_iop_module_t *self)
   dt_bauhaus_combobox_clear(g->work_combobox);
 
   gboolean work_file_profile_separator_added = FALSE;
-  for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     if(prof->work_pos > -1)

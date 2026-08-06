@@ -78,7 +78,7 @@ void _colormanage_ui_color(const float L, const float a, const float b, dt_align
   dt_aligned_pixel_t Lab = { L, a, b, 1.f };
   dt_aligned_pixel_t XYZ = { 0.f, 0.f, 0.f, 1.f };
   dt_Lab_to_XYZ(Lab, XYZ);
-  cmsDoTransform(darktable.color_profiles->transform_xyz_to_display, XYZ, RGB, 1);
+  cmsDoTransform(dt_colorspaces_get_global()->transform_xyz_to_display, XYZ, RGB, 1);
 }
 
 static gboolean

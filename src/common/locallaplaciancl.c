@@ -99,7 +99,7 @@ dt_local_laplacian_cl_t *dt_local_laplacian_init_cl(
   dt_local_laplacian_cl_t *g = malloc(sizeof(dt_local_laplacian_cl_t));
   if(IS_NULL_PTR(g)) return NULL;
 
-  g->global = darktable.opencl->local_laplacian;
+  g->global = dt_opencl_get_global()->local_laplacian;
   g->devid = devid;
   g->width = width;
   g->height = height;

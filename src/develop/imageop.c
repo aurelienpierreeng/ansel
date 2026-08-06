@@ -436,8 +436,8 @@ int dt_iop_load_module_so(void *m, const char *libname, const char *module_name)
   if(IS_NULL_PTR(module->modify_roi_out)) module->modify_roi_out = _iop_modify_roi_out;
 
   #ifdef HAVE_OPENCL
-  if(IS_NULL_PTR(module->process_tiling_cl)) module->process_tiling_cl = darktable.opencl->inited ? default_process_tiling_cl : NULL;
-  if(!darktable.opencl->inited) module->process_cl = NULL;
+  if(IS_NULL_PTR(module->process_tiling_cl)) module->process_tiling_cl = dt_opencl_is_inited() ? default_process_tiling_cl : NULL;
+  if(!dt_opencl_is_inited()) module->process_cl = NULL;
   #endif // HAVE_OPENCL
 
   module->process_plain = module->process;

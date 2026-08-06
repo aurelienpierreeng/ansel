@@ -1137,18 +1137,18 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   }
 
   cmsHTRANSFORM transform = NULL;
-  pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+  pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
   gboolean alloc = FALSE;
 
   // we only color manage when a thumbnail is sRGB or AdobeRGB. everything else just gets dumped to the
   // screen
   if(buf.color_space == DT_COLORSPACE_SRGB)
   {
-    transform = darktable.color_profiles->transform_srgb_to_display;
+    transform = dt_colorspaces_get_global()->transform_srgb_to_display;
   }
   else if(buf.color_space == DT_COLORSPACE_ADOBERGB)
   {
-    transform = darktable.color_profiles->transform_adobe_rgb_to_display;
+    transform = dt_colorspaces_get_global()->transform_adobe_rgb_to_display;
   }
   else if(buf.color_space == DT_COLORSPACE_DISPLAY)
   {
@@ -1175,7 +1175,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   dt_colorspaces_transform_rgba8_to_bgra8(transform, buf.buf, rgbbuf, buf.width, buf.height);
   if(alloc) cmsDeleteTransform(transform);
-  pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+  pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
   dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   const int32_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, buf_wd);

@@ -1631,7 +1631,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     if(keep_running)
     {
       // Log the error
-      darktable.opencl->error_count++; // increase error count
+      dt_opencl_get_global()->error_count++; // increase error count
       opencl_error = 1; // = any OpenCL error, next run goes to CPU
 
       // Disable OpenCL for this pipe
@@ -1640,10 +1640,10 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
       pipe->opencl_error = 0;
       pipe->devid = -1;
 
-      if(darktable.opencl->error_count >= DT_OPENCL_MAX_ERRORS)
+      if(dt_opencl_get_global()->error_count >= DT_OPENCL_MAX_ERRORS)
       {
         // Too many errors : dispable OpenCL for this session
-        darktable.opencl->stopped = 1;
+        dt_opencl_get_global()->stopped = 1;
         dt_capabilities_remove("opencl");
         opencl_error = 2; // = too many OpenCL errors, all runs go to CPU
       }

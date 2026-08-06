@@ -570,7 +570,7 @@ dwt_params_cl_t *dt_dwt_init_cl(const int devid, cl_mem image, const int width, 
   dwt_params_cl_t *p = (dwt_params_cl_t *)malloc(sizeof(dwt_params_cl_t));
   if(IS_NULL_PTR(p)) return NULL;
 
-  p->global = darktable.opencl->dwt;
+  p->global = dt_opencl_get_global()->dwt;
   p->devid = devid;
   p->image = image;
   p->ch = 4;

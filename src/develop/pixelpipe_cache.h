@@ -646,7 +646,7 @@ int dt_dev_pixelpipe_cache_invalidate_hashes(dt_dev_pixelpipe_cache_t *cache,
  *
  * @param devid Device to flush, or a negative value for a no-op (e.g. a pipe that
  *              never used OpenCL). The caller must already hold
- *              `darktable.opencl->dev[devid].lock` -- this is the case for the
+ *              `dt_opencl_get_global()->dev[devid].lock` -- this is the case for the
  *              pixelpipe currently running on that device. Callers that don't hold
  *              it (e.g. cleaning up a pipe after it finished) must use
  *              dt_dev_pixelpipe_cache_flush_clmem_for_pipe() instead.
@@ -655,7 +655,7 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
 
 /**
  * @brief Like dt_dev_pixelpipe_cache_flush_clmem(), for callers that do not hold
- * `darktable.opencl->dev[devid].lock` (e.g. a pipe's own cleanup after
+ * `dt_opencl_get_global()->dev[devid].lock` (e.g. a pipe's own cleanup after
  * dt_dev_pixelpipe_process() already released it). Takes the lock itself, then
  * delegates. No-op if devid < 0 or OpenCL isn't available.
  */

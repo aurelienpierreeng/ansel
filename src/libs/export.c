@@ -565,7 +565,7 @@ void gui_reset(dt_lib_module_t *self)
   dt_bauhaus_combobox_set(d->profile, 0);
   if(icctype != DT_COLORSPACE_NONE)
   {
-    for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
+    for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
     {
       const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
       if(pp->out_pos > -1
@@ -795,7 +795,7 @@ static void _profile_changed(GtkWidget *widget, dt_lib_export_t *d)
   if(pos > 0)
   {
     pos--;
-    for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
+    for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
     {
       const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
       if(pp->out_pos == pos)
@@ -1241,7 +1241,7 @@ void gui_init(dt_lib_module_t *self)
   dt_bauhaus_widget_set_label(d->profile, N_("Color space"));
   gtk_box_pack_start(GTK_BOX(self->widget), d->profile, FALSE, TRUE, 0);
   dt_bauhaus_combobox_add(d->profile, _("same as original"));
-  for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     const dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     if(prof->out_pos > -1)
@@ -1376,7 +1376,7 @@ void gui_init(dt_lib_module_t *self)
 
   if(icctype != DT_COLORSPACE_NONE)
   {
-    for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
+    for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
     {
       const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
       if(pp->out_pos > -1
@@ -1968,7 +1968,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   dt_bauhaus_combobox_set(d->profile, 0);
   if(icctype != DT_COLORSPACE_NONE)
   {
-    for(GList *iter = darktable.color_profiles->profiles; iter; iter = g_list_next(iter))
+    for(GList *iter = dt_colorspaces_get_global()->profiles; iter; iter = g_list_next(iter))
     {
       const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)iter->data;
       if(pp->out_pos > -1

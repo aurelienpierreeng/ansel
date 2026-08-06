@@ -433,7 +433,7 @@ heal_params_cl_t *dt_heal_init_cl(const int devid)
   heal_params_cl_t *p = (heal_params_cl_t *)malloc(sizeof(heal_params_cl_t));
   if(IS_NULL_PTR(p)) return NULL;
 
-  p->global = darktable.opencl->heal;
+  p->global = dt_opencl_get_global()->heal;
   p->devid = devid;
 
   return p;
