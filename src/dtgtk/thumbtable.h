@@ -44,7 +44,6 @@
 
 
 #include "dtgtk/thumbnail.h"
-#include "common/dtpthread.h"
 #include "common/debug.h"
 #include "common/logging.h"
 

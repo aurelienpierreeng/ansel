@@ -32,7 +32,6 @@
 
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorspaces.h"
-#include "common/matrices.h"
 /* develop/imageop.h is deliberately NOT included: every iop/pixelpipe type used
  * below is used as a POINTER and already tag-declared a few lines down. Including
  * it made common/ depend on develop/ (a layering inversion) and closed a 6-node

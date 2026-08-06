@@ -58,7 +58,6 @@
 // image along the four axis directions, propagating unclipped colour into the clipped runs through the
 // per-line interpolators shared with the LCh mode (see lch.h).
 
-#include "develop/imageop.h"
 #include "iop/highlights/common.h"
 
 // Bayer colour inpainting: four directional passes over the mosaic. `clips` are the per-channel

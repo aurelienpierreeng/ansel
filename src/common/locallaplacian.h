@@ -24,7 +24,6 @@
 #ifndef DT_COMMON_LOCALLAPLACIAN_H
 #define DT_COMMON_LOCALLAPLACIAN_H
 
-#include "develop/imageop.h"
 #include "develop/pixelpipe_cache_alloc.h"
 
 // struct bundling all the auxiliary buffers

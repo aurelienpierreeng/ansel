@@ -56,9 +56,7 @@
 // Guided-laplacian (2021 a-trous) highlight reconstruction, CPU + OpenCL.
 // Public API of this highlights mode (a compiled TU); internals are static in the .c.
 
-#include "common/opencl.h"
 #include "develop/imageop.h"
-#include "iop/highlights/common.h"
 
 // Single CPU driver for guided-laplacian reconstruction, for Bayer, X-Trans and already-demosaiced
 // (non-raw / sRAW) input alike. The wavelet reconstruction is CFA-agnostic; only the disposable-demosaic

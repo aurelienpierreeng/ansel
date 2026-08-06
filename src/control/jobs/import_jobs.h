@@ -19,7 +19,6 @@
 #define DT_CONTROL_JOBS_IMPORT_JOBS_H
 
 #include "common/image.h"
-#include "control/control.h"
 #include "common/variables.h"
 
 #ifdef __cplusplus

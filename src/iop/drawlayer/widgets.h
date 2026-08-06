@@ -19,7 +19,6 @@
 #ifndef DT_IOP_DRAWLAYER_WIDGETS_H
 #define DT_IOP_DRAWLAYER_WIDGETS_H
 
-#include "iop/drawlayer/brush.h"
 
 #include <gtk/gtk.h>
 

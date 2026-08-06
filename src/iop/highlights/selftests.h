@@ -23,8 +23,6 @@
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/opencl.h"
-#include "iop/highlights/common.h"
 
 #ifdef HAVE_OPENCL
 // Self-test (enable with HL_SPCL_TEST=1): factor + solve the 13-point biharmonic system on a

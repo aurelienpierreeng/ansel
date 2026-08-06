@@ -48,7 +48,6 @@
 #include "common/curve_tools.h"
 #include "common/logging.h"
 #include "common/splines.h"
-#include "control/conf.h"
 #include "develop/develop.h"
 #include <cairo.h>
 #include <glib.h>

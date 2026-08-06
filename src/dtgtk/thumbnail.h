@@ -36,7 +36,6 @@
 
 #include "common/atomic.h"
 #include "common/debug.h"
-#include "common/dtpthread.h"
 #include "common/logging.h"
 #include "dtgtk/thumbtable_info.h"
 

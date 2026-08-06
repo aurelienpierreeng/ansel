@@ -25,7 +25,6 @@
 #ifndef DT_DEVELOP_IMAGEOP_GUI_H
 #define DT_DEVELOP_IMAGEOP_GUI_H
 
-#include "control/signal.h"
 #include "develop/imageop.h"
 
 #ifdef __cplusplus

@@ -64,7 +64,6 @@
 #include "config.h"
 #endif
 
-#include "common/dtpthread.h"
 #include "common/paths.h"
 #include "develop/format.h"
 #include <glib.h>

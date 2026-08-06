@@ -115,10 +115,8 @@ GList dev->forms
 #include "common/simd.h"
 #include "common/times.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/opencl.h"
 #include "develop/pixelpipe.h"
 #include "dtgtk/button.h"
-#include "dtgtk/gradientslider.h"
 #include "gui/draw.h"
 #include "control/control.h"
 

@@ -23,7 +23,6 @@
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/opencl.h"
 #include "iop/highlights/common.h"
 #include <math.h>
 #include <stdint.h>
