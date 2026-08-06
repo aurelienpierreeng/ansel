@@ -708,7 +708,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
   const float input_width = pipe->iwidth;
   const float input_height = pipe->iheight;
-  const int pixel_threshold = (dt_dev_pixelpipe_has_preview_output(darktable.develop, pipe, NULL)
+  const int pixel_threshold = (dt_dev_pixelpipe_has_preview_output(develop, pipe, NULL)
                                || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
   const guint node_count = g_list_length(mask_form->points);
 
@@ -1098,7 +1098,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module,
   if(IS_NULL_PTR(new_node)) return;
 
   // set coordinates
-  dt_masks_gui_cursor_to_raw_norm(darktable.develop, mask_gui, new_node->node);
+  dt_masks_gui_cursor_to_raw_norm(mask_gui->dev, mask_gui, new_node->node);
   new_node->ctrl1[0] = new_node->ctrl1[1] = new_node->ctrl2[0] = new_node->ctrl2[1] = -1.0;
   new_node->state = DT_MASKS_POINT_STATE_NORMAL;
 
@@ -1204,13 +1204,13 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
   }
 
   float mask_span[2] = { p2[0] - p1[0], p2[1] - p1[1] };
-  dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, mask_span, 1);
+  dt_dev_coordinates_preview_abs_to_image_norm(mask_gui->dev, mask_span, 1);
   *mask_size = fmaxf(mask_span[0], mask_span[1]);
 
   if(!IS_NULL_PTR(border_size))
   {
     float border_span[2] = { fp2[0] - fp1[0], fp2[1] - fp1[1] };
-    dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, border_span, 1);
+    dt_dev_coordinates_preview_abs_to_image_norm(mask_gui->dev, border_span, 1);
     *border_size = fmaxf(border_span[0], border_span[1]);
   }
 }
@@ -1251,7 +1251,7 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
   }
 }
 
-static gboolean _polygon_get_gravity_center(const dt_masks_form_t *mask_form,
+static gboolean _polygon_get_gravity_center(dt_develop_t *dev, const dt_masks_form_t *mask_form,
                                             float center[2], float *area)
 {
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points) || IS_NULL_PTR(center)) return FALSE;
@@ -1687,7 +1687,7 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, double
   if(mask_gui->edit_mode == DT_MASKS_EDIT_FULL && dt_masks_is_anything_selected(mask_gui))
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_change_opacity(mask_form, parent_id, up, flow);
+      return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parent_id, up, flow);
     if(dt_modifier_is(state, GDK_SHIFT_MASK) || mask_gui->node_selected)
       return _change_hardness(mask_form, parent_id, mask_gui, module, form_index, up ? +0.01f : -0.01f,
                               DT_MASKS_INCREMENT_OFFSET, flow);
@@ -1719,7 +1719,7 @@ static int _polygon_creation_closing_form(dt_masks_form_t *mask_form, dt_masks_f
   mask_gui->node_dragging = -1;
   _polygon_init_ctrl_points(mask_form);
 
-  dt_masks_gui_form_save_creation(darktable.develop, creation_module, mask_form, mask_gui);
+  dt_masks_gui_form_save_creation(mask_gui->dev, creation_module, mask_form, mask_gui);
 
   return 1;
 }
@@ -1757,7 +1757,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
         dt_masks_node_polygon_t *polygon_node = (dt_masks_node_polygon_t *)(malloc(sizeof(dt_masks_node_polygon_t)));
         if(IS_NULL_PTR(polygon_node)) return 0;
 
-        dt_masks_gui_cursor_to_raw_norm(darktable.develop, mask_gui, polygon_node->node);
+        dt_masks_gui_cursor_to_raw_norm(mask_gui->dev, mask_gui, polygon_node->node);
 
         polygon_node->ctrl1[0] = polygon_node->ctrl1[1] = polygon_node->ctrl2[0] = polygon_node->ctrl2[1] = -1.0;
         polygon_node->border[0] = polygon_node->border[1] = MAX(HARDNESS_MIN, masks_border);
@@ -1951,7 +1951,7 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
         // Decrease the current dragging node index
         mask_gui->node_dragging -= 1;
 
-        dt_dev_pixelpipe_update_history_preview(darktable.develop);
+        dt_dev_pixelpipe_update_history_preview(mask_gui->dev);
         return 1;
       }
       case GDK_KEY_Return:
@@ -1974,13 +1974,13 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
                                        dt_masks_form_gui_t *mask_gui, int form_index)
 {
   // centre view will have zoom_scale * backbuf_width pixels, we want the handle offset to scale with DPI:
-  dt_develop_t *const dev = (dt_develop_t *)darktable.develop;
+  dt_develop_t *const dev = mask_gui->dev;
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   if(IS_NULL_PTR(gui_points)) return 0;
 
-  const int iwidth = darktable.develop->roi.raw_width;
-  const int iheight = darktable.develop->roi.raw_height;
+  const int iwidth = dev->roi.raw_width;
+  const int iheight = dev->roi.raw_height;
 
   if(mask_gui->node_dragging >= 0)
   {
@@ -2070,7 +2070,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
                             gui_points->points[mask_gui->handle_dragging * 6 + 3],
                             pts[0], pts[1], &p[0], &p[1], &p[2], &p[3], gui_points->clockwise);
 
-    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, p, 2);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, p, 2);
 
     // set new ctrl points
     dt_masks_set_ctrl_points(node->ctrl1, node->ctrl2, p);
@@ -2140,10 +2140,10 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
 /**
  * @brief Draw a polygon or border polyline, skipping NaN points.
  */
-static void _polygon_draw_shape(cairo_t *cr, const float *point_buffer, const int point_count,
+static void _polygon_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *point_buffer, const int point_count,
                                 const int node_count, const gboolean draw_border, const gboolean draw_source)
 {
-  
+
   // Find the first valid non-NaN point to start drawing
   // FIXME: Why not just avoid having NaN points in the array?
   int start_idx = -1;
@@ -2184,7 +2184,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(mask_gui->creation)
   {
     // draw a cross where the source will be created
-    dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+    dt_masks_form_t *visible_form = dt_masks_get_visible_form(mask_gui->dev);
     if(visible_form && (visible_form->type & DT_MASKS_CLONE))
     {
       const gboolean have_first_node = node_count && gui_points->points && gui_points->points_count > 1;
@@ -2199,12 +2199,12 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   else if((mask_gui->type & DT_MASKS_IS_RETOUCHE) != 0 || mask_gui->node_selected || mask_gui->node_dragging >= 0
           || mask_gui->handle_selected)
   {
-    dt_masks_form_t *group_form = dt_masks_get_visible_form(darktable.develop);
+    dt_masks_form_t *group_form = dt_masks_get_visible_form(mask_gui->dev);
     if(!IS_NULL_PTR(group_form) && (group_form->type & DT_MASKS_GROUP))
     {
       dt_masks_form_group_t *group_entry = g_list_nth_data(group_form->points, form_index);
       dt_masks_form_t *polygon_form = group_entry
-                                          ? dt_masks_get_from_id(darktable.develop, group_entry->formid)
+                                          ? dt_masks_get_from_id(mask_gui->dev, group_entry->formid)
                                           : NULL;
       if(!IS_NULL_PTR(polygon_form)) gui_points->clockwise = _polygon_is_clockwise(polygon_form);
     }
@@ -2222,7 +2222,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     // draw borders
     if(gui_points->border_count > node_count * 3 + 2)
     {
-      dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (mask_gui->border_selected), zoom_scale,
+      dt_draw_shape_lines(mask_gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, node_count, (mask_gui->border_selected), zoom_scale,
                           gui_points->border, gui_points->border_count, &dt_masks_functions_polygon.draw_shape,
                           CAIRO_LINE_CAP_ROUND);
     }
@@ -3500,12 +3500,12 @@ static void _polygon_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *
   dt_masks_duplicate_points(base, dest, sizeof(dt_masks_node_polygon_t));
 }
 
-static void _polygon_initial_source_pos(const float iwd, const float iht, float *x, float *y)
+static void _polygon_initial_source_pos(struct dt_develop_t *dev, const float iwd, const float iht, float *x, float *y)
 {
-  
-  
+
+
   float offset[2] = { 0.1f, 0.1f };
-  dt_dev_coordinates_raw_norm_to_raw_abs(darktable.develop, offset, 1);
+  dt_dev_coordinates_raw_norm_to_raw_abs(dev, offset, 1);
   *x = offset[0];
   *y = offset[1];
 }
@@ -3514,7 +3514,7 @@ static void _polygon_creation_closing_form_callback(GtkWidget *widget, gpointer 
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
   // This is a temp form on creation mode
-  dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(mask_gui->dev);
   if(IS_NULL_PTR(mask_form)) return;
 
   _polygon_creation_closing_form(mask_form, mask_gui);
@@ -3524,10 +3524,10 @@ static void _polygon_switch_node_callback(GtkWidget *widget, gpointer user_data)
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
   if(IS_NULL_PTR(mask_gui)) return;
-  dt_iop_module_t *module = darktable.develop->gui_module;
+  dt_iop_module_t *module = mask_gui->dev->gui_module;
   if(IS_NULL_PTR(module)) return;
   const int form_id = mask_gui->formid;
-  dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
+  dt_masks_form_t *selected_form = dt_masks_get_from_id(mask_gui->dev, form_id);
   if(IS_NULL_PTR(selected_form)) return;
 
   mask_gui->node_selected = TRUE;
@@ -3546,10 +3546,10 @@ static void _polygon_reset_round_node_callback(GtkWidget *widget, gpointer user_
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
   if(IS_NULL_PTR(mask_gui)) return;
-  dt_iop_module_t *module = darktable.develop->gui_module;
+  dt_iop_module_t *module = mask_gui->dev->gui_module;
   if(IS_NULL_PTR(module)) return;
   const int form_id = mask_gui->formid;
-  dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
+  dt_masks_form_t *selected_form = dt_masks_get_from_id(mask_gui->dev, form_id);
   if(IS_NULL_PTR(selected_form)) return;
 
   mask_gui->node_selected = TRUE;
@@ -3570,22 +3570,22 @@ static void _polygon_add_node_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
   if(IS_NULL_PTR(mask_gui)) return;
-  dt_masks_form_t *visible_forms = dt_masks_get_visible_form(darktable.develop);
+  dt_masks_form_t *visible_forms = dt_masks_get_visible_form(mask_gui->dev);
   if(IS_NULL_PTR(visible_forms)) return;
 
-  dt_iop_module_t *module = darktable.develop->gui_module;
+  dt_iop_module_t *module = mask_gui->dev->gui_module;
   if(IS_NULL_PTR(module)) return;
 
   dt_masks_form_group_t *group_entry = dt_masks_form_get_selected_group(visible_forms, mask_gui);
   if(IS_NULL_PTR(group_entry)) return;
-  dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
+  dt_masks_form_t *selected_form = dt_masks_get_from_id(mask_gui->dev, group_entry->formid);
 
   if(selected_form)
   {
     _add_node_to_segment(module, selected_form, group_entry->parentid, mask_gui, mask_gui->group_selected);
   }
 
-  //dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  //dt_dev_add_history_item(mask_gui->dev, module, TRUE, TRUE);
 }
 
 static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t *mask_form,

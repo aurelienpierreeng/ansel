@@ -199,7 +199,7 @@ static void _gradient_get_creation_values(dt_masks_gradient_creation_values_t *v
 static void _gradient_init_new(dt_masks_form_gui_t *gui, dt_masks_anchor_gradient_t *gradient)
 {
   dt_masks_gradient_creation_values_t values;
-  dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, gradient->center);
+  dt_masks_gui_cursor_to_raw_norm(gui->dev, gui, gradient->center);
   _gradient_get_creation_values(&values);
   gradient->extent = values.extent;
   gradient->curvature = values.curvature;
@@ -219,13 +219,13 @@ static int _gradient_get_creation_preview(dt_masks_form_gui_t *gui, dt_masks_pre
   _gradient_get_creation_values(&values);
 
   float center[2];
-  dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, center);
+  dt_masks_gui_cursor_to_raw_norm(gui->dev, gui, center);
 
   *preview = (dt_masks_preview_buffers_t){ 0 };
-  int err = _gradient_get_points(darktable.develop, center[0], center[1], values.rotation,
+  int err = _gradient_get_points(gui->dev, center[0], center[1], values.rotation,
                                  values.curvature, &preview->points, &preview->points_count);
   if(!err && values.extent > 0.0f)
-    err = _gradient_get_pts_border(darktable.develop, center[0], center[1], values.rotation,
+    err = _gradient_get_pts_border(gui->dev, center[0], center[1], values.rotation,
                                    values.extent, values.curvature, &preview->border,
                                    &preview->border_count);
   return err;
@@ -410,7 +410,7 @@ static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_mas
   }
 }
 
-static gboolean _gradient_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
+static gboolean _gradient_get_gravity_center(dt_develop_t *dev, const dt_masks_form_t *form, float center[2], float *area)
 {
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points) || IS_NULL_PTR(center) || IS_NULL_PTR(area)) return FALSE;
   const dt_masks_anchor_gradient_t *gradient = (const dt_masks_anchor_gradient_t *)(form->points)->data;
@@ -546,7 +546,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, doubl
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
       return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_change_opacity(form, parentid, up, flow);
+      return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_curvature(form, gui, module, index, (up ? +0.02f : -0.02f), DT_MASKS_INCREMENT_OFFSET, flow);
     else
@@ -576,7 +576,7 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, doubl
       _gradient_init_new(gui, gradient);
 
       form->points = g_list_append(form->points, gradient);
-      dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
+      dt_masks_gui_form_save_creation(gui->dev, crea_module, form, gui);
       
       return 1;
     }
@@ -704,7 +704,7 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
   {
     // we change the center value
     float pts[2];
-    dt_masks_gui_delta_to_raw_norm(darktable.develop, gui, pts);
+    dt_masks_gui_delta_to_raw_norm(gui->dev, gui, pts);
 
     gradient->center[0] = pts[0];
     gradient->center[1] = pts[1];
@@ -719,7 +719,7 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
   if(gui->form_rotating)
   {
     const float origin_point[2] = { gpt->points[0], gpt->points[1] };
-    const float angle = - dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
+    const float angle = - dt_masks_rotate_with_anchor(gui->dev, gui->pos, origin_point, gui);
     _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
 
     // we recreate the form points
@@ -953,7 +953,7 @@ cleanup:
   return err;
 }
 
-static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
+static void _gradient_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
 {
   // safeguard in case of malformed arrays of points
   if(border && pts_line_count <= 3) return;
@@ -961,9 +961,9 @@ static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int p
 
   const float *points = (border) ? pts_line : pts_line + 6;
   const int points_count = (border) ? pts_line_count : pts_line_count - 3;
-  
-  const float wd = darktable.develop->roi.raw_width;
-  const float ht = darktable.develop->roi.raw_height;
+
+  const float wd = dev->roi.raw_width;
+  const float ht = dev->roi.raw_height;
 
   int i = 0;
   while(i < points_count)
@@ -1076,7 +1076,7 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     dt_masks_preview_buffers_t preview;
     if(_gradient_get_creation_preview(gui, &preview)) return;
 
-    dt_masks_draw_preview_shape(cr, zoom_scale, nb, preview.points, preview.points_count,
+    dt_masks_draw_preview_shape(gui->dev, cr, zoom_scale, nb, preview.points, preview.points_count,
                                 preview.border, preview.border_count,
                                 &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND,
                                 CAIRO_LINE_CAP_ROUND, FALSE, FALSE);
@@ -1093,13 +1093,13 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging); 
   // draw main line
   if(gpt->points && gpt->points_count > 0)
-    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points,
+    dt_draw_shape_lines(gui->dev, DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points,
                         gpt->points_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
   // draw borders
   if(gui->group_selected == index)
   {
     if(gpt->border && gpt->border_count > 0)
-      dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
+      dt_draw_shape_lines(gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
                           gpt->border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
   }
 

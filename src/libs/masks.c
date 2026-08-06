@@ -268,7 +268,7 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
 static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_creation_mode_enter(module, DT_MASKS_CIRCLE);
+  dt_masks_creation_mode_enter(darktable.develop, module, DT_MASKS_CIRCLE);
   darktable.develop->form_gui->group_selected = 0;
   dt_control_queue_redraw_center();
 }
@@ -276,7 +276,7 @@ static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)
 static void _tree_add_ellipse(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_creation_mode_enter(module, DT_MASKS_ELLIPSE);
+  dt_masks_creation_mode_enter(darktable.develop, module, DT_MASKS_ELLIPSE);
   darktable.develop->form_gui->group_selected = 0;
   dt_control_queue_redraw_center();
 }
@@ -284,7 +284,7 @@ static void _tree_add_ellipse(GtkButton *button, dt_iop_module_t *module)
 static void _tree_add_polygon(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_creation_mode_enter(module, DT_MASKS_POLYGON);
+  dt_masks_creation_mode_enter(darktable.develop, module, DT_MASKS_POLYGON);
   darktable.develop->form_gui->group_selected = 0;
   dt_control_queue_redraw_center();
 }
@@ -292,7 +292,7 @@ static void _tree_add_polygon(GtkButton *button, dt_iop_module_t *module)
 static void _tree_add_gradient(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_creation_mode_enter(module, DT_MASKS_GRADIENT);
+  dt_masks_creation_mode_enter(darktable.develop, module, DT_MASKS_GRADIENT);
   darktable.develop->form_gui->group_selected = 0;
   dt_control_queue_redraw_center();
 }
@@ -300,7 +300,7 @@ static void _tree_add_gradient(GtkButton *button, dt_iop_module_t *module)
 static void _tree_add_brush(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_creation_mode_enter(module, DT_MASKS_BRUSH);
+  dt_masks_creation_mode_enter(darktable.develop, module, DT_MASKS_BRUSH);
   darktable.develop->form_gui->group_selected = 0;
   dt_control_queue_redraw_center();
 }
@@ -321,7 +321,7 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
   // we add the form in this group
   dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
   grp = dt_masks_cow_touch(darktable.develop, grp);
-  if(form && dt_masks_group_add_form(grp, form))
+  if(form && dt_masks_group_add_form(darktable.develop, grp, form))
   {
     // we save the group
     dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
@@ -374,7 +374,7 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
   // add we save
   dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
   _lib_masks_recreate_list(self);
-  // dt_masks_change_form_gui(grp);
+  // dt_masks_change_form_gui(darktable.develop, grp);
 }
 
 static int _tree_format_form_usage_label(char *str, const size_t str_size,
@@ -745,7 +745,7 @@ static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
 
   // we first discard all visible shapes
-  dt_masks_change_form_gui(NULL);
+  dt_masks_change_form_gui(darktable.develop, NULL);
 
   // now we go through all selected nodes
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
@@ -783,7 +783,7 @@ static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
 
   // we first discard all visible shapes
-  dt_masks_change_form_gui(NULL);
+  dt_masks_change_form_gui(darktable.develop, NULL);
 
   // now we go through all selected nodes
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
@@ -821,7 +821,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
 
   // we first discard all visible shapes
-  dt_masks_change_form_gui(NULL);
+  dt_masks_change_form_gui(darktable.develop, NULL);
 
   // now we go through all selected nodes
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
@@ -839,7 +839,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
       int id = -1;
       _lib_masks_get_values(model, &iter, &module, &grid, &id);
 
-      dt_masks_form_delete(module, dt_masks_get_from_id(darktable.develop, grid),
+      dt_masks_form_delete(darktable.develop, module, dt_masks_get_from_id(darktable.develop, grid),
                            dt_masks_get_from_id(darktable.develop, id));
     }
   }
@@ -893,7 +893,7 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
         }
 
         dt_masks_form_t *dup_form = dt_masks_get_from_id(darktable.develop, nid);
-        dt_masks_form_group_t *new_entry = dup_form ? dt_masks_group_add_form(grp, dup_form) : NULL;
+        dt_masks_form_group_t *new_entry = dup_form ? dt_masks_group_add_form(darktable.develop, grp, dup_form) : NULL;
         if(new_entry && orig_entry)
         {
           new_entry->state = orig_entry->state;
@@ -951,13 +951,13 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
   if(!IS_NULL_PTR(creation_gui) && creation_gui->creation) return;
 
   // we reset all "show mask" icon of iops
-  dt_masks_reset_show_masks_icons();
+  dt_masks_reset_show_masks_icons(darktable.develop);
 
   // if selection empty, we hide all
   const int nb = gtk_tree_selection_count_selected_rows(selection);
   if(nb == 0)
   {
-    dt_masks_change_form_gui(NULL);
+    dt_masks_change_form_gui(darktable.develop, NULL);
     dt_control_queue_redraw_center();
     return;
   }
@@ -1011,8 +1011,8 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
 
   dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
   grp2->formid = 0;
-  dt_masks_group_ungroup(grp2, grp);
-  dt_masks_change_form_gui(grp2);
+  dt_masks_group_ungroup(darktable.develop, grp2, grp);
+  dt_masks_change_form_gui(darktable.develop, grp2);
   darktable.develop->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
   if(nb == 1 && !IS_NULL_PTR(selected_form))
     dt_masks_center_view_on_form(darktable.develop, selected_form);
@@ -2048,6 +2048,7 @@ void gui_init(dt_lib_module_t *self)
   // so there is no child added to self->widget from here.
   GtkWidget *shape_buttons[DEVELOP_MASKS_NB_SHAPES] = { 0 };
   const dt_masks_shape_buttons_config_t shape_buttons_config = {
+    .dev = darktable.develop,
     .owner_module = NULL,
     .creation_module = NULL,
     .buttons = shape_buttons,

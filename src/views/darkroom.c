@@ -1046,7 +1046,7 @@ void expose(
                                  || dt_lib_gui_get_expanded(dt_lib_get_module("masks"));
 
     if(dt_masks_get_visible_form(dev) && display_masks)
-      dt_masks_events_post_expose(dev->gui_module, cri, width, height, pointerx, pointery);
+      dt_masks_events_post_expose(dev, dev->gui_module, cri, width, height, pointerx, pointery);
       
     // module
     if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->gui_post_expose)
@@ -2455,7 +2455,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   // masks
   else if(dt_masks_get_visible_form(dev)
-          && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
+          && dt_masks_events_mouse_moved(dev, dev->gui_module, x, y, pressure, which))
   {
     // There is no shape dragging in creation mode, so no need to commit history.
     if(!dev->form_gui->creation)
@@ -2598,7 +2598,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   }
   // masks
   if(dt_masks_get_visible_form(dev)
-     && dt_masks_events_button_released(dev->gui_module, x, y, which, state))
+     && dt_masks_events_button_released(dev, dev->gui_module, x, y, which, state))
   {
     // Change on mask parameters and image output.
     _queue_delayed_history_commit(dev);
@@ -2768,7 +2768,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   // masks
   if(dt_masks_get_visible_form(dev)
-     && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
+     && dt_masks_events_button_pressed(dev, dev->gui_module, x, y, pressure, which, type, state))
   {
     if(!darktable.develop->form_gui->creation)
       _queue_delayed_history_commit(dev);
@@ -2875,7 +2875,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
 
   // masks
   if(dt_masks_get_visible_form(dev)
-     && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state, delta_y))
+     && dt_masks_events_mouse_scrolled(dev, dev->gui_module, x, y, up, state, delta_y))
   {
     dt_control_queue_redraw_center();
     if(!dev->form_gui->creation)
@@ -2909,7 +2909,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  if(dt_masks_get_visible_form(dev) && dt_masks_events_key_pressed(dev->gui_module, event))
+  if(dt_masks_get_visible_form(dev) && dt_masks_events_key_pressed(dev, dev->gui_module, event))
   {
     _queue_delayed_history_commit(dev);
     return 1;

@@ -36,7 +36,7 @@
 /*
 Typical forms tree structure :
 
-GList darktable.develop->forms
+GList dev->forms
   |
   0) dt_masks_form_t  circle --------------------> ID 1771813676,  "circle #2"
   |    { GList *points
@@ -323,7 +323,7 @@ typedef struct dt_masks_functions_t
   void (*set_hint_message)(const struct dt_masks_form_gui_t *const gui, const struct dt_masks_form_t *const form,
                            const int opacity, char *const __restrict__ msgbuf, const size_t msgbuf_len);
   void (*duplicate_points)(struct dt_develop_t *const dev, struct dt_masks_form_t *base, struct dt_masks_form_t *dest);
-  void (*initial_source_pos)(const float iwd, const float iht, float *x, float *y);
+  void (*initial_source_pos)(struct dt_develop_t *dev, const float iwd, const float iht, float *x, float *y);
   // input coordinates are in absolute output-image space, dist is squared in the same space
   void (*get_distance)(float x, float y, float as, struct dt_masks_form_gui_t *gui, int index, int num_points,
                        int *inside, int *inside_border, int *near, int *inside_source, float *dist);
@@ -346,7 +346,7 @@ typedef struct dt_masks_functions_t
   int (*get_source_area)(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                          dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
-  gboolean (*get_gravity_center)(const struct dt_masks_form_t *form, float center[2], float *area);
+  gboolean (*get_gravity_center)(struct dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);
   float (*get_interaction_value)(const struct dt_masks_form_t *form, dt_masks_interaction_t interaction);
   float (*set_interaction_value)(struct dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
                                  dt_masks_increment_t increment, int flow,
@@ -370,8 +370,8 @@ typedef struct dt_masks_functions_t
   /* Key event */
   int (*key_pressed)(struct dt_iop_module_t *module, GdkEventKey *event, struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
-  // The function to draw the shape in question.
-  void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+  // The function to draw the shape in question. Signature must match shape_draw_function_t.
+  shape_draw_function_t draw_shape;
   /** initialise all control points to eventually match a catmull-rom like spline */
   void (*init_ctrl_points)(struct dt_masks_form_t *form);
   int (*populate_context_menu)(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui, const float pzx, const float pzy);
@@ -443,6 +443,12 @@ typedef struct dt_masks_dynbuf_t
 /** structure used to display a form */
 typedef struct dt_masks_form_gui_t
 {
+  // Owning develop instance, set once at init. Mask GUI code must use this (or an explicit
+  // dev/module argument) instead of the darktable.develop global: shape handlers can run with
+  // module == NULL (mask-manager editing), and reaching for the global both couples every
+  // shape file to the whole application and hides which develop instance the code mutates.
+  struct dt_develop_t *dev;
+
   dt_masks_type_t type;
   // currently visible form when editing masks (GUI-only; may be a temporary copy)
   dt_masks_form_t *form_visible;
@@ -788,13 +794,11 @@ static inline float dt_masks_border_from_projected_handle(dt_develop_t *dev, con
 
 // Circle, ellipse and gradient creation previews all follow the same drawing sequence:
 // optional save/restore, draw the shape, then draw the border preview if present.
-static inline void dt_masks_draw_preview_shape(cairo_t *cr, const float zoom_scale, const int num_points,
+static inline void dt_masks_draw_preview_shape(struct dt_develop_t *dev, cairo_t *cr, const float zoom_scale,
+                                               const int num_points,
                                                float *points, const int points_count,
                                                float *border, const int border_count,
-                                               void (*const *draw_shape)(cairo_t *cr, const float *points,
-                                                                         const int points_count, const int nb,
-                                                                         const gboolean border,
-                                                                         const gboolean source),
+                                               const shape_draw_function_t *draw_shape,
                                                const cairo_line_cap_t shape_cap,
                                                const cairo_line_cap_t border_cap,
                                                const gboolean save_restore,
@@ -802,10 +806,10 @@ static inline void dt_masks_draw_preview_shape(cairo_t *cr, const float zoom_sca
 {
   if(save_restore) cairo_save(cr);
   if(points && points_count > 0)
-    dt_draw_shape_lines(DT_MASKS_NO_DASH, source, cr, num_points, FALSE, zoom_scale, points, points_count,
+    dt_draw_shape_lines(dev, DT_MASKS_NO_DASH, source, cr, num_points, FALSE, zoom_scale, points, points_count,
                         draw_shape, shape_cap);
   if(border && border_count > 0)
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, source, cr, num_points, FALSE, zoom_scale, border, border_count,
+    dt_draw_shape_lines(dev, DT_MASKS_DASH_STICK, source, cr, num_points, FALSE, zoom_scale, border, border_count,
                         draw_shape, border_cap);
   if(save_restore) cairo_restore(cr);
 }
@@ -853,7 +857,8 @@ extern const dt_masks_functions_t dt_masks_functions_gradient;
 extern const dt_masks_functions_t dt_masks_functions_group;
 
 /** init dt_masks_form_gui_t struct with default values */
-void dt_masks_init_form_gui(dt_masks_form_gui_t *gui);
+/** Reset a form GUI state and bind it to its owning develop instance (gui->dev). */
+void dt_masks_init_form_gui(dt_develop_t *dev, dt_masks_form_gui_t *gui);
 
 /** get points in real space with respect of distortion dx and dy are used to eventually move the center of
  * the circle */
@@ -912,8 +917,8 @@ int dt_masks_legacy_params(dt_develop_t *dev, void *params, const int old_versio
 
 /** we create a completely new form. */
 dt_masks_form_t *dt_masks_create(dt_masks_type_t type);
-/** we create a completely new form and add it to darktable.develop->allforms. */
-dt_masks_form_t *dt_masks_create_ext(dt_masks_type_t type);
+/** we create a completely new form and add it to dev->allforms. */
+dt_masks_form_t *dt_masks_create_ext(dt_develop_t *dev, dt_masks_type_t type);
 /** returns a form with formid == id from a list of forms */
 dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id);
 /** returns a form with formid == id from dev->forms */
@@ -932,11 +937,11 @@ void dt_masks_free_form(dt_masks_form_t *form);
 void dt_masks_cleanup_unused(dt_develop_t *dev);
 
 /** function used to manipulate forms for masks */
-void dt_masks_change_form_gui(dt_masks_form_t *newform);
+void dt_masks_change_form_gui(dt_develop_t *dev, dt_masks_form_t *newform);
 void dt_masks_clear_form_gui(dt_develop_t *dev);
-void dt_masks_reset_form_gui(void);
+void dt_masks_reset_form_gui(dt_develop_t *dev);
 void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui);
-void dt_masks_reset_show_masks_icons(void);
+void dt_masks_reset_show_masks_icons(dt_develop_t *dev);
 
 #define DEVELOP_MASKS_NB_SHAPES 5
 
@@ -980,6 +985,9 @@ typedef void (*dt_masks_shape_buttons_notify_f)(GtkWidget *button, dt_iop_module
 
 typedef struct dt_masks_shape_buttons_config_t
 {
+  // Owning develop instance. Mandatory: the GTK button callbacks have no other context when
+  // creation_module is NULL (the shape-manager toolbar case).
+  struct dt_develop_t *dev;
   dt_iop_module_t *owner_module;
   dt_iop_module_t *creation_module;
   GtkWidget **buttons;
@@ -998,15 +1006,15 @@ typedef struct dt_masks_shape_buttons_config_t
 GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *config);
 void dt_masks_shape_buttons_deactivate_all(GtkWidget *active_button);
 
-int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure,
+int dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure,
                                 int which);
-int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, double y, int which,
+int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, int which,
                                     uint32_t state);
-int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, double y, double pressure,
+int dt_masks_events_button_pressed(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure,
                                    int which, int type, uint32_t state);
-int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
+int dt_masks_events_mouse_scrolled(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
 
-int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event);
+int dt_masks_events_key_pressed(dt_develop_t *dev, struct dt_iop_module_t *module, GdkEventKey *event);
 /**
  * @brief returns wether a node is a corner or not.
  * A node is a corner if its 2 control handles are at the same position, else it's a curve.
@@ -1035,7 +1043,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
 void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const float *points,
                                    const int points_count, const int node_count, const float zoom_scale);
 
-void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
+void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module);
 int dt_masks_events_mouse_enter(struct dt_iop_module_t *module);
@@ -1107,9 +1115,9 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *g
  */
 void dt_masks_gui_form_save_creation(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *form,
                                      dt_masks_form_gui_t *gui);
-void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp);
+void dt_masks_group_ungroup(dt_develop_t *dev, dt_masks_form_t *dest_grp, dt_masks_form_t *grp);
 void dt_masks_group_update_name(dt_iop_module_t *module);
-dt_masks_form_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_form_t *form);
+dt_masks_form_group_t *dt_masks_group_add_form(dt_develop_t *dev, dt_masks_form_t *grp, dt_masks_form_t *form);
 
 void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module_t *module);
 dt_masks_edit_mode_t dt_masks_get_edit_mode(struct dt_iop_module_t *module);
@@ -1117,18 +1125,17 @@ void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t
 void dt_masks_iop_update(struct dt_iop_module_t *module);
 void dt_masks_iop_combo_populate(GtkWidget *w, void *module);
 void dt_masks_iop_use_same_as(struct dt_iop_module_t *module, struct dt_iop_module_t *src);
-uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *form);
-/** Same as dt_masks_group_get_hash(), but resolves grouped children from the given forms list
- * instead of the live dev->forms — mandatory when hashing a history/pipe snapshot, so the hash
- * describes one coherent state instead of mixing the snapshot's group with live children. */
+/** Hash a group's full content (recursing into members). Children are resolved from the given
+ * forms list — pass the same list the group came from (live dev->forms or a snapshot), so the
+ * hash describes one coherent state instead of mixing the group with foreign children. */
 uint64_t dt_masks_group_get_hash_ext(uint64_t hash, GList *masks, dt_masks_form_t *form);
-/** Same as dt_masks_group_get_hash(), but hashes only the form's own content: for a group,
+/** Same as dt_masks_group_get_hash_ext(), but hashes only the form's own content: for a group,
  * member references (id/state/opacity) instead of recursing into each member's content.
  * Meant for walking a flat list where every member already gets its own top-level call. */
-uint64_t dt_masks_form_get_own_hash(uint64_t hash, const dt_masks_form_t *form);
+uint64_t dt_masks_form_get_own_hash(uint64_t hash, GList *masks, const dt_masks_form_t *form);
 
-void dt_masks_form_delete(struct dt_iop_module_t *module, dt_masks_form_t *grp, dt_masks_form_t *form);
-int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow);
+void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *grp, dt_masks_form_t *form);
+int dt_masks_form_change_opacity(dt_develop_t *dev, dt_masks_form_t *form, int parentid, int up, const int flow);
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up);
 int dt_masks_form_duplicate(dt_develop_t *dev, int formid);
 /* returns a duplicate tof form, including the formid */
@@ -1138,7 +1145,7 @@ dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form);
 int dt_masks_point_in_form_exact(const float *pts, int num_pts, const float *points, int points_start, int points_count);
 
 /** allow to select a shape inside an iop */
-void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel);
+void dt_masks_select_form(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *sel);
 
 /** utils for selecting the source of a clone mask while creating it */
 void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint32_t state);
@@ -1168,7 +1175,7 @@ static inline void dt_masks_draw_source_preview(cairo_t *cr, const float zoom_sc
 float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], const float center[2], dt_masks_form_gui_t *gui);
 
 /** Getters and setters for direct GUI interaction */
-dt_masks_form_group_t *dt_masks_form_group_from_parentid(int parentid, int formid);
+dt_masks_form_group_t *dt_masks_form_group_from_parentid(dt_develop_t *dev, int parentid, int formid);
 int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int formid);
 dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_form_t *form,
                                                         const struct dt_masks_form_gui_t *gui);
@@ -1189,10 +1196,10 @@ gboolean dt_masks_is_anything_hovered(const dt_masks_form_gui_t *mask_gui);
  */
 dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const struct dt_masks_form_t *form,
                                                              const struct dt_masks_form_gui_t *gui);
-float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
+float dt_masks_form_get_interaction_value(dt_develop_t *dev, dt_masks_form_group_t *form_group,
                                           dt_masks_interaction_t interaction);
-gboolean dt_masks_form_get_gravity_center(const struct dt_masks_form_t *form, float center[2], float *area);
-void dt_masks_form_update_gravity_center(struct dt_masks_form_t *form);
+gboolean dt_masks_form_get_gravity_center(dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);
+void dt_masks_form_update_gravity_center(dt_develop_t *dev, struct dt_masks_form_t *form);
 /** Marks gravity_center/area stale instead of recomputing them right away. Use for bulk
  * paths (loading history, undo/redo) that swap in many forms at once; the one GUI
  * hit-testing read site recomputes lazily on first actual use. */
@@ -1556,7 +1563,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form, dt_masks_for
                                         void *user_data);
 
 void dt_masks_creation_mode_quit(dt_masks_form_gui_t *gui);
-gboolean dt_masks_creation_mode_enter(dt_iop_module_t *module, const dt_masks_type_t type);
+gboolean dt_masks_creation_mode_enter(dt_develop_t *dev, dt_iop_module_t *module, const dt_masks_type_t type);
 void apply_operation(struct dt_masks_form_group_t *pt, const dt_masks_state_t apply_state);
 
 /** Contextual menu */

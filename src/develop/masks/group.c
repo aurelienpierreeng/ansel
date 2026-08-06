@@ -46,20 +46,20 @@
  * coordinates come from `gui->pos`. */
 // Centralize group child lookup so all dispatchers and expose code resolve the same
 // selected child the same way.
-static dt_masks_form_t *_group_get_child_at(dt_masks_form_t *form, const int group_index,
+static dt_masks_form_t *_group_get_child_at(dt_develop_t *dev, dt_masks_form_t *form, const int group_index,
                                             dt_masks_form_group_t **group_entry)
 {
   dt_masks_form_group_t *entry = (dt_masks_form_group_t *)g_list_nth_data(form->points, group_index);
   if(IS_NULL_PTR(entry)) return NULL;
   if(group_entry) *group_entry = entry;
-  return dt_masks_get_from_id(darktable.develop, entry->formid);
+  return dt_masks_get_from_id(dev, entry->formid);
 }
 
 static dt_masks_form_t *_group_get_selected_child(dt_masks_form_t *form, dt_masks_form_gui_t *gui,
                                                   dt_masks_form_group_t **group_entry)
 {
   if(gui->group_selected < 0) return NULL;
-  return _group_get_child_at(form, gui->group_selected, group_entry);
+  return _group_get_child_at(gui->dev, form, gui->group_selected, group_entry);
 }
 
 static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, const int flow,
@@ -128,7 +128,7 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, double x, d
 static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                           dt_masks_form_gui_t *gui, int pos)
 {
-  dt_masks_form_t *selected_form = _group_get_child_at(form, pos, NULL);
+  dt_masks_form_t *selected_form = _group_get_child_at(gui->dev, form, pos, NULL);
   if(selected_form && selected_form->functions && selected_form->functions->post_expose)
   {
     gui->type = selected_form->type;
@@ -691,7 +691,7 @@ static void _group_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *co
   }
 }
 
-static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
+static gboolean _group_get_gravity_center(dt_develop_t *dev, const dt_masks_form_t *form, float center[2], float *area)
 {
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points) || IS_NULL_PTR(center) || IS_NULL_PTR(area)) return FALSE;
 
@@ -704,12 +704,12 @@ static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float cen
   {
     const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)l->data;
     if(IS_NULL_PTR(pt)) continue;
-    dt_masks_form_t *child = dt_masks_get_from_id(darktable.develop, pt->formid);
+    dt_masks_form_t *child = dt_masks_get_from_id(dev, pt->formid);
     if(IS_NULL_PTR(child)) continue;
 
     float child_center[2] = { 0.0f, 0.0f };
     float child_area = 0.0f;
-    if(!dt_masks_form_get_gravity_center(child, child_center, &child_area)) continue;
+    if(!dt_masks_form_get_gravity_center(dev, child, child_center, &child_area)) continue;
 
     const float w = (child_area > 0.0f) ? child_area : 1.0f;
     sum_x += child_center[0] * w;
