@@ -2842,7 +2842,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int 
 
 
     
-    if(darktable.unmuted & DT_DEBUG_MASKS)
+    if(dt_get_debug_flags() & DT_DEBUG_MASKS)
     {
       // Debug: show the main and source gravity points, show head and tail points
       cairo_save(cr);

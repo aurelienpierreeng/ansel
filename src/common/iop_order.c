@@ -53,7 +53,7 @@
 
 #define DT_IOP_ORDER_VERSION 5
 
-#define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+#define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
 static void _ioppr_reset_iop_order(GList *iop_order_list);
 static dt_iop_order_entry_t *dt_ioppr_get_iop_order_entry(GList *iop_order_list, const char *op_name,

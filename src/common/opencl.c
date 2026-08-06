@@ -778,7 +778,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   }
   // create a command queue for first device the context reported
   cl->dev[dev].cmd_queue = (cl->dlocl->symbols->dt_clCreateCommandQueue)(
-      cl->dev[dev].context, devid, (darktable.unmuted & DT_DEBUG_PERF) ? CL_QUEUE_PROFILING_ENABLE : 0, &err);
+      cl->dev[dev].context, devid, (dt_get_debug_flags() & DT_DEBUG_PERF) ? CL_QUEUE_PROFILING_ENABLE : 0, &err);
   if(err != CL_SUCCESS)
   {
     dt_print_nts(DT_DEBUG_OPENCL, "   *** could not create command queue *** %i\n", err);
@@ -1270,7 +1270,7 @@ void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
   if(!IS_NULL_PTR(cl->dev[i].context))
     (cl->dlocl->symbols->dt_clReleaseContext)(cl->dev[i].context);
 
-  if(cl->print_statistics && (darktable.unmuted & DT_DEBUG_MEMORY))
+  if(cl->print_statistics && (dt_get_debug_flags() & DT_DEBUG_MEMORY))
   {
     dt_print_nts(DT_DEBUG_OPENCL, " [opencl_summary_statistics] device '%s' (%d): peak memory usage %" G_GSIZE_FORMAT " bytes (%.1f MB)\n",
                 cl->dev[i].name, i, cl->dev[i].peak_memory, (float)cl->dev[i].peak_memory/(1024*1024));
@@ -2176,7 +2176,7 @@ int dt_opencl_enqueue_kernel_2d_with_local(const int dev, const int kernel, cons
 
   char buf[256];
   buf[0] = '\0';
-  if(darktable.unmuted & DT_DEBUG_OPENCL)
+  if(dt_get_debug_flags() & DT_DEBUG_OPENCL)
     (cl->dlocl->symbols->dt_clGetKernelInfo)(cl->dev[dev].kernel[kernel], CL_KERNEL_FUNCTION_NAME, 256, buf, NULL);
   cl_event *eventp = dt_opencl_events_get_slot(dev, buf);
   cl_int err = (cl->dlocl->symbols->dt_clEnqueueNDRangeKernel)(cl->dev[dev].cmd_queue, cl->dev[dev].kernel[kernel],
@@ -2714,7 +2714,7 @@ void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_m
   darktable.opencl->dev[devid].peak_memory = MAX(darktable.opencl->dev[devid].peak_memory,
                                                  darktable.opencl->dev[devid].memory_in_use);
 
-  if((darktable.unmuted & DT_DEBUG_MEMORY) && (darktable.unmuted & DT_DEBUG_OPENCL))
+  if((dt_get_debug_flags() & DT_DEBUG_MEMORY) && (dt_get_debug_flags() & DT_DEBUG_OPENCL))
     dt_print(DT_DEBUG_OPENCL,
               "[opencl memory] device %d: %" G_GSIZE_FORMAT " bytes (%.1f MB) in use\n", devid, darktable.opencl->dev[devid].memory_in_use,
                                       (float)darktable.opencl->dev[devid].memory_in_use/(1024*1024));
@@ -3139,7 +3139,7 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
     else
       (*totalsuccess)++;
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       // get profiling info of event (only if darktable was called with '-d perf')
       cl_ulong start;
@@ -3172,7 +3172,7 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
   if(reset)
   {
     // output profiling info if wanted
-    if(darktable.unmuted & DT_DEBUG_PERF) dt_opencl_events_profiling(devid, 1);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_opencl_events_profiling(devid, 1);
 
     // reset eventlist structures to empty state
     dt_opencl_events_reset(devid);

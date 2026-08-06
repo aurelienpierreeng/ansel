@@ -1975,7 +1975,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   if(module->flags() & IOP_FLAGS_ALLOW_TILING)
     piece->process_tiling_ready = 1;
 
-  if(darktable.unmuted & DT_DEBUG_PARAMS && module->so->get_introspection())
+  if(dt_get_debug_flags() & DT_DEBUG_PARAMS && module->so->get_introspection())
     _iop_validate_params(module->so->get_introspection()->field, params, TRUE);
 
   module->commit_params(module, params, pipe, piece);

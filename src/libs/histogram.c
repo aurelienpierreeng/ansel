@@ -1278,7 +1278,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
     }
   uint32_t *smooth_bins = NULL;
 
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_DEV,
             "[histogram/scope] waveform setup op=%s parade=%d vertical=%d widget=%dx%d backbuf=%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT " "
             "tone_bins=%" G_GSIZE_FORMAT " raster_extent=%" G_GSIZE_FORMAT " source_axis=%" G_GSIZE_FORMAT
@@ -1295,7 +1295,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
       0);
   if(IS_NULL_PTR(image) || IS_NULL_PTR(bins))
   {
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_DEV,
               "[histogram/scope] waveform allocation failed bins=%p image=%p binning_size=%" G_GSIZE_FORMAT
               " image_size=%" G_GSIZE_FORMAT "\n",

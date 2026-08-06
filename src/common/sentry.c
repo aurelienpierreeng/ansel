@@ -564,7 +564,7 @@ void dt_sentry_init(const gboolean have_gui)
   // dashboard and release-health metrics. The compiler/optimization build type is
   // kept separately as the "build_type" extra.
   sentry_options_set_environment(options, DT_BUILD_CHANNEL);
-  sentry_options_set_debug(options, (darktable.unmuted & DT_DEBUG_CONTROL) ? 1 : 0);
+  sentry_options_set_debug(options, (dt_get_debug_flags() & DT_DEBUG_CONTROL) ? 1 : 0);
 
   // Stamp non-crash events with the session length...
   sentry_options_set_before_send(options, _sentry_before_send, NULL);

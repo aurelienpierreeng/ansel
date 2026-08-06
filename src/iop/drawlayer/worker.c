@@ -517,7 +517,7 @@ static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, const guint c
 static void _log_worker_batch_timing(const char *tag, const guint processed_dabs, const guint thread_count,
                                      const double elapsed_ms, const gboolean outer_loop)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PERF)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PERF)) return;
   dt_print(DT_DEBUG_PERF, "[drawlayer] batch worker=%s dabs=%u threads=%u outer=%d ms=%.3f\n",
            tag ? tag : "unknown", processed_dabs, thread_count, outer_loop ? 1 : 0, elapsed_ms);
 }

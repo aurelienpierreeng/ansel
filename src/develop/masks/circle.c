@@ -747,12 +747,12 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
                             float **buffer, int *width, int *height, int *posx, int *posy)
 {
   double start2 = 0.0;
-  if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
   // we get the area
   if(_circle_get_area(module, pipe, piece, form, width, height, posx, posy) != 0) return 1;
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle area took %0.04f sec\n", form->name, dt_get_wtime() - start2);
     start2 = dt_get_wtime();
@@ -781,7 +781,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
       p[2*j + 1] = y;
     }
   }
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle draw took %0.04f sec\n", form->name, dt_get_wtime() - start2);
 
@@ -794,7 +794,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
     return 1;
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle transform took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
@@ -832,7 +832,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
 
   dt_pixelpipe_cache_free_align(points);
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle fill took %0.04f sec\n", form->name, dt_get_wtime() - start2);
 
   return 0;
@@ -849,7 +849,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
   double start1 = 0.0;
   double start2 = start1;
   
-  if(darktable.unmuted & DT_DEBUG_PERF) start2 = start1 = dt_get_wtime();
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = start1 = dt_get_wtime();
 
   // we get the circle parameters
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
@@ -879,7 +879,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
   // initialize output buffer with zero
   memset(buffer, 0, sizeof(float) * width * height);
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle init took %0.04f sec\n", form->name, dt_get_wtime() - start2);
     start2 = dt_get_wtime();
@@ -927,7 +927,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
     return 1;
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle outline took %0.04f sec\n", form->name, dt_get_wtime() - start2);
     start2 = dt_get_wtime();
@@ -967,7 +967,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
 
   dt_pixelpipe_cache_free_align(circ);
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle bounding box took %0.04f sec\n", form->name, dt_get_wtime() - start2);
     start2 = dt_get_wtime();
@@ -991,7 +991,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
       points[index * 2 + 1] = (grid * j + py) * iscale;
     }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle grid took %0.04f sec\n", form->name, dt_get_wtime() - start2);
     start2 = dt_get_wtime();
@@ -1005,7 +1005,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
     return 1;
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle transform took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
@@ -1028,7 +1028,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
       points[2*index] = f * f;
     }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle draw took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
@@ -1077,7 +1077,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
 
   dt_pixelpipe_cache_free_align(points);
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle fill took %0.04f sec\n", form->name, dt_get_wtime() - start2);
     dt_print(DT_DEBUG_MASKS, "[masks %s] circle total render took %0.04f sec\n", form->name,

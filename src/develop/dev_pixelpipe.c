@@ -514,7 +514,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out = roi_in;
   gchar *pipe_name = NULL;
-  if(darktable.unmuted & DT_DEBUG_PIPE)
+  if(dt_get_debug_flags() & DT_DEBUG_PIPE)
     pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
@@ -538,7 +538,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
     // Forward ROI planning answers "what output rectangle does this module
     // produce from the previous one ?". Logging the tuple here makes each
     // module-local geometry change visible on `-d pipe`.
-    if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
+    if(piece->enabled && (dt_get_debug_flags() & DT_DEBUG_PIPE))
       dt_print(DT_DEBUG_PIPE,
                "[roi-out] pipe=%-15s module=%-18s enabled=%d in =(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)"
                " out=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)\n",
@@ -571,7 +571,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
   gchar *pipe_name = NULL;
-  if(darktable.unmuted & DT_DEBUG_PIPE)
+  if(dt_get_debug_flags() & DT_DEBUG_PIPE)
     pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
   for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
   {
@@ -595,7 +595,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
     // module need from upstream to deliver the requested downstream output ?".
     // Logging that request before and after modify_roi_in() makes ROI growth
     // and padding traceable module-by-module on `-d pipe`.
-    if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
+    if(piece->enabled && (dt_get_debug_flags() & DT_DEBUG_PIPE))
       dt_print(DT_DEBUG_PIPE,
                "[roi-in ] pipe=%-15s module=%-18s enabled=%d out=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)"
                " in=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)\n",
@@ -1154,7 +1154,7 @@ void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
   if(IS_NULL_PTR(pipe)) return;
 
   dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
-  gchar *pipe_name = (darktable.unmuted & DT_DEBUG_PIPE) ? _get_debug_pipe_name(pipe, NULL) : NULL;
+  gchar *pipe_name = (dt_get_debug_flags() & DT_DEBUG_PIPE) ? _get_debug_pipe_name(pipe, NULL) : NULL;
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
@@ -1502,7 +1502,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
     // Update global hash for this stage
     hash = dt_hash(hash, (const char *)&local_hash, sizeof(uint64_t));
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     {
       gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
       dt_print(DT_DEBUG_PIPE,

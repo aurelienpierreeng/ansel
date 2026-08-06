@@ -776,7 +776,7 @@ gboolean _apply_style_before_export(dt_develop_t *dev, dt_imageio_module_data_t 
 
 void _print_export_debug(dt_dev_pixelpipe_t *pipe, dt_imageio_module_data_t *format_params, const gboolean use_style)
 {
-  if(darktable.unmuted & DT_DEBUG_IMAGEIO)
+  if(dt_get_debug_flags() & DT_DEBUG_IMAGEIO)
   {
     fprintf(stderr,"[dt_imageio_export_with_flags] ");
     if(use_style)

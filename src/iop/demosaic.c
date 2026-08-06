@@ -998,7 +998,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_roi_t roo = *roi_out;
   roo.x = roo.y = 0;
   // roi_out->scale = global scale: (iscale == 1.0, always when demosaic is on)
-  const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
+  const gboolean info = ((dt_get_debug_flags() & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
                          && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   // piece->dsc_in.filters/xtrans only carries the fixed sensor-border-trim phase shift
@@ -1639,7 +1639,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_times_t start_time = { 0 }, end_time = { 0 };
-  const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
+  const gboolean info = ((dt_get_debug_flags() & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
                          && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   // See the matching comment in process(): most kernels below take roi_in->x/y as an

@@ -775,7 +775,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
                             const dt_iop_order_iccprofile_info_t *const profile)
 {
   dt_times_t start_time = { 0 }, end_time = { 0 };
-  if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
   if(dsc->channels == 4u)
   {
@@ -823,7 +823,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
   else
     dt_unreachable_codepath();
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_get_times(&end_time);
     fprintf(stderr, "colorpicker stats reading took %.3f secs (%.3f CPU)\n",

@@ -1024,14 +1024,14 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
   }
 
   dt_times_t start_time = { 0 }, end_time = { 0 };
-  if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
   // matrix should be never NAN, this is only to test it against lcms2!
   if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
   {
     _transform_matrix(self, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f CPU) [%s %s]\n",
@@ -1044,7 +1044,7 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
   {
     _transform_lcms2(self, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f lcms2) [%s %s]\n",
@@ -1079,14 +1079,14 @@ void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_i
   }
 
   dt_times_t start_time = { 0 }, end_time = { 0 };
-  if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
   if(!isnan(profile_info_from->matrix_in[0][0]) && !isnan(profile_info_from->matrix_out[0][0])
      && !isnan(profile_info_to->matrix_in[0][0]) && !isnan(profile_info_to->matrix_out[0][0]))
   {
     _transform_matrix_rgb(image_in, image_out, width, height, profile_info_from, profile_info_to);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform RGB-->RGB took %.3f secs (%.3f CPU) [%s]\n",
@@ -1097,7 +1097,7 @@ void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_i
   {
     _transform_lcms2_rgb(image_in, image_out, width, height, profile_info_from, profile_info_to);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform RGB-->RGB took %.3f secs (%.3f lcms2) [%s]\n",
@@ -1292,7 +1292,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
   {
     dt_times_t start_time = { 0 }, end_time = { 0 };
-    if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
     if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
     {
@@ -1345,7 +1345,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
 
     *converted_cst = cst_to;
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f GPU) [%s %s]\n",
@@ -1450,7 +1450,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
      && !isnan(profile_info_to->matrix_in[0][0]) && !isnan(profile_info_to->matrix_out[0][0]))
   {
     dt_times_t start_time = { 0 }, end_time = { 0 };
-    if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
     size_t origin[] = { 0, 0, 0 };
     size_t region[] = { width, height, 1 };
@@ -1557,7 +1557,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
       goto cleanup;
     }
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform RGB-->RGB took %.3f secs (%.3f GPU) [%s]\n",

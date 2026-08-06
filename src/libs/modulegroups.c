@@ -61,7 +61,7 @@
 
 DT_MODULE(1)
 
-#define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+#define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
 typedef enum dt_modulesgroups_tabs_t
 {

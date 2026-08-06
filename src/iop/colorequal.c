@@ -546,7 +546,7 @@ _sample_ring_anchor(const float ring_surface[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP
 static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_params_t *p,
                         const dt_iop_order_iccprofile_info_t *lut_profile)
 {
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
   const float white = dt_colorrings_graph_white();
   const size_t clut_size
@@ -950,7 +950,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   if(!self->enabled) return;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   const dt_iop_colorequal_params_t *p = g ? &g->gui_params : (const dt_iop_colorequal_params_t *)self->params;
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
 
   if(IS_NULL_PTR(g->viewer)) return;
@@ -1005,7 +1005,7 @@ static void _update_gui_lut_cache_throttled(gpointer data)
 
 static void _update_curve_cache(dt_iop_colorequal_gui_data_t *g, const dt_iop_colorequal_params_t *p)
 {
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
   for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
     for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)

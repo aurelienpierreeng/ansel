@@ -283,7 +283,7 @@ static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_r
     input->have_layer_coords = TRUE;
   }
 
-  if(darktable.unmuted & DT_DEBUG_INPUT)
+  if(dt_get_debug_flags() & DT_DEBUG_INPUT)
     dt_print(DT_DEBUG_INPUT,
              "[drawlayer] raw-input batch=%u event=%u pos=%u widget=(%.3f,%.3f) raster=(%.3f,%.3f) ok=%d\n",
              input->stroke_batch, input->event_index, input->stroke_pos, input->wx, input->wy, input->lx, input->ly,
@@ -459,7 +459,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
                                                  published.cache_entry, -1);
 #endif
   dt_drawlayer_cache_patch_clear(&published, "drawlayer patch");
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF,
              "[drawlayer] cache rekey conflict old=%" PRIu64 " new=%" PRIu64 " -> published snapshot instead\n",
              patch->cache_hash, new_hash);
@@ -1027,7 +1027,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     err = dt_opencl_enqueue_copy_image(devid, dev_out_partial, dev_out, zero_origin, win_origin, win_region);
     if(err != CL_SUCCESS) goto cleanup;
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] partial composite window=%dx%d at (%d,%d) of %dx%d\n", dw, dh,
                target_damage.nw[0], target_damage.nw[1], target_roi->width, target_roi->height);
 
@@ -4053,7 +4053,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const gboolean g_hash = pstate && layer_hash != 0 && pstate->last_composite_layer_hash == layer_hash;
     const gboolean g_roi = pstate && !memcmp(&pstate->last_composite_target_roi, &target_roi, sizeof(dt_iop_roi_t));
     const gboolean allow_partial = realtime && g_valid && g_devout && g_hash && g_roi;
-    if(realtime && pstate && !allow_partial && (darktable.unmuted & DT_DEBUG_VERBOSE))
+    if(realtime && pstate && !allow_partial && (dt_get_debug_flags() & DT_DEBUG_VERBOSE))
       dt_print(DT_DEBUG_PERF,
                "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d\n",
                g_valid, g_devout, g_hash, g_roi);
@@ -4086,7 +4086,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       .process = runtime_request.process_state,
       .source = &source,
     };
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=blend-base total=%.3f ok=%d\n",
                (g_get_monotonic_time() - process_t0) / 1000.0, ok ? 1 : 0);
     dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
@@ -4094,7 +4094,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
 process_cl_fallback:
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=no-cache-pass-through total=%.3f\n",
              (g_get_monotonic_time() - process_t0) / 1000.0);
   const gboolean ok = dt_iop_clip_and_zoom_roi_cl(pipe->devid, dev_out, dev_in, roi_out, roi_in)
@@ -4202,7 +4202,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     }
 
     _blend_layer_over_input(output, input, layer_pixels, pixels, preview_bg.enabled, preview_bg.value);
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] process step=blend-base total=%.3f\n",
                (g_get_monotonic_time() - process_t0) / 1000.0);
 
@@ -4220,7 +4220,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
    * the correct backend behavior is therefore a no-op pass-through rather than
    * reopening/scanning/loading the TIFF in the hot process path. */
 fallback_pass_through:
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF, "[drawlayer] process step=no-cache-pass-through total=%.3f\n",
              (g_get_monotonic_time() - process_t0) / 1000.0);
   dt_iop_image_copy_by_size(output, input, roi_out->width, roi_out->height, 4);

@@ -685,7 +685,7 @@ static void _draw_samples(cairo_t *cr, const dt_lut_viewer_t *viewer,
     return;
 
   dt_lut_viewer_t *mutable_viewer = (dt_lut_viewer_t *)viewer;
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double total_start = log_perf ? dt_get_wtime() : 0.0;
   double collect_done = 0.0;
   double convert_done = 0.0;
@@ -940,7 +940,7 @@ static void _draw_placeholder(cairo_t *cr, const int width, const int height, co
 
 static void _render_surface(dt_lut_viewer_t *viewer, const int width, const int height)
 {
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
   const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
   if(viewer->clut_lock) dt_pthread_rwlock_rdlock(viewer->clut_lock);

@@ -700,7 +700,7 @@ static void _node_target_hsb(const dt_iop_colorprimaries_params_t *const p, cons
 static void _build_clut(dt_iop_colorprimaries_data_t *d, const dt_iop_colorprimaries_params_t *p,
                         const dt_iop_order_iccprofile_info_t *lut_profile)
 {
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
   const size_t clut_size = (size_t)DT_COLORRINGS_CLUT_LEVEL * DT_COLORRINGS_CLUT_LEVEL * DT_COLORRINGS_CLUT_LEVEL * 3u;
   const float inv_sigma_L = 1.f / fmaxf(p->sigma_L * 0.01f, 1e-6f);

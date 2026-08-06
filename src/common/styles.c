@@ -71,7 +71,7 @@ static sqlite3_stmt *_styles_apply_items_stmt = NULL;
 #include <stdio.h>
 #include <string.h>
 
-#define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+#define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
 typedef struct
 {

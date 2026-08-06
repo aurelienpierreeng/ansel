@@ -1629,6 +1629,16 @@ int32_t dt_get_debug_flags(void)
   return darktable.unmuted;
 }
 
+int32_t dt_get_signal_debug_acts(void)
+{
+  return darktable.unmuted_signal_dbg_acts;
+}
+
+gboolean dt_get_signal_debug(const int signal)
+{
+  return darktable.unmuted_signal_dbg[signal];
+}
+
 void dt_print(dt_debug_thread_t thread, const char *msg, ...)
 {
   if(thread == DT_DEBUG_ALWAYS || (darktable.unmuted & thread))

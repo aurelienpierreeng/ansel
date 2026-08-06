@@ -306,7 +306,7 @@ void dt_control_change_cursor_by_name(const char *curs_str)
     _control_apply_cursor(cursor_shape);
     _control_store_current_cursor(chosen_shape, hide ? NULL : curs_str);
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_CONTROL, "Changing cursor to `%s`\n", hide ? "GDK_BLANK_CURSOR" : curs_str);
 
     g_object_unref(cursor_shape);
@@ -366,7 +366,7 @@ void dt_control_change_cursor_EXT(dt_cursor_t cursor, const char *file, int line
     g_object_unref(cursor_shape);
     _control_store_current_cursor(chosen_shape, NULL);
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_CONTROL,
                "Changing cursor to `%s`, requested from %s:%d\n",
                hide ? "GDK_BLANK_CURSOR" : _get_cursor_name(requested_shape), file, line);
@@ -381,7 +381,7 @@ void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line)
      && IS_NULL_PTR(darktable.control->cursor.shape_str))
     return;
 
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_CONTROL, "Queue cursor to `%s`, requested from %s:%d\n", _get_cursor_name(requested_shape), file, line);
 
   g_free(darktable.control->cursor.shape_str);
@@ -415,7 +415,7 @@ void dt_control_queue_cursor_by_name(const char *curs_str)
 
 void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int line)
 {
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_CONTROL, "%s cursor, requested from %s:%d\n", visible ? "Show" : "Hide", file, line);
   darktable.control->cursor.hide = !visible;
 }

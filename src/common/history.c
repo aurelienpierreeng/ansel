@@ -57,7 +57,7 @@
 #include "develop/develop.h"
 #include "develop/masks.h"
 
-#define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+#define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
 static sqlite3_stmt *_history_check_module_exists_stmt = NULL;
 static sqlite3_stmt *_history_hash_set_mipmap_stmt = NULL;

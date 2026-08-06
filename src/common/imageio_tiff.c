@@ -339,7 +339,7 @@ static void _warning_error_handler(const char *type, const char* module, const c
 
 static void _warning_handler(const char* module, const char* fmt, va_list ap)
 {
-  if(darktable.unmuted & DT_DEBUG_IMAGEIO)
+  if(dt_get_debug_flags() & DT_DEBUG_IMAGEIO)
   {
     _warning_error_handler("warning", module, fmt, ap);
   }

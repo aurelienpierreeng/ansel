@@ -350,7 +350,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(level == 0.0f) return;
-  const gboolean info = ((darktable.unmuted & DT_DEBUG_MASKS) && (pipe->type == DT_DEV_PIXELPIPE_FULL));
+  const gboolean info = ((dt_get_debug_flags() & DT_DEBUG_MASKS) && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   const gboolean detail = (level > 0.0f);
   const float threshold = _detail_mask_threshold(level, detail);
@@ -956,7 +956,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(level == 0.0f) return;
-  const gboolean info = (darktable.unmuted & DT_DEBUG_MASKS);
+  const gboolean info = (dt_get_debug_flags() & DT_DEBUG_MASKS);
 
   const int detail = (level > 0.0f);
   const float threshold = _detail_mask_threshold(level, detail);

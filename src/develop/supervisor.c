@@ -575,7 +575,7 @@ static void _emit_line(JsonObject *root)
   gsize len = 0;
   gchar *str = json_generator_to_data(gen, &len);
 
-  if(darktable.unmuted & DT_DEBUG_SUPERVISOR)
+  if(dt_get_debug_flags() & DT_DEBUG_SUPERVISOR)
   {
     fprintf(stderr, "%s\n", str);
     fflush(stderr);

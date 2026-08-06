@@ -1612,7 +1612,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
           }
         }
 
-      if((sel_illu > -1) && (darktable.unmuted & DT_DEBUG_IMAGEIO))
+      if((sel_illu > -1) && (dt_get_debug_flags() & DT_DEBUG_IMAGEIO))
       {
         fprintf(stderr, "[exif] `%s` dng illuminant %i (%iK) selected from ", img->filename, illu[sel_illu], sel_temp);
         for(int i = 0; i < 3; i++)

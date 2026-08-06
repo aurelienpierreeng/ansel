@@ -925,7 +925,7 @@ static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *key
                                       event->key.group, // this ensures that numlock or shift are properly decoded
                                       keyval, NULL, NULL, &consumed);
 
-  if(darktable.unmuted & DT_DEBUG_SHORTCUTS)
+  if(dt_get_debug_flags() & DT_DEBUG_SHORTCUTS)
   {
     gchar *accel_name = gtk_accelerator_name(*keyval, *mods);
     dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] %s : %s\n",

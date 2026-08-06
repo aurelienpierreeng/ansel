@@ -764,7 +764,7 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
   if(rasterized && !IS_NULL_PTR(runtime_state) && !IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     dt_drawlayer_paint_runtime_note_dab_damage(runtime_state, &runtime_private->bounds);
 
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
   {
     if(!IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     {

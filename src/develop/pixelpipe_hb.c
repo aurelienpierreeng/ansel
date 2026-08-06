@@ -98,8 +98,8 @@ static void _trace_cache_owner(const dt_dev_pixelpipe_t *pipe, const dt_iop_modu
                                const void *buffer, const dt_pixel_cache_entry_t *entry,
                                const gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
-  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_owner] pipe=%s module=%s phase=%s slot=%s req=%" PRIu64
@@ -123,8 +123,8 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
                                   const char *phase, const void *buffer,
                                   const dt_iop_buffer_dsc_t *format, const dt_iop_roi_t *roi)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
-  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
   if(IS_NULL_PTR(buffer) || IS_NULL_PTR(format) || IS_NULL_PTR(roi)) return;
   if(roi->width <= 0 || roi->height <= 0) return;
 
@@ -350,8 +350,8 @@ void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_modu
                                            const size_t in_bpp, const size_t out_bpp,
                                            const int cst_before, const int cst_after)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPE)) return;
-  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
   const char *module_name = module ? module->op : "base";
   const char *pipe_name = dt_pixelpipe_get_pipe_name(pipe->type);
   const char *stage_name = stage ? stage : "process";
@@ -762,9 +762,9 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
                              const dt_iop_roi_t *roi_out, dt_iop_buffer_dsc_t *out_format,
                              dt_iop_module_t *module)
 {
-  if(!(darktable.unmuted & DT_DEBUG_NAN)) return;
-  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
-  if((darktable.unmuted & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0)
+  if(!(dt_get_debug_flags() & DT_DEBUG_NAN)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
+  if((dt_get_debug_flags() & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0)
   {
     gchar *module_label = dt_history_item_get_name(module);
 
@@ -996,7 +996,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
    * be fully overwritten later. As soon as we keep the current output as a published cacheline in
    * RAM, rekey reuse must stop for that piece so later runs cannot overwrite a long-term state in
    * place just because the pipe is running in realtime. */
-  const gboolean allow_rekey_reuse = !(darktable.unmuted & DT_DEBUG_NOCACHE_REUSE) && !cache_ram_output;
+  const gboolean allow_rekey_reuse = !(dt_get_debug_flags() & DT_DEBUG_NOCACHE_REUSE) && !cache_ram_output;
   const dt_dev_pixelpipe_cache_writable_status_t acquire_status
       = dt_dev_pixelpipe_cache_get_writable(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                             cache_ram_output, allow_rekey_reuse,
@@ -1230,7 +1230,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   }
 
   // Print min/max/Nan in debug mode only
-  if((darktable.unmuted & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && !IS_NULL_PTR(output))
+  if((dt_get_debug_flags() & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && !IS_NULL_PTR(output))
   {
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
     _print_nan_debug(pipe, cl_mem_output, output, &piece->roi_out, &piece->dsc_out, module);
@@ -1394,7 +1394,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     dt_telemetry_record_file_type(&pipe->dev->image_storage, pl);
   }
 
-  if(darktable.unmuted & DT_DEBUG_MEMORY)
+  if(dt_get_debug_flags() & DT_DEBUG_MEMORY)
   {
     fprintf(stderr, "[memory] before pixelpipe process\n");
     dt_print_mem_usage();

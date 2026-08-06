@@ -704,7 +704,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
 
   double start2 = 0.0;
-  if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
   const float input_width = pipe->iwidth;
   const float input_height = pipe->iheight;
@@ -778,7 +778,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   int cw = _polygon_is_clockwise(mask_form);
   if(cw == 0) cw = -1;
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points init took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
@@ -895,7 +895,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
     dt_masks_dynbuf_free(dborder);
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points point recurs %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
@@ -915,7 +915,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
       return 1;
     }
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points self-intersect took %0.04f sec\n", mask_form->name,
                dt_get_wtime() - start2);
@@ -953,7 +953,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
         goto fail;
     }
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
       dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points end took %0.04f sec\n",
                mask_form->name, dt_get_wtime() - start2);
 
@@ -968,7 +968,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
        || dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
                                         *border_buffer, *border_count))
     {
-      if(darktable.unmuted & DT_DEBUG_PERF)
+      if(dt_get_debug_flags() & DT_DEBUG_PERF)
       {
         dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points transform took %0.04f sec\n", mask_form->name,
                  dt_get_wtime() - start2);
@@ -1015,7 +1015,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
         }
       }
 
-      if(darktable.unmuted & DT_DEBUG_PERF)
+      if(dt_get_debug_flags() & DT_DEBUG_PERF)
         dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_points end took %0.04f sec\n", mask_form->name,
                  dt_get_wtime() - start2);
 
@@ -2458,7 +2458,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   double start = 0.0;
   double start2 = 0.0;
 
-  if(darktable.unmuted & DT_DEBUG_PERF) start = dt_get_wtime();
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) start = dt_get_wtime();
 
   // we get buffers for all points
   float *point_buffer = NULL;
@@ -2474,7 +2474,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
     return 1;
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon points took %0.04f sec\n",
              mask_form->name, dt_get_wtime() - start);
@@ -2492,7 +2492,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
                            || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_factor = sparse ? 4 : 1;
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill min max took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
@@ -2613,7 +2613,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
       if(ii != i) break;
     }
   }
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill draw polygon took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
@@ -2632,7 +2632,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
     }
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill fill plain took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
@@ -2707,14 +2707,14 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
     }
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill fill falloff took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
 
   dt_pixelpipe_cache_free_align(point_buffer);
   dt_pixelpipe_cache_free_align(border_buffer);
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon fill buffer took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start);
 
@@ -3066,7 +3066,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   if(IS_NULL_PTR(module)) return 1;
   double start = 0.0;
   double start2 = 0.0;
-  if(darktable.unmuted & DT_DEBUG_PERF) start = dt_get_wtime();
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) start = dt_get_wtime();
 
   const int px = roi->x;
   const int py = roi->y;
@@ -3104,7 +3104,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
     return 0;
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon points took %0.04f sec\n",
              mask_form->name, dt_get_wtime() - start);
@@ -3204,14 +3204,14 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   _polygon_bounding_box_raw(points, border, corner_count, points_count, border_count,
                             &xmin, &xmax, &ymin, &ymax);
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill min max took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
     start2 = dt_get_wtime();
   }
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill clear mask took %0.04f sec\n", mask_form->name,
              dt_get_wtime() - start2);
@@ -3239,7 +3239,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
                                                   width - 1, 0, height);
     polygon_encircles_roi = polygon_encircles_roi || !crop_success;
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill crop to roi took %0.04f sec\n", mask_form->name,
                dt_get_wtime() - start2);
@@ -3294,7 +3294,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
         }
       }
 
-      if(darktable.unmuted & DT_DEBUG_PERF)
+      if(dt_get_debug_flags() & DT_DEBUG_PERF)
       {
         dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill draw polygon took %0.04f sec\n", mask_form->name,
                  dt_get_wtime() - start2);
@@ -3320,7 +3320,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
         }
       }
 
-      if(darktable.unmuted & DT_DEBUG_PERF)
+      if(dt_get_debug_flags() & DT_DEBUG_PERF)
       {
         dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill fill plain took %0.04f sec\n", mask_form->name,
                  dt_get_wtime() - start2);
@@ -3435,7 +3435,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
 
     dt_pixelpipe_cache_free_align(dpoints);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_print(DT_DEBUG_MASKS, "[masks %s] polygon_fill fill falloff took %0.04f sec\n",
                mask_form->name,
@@ -3446,7 +3446,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   dt_pixelpipe_cache_free_align(points);
   dt_pixelpipe_cache_free_align(border);
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon fill buffer took %0.04f sec\n",
              mask_form->name,
              dt_get_wtime() - start);

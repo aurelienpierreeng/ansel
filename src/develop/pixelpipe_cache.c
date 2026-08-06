@@ -63,8 +63,8 @@ static inline const char *_cache_debug_module_name(void)
 static void _trace_exact_hit(const char *phase, const uint64_t hash, dt_pixel_cache_entry_t *cache_entry,
                              void *data, void *cl_mem_output, const int preferred_devid, const gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
-  if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
+  if(verbose && !(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] exact-hit %s req=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
@@ -199,8 +199,8 @@ static size_t _pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
 
 static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *message, gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
-  if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
+  if(verbose && !(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %" G_GSIZE_FORMAT " MiB - age %" PRId64
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
@@ -524,14 +524,14 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
     if(!locked) dt_pthread_rwlock_unlock(&entry->lock);
     if(used || locked)
     {
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] entry %" PRIu64 " is in use (refcount=%i locked=%i), "
           "keeping its vRAM\n", entry->hash, dt_atomic_get_int(&entry->refcount), locked);
       continue;
     }
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_OPENCL,
         "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 " on device %d...\n",
         entry->hash, devid);
@@ -664,7 +664,7 @@ static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_pt
 {
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
 
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
   dt_print(DT_DEBUG_OPENCL, 
     "[_pixel_cache_clmem_get] %u output entries in %" PRIu64 "\n", 
     g_list_length(entry->cl_mem_list), entry->hash);
@@ -934,7 +934,7 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
   dt_pixel_cache_entry_t *entry = entry_hint;
   if(IS_NULL_PTR(entry)) 
   {
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] no cache entry to put the vRAM buffer\n");
     return;
   }
@@ -942,7 +942,7 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
   // FIXME: is it safe to cache non-pinned vRAM buffers (aka no CL_MEM_USE_HOST_PTR in flags) ?
   const int state = _pixel_cache_clmem_put(entry, host_ptr, (cl_mem)*mem);
   *mem = NULL;
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] cache entry put the vRAM buffer (state=%i) in %p\n", state, entry);
 }
 
@@ -1049,7 +1049,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
     {
       cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp,
                                                              host_ptr, flags);
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a pinned GPU buffer for %s %s\n", module->name(), message);
     }
   }
@@ -1069,7 +1069,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
     {
       cl_mem_input = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(devid, roi, bpp, module, message, keep);
 
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a device-only GPU buffer for %s %s\n", module->name(), message);
     }
   }
@@ -1082,7 +1082,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
   {
     const int hits = dt_atomic_add_int(&clmem_reuse_hits, 1) + 1;
     const int misses = dt_atomic_get_int(&clmem_reuse_misses);
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_OPENCL,
               "[dev_pixelpipe] reused GPU buffer from cache (hits=%d, misses=%d) for module %s %s\n",
               hits, misses, module->name(), message);
@@ -1697,7 +1697,7 @@ static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, c
     {
       // Don't flush cachelines that don't belong to the current OpenCL device,
       // or are still borrowed by an in-flight GPU module (per-payload refs > 0).
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] for entry %" PRIu64 ": couldn't flush %p "
           "(referenced=%i not ours=%i)\n",
@@ -2838,7 +2838,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
 
 void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %" G_GSIZE_FORMAT " MiB over %" G_GSIZE_FORMAT " MiB - %i items\n", 
     100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), 

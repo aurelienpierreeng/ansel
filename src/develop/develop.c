@@ -93,7 +93,7 @@
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
 
-#define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+#define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
 GList *dt_dev_load_modules(dt_develop_t *dev)
 {

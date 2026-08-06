@@ -1043,7 +1043,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
                                                                 dt_atomic_int *shutdown)
 {
   double tt = 0;
-  if((darktable.unmuted & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
+  if((dt_get_debug_flags() & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
     tt = dt_get_wtime();
 
   dt_view_surface_value_t ret = DT_VIEW_SURFACE_KO;
@@ -1225,13 +1225,13 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   dt_free(rgbbuf);
 
   // logs
-  if((darktable.unmuted & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
+  if((dt_get_debug_flags() & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
   {
     dt_print(DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF,
              "[dt_view_image_get_surface]  id %i, mip code %i, dots %ix%i, mip %ix%i, surf %ix%i created in %0.04f sec\n",
              imgid, mip, width, height, buf_wd, buf_ht, img_width, img_height, dt_get_wtime() - tt);
   }
-  else if(darktable.unmuted & DT_DEBUG_IMAGEIO)
+  else if(dt_get_debug_flags() & DT_DEBUG_IMAGEIO)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[dt_view_image_get_surface]  id %i, mip code %i, dots %ix%i, mip %ix%i, surf %ix%i\n", imgid, mip,
              width, height, buf_wd, buf_ht, img_width, img_height);
