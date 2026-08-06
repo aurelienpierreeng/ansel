@@ -176,8 +176,11 @@ def analyse():
                 continue           # header declares nothing we can see: stay silent
             if used & names:
                 continue
+            annotated = bool(re.search(
+                r'^[ \t]*#[ \t]*include[ \t]+"%s"[ \t]*(?://|/\*)' % re.escape(inc),
+                text[p], re.M))
             cands.append({'include': inc, 'header': target,
-                          'platform_guarded': guarded})
+                          'platform_guarded': guarded, 'annotated': annotated})
         if cands:
             results[p] = cands
     return results
@@ -262,6 +265,9 @@ def main():
             json.dump(results, fh, indent=1, sort_keys=True)
         print('wrote %s' % out)
 
+    if '--push-down' in sys.argv:
+        return push_down(results)
+
     if '--apply' in sys.argv:
         prefix = sys.argv[sys.argv.index('--prefix') + 1] if '--prefix' in sys.argv else 'src/'
         return apply_mode(results, prefix, '--include-guarded' not in sys.argv)
@@ -322,11 +328,22 @@ def main():
 # ---------------------------------------------------------------------------
 
 def _strip(path, incs):
+    """Remove whole #include lines. Returns the ones actually removed.
+
+    Must match the LINE, not the exact string `#include "x"\n`: an include carrying a
+    trailing comment would silently fail to match, and the caller would then report a
+    removal that never happened -- which is how this tool once claimed 7 removals for a
+    3-line diff."""
     s = read(path)
+    done = []
     for inc in incs:
-        s = s.replace('#include "%s"\n' % inc, '', 1)
+        pat = re.compile(r'^[ \t]*#[ \t]*include[ \t]+"%s"[^\n]*\n' % re.escape(inc), re.M)
+        s, n = pat.subn('', s, count=1)
+        if n:
+            done.append(inc)
     with open(path, 'w', encoding='utf-8') as fh:
         fh.write(s)
+    return done
 
 
 def _build(targets=None):
@@ -353,11 +370,52 @@ def _implicated(log, owned):
     return hit
 
 
+def _apply_only(subset, originals, targets):
+    """Restore every touched file, then re-strip just `subset`."""
+    for p, text in originals.items():
+        with open(p, 'w', encoding='utf-8') as fh:
+            fh.write(text)
+    for p in subset:
+        _strip(p, [c['include'] for c in targets[p]])
+
+
+def _bisect_set(files, originals, targets):
+    """Largest subset of `files` whose removals still build. Removals are independent
+    in practice, so recursive halving is sound; the caller re-verifies the union."""
+    if not files:
+        return []
+    _apply_only(files, originals, targets)
+    rc, _ = _build()
+    if rc == 0:
+        return list(files)
+    if len(files) == 1:
+        return []
+    mid = len(files) // 2
+    left = _bisect_set(files[:mid], originals, targets)
+    right = _bisect_set(files[mid:], originals, targets)
+    good = left + right
+    _apply_only(good, originals, targets)
+    rc, _ = _build()
+    if rc != 0:                     # halves interact: keep the larger half only
+        good = left if len(left) >= len(right) else right
+        _apply_only(good, originals, targets)
+        _build()
+    return good
+
+
 def apply_mode(results, prefix, skip_guarded):
     targets = {p: v for p, v in results.items() if p.startswith(prefix)}
     if skip_guarded:
         targets = {p: v for p, v in targets.items()
                    if not any(c['platform_guarded'] for c in v)}
+    # A trailing comment on an include line is the author stating why it is there --
+    # usually a transitive need the static pass cannot see ("needed by dwt.h",
+    # "for dt_pthread_mutex_t"). Never remove those silently.
+    annotated = [(p, c['include']) for p, v in targets.items() for c in v if c.get('annotated')]
+    targets = {p: [c for c in v if not c.get('annotated')] for p, v in targets.items()}
+    targets = {p: v for p, v in targets.items() if v}
+    for p, i in annotated:
+        print('  skipping annotated include (documented intent): %s: %s' % (p, i))
     if not targets:
         print('nothing to do for prefix %r' % prefix)
         return 0
@@ -375,11 +433,14 @@ def apply_mode(results, prefix, skip_guarded):
             break
         bad = _implicated(log, list(removed))
         if not bad:
-            print('build fails but blames nothing we touched -- reverting all', file=sys.stderr)
-            for p, s in originals.items():
-                open(p, 'w', encoding='utf-8').write(s)
-            _build()
-            return 1
+            # Blame-mapping is impossible for headers: when foo.h stops including bar.h,
+            # the error lands in some baz.c that used bar.h's symbols through foo.h, and
+            # the log never names foo.h. Fall back to bisecting the FILE SET instead of
+            # giving up: O(bad x log n) builds rather than one per file.
+            print('  build fails and blames nothing we edited -- bisecting the file set')
+            keep = _bisect_set(sorted(removed), originals, targets)
+            removed = {p: targets[p] for p in keep}
+            break
         print('  round %d: restoring %d implicated file(s)' % (attempt + 1, len(bad)))
         for p in bad:
             open(p, 'w', encoding='utf-8').write(originals[p])
@@ -420,6 +481,129 @@ def apply_mode(results, prefix, skip_guarded):
     total = sum(len(v) for v in removed.values())
     print('\nREMOVED %d includes from %d files (%d salvaged by bisection); final build rc=%d'
           % (total, len(removed), salvaged, rc))
+    return 0 if rc == 0 else 1
+
+
+
+
+# ---------------------------------------------------------------------------
+# --push-down: enforce "a header includes only what its own declarations need".
+#
+# tools/include_unused.py --apply keeps an include the header does not need when a
+# CONSUMER is reaching through the header to get it. That is the wrong reason to keep
+# it: the consumer should include it itself. This mode removes it from the header and
+# adds it to whichever translation units actually break.
+#
+# The exception is honoured, not overridden: if EVERY consumer of the header turns out
+# to need the include, pushing it down is pure boilerplate, so it stays in the header.
+# ---------------------------------------------------------------------------
+
+def _object_to_source():
+    """Reverse-map ninja object targets back to source files, via compdb."""
+    fmap = {}
+    r = subprocess.run(['ninja', '-C', BUILD, '-t', 'compdb'], capture_output=True, text=True)
+    if r.returncode != 0:
+        return fmap
+    for e in json.loads(r.stdout):
+        out = e.get('output') or ''
+        f = e.get('file') or ''
+        if not out or not f:
+            continue
+        base = os.path.basename(f)
+        if base.startswith('introspection_'):
+            stem = base[len('introspection_'):]
+            for d in ('src/iop/', 'src/libs/', 'src/imageio/format/', 'src/imageio/storage/'):
+                if os.path.exists(d + stem):
+                    f = d + stem
+                    break
+        fmap[out] = os.path.relpath(f, os.getcwd()) if os.path.isabs(f) else f
+    return fmap
+
+
+def _failing_sources(log, obj2src):
+    out = set()
+    for m in re.finditer(r'^FAILED: (?:\[[^\]]*\] )?(\S+)', log, re.M):
+        src = obj2src.get(m.group(1))
+        if src:
+            out.add(os.path.normpath(src))
+    return out
+
+
+def _consumers_of(header):
+    """Files that include `header` directly (either spelling)."""
+    rel = header[len(SRC) + 1:] if header.startswith(SRC + os.sep) else header
+    base = os.path.basename(header)
+    hits = set()
+    for root, dirs, names in os.walk(SRC):
+        dirs[:] = [d for d in dirs if d != 'external']
+        for n in names:
+            if not n.endswith(('.c', '.cc', '.cpp', '.h', '.hpp')):
+                continue
+            p = os.path.join(root, n)
+            t = read(p)
+            if '#include "%s"' % rel in t or '#include "%s"' % base in t:
+                hits.add(os.path.normpath(p))
+    return hits
+
+
+def push_down(results):
+    headers = {p: v for p, v in results.items() if p.endswith(('.h', '.hpp'))}
+    obj2src = _object_to_source()
+    moved = kept_universal = reverted = 0
+
+    for hdr, cands in sorted(headers.items()):
+        consumers = _consumers_of(hdr)
+        for c in cands:
+            inc = c['include']
+            original_hdr = read(hdr)
+            _strip(hdr, [inc])
+            rc, log = _build()
+            if rc == 0:
+                print('  %s: dropped %s (nobody needed it)' % (hdr, inc))
+                moved += 1
+                continue
+
+            needy = _failing_sources(log, obj2src)
+            c_consumers = {f for f in consumers if f.endswith(('.c', '.cc', '.cpp'))}
+            if needy and c_consumers and needy >= c_consumers:
+                # every consumer needs it -- pushing it down is pure boilerplate
+                open(hdr, 'w', encoding='utf-8').write(original_hdr)
+                _build()
+                print('  %s: KEPT %s (all %d consumers need it)' % (hdr, inc, len(c_consumers)))
+                kept_universal += 1
+                continue
+
+            patched = []
+            for f in sorted(needy):
+                t = read(f)
+                if '#include "%s"' % inc in t:
+                    continue
+                lines = [l for l in t.splitlines() if l.startswith('#include "')]
+                if not lines:
+                    continue
+                anchor = lines[0] + '\n'
+                t = t.replace(anchor, anchor + '#include "%s"\n' % inc, 1)
+                with open(f, 'w', encoding='utf-8') as fh:
+                    fh.write(t)
+                patched.append(f)
+
+            rc2, _ = _build()
+            if rc2 == 0:
+                print('  %s: moved %s down into %d consumer(s)' % (hdr, inc, len(patched)))
+                moved += 1
+            else:
+                open(hdr, 'w', encoding='utf-8').write(original_hdr)
+                for f in patched:
+                    t = read(f).replace('#include "%s"\n' % inc, '', 1)
+                    with open(f, 'w', encoding='utf-8') as fh:
+                        fh.write(t)
+                _build()
+                print('  %s: reverted %s (did not converge)' % (hdr, inc))
+                reverted += 1
+
+    rc, _ = _build()
+    print('\nmoved=%d  kept-as-universal=%d  reverted=%d  final build rc=%d'
+          % (moved, kept_universal, reverted, rc))
     return 0 if rc == 0 else 1
 
 
