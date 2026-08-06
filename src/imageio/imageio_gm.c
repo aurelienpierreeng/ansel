@@ -6,9 +6,7 @@
     Copyright (C) 2014 johannes hanika.
     Copyright (C) 2014 Pascal de Bruijn.
     Copyright (C) 2019 Hanno Schwalm.
-    Copyright (C) 2020 Aurélien PIERRE.
     Copyright (C) 2020 Hubert Kowalski.
-    Copyright (C) 2020 Matthieu Volat.
     Copyright (C) 2020-2021 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
@@ -27,26 +25,25 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifdef HAVE_IMAGEMAGICK
+#ifdef HAVE_GRAPHICSMAGICK
+#include "imageio_gm.h"
 #include "common/macros.h"
 #include "common/logging.h"
-#include "develop/develop.h"
 #include "common/exif.h"
-#include "common/imageio_magick_abort_guard.h"
+#include "imageio/imageio_magick_abort_guard.h"
+#include "develop/develop.h"
 
+#include <assert.h>
+#include <inttypes.h>
+#include <magick/api.h>
 #include <memory.h>
 #include <stdio.h>
-#include <inttypes.h>
 #include <strings.h>
-#include <assert.h>
-
-#include <MagickWand/MagickWand.h>
 
 
-/* we only support images with certain filename extensions via ImageMagick,
- * derived from what it declared as "supported" with GraphicsMagick; RAWs
- * are excluded as ImageMagick would render them with third party libraries
- * in reduced quality - slow and only 8-bit */
+// we only support images with certain filename extensions via GraphicsMagick;
+// RAWs are excluded as GraphicsMagick would render them with third party
+// libraries in reduced quality - slow and only 8-bit
 static gboolean _supported_image(const gchar *filename)
 {
   const char *extensions_whitelist[] = { "tif",  "tiff", "gif", "jpc", "jp2", "bmp", "dcm", "jng",
@@ -65,46 +62,52 @@ static gboolean _supported_image(const gchar *filename)
 }
 
 
-dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *mbuf)
+dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *mbuf)
 {
   int err = DT_IMAGEIO_FILE_CORRUPTED;
-  MagickWand *image = NULL;
-  MagickBooleanType ret;
+  ExceptionInfo exception;
+  Image *image = NULL;
+  ImageInfo *image_info = NULL;
+  uint32_t width, height;
 
   if(!_supported_image(filename)) return DT_IMAGEIO_FILE_CORRUPTED;
 
   if(!img->exif_inited) (void)dt_exif_read(img, filename);
 
-  image = NewMagickWand();
-  if (IS_NULL_PTR(image)) return DT_IMAGEIO_FILE_CORRUPTED;
+  GetExceptionInfo(&exception);
+  image_info = CloneImageInfo((ImageInfo *)NULL);
 
-  // ImageMagick calls assert() -> abort() on some malformed files instead of
-  // reporting through its normal error status. Recover instead of crashing
-  // the whole app; on recovery, `image` is NOT touched again (see
-  // imageio_magick_abort_guard.h) - we leak the wand and bail out directly.
-  DT_MAGICK_ABORT_GUARD("ImageMagick_open", filename, return DT_IMAGEIO_FILE_CORRUPTED);
+  g_strlcpy(image_info->filename, filename, sizeof(image_info->filename));
 
-  ret = MagickReadImage(image, filename);
-  if (ret != MagickTrue) {
-    fprintf(stderr, "[ImageMagick_open] cannot open `%s'\n", img->filename);
+  // GraphicsMagick calls assert() -> abort() on some malformed files instead
+  // of reporting through `exception`. Recover instead of crashing the whole
+  // app; on recovery, `image`/`image_info`/`exception` are NOT touched again
+  // (see imageio_magick_abort_guard.h) - we leak them and bail out directly.
+  DT_MAGICK_ABORT_GUARD("GraphicsMagick_open", filename, return DT_IMAGEIO_FILE_CORRUPTED);
+
+  image = ReadImage(image_info, &exception);
+  if(exception.severity != UndefinedException) CatchException(&exception);
+  if(IS_NULL_PTR(image))
+  {
+    fprintf(stderr, "[GraphicsMagick_open] image `%s' not found\n", img->filename);
     err = DT_IMAGEIO_FILE_NOT_FOUND;
     goto error;
   }
-  dt_print(DT_DEBUG_IMAGEIO, "[ImageMagick_open] image `%s' loading\n", img->filename);
 
-  ColorspaceType colorspace;
+  dt_print(DT_DEBUG_IMAGEIO, "[GraphicsMagick_open] image `%s' loading\n", img->filename);
 
-  colorspace = MagickGetImageColorspace(image);
-
-  if((colorspace == CMYColorspace) || (colorspace == CMYKColorspace))
+  if(IsCMYKColorspace(image->colorspace))
   {
-    fprintf(stderr, "[ImageMagick_open] error: CMY(K) images are not supported.\n");
+    fprintf(stderr, "[GraphicsMagick_open] error: CMYK images are not supported.\n");
     err =  DT_IMAGEIO_FILE_CORRUPTED;
     goto error;
   }
 
-  img->width = MagickGetImageWidth(image);
-  img->height = MagickGetImageHeight(image);
+  width = image->columns;
+  height = image->rows;
+
+  img->width = width;
+  img->height = height;
 
   img->dsc.channels = 4;
   img->dsc.datatype = TYPE_FLOAT;
@@ -112,55 +115,62 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
   img->dsc.cst = IOP_CS_RGB;
   img->dsc.filters = 0u;
   img->flags &= ~DT_IMAGE_RAW;
-  img->flags &= ~DT_IMAGE_S_RAW;
   img->flags &= ~DT_IMAGE_HDR;
+  img->flags &= ~DT_IMAGE_S_RAW;
   img->flags |= DT_IMAGE_LDR;
 
-  img->loader = LOADER_IM;
+  img->loader = LOADER_GM;
 
   if(IS_NULL_PTR(mbuf))
   {
     DT_MAGICK_ABORT_GUARD_DISARM();
-    DestroyMagickWand(image);
+    if(image) DestroyImage(image);
+    if(image_info) DestroyImageInfo(image_info);
+    DestroyExceptionInfo(&exception);
     return DT_IMAGEIO_OK;
   }
 
-  float *mipbuf = dt_mipmap_cache_alloc(mbuf, img);
-  if (IS_NULL_PTR(mipbuf)) {
-    fprintf(stderr,
-        "[ImageMagick_open] could not alloc full buffer for image `%s'\n",
-        img->filename);
+  float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
+  if(IS_NULL_PTR(mipbuf))
+  {
+    fprintf(stderr, "[GraphicsMagick_open] could not alloc full buffer for image `%s'\n", img->filename);
     err = DT_IMAGEIO_CACHE_FULL;
     goto error;
   }
 
-  ret = MagickExportImagePixels(image, 0, 0, img->width, img->height, "RGBP", FloatPixel, mipbuf);
-  if (ret != MagickTrue) {
-    fprintf(stderr,
-        "[ImageMagick_open] error reading image `%s'\n", img->filename);
-    goto error;
+  for(uint32_t row = 0; row < height; row++)
+  {
+    float *bufprt = mipbuf + (size_t)4 * row * img->width;
+    int ret = DispatchImage(image, 0, row, width, 1, "RGBP", FloatPixel, bufprt, &exception);
+    if(exception.severity != UndefinedException) CatchException(&exception);
+    if(ret != MagickPass)
+    {
+      fprintf(stderr, "[GraphicsMagick_open] error reading image `%s'\n", img->filename);
+      err = DT_IMAGEIO_FILE_CORRUPTED;
+      goto error;
+    }
   }
 
   size_t profile_length;
-  uint8_t *profile_data = (uint8_t *)MagickGetImageProfile(image, "icc", &profile_length);
-  /* no alias support like GraphicsMagick, have to check both locations */
-  if(IS_NULL_PTR(profile_data))
-    profile_data = (uint8_t *)MagickGetImageProfile(image, "icm", &profile_length);
+  const uint8_t *profile_data = (const uint8_t *)GetImageProfile(image, "ICM", &profile_length);
   if(profile_data)
   {
     img->profile_size = profile_length;
     img->profile = (uint8_t *)g_malloc0(profile_length);
     memcpy(img->profile, profile_data, profile_length);
-    MagickRelinquishMemory(profile_data);
   }
 
   DT_MAGICK_ABORT_GUARD_DISARM();
-  DestroyMagickWand(image);
+  if(image) DestroyImage(image);
+  if(image_info) DestroyImageInfo(image_info);
+  DestroyExceptionInfo(&exception);
   return DT_IMAGEIO_OK;
 
 error:
   DT_MAGICK_ABORT_GUARD_DISARM();
-  DestroyMagickWand(image);
+  if(image) DestroyImage(image);
+  if(image_info) DestroyImageInfo(image_info);
+  DestroyExceptionInfo(&exception);
   return err;
 }
 #endif

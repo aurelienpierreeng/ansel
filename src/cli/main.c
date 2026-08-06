@@ -57,8 +57,8 @@
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
-#include "common/imageio_jpeg.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_jpeg.h"
+#include "imageio/imageio_module.h"
 #include "common/l10n.h"
 #include "common/points.h"
 

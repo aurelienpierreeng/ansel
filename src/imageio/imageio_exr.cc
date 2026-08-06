@@ -53,10 +53,10 @@
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/exif.h"
-#include "common/imageio_exr.h"
+#include "imageio/imageio_exr.h"
 #include "develop/develop.h"
 
-#include "common/imageio_exr.hh"
+#include "imageio/imageio_exr.hh"
 
 dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *mbuf)
 {

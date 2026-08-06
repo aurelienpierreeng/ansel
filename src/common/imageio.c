@@ -72,34 +72,34 @@
 #include "common/history.h"
 #include "common/image_extensions.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #ifdef HAVE_OPENEXR
-#include "common/imageio_exr.h"
+#include "imageio/imageio_exr.h"
 #endif
 #ifdef HAVE_OPENJPEG
-#include "common/imageio_j2k.h"
+#include "imageio/imageio_j2k.h"
 #endif
-#include "common/imageio_gm.h"
-#include "common/imageio_im.h"
-#include "common/imageio_magick_abort_guard.h"
-#include "common/imageio_jpeg.h"
-#include "common/imageio_pfm.h"
-#include "common/imageio_png.h"
-#include "common/imageio_pnm.h"
-#include "common/imageio_rawspeed.h"
-#include "common/imageio_libraw.h"
-#include "common/imageio_rgbe.h"
-#include "common/imageio_tiff.h"
+#include "imageio/imageio_gm.h"
+#include "imageio/imageio_im.h"
+#include "imageio/imageio_magick_abort_guard.h"
+#include "imageio/imageio_jpeg.h"
+#include "imageio/imageio_pfm.h"
+#include "imageio/imageio_png.h"
+#include "imageio/imageio_pnm.h"
+#include "imageio/imageio_rawspeed.h"
+#include "imageio/imageio_libraw.h"
+#include "imageio/imageio_rgbe.h"
+#include "imageio/imageio_tiff.h"
 #ifdef HAVE_LIBAVIF
-#include "common/imageio_avif.h"
+#include "imageio/imageio_avif.h"
 #endif
 #ifdef HAVE_LIBHEIF
-#include "common/imageio_heif.h"
+#include "imageio/imageio_heif.h"
 #endif
 #ifdef HAVE_WEBP
-#include "common/imageio_webp.h"
+#include "imageio/imageio_webp.h"
 #endif
-#include "common/imageio_libraw.h"
+#include "imageio/imageio_libraw.h"
 #include "common/mipmap_cache.h"
 #include "common/styles.h"
 #include "control/conf.h"

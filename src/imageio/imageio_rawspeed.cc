@@ -66,7 +66,7 @@
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
 #include "common/imageio.h"
-#include "common/imageio_rawspeed.h"
+#include "imageio/imageio_rawspeed.h"
 #include "develop/imageop.h"
 #include <stdint.h>
 

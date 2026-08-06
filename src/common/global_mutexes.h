@@ -28,7 +28,7 @@
  * buses".
  *
  * Declared here so that the modules which need them (iop/lens.cc, iop/watermark.c,
- * imageio/storage/disk.c, common/imageio_rawspeed.cc, ...) do not have to include
+ * imageio/storage/disk.c, imageio/imageio_rawspeed.cc, ...) do not have to include
  * common/darktable.h, and therefore the whole application, to take a lock. */
 
 #include "common/dtpthread.h"

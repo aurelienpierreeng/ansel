@@ -62,6 +62,12 @@ WIN_DEFINES = ['-DHAVE_CONFIG_H', '-D_POSIX_THREAD_SAFE_FUNCTIONS', '-D_USE_MATH
 
 MISSING_HEADER = re.compile(r"fatal error: ([^:]+): No such file or directory")
 
+# Some sources guard an absent library with a hand-written directive instead:
+#     #error "openjpeg.h not found"
+# That is the same condition as a missing header -- the library is not in the sysroot --
+# but it does not match MISSING_HEADER, so it was being reported as a real failure.
+EXPLICIT_ERROR = re.compile(r'error: #error\s+"?([^"\n]+)')
+
 
 # Feature defines whose headers are not in the mingw64 sysroot. Keeping them does not
 # make the harness stricter -- it just converts checkable files into skipped ones,
@@ -203,6 +209,9 @@ def _missing_unavailable_header(stderr):
     """The header name if this failure is only 'we do not have it cross-built'."""
     m = MISSING_HEADER.search(stderr)
     if not m:
+        e = EXPLICIT_ERROR.search(stderr)
+        if e and UNAVAILABLE.search(e.group(1)):
+            return e.group(1).strip()
         return None
     if UNAVAILABLE.search(m.group(1)) or not os.path.exists(os.path.join('src', m.group(1))):
         return m.group(1)
@@ -243,6 +252,9 @@ def check(path, flags, fmap):
     m = MISSING_HEADER.search(log)
     if m and UNAVAILABLE.search(m.group(1)):
         return ('skip', path, m.group(1))
+    e = EXPLICIT_ERROR.search(log)
+    if e and UNAVAILABLE.search(e.group(1)):
+        return ('skip', path, e.group(1).strip())
     if m and not os.path.exists(os.path.join('src', m.group(1))):
         # some other header we simply do not have cross-built
         return ('skip', path, m.group(1))

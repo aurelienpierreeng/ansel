@@ -33,7 +33,7 @@
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/metadata.h"
 #include "common/pwstorage/pwstorage.h"
 #include "common/tags.h"

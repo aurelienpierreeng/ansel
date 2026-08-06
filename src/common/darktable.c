@@ -133,7 +133,7 @@
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/image_extensions.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/iop_order.h"
 #include "common/l10n.h"
 #include "common/metadata.h"

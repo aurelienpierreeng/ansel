@@ -33,7 +33,7 @@
 #include "common/paths.h"
 #include "common/exif.h"
 #include "common/image_cache.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/utility.h"
 #include "imageio/format/imageio_format_api.h"
 #include "gui/gtk.h"

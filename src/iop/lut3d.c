@@ -47,7 +47,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
-#include "common/imageio_png.h"
+#include "imageio/imageio_png.h"
 #include "common/imagebuf.h"
 #include "common/colorspaces.h"
 #include "common/file_location.h"

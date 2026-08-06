@@ -28,7 +28,7 @@
 #endif
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "common/imageio_pfm.h"
+#include "imageio/imageio_pfm.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 
 #include <assert.h>

@@ -89,7 +89,7 @@
 #include "common/hash.h"
 #include "common/history.h"
 #include "common/iop-autoset.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/mipmap_cache.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
