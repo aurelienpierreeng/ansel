@@ -11,9 +11,11 @@ unavailable.
 This is `-fsyntax-only`: it compiles nothing and links nothing. That is deliberate --
 the goal is the preprocessor and the parser, which is where this class of bug lives.
 
-Fedora does not package json-glib, lensfun or libcurl for mingw64, so files needing
-those headers cannot be checked here. They are reported as SKIPPED, never as passing:
-a check you did not run is not a check that succeeded.
+Some libraries have no Fedora mingw64 package (json-glib, lensfun, libcurl, libraw,
+osmgpsmap, openjpeg, sentry, OpenCL ...), so files needing them cannot be checked here.
+They are reported as SKIPPED and counted separately, never as passing: a check you did
+not run is not a check that succeeded. Keep UNAVAILABLE honest -- an entry for a library
+that IS installed would downgrade a real failure to "skipped".
 
 Setup (Fedora):
   sudo dnf install mingw64-gcc mingw64-gcc-c++ mingw64-glib2 mingw64-gtk3 \
@@ -34,15 +36,27 @@ import sys
 
 CC = 'x86_64-w64-mingw32-gcc'
 CXX = 'x86_64-w64-mingw32-g++'
-PKGS = ['gtk+-3.0', 'lcms2', 'sqlite3', 'libpng', 'libtiff-4', 'libjpeg', 'exiv2']
+PKGS = ['gtk+-3.0', 'lcms2', 'sqlite3', 'libpng', 'libtiff-4', 'libjpeg', 'exiv2',
+        'librsvg-2.0', 'libxml-2.0', 'libwebp', 'OpenEXR', 'libsoup-2.4']
 
-# Third-party headers with no mingw64 package on Fedora. A file that fails *only*
-# because one of these is absent is not a finding.
+# Third-party headers genuinely absent from the mingw64 sysroot. A file that fails
+# ONLY because one of these is missing is not a finding -- but this list must be kept
+# honest: leaving an installed library in here would silently downgrade a REAL failure
+# to "skipped", which defeats the purpose of the harness. Verified against
+# /usr/x86_64-w64-mingw32/sys-root/mingw/include; re-check after installing packages.
 UNAVAILABLE = re.compile(
-    r'(json-glib[/.]|lensfun[/.]|curl/curl\.h|libraw|openexr|OpenEXR|Imath|osmgpsmap|'
-    r'librsvg|gmic|libsecret|libavif|libheif|webp|openjpeg|graphicsmagick|magick|'
-    r'sentry\.h|CL/cl|lua\.h|libxml|cmark|colord|gphoto2|libsoup|portmidi|'
-    r'pugixml|rawspeed|libdeflate|zlib\.h|jasper)', re.I)
+    r'(json-glib[/.]|lensfun[/.]|curl/curl\.h|libraw|osmgpsmap|osm-gps-map|openjpeg|'
+    r'gmic|libsecret|libavif|libheif|graphicsmagick|magick|sentry\.h|CL/cl|lua\.h|'
+    r'cmark|colord|gphoto2|portmidi|pugixml|rawspeed|libdeflate|jasper|portaudio)',
+    re.I)
+
+# Mirror the defines the real Win64 CI job passes. Without them the harness invents
+# failures that do not exist in the actual build -- e.g. localtime_r is only declared
+# on MinGW when _POSIX_THREAD_SAFE_FUNCTIONS is set, so omitting it makes every user
+# of localtime_r look broken. Taken from the Win64.UCRT64 compile command line.
+WIN_DEFINES = ['-DHAVE_CONFIG_H', '-D_POSIX_THREAD_SAFE_FUNCTIONS', '-D_USE_MATH_DEFINES',
+               '-D__USE_MINGW_ANSI_STDIO=1', '-DUNICODE', '-D_UNICODE',
+               '-D__GDK_KEYSYMS_COMPAT_H__']
 
 MISSING_HEADER = re.compile(r"fatal error: ([^:]+): No such file or directory")
 
@@ -85,7 +99,7 @@ def check(path, flags):
     cxx = path.endswith(('.cc', '.cpp'))
     cmd = [CXX if cxx else CC, '-fsyntax-only',
            '-std=gnu++17' if cxx else '-std=gnu11',
-           '-I', 'src', '-I', 'build/src', '-DHAVE_CONFIG_H',
+           '-I', 'src', '-I', 'build/src'] + WIN_DEFINES + [
            '-Wno-attributes', '-Wno-unknown-pragmas'] + flags + [path]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode == 0:

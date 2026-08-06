@@ -69,9 +69,12 @@
 #endif
 
 #ifdef _WIN32
-  #include <Windows.h>
-  #include <WinBase.h>
-  #include <FileAPI.h>
+  /* lowercase: MinGW ships windows.h/winbase.h/fileapi.h, and a Linux filesystem is
+   * case-sensitive. The capitalised spellings only ever worked because Windows itself
+   * is not, so they silently blocked cross-compiling from Linux. */
+  #include <windows.h>
+  #include <winbase.h>
+  #include <fileapi.h>
 #endif
 
 #include <math.h>
