@@ -223,9 +223,9 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
     gchar exif[256] = { 0 };
     _email_attachment_t *attachment = (_email_attachment_t *)iter->data;
     gchar *filename = g_path_get_basename(attachment->file);
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, attachment->imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), attachment->imgid, 'r');
     dt_image_print_exif(img, exif, sizeof(exif));
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
     gchar *imgbody = g_strdup_printf(imageBodyFormat, filename, exif);
     if (!IS_NULL_PTR(body)) {

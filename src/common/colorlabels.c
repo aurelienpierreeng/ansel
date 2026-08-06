@@ -121,7 +121,7 @@ void dt_colorlabels_set_labels(const int32_t imgid, const int colors)
 
 static void _pop_undo_execute(const int32_t imgid, const int before, const int after)
 {
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
   if(IS_NULL_PTR(image)) return;
 
   // Write to image
@@ -138,7 +138,7 @@ static void _pop_undo_execute(const int32_t imgid, const int before, const int a
 
   // Update image cache object and write to DB in _write_release
   image->color_labels = dt_colorlabels_get_labels(imgid);
-  dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
 }
 
 static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)
@@ -257,11 +257,11 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
     {
       const int32_t image_id = GPOINTER_TO_INT(image->data);
 
-      dt_image_t *img = dt_image_cache_get(darktable.image_cache, image_id, 'r');
+      dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), image_id, 'r');
       if(IS_NULL_PTR(img)) continue;
 
       const int before = img->color_labels;
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
       // as long as a single image does not have the label we do not toggle the label for all images
       // but add the label to all unlabeled images first
@@ -277,7 +277,7 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
   {
     const int32_t image_id = GPOINTER_TO_INT(image->data);
 
-    dt_image_t *img = dt_image_cache_get(darktable.image_cache, image_id, 'w');
+    dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), image_id, 'w');
     if(IS_NULL_PTR(img)) continue;
 
     const int before = img->color_labels;
@@ -299,7 +299,7 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
     }
 
     img->color_labels = after;
-    dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_SAFE);
+    dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_SAFE);
 
     if(undo_on)
     {

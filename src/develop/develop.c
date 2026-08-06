@@ -889,17 +889,17 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
 
 static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(IS_NULL_PTR(image)) return FALSE;
   dev->image_storage = *image;
-  dt_image_cache_read_release(darktable.image_cache, image);
+  dt_image_cache_read_release(dt_image_cache_get_global(), image);
   dt_iop_buffer_dsc_update_bpp(&dev->image_storage.dsc);
   return TRUE;
 }
 
 dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  if(IS_NULL_PTR(dev) || imgid <= 0 || IS_NULL_PTR(darktable.image_cache))
+  if(IS_NULL_PTR(dev) || imgid <= 0 || IS_NULL_PTR(dt_image_cache_get_global()))
     return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
 
   if(!_dt_dev_mipmap_prefetch_full(dev, imgid))
@@ -951,11 +951,11 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   {
     // Resync our private copy of image image with DB,
     // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag.
-    dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
     if(!IS_NULL_PTR(image))
     {
       *image = dev->image_storage;
-      dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+      dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
     }
 
     dt_dev_write_history_ext(dev, imgid);

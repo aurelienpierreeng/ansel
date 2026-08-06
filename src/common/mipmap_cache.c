@@ -251,7 +251,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
 {
   // Get file name
   char _filename[PATH_MAX] = { 0 };
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(filename || ext || input_exists || is_jpg_input)
   {
     const dt_image_path_source_t source = dt_image_choose_input_path(img, _filename, sizeof(_filename), FALSE);
@@ -293,7 +293,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   }
 
   if(img)
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
 }
 
 
@@ -506,10 +506,10 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
   // first sighting to a `create` so the link resolves.
   if(dt_supervisor_active())
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(img) dt_supervisor_image(DT_SV_UPDATE, imgid, img);
     dt_supervisor_mipmap(DT_SV_CREATE, imgid, mip);
-    if(img) dt_image_cache_read_release(darktable.image_cache, img);
+    if(img) dt_image_cache_read_release(dt_image_cache_get_global(), img);
   }
 
   gboolean write_to_disk;
@@ -922,7 +922,7 @@ static gboolean _get_image_copy(const int32_t imgid, dt_image_t *buffered_image)
   // load the image:
   // make sure we access the r/w lock as shortly as possible!
   gboolean no_buffer = TRUE;
-  const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
 
   if(cimg)
   {
@@ -930,7 +930,7 @@ static gboolean _get_image_copy(const int32_t imgid, dt_image_t *buffered_image)
     no_buffer = FALSE;
   }
 
-  dt_image_cache_read_release(darktable.image_cache, cimg);
+  dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
 
   return no_buffer;
 }
@@ -982,14 +982,14 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     if(ret == DT_IMAGEIO_OK)
     {
       // swap back new image data, may contain updated EXIF & colorspace
-      dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+      dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
       // dt_image_cache_get() returns NULL if the image vanished from the DB/cache while this
       // full-res I/O was in flight (e.g. removed from the library concurrently) -- nothing left
       // to swap the freshly-read data back into.
       if(!IS_NULL_PTR(img))
       {
         *img = buffered_image;
-        dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
+        dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
       }
     }
     else
@@ -1270,11 +1270,11 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   char filename[PATH_MAX] = { 0 };
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(img)
     {
       source = dt_image_choose_input_path(img, filename, sizeof(filename), FALSE);
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
     }
   }
   if(source == DT_IMAGE_PATH_NONE)
@@ -1289,7 +1289,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
 
   // lock image after we have the buffer, we might need to lock the image struct for
   // writing during raw loading, to write to width/height.
-  const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
 
   dt_iop_roi_t roi_in, roi_out;
   roi_in.x = roi_in.y = 0;
@@ -1308,7 +1308,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
 
   if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
   {
-    dt_image_cache_read_release(darktable.image_cache, image);
+    dt_image_cache_read_release(dt_image_cache_get_global(), image);
     *width = *height = 0;
     *iscale = 0.0f;
     return;
@@ -1355,7 +1355,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   *height = roi_out.height;
   *iscale = (float)image->width / (float)roi_out.width;
 
-  dt_image_cache_read_release(darktable.image_cache, image);
+  dt_image_cache_read_release(dt_image_cache_get_global(), image);
 }
 
 
@@ -1487,11 +1487,11 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   dt_boundingbox_t usercrop = { 0.f, 0.f, 1.f, 1.f };
   if(use_embedded_jpg)
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(img)
     {
       orientation = (img->orientation != ORIENTATION_NULL) ? img->orientation : ORIENTATION_NONE;
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
     }
 
     // Resolve outside the read lock: this path never decodes the raw, so the framing may still

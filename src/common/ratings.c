@@ -85,14 +85,14 @@ char *dt_ratings_get_name(const int rating)
 int dt_ratings_get(const int32_t imgid)
 {
   int stars = 0;
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(image)
   {
     if(image->flags & DT_IMAGE_REJECTED)
       stars = DT_VIEW_REJECT;
     else
       stars = DT_VIEW_RATINGS_MASK & image->flags;
-    dt_image_cache_read_release(darktable.image_cache, image);
+    dt_image_cache_read_release(dt_image_cache_get_global(), image);
   }
   return stars;
 }
@@ -100,7 +100,7 @@ int dt_ratings_get(const int32_t imgid)
 static void _ratings_apply_to_image(const int32_t imgid, const int rating)
 {
   int new_rating = rating;
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
 
   if(image)
   {
@@ -115,11 +115,11 @@ static void _ratings_apply_to_image(const int32_t imgid, const int rating)
         | (DT_VIEW_RATINGS_MASK & new_rating);
     }
     // synch through:
-    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+    dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
   }
   else
   {
-    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
+    dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_RELAXED);
   }
 }
 

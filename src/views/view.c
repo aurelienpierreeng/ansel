@@ -1063,10 +1063,10 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   }
   else
   {
-    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     const int full_width = image->width;
     const int full_height = image->height;
-    dt_image_cache_read_release(darktable.image_cache, image);
+    dt_image_cache_read_release(dt_image_cache_get_global(), image);
 
     if(zoom == DT_THUMBTABLE_ZOOM_HALF)
       mip = dt_mipmap_cache_get_matching_size(cache, ceilf(full_width / 2.f ), ceilf(full_height / 2.f), imgid);

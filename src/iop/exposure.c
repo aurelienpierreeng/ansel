@@ -332,9 +332,9 @@ void init_presets (dt_iop_module_so_t *self)
 static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histogram,
                                          dt_dev_histogram_stats_t *histogram_stats)
 {
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, self->dev->image_storage.id, 'r');
+  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'r');
   dt_image_t image = *img;
-  dt_image_cache_read_release(darktable.image_cache, img);
+  dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
   if(image.dsc.channels != 1 || image.dsc.datatype != TYPE_UINT16) return;
 

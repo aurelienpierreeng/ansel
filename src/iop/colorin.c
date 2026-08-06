@@ -1544,7 +1544,7 @@ static void update_profile_list(dt_iop_module_t *self)
   int pos = -1;
   // some file formats like jpeg can have an embedded color profile
   // currently we only support jpeg, j2k, tiff and png
-  const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, self->dev->image_storage.id, 'r');
+  const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'r');
   if(cimg->profile)
   {
     dt_colorspaces_color_profile_t *prof
@@ -1554,7 +1554,7 @@ static void update_profile_list(dt_iop_module_t *self)
     g->image_profiles = g_list_append(g->image_profiles, prof);
     prof->in_pos = ++pos;
   }
-  dt_image_cache_read_release(darktable.image_cache, cimg);
+  dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
   // use the matrix embedded in some DNGs and EXRs
   if(!isnan(self->dev->image_storage.d65_color_matrix[0]))
   {

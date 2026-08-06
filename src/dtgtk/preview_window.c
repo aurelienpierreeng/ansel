@@ -159,9 +159,9 @@ void dt_preview_window_spawn(const int32_t imgid)
 
   GtkWidget *dialog = gtk_dialog_new();
 
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   gchar *name = g_strdup_printf(_("Ansel - Preview : %s"), img->filename);
-  dt_image_cache_read_release(darktable.image_cache, img);
+  dt_image_cache_read_release(dt_image_cache_get_global(), img);
   gtk_window_set_title(GTK_WINDOW(dialog), name);
   dt_free(name);
 

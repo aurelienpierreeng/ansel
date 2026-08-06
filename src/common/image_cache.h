@@ -59,6 +59,9 @@ void dt_image_cache_init(dt_image_cache_t *cache);
 void dt_image_cache_cleanup(dt_image_cache_t *cache);
 void dt_image_cache_print(dt_image_cache_t *cache);
 
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+struct dt_image_cache_t *dt_image_cache_get_global(void);
+
 // One cached image (dt_image_t), for the GUI memory view.
 typedef struct dt_image_cache_stats_entry_t
 {

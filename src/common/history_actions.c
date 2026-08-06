@@ -366,7 +366,7 @@ typedef struct dt_history_load_params_t
 static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_data)
 {
   dt_history_load_params_t *params = (dt_history_load_params_t *)user_data;
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
   if(IS_NULL_PTR(img)) return FALSE;
 
   dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
@@ -375,7 +375,7 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
 
   if(dt_exif_xmp_read(img, params->filename, params->history_only))
   {
-    dt_image_cache_write_release(darktable.image_cache, img,
+    dt_image_cache_write_release(dt_image_cache_get_global(), img,
                                  // ugly but if not history_only => called from crawler - do not write the xmp
                                  params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
     return FALSE;
@@ -385,7 +385,7 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
-  dt_image_cache_write_release(darktable.image_cache, img,
+  dt_image_cache_write_release(dt_image_cache_get_global(), img,
                                // ugly but if not history_only => called from crawler - do not write the xmp
                                params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
 

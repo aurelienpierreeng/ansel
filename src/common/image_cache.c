@@ -564,9 +564,9 @@ static void _image_cache_info_changed_reload_callback(gpointer instance, gpointe
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     if(imgid <= 0) continue;
 
-    dt_image_t *img = dt_image_cache_get_reload(darktable.image_cache, imgid, 'r');
+    dt_image_t *img = dt_image_cache_get_reload(dt_image_cache_get_global(), imgid, 'r');
     if(img)
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
   }
 }
 
