@@ -73,10 +73,22 @@ Done, on `refactor/strip-darktable-h`:
 | `collection` | 0 | idem; `libs/tools/filter.c` still reads `->params`/`->tagid` directly — wrap in named API later |
 | `db` | 0 | two accessors: `dt_database_get_sqlite3_global()` (353 sites) + `dt_database_get_global()` (56) |
 | `signals` | 0 | `dt_control_signal_get_global()` — **end state**, not interim (see below) |
+| `develop` **in `develop/blend_gui.c`** | 52 → 0 | `module->dev`/`self->dev`, `data->module->dev`; 4 context-less helpers gained a dev parameter |
 | `lib`, `imageio`, `l10n`, `dbus`, `pwstorage`, `points`, `noiseprofile_parser` | 0 | `dt_*_get_global()` — end state (process-wide singletons). Fixed a latent break: `common/points.h`'s inlines dereferenced the global without including darktable.h |
 | `opencl`, `color_profiles` | 0 **outside their own TU** | `dt_opencl_get_global()`, `dt_colorspaces_get_global()`; external `->inited` reads now use `dt_opencl_is_inited()`. `opencl.c`/`colorspaces.c` keep direct access — see below |
 
 Member references tree-wide (excluding `darktable.c` and include lines): **~5,400 → ~3,100**.
+
+**Where `develop` now stands (383 refs left, from 962).** The carrier-based conversion is
+done everywhere a carrier exists: `iop/` (via `self->dev`, 289 → 4), the masks subsystem, and
+`blend_gui.c`. What remains is concentrated in `libs/` (~250, led by masks.c 87 and
+histogram.c 84) and `views/` (darkroom.c 38, studio_capture.c 11) — and these are the
+**dispatch points** the target architecture explicitly allows: a view or a top-level panel may
+resolve the current develop instance; what must not happen is a leaf module reaching for it.
+`dt_lib_module_t` carries no dev today, so giving panels one would mean adding it at
+lib-init — worth doing only if the goal is to make panels testable against a non-global
+develop, not as global-count reduction. The residual in `develop/imageop.c` (19) and
+`gui/color_picker_proxy.c` (14) is the genuinely remaining leaf work.
 
 **Scope rule applied to subsystem-owned singletons**: the harm this migration targets is
 *distant* modules reaching into application state. A subsystem reading its own singleton
