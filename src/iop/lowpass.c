@@ -42,10 +42,16 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "common/bilateral.h"
 #include "common/bilateralcl.h"
 #include "common/debug.h"

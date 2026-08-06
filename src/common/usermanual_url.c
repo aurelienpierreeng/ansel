@@ -25,7 +25,8 @@
 */
 
 #include "common/usermanual_url.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "common/l10n.h"
 
 

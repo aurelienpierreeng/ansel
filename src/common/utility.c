@@ -50,7 +50,10 @@
 
 #include <locale.h>
 
-#include "common/darktable.h"
+#include <glib/gstdio.h>
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/paths.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"
 #include "common/utility.h"

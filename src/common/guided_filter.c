@@ -37,7 +37,12 @@
     
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/box_filters.h"
 #include "common/guided_filter.h"

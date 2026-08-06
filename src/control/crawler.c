@@ -37,11 +37,15 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "common/darktable.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/paths.h"
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/image.h"
+#include "common/utility.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "crawler.h"

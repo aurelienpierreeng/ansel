@@ -20,7 +20,10 @@
 #include "config.h"
 #endif
 
-#include "common/darktable.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
 #include "common/mipmap_cache.h"
 #include "common/imagebuf.h"
 #include "develop/develop.h"

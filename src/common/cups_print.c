@@ -27,7 +27,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/utility.h"
+#include <glib/gstdio.h>
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/paths.h"
 #include <cups/cups.h>
 #include <cups/ppd.h>
 #include <glib.h>

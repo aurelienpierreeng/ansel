@@ -17,11 +17,12 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 
 #include "iop/drawlayer/widgets.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 
 #include "iop/drawlayer/paint.h"
 #include "gui/gtk.h"

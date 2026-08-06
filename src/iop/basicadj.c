@@ -49,7 +49,14 @@
 #endif
 
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/image.h"
+#include "gui/gtk.h"
 #include "control/control.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/math.h"

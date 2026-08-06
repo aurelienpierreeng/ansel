@@ -51,7 +51,8 @@
 #include "glib.h"
 
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
 #include "common/exif.h"
 #include "common/imageio.h"
 #include "common/imageio_exr.h"

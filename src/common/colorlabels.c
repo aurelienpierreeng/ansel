@@ -34,9 +34,10 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/database.h"
 #include "common/colorlabels.h"
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/undo.h"

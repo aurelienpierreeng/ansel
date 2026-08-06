@@ -48,7 +48,11 @@
 */
 #include "common/collection.h"
 #include "common/selection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "control/signal.h"
+#include "common/utility.h"
 #include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "common/tags.h"

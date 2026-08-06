@@ -21,8 +21,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/database.h"
 #include "common/presets.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/file_location.h"

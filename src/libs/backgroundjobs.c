@@ -33,7 +33,10 @@
 */
 
 #include "common/atomic.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/dtpthread.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "control/conf.h"

@@ -42,11 +42,16 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
 #include "control/conf.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/image.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"

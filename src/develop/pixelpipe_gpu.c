@@ -2,7 +2,8 @@
     Private OpenCL pixelpipe backend.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/logging.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/iop_order.h"
 #include "common/opencl.h"

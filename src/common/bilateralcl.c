@@ -25,11 +25,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
 #ifdef HAVE_OPENCL
 
 #include "common/bilateral.h"
 #include "common/bilateralcl.h"
-#include "common/darktable.h" // for CLAMPS, dt_print, darktable, darktable_t
 #include "common/opencl.h"    // for dt_opencl_set_kernel_arg, dt_opencl_cr...
 #include <glib.h>             // for MAX
 #include <math.h>             // for roundf

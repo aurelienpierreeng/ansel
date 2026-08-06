@@ -27,9 +27,11 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/database.h"
 #include "common/grouping.h"
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/selection.h"

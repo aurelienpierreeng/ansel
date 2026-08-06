@@ -43,9 +43,16 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/utility.h"
+#include <glib/gstdio.h>
+#include "common/database.h"
 #include "common/styles.h"
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/paths.h"
+#include "common/image.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/file_location.h"

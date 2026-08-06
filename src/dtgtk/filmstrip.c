@@ -22,7 +22,9 @@
  *        thumbtable_internal.h for the ops contract.
  */
 
-#include "common/darktable.h"
+#include "common/image.h"
+#include "common/logging.h"
+#include "common/usermanual_url.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "dtgtk/thumbtable.h"

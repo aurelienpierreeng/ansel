@@ -56,7 +56,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/utility.h"
 #include "common/gaussian.h"
 #include "common/math.h"
 #include "common/opencl.h"

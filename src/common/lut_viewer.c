@@ -16,11 +16,17 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <glib/gstdio.h>
 #include "common/lut_viewer.h"
 
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
+#include "common/times.h"
 #include "common/matrices.h"
 #include "control/conf.h"
 #include "control/control.h"

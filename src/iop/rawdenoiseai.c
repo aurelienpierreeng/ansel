@@ -56,7 +56,15 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include <json-glib/json-glib.h>
+#include "common/paths.h"
+#include "gui/gtk.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"

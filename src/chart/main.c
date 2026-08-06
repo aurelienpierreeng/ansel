@@ -28,7 +28,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include <gtk/gtk.h>
+
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/openmp.h"
+#include "common/simd.h"
 #include "chart/dtcairo.h"
 #include "chart/colorchart.h"
 #include "chart/common.h"
@@ -38,7 +43,7 @@
 #include "chart/tonecurve.h"
 #include "common/exif.h"
 
-#include <gtk/gtk.h>
+#include <glib/gstdio.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

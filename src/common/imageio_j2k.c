@@ -26,9 +26,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include <glib/gstdio.h>
 #include "config.h"
 #endif
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/mem_alloc.h"
 #include "common/exif.h"
 #include "common/imageio_j2k.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB

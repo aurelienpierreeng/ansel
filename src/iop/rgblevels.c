@@ -36,7 +36,14 @@
 #include "config.h"
 #endif
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/image.h"
 #include "common/iop_profile.h"
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"

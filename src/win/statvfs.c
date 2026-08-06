@@ -40,7 +40,7 @@
  * limitations under the License.
  */
 
-#include "common/darktable.h"
+#include "common/mem_alloc.h"
 #include <glib.h>
 
 #include <string.h>

@@ -53,7 +53,12 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/module_versioning.h"
 #include "common/imagebuf.h"
 #include "control/control.h"
 #include "develop/develop.h"

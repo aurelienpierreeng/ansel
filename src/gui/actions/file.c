@@ -18,7 +18,12 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/paths.h"
+#include "common/usermanual_url.h"
+#include "control/signal.h"
+#include "gui/gtk.h"
 #include "gui/actions/menu.h"
 #include "common/collection.h"
 #include "common/image.h"

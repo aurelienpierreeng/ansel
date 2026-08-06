@@ -39,11 +39,12 @@
 
 #include "common/image.h"
 
+#include <glib.h>
+#include <json-glib/json-glib.h>
+
 /* Process-wide singleton with no per-call context to ride on: this accessor is the
  * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
 JsonParser *dt_noiseprofile_get_parser_global(void);
-#include <glib.h>
-#include <json-glib/json-glib.h>
 
 typedef struct dt_noiseprofile_t
 {

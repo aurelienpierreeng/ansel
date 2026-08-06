@@ -47,7 +47,10 @@
 
 #include "common/collection.h"
 #include "common/selection.h"
-#include "common/darktable.h"
+#include "common/mem_alloc.h"
+#include "common/times.h"
+#include "common/module_versioning.h"
+#include "control/signal.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"

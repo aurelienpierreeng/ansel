@@ -33,10 +33,11 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include <glib-object.h>
 #include <glib.h>
 #include <lcms2.h>

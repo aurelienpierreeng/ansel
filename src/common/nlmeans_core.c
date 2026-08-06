@@ -26,7 +26,10 @@
 #include "config.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #endif
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/simd.h"
 #include "common/math.h"
 #include "common/opencl.h"
 #include "control/control.h"

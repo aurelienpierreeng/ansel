@@ -40,9 +40,14 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/database.h"
 #include "common/image_cache.h"
 #include "common/colorlabels.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/hash.h"
+#include "common/logging.h"
+#include "common/paths.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/image.h"

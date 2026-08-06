@@ -29,7 +29,12 @@
 */
 
 #include "common/bilateral.h"
-#include "common/darktable.h" // dt_print, dt_alloc_align, dt_free_align
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
 #include "develop/pixelpipe_cache_alloc.h" // dt_pixelpipe_cache_alloc_align_float_cache
 #include "common/math.h"      // for CLAMPS, roundf
 #include <glib.h>             // for MIN, MAX

@@ -40,7 +40,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "gui/gdkkeys.h"
 #include "common/math.h"
 #include "develop/develop.h"

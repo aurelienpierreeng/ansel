@@ -39,9 +39,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/database.h"
 #include "common/history.h"
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
 #include "common/history_snapshot.h"

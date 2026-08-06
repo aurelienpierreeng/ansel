@@ -31,7 +31,8 @@
 /* workaround to fix issue #12720 */
 #define _DARWIN_C_SOURCE
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include <Carbon/Carbon.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreServices/CoreServices.h>

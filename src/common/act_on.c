@@ -20,7 +20,6 @@
 */
 
 #include "common/act_on.h"
-#include "common/darktable.h"
 #include "common/collection.h"
 #include "common/selection.h"
 #include "control/control.h"

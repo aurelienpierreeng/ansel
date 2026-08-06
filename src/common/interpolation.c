@@ -33,7 +33,11 @@
 */
 
 #include "common/interpolation.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/math.h"
 #include "control/conf.h"

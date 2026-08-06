@@ -58,7 +58,15 @@
 #include "config.h"
 #endif
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "common/module_versioning.h"
+#include "common/fp_mode.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "common/image_cache.h"

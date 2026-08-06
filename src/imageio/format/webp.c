@@ -34,7 +34,10 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include <glib/gstdio.h>
 #include "common/exif.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"

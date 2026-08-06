@@ -18,7 +18,14 @@
 */
 
 #include "common/debug.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/hash.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "common/paths.h"
+#include "develop/pixelpipe_cache_alloc.h"
+#include "gui/gtk.h"
 #include "common/dtpthread.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"

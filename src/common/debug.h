@@ -28,7 +28,17 @@
 
 #pragma once
 
+/* Self-containment: the DT_DEBUG_SQLITE3_* macros below expand to
+ * dt_database_get_sqlite3_global() (common/database.h), dt_print()/DT_DEBUG_SQL
+ * (common/logging.h) and fprintf() (<stdio.h>). Include them here rather than
+ * making every consumer of the macros do it: this header used to compile only
+ * because common/darktable.h happened to be included first. */
+
+#include "common/database.h"
+#include "common/logging.h"
+
 #include <sqlite3.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {

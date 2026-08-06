@@ -39,9 +39,14 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <glib/gstdio.h>
+#include "common/database.h"
+#include "common/utility.h"
 #include "common/tags.h"
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/image.h"
 #include "common/debug.h"
 #include "common/grouping.h"
 #include "common/selection.h"

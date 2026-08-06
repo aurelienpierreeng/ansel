@@ -24,7 +24,11 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/darktable.h"
+#include <json-glib/json-glib.h>
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/paths.h"
 #include "common/noiseprofiles.h"
 #include "common/file_location.h"
 #include "control/control.h"

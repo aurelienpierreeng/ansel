@@ -21,7 +21,6 @@
 #endif
 
 #include "common/privacy_consent.h"
-#include "common/darktable.h"
 
 #if defined(HAVE_SENTRY) || defined(HAVE_TELEMETRY)
 

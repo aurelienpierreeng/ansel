@@ -36,7 +36,12 @@
 #include "config.h"
 #endif
 
-#include "common/darktable.h"    // for darktable, darktable_t, dt_alloc_a...
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/image.h"        // for dt_image_t, ::DT_IMAGE_4BAYER
 #include "common/imagebuf.h"     // for dt_iop_image_copy_by_size

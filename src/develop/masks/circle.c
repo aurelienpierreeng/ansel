@@ -34,7 +34,11 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "gui/gtk.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "common/undo.h"

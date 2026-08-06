@@ -52,10 +52,18 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
+#include "common/image.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>

@@ -29,7 +29,12 @@
 
 #include "common/color_picker.h"
 #include "common/bspline.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/openmp.h"
+#include "common/mem_alloc.h"
+#include "common/simd.h"
+#include "common/logging.h"
+#include "common/times.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/iop_profile.h"

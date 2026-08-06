@@ -21,9 +21,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/logging.h"
+#include "common/database.h"
 #include "common/geo.h"
 #include "common/map_locations.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
 #include "common/debug.h"
 #include "common/tags.h"
 

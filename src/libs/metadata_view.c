@@ -53,7 +53,14 @@
 */
 
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
+#include "common/image.h"
+#include "control/signal.h"
+#include "common/database.h"
+#include "common/utility.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/metadata.h"

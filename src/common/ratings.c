@@ -35,7 +35,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/glib_utils.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/ratings.h"

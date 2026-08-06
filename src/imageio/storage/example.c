@@ -35,7 +35,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
 #include "common/file_location.h"
 #include "common/image.h"
 #include "common/image_cache.h"

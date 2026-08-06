@@ -23,7 +23,10 @@
     source folder and the scan frequency are locked during a session to
     protect the engine's baseline. */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "control/signal.h"
 #include "bauhaus/bauhaus.h"
 #include "common/datetime.h"
 #include "common/debug.h"

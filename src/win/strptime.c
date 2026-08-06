@@ -57,7 +57,7 @@ __RCSID("$NetBSD: strptime.c,v 1.36 2012/03/13 21:13:48 christos Exp $");
 #include "namespace.h"
 #include <sys/localedef.h>
 */
-#include "common/darktable.h"
+#include "common/macros.h"
 #include <ctype.h>
 #include <locale.h>
 #include <string.h>

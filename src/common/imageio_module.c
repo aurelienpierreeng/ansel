@@ -34,8 +34,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/module_versioning.h"
 #include "common/imageio_module.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/paths.h"
+#include "gui/gtk.h"
 #include "common/file_location.h"
 #include "common/imageio.h"
 #include "control/conf.h"
