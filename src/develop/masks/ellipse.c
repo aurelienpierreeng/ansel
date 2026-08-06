@@ -177,14 +177,14 @@ static int _ellipse_point_close_to_path(float x, float y, float mouse_radius, fl
 }
 
 static void _ellipse_get_distance(float x, float y, float mouse_radius, dt_masks_form_gui_t *gui, int index,
-                                  int num_points, int *inside, int *inside_border, int *near,
+                                  int num_points, int *inside, int *inside_border, int *near_handle,
                                   int *inside_source, float *dist)
 {
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
   *inside_border = 0;
-  *near = -1;
+  *near_handle = -1;
   *dist = FLT_MAX;
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
@@ -512,10 +512,10 @@ static void _ellipse_node_position_cb(const dt_masks_form_gui_points_t *gui_poin
  */
 static void _ellipse_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                  dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                                 int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+                                 int *inside_border, int *near_handle, int *inside_source, float *dist, void *user_data)
 {
   _ellipse_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0, inside,
-                        inside_border, near, inside_source, dist);
+                        inside_border, near_handle, inside_source, dist);
 }
 
 /**

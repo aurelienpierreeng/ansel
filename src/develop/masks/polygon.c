@@ -333,7 +333,7 @@ static int _polygon_fill_gaps(int last_x, int last_y, int target_x, int target_y
 /**
  * @brief Fill gaps between border points with a circular arc.
  *
- * This is used when the border has gaps, especially near sharp nodes.
+ * This is used when the border has gaps, especially near_handle sharp nodes.
  */
 static void _polygon_points_recurs_border_gaps(float *center_max, float *border_min,
                                                float *border_min2, float *border_max,
@@ -435,7 +435,7 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
                            polygon_max, polygon_max + 1, border_max, border_max + 1);
   }
 
-  // are the points near ?
+  // are the points near_handle ?
   if((t_max - t_min < 0.0001)
        || (_is_within_pxl_threshold(polygon_min, polygon_max, pixel_threshold)
           && (!with_border || (_is_within_pxl_threshold(border_min, border_max, pixel_threshold)))))
@@ -1314,13 +1314,13 @@ static float _polygon_set_interaction_value(dt_masks_form_t *mask_form,
 static void _polygon_get_distance(float point_x, float point_y, float radius,
                                   dt_masks_form_gui_t *mask_gui, int form_index,
                                   int node_count, int *inside, int *inside_border,
-                                  int *near, int *inside_source, float *dist)
+                                  int *near_handle, int *inside_source, float *dist)
 {
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
   *inside_border = 0;
-  *near = -1;
+  *near_handle = -1;
   *dist = FLT_MAX;
 
   if(IS_NULL_PTR(mask_gui)) return;
@@ -1372,7 +1372,7 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
     return;
   }
 
-  // we check if we are near a segment
+  // we check if we are near_handle a segment
   if(gui_points->points && gui_points->points_count > 2 + node_count * 3)
   {
     int current_seg = 1;
@@ -1398,9 +1398,9 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
         if(current_seg >= 0 && dd < radius2)
         {
           if(current_seg == 0)
-            *near = node_count - 1;
+            *near_handle = node_count - 1;
           else
-            *near = current_seg - 1;
+            *near_handle = current_seg - 1;
         }
       }
     }
@@ -1454,11 +1454,11 @@ static void _polygon_curve_handle_cb(const dt_masks_form_gui_points_t *gui_point
  */
 static void _polygon_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                  dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                                 int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+                                 int *inside_border, int *near_handle, int *inside_source, float *dist, void *user_data)
 {
   
   _polygon_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count,
-                        inside, inside_border, near, inside_source, dist);
+                        inside, inside_border, near_handle, inside_source, dist);
 }
 
 static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)
@@ -1987,7 +1987,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
     if(IS_NULL_PTR(mask_form->points)) return 0;
     if(mask_gui->creation && !g_list_shorter_than(mask_form->points, 4))
     {
-      // check if we are near the first point to close the polygon on creation
+      // check if we are near_handle the first point to close the polygon on creation
       const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS;
       const float dx = mask_gui->pos[0] - gui_points->points[2];
       const float dy = mask_gui->pos[1] - gui_points->points[3];

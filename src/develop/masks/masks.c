@@ -565,13 +565,13 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
       // Lock selection only when the click lands on the selected closed-shape border/segment.
       int inside = 0;
       int inside_border = 0;
-      int near = -1;
+      int near_handle = -1;
       int inside_source = 0;
       float dist = FLT_MAX;
       selected_form->functions->get_distance(cursor_x, cursor_y, radius, mask_gui, prev_group_selected,
                                              g_list_length(selected_form->points), &inside, &inside_border,
-                                             &near, &inside_source, &dist);
-      if(inside_border || near >= 0)
+                                             &near_handle, &inside_source, &dist);
+      if(inside_border || near_handle >= 0)
         locked_formid = selected_group_entry->formid;
     }
   }
@@ -595,15 +595,15 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
 
     int inside = 0;
     int inside_border = 0;
-    int near = -1;
+    int near_handle = -1;
     int inside_source = 0;
     float dist = FLT_MAX;
     if(form->functions && form->functions->get_distance)
       form->functions->get_distance(cursor_x, cursor_y, radius, mask_gui, index, g_list_length(form->points),
-                                    &inside, &inside_border, &near, &inside_source, &dist);
+                                    &inside, &inside_border, &near_handle, &inside_source, &dist);
 
     const gboolean is_selected_form = (prev_group_selected == index);
-    const gboolean hit_border = (inside_border || near >= 0);
+    const gboolean hit_border = (inside_border || near_handle >= 0);
     const gboolean is_open_shape = (form->type & DT_MASKS_IS_OPEN_SHAPE) != 0;
     // Only open shapes can be selected via their border when unselected.
     if(!is_selected_form && hit_border && !is_open_shape)
@@ -661,14 +661,14 @@ static gboolean _dt_masks_events_cursor_over_form(const dt_masks_form_t *dispatc
 
   int inside = 0;
   int inside_border = 0;
-  int near = -1;
+  int near_handle = -1;
   int inside_source = 0;
   float dist = FLT_MAX;
   dispatch_form->functions->get_distance(mask_gui->pos[0], mask_gui->pos[1], DT_GUI_MOUSE_EFFECT_RADIUS,
                                          mask_gui, form_index,
-                                         g_list_length(dispatch_form->points), &inside, &inside_border, &near,
+                                         g_list_length(dispatch_form->points), &inside, &inside_border, &near_handle,
                                          &inside_source, &dist);
-  return inside || inside_border || near >= 0 || inside_source;
+  return inside || inside_border || near_handle >= 0 || inside_source;
 }
 
 /**

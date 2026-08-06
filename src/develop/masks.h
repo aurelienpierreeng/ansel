@@ -326,7 +326,7 @@ typedef struct dt_masks_functions_t
   void (*initial_source_pos)(struct dt_develop_t *dev, const float iwd, const float iht, float *x, float *y);
   // input coordinates are in absolute output-image space, dist is squared in the same space
   void (*get_distance)(float x, float y, float as, struct dt_masks_form_gui_t *gui, int index, int num_points,
-                       int *inside, int *inside_border, int *near, int *inside_source, float *dist);
+                       int *inside, int *inside_border, int *near_handle, int *inside_source, float *dist);
   int (*get_points)(struct dt_develop_t *dev, float x, float y, float radius_a, float radius_b, float rotation,
                     float **points, int *points_count);
   int (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form, float **points, int *points_count,
@@ -1537,7 +1537,7 @@ typedef void (*dt_masks_node_position_fn)(const dt_masks_form_gui_points_t *gui_
  */
 typedef void (*dt_masks_distance_fn)(float pointer_x, float pointer_y, float cursor_radius,
                                      dt_masks_form_gui_t *mask_gui, int form_index, int node_count,
-                                     int *inside, int *inside_border, int *near, int *inside_source, float *dist,
+                                     int *inside, int *inside_border, int *near_handle, int *inside_source, float *dist,
                                      void *user_data);
 /**
  * @brief Optional hook to customize selection flags after inside/border/source resolution.

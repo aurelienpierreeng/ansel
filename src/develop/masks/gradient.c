@@ -232,14 +232,14 @@ static int _gradient_get_creation_preview(dt_masks_form_gui_t *gui, dt_masks_pre
 }
 
 static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_form_gui_t *gui, int index,
-                                   int num_points, int *inside, int *inside_border, int *near,
+                                   int num_points, int *inside, int *inside_border, int *near_handle,
                                    int *inside_source, float *dist)
 {
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
   *inside_border = 0;
-  *near = -1;
+  *near_handle = -1;
   *dist = FLT_MAX;
   const float sqr_dist_mouse = dist_mouse * dist_mouse;
 
@@ -301,7 +301,7 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
     }
   }
 
-  // and we check if we are near a segment (single continuous segment starting at gpt->points[3])
+  // and we check if we are near_handle a segment (single continuous segment starting at gpt->points[3])
   if(gpt->points && gpt->points_count > 3)
   {
     for(int i = 3; i < gpt->points_count; i++)
@@ -316,9 +316,9 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
       min_dist = fminf(min_dist, dd);
 
       // only one segment present: if any guide point is within the mouse distance,
-      // mark the (only) segment as near (index 0)
+      // mark the (only) segment as near_handle (index 0)
       if(dd < sqr_dist_mouse)
-        *near = 0;
+        *near_handle = 0;
     }
   }
 
@@ -334,10 +334,10 @@ static void _gradient_node_position_cb(const dt_masks_form_gui_points_t *gui_poi
 
 static void _gradient_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                   dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                                  int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+                                  int *inside_border, int *near_handle, int *inside_source, float *dist, void *user_data)
 {
   _gradient_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0, inside,
-                         inside_border, near, inside_source, dist);
+                         inside_border, near_handle, inside_source, dist);
 }
 
 static void _gradient_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,

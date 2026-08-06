@@ -643,7 +643,7 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
                          points_max + 1, border_max, border_max + 1);
   }
 
-  // are the points near ?
+  // are the points near_handle ?
   if((tmax - tmin < 0.0001f)
      || (_is_within_pxl_threshold(points_min, points_max, pixel_threshold)
          && (!withborder || (_is_within_pxl_threshold(border_min, border_max, pixel_threshold)))))
@@ -1101,7 +1101,7 @@ fail:
 static void _brush_get_distance(float point_x, float point_y, float radius,
                                 dt_masks_form_gui_t *mask_gui, int form_index,
                                 int corner_count, int *inside, int *inside_border,
-                                int *near, int *inside_source, float *distance)
+                                int *near_handle, int *inside_source, float *distance)
 {
   if(IS_NULL_PTR(mask_gui)) return;
 
@@ -1109,7 +1109,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
   *inside_source = 0;
   *inside = 0;
   *inside_border = 0;
-  *near = -1;
+  *near_handle = -1;
   *distance = FLT_MAX;
 
   dt_masks_form_gui_points_t *gui_points
@@ -1196,7 +1196,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
     *inside = *inside_border = (nearest != -1 || (crossings & 1));
   }
 
-  // and we check if we are near a segment
+  // and we check if we are near_handle a segment
   if(gui_points->points && gui_points->points_count > 2 + corner_count * 3)
   {
     int current_seg = 1;
@@ -1221,7 +1221,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
 
         if(current_seg > 0 && dd < radius2)
         {
-          *near = current_seg - 1;
+          *near_handle = current_seg - 1;
         }
       }
     }
@@ -1311,10 +1311,10 @@ static void _brush_curve_handle_cb(const dt_masks_form_gui_points_t *gui_points,
  */
 static void _brush_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                               int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+                               int *inside_border, int *near_handle, int *inside_source, float *dist, void *user_data)
 {
   _brush_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count,
-                      inside, inside_border, near, inside_source, dist);
+                      inside, inside_border, near_handle, inside_source, dist);
 }
 
 static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)

@@ -102,6 +102,16 @@
 #include "common/glib_utils.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
+
+/* Win32 API surface (windows.h/psapi) plus the #undef of the legacy `near`/`interface`
+ * macros windows.h defines. The orchestrator carries it because app-level TUs
+ * (darktable.c, main.c) call Win32 memory/file APIs directly. Low-level code must NOT
+ * rely on inheriting this: identifiers colliding with those macros are renamed at the
+ * source instead. */
+#if defined _WIN32
+#include "win/win.h"
+#endif
+
 #ifdef _WIN32
 #include "win/getrusage.h"
 #else

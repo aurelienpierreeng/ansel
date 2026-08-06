@@ -88,6 +88,24 @@
 #include <sys/malloc.h>
 #endif
 
+/* Platform memory-query APIs used by dt_get_total_memory()/dt_get_system_available_mem()
+ * below: sysctl(CTL_HW, ...) on Apple/BSD and the mach host/task statistics on Apple.
+ * These used to arrive through common/darktable.h's OS block; this TU is their only
+ * non-external consumer in the tree (common/telemetry.c carries its own), so it declares
+ * them itself. */
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <sys/sysctl.h>
+#endif
+#if defined(__DragonFly__) || defined(__FreeBSD__)
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#endif
+#if defined(__NetBSD__) || defined(__OpenBSD__)
+#include <sys/param.h>
+#include <sys/sysctl.h>
+#endif
+
 #include "common/collection.h"
 #include "common/colorspaces.h"
 #include "common/colorlabels.h"
