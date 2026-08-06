@@ -561,7 +561,7 @@ static void _blendop_blend_mode_callback(GtkWidget *combo, dt_iop_gui_blend_data
       dt_bauhaus_slider_set(data->blend_mode_parameter_slider, bp->blend_parameter);
       gtk_widget_set_visible(data->blend_mode_parameter_slider, FALSE);
     }
-    dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+    dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
     dt_iop_gui_update_header(data->module);
   }
 }
@@ -577,7 +577,7 @@ static void _blendop_compositing_changed(GtkWidget *combobox, dt_iop_gui_blend_d
   else
     bp->blend_mode |= DEVELOP_BLEND_REVERSE;
 
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
   dt_control_queue_redraw_widget(GTK_WIDGET(combobox));
 }
@@ -604,7 +604,7 @@ static void _blendop_masks_combine_callback(GtkWidget *combo, dt_iop_gui_blend_d
   }
 
   _blendif_clean_output_channels(data->module);
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
 }
 
@@ -617,7 +617,7 @@ static void _blendop_masks_invert_toggled(GtkToggleButton *togglebutton, dt_iop_
   else
     data->module->blend_params->mask_combine &= ~DEVELOP_COMBINE_INV;
   _blendif_clean_output_channels(data->module);
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
 }
 
@@ -659,7 +659,7 @@ static void _blendop_blendif_sliders_callback(GtkDarktableGradientSlider *slider
   else
     bp->blendif |= (1 << ch);
 
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
 }
 
@@ -681,7 +681,7 @@ static void _blendop_blendif_sliders_reset_callback(GtkDarktableGradientSlider *
   else
     bp->blendif &= ~(1 << (16 + ch));
 
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
   _blendop_blendif_update_tab(data->module, data->tab);
 }
@@ -714,7 +714,7 @@ static void _blendop_blendif_polarity_callback(GtkToggleButton *togglebutton, dt
   dtgtk_gradient_slider_multivalue_set_marker(
       slider, active ? GRADIENT_SLIDER_MARKER_LOWER_OPEN_BIG : GRADIENT_SLIDER_MARKER_UPPER_OPEN_BIG, 3);
 
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
   dt_control_queue_redraw_widget(GTK_WIDGET(togglebutton));
 }
@@ -1155,7 +1155,7 @@ static void _blendop_blendif_boost_factor_callback(GtkWidget *slider, dt_iop_gui
 
   _blendop_blendif_update_tab(data->module, tab);
 
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
 }
 
@@ -1165,7 +1165,7 @@ static void _blendop_blendif_details_callback(GtkWidget *slider, dt_iop_gui_blen
   dt_develop_blend_params_t *bp = data->module->blend_params;
   const float oldval = bp->details;
   bp->details = dt_bauhaus_slider_get(slider);
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(data->module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
 
   if((oldval == 0.0f) && (bp->details != 0.0f))
@@ -1291,7 +1291,7 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
   _blendop_masks_mode_callback(mask_mode, data);
   dt_iop_add_remove_mask_indicator(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+  dt_dev_add_history_item(module->dev, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
 }
 
@@ -1304,7 +1304,7 @@ static gboolean _blendop_blendif_reset(GtkButton *button, GdkEventButton *event,
 
   dt_iop_color_picker_reset(module, FALSE);
   dt_iop_gui_update_blendif(module);
-  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   dt_iop_gui_update_header(module);
 
   return TRUE;
@@ -1337,7 +1337,7 @@ static gboolean _blendop_blendif_invert(GtkButton *button, GdkEventButton *event
   module->blend_params->mask_combine ^= DEVELOP_COMBINE_MASKS_POS;
   module->blend_params->mask_combine ^= DEVELOP_COMBINE_INCL;
   dt_iop_gui_update_blending(module);
-  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   dt_iop_gui_update_header(module);
 
   return TRUE;
@@ -1370,7 +1370,7 @@ static gboolean _blendop_masks_show_and_edit(GtkWidget *widget, GdkEventButton *
     dt_iop_request_focus(self);
     dt_iop_color_picker_reset(self, FALSE);
 
-    dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, self->blend_params->mask_id);
+    dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
     if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
     {
       const gboolean control_button_pressed = dt_modifier_is(event->state, GDK_CONTROL_MASK);
@@ -1425,7 +1425,7 @@ static gboolean _blendop_masks_polarity_callback(GtkToggleButton *togglebutton, 
   else
     bp->mask_combine &= ~DEVELOP_COMBINE_MASKS_POS;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_iop_gui_update_header(self);
   dt_control_queue_redraw_widget(GTK_WIDGET(togglebutton));
 
@@ -1459,21 +1459,21 @@ static dt_masks_form_t *_blendop_masks_group_from_module(dt_iop_module_t *module
 {
   if(IS_NULL_PTR(module)) return NULL;
   if(IS_NULL_PTR(module->blend_params)) return NULL;
-  return dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  return dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
 }
 
-static void _blendop_masks_check_id(dt_masks_form_t *mask_form)
+static void _blendop_masks_check_id(dt_develop_t *dev, dt_masks_form_t *mask_form)
 {
   if(IS_NULL_PTR(mask_form)) return;
 
   int new_form_id = 100;
-  for(GList *form_node = darktable.develop->forms; form_node;)
+  for(GList *form_node = dev->forms; form_node;)
   {
     const dt_masks_form_t *existing_form = (dt_masks_form_t *)form_node->data;
     if(existing_form->formid == mask_form->formid)
     {
       mask_form->formid = new_form_id++;
-      form_node = darktable.develop->forms;
+      form_node = dev->forms;
     }
     else
     {
@@ -1499,8 +1499,8 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
   g_snprintf(group_form->name, sizeof(group_form->name), "%s %s", _("Mask"), module_label);
   dt_free(module_label);
 
-  _blendop_masks_check_id(group_form);
-  dt_masks_append_form(darktable.develop, group_form);
+  _blendop_masks_check_id(module->dev, group_form);
+  dt_masks_append_form(module->dev, group_form);
   module->blend_params->mask_id = group_form->formid;
 
   return group_form;
@@ -1571,7 +1571,7 @@ static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, G
 
 // Check if this is a parent mask reusing a single parent mask (and no shapes).
 // Such a wrapper is redundant and should be hidden: the child mask should be used directly instead.
-static gboolean _blendop_masks_is_single_group_wrapper(const dt_masks_form_t *mask_form)
+static gboolean _blendop_masks_is_single_group_wrapper(dt_develop_t *dev, const dt_masks_form_t *mask_form)
 {
   if(IS_NULL_PTR(mask_form)) return FALSE;
   if(!(mask_form->type & DT_MASKS_GROUP)) return FALSE;
@@ -1584,14 +1584,14 @@ static gboolean _blendop_masks_is_single_group_wrapper(const dt_masks_form_t *ma
   const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)mask_form->points->data;
   if(IS_NULL_PTR(group_entry)) return FALSE;
   
-  const dt_masks_form_t *child_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
+  const dt_masks_form_t *child_form = dt_masks_get_from_id((dt_develop_t *)dev, group_entry->formid);
   if(IS_NULL_PTR(child_form)) return FALSE;
   
   // Check if the single child is a group
   return (child_form->type & DT_MASKS_GROUP) ? TRUE : FALSE;
 }
 
-static gboolean _blendop_masks_is_group_with_shapes(const dt_masks_form_t *mask_form)
+static gboolean _blendop_masks_is_group_with_shapes(const dt_develop_t *dev, const dt_masks_form_t *mask_form)
 {
   if(IS_NULL_PTR(mask_form)) return FALSE;
   if(!(mask_form->type & DT_MASKS_GROUP)) return FALSE;
@@ -1602,10 +1602,10 @@ static gboolean _blendop_masks_is_group_with_shapes(const dt_masks_form_t *mask_
     const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
     if(IS_NULL_PTR(group_entry)) continue;
 
-    const dt_masks_form_t *child_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
+    const dt_masks_form_t *child_form = dt_masks_get_from_id((dt_develop_t *)dev, group_entry->formid);
     if(IS_NULL_PTR(child_form)) continue;
     if(!(child_form->type & DT_MASKS_GROUP)) return TRUE;
-    if(_blendop_masks_is_group_with_shapes(child_form)) return TRUE;
+    if(_blendop_masks_is_group_with_shapes(dev, child_form)) return TRUE;
   }
 
   return FALSE;
@@ -1662,9 +1662,9 @@ static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, G
   {
     const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
     const dt_masks_form_t *mask_form = group_entry
-                                           ? dt_masks_get_from_id(darktable.develop, group_entry->formid)
+                                           ? dt_masks_get_from_id(bd->module->dev, group_entry->formid)
                                            : NULL;
-    if(mask_form && _blendop_masks_is_group_with_shapes(mask_form))
+    if(mask_form && _blendop_masks_is_group_with_shapes(bd->module->dev, mask_form))
       row_count += _blendop_masks_group_tree_append_entry(bd, tree_store, parent_iter, group_entry, mask_form,
                                                           index);
     index++;
@@ -1676,9 +1676,9 @@ static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, G
   {
     const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
     const dt_masks_form_t *mask_form = group_entry
-                                           ? dt_masks_get_from_id(darktable.develop, group_entry->formid)
+                                           ? dt_masks_get_from_id(bd->module->dev, group_entry->formid)
                                            : NULL;
-    if(mask_form && !_blendop_masks_is_group_with_shapes(mask_form))
+    if(mask_form && !_blendop_masks_is_group_with_shapes(bd->module->dev, mask_form))
     {
       row_count += _blendop_masks_group_tree_append_entry(bd, tree_store, parent_iter, group_entry, mask_form,
                                                           index);
@@ -1744,15 +1744,15 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
 
   // First pass: groups containing shapes first.
-  for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
+  for(const GList *form_node = module->dev->forms; form_node; form_node = g_list_next(form_node))
   {
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
     if(IS_NULL_PTR(mask_form)) continue;
     if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
     if(!IS_NULL_PTR(group_form) && mask_form->formid == group_form->formid) continue;
-    if(!_blendop_masks_is_group_with_shapes(mask_form)) continue;
+    if(!_blendop_masks_is_group_with_shapes(module->dev, mask_form)) continue;
     // Skip groups containing only a single group
-    if(_blendop_masks_is_single_group_wrapper(mask_form)) continue;
+    if(_blendop_masks_is_single_group_wrapper(module->dev, mask_form)) continue;
 
     const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
     GtkTreeIter iter;
@@ -1768,23 +1768,23 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   }
 
   // Second pass: then all non-group (and empty-group) entries.
-  for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
+  for(const GList *form_node = module->dev->forms; form_node; form_node = g_list_next(form_node))
   {
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
     if(IS_NULL_PTR(mask_form)) continue;
     if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
     if(!IS_NULL_PTR(group_form) && mask_form->formid == group_form->formid) continue;
-    if(_blendop_masks_is_group_with_shapes(mask_form)) continue;
+    if(_blendop_masks_is_group_with_shapes(module->dev, mask_form)) continue;
 
     const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
     gboolean sensitive = TRUE;
     const gchar *locked_group_name = NULL;
     
     // Check if this shape belongs to an active group
-    for(const GList *parent_node = darktable.develop->forms; parent_node; parent_node = g_list_next(parent_node))
+    for(const GList *parent_node = module->dev->forms; parent_node; parent_node = g_list_next(parent_node))
     {
       dt_masks_form_t *parent_form = (dt_masks_form_t *)parent_node->data;
-      if(IS_NULL_PTR(parent_form) || !_blendop_masks_is_group_with_shapes(parent_form)) continue;
+      if(IS_NULL_PTR(parent_form) || !_blendop_masks_is_group_with_shapes(module->dev, parent_form)) continue;
       
       const gboolean parent_active = _blendop_masks_find_group_entry(group_form, parent_form->formid, NULL) != NULL;
       if(parent_active && _blendop_masks_find_group_entry(parent_form, mask_form->formid, NULL))
@@ -1895,13 +1895,13 @@ static void _blendop_masks_all_name_edited(GtkCellRendererText *cell, gchar *pat
 
   int formid = -1;
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
-  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(module->dev, formid);
   if(IS_NULL_PTR(mask_form)) return;
 
   const gchar *text = (new_text && *new_text) ? new_text : " ";
   g_strlcpy(mask_form->name, text, sizeof(mask_form->name));
 
-  dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
+  dt_dev_add_history_item(module->dev, NULL, FALSE, TRUE);
   _blendop_masks_refresh_lists(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, mask_form->formid, 0,
                                 DT_MASKS_EVENT_CHANGE);
@@ -1921,13 +1921,13 @@ static void _blendop_masks_all_selection_changed(GtkTreeSelection *selection, dt
   int formid = -1;
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
-  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(module->dev, formid);
   if(IS_NULL_PTR(mask_form)) return;
 
   // Keep the global shape manager in sync without firing its selection handler.
   // That handler rebuilds the visible mask GUI and can be re-entered while this
   // blend list selection is still being processed.
-  dt_dev_masks_selection_change(darktable.develop, NULL, formid, FALSE);
+  dt_dev_masks_selection_change(module->dev, NULL, formid, FALSE);
   dt_masks_change_form_gui(module->dev, mask_form);
   if(module->dev && module->dev->form_gui)
   {
@@ -1960,7 +1960,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
 
   if(!sensitive) return;
 
-  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(module->dev, formid);
   if(IS_NULL_PTR(mask_form)) return;
 
   dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
@@ -1979,14 +1979,14 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
 
     if(!_blendop_masks_find_group_entry(group_form, mask_form->formid, NULL))
     {
-      group_form = dt_masks_cow_touch(darktable.develop, group_form);
+      group_form = dt_masks_cow_touch(module->dev, group_form);
       dt_masks_group_add_form(module->dev, group_form, mask_form);
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
     }
   }
 
   // If this is a group with shapes, update sensitive state of child shapes
-  if(_blendop_masks_is_group_with_shapes(mask_form))
+  if(_blendop_masks_is_group_with_shapes(module->dev, mask_form))
   {
     const gboolean new_active = !active;  // Toggle state
     GtkTreeIter search_iter;
@@ -2023,7 +2023,7 @@ static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
 {
   if(IS_NULL_PTR(module)) return;
 
-  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(module->dev, formid);
   if(IS_NULL_PTR(mask_form)) return;
 
   if(!dt_masks_gui_confirm_permanent_delete(mask_form->name)) return;
@@ -2047,7 +2047,7 @@ static void _blendop_masks_all_duplicate_callback(GtkWidget *menu_item, dt_iop_m
   if(IS_NULL_PTR(module)) return;
 
   const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
-  if(dt_masks_form_duplicate(darktable.develop, formid) <= 0) return;
+  if(dt_masks_form_duplicate(module->dev, formid) <= 0) return;
 
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, 0, DT_MASKS_EVENT_RESET);
@@ -2196,9 +2196,9 @@ static void _blendop_masks_group_operation_callback(GtkWidget *menu_item, gpoint
   // apply_operation() below mutates the group_entry in place, memory owned by the parent
   // group -- touch the parent before resolving the entry, or a shared parent's group_entry
   // gets mutated behind the back of a snapshot that still references it.
-  dt_masks_form_t *parent_form = dt_masks_get_from_id(darktable.develop, parentid);
+  dt_masks_form_t *parent_form = dt_masks_get_from_id(module->dev, parentid);
   if(IS_NULL_PTR(parent_form) || !(parent_form->type & DT_MASKS_GROUP)) return;
-  parent_form = dt_masks_cow_touch(darktable.develop, parent_form);
+  parent_form = dt_masks_cow_touch(module->dev, parent_form);
 
   dt_masks_form_group_t *group_entry = NULL;
   for(GList *group_node = parent_form->points; group_node; group_node = g_list_next(group_node))
@@ -2235,7 +2235,7 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
   int formid = -1;
   gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &formid, -1);
   if(formid <= 0) return;
-  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(module->dev, formid);
   if(IS_NULL_PTR(mask_form)) return;
 
   // Switching edit mode rebuilds the visible module group. Do it only when the
@@ -2255,7 +2255,7 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
 
   // Keep lib/masks tree selection in sync without re-triggering its selection handler,
   // otherwise the visible overlay can be replaced by only the clicked shape.
-  dt_dev_masks_selection_change(darktable.develop, module, formid, FALSE);
+  dt_dev_masks_selection_change(module->dev, module, formid, FALSE);
 
   // Mark the selected shape as active in the central mask GUI state.
   if(module->dev && module->dev->form_gui)
@@ -2283,8 +2283,8 @@ static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, 
   dt_masks_center_view_on_form(module->dev, mask_form);
 }
 
-static gboolean _blendop_masks_group_move_by_index(dt_masks_form_t *group_form, const int index,
-                                                   const gboolean move_up)
+static gboolean _blendop_masks_group_move_by_index(dt_develop_t *dev, dt_masks_form_t *group_form,
+                                                   const int index, const gboolean move_up)
 {
   if(IS_NULL_PTR(group_form)) return FALSE;
   if(!(group_form->type & DT_MASKS_GROUP)) return FALSE;
@@ -2298,7 +2298,7 @@ static gboolean _blendop_masks_group_move_by_index(dt_masks_form_t *group_form, 
   // Touch before resolving `entry`: cloning group_form also clones its points (fresh
   // dt_masks_form_group_t blocks), so an entry resolved from the pre-touch list would not
   // be a member of the (possibly cloned) list touched below.
-  group_form = dt_masks_cow_touch(darktable.develop, group_form);
+  group_form = dt_masks_cow_touch(dev, group_form);
   dt_masks_form_group_t *entry = (dt_masks_form_group_t *)g_list_nth_data(group_form->points, index);
   if(IS_NULL_PTR(entry)) return FALSE;
 
@@ -2315,8 +2315,8 @@ static void _blendop_masks_group_move_callback(GtkWidget *menu_item, dt_iop_modu
   const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
   const int index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-index"));
   const gboolean move_up = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-move-up"));
-  dt_masks_form_t *group_form = dt_masks_get_from_id(darktable.develop, parentid);
-  if(!_blendop_masks_group_move_by_index(group_form, index, move_up)) return;
+  dt_masks_form_t *group_form = dt_masks_get_from_id(module->dev, parentid);
+  if(!_blendop_masks_group_move_by_index(module->dev, group_form, index, move_up)) return;
 
   dt_masks_change_form_gui(module->dev, NULL);
   _blendop_masks_apply_and_commit(module);
@@ -2456,8 +2456,8 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
 static void _blendop_masks_group_unlink(dt_iop_module_t *module, const int formid, const int parentid)
 {
   if(IS_NULL_PTR(module)) return;
-  dt_masks_form_t *parent_group = dt_masks_get_from_id(darktable.develop, parentid);
-  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
+  dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
   if(IS_NULL_PTR(parent_group) || !(parent_group->type & DT_MASKS_GROUP) || IS_NULL_PTR(form)) return;
 
   // Discard any visible overlay before mutating the group.
@@ -2476,7 +2476,7 @@ static void _blendop_masks_group_unlink(dt_iop_module_t *module, const int formi
 static void _blendop_masks_group_delete(dt_iop_module_t *module, const int formid, const int parentid)
 {
   if(IS_NULL_PTR(module)) return;
-  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
+  dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
   if(IS_NULL_PTR(form)) return;
 
   if(!dt_masks_gui_confirm_permanent_delete(form->name)) return;
@@ -2566,7 +2566,7 @@ static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEven
   if(formid <= 0 || parentid <= 0) return TRUE;
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  dt_masks_form_t *parent_group = dt_masks_get_from_id(darktable.develop, parentid);
+  dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
   const int list_length = (parent_group && (parent_group->type & DT_MASKS_GROUP))
                               ? g_list_length(parent_group->points)
                               : 0;
@@ -2645,8 +2645,8 @@ static void _blendop_masks_group_update_row(dt_iop_module_t *module, const int f
   GtkTreeIter iter;
   if(!_blendop_masks_group_find_row(model, NULL, formid, parentid, &iter)) return;
 
-  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
-  dt_masks_form_t *parent_group = dt_masks_get_from_id(darktable.develop, parentid);
+  dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
+  dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
   int index = -1;
   dt_masks_form_group_t *entry = _blendop_masks_find_group_entry(parent_group, formid, &index);
   if(IS_NULL_PTR(form) || IS_NULL_PTR(entry)) return;
@@ -2894,7 +2894,7 @@ gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt
     else
       bp->blendif |= 1 << (16 + ch);
 
-    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+    dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 
     dt_iop_gui_update_header(module);
     _blendop_blendif_update_tab(module, tab);
@@ -2930,7 +2930,7 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
     dt_develop_blend_init_blendif_parameters(module->blend_params, cst);
 
     // look for last history item for this module with the selected blending mode to copy parametric mask settings
-    for(const GList *history = g_list_last(darktable.develop->history); history; history = g_list_previous(history))
+    for(const GList *history = g_list_last(module->dev->history); history; history = g_list_previous(history))
     {
       const dt_dev_history_item_t *data = (dt_dev_history_item_t *)(history->data);
       if(data->module == module && data->blend_params->blend_cst == cst)
@@ -2949,7 +2949,7 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
 
     dt_iop_gui_blend_data_t *bd = module->blend_data;
     const int cst_old = _blendop_blendif_get_picker_colorspace(bd);
-    dt_dev_add_history_item(darktable.develop, module, FALSE, TRUE);
+    dt_dev_add_history_item(module->dev, module, FALSE, TRUE);
     dt_iop_gui_update(module);
 
     if(cst_old != _blendop_blendif_get_picker_colorspace(bd) &&
@@ -2994,7 +2994,7 @@ static void _blendif_hide_output_channels(GtkMenuItem *menuitem, dt_iop_module_t
     bd->output_channels_shown = FALSE;
     if(_blendif_clean_output_channels(module))
     {
-      dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+      dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
     }
     dt_iop_gui_update(module);
   }
@@ -3790,7 +3790,7 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   const dt_masks_type_t creation_type = module_creation && !IS_NULL_PTR(visible_form)
                                         ? visible_form->type
                                         : (module_creation ? form_gui->creation_type : DT_MASKS_NONE);
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
   const gboolean has_group_shapes = grp && (grp->type & DT_MASKS_GROUP) && grp->points;
   if(GTK_IS_WIDGET(bd->masks_combo))
   {
@@ -4102,7 +4102,7 @@ static void _raster_combo_populate(GtkWidget *w, void *m)
 
   int i = 1;
 
-  for(GList* iter = darktable.develop->iop; iter; iter = g_list_next(iter))
+  for(GList* iter = module->dev->iop; iter; iter = g_list_next(iter))
   {
     dt_iop_module_t *iop = (dt_iop_module_t *)iter->data;
     if(iop == module)
@@ -4190,7 +4190,7 @@ static void _raster_polarity_callback(GtkToggleButton *togglebutton, dt_iop_modu
 
   bp->raster_mask_invert = gtk_toggle_button_get_active(togglebutton);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_iop_gui_update_header(self);
   dt_control_queue_redraw_widget(GTK_WIDGET(togglebutton));
 }
