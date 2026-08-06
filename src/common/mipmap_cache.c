@@ -49,7 +49,6 @@
 #include "common/mipmap_cache.h"
 #include "common/sys_resources.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/debug.h"
 #include "common/exif.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"
@@ -63,7 +62,6 @@
 #include "control/conf.h"
 #include "control/jobs.h"
 #include "develop/imageop_math.h"
-#include "gui/gtk.h"
 
 #include <assert.h>
 #include <errno.h>

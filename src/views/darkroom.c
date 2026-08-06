@@ -85,14 +85,9 @@
 #include <glib/gstdio.h>
 #include "common/paths.h"
 #include "common/collection.h"
-#include "common/colorspaces.h"
 #include "gui/gdkkeys.h"
-#include "common/debug.h"
-#include "common/file_location.h"
 #include "common/hash.h"
 #include "common/history.h"
-#include "common/image_cache.h"
-#include "common/imageio.h"
 #include "common/iop-autoset.h"
 #include "common/imageio_module.h"
 #include "common/mipmap_cache.h"
@@ -117,7 +112,6 @@
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 #include "gui/guides.h"
-#include "gui/presets.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
 #include "views/dev_backbuf.h"
@@ -125,7 +119,6 @@
 #include "views/view.h"
 #include "views/view_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include <gdk/gdkkeysyms.h>

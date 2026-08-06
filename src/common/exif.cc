@@ -116,7 +116,6 @@
 #include "common/exif.h"
 #include "common/imageio_jpeg.h"
 #include "common/metadata.h"
-#include "common/ratings.h"
 #include "common/tags.h"
 #include "common/iop_order.h"
 #include "common/variables.h"

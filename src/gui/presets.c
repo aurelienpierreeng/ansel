@@ -60,7 +60,6 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
-#include "common/file_location.h"
 #include "common/presets.h"
 #include "control/control.h"
 #include "develop/blend.h"

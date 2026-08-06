@@ -51,15 +51,11 @@
 #include "dtgtk/thumbnail.h"
 #include "dtgtk/thumbtable_info.h"
 #include "common/collection.h"
-#include "common/colorlabels.h"
 #include "common/history.h"
 #include "common/image_cache.h"
-#include "common/grouping.h"
 #include "common/hash.h"
-#include "common/ratings.h"
 #include "common/selection.h"
 #include "common/times.h"
-#include "common/undo.h"
 #include "common/usermanual_url.h"
 #include "common/utility.h"
 #include "control/control.h"
@@ -71,7 +67,6 @@
 #include "bauhaus/bauhaus.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include <glib-object.h>

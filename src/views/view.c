@@ -73,15 +73,12 @@
 #include "views/view.h"
 #include "common/variables.h"
 #include "bauhaus/bauhaus.h"
-#include "common/collection.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
-#include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
 #include "common/module.h"
 #include "common/module_versioning.h"
-#include "common/selection.h"
 #include "common/times.h"
 #include "common/undo.h"
 #include "common/usermanual_url.h"
@@ -89,7 +86,6 @@
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"
-#include "dtgtk/button.h"
 #include "dtgtk/expander.h"
 #include "dtgtk/thumbtable.h"
 
@@ -97,7 +93,6 @@
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include <glib.h>

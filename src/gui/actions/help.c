@@ -16,13 +16,13 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/logging.h"
-#include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "gui/gtk.h"
 #include "gui/actions/menu.h"
+#ifdef __APPLE__
+#include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
+#endif
 #include "gui/actions/supervisor_window.h"
-#include "common/l10n.h"
 #include "control/control.h"
 
 

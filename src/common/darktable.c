@@ -79,7 +79,6 @@
 #include "config.h"
 #endif
 
-#include "is_supported_platform.h"
 
 #if !defined(__APPLE__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
 #include <malloc.h>
@@ -150,10 +149,8 @@
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/crawler.h"
-#include "control/jobs/control_jobs.h"
 #include "control/jobs/film_jobs.h"
 #include "control/signal.h"
-#include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "develop/supervisor.h"

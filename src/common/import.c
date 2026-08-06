@@ -21,13 +21,10 @@
 */
 
 #include "bauhaus/bauhaus.h"
-#include "common/atomic.h"
 #include "common/cache.h"
-#include "common/collection.h"
 #include "common/film.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
-#include "common/debug.h"
 #include "common/exif.h"
 #include "common/import.h"
 #include "common/image.h"
@@ -36,15 +33,12 @@
 #include "common/imageio.h"
 #include "common/metadata.h"
 #include "common/datetime.h"
-#include "common/selection.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "control/jobs/import_jobs.h"
-#include "dtgtk/button.h"
 
 #include "gui/draw.h"
-#include "gui/preferences.h"
 #include "gui/gtkentry.h"
 
 #include <gio/gio.h>
@@ -54,7 +48,6 @@
 #endif
 #ifdef _WIN32
 //MSVCRT does not have strptime implemented
-#include "win/strptime.h"
 #endif
 #include <strings.h>
 #include <librsvg/rsvg.h>

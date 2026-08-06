@@ -17,6 +17,9 @@
 */
 
 #include "gui/actions/menu.h"
+#ifdef __APPLE__
+#include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
+#endif
 #include "common/history_actions.h"
 #include "gui/gtk.h"
 #include "gui/styles.h"
@@ -25,12 +28,10 @@
 #include "common/history_merge.h"
 #include "common/history_merge_gui.h"
 #include "common/styles.h"
-#include "common/undo.h"
 #include "common/usermanual_url.h"
 #include "develop/dev_history.h"
 #include "gui/accelerators.h"
 #include "control/conf.h"
-#include "control/control.h"
 #include "control/signal.h"
 #include "libs/lib.h"
 

@@ -57,7 +57,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "common/colorlabels.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
 #include "common/openmp.h"
@@ -68,7 +67,6 @@
 #include "common/times.h"
 #include "common/paths.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/debug.h"
 #include "common/exif.h"
 #include "common/image_cache.h"
 #include "common/history.h"

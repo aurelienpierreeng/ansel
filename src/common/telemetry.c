@@ -29,7 +29,6 @@
 
 #include "common/image.h"
 #include "common/opencl.h"
-#include "control/conf.h"
 #include "gui/gtk.h"
 
 #include <curl/curl.h>

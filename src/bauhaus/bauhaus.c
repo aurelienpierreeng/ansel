@@ -61,7 +61,6 @@
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
 #include "common/math.h"
-#include "common/debug.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/utility.h"
@@ -72,7 +71,6 @@
 
 
 #include "gui/accelerators.h"
-#include "gui/color_picker_proxy.h"
 #include "gui/gui_throttle.h"
 #include "gui/gtk.h"
 #ifdef GDK_WINDOWING_QUARTZ

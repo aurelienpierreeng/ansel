@@ -52,9 +52,6 @@
 #include "common/mem_alloc.h"
 #include "common/simd.h"
 #include "common/module_versioning.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
@@ -63,7 +60,6 @@
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include <assert.h>

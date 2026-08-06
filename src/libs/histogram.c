@@ -55,11 +55,9 @@
 #include <inttypes.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/atomic.h"
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/debug.h"
 #include "common/histogram.h"
 #include "common/image.h"
 #include "common/imageio.h"
@@ -80,7 +78,6 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe_cache.h"
-#include "dtgtk/drawingarea.h"
 #include "dtgtk/button.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
@@ -90,7 +87,6 @@
 #include "libs/colorpicker.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #define HISTOGRAM_BINS 256

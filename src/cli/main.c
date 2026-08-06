@@ -49,9 +49,7 @@
  *  - profit
  */
 
-#include "common/collection.h"
 #include "common/darktable.h"
-#include "common/debug.h"
 #include "common/exif.h"
 #include "common/film.h"
 #include "common/file_location.h"
@@ -63,8 +61,6 @@
 #include "common/imageio_module.h"
 #include "common/l10n.h"
 #include "common/points.h"
-#include "control/conf.h"
-#include "develop/imageop.h"
 
 #include <inttypes.h>
 #include <libintl.h>

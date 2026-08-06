@@ -43,11 +43,9 @@
 #include "common/database.h"
 #include "common/act_on.h"
 #include "control/settings.h"
-#include "common/metadata.h"
 #include "common/metadata_export.h"
 #include "common/utility.h"
 #include "common/tags.h"
-#include "common/collection.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/image.h"
@@ -56,7 +54,6 @@
 #include "common/selection.h"
 #include "common/undo.h"
 #include "control/conf.h"
-#include "control/control.h"
 #include <glib.h>
 #if defined (_WIN32)
 #include "win/getdelim.h"

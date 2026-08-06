@@ -58,7 +58,6 @@
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "gui/styles.h"
