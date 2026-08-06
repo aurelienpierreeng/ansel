@@ -97,9 +97,23 @@ avoids double churn:
    `dt_gui_module_t`, `develop` → `self->dev`) — these are the real injection targets, and for
    them the interim accessor is *churn*: convert them straight to the carrier instead.
 
-Consequently `pixelpipe_cache` was deliberately **not** given an interim accessor sweep: its
-carrier (`dt_dev_pixelpipe_t`, already threaded through every pipeline function) is available
-today, so it should go directly to Strategy A.
+**Correction — `pixelpipe_cache` is category 2, not category 3.** §4 below ordered it for
+Strategy A (carry the handle on `dt_dev_pixelpipe_t`, which is indeed threaded everywhere).
+Examining the semantics instead of the reference counts shows that would advertise ownership
+that does not exist:
+
+- one cache serves **all** pipes — `dt_dev_pixelpipe_cache_flush(cache, id)` takes the owning
+  pipe id as a *parameter* precisely because entries from many pipes share one cache, and
+  lookups are keyed by a global content hash rather than by pipe;
+- consumers legitimately operate across pipes, or with no pipe at all: `iop/toneequal.c`'s
+  `invalidate_luminance_cache()` releases an entry held in GUI state from a function that has
+  only the module pointer, and the GUI peek path reads entries produced by a *different* pipe
+  than the caller's.
+
+Cross-pipe callers would have to pick an arbitrary pipe just to reach the shared object, which
+is worse than an accessor because it misleads. `dt_pixelpipe_cache_get_global()` is therefore
+its **end state**. Generalisation: decide a member's category from its *ownership semantics*,
+not from where a convenient carrier happens to be threaded.
 
 ## 4. Recommended order
 
