@@ -276,7 +276,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
      only part
       of the undo list. This should probably done with a view proxy routine returning the type of undo to
      remove. */
-  dt_undo_clear(darktable.undo, DT_UNDO_ALL);
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_ALL);
 
   /* Special case when entering nothing (just before leaving dt) */
   if(IS_NULL_PTR(new_view))

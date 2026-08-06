@@ -467,7 +467,7 @@ gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolea
   GList *tags = NULL;
 
   tags = g_list_prepend(tags, GINT_TO_POINTER(tagid));
-  if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
+  if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
 
   const gboolean res = _tag_execute(tags, img, &undo, undo_on, DT_TA_ATTACH);
 
@@ -475,8 +475,8 @@ gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolea
   tags = NULL;
   if(undo_on)
   {
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
-    dt_undo_end_group(darktable.undo);
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
+    dt_undo_end_group(dt_undo_get_global());
   }
 
   return res;
@@ -509,14 +509,14 @@ gboolean dt_tag_set_tags(const GList *tags, const GList *img, const gboolean ign
   if(img)
   {
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
+    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
 
     const gboolean res = _tag_execute(tags, img, &undo, undo_on,
                                       clear_on ? ignore_dt_tags ? DT_TA_SET : DT_TA_SET_ALL : DT_TA_ATTACH);
     if(undo_on)
     {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
-      dt_undo_end_group(darktable.undo);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
     }
     return res;
   }
@@ -550,14 +550,14 @@ gboolean dt_tag_attach_string_list(const gchar *tags, const GList *img, const gb
     if(img)
     {
       GList *undo = NULL;
-      if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
+      if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
 
       res = _tag_execute(tagl, img, &undo, undo_on, DT_TA_ATTACH);
 
       if(undo_on)
       {
-        dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
-        dt_undo_end_group(darktable.undo);
+        dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
+        dt_undo_end_group(dt_undo_get_global());
       }
     }
     g_list_free(tagl);
@@ -574,7 +574,7 @@ gboolean dt_tag_detach_images(const guint tagid, const GList *img, const gboolea
     GList *tags = NULL;
     tags = g_list_prepend(tags, GINT_TO_POINTER(tagid));
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
+    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
 
     const gboolean res = _tag_execute(tags, img, &undo, undo_on, DT_TA_DETACH);
 
@@ -582,8 +582,8 @@ gboolean dt_tag_detach_images(const guint tagid, const GList *img, const gboolea
     tags = NULL;
     if(undo_on)
     {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
-      dt_undo_end_group(darktable.undo);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
     }
     return res;
   }

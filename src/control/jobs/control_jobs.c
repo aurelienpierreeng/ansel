@@ -619,7 +619,7 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
   double fraction = 0.0f;
   char message[512] = { 0 };
 
-  dt_undo_start_group(darktable.undo, DT_UNDO_DUPLICATE);
+  dt_undo_start_group(dt_undo_get_global(), DT_UNDO_DUPLICATE);
 
   snprintf(message, sizeof(message), ngettext("duplicating %d image", "duplicating %d images", total), total);
   dt_control_job_set_progress_message(job, message);
@@ -644,7 +644,7 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
     dt_control_job_set_progress(job, fraction);
   }
 
-  dt_undo_end_group(darktable.undo);
+  dt_undo_end_group(dt_undo_get_global());
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
   dt_control_queue_redraw_center();
@@ -660,7 +660,7 @@ static int32_t dt_control_flip_images_job_run(dt_job_t *job)
   double fraction = 0.0f;
   char message[512] = { 0 };
 
-  dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
+  dt_undo_start_group(dt_undo_get_global(), DT_UNDO_LT_HISTORY);
 
   snprintf(message, sizeof(message), ngettext("flipping %d image", "flipping %d images", total), total);
   dt_control_job_set_progress_message(job, message);
@@ -673,7 +673,7 @@ static int32_t dt_control_flip_images_job_run(dt_job_t *job)
     dt_control_job_set_progress(job, fraction);
   }
 
-  dt_undo_end_group(darktable.undo);
+  dt_undo_end_group(dt_undo_get_global());
   dt_control_queue_redraw_center();
   return 0;
 }
@@ -686,7 +686,7 @@ static int32_t dt_control_monochrome_images_job_run(dt_job_t *job)
   char message[512] = { 0 };
   double fraction = 0.0f;
 
-  dt_undo_start_group(darktable.undo, DT_UNDO_FLAGS);
+  dt_undo_start_group(dt_undo_get_global(), DT_UNDO_FLAGS);
 
   if(mode == 0)
     snprintf(message, sizeof(message), ngettext("set %d color image", "setting %d color images", total), total);
@@ -710,7 +710,7 @@ static int32_t dt_control_monochrome_images_job_run(dt_job_t *job)
     dt_control_job_set_progress(job, fraction);
   }
 
-  dt_undo_end_group(darktable.undo);
+  dt_undo_end_group(dt_undo_get_global());
 
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));

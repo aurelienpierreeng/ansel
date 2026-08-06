@@ -622,7 +622,7 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
   }
 
   /* for each selected image apply style */
-  dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
+  dt_undo_start_group(dt_undo_get_global(), DT_UNDO_LT_HISTORY);
   for(const GList *l = list; l; l = g_list_next(l))
   {
     const int32_t imgid = GPOINTER_TO_INT(l->data);
@@ -631,7 +631,7 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
       dt_history_style_on_image(imgid, (char *)style->data, duplicate);
     }
   }
-  dt_undo_end_group(darktable.undo);
+  dt_undo_end_group(dt_undo_get_global());
 
   const guint styles_cnt = g_list_length(styles);
   dt_control_log(ngettext("style successfully applied!", "styles successfully applied!", styles_cnt));
@@ -1042,9 +1042,9 @@ void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item)
 
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid)
 {
-  dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
+  dt_undo_start_group(dt_undo_get_global(), DT_UNDO_LT_HISTORY);
   dt_history_style_on_image(imgid, name, duplicate);
-  dt_undo_end_group(darktable.undo);
+  dt_undo_end_group(dt_undo_get_global());
 }
 
 void dt_styles_delete_by_name_adv(const char *name, const gboolean raise)

@@ -42,11 +42,11 @@ static gboolean undo_sensitive_callback()
   gboolean sensitive = FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
+    sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
+    sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_MAP);
+    sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_MAP);
 
   return sensitive;
 }
@@ -58,11 +58,11 @@ static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   if(IS_NULL_PTR(cv)) return FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    dt_undo_do_undo(darktable.undo, DT_UNDO_LIGHTTABLE);
+    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    dt_undo_do_undo(darktable.undo, DT_UNDO_DEVELOP);
+    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "map"))
-    dt_undo_do_undo(darktable.undo, DT_UNDO_MAP);
+    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_MAP);
   // Beware: it needs to block callbacks declared in view, which may not be loaded.
   // Another piece of shitty peculiar design that doesn't comply with the logic of the rest of the soft.
   // That's what you get from ignoring modularity principles.
@@ -81,11 +81,11 @@ static gboolean redo_sensitive_callback()
   gboolean sensitive = FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
+    sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
+    sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_MAP);
+    sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_MAP);
 
   return sensitive;
 }
@@ -98,11 +98,11 @@ static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   if(IS_NULL_PTR(cv)) return FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    dt_undo_do_redo(darktable.undo, DT_UNDO_LIGHTTABLE);
+    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    dt_undo_do_redo(darktable.undo, DT_UNDO_DEVELOP);
+    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "map"))
-    dt_undo_do_redo(darktable.undo, DT_UNDO_MAP);
+    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_MAP);
   //   see undo_callback()
 
   return TRUE;

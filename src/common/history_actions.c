@@ -60,14 +60,14 @@ static gboolean _history_action_on_list_with_undo(const GList *list, dt_history_
 {
   if(IS_NULL_PTR(list)) return FALSE;
 
-  if(use_undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
+  if(use_undo) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_LT_HISTORY);
   gboolean changed = FALSE;
   for(const GList *l = list; l; l = g_list_next(l))
   {
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     changed |= action(imgid, user_data);
   }
-  if(use_undo) dt_undo_end_group(darktable.undo);
+  if(use_undo) dt_undo_end_group(dt_undo_get_global());
 
   _history_action_finalize_list(list, changed);
   return changed;
@@ -215,7 +215,7 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
                                                        batch);
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+  dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
   return ret_val;
@@ -382,7 +382,7 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   }
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+  dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
   dt_image_cache_write_release(dt_image_cache_get_global(), img,
@@ -443,7 +443,7 @@ static gboolean _history_delete_apply(const int32_t imgid, void *user_data)
   if(undo)
   {
     dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist, dt_history_snapshot_undo_pop,
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist, dt_history_snapshot_undo_pop,
                    dt_history_snapshot_undo_lt_history_data_free);
   }
 
@@ -559,7 +559,7 @@ static gboolean _history_style_apply(const int32_t imgid, void *user_data)
                                                      &params->batch);
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+  dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
   const gboolean changed = (ret_val == 0);

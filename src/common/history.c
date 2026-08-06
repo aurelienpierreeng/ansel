@@ -178,10 +178,10 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
   {
     dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
 
-    dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+    dt_undo_start_group(dt_undo_get_global(), DT_UNDO_LT_HISTORY);
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                    dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
-    dt_undo_end_group(darktable.undo);
+    dt_undo_end_group(dt_undo_get_global());
   }
 }
 

@@ -590,7 +590,7 @@ static void _history_invalidate_cb(gpointer user_data, dt_undo_type_t type, dt_u
 void dt_dev_history_undo_invalidate_module(dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
-  dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, module, &_history_invalidate_cb);
+  dt_undo_iterate_internal(dt_undo_get_global(), DT_UNDO_HISTORY, module, &_history_invalidate_cb);
 }
 
 /**
@@ -740,7 +740,7 @@ void dt_dev_history_undo_end_record_locked(dt_develop_t *dev)
     hist->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   }
 
-  dt_undo_record(darktable.undo, dev, DT_UNDO_HISTORY, (dt_undo_data_t)hist, _pop_undo, _history_undo_data_free);
+  dt_undo_record(dt_undo_get_global(), dev, DT_UNDO_HISTORY, (dt_undo_data_t)hist, _pop_undo, _history_undo_data_free);
 }
 
 
@@ -2618,7 +2618,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
       iop_list = g_list_delete_link(iop_list, modules);
 
       // remove the module reference from all snapshots
-      dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, mod, &_history_invalidate_cb);
+      dt_undo_iterate_internal(dt_undo_get_global(), DT_UNDO_HISTORY, mod, &_history_invalidate_cb);
 
       // don't delete the module, a pipe may still need it
       dev->alliop = g_list_append(dev->alliop, mod);
@@ -2756,7 +2756,7 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
 
         // and do that also in the undo/redo lists
         struct _cb_data udata = { module, hitem->multi_priority };
-        dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, &udata, &_undo_items_cb);
+        dt_undo_iterate_internal(dt_undo_get_global(), DT_UNDO_HISTORY, &udata, &_undo_items_cb);
         done = TRUE;
       }
 

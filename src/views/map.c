@@ -2159,7 +2159,7 @@ static void _view_map_undo_callback(dt_action_t *action)
   // let current map view unchanged (avoid to center the map on collection)
   dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
   dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_undo_do_undo(darktable.undo, DT_UNDO_MAP);
+  dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_MAP);
   dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
   dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
   g_signal_emit_by_name(lib->map, "changed");
@@ -2173,7 +2173,7 @@ static void _view_map_redo_callback(dt_action_t *action)
   // let current map view unchanged (avoid to center the map on collection)
   dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
   dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_undo_do_redo(darktable.undo, DT_UNDO_MAP);
+  dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_MAP);
   dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
   dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
   g_signal_emit_by_name(lib->map, "changed");

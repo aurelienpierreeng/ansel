@@ -202,14 +202,14 @@ void dt_ratings_apply_on_list(GList *img, const int rating, const gboolean undo_
   if(img)
   {
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_RATINGS);
+    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_RATINGS);
 
     _ratings_apply(img, rating, &undo, undo_on);
 
     if(undo_on)
     {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
-      dt_undo_end_group(darktable.undo);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
     }
     dt_collection_hint_message(darktable.collection);
     dt_toast_log(_("Rating set to %s for %i image(s)"), dt_ratings_get_name(rating), g_list_length(img));
@@ -227,7 +227,7 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
   if(imgs)
   {
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_RATINGS);
+    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_RATINGS);
     if(group_on) dt_grouping_add_grouped_images(&imgs);
 
     if(!g_list_shorter_than(imgs, 2)) // pop up a toast if rating multiple images at once
@@ -244,8 +244,8 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
 
     if(undo_on)
     {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
-      dt_undo_end_group(darktable.undo);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
     }
     g_list_free(imgs);
     imgs = NULL;

@@ -1110,7 +1110,7 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   _darkroom_pending_focus_module = NULL;
 
   // Clean & Init the starting point of undo/redo
-  dt_undo_clear(darktable.undo, DT_UNDO_DEVELOP);
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_DEVELOP);
   dt_dev_undo_start_record(dev);
   dt_dev_undo_end_record(dev);
 
@@ -1834,7 +1834,7 @@ void enter(dt_view_t *self)
 
   // just make sure at this stage we have only history info into the undo, all automatic
   // tagging should be ignored.
-  dt_undo_clear(darktable.undo, DT_UNDO_TAGS);
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_TAGS);
 
   dt_iop_color_picker_init();
 

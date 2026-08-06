@@ -79,6 +79,9 @@ typedef struct dt_undo_t
 dt_undo_t *dt_undo_init(void);
 void dt_undo_cleanup(dt_undo_t *self);
 
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+dt_undo_t *dt_undo_get_global(void);
+
 // create a group of item to be handled together, a group
 void dt_undo_start_group(dt_undo_t *self, dt_undo_type_t type);
 void dt_undo_end_group(dt_undo_t *self);

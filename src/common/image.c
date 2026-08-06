@@ -227,7 +227,7 @@ static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome,
         undomono->imgid = imgid;
         undomono->before = mask_bw;
         undomono->after = mask;
-        dt_undo_record(darktable.undo, NULL, DT_UNDO_FLAGS, undomono, _pop_undo, g_free);
+        dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_FLAGS, undomono, _pop_undo, g_free);
       }
     }
   }
@@ -957,14 +957,14 @@ void dt_image_set_locations(const GList *imgs, const dt_image_geoloc_t *geoloc, 
   if(imgs)
   {
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_GEOTAG);
+    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_GEOTAG);
 
     _image_set_location((GList *)imgs, geoloc, &undo, undo_on);
 
     if(undo_on)
     {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_GEOTAG, undo, _pop_undo, _geotag_undo_data_free);
-      dt_undo_end_group(darktable.undo);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_GEOTAG, undo, _pop_undo, _geotag_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
     }
   }
 }
@@ -1011,14 +1011,14 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc, const 
   if(IS_NULL_PTR(imgs) || IS_NULL_PTR(gloc) || (g_list_length((GList *)imgs) != gloc->len))
     return;
   GList *undo = NULL;
-  if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_GEOTAG);
+  if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_GEOTAG);
 
   _image_set_images_locations(imgs, gloc, &undo, undo_on);
 
   if(undo_on)
   {
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_GEOTAG, undo, _pop_undo, _geotag_undo_data_free);
-    dt_undo_end_group(darktable.undo);
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_GEOTAG, undo, _pop_undo, _geotag_undo_data_free);
+    dt_undo_end_group(dt_undo_get_global());
   }
 }
 
@@ -1290,7 +1290,7 @@ void dt_image_flip(const int32_t imgid, const int32_t cw)
   dt_image_set_flip(imgid, orientation);
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+  dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 }
 
@@ -1463,7 +1463,7 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
       dupundo->orig_imgid = imgid;
       dupundo->version = newversion;
       dupundo->new_imgid = newid;
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_DUPLICATE, dupundo, _pop_undo, NULL);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_DUPLICATE, dupundo, _pop_undo, NULL);
     }
 
     // make sure that the duplicate doesn't have some magic darktable| tags
@@ -3044,14 +3044,14 @@ void dt_image_set_datetimes(const GList *imgs, const GArray *dtime, const gboole
   if(IS_NULL_PTR(imgs) || IS_NULL_PTR(dtime) || (g_list_length((GList *)imgs) != dtime->len))
     return;
   GList *undo = NULL;
-  if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_DATETIME);
+  if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_DATETIME);
 
   _image_set_datetimes(imgs, dtime, &undo, undo_on);
 
   if(undo_on)
   {
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_DATETIME, undo, _pop_undo, _datetime_undo_data_free);
-    dt_undo_end_group(darktable.undo);
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_DATETIME, undo, _pop_undo, _datetime_undo_data_free);
+    dt_undo_end_group(dt_undo_get_global());
   }
 }
 
@@ -3081,14 +3081,14 @@ void dt_image_set_datetime(const GList *imgs, const char *datetime, const gboole
   if(IS_NULL_PTR(imgs))
     return;
   GList *undo = NULL;
-  if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_DATETIME);
+  if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_DATETIME);
 
   _image_set_datetime(imgs, datetime, &undo, undo_on);
 
   if(undo_on)
   {
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_DATETIME, undo, _pop_undo, _datetime_undo_data_free);
-    dt_undo_end_group(darktable.undo);
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_DATETIME, undo, _pop_undo, _datetime_undo_data_free);
+    dt_undo_end_group(dt_undo_get_global());
   }
 }
 

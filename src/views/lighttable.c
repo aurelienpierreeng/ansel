@@ -161,7 +161,7 @@ void enter(dt_view_t *self)
 {
   dt_view_active_images_reset(FALSE);
 
-  dt_undo_clear(darktable.undo, DT_UNDO_LIGHTTABLE);
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   dt_gui_refocus_center();
   dt_collection_hint_message(darktable.collection);
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);

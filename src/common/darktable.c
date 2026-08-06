@@ -513,6 +513,11 @@ struct dt_selection_t *dt_selection_get_global(void)
   return darktable.selection;
 }
 
+struct dt_undo_t *dt_undo_get_global(void)
+{
+  return darktable.undo;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();
