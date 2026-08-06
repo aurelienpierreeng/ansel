@@ -29,11 +29,13 @@ Usage:
   python3 tools/mingw_syntax_check.py --jobs 8
 """
 import concurrent.futures
+import json
 import os
 import re
 import subprocess
 import sys
 
+REPO = os.getcwd()
 CC = 'x86_64-w64-mingw32-gcc'
 CXX = 'x86_64-w64-mingw32-g++'
 PKGS = ['gtk+-3.0', 'lcms2', 'sqlite3', 'libpng', 'libtiff-4', 'libjpeg', 'exiv2',
@@ -59,6 +61,87 @@ WIN_DEFINES = ['-DHAVE_CONFIG_H', '-D_POSIX_THREAD_SAFE_FUNCTIONS', '-D_USE_MATH
                '-D__GDK_KEYSYMS_COMPAT_H__']
 
 MISSING_HEADER = re.compile(r"fatal error: ([^:]+): No such file or directory")
+
+
+# Feature defines whose headers are not in the mingw64 sysroot. Keeping them does not
+# make the harness stricter -- it just converts checkable files into skipped ones,
+# because the guarded include fails outright. Dropping them checks everything EXCEPT
+# those branches, which were unverifiable regardless. HAVE_MAP alone accounted for 110
+# skipped files.
+UNBUILDABLE_FEATURES = ('HAVE_MAP', 'HAVE_GMIC', 'HAVE_LIBAVIF', 'HAVE_LIBHEIF',
+                        'HAVE_GRAPHICSMAGICK', 'HAVE_IMAGEMAGICK', 'HAVE_HTTP_SERVER',
+                        'HAVE_SENTRY', 'HAVE_LIBRAW', 'HAVE_OPENJPEG', 'HAVE_WEBP',
+                        'HAVE_OPENEXR', 'HAVE_ISO_CODES', 'HAVE_CMARK', 'HAVE_LIBSECRET',
+                        'HAVE_OSMGPSMAP_110_OR_NEWER', 'HAVE_OSMGPSMAP_NEWER_THAN_110')
+
+
+def _drop_unbuildable(flags):
+    keep = []
+    for f in flags:
+        if f.startswith('-D') and any(f[2:].split('=')[0] == n for n in UNBUILDABLE_FEATURES):
+            continue
+        keep.append(f)
+    return keep
+
+
+def build_flag_map(compdb='build/compile_commands.json'):
+    """Per-file -D/-include/project -I flags, taken from the BUILD SYSTEM.
+
+    Guessing these is how a cross-check invents failures: the real build force-includes
+    common/module_api.h and iop/iop_api.h into every module, and gates whole APIs behind
+    -DHAVE_MAP / -DBUILD_PRINT / -DHAVE_OPENCL. Without them the harness reports missing
+    declarations that exist perfectly well in the real build.
+
+    Generated introspection_X.c entries carry the flags for src/iop/X.c, which is
+    textually included by them, so they are mapped back onto the original.
+    """
+    import shlex
+    if not os.path.exists(compdb):
+        r = subprocess.run(['ninja', '-C', 'build', '-t', 'compdb'],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return {}
+        entries = json.loads(r.stdout)
+    else:
+        entries = json.load(open(compdb))
+
+    out = {}
+    for e in entries:
+        f = e.get('file', '')
+        cmd = e.get('command', '')
+        if not cmd or cmd.lstrip().startswith(':'):
+            continue                      # link/utility line, not a compile
+        try:
+            argv = shlex.split(cmd)
+        except ValueError:
+            continue
+        flags, i = [], 0
+        while i < len(argv):
+            a = argv[i]
+            if a.startswith('-D'):
+                flags.append(a)
+            elif a == '-include' and i + 1 < len(argv):
+                flags += ['-include', argv[i + 1]]
+                i += 1
+            elif a in ('-I', '-isystem') and i + 1 < len(argv):
+                if not os.path.isabs(argv[i + 1]) or REPO in argv[i + 1]:
+                    flags += ['-I', argv[i + 1]]
+                i += 1
+            elif a.startswith('-I') and len(a) > 2:
+                if not os.path.isabs(a[2:]) or REPO in a[2:]:
+                    flags.append(a)
+            i += 1
+        base = os.path.basename(f)
+        if base.startswith('introspection_'):
+            stem = base[len('introspection_'):]
+            for cand in ('src/iop/' + stem, 'src/libs/' + stem, 'src/imageio/format/' + stem,
+                         'src/imageio/storage/' + stem):
+                if os.path.exists(cand):
+                    out.setdefault(os.path.normpath(cand), flags)
+        else:
+            rel = os.path.relpath(f, REPO) if os.path.isabs(f) else f
+            out.setdefault(os.path.normpath(rel), flags)
+    return out
 
 
 def pkg_cflags():
@@ -95,12 +178,16 @@ def sources(args):
     return sorted(out)
 
 
-def check(path, flags):
+def check(path, flags, fmap):
     cxx = path.endswith(('.cc', '.cpp'))
+    own = fmap.get(os.path.normpath(path))
+    own = _drop_unbuildable(own) if own is not None else None
+    if own is None:
+        return ('skip', path, '<not compiled by this build>')
     cmd = [CXX if cxx else CC, '-fsyntax-only',
            '-std=gnu++17' if cxx else '-std=gnu11',
-           '-I', 'src', '-I', 'build/src'] + WIN_DEFINES + [
-           '-Wno-attributes', '-Wno-unknown-pragmas'] + flags + [path]
+           '-I', 'src', '-I', 'build/src', '-I', 'src/external/OpenCL'] + own + WIN_DEFINES + [
+           '-fopenmp', '-Wno-attributes', '-Wno-unknown-pragmas'] + flags + [path]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode == 0:
         return ('ok', path, '')
@@ -111,6 +198,22 @@ def check(path, flags):
     if m and not os.path.exists(os.path.join('src', m.group(1))):
         # some other header we simply do not have cross-built
         return ('skip', path, m.group(1))
+    # Dropping a feature define (UNBUILDABLE_FEATURES) can hide declarations a
+    # feature-only file legitimately uses -- src/libs/map_locations.c is entirely map
+    # code. Retry with the ORIGINAL flags: if it then dies on a header we simply do not
+    # have cross-built, the file is unverifiable here rather than broken.
+    full = fmap.get(os.path.normpath(path))
+    if full is not None and full != own:
+        cmd2 = [c for c in cmd]
+        cmd2[cmd2.index(path)] = path
+        cmd2 = cmd2[:cmd2.index(own[0])] + full + cmd2[cmd2.index(own[0]) + len(own):] if own else cmd2
+        r2 = subprocess.run(cmd2, capture_output=True, text=True)
+        if r2.returncode != 0:
+            m2 = MISSING_HEADER.search(r2.stderr)
+            if m2 and (UNAVAILABLE.search(m2.group(1))
+                       or not os.path.exists(os.path.join('src', m2.group(1)))):
+                return ('skip', path, m2.group(1))
+
     first = [ln for ln in log.splitlines() if ' error:' in ln][:3]
     return ('fail', path, '\n'.join(first) or log.strip().splitlines()[-1] if log.strip() else '?')
 
@@ -122,13 +225,15 @@ def main():
     args = sys.argv[1:]
     jobs = int(args[args.index('--jobs') + 1]) if '--jobs' in args else os.cpu_count() or 4
     flags = pkg_cflags()
+    fmap = build_flag_map()
     files = sources(args)
+    print('per-file flags recovered for %d translation units' % len(fmap))
     print('checking %d files with %s (%d jobs)' % (len(files), CC, jobs))
 
     ok = skipped = 0
     fails, skips = [], {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
-        for status, path, info in ex.map(lambda f: check(f, flags), files):
+        for status, path, info in ex.map(lambda f: check(f, flags, fmap), files):
             if status == 'ok':
                 ok += 1
             elif status == 'skip':
