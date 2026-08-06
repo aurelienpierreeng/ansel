@@ -26,7 +26,6 @@
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
-#include "common/debug.h"
 #include "common/folder_survey.h"
 #include "common/history_merge.h"
 #include "common/image.h"

@@ -25,7 +25,6 @@
 #include "common/image.h"
 #include "common/logging.h"
 #include "common/usermanual_url.h"
-#include "control/control.h"
 #include "control/signal.h"
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/thumbtable_internal.h"

@@ -44,7 +44,6 @@
 #include "common/mem_alloc.h"
 #include "gui/gdkkeys.h"
 #include "common/math.h"
-#include "develop/develop.h"
 #include "gradientslider.h"
 #include "gui/gtk.h"
 

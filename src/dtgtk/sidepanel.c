@@ -23,7 +23,6 @@
 
 #include "dtgtk/sidepanel.h"
 #include "control/conf.h"
-#include "develop/imageop.h"
 
 #include <gtk/gtk.h>
 

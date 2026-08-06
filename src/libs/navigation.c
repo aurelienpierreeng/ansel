@@ -44,12 +44,9 @@
 */
 
 #include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "common/image_cache.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/times.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"

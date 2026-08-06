@@ -26,8 +26,6 @@
 
 #include "common/macros.h"
 #include "common/module_versioning.h"
-#include "control/signal.h"
-#include "dtgtk/button.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"

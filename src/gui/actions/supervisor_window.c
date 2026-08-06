@@ -17,7 +17,6 @@
 */
 
 #include "gui/actions/supervisor_window.h"
-#include "develop/pixelpipe_cache_alloc.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
 #include "common/opencl.h"

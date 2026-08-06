@@ -40,14 +40,11 @@
 */
 
 #include "bauhaus/bauhaus.h"
-#include "common/debug.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
-#include "common/file_location.h"
 #include "common/history.h"
 #include "common/iop_order.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"

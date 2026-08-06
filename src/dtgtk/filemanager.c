@@ -23,14 +23,11 @@
  */
 
 #include "control/conf.h"
-#include "common/collection.h"
 #include "common/selection.h"
 #include "common/usermanual_url.h"
-#include "control/control.h"
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/thumbtable_internal.h"
 #include "dtgtk/thumbnail.h"
-#include "gui/accelerators.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 

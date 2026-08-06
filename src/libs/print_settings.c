@@ -42,7 +42,6 @@
 #include <glib.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/collection.h"
 #include "common/colorspaces.h"
 #include "common/cups_print.h"
 #include "common/file_location.h"
@@ -61,9 +60,7 @@
 #include "common/utility.h"
 #include "common/variables.h"
 #include "control/jobs.h"
-#include "dtgtk/resetlabel.h"
 
-#include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
