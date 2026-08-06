@@ -38,6 +38,7 @@
 */
 
 #include "common/darktable.h"
+#include "common/mipmap_cache.h"
 #include <glib.h>
 
 #include "bauhaus/bauhaus.h"
@@ -1254,7 +1255,7 @@ _intent_callback(GtkWidget *widget, dt_lib_module_t *self)
 static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf,
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf,
                       imgid, DT_MIPMAP_0, DT_MIPMAP_BLOCKING, 'r');
 
   // If there's a mipmap available, figure out orientation based upon
@@ -1267,7 +1268,7 @@ static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
     dt_bauhaus_combobox_set(ps->orientation, ps->prt.page.landscape == TRUE ? 1 : 0);
   }
 
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
   dt_control_queue_redraw_center();
 }
 

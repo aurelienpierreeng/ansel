@@ -1403,13 +1403,13 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
   const gboolean autoset_running_before
       = !IS_NULL_PTR(_autoset_manager) && _autoset_manager->progress_cursor_active;
   const int32_t imgid = darktable.develop->image_storage.id;
-  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(darktable.mipmap_cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
+  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(dt_mipmap_cache_get_global(), pipe->backbuf.width, pipe->backbuf.height, imgid);
 
   // Check if the cache is ready for that mipmap size.
   dt_mipmap_buffer_t tmp;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &tmp, imgid, mip, DT_MIPMAP_TESTLOCK, 'r');
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &tmp, imgid, mip, DT_MIPMAP_TESTLOCK, 'r');
   gboolean cache_ready = !IS_NULL_PTR(tmp.buf);
-  dt_mipmap_cache_release(darktable.mipmap_cache, &tmp);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &tmp);
 
   if(pipe->autoset)
   {

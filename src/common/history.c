@@ -164,7 +164,7 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
   _remove_preset_flag(imgid);
 
   /* make sure mipmaps are recomputed */
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
 
   /* remove darktable|style|* tags */
   dt_tag_detach_by_string("darktable|style|%", imgid, FALSE, FALSE);

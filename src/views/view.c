@@ -1054,7 +1054,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   *surface = NULL;
 
   // get mipmap cache image
-  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
+  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   dt_mipmap_size_t mip = DT_MIPMAP_NONE;
 
   if(zoom == DT_THUMBTABLE_ZOOM_FIT)
@@ -1097,7 +1097,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   // if we don't get buffer, no image is available at the moment
   if(IS_NULL_PTR(buf.buf))
   {
-    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
     if(dt_supervisor_active())
       dt_supervisor_thumbnail(DT_SV_UPDATE, imgid, width, height, mip, FALSE);
     return DT_VIEW_SURFACE_KO;
@@ -1132,7 +1132,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   uint8_t *rgbbuf = (uint8_t *)calloc((size_t)buf_wd * buf_ht * 4, sizeof(uint8_t));
   if(IS_NULL_PTR(rgbbuf))
   {
-    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
     return ret;
   }
 
@@ -1176,7 +1176,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   dt_colorspaces_transform_rgba8_to_bgra8(transform, buf.buf, rgbbuf, buf.width, buf.height);
   if(alloc) cmsDeleteTransform(transform);
   pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   const int32_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, buf_wd);
   cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(rgbbuf, CAIRO_FORMAT_RGB24, buf_wd, buf_ht, stride);

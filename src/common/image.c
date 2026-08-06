@@ -1037,7 +1037,7 @@ void dt_image_history_changed(const int32_t imgid, const gboolean refresh_filmst
 
   // Drop the stale rendered thumbnail. The mipmap cache regenerates purely on explicit removal,
   // never by comparing history hashes, so this is mandatory after any development change.
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
 
   if(!darktable.gui) return;
 
@@ -1523,7 +1523,7 @@ void dt_image_remove(const int32_t imgid)
   sqlite3_finalize(stmt);
 
   // also clear all thumbnails in mipmap_cache.
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
 }
 
 uint32_t dt_image_altered(const int32_t imgid)
@@ -1945,7 +1945,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   dt_tag_attach(tagid, id, FALSE, FALSE);
 
   // make sure that there are no stale thumbnails left
-  dt_mipmap_cache_remove(darktable.mipmap_cache, id, TRUE);
+  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), id, TRUE);
 
   //synch database entries to xmp
   if(dt_image_get_xmp_mode()) dt_image_synch_all_xmp(normalized_filename);
@@ -2449,7 +2449,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
       if(newid != -1)
       {
         // also copy over on-disk thumbnails, if any
-        dt_mipmap_cache_copy_thumbnails(darktable.mipmap_cache, newid, imgid);
+        dt_mipmap_cache_copy_thumbnails(dt_mipmap_cache_get_global(), newid, imgid);
         // clang-format off
         DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                     "INSERT INTO main.color_labels (imgid, color)"

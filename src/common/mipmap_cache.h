@@ -115,6 +115,9 @@ void dt_mipmap_cache_init(dt_mipmap_cache_t *cache);
 void dt_mipmap_cache_cleanup(dt_mipmap_cache_t *cache);
 void dt_mipmap_cache_print(dt_mipmap_cache_t *cache);
 
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+struct dt_mipmap_cache_t *dt_mipmap_cache_get_global(void);
+
 // One cached mipmap buffer, for the GUI memory view.
 typedef struct dt_mipmap_cache_stats_entry_t
 {

@@ -79,7 +79,7 @@ static int32_t preload_image_cache(dt_job_t *job)
     for(int k = max_mipmap_size; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
       char filename[PATH_MAX] = { 0 };
-      dt_mipmap_get_cache_filename(filename, darktable.mipmap_cache, k, imgid);
+      dt_mipmap_get_cache_filename(filename, dt_mipmap_cache_get_global(), k, imgid);
 
       // if a valid thumbnail file is already on disc - do nothing
       if(dt_util_test_image_file(filename))
@@ -90,15 +90,15 @@ static int32_t preload_image_cache(dt_job_t *job)
 
       // else, generate thumbnail and store in mipmap cache.
       dt_mipmap_buffer_t buf;
-      dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
-      dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+      dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
+      dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
       i++;
       dt_control_job_set_progress(job, (float)i / imgs);
     }
 
     // and immediately write thumbs to disc and remove from mipmap cache.
-    dt_mimap_cache_evict(darktable.mipmap_cache, imgid);
+    dt_mimap_cache_evict(dt_mipmap_cache_get_global(), imgid);
 
     img = g_list_next(img);
   }
@@ -172,7 +172,7 @@ static gboolean preload_auto_callback(GtkAccelGroup *group, GObject *acceleratab
   dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
   const int width = ceilf(table->thumb_width * darktable.gui->ppd);
   const int height = ceilf(table->thumb_height * darktable.gui->ppd);
-  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
+  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   dt_mipmap_size_t mip = dt_mipmap_cache_get_matching_size(cache, width, height, UNKNOWN_IMAGE);
   fprintf(stdout, "mipmap %i\n", mip);
   return _preload_image_cache_with_max_size(mip, _("Preloading cache for current collection"));
@@ -185,7 +185,7 @@ static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, 
   for(GList *img = g_list_first(selection); img; img = g_list_next(img))
   {
     const int32_t imgid = GPOINTER_TO_INT(img->data);
-    dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+    dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
   }
 
   g_list_free(selection);

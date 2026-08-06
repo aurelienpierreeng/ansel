@@ -582,8 +582,8 @@ static void _rebuild_memory(void)
   g_array_free(pe, TRUE);
 
   // Mipmap cache
-  dt_mipmap_cache_get_usage(darktable.mipmap_cache, &cur, &max);
-  GArray *me = dt_mipmap_cache_get_entries_stats(darktable.mipmap_cache);
+  dt_mipmap_cache_get_usage(dt_mipmap_cache_get_global(), &cur, &max);
+  GArray *me = dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_get_global());
   gchar *mtitle = g_strdup_printf(_("Mipmap cache — %u items"), me->len);
   _add_usage_bar(_g.mem_box, mtitle, cur, max);
   g_free(mtitle);

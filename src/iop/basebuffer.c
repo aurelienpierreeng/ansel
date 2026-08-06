@@ -21,6 +21,7 @@
 #endif
 
 #include "common/darktable.h"
+#include "common/mipmap_cache.h"
 #include "common/imagebuf.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -93,7 +94,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_mipmap_buffer_t buf;
 
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
 
   // Catch out-of-bounds here because roi_in -> roi_out conversions
   // use float scaling that may not always respect initial size.
@@ -124,7 +125,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   for(size_t j = 0; j < in_height; j++)
     memcpy(ovoid + j * out_stride, input + x_offset + y_offset + j * in_stride, MIN(row_bytes, out_stride));
 
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   return 0;
 }
@@ -135,7 +136,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_mipmap_buffer_t buf;
 
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
 
   // Catch out-of-bounds here because roi_in -> roi_out conversions
   // use float scaling that may not always respect initial size.
@@ -167,7 +168,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                                                region, in_stride, CL_TRUE);
 
 
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   return err == CL_SUCCESS;
 }

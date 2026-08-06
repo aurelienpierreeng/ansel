@@ -937,7 +937,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_get_times(&start);
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
+  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   void *outbuf = NULL;
 
   // Get the history, aka sequence of editing changes

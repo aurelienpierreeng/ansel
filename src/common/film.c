@@ -43,6 +43,7 @@
 #include "common/film.h"
 #include "common/collection.h"
 #include "common/darktable.h"
+#include "common/mipmap_cache.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
 #include "common/image_cache.h"
@@ -434,7 +435,7 @@ void dt_film_remove(const int id)
   {
     const int32_t imgid = sqlite3_column_int(stmt, 0);
     dt_image_local_copy_reset(imgid);
-    dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+    dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
     dt_image_cache_remove(dt_image_cache_get_global(), imgid);
   }
   sqlite3_finalize(stmt);
