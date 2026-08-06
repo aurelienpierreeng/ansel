@@ -232,7 +232,7 @@ end:
 
 GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 {
-  JsonParser *parser = darktable.noiseprofile_parser;
+  JsonParser *parser = dt_noiseprofile_get_parser_global();
   JsonReader *reader = NULL;
   GList *result = NULL;
   gboolean parser_locked = FALSE;

@@ -608,7 +608,7 @@ static void set_format_by_name(dt_lib_export_t *d, const char *name)
 {
   // Find the selected format plugin among all existing plugins
   dt_imageio_module_format_t *module = NULL;
-  for(GList *it = darktable.imageio->plugins_format; it; it = g_list_next(it))
+  for(GList *it = dt_imageio_get_global()->plugins_format; it; it = g_list_next(it))
   {
     if(g_strcmp0(((dt_imageio_module_format_t *)it->data)->name(), name) == 0
        || g_strcmp0(((dt_imageio_module_format_t *)it->data)->plugin_name, name) == 0)
@@ -725,7 +725,7 @@ static void set_storage_by_name(dt_lib_export_t *d, const char *name)
   int k = -1;
   dt_imageio_module_storage_t *module = NULL;
 
-  for(const GList *it = darktable.imageio->plugins_storage; it; it = g_list_next(it))
+  for(const GList *it = dt_imageio_get_global()->plugins_storage; it; it = g_list_next(it))
   {
     dt_imageio_module_storage_t *storage = (dt_imageio_module_storage_t *)it->data;
     k++;
@@ -1003,7 +1003,7 @@ static void _update_formats_combobox(dt_lib_export_t *d)
 
   // Add supported formats to combobox
   gboolean empty = TRUE;
-  for(const GList *it = darktable.imageio->plugins_format; it; it = g_list_next(it))
+  for(const GList *it = dt_imageio_get_global()->plugins_format; it; it = g_list_next(it))
   {
     dt_imageio_module_format_t *format = (dt_imageio_module_format_t *)it->data;
     if(storage->supported(storage, format))
@@ -1024,7 +1024,7 @@ static void _on_storage_list_changed(gpointer instance, dt_lib_module_t *self)
 
   dt_gui_container_remove_children(GTK_CONTAINER(d->storage_extra_container));
 
-  for(const GList *it = darktable.imageio->plugins_storage; it; it = g_list_next(it))
+  for(const GList *it = dt_imageio_get_global()->plugins_storage; it; it = g_list_next(it))
   {
     const dt_imageio_module_storage_t *module = (dt_imageio_module_storage_t *)it->data;
     dt_bauhaus_combobox_add(d->storage, module->name(module));
@@ -1089,7 +1089,7 @@ void gui_init(dt_lib_module_t *self)
   d->storage_extra_container = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(d->storage_extra_container),FALSE);
   gtk_box_pack_start(GTK_BOX(self->widget), d->storage_extra_container, FALSE, TRUE, 0);
-  for(const GList *it = darktable.imageio->plugins_storage; it; it = g_list_next(it))
+  for(const GList *it = dt_imageio_get_global()->plugins_storage; it; it = g_list_next(it))
   {
     const dt_imageio_module_storage_t *module = (dt_imageio_module_storage_t *)it->data;
     dt_bauhaus_combobox_add(d->storage, module->name(module));
@@ -1116,7 +1116,7 @@ void gui_init(dt_lib_module_t *self)
   d->format_extra_container = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(d->format_extra_container),FALSE);
   gtk_box_pack_start(GTK_BOX(self->widget), d->format_extra_container, FALSE, TRUE, 0);
-  for(const GList *it = darktable.imageio->plugins_format; it; it = g_list_next(it))
+  for(const GList *it = dt_imageio_get_global()->plugins_format; it; it = g_list_next(it))
   {
     const dt_imageio_module_format_t *module = (dt_imageio_module_format_t *)it->data;
     dt_bauhaus_combobox_add(d->format, module->name());
@@ -1425,13 +1425,13 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_image_selection_changed_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
 
-  for(const GList *it = darktable.imageio->plugins_storage; it; it = g_list_next(it))
+  for(const GList *it = dt_imageio_get_global()->plugins_storage; it; it = g_list_next(it))
   {
     dt_imageio_module_storage_t *module = (dt_imageio_module_storage_t *)it->data;
     if(module->widget && GTK_IS_CONTAINER(d->storage_extra_container)) gtk_container_remove(GTK_CONTAINER(d->storage_extra_container), module->widget);
   }
 
-  for(const GList *it = darktable.imageio->plugins_format; it; it = g_list_next(it))
+  for(const GList *it = dt_imageio_get_global()->plugins_format; it; it = g_list_next(it))
   {
     dt_imageio_module_format_t *module = (dt_imageio_module_format_t *)it->data;
     if(module->widget && GTK_IS_CONTAINER(d->format_extra_container)) gtk_container_remove(GTK_CONTAINER(d->format_extra_container), module->widget);

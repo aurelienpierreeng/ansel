@@ -2620,7 +2620,7 @@ static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *
 
 static void _set_sample_box_area(dt_lib_module_t *self, const dt_boundingbox_t box)
 {
-  dt_lib_colorpicker_set_box_area(darktable.lib, box);
+  dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
   dt_lib_histogram_t *d = self->data;
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
     _reset_cache(d);
@@ -2629,7 +2629,7 @@ static void _set_sample_box_area(dt_lib_module_t *self, const dt_boundingbox_t b
 
 static void _set_sample_point(dt_lib_module_t *self, const float pos[2])
 {
-  dt_lib_colorpicker_set_point(darktable.lib, pos);
+  dt_lib_colorpicker_set_point(dt_lib_get_global(), pos);
   dt_lib_histogram_t *d = self->data;
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
     _reset_cache(d);

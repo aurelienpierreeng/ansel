@@ -44,6 +44,10 @@ dt_dbus_t *dt_dbus_init();
 /** closes down database and frees memory */
 void dt_dbus_destroy(const dt_dbus_t *);
 
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
+struct dt_dbus_t *dt_dbus_get_global(void);
+
 /** have we managed to get the dbus name? when not, then there is already another instance of darktable
  * running */
 gboolean dt_dbus_connected(const dt_dbus_t *);

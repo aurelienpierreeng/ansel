@@ -436,7 +436,7 @@ gboolean dt_lib_presets_apply(const gchar *preset, const gchar *module_name, int
     int writeprotect = sqlite3_column_int(stmt, 1);
     if(blob)
     {
-      for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
+      for(const GList *it = dt_lib_get_global()->plugins; it; it = g_list_next(it))
       {
         dt_lib_module_t *module = (dt_lib_module_t *)it->data;
         if(!strncmp(module->plugin_name, module_name, 128))
@@ -1083,15 +1083,15 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
   if(expanded)
   {
     /* register to receive draw events */
-    darktable.lib->gui_module = module;
+    dt_lib_get_global()->gui_module = module;
     darktable.gui->scroll_to[1] = module->expander;
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
   }
   else
   {
-    if(darktable.lib->gui_module == module)
+    if(dt_lib_get_global()->gui_module == module)
     {
-      darktable.lib->gui_module = NULL;
+      dt_lib_get_global()->gui_module = NULL;
       dt_control_queue_redraw();
     }
     dt_gui_refocus_center();
@@ -1151,7 +1151,7 @@ static void _toggle_expanded(dt_lib_module_t *module, gboolean close_all)
     gboolean all_other_closed = TRUE;
     uint32_t container = module->container(module);
 
-    for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
+    for(const GList *it = dt_lib_get_global()->plugins; it; it = g_list_next(it))
     {
       dt_lib_module_t *m = (dt_lib_module_t *)it->data;
 
@@ -1325,7 +1325,7 @@ void dt_lib_init(dt_lib_t *lib)
 {
   // Setting everything to null initially
   memset(lib, 0, sizeof(dt_lib_t));
-  darktable.lib->plugins = dt_module_load_modules("/plugins/lighttable", sizeof(dt_lib_module_t),
+  dt_lib_get_global()->plugins = dt_module_load_modules("/plugins/lighttable", sizeof(dt_lib_module_t),
                                                   dt_lib_load_module, dt_lib_init_module, dt_lib_sort_plugins);
 }
 
@@ -1443,7 +1443,7 @@ gchar *dt_lib_get_localized_name(const gchar *plugin_name)
   if(IS_NULL_PTR(module_names))
   {
     module_names = g_hash_table_new(g_str_hash, g_str_equal);
-    for(const GList *lib = darktable.lib->plugins; lib; lib = g_list_next(lib))
+    for(const GList *lib = dt_lib_get_global()->plugins; lib; lib = g_list_next(lib))
     {
       dt_lib_module_t *module = (dt_lib_module_t *)lib->data;
       g_hash_table_insert(module_names, module->plugin_name, g_strdup(module->name(module)));
@@ -1499,7 +1499,7 @@ void dt_lib_colorpicker_set_point(dt_lib_t *lib, const float pos[2])
 dt_lib_module_t *dt_lib_get_module(const char *name)
 {
   /* hide/show modules as last config */
-  for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
   {
     dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
     if(strcmp(plugin->plugin_name, name) == 0)

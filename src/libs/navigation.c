@@ -198,7 +198,7 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NAVIGATION_REDRAW,
                             G_CALLBACK(_lib_navigation_control_redraw_callback), self);
 
-  darktable.lib->proxy.navigation.module = self;
+  dt_lib_get_global()->proxy.navigation.module = self;
 }
 
 void gui_cleanup(dt_lib_module_t *self)

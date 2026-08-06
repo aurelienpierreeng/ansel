@@ -538,6 +538,41 @@ struct dt_control_signal_t *dt_control_signal_get_global(void)
   return darktable.signals;
 }
 
+struct dt_lib_t *dt_lib_get_global(void)
+{
+  return darktable.lib;
+}
+
+struct dt_imageio_t *dt_imageio_get_global(void)
+{
+  return darktable.imageio;
+}
+
+struct dt_points_t *dt_points_get_global(void)
+{
+  return darktable.points;
+}
+
+struct dt_l10n_t *dt_l10n_get_global(void)
+{
+  return darktable.l10n;
+}
+
+const struct dt_pwstorage_t *dt_pwstorage_get_global(void)
+{
+  return darktable.pwstorage;
+}
+
+struct dt_dbus_t *dt_dbus_get_global(void)
+{
+  return darktable.dbus;
+}
+
+JsonParser *dt_noiseprofile_get_parser_global(void)
+{
+  return darktable.noiseprofile_parser;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

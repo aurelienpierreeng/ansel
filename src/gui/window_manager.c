@@ -296,10 +296,10 @@ static gboolean _ui_scroll_target_is_live_widget(const GtkWidget *target, const 
   if(IS_NULL_PTR(target)) return FALSE;
   if(side != LEFT_PANNEL && side != RIGHT_PANNEL) return FALSE;
 
-  if(!IS_NULL_PTR(darktable.lib))
+  if(!IS_NULL_PTR(dt_lib_get_global()))
   {
     // Walk all lib modules and look for the exact expander address queued for scrolling.
-    for(const GList *libs = darktable.lib->plugins; libs; libs = g_list_next(libs))
+    for(const GList *libs = dt_lib_get_global()->plugins; libs; libs = g_list_next(libs))
     {
       const dt_lib_module_t *module = (const dt_lib_module_t *)libs->data;
       if(!IS_NULL_PTR(module) && module->expander == target) return TRUE;

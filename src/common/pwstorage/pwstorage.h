@@ -55,6 +55,10 @@ typedef struct dt_pwstorage_t
 const dt_pwstorage_t *dt_pwstorage_new();
 /** Cleanup and destroy pwstorage context. \remarks After this point pointer at pwstorage is invalid. */
 void dt_pwstorage_destroy(const dt_pwstorage_t *pwstorage);
+
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
+const struct dt_pwstorage_t *dt_pwstorage_get_global(void);
 /** Store (key,value) pairs. */
 gboolean dt_pwstorage_set(const gchar *slot, GHashTable *table);
 /** Load (key,value) pairs. */

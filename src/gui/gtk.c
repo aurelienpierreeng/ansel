@@ -1244,7 +1244,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // Init global accels. We localize the config because accels pathes use translated GUI labels.
   // User switching between languages may loose their custom shortcuts if we didn't localize them.
   // NOTE: needs to be inited before widgets, more specifically before the global menu
-  gchar *keyboardrc = g_strdup_printf("keyboardrc.%s", dt_l10n_get_current_lang(darktable.l10n));
+  gchar *keyboardrc = g_strdup_printf("keyboardrc.%s", dt_l10n_get_current_lang(dt_l10n_get_global()));
   gchar *keyboardrc_path = g_build_filename(configdir, keyboardrc, NULL);
 
   GtkAccelFlags flags = 0;

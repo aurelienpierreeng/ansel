@@ -2434,7 +2434,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
           sample_changed |= (image_box[k] != box[k]);
 
         if(sample_changed)
-          dt_lib_colorpicker_set_box_area(darktable.lib, box);
+          dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
       }
       else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       {
@@ -2442,7 +2442,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         _darkroom_sample_raw_point_to_image_norm(sample, image_point);
         sample_changed = memcmp(image_point, mouse_point, sizeof(mouse_point)) != 0;
         if(sample_changed)
-          dt_lib_colorpicker_set_point(darktable.lib, mouse_point);
+          dt_lib_colorpicker_set_point(dt_lib_get_global(), mouse_point);
       }
     }
     handled = TRUE;
@@ -2700,7 +2700,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
               fminf(1.0, point[0] + delta_x),
               fminf(1.0, point[1] + delta_y)
             };
-            dt_lib_colorpicker_set_box_area(darktable.lib, box);
+            dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
           }
           dt_control_queue_cursor(GDK_FLEUR);
         }
@@ -2708,7 +2708,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
         {
           /* Point pickers must not pre-write sample->point before going through the picker API,
              otherwise the setter sees no geometry change and skips the resample request. */
-          dt_lib_colorpicker_set_point(darktable.lib, point);
+          dt_lib_colorpicker_set_point(dt_lib_get_global(), point);
         }
       }
       dt_control_mouse_is_dragging(TRUE);
@@ -2731,7 +2731,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
             if(point[0] < live_box[0] || point[0] > live_box[2]
                || point[1] < live_box[1] || point[1] > live_box[3])
               continue;
-            dt_lib_colorpicker_set_box_area(darktable.lib, live_box);
+            dt_lib_colorpicker_set_box_area(dt_lib_get_global(), live_box);
           }
           else if(live_sample->size == DT_LIB_COLORPICKER_SIZE_POINT && picker->kind != DT_COLOR_PICKER_AREA)
           {
@@ -2748,7 +2748,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
             if(fabsf(point[0] - live_point[0]) > slop[0]
                || fabsf(point[1] - live_point[1]) > slop[1])
               continue;
-            dt_lib_colorpicker_set_point(darktable.lib, live_point);
+            dt_lib_colorpicker_set_point(dt_lib_get_global(), live_point);
           }
           else
             continue;
@@ -2760,7 +2760,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
         // default is hardcoded this way
         // FIXME: color_pixer_proxy should have an dt_iop_color_picker_clear_area() function for this
         dt_boundingbox_t reset = { 0.01f, 0.01f, 0.99f, 0.99f };
-        dt_lib_colorpicker_set_box_area(darktable.lib, reset);
+        dt_lib_colorpicker_set_box_area(dt_lib_get_global(), reset);
       }
       return 1;
     }

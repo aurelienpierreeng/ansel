@@ -95,6 +95,9 @@ typedef struct dt_lib_module_t
 } dt_lib_module_t;
 
 void dt_lib_init(dt_lib_t *lib);
+
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+struct dt_lib_t *dt_lib_get_global(void);
 void dt_lib_cleanup(dt_lib_t *lib);
 
 /** creates a label widget for the expander, with callback to enable/disable this module. */

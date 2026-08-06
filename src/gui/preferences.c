@@ -296,16 +296,16 @@ static void usercss_dialog_callback(GtkDialog *dialog, gint response_id, gpointe
 static void language_callback(GtkWidget *widget, gpointer user_data)
 {
   int selected = gtk_combo_box_get_active(GTK_COMBO_BOX(widget));
-  dt_l10n_language_t *language = (dt_l10n_language_t *)g_list_nth_data(darktable.l10n->languages, selected);
-  if(darktable.l10n->sys_default == selected)
+  dt_l10n_language_t *language = (dt_l10n_language_t *)g_list_nth_data(dt_l10n_get_global()->languages, selected);
+  if(dt_l10n_get_global()->sys_default == selected)
   {
     dt_conf_set_string("ui_last/gui_language", "");
-    darktable.l10n->selected = darktable.l10n->sys_default;
+    dt_l10n_get_global()->selected = dt_l10n_get_global()->sys_default;
   }
   else
   {
     dt_conf_set_string("ui_last/gui_language", language->code);
-    darktable.l10n->selected = selected;
+    dt_l10n_get_global()->selected = selected;
   }
   restart_required = TRUE;
 }
@@ -314,7 +314,7 @@ static gboolean reset_language_widget(GtkWidget *label, GdkEventButton *event, G
 {
   if(event->type == GDK_2BUTTON_PRESS)
   {
-    gtk_combo_box_set_active(GTK_COMBO_BOX(widget), darktable.l10n->sys_default);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(widget), dt_l10n_get_global()->sys_default);
     return TRUE;
   }
   return FALSE;
@@ -343,13 +343,13 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_container_add(GTK_CONTAINER(labelev), label);
   GtkWidget *widget = gtk_combo_box_text_new();
 
-  for(GList *iter = darktable.l10n->languages; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_l10n_get_global()->languages; iter; iter = g_list_next(iter))
   {
     const char *name = dt_l10n_get_name(iter->data);
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), name);
   }
 
-  gtk_combo_box_set_active(GTK_COMBO_BOX(widget), darktable.l10n->selected);
+  gtk_combo_box_set_active(GTK_COMBO_BOX(widget), dt_l10n_get_global()->selected);
   g_signal_connect(G_OBJECT(widget), "changed", G_CALLBACK(language_callback), 0);
   gtk_widget_set_tooltip_text(labelev,  _("double-click to reset to the system language"));
   gtk_event_box_set_visible_window(GTK_EVENT_BOX(labelev), FALSE);

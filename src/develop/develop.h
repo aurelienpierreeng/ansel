@@ -355,7 +355,7 @@ typedef struct dt_develop_t
    * @brief Authoritative darkroom color-picker state.
    *
    * @details
-   * Picker ownership used to be split between `darktable.lib->proxy.colorpicker`, the preview pipe,
+   * Picker ownership used to be split between `dt_lib_get_global()->proxy.colorpicker`, the preview pipe,
    * and the module widgets. That made it difficult to tell whether a picker move should:
    * - dirtify the preview pipe,
    * - resample a cached buffer directly,

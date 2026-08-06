@@ -125,6 +125,9 @@ typedef struct dt_imageio_t
 
 /* load all modules */
 void dt_imageio_init(dt_imageio_t *iio);
+
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+struct dt_imageio_t *dt_imageio_get_global(void);
 /* cleanup */
 void dt_imageio_cleanup(dt_imageio_t *iio);
 

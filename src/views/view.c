@@ -287,7 +287,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
       if(old_view->leave) old_view->leave(old_view);
 
       /* iterator plugins and cleanup plugins in current view */
-      for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+      for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
       {
         dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
 
@@ -331,7 +331,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
     if(old_view->leave) old_view->leave(old_view);
 
     /* iterator plugins and cleanup plugins in current view */
-    for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+    for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
     {
       dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
 
@@ -355,7 +355,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
 
   /* lets add plugins related to new view into panels.
    * this has to be done in reverse order to have the lowest position at the bottom! */
-  for(GList *iter = g_list_last(darktable.lib->plugins); iter; iter = g_list_previous(iter))
+  for(GList *iter = g_list_last(dt_lib_get_global()->plugins); iter; iter = g_list_previous(iter))
   {
     dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
     if(dt_lib_is_visible_in_view(plugin, new_view))
@@ -386,7 +386,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
   }
 
   /* hide/show modules as last config */
-  for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
   {
     dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
     if(dt_lib_is_visible_in_view(plugin, new_view))
@@ -472,7 +472,7 @@ void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, i
 
     cairo_restore(cr);
     /* expose plugins */
-    for(const GList *plugins = g_list_last(darktable.lib->plugins); plugins; plugins = g_list_previous(plugins))
+    for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins); plugins; plugins = g_list_previous(plugins))
     {
       dt_lib_module_t *plugin = (dt_lib_module_t *)(plugins->data);
 
@@ -497,7 +497,7 @@ void dt_view_manager_mouse_leave(dt_view_manager_t *vm)
 
   /* lets check if any plugins want to handle mouse move */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -525,7 +525,7 @@ void dt_view_manager_mouse_moved(dt_view_manager_t *vm, double x, double y, doub
 
   /* lets check if any plugins want to handle mouse move */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -547,7 +547,7 @@ int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event)
 
   /* lets check if any plugins want to handle button press */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -574,7 +574,7 @@ int dt_view_manager_button_released(dt_view_manager_t *vm, double x, double y, i
 
   /* lets check if any plugins want to handle button press */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -607,7 +607,7 @@ int dt_view_manager_button_pressed(dt_view_manager_t *vm, double x, double y, do
   /* lets check if any plugins want to handle button press */
   gboolean handled = FALSE;
 
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins && !handled;
       plugins = g_list_previous(plugins))
   {

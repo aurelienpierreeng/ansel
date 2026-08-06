@@ -992,7 +992,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
                                        MIN(d->picker_box_anchor[1], point[1]),
                                        MAX(d->picker_box_anchor[0], point[0]),
                                        MAX(d->picker_box_anchor[1], point[1]) };
-        dt_lib_colorpicker_set_box_area(darktable.lib, box);
+        dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
         dt_control_queue_redraw_center();
       }
     }
@@ -1003,7 +1003,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       float point[2] = { 0.0f };
       if(_studio_widget_to_image_norm(d, x, y, point))
       {
-        dt_lib_colorpicker_set_point(darktable.lib, point);
+        dt_lib_colorpicker_set_point(dt_lib_get_global(), point);
         dt_control_queue_redraw_center();
       }
     }
@@ -1035,7 +1035,7 @@ static void _studio_picker_left_click(dt_studio_capture_t *d, const float point[
   if(sample->size != DT_LIB_COLORPICKER_SIZE_BOX)
   {
     d->picker_dragging_box = FALSE;
-    dt_lib_colorpicker_set_point(darktable.lib, point);
+    dt_lib_colorpicker_set_point(dt_lib_get_global(), point);
     return;
   }
 
@@ -1069,7 +1069,7 @@ static void _studio_picker_left_click(dt_studio_capture_t *d, const float point[
     d->picker_box_anchor[1] = point[1];
     const dt_boundingbox_t box = { fmaxf(0.0f, point[0] - delta), fmaxf(0.0f, point[1] - delta),
                                    fminf(1.0f, point[0] + delta), fminf(1.0f, point[1] + delta) };
-    dt_lib_colorpicker_set_box_area(darktable.lib, box);
+    dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
   }
 
   d->picker_dragging_box = TRUE;
@@ -1102,7 +1102,7 @@ static void _studio_picker_right_click(dt_studio_capture_t *d, const float point
         dt_dev_coordinates_raw_norm_to_image_norm(dev, live_box, 2);
         if(point[0] < live_box[0] || point[0] > live_box[2] || point[1] < live_box[1] || point[1] > live_box[3])
           continue;
-        dt_lib_colorpicker_set_box_area(darktable.lib, live_box);
+        dt_lib_colorpicker_set_box_area(dt_lib_get_global(), live_box);
         return;
       }
       else if(live_sample->size == DT_LIB_COLORPICKER_SIZE_POINT && sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
@@ -1110,7 +1110,7 @@ static void _studio_picker_right_click(dt_studio_capture_t *d, const float point
         float live_point[2] = { live_sample->point[0], live_sample->point[1] };
         dt_dev_coordinates_raw_norm_to_image_norm(dev, live_point, 1);
         if(fabsf(point[0] - live_point[0]) > slop_x || fabsf(point[1] - live_point[1]) > slop_y) continue;
-        dt_lib_colorpicker_set_point(darktable.lib, live_point);
+        dt_lib_colorpicker_set_point(dt_lib_get_global(), live_point);
         return;
       }
     }
@@ -1119,7 +1119,7 @@ static void _studio_picker_right_click(dt_studio_capture_t *d, const float point
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
     const dt_boundingbox_t reset = { 0.01f, 0.01f, 0.99f, 0.99f };
-    dt_lib_colorpicker_set_box_area(darktable.lib, reset);
+    dt_lib_colorpicker_set_box_area(dt_lib_get_global(), reset);
   }
 }
 

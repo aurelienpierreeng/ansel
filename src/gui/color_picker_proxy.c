@@ -790,13 +790,13 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     {
       dt_boundingbox_t image_box = { 0.0f };
       _picker_raw_box_to_image_norm(dev, self->pick_box, image_box);
-      dt_lib_colorpicker_set_box_area(darktable.lib, image_box);
+      dt_lib_colorpicker_set_box_area(dt_lib_get_global(), image_box);
     }
     else if(kind == DT_COLOR_PICKER_POINT)
     {
       float image_point[2] = { 0.0f };
       _picker_raw_point_to_image_norm(dev, self->pick_pos, image_point);
-      dt_lib_colorpicker_set_point(darktable.lib, image_point);
+      dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
     }
     else
       dt_unreachable_codepath();

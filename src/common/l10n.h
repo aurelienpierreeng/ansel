@@ -41,6 +41,10 @@ typedef struct dt_l10n_t
 dt_l10n_t *dt_l10n_init(gboolean init_list);
 void dt_l10n_disable_setlocale_early(void);
 
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
+struct dt_l10n_t *dt_l10n_get_global(void);
+
 const char *dt_l10n_get_current_lang(dt_l10n_t *l10n);
 
 const char *dt_l10n_get_name(const dt_l10n_language_t *language);
