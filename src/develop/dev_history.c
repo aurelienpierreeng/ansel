@@ -1600,7 +1600,7 @@ void dt_dev_write_history(dt_develop_t *dev, gboolean async)
                                         dev->image_storage.id);
   dt_control_job_set_params(job, dev, NULL);
 
-  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job) != 0)
+  if(dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job) != 0)
   {
     // scheduling failed: dispose job, clear the flag we just set, and run synchronously
     dt_control_job_dispose(job);

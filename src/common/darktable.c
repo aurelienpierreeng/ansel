@@ -606,6 +606,11 @@ struct dt_bauhaus_t *dt_bauhaus_get_global(void)
   return darktable.bauhaus;
 }
 
+struct dt_control_t *dt_control_get_global(void)
+{
+  return darktable.control;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

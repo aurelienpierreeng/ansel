@@ -528,13 +528,13 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
   }
 
-  if(grab == 0 || !(darktable.control->button_down && darktable.control->button_down_which == 1))
+  if(grab == 0 || !(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1))
   {
     grab = get_grab(self, pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
                     -vignette_fy, zoom_scale);
   }
 
-  if(darktable.control->button_down && darktable.control->button_down_which == 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
   {
     if(grab == 0) // pan the image
     {

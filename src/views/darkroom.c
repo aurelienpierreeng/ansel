@@ -1793,7 +1793,7 @@ gboolean _scroll_on_focus(GdkEventScroll event, void *data)
 void enter(dt_view_t *self)
 {
   // Flush all background jobs (thumbnails generation) to spare resources for interactivity
-  dt_control_flush_jobs_queue(darktable.control, DT_JOB_QUEUE_SYSTEM_FG);
+  dt_control_flush_jobs_queue(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_FG);
   
   dt_print(DT_DEBUG_CONTROL, "[run_job+] 11 %f in darkroom mode\n", dt_get_wtime());
   dt_develop_t *dev = (dt_develop_t *)self->data;
@@ -2054,7 +2054,7 @@ void mouse_leave(dt_view_t *self)
 {
   // if we are not hovering over a thumbnail in the filmstrip -> show metadata of opened image.
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  dt_control_t *ctl = darktable.control;
+  dt_control_t *ctl = dt_control_get_global();
   dt_gui_gtk_t *gui = dt_gui_get_global();
   dt_control_mouse_is_dragging(FALSE);
   dt_control_mouse_is_painting(FALSE);
@@ -2227,7 +2227,7 @@ static void _darkroom_edge_pan_update_state(dt_view_t *self,
                                             darkroom_edge_pan_test_t *edge)
 {
   dt_gui_gtk_t *gui = dt_gui_get_global();
-  dt_control_t *ctl = darktable.control;
+  dt_control_t *ctl = dt_control_get_global();
   if(IS_NULL_PTR(gui) || IS_NULL_PTR(ctl) || IS_NULL_PTR(self)) return;
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
@@ -2281,7 +2281,7 @@ static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
                                          const int height)
 {
   dt_gui_gtk_t *gui = dt_gui_get_global();
-  dt_control_t *ctl = darktable.control;
+  dt_control_t *ctl = dt_control_get_global();
   darkroom_edge_pan_test_t edge = { 0 };
   _darkroom_edge_pan_update_state(self, pointer_x, pointer_y, width, height, &edge);
 
@@ -2394,7 +2394,7 @@ static gboolean _darkroom_edge_pan_tick(gpointer user_data)
 void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  dt_control_t *ctl = darktable.control;
+  dt_control_t *ctl = dt_control_get_global();
   dt_gui_gtk_t *gui = dt_gui_get_global();
 
   const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
@@ -2515,8 +2515,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   dt_control_commit_cursor();
 
-  if(_darkroom_center_pan_drag && darktable.control->button_down
-     && darktable.control->button_down_which == 1 && dev->roi.scaling > 1)
+  if(_darkroom_center_pan_drag && dt_control_get_global()->button_down
+     && dt_control_get_global()->button_down_which == 1 && dev->roi.scaling > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
@@ -2549,7 +2549,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 
   // panning with left mouse button
-  if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->roi.scaling > 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && dev->roi.scaling > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);

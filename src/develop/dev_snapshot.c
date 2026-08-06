@@ -298,7 +298,7 @@ static void _schedule_main_recompute(dt_dev_snapshot_engine_t *engine, const dt_
   engine->job = job;
   dt_pthread_mutex_unlock(&engine->lock);
 
-  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job) != 0)
+  if(dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job) != 0)
   {
     dt_pthread_mutex_lock(&engine->lock);
     if(engine->job == job) engine->job = NULL;

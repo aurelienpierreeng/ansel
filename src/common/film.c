@@ -273,7 +273,7 @@ int dt_film_import(const char *dirname)
   }
 
   // launch import job
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, dt_film_import1_create(film));
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, dt_film_import1_create(film));
 
   return filmid;
 }

@@ -698,7 +698,7 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   dt_pthread_mutex_unlock(&thumb->lock);
 
   dt_control_job_set_params(job, thumb, _thumbnail_release);
-  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job) != 0)
+  if(dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_FG, job) != 0)
   {
     dt_pthread_mutex_lock(&thumb->lock);
     if(thumb->job == job) thumb->job = NULL;

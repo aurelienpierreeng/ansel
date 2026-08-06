@@ -2294,7 +2294,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   // draw cropping window dimensions if first mouse button is pressed
-  if(darktable.control->button_down && darktable.control->button_down_which == 1 && g->k_show != 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && g->k_show != 1)
   {
     char dimensions[16];
     dimensions[0] = '\0';
@@ -2667,14 +2667,14 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   _iop_clipping_set_max_clip(self);
   _grab_region_t grab = get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, wd, ht);
 
-  if(darktable.control->button_down && darktable.control->button_down_which == 3 && g->k_show != 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 3 && g->k_show != 1)
   {
     // second mouse button, straighten activated:
     g->straightening = 1;
     dt_control_queue_cursor(GDK_CROSSHAIR);
     dt_control_queue_redraw_center();
   }
-  else if(darktable.control->button_down && darktable.control->button_down_which == 1)
+  else if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
   {
     // case when we drag a point for keystone
     if(g->k_drag == TRUE && g->k_selected >= 0)
@@ -2794,9 +2794,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       if(grab & GRAB_TOP) g->handle_y = bzy - g->clip_y;
       if(grab & GRAB_RIGHT) g->handle_x = bzx - (g->clip_w + g->clip_x);
       if(grab & GRAB_BOTTOM) g->handle_y = bzy - (g->clip_h + g->clip_y);
-      if(!grab && darktable.control->button_down_which == 3) g->straightening = 1;
+      if(!grab && dt_control_get_global()->button_down_which == 3) g->straightening = 1;
     }
-    if(!g->straightening && darktable.control->button_down_which == 1 && g->k_show != 1)
+    if(!g->straightening && dt_control_get_global()->button_down_which == 1 && g->k_show != 1)
     {
       grab = g->cropping;
 
@@ -2935,11 +2935,11 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       dt_control_queue_cursor(GDK_BOTTOM_LEFT_CORNER);
     else if(grab == GRAB_NONE)
     {
-      dt_control_hinter_message(darktable.control, _("<b>commit</b>: double-click, <b>straighten</b>: right-drag"));
+      dt_control_hinter_message(dt_control_get_global(), _("<b>commit</b>: double-click, <b>straighten</b>: right-drag"));
       dt_control_queue_cursor(GDK_LEFT_PTR);
     }
     if(grab != GRAB_NONE)
-      dt_control_hinter_message(darktable.control, _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag\n"
+      dt_control_hinter_message(dt_control_get_global(), _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag\n"
                                                      "<b>straighten</b>: right-drag"));
     dt_control_queue_redraw_center();
   }
@@ -2981,24 +2981,24 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       }
       if(g->k_selected >= 0)
       {
-        dt_control_hinter_message(darktable.control, _("<b>move control point</b>: drag"));
+        dt_control_hinter_message(dt_control_get_global(), _("<b>move control point</b>: drag"));
         dt_control_queue_cursor(GDK_CROSS);
       }
       else if(g->k_selected_segment >= 0)
       {
-        dt_control_hinter_message(darktable.control, _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>"));
+        dt_control_hinter_message(dt_control_get_global(), _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>"));
         dt_control_queue_cursor(GDK_CROSS);
       }
       else
       {
-        dt_control_hinter_message(darktable.control, _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>\n"
+        dt_control_hinter_message(dt_control_get_global(), _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>\n"
                                                        "<b>move line/control point</b>: drag"));
         dt_control_queue_cursor(GDK_FLEUR);
       }
     }
     else
     {
-      dt_control_hinter_message(darktable.control, _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag\n"
+      dt_control_hinter_message(dt_control_get_global(), _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag\n"
                                                      "<b>straighten</b>: right-drag, <b>commit</b>: double-click"));
     }
     dt_control_queue_redraw_center();

@@ -773,5 +773,5 @@ int dt_control_import(dt_control_import_t data)
     return 1;
   }
 
-  return dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+  return dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
 }

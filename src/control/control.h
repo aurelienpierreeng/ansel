@@ -129,14 +129,14 @@ void dt_control_change_cursor_by_name(const char *curs_str);
  */
 void dt_control_change_cursor_by_name_and_flush(const char *curs_str);
 
-// set darktable.control->cursor.shape to the desired cursor shape
+// set dt_control_get_global()->cursor.shape to the desired cursor shape
 void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line);
 #define  dt_control_queue_cursor(cursor) \
   dt_control_queue_cursor_EXT((cursor), __FILE__, __LINE__)
 
 void dt_control_queue_cursor_by_name(const char *curs_str);
 
-// commit the currently set cursor shape from darktable.control->cursor.shape
+// commit the currently set cursor shape from dt_control_get_global()->cursor.shape
 void dt_control_commit_cursor();
 /** \brief Set whether the cursor should be visible or not.
  *
@@ -298,7 +298,7 @@ typedef struct dt_control_t
   } progress_system;
 
   /* proxy */
-  // TODO: this is unused now, but deleting it makes g_free(darktable.control)
+  // TODO: this is unused now, but deleting it makes g_free(dt_control_get_global())
   // segfault on double free or corruption. Find out why.
   struct
   {
@@ -314,6 +314,13 @@ typedef struct dt_control_t
 } dt_control_t;
 
 void dt_control_init(dt_control_t *s);
+
+/* The application-wide control singleton. Process-wide by nature (one job system, one
+ * log/toast queue, one pointer state) with no per-call context to ride on, so this
+ * accessor is the end state for the handle; finer encapsulation of its three
+ * sub-services (log/toast, progress, pointer state) is a separate concern.
+ * Implemented by the orchestrator (common/darktable.c). */
+struct dt_control_t *dt_control_get_global(void);
 
 // join all worker threads.
 void dt_control_shutdown(dt_control_t *s);

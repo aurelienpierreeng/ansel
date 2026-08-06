@@ -72,7 +72,7 @@ static dt_dev_pixelpipe_cache_wait_manager_t _cache_wait_manager
 
 static gboolean _cache_wait_cursor_progress(gpointer user_data)
 {
-  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()))
+  if(IS_NULL_PTR(dt_control_get_global()) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()))
     return G_SOURCE_REMOVE;
 
   dt_control_change_cursor_by_name_and_flush("progress");
@@ -81,7 +81,7 @@ static gboolean _cache_wait_cursor_progress(gpointer user_data)
 
 static gboolean _cache_wait_cursor_restore(gpointer user_data)
 {
-  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()))
+  if(IS_NULL_PTR(dt_control_get_global()) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()))
     return G_SOURCE_REMOVE;
 
   dt_control_commit_cursor();

@@ -1562,7 +1562,7 @@ static dt_job_t *_control_gpx_apply_job_create(const gchar *filename, int32_t fi
 
 void dt_control_save_xmp(const int32_t imgid)
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_save_xmps_job_run,
                                                           N_("save history to XMP"),
                                                           0, NULL, PROGRESS_NONE, imgid));
@@ -1587,39 +1587,39 @@ void dt_control_save_xmps(const GList *imgids, const gboolean check_history)
   params->flag = 0;
 
   dt_control_job_set_params(job, params, dt_control_image_enumerator_cleanup);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
 }
 
 void dt_control_merge_hdr()
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_merge_hdr_job_run, N_("merge hdr image"), 0,
                                                           NULL, PROGRESS_CANCELLABLE, TRUE));
 }
 
 void dt_control_gpx_apply(const gchar *filename, int32_t filmid, const gchar *tz, GList *imgs)
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      _control_gpx_apply_job_create(filename, filmid, tz, imgs));
 }
 
 void dt_control_duplicate_images(gboolean virgin)
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_duplicate_images_job_run,
                                                           N_("duplicate images"), 0, GINT_TO_POINTER(virgin), PROGRESS_SIMPLE, TRUE));
 }
 
 void dt_control_flip_images(const int32_t cw)
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_flip_images_job_run, N_("flip images"), cw,
                                                           NULL, PROGRESS_SIMPLE, TRUE));
 }
 
 void dt_control_monochrome_images(const int32_t mode)
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_monochrome_images_job_run, N_("set monochrome images"), mode,
                                                           NULL, PROGRESS_SIMPLE, TRUE));
 }
@@ -1666,7 +1666,7 @@ gboolean dt_control_remove_images()
       return FALSE;
     }
   }
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
   return TRUE;
 }
 
@@ -1714,7 +1714,7 @@ void dt_control_delete_images()
       return;
     }
   }
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
 }
 
 void dt_control_delete_image(int32_t imgid)
@@ -1757,7 +1757,7 @@ void dt_control_delete_image(int32_t imgid)
       return;
     }
   }
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
 }
 
 void dt_control_move_images()
@@ -1815,7 +1815,7 @@ void dt_control_move_images()
     if(res != GTK_RESPONSE_YES) goto abort;
   }
 
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
   return;
 
 abort:
@@ -1874,7 +1874,7 @@ void dt_control_copy_images()
     if(res != GTK_RESPONSE_YES) goto abort;
   }
 
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG, job);
   return;
 
 abort:
@@ -1884,7 +1884,7 @@ abort:
 
 void dt_control_set_local_copy_images()
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_local_copy_images_job_run,
                                                           N_("local copy images"), 1, NULL, PROGRESS_CANCELLABLE,
                                                           FALSE));
@@ -1892,7 +1892,7 @@ void dt_control_set_local_copy_images()
 
 void dt_control_reset_local_copy_images()
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_local_copy_images_job_run,
                                                           N_("local copy images"), 0, NULL, PROGRESS_CANCELLABLE,
                                                           FALSE));
@@ -1900,7 +1900,7 @@ void dt_control_reset_local_copy_images()
 
 void dt_control_refresh_exif()
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_generic_images_job_create(&dt_control_refresh_exif_run, N_("refresh exif"), 0,
                                                           NULL, PROGRESS_CANCELLABLE, FALSE));
 }
@@ -1979,7 +1979,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
   data->metadata_export = g_strdup(metadata_export);
 
   dt_control_job_add_progress(job, _("export images"), TRUE);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_EXPORT, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_EXPORT, job);
 
   // tell the storage that we got its params for an export so it can reset itself to a safe state
   mstorage->export_dispatched(mstorage);
@@ -2127,7 +2127,7 @@ static dt_job_t *dt_control_datetime_job_create(const GTimeSpan offset, const ch
 
 void dt_control_datetime(const GTimeSpan offset, const char *datetime, GList *imgs)
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_FG,
                      dt_control_datetime_job_create(offset, datetime, imgs));
 }
 

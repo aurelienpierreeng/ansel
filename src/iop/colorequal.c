@@ -1968,7 +1968,7 @@ static void _switch_preview_cursor(dt_iop_module_t *self)
   if(g->cursor_valid && self->enabled)
   {
     dt_control_set_cursor_visible(FALSE);
-    dt_control_hinter_message(darktable.control,
+    dt_control_hinter_message(dt_control_get_global(),
                               _("scroll over image to adjust the selected color graph\n"
                                 "right-click to add a node at the sampled hue"));
     return;

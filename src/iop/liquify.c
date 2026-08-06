@@ -2975,7 +2975,7 @@ int mouse_moved(struct dt_iop_module_t *module,
       if(!IS_NULL_PTR(last_hovered))
         last_hovered->header.hovered = 0;
       // change in hover display
-      dt_control_hinter_message(darktable.control, dt_liquify_layers[hit.layer].hint);
+      dt_control_hinter_message(dt_control_get_global(), dt_liquify_layers[hit.layer].hint);
       handled = TRUE;
       goto done;
     }
@@ -3468,7 +3468,7 @@ int button_released(struct dt_iop_module_t *module,
   // right click == cancel or delete
   if(which == 3)
   {
-    dt_control_hinter_message(darktable.control, "");
+    dt_control_hinter_message(dt_control_get_global(), "");
     end_drag(g);
 
     // cancel line or curve creation
@@ -3791,7 +3791,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
 
     dt_iop_gui_enter_critical_section(self);
 
-    dt_control_hinter_message(darktable.control, "");
+    dt_control_hinter_message(dt_control_get_global(), "");
     end_drag(g);
 
     if(g->temp)
@@ -3810,7 +3810,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
     gtk_toggle_button_set_active(g->btn_curve_tool, FALSE);
     gtk_toggle_button_set_active(g->btn_node_tool, TRUE);
 
-    dt_control_hinter_message(darktable.control, _("click to edit nodes"));
+    dt_control_hinter_message(dt_control_get_global(), _("click to edit nodes"));
     dt_iop_request_focus(self);
     update_warp_count(g);
     sync_pipe(self, TRUE);
@@ -3833,7 +3833,7 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
     return TRUE;
   }
 
-  dt_control_hinter_message(darktable.control, "");
+  dt_control_hinter_message(dt_control_get_global(), "");
 
   // if we are on a preview, it means that a form (point, line, curve) has been started, but no node has yet been placed.
   // in this case we abort the current preview and let the new tool activated.
@@ -3854,18 +3854,18 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
 
     if(btn == g->btn_point_tool)
       dt_control_hinter_message
-        (darktable.control, _("click and drag to add point\nscroll to change size - "
+        (dt_control_get_global(), _("click and drag to add point\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_line_tool)
       dt_control_hinter_message
-        (darktable.control, _("click to add line\nscroll to change size - "
+        (dt_control_get_global(), _("click to add line\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_curve_tool)
       dt_control_hinter_message
-        (darktable.control, _("click to add curve\nscroll to change size - "
+        (dt_control_get_global(), _("click to add curve\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_node_tool)
-      dt_control_hinter_message(darktable.control, _("click to edit nodes"));
+      dt_control_hinter_message(dt_control_get_global(), _("click to edit nodes"));
 
     //  start the preview mode to show the shape that will be created
 

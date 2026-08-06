@@ -117,7 +117,7 @@ static gboolean _preload_image_cache_with_max_size(dt_mipmap_size_t max_size, co
   dt_job_t *job = dt_control_job_create(&preload_image_cache, "preload");
   dt_control_job_set_params(job, params, g_free);
   dt_control_job_add_progress(job, description, TRUE);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
   return TRUE;
 }
 

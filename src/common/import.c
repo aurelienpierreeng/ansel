@@ -405,7 +405,7 @@ void dt_control_get_selected_files(dt_lib_import_t *d, gboolean destroy_window)
     }
     dt_control_job_set_params(job, import, dt_import_cleanup);
     // Note : we don't free import->files. It's returned with the signal.
-    dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+    dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
   }
 }
 

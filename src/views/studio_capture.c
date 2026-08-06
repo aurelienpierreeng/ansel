@@ -980,8 +980,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 {
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
-  if(dt_iop_color_picker_is_visible(d->dev) && darktable.control->button_down
-     && darktable.control->button_down_which == 1)
+  if(dt_iop_color_picker_is_visible(d->dev) && dt_control_get_global()->button_down
+     && dt_control_get_global()->button_down_which == 1)
   {
     if(d->picker_dragging_box)
     {

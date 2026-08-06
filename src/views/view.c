@@ -707,7 +707,7 @@ static void _enqueue_surface_fetch(dt_view_image_surface_fetcher_t *fetcher)
   dt_control_job_set_params_with_size(job, params, sizeof(dt_view_surface_fetch_job_t), g_free);
   fetcher->job_queued = TRUE;
   fetcher->queued_request_id = fetcher->request_id;
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_FG, job);
 }
 
 static gboolean _view_surface_commit_main(gpointer user_data)

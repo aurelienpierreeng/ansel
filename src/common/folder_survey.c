@@ -531,7 +531,7 @@ static gboolean _folder_survey_scan(gpointer user_data)
     return G_SOURCE_CONTINUE;
   }
   dt_control_job_set_params(job, params, _folder_survey_job_cleanup);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_BG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_BG, job);
   return G_SOURCE_CONTINUE;
 }
 

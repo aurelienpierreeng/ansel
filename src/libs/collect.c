@@ -2049,7 +2049,7 @@ static void _act_prerender(dt_lib_collect_t *d, GList *rows)
   dt_job_t *job = dt_control_job_create(&_prerender_job, "prerender collection thumbnails");
   dt_control_job_set_params(job, p, _prerender_free);
   dt_control_job_add_progress(job, _("pre-rendering thumbnails"), TRUE);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
 }
 
 // ---- action table: add a bulk operation by adding a row here ----

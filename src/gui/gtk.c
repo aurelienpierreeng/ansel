@@ -188,7 +188,7 @@ void dt_gui_set_symbolic_icon(GtkWidget *image, const char *icon_name, GtkIconSi
 static inline gboolean _dt_on_gui_thread(void)
 {
   // Same idiom as dt_control_signal (control/signal.c): is the caller the GUI/main thread?
-  return darktable.control && pthread_equal(darktable.control->gui_thread, pthread_self());
+  return dt_control_get_global() && pthread_equal(dt_control_get_global()->gui_thread, pthread_self());
 }
 
 /* Sub-handle accessors for the GUI singleton (declared in gui/gtk.h). The orchestrator
@@ -1406,8 +1406,8 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
   darktable.gui->surface
       = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   // need to pre-configure views to avoid crash caused by draw coming before configure-event
-  darktable.control->tabborder = 8;
-  const int tb = darktable.control->tabborder;
+  dt_control_get_global()->tabborder = 8;
+  const int tb = dt_control_get_global()->tabborder;
   dt_view_manager_configure(darktable.view_manager, allocation.width - 2 * tb, allocation.height - 2 * tb);
 #ifdef MAC_INTEGRATION
 #ifdef GTK_TYPE_OSX_APPLICATION
@@ -1869,38 +1869,40 @@ static void _ui_widget_redraw_callback(gpointer instance, GtkWidget *widget)
 static void _ui_log_redraw_callback(gpointer instance, GtkWidget *widget)
 {
   // draw log message, if any
-  dt_pthread_mutex_lock(&darktable.control->log_mutex);
+  dt_control_t *const control = dt_control_get_global();
+  dt_pthread_mutex_lock(&control->log_mutex);
   if(!GTK_IS_LABEL(widget))
   {
-    dt_pthread_mutex_unlock(&darktable.control->log_mutex);
+    dt_pthread_mutex_unlock(&control->log_mutex);
     return;
   }
-  if(darktable.control->log_ack != darktable.control->log_pos)
+  if(dt_control_get_global()->log_ack != dt_control_get_global()->log_pos)
   {
-    if(strcmp(darktable.control->log_message[darktable.control->log_ack], gtk_label_get_text(GTK_LABEL(widget))))
-      gtk_label_set_markup(GTK_LABEL(widget), darktable.control->log_message[darktable.control->log_ack]);
+    if(strcmp(dt_control_get_global()->log_message[dt_control_get_global()->log_ack], gtk_label_get_text(GTK_LABEL(widget))))
+      gtk_label_set_markup(GTK_LABEL(widget), dt_control_get_global()->log_message[dt_control_get_global()->log_ack]);
     gtk_widget_show(widget);
   }
   else
   {
     gtk_widget_hide(widget);
   }
-  dt_pthread_mutex_unlock(&darktable.control->log_mutex);
+  dt_pthread_mutex_unlock(&control->log_mutex);
 }
 
 static void _ui_toast_redraw_callback(gpointer instance, GtkWidget *widget)
 {
   // draw toast message, if any
-  dt_pthread_mutex_lock(&darktable.control->toast_mutex);
+  dt_control_t *const control = dt_control_get_global();
+  dt_pthread_mutex_lock(&control->toast_mutex);
   if(!GTK_IS_LABEL(widget))
   {
-    dt_pthread_mutex_unlock(&darktable.control->toast_mutex);
+    dt_pthread_mutex_unlock(&control->toast_mutex);
     return;
   }
-  if(darktable.control->toast_ack != darktable.control->toast_pos)
+  if(dt_control_get_global()->toast_ack != dt_control_get_global()->toast_pos)
   {
-    if(strcmp(darktable.control->toast_message[darktable.control->toast_ack], gtk_label_get_text(GTK_LABEL(widget))))
-      gtk_label_set_markup(GTK_LABEL(widget), darktable.control->toast_message[darktable.control->toast_ack]);
+    if(strcmp(dt_control_get_global()->toast_message[dt_control_get_global()->toast_ack], gtk_label_get_text(GTK_LABEL(widget))))
+      gtk_label_set_markup(GTK_LABEL(widget), dt_control_get_global()->toast_message[dt_control_get_global()->toast_ack]);
     if(!gtk_widget_get_visible(widget))
     {
       const int h = gtk_widget_get_allocated_height(dt_ui_center_base(darktable.gui->ui));
@@ -1912,7 +1914,7 @@ static void _ui_toast_redraw_callback(gpointer instance, GtkWidget *widget)
   {
     if(gtk_widget_get_visible(widget)) gtk_widget_hide(widget);
   }
-  dt_pthread_mutex_unlock(&darktable.control->toast_mutex);
+  dt_pthread_mutex_unlock(&control->toast_mutex);
 }
 
 void dt_ellipsize_combo(GtkComboBox *cbox)
@@ -2469,7 +2471,7 @@ static void _notebook_size_callback(GtkNotebook *notebook, GdkRectangle *allocat
 }
 
 // GTK_STATE_FLAG_PRELIGHT does not seem to get set on the label on hover so
-// state-flags-changed cannot update darktable.control->element for shortcut mapping
+// state-flags-changed cannot update dt_control_get_global()->element for shortcut mapping
 static gboolean _notebook_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   GtkAllocation notebook_alloc, label_alloc;

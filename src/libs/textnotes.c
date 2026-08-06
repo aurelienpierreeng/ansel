@@ -2129,7 +2129,7 @@ static void _load_for_image(dt_lib_module_t *self, const int32_t imgid)
   params->path = g_strdup(d->path);
   dt_control_job_set_params(job, params, _textnotes_load_job_cleanup);
   dt_control_job_set_state_callback(job, _textnotes_load_job_state);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
 }
 
 static void _image_changed_callback(gpointer instance, gpointer user_data)

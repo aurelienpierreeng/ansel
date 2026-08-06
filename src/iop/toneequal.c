@@ -1838,7 +1838,7 @@ static void _switch_cursors(struct dt_iop_module_t *self)
     // if pipe is clean and idle and cursor is on preview,
     // hide GTK cursor because we display our custom one
     dt_control_set_cursor_visible(FALSE);
-    dt_control_hinter_message(darktable.control,
+    dt_control_hinter_message(dt_control_get_global(),
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
                                 "ctrl+scroll for small steps"));
@@ -2469,7 +2469,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     if(needs_preview_update)
       dt_dev_pixelpipe_update_history_preview(self->dev);
 
-    dt_control_hinter_message(darktable.control,
+    dt_control_hinter_message(dt_control_get_global(),
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
                                 "ctrl+scroll for small steps"));

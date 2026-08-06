@@ -439,7 +439,7 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
   }
   else
   {
-    if(pthread_equal(darktable.control->gui_thread, pthread_self()))
+    if(pthread_equal(dt_control_get_global()->gui_thread, pthread_self()))
     {
       _signal_emit(params);
       _signal_param_cleanup(params);

@@ -864,7 +864,7 @@ dt_job_t *dt_dev_process_job_create(dt_develop_t *dev)
 void dt_dev_start_all_pipelines(dt_develop_t *dev)
 {
   if(dev->pipelines_started) return;
-  dt_control_add_job_res(darktable.control, dt_dev_process_job_create(dev), DT_CTL_WORKER_DARKROOM);
+  dt_control_add_job_res(dt_control_get_global(), dt_dev_process_job_create(dev), DT_CTL_WORKER_DARKROOM);
   dev->pipelines_started = TRUE;
 }
 

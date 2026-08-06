@@ -2371,7 +2371,7 @@ void dt_culling_mode_to_selection()
 
 gboolean dt_collection_hint_message_internal(void *message)
 {
-  dt_control_hinter_message(darktable.control, message);
+  dt_control_hinter_message(dt_control_get_global(), message);
   dt_free(message);
   return FALSE;
 }

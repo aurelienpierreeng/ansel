@@ -772,7 +772,7 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
     selected_form->functions->set_hint_message(mask_gui, selected_form, opacity_percent, message, sizeof(message));
   }
 
-  dt_control_hinter_message(darktable.control, message);
+  dt_control_hinter_message(dt_control_get_global(), message);
   dt_print(DT_DEBUG_INPUT,
            "[masks] hint end: sel=%p has_set_hint=%d opacity=%d msg_len=%" G_GSIZE_FORMAT " msg='%s'\n",
            (void *)selected_form,

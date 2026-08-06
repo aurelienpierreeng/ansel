@@ -2249,7 +2249,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   dt_control_job_add_progress(job, _("creating background layer"), TRUE);
   g->session.background_job_running = TRUE;
   if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, FALSE);
-  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job) != 0)
+  if(dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job) != 0)
   {
     g->session.background_job_running = FALSE;
     if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, TRUE);
