@@ -55,6 +55,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/simd.h"
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/macros.h"

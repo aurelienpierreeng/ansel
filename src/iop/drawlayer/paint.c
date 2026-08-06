@@ -24,6 +24,7 @@
  */
 
 #include "iop/drawlayer/paint.h"
+#include "common/simd.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/brush_profile.h"
 

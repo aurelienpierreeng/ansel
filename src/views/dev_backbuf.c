@@ -20,6 +20,7 @@
  * separate preview-pipe substitution tier) uses dt_dev_paint_main_backbuf(). */
 
 #include "views/dev_backbuf.h"
+#include "common/colorspaces_inline_conversions.h"   // dt_Lab_to_XYZ(), dt_XYZ_to_sRGB()
 #include "control/conf.h"
 
 #include "bauhaus/bauhaus.h"
