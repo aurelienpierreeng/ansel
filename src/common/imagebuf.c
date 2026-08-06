@@ -95,7 +95,7 @@ int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
     {
       *bufptr = dt_pixelpipe_cache_alloc_perthread_float(nfloats,paddedsize);
       if ((size & DT_IMGSZ_CLEARBUF) && *bufptr)
-        memset(*bufptr, 0, *paddedsize * darktable.num_openmp_threads * sizeof(float));
+        memset(*bufptr, 0, *paddedsize * dt_get_num_openmp_threads() * sizeof(float));
     }
     else
     {
@@ -220,7 +220,7 @@ void dt_iop_image_fill(float *const buf, const float fill_value, const size_t wi
 #ifdef _OPENMP
   if (nfloats > parallel_imgop_minimum)	// is the copy big enough to outweigh threading overhead?
   {
-    const size_t nthreads = MIN(16,darktable.num_openmp_threads);
+    const size_t nthreads = MIN(16,dt_get_num_openmp_threads());
     // determine the number of 4-float vectors to be processed by each thread
     const size_t chunksize = (((nfloats + nthreads - 1) / nthreads) + 3) / 4;
 #pragma omp parallel for default(firstprivate)  num_threads(nthreads)

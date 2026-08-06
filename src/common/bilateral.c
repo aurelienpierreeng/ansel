@@ -84,7 +84,7 @@ size_t dt_bilateral_memory_use(const int width,     // width of input image
   // OpenCL path needs two buffers
   return 2 * grid_size * sizeof(float);
 #else
-  return (grid_size + 3 * darktable.num_openmp_threads * b.size_x * b.size_z) * sizeof(float);
+  return (grid_size + 3 * dt_get_num_openmp_threads() * b.size_x * b.size_z) * sizeof(float);
 #endif /* HAVE_OPENCL */
 }
 
@@ -108,7 +108,7 @@ size_t dt_bilateral_singlebuffer_size(const int width,     // width of input ima
   dt_bilateral_t b;
   dt_bilateral_grid_size(&b,width,height,100.0f,sigma_s,sigma_r);
   size_t grid_size = b.size_x * b.size_y * b.size_z;
-  return (grid_size + 3 * darktable.num_openmp_threads * b.size_x * b.size_z) * sizeof(float);
+  return (grid_size + 3 * dt_get_num_openmp_threads() * b.size_x * b.size_z) * sizeof(float);
 }
 
 #ifndef HAVE_OPENCL
@@ -159,7 +159,7 @@ dt_bilateral_t *dt_bilateral_init(const int width,     // width of input image
   dt_bilateral_grid_size(b,width,height,100.0f,sigma_s,sigma_r);
   b->width = width;
   b->height = height;
-  b->numslices = darktable.num_openmp_threads;
+  b->numslices = dt_get_num_openmp_threads();
   b->sliceheight = (height + b->numslices - 1) / b->numslices;
   b->slicerows = (b->size_y + b->numslices - 1) / b->numslices + 2;
   b->buf = dt_pixelpipe_cache_alloc_align_float_cache(b->size_x * b->size_z * b->numslices * b->slicerows, 0);
@@ -185,7 +185,7 @@ void dt_bilateral_splat(const dt_bilateral_t *b, const float *const in)
 
   if (IS_NULL_PTR(buf)) return;
   // splat into downsampled grid
-  const int nthreads = darktable.num_openmp_threads;
+  const int nthreads = dt_get_num_openmp_threads();
   const size_t offsets[8] =
   {
     0,

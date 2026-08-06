@@ -785,7 +785,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   (*points)[4] = x2;
   (*points)[5] = y2;
 
-  const int nthreads = darktable.num_openmp_threads;
+  const int nthreads = dt_get_num_openmp_threads();
   size_t c_padded_size;
   uint32_t *pts_count = dt_pixelpipe_cache_calloc_perthread(1, sizeof(uint32_t), &c_padded_size);
   size_t pts_padded_size;

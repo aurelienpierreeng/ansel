@@ -383,7 +383,7 @@ static void _sentry_set_context(void)
   // Hardware / device context
   sentry_value_t device = sentry_value_new_object();
   sentry_value_set_by_key(device, "cpu_logical_cores", sentry_value_new_int32(g_get_num_processors()));
-  sentry_value_set_by_key(device, "openmp_threads", sentry_value_new_int32(darktable.num_openmp_threads));
+  sentry_value_set_by_key(device, "openmp_threads", sentry_value_new_int32(dt_get_num_openmp_threads()));
 
   if(dt_get_total_mem() > 0)
   {

@@ -769,7 +769,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
 
   const float pos_x = *posx;
   const float pos_y = *posy;
-  __OMP_PARALLEL_FOR__(if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000)))
+  __OMP_PARALLEL_FOR__(if(h*w > 50000) num_threads(MIN(dt_get_num_openmp_threads(),(h*w)/20000)))
   for(int i = 0; i < h; i++)
   {
     float *const restrict p = points + 2 * i * w;
@@ -818,7 +818,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module, dt_dev
   const float radius2 = circle->radius * mindim * circle->radius * mindim;
   const float total2 = (circle->radius + circle->border) * mindim * (circle->radius + circle->border) * mindim;
   const float border2 = total2 - radius2;
-  __OMP_PARALLEL_FOR_SIMD__(if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000))  aligned(points, ptbuffer : 64))
+  __OMP_PARALLEL_FOR_SIMD__(if(h*w > 50000) num_threads(MIN(dt_get_num_openmp_threads(),(h*w)/20000))  aligned(points, ptbuffer : 64))
   for(int i = 0 ; i < h*w; i++)
   {
     // find the square of the distance from the center
@@ -1014,7 +1014,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module, dt
 
   // we calculate the mask values at the transformed points;
   // for results: re-use the points array
-  __OMP_PARALLEL_FOR__(collapse(2) if(bbh*bbw > 50000) num_threads(MIN(darktable.num_openmp_threads,(height*width)/20000)))
+  __OMP_PARALLEL_FOR__(collapse(2) if(bbh*bbw > 50000) num_threads(MIN(dt_get_num_openmp_threads(),(height*width)/20000)))
   for(int j = 0; j < bbh; j++)
     for(int i = 0; i < bbw; i++)
     {

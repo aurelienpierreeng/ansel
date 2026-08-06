@@ -366,7 +366,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
       fimg[col] = 0.5f;
       fimg[(size_t)(height-1)*width + col] = 0.5f;
     }
-    const size_t nthreads = darktable.num_openmp_threads; // go direct, darktable.num_openmp_threads always returns numprocs
+    const size_t nthreads = dt_get_num_openmp_threads(); // go direct, dt_get_num_openmp_threads() always returns numprocs
     const size_t chunksize = (height + nthreads - 1) / nthreads;
     __OMP_PARALLEL_FOR__(num_threads(nthreads) )
     for(size_t chunk = 0; chunk < nthreads; chunk++)

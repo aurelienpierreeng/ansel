@@ -64,7 +64,7 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
 {
   bool isTiled = false;
 
-  Imf::setGlobalThreadCount(darktable.num_openmp_threads);
+  Imf::setGlobalThreadCount(dt_get_num_openmp_threads());
 
   std::unique_ptr<Imf::TiledInputFile> fileTiled;
   std::unique_ptr<Imf::InputFile> file;

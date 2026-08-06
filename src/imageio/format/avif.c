@@ -491,7 +491,7 @@ int write_image(struct dt_imageio_module_data_t *data,
        */
       max_threads = (1 << encoder->tileRowsLog2) * (1 << encoder->tileColsLog2);
 
-      encoder->maxThreads = MIN(max_threads, darktable.num_openmp_threads);
+      encoder->maxThreads = MIN(max_threads, dt_get_num_openmp_threads());
     }
     case AVIF_TILING_OFF:
       break;

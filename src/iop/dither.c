@@ -461,7 +461,7 @@ static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   const int height = roi_in->height;
   const float dither = powf(2.0f, data->random.damping / 10.0f);
 
-  unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
+  unsigned int *const tea_states = alloc_tea_states(dt_get_num_openmp_threads());
   __OMP_PARALLEL__()
   {
     // get a pointer to each thread's private buffer *outside* the for loop, to avoid a function call per iteration

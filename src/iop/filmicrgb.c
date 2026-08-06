@@ -1418,7 +1418,7 @@ static inline int reconstruct_highlights(const dt_dev_pixelpipe_t *const pipe,
   float *const restrict HF_grey = dt_pixelpipe_cache_alloc_align_float_cache(ch * roi_out->width * roi_out->height, 0); // high-frequencies RGB backup
 
   // alloc a permanent reusable buffer for intermediate computations - avoid multiple alloc/free
-  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(darktable.num_openmp_threads * ch * roi_out->width, 0);
+  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(dt_get_num_openmp_threads() * ch * roi_out->width, 0);
 
   if(IS_NULL_PTR(LF_even) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(HF_RGB) || IS_NULL_PTR(HF_grey) || IS_NULL_PTR(temp))
   {
