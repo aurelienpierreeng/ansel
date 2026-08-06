@@ -34,12 +34,10 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/interpolation.h"
-#include "common/opencl.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
 #include "iop/iop_api.h"
-#include "gui/gtk.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_initialscale_params_t)
 

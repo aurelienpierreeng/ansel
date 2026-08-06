@@ -56,15 +56,11 @@
 #include "common/colorspaces.h"
 #include "common/imagebuf.h"
 #include "common/math.h"
-#include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/resetlabel.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include <gtk/gtk.h>
 #include <inttypes.h>

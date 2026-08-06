@@ -81,15 +81,12 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/opencl.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/rgb_norms.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
 #include "dtgtk/paint.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"

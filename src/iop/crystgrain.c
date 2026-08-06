@@ -34,7 +34,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/noise_generator.h"
 #include "gui/presets.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <float.h>

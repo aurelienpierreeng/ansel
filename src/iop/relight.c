@@ -54,10 +54,7 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/debug.h"
 #include "common/math.h"
-#include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -67,7 +64,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "dtgtk/gradientslider.h"
-#include "dtgtk/togglebutton.h"
 #include "gui/color_picker_proxy.h"
 
 #include "gui/gtk.h"

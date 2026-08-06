@@ -35,11 +35,9 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/debug.h"
 #include "common/gaussian.h"
 #include "common/opencl.h"
 #include "common/imagebuf.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
@@ -47,8 +45,6 @@
 #include "develop/noise_generator.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 #include <assert.h>
 #include <gtk/gtk.h>

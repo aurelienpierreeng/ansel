@@ -63,14 +63,12 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/database.h"
-#include "common/image.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/debug.h"
 #include "common/math.h"
 #include "common/opencl.h"
 #include "control/control.h"
@@ -79,7 +77,6 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/gradientslider.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"

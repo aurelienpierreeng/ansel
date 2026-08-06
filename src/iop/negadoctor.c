@@ -48,8 +48,6 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/openmp_maths.h"
-#include "dtgtk/button.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

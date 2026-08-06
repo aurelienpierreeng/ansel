@@ -37,9 +37,6 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -50,8 +47,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <assert.h>

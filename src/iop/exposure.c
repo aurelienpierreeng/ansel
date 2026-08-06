@@ -83,7 +83,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe.h"
 #include "dtgtk/paint.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

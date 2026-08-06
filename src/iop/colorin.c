@@ -82,16 +82,11 @@
 #include "gui/gtk.h"
 
 #ifdef HAVE_OPENJPEG
-#include "common/imageio_j2k.h"
 #endif
 #include "common/imageio_jpeg.h"
-#include "common/imageio_png.h"
-#include "common/imageio_tiff.h"
 #ifdef HAVE_LIBAVIF
-#include "common/imageio_avif.h"
 #endif
 #ifdef HAVE_LIBHEIF
-#include "common/imageio_heif.h"
 #endif
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"

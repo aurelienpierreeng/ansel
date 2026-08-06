@@ -69,7 +69,40 @@ DECL_PATTERNS = [
     re.compile(r'^[ \t]*extern[^;=]*?\b([A-Za-z_][A-Za-z0-9_]*)[ \t]*(?:\[|;)', re.M),
 ]
 
-CONDITIONAL_RE = re.compile(r'^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else)\b', re.M)
+# A file is "platform guarded" if it contains code THIS build does not compile, so a
+# clean local build cannot authorise removing an include that branch needs. Flagging
+# every `#if` (include guards included) would exclude the whole tree; flagging none let
+# three separate breakages reach CI during the darktable.h series.
+#
+# Two distinct cases, and conflating them makes the tool useless:
+#   * an OS/compiler conditional (_WIN32, __APPLE__ ...) -- its body is never compiled
+#     here, so the file is risky whether or not it has an #else;
+#   * a feature conditional (HAVE_OPENCL ...) -- with the feature ON locally the body IS
+#     compiled and is verified; only its #else/#elif is unverified.
+OS_MACROS = (r'_WIN32|WIN32|__WIN32__|__MINGW\w*|_MSC_VER|__APPLE__|__MACH__'
+             r'|GDK_WINDOWING_QUARTZ|__FreeBSD__|__NetBSD__|__OpenBSD__|__DragonFly__')
+OS_COND_RE = re.compile(r'^[ \t]*#[ \t]*(?:if|ifdef|ifndef|elif)\b[^\n]*\b(?:' + OS_MACROS + r')\b', re.M)
+COND_RE = re.compile(r'^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b([^\n]*)', re.M)
+FEATURE_RE = re.compile(r'\b(?:HAVE_[A-Z0-9_]+|__SSE2__|__ARM_NEON|_OPENMP)\b')
+
+
+def has_unbuilt_branch(text):
+    """True if the file contains a branch this build does not compile."""
+    if OS_COND_RE.search(text):
+        return True
+    stack = []
+    for m in COND_RE.finditer(text):
+        kind, rest = m.group(1), m.group(2)
+        if kind in ('if', 'ifdef', 'ifndef'):
+            stack.append(bool(FEATURE_RE.search(rest)))
+        elif kind == 'endif':
+            if stack:
+                stack.pop()
+        elif kind in ('else', 'elif'):
+            # the alternative branch of a feature conditional is not compiled here
+            if stack and stack[-1]:
+                return True
+    return False
 
 
 def read(path):
@@ -129,7 +162,7 @@ def analyse():
     for p in files:
         body = strip_comments_and_strings(text[p])
         used = set(IDENT_RE.findall(body))
-        guarded = bool(CONDITIONAL_RE.search(text[p]))
+        guarded = has_unbuilt_branch(text[p])
         cands = []
         for m in INCLUDE_RE.finditer(text[p]):
             inc = m.group(2)
@@ -229,6 +262,10 @@ def main():
             json.dump(results, fh, indent=1, sort_keys=True)
         print('wrote %s' % out)
 
+    if '--apply' in sys.argv:
+        prefix = sys.argv[sys.argv.index('--prefix') + 1] if '--prefix' in sys.argv else 'src/'
+        return apply_mode(results, prefix, '--include-guarded' not in sys.argv)
+
     if '--verify' in sys.argv:
         limit = 20
         if '--limit' in sys.argv:
@@ -268,6 +305,122 @@ def main():
     for p, v in worst:
         print('  %5d  %s' % (len(v), p))
     return 0
+
+
+
+
+# ---------------------------------------------------------------------------
+# --apply: remove candidates and prove the result still builds.
+#
+# Doing one compile per candidate would be ~760 builds. Instead:
+#   1. strip every candidate in the tranche at once, then run ONE full build;
+#   2. whatever that build implicates, restore -- file by file -- and retry;
+#   3. for each restored file, retry alone (all of its candidates at once), and
+#      only if THAT fails fall back to removing its candidates one at a time.
+# The happy path costs one build for a whole directory; the pathological path
+# degenerates to the naive per-include cost for the few files that need it.
+# ---------------------------------------------------------------------------
+
+def _strip(path, incs):
+    s = read(path)
+    for inc in incs:
+        s = s.replace('#include "%s"\n' % inc, '', 1)
+    with open(path, 'w', encoding='utf-8') as fh:
+        fh.write(s)
+
+
+def _build(targets=None):
+    cmd = ['ninja', '-C', BUILD, '-k', '0'] + (targets or [])
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    return p.returncode, (p.stdout + p.stderr)
+
+
+def _implicated(log, owned):
+    """Source files in `owned` that the build log blames, directly or through a
+    generated introspection_*.c that textually includes them."""
+    hit = set()
+    for m in re.finditer(r'([\w./\\-]+\.(?:c|cc|cpp|h|hpp))[:(]', log):
+        f = m.group(1).replace('\\', '/')
+        for o in owned:
+            if f.endswith('/' + os.path.basename(o)) or f.endswith(o):
+                hit.add(o)
+        base = os.path.basename(f)
+        if base.startswith('introspection_'):
+            stem = base[len('introspection_'):]
+            for o in owned:
+                if os.path.basename(o) == stem:
+                    hit.add(o)
+    return hit
+
+
+def apply_mode(results, prefix, skip_guarded):
+    targets = {p: v for p, v in results.items() if p.startswith(prefix)}
+    if skip_guarded:
+        targets = {p: v for p, v in targets.items()
+                   if not any(c['platform_guarded'] for c in v)}
+    if not targets:
+        print('nothing to do for prefix %r' % prefix)
+        return 0
+
+    originals = {p: read(p) for p in targets}
+    print('applying %d candidate removals across %d files (prefix %r)'
+          % (sum(len(v) for v in targets.values()), len(targets), prefix))
+    for p, cands in targets.items():
+        _strip(p, [c['include'] for c in cands])
+
+    removed = dict(targets)
+    for attempt in range(6):
+        rc, log = _build()
+        if rc == 0:
+            break
+        bad = _implicated(log, list(removed))
+        if not bad:
+            print('build fails but blames nothing we touched -- reverting all', file=sys.stderr)
+            for p, s in originals.items():
+                open(p, 'w', encoding='utf-8').write(s)
+            _build()
+            return 1
+        print('  round %d: restoring %d implicated file(s)' % (attempt + 1, len(bad)))
+        for p in bad:
+            open(p, 'w', encoding='utf-8').write(originals[p])
+            removed.pop(p, None)
+    else:
+        print('did not converge; reverting all', file=sys.stderr)
+        for p, s in originals.items():
+            open(p, 'w', encoding='utf-8').write(s)
+        _build()
+        return 1
+
+    # Retry each restored file on its own, then per-include.
+    salvaged = 0
+    for p in [f for f in targets if f not in removed]:
+        cands = [c['include'] for c in targets[p]]
+        _strip(p, cands)
+        rc, _ = _build()
+        if rc == 0:
+            removed[p] = targets[p]
+            salvaged += len(cands)
+            continue
+        open(p, 'w', encoding='utf-8').write(originals[p])
+        kept = []
+        for inc in cands:
+            _strip(p, [inc])
+            rc, _ = _build()
+            if rc == 0:
+                kept.append(inc)
+            else:
+                open(p, 'w', encoding='utf-8').write(originals[p])
+                for k in kept:
+                    _strip(p, [k])
+        if kept:
+            removed[p] = [{'include': i} for i in kept]
+            salvaged += len(kept)
+
+    rc, _ = _build()
+    total = sum(len(v) for v in removed.values())
+    print('\nREMOVED %d includes from %d files (%d salvaged by bisection); final build rc=%d'
+          % (total, len(removed), salvaged, rc))
+    return 0 if rc == 0 else 1
 
 
 if __name__ == '__main__':

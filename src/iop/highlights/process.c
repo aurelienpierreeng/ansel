@@ -26,7 +26,6 @@
 #include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/distance_transform.h"
-#include "common/gaussian.h"
 #include "common/solvers/sparse_cholesky_cl.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/blur.h"

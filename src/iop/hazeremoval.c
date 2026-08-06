@@ -62,12 +62,10 @@
 #include "common/module_versioning.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/guided_filter.h"
-#include "control/control.h"
 #include "control/signal.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "gui/gtk.h"
 
 #include "develop/tiling.h"
 #include "iop/iop_api.h"

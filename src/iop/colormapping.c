@@ -46,14 +46,11 @@
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
 #include "common/simd.h"
-#include "common/logging.h"
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
 #include "common/bilateral.h"
-#include "common/bilateralcl.h"
 #include "common/colorspaces.h"
 #include "common/imagebuf.h"
-#include "common/opencl.h"
 #include "common/points.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -62,7 +59,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 #include "dtgtk/drawingarea.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "iop/iop_api.h"

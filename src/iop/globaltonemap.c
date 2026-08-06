@@ -44,9 +44,7 @@
 #include "common/module_versioning.h"
 #include "common/target_clones.h"
 #include "common/bilateral.h"
-#include "common/bilateralcl.h"
 #include "common/math.h"
-#include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -54,7 +52,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include <assert.h>
 #include <stdlib.h>

@@ -54,12 +54,10 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/imagebuf.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/develop.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "iop/iop_api.h"

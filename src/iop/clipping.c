@@ -77,14 +77,11 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/debug.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
 #include "common/math.h"
-#include "common/opencl.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -95,7 +92,6 @@
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/guides.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 

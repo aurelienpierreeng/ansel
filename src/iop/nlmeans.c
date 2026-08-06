@@ -52,13 +52,11 @@
 #include "bauhaus/bauhaus.h"
 #include "common/nlmeans_core.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include <gtk/gtk.h>
 #include <stdlib.h>

@@ -52,7 +52,6 @@
 #include "common/math.h"
 #include "common/opencl.h"
 #include "common/tea.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

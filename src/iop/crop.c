@@ -37,7 +37,6 @@
 #include "common/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/debug.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
@@ -48,12 +47,10 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/expander.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/guides.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <assert.h>

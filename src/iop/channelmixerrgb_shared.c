@@ -22,11 +22,8 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/chromatic_adaptation.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/illuminants.h"
 #include "common/matrices.h"
-#include "develop/imageop_math.h"
-#include "common/solvers/gaussian_elimination.h"
 #include "iop/channelmixerrgb_shared.h"
 
 #include <float.h>

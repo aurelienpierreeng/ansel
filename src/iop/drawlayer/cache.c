@@ -19,7 +19,6 @@
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/mem_alloc.h"
-#include "develop/pixelpipe_cache_alloc.h"
 #include "iop/drawlayer/cache.h"
 
 #include "develop/imageop_math.h"

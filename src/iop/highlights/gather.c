@@ -58,7 +58,6 @@
 #include "common/openmp.h"
 #include "common/simd.h"
 #include "common/target_clones.h"
-#include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/gather.h"
 #include <math.h>

@@ -79,7 +79,6 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"

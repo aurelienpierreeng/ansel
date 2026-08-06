@@ -52,7 +52,6 @@
 #include "common/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/image.h"
 #include "gui/gtk.h"
 #include "common/bilateral.h"
 #include "common/bilateralcl.h"
@@ -69,7 +68,6 @@
 #include "develop/tiling.h"
 #include "gui/actions/menu.h"
 #include "iop/iop_api.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/color_picker_proxy.h"
 #include <stdlib.h>

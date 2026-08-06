@@ -63,10 +63,7 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/debug.h"
 #include "common/math.h"
-#include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -76,9 +73,6 @@
 #include "common/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/button.h"
-#include "dtgtk/gradientslider.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

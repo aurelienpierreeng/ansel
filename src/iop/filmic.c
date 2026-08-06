@@ -38,7 +38,6 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -48,11 +47,8 @@
 #include "common/module_versioning.h"
 #include "common/math.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop_math.h"
-#include "dtgtk/button.h"
-#include "dtgtk/drawingarea.h"
 #include "dtgtk/expander.h"
 #include "dtgtk/paint.h"
 

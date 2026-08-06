@@ -50,7 +50,6 @@
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/debug.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "control/control.h"
@@ -60,7 +59,6 @@
 #include "develop/tiling.h"
 
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <assert.h>
