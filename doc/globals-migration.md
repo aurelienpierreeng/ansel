@@ -73,6 +73,17 @@ Done, on `refactor/strip-darktable-h`:
 | `collection` | 0 | idem; `libs/tools/filter.c` still reads `->params`/`->tagid` directly — wrap in named API later |
 | `db` | 0 | two accessors: `dt_database_get_sqlite3_global()` (353 sites) + `dt_database_get_global()` (56) |
 | `signals` | 0 | `dt_control_signal_get_global()` — **end state**, not interim (see below) |
+| `lib`, `imageio`, `l10n`, `dbus`, `pwstorage`, `points`, `noiseprofile_parser` | 0 | `dt_*_get_global()` — end state (process-wide singletons). Fixed a latent break: `common/points.h`'s inlines dereferenced the global without including darktable.h |
+| `opencl`, `color_profiles` | 0 **outside their own TU** | `dt_opencl_get_global()`, `dt_colorspaces_get_global()`; external `->inited` reads now use `dt_opencl_is_inited()`. `opencl.c`/`colorspaces.c` keep direct access — see below |
+
+Member references tree-wide (excluding `darktable.c` and include lines): **~5,400 → ~3,100**.
+
+**Scope rule applied to subsystem-owned singletons**: the harm this migration targets is
+*distant* modules reaching into application state. A subsystem reading its own singleton
+(`opencl.c` → `darktable.opencl`, `colorspaces.c` → `darktable.color_profiles`) is a smaller,
+different problem, and its correct fix is **relocating ownership** into the subsystem (a
+file-static set at init by the orchestrator), not an accessor indirection. Those owner-internal
+references are therefore deliberately left, and the relocation is tracked as follow-up.
 
 **Refinement learned while migrating**: not every member should end up threaded through
 arguments. Three categories have emerged, and classifying a member *before* touching it
