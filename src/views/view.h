@@ -51,8 +51,6 @@
 #include "common/atomic.h"
 
 #include "common/history.h"
-#include "common/image.h"
-#include "common/dtpthread.h"
 #ifdef HAVE_PRINT
 #include "common/cups_print.h"
 #include "common/printing.h"

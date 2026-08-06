@@ -27,7 +27,6 @@
 #ifndef DT_COMMON_ILLUMINANTS_H
 #define DT_COMMON_ILLUMINANTS_H
 
-#include "common/chromatic_adaptation.h"
 #include "common/image.h"
 
 

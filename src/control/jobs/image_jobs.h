@@ -26,7 +26,6 @@
 #ifndef DT_CONTROL_JOBS_IMAGE_JOBS_H
 #define DT_CONTROL_JOBS_IMAGE_JOBS_H
 
-#include "common/image.h"
 #include "common/mipmap_cache.h"
 #include "control/jobs.h"
 #include <inttypes.h>

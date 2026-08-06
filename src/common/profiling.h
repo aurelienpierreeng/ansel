@@ -24,7 +24,6 @@
 #ifndef DT_COMMON_PROFILING_H
 #define DT_COMMON_PROFILING_H
 
-#include "gui/gtk.h"
 
 
 #ifdef USE_DARKTABLE_PROFILING

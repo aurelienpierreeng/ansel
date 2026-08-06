@@ -35,7 +35,6 @@
 #ifndef DT_COMMON_PWSTORAGE_BACKEND_KWALLET_H
 #define DT_COMMON_PWSTORAGE_BACKEND_KWALLET_H
 
-#include "pwstorage.h"
 #include <gio/gio.h>
 #include <glib.h>
 

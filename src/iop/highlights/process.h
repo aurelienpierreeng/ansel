@@ -23,9 +23,7 @@
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/opencl.h"
 #include "develop/imageop.h"
-#include "iop/highlights/common.h"
 
 // Single CPU driver for the harmonic-transposition reconstruction, for Bayer, X-Trans and
 // already-demosaiced (non-raw / sRAW) input alike. The reconstruction middle is CFA-agnostic (it works

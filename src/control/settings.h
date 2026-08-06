@@ -30,7 +30,6 @@
 #ifndef DT_CONTROL_SETTINGS_H
 #define DT_CONTROL_SETTINGS_H
 
-#include "common/dtpthread.h"
 #include "control/signal.h"
 
 #include <inttypes.h>

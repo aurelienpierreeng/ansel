@@ -37,9 +37,7 @@
 #include "common/imagebuf.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
 #include "control/control.h" // dt_control_log (OOM error toast) — self-contained include order
-#include "develop/imageop_math.h"
 
 
 /* DOCUMENTATION

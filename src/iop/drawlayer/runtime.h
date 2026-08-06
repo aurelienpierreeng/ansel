@@ -2,12 +2,10 @@
 #define DT_IOP_DRAWLAYER_RUNTIME_H
 
 #include "iop/drawlayer/coordinates.h"
-#include "common/dtpthread.h"
 #include "iop/drawlayer/widgets.h"
 #include "iop/drawlayer/worker.h"
 
 #ifdef HAVE_OPENCL
-#include "common/opencl.h"
 #endif
 
 #include <stdint.h>

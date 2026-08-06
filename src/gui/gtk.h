@@ -54,7 +54,6 @@
 #ifndef DT_GUI_GTK_H
 #define DT_GUI_GTK_H
 
-#include "common/dtpthread.h"
 #include "common/glib_utils.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
