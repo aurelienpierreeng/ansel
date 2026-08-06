@@ -222,7 +222,7 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
   if(self->off)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   _turn_selregion_picker_off(self);
@@ -248,7 +248,7 @@ static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_io
   if(self->off)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -283,7 +283,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 
     memcpy(p, &g->params, sizeof(dt_iop_basicadj_params_t));
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
     dt_iop_gui_enter_critical_section(self);
     g->call_auto_exposure = 0;
@@ -339,7 +339,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(!IS_NULL_PTR(g) && g->draw_selected_region && g->button_down && self->enabled)
   {
     float point[2] = { (float)x, (float)y };
-    dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
+    dt_dev_coordinates_widget_to_image_norm(self->dev, point, 1);
     dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
 
     g->posx_to = point[0];
@@ -397,7 +397,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     else if(which == 1)
     {
       float point[2] = { (float)x, (float)y };
-      dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
+      dt_dev_coordinates_widget_to_image_norm(self->dev, point, 1);
       dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
 
       g->posx_from = g->posx_to = point[0];
@@ -420,7 +420,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(!g->draw_selected_region || !g->button_down) return;
   if(g->posx_from == g->posx_to && g->posy_from == g->posy_to) return;
 
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = self->dev;
   //const float wd = dev->roi.preview_width;
   //const float ht = dev->roi.preview_height;
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
@@ -473,7 +473,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_bauhaus_slider_set(g->sl_middle_grey, p->middle_grey);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static inline float get_gamma(const float x, const float gamma)

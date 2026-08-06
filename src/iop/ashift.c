@@ -2827,7 +2827,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
                      p->last_quad_lines[2], p->last_quad_lines[3],
                      p->last_quad_lines[4], p->last_quad_lines[5],
                      p->last_quad_lines[6], p->last_quad_lines[7] };
-    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       if(g->lines)
@@ -2866,7 +2866,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
     for(int i = 0; i < p->last_drawn_lines_count * 4; i++)
       pts[i] = p->last_drawn_lines[i];
 
-    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, p->last_drawn_lines_count * 2))
     {
       if(g->lines)
@@ -3040,7 +3040,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
     const float wd = self->dev->roi.processed_width;
     const float ht = self->dev->roi.processed_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
-    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
     {
       g->current_structure_method = ASHIFT_METHOD_QUAD;
@@ -3184,7 +3184,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3324,7 +3324,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     const float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3865,7 +3865,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we draw the cropping area; use the input ROI from the virtual pipe piece
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece))
   {
     cairo_restore(cr);
@@ -3883,7 +3883,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { ixo + iwd,  iyo       } };
 
   // convert coordinates of corners to coordinates of this module's output
-  if(!call_distort_transform(darktable.develop->virtual_pipe, self, (float *)V, 4))
+  if(!call_distort_transform(self->dev->virtual_pipe, self, (float *)V, 4))
     return;
 
   // get x/y-offset as well as width and height of output buffer
@@ -3934,10 +3934,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { xmin + p->cr * owd, ymin + p->ct * oht } };
 
   // convert clipping corners to final output image
-  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)C, 4))
     return;
-  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
     return;
 
@@ -3945,7 +3945,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_set_dash(cr, &dashes, 0, 0);
   
   // Resize the coordinates of the rectangles V and C according to the current zoom.
-  const float scale_factor = dt_dev_get_natural_scale(darktable.develop);
+  const float scale_factor = dt_dev_get_natural_scale(self->dev);
   for(size_t i = 0; i < 4; i++)
   {
     V[i][0] *= scale_factor;
@@ -4190,9 +4190,9 @@ static void _update_lines_count(const dt_iop_ashift_line_t *lines, const int lin
 }
 
 // determine if we are near a drawn line extrema
-static int _draw_near_point(const float x, const float y, const float *points, const int limit)
+static int _draw_near_point(dt_develop_t *dev, const float x, const float y, const float *points, const int limit)
 {
-  const float zoom_scale = dt_dev_get_overlay_scale(darktable.develop);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
   const float delta = DT_PIXEL_APPLY_DPI(6) / (zoom_scale > 0.f ? zoom_scale : 1.f);
 
   for(int i = 0; i < limit; i++)
@@ -4223,12 +4223,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   gboolean handled = FALSE;
 
-  const float wd = darktable.develop->roi.preview_width;
-  const float ht = darktable.develop->roi.preview_height;
+  const float wd = self->dev->roi.preview_width;
+  const float ht = self->dev->roi.preview_height;
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzxpy[2] = { (float)x, (float)y };
-  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
   float pzx = pzxpy[0];
   float pzy = pzxpy[1];
 
@@ -4254,10 +4254,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       return FALSE;
     }
 
-    const float pd_w = darktable.develop->roi.processed_width;
-    const float pd_h = darktable.develop->roi.processed_height;
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       // first we move the point
@@ -4323,7 +4323,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       const float dx = (pts[0] - g->draw_pointmove_x);
@@ -4398,7 +4398,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
          || g->current_structure_method == ASHIFT_METHOD_LINES))
   {
     const int limit = (g->current_structure_method == ASHIFT_METHOD_LINES) ? g->lines_count * 2 : 4;
-    g->draw_near_point = _draw_near_point(pzx * wd, pzy * ht, g->draw_points, limit);
+    g->draw_near_point = _draw_near_point(self->dev, pzx * wd, pzy * ht, g->draw_points, limit);
   }
 
   // if in rectangle selecting mode adjust "near"-ness of lines according to
@@ -4559,10 +4559,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       if(g->points_idx[n].near)
       {
-        const float pd_w = darktable.develop->roi.processed_width;
-        const float pd_h = darktable.develop->roi.processed_height;
+        const float pd_w = self->dev->roi.processed_width;
+        const float pd_h = self->dev->roi.processed_height;
         float pts[2] = { pzx * pd_w, pzy * pd_h };
-        dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+        dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                           DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
         g->draw_line_move = n;
         g->draw_pointmove_x = pts[0];
@@ -4662,7 +4662,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
@@ -4727,13 +4727,13 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     g->straightening = FALSE;
     // adjust the line with possible current angle and flip on this module
     float pzxpy[2] = { (float)x, (float)y };
-    dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
+    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
     const float pzx = pzxpy[0];
     const float pzy = pzxpy[1];
-    const float pd_w = darktable.develop->roi.processed_width;
-    const float pd_h = darktable.develop->roi.processed_height;
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
     float pts[4] = { pzx * pd_w, pzy * pd_h, g->lastx * pd_w, g->lasty * pd_h };
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe,
                                       self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
 
@@ -5409,7 +5409,7 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   memcpy(p, &g->new_params, sizeof(dt_iop_ashift_params_t));
 
   // Commit history and refresh view
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_dev_get_thumbnail_size(self->dev);
   dt_dev_pixelpipe_update_zoom_main(self->dev);
   dt_dev_pixelpipe_update_zoom_preview(self->dev);

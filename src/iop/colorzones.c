@@ -863,7 +863,7 @@ static void _draw_color_picker(dt_iop_module_t *self, cairo_t *cr, dt_iop_colorz
        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(c->colorpicker_set_values)) ))
   {
     // the global live samples ...
-    GSList *samples = darktable.develop->color_picker.samples;
+    GSList *samples = self->dev->color_picker.samples;
     if(samples)
     {
       const dt_iop_order_iccprofile_info_t *const display_profile
@@ -1658,7 +1658,7 @@ static void _delete_node(dt_iop_module_t *self, dt_iop_colorzones_node_t *curve,
 
   dt_iop_color_picker_reset(self, TRUE);
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static inline int _add_node(dt_iop_colorzones_node_t *curve, int *nodes, float x, float y)
@@ -1790,7 +1790,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
       {
         dt_iop_colorzones_get_params(p, c, c->channel, c->mouse_x, c->mouse_y, c->mouse_radius);
         dt_iop_color_picker_reset(self, TRUE);
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       }
     }
     else if(event->y > height)
@@ -1827,7 +1827,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
         c->selected = _add_node(curve, &p->curve_num_nodes[ch], linx, liny);
 
         dt_iop_color_picker_reset(self, TRUE);
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       }
     }
     else
@@ -1927,7 +1927,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
         }
 
         dt_iop_color_picker_reset(self, TRUE);
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
         gtk_widget_queue_draw(self->widget);
       }
 
@@ -1945,7 +1945,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       dt_bauhaus_combobox_set(c->interpolator, p->curve_type[ch]);
 
       dt_iop_color_picker_reset(self, TRUE);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       gtk_widget_queue_draw(self->widget);
 
       return TRUE;
@@ -1971,7 +1971,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
       dt_iop_color_picker_reset(self, TRUE);
       gtk_widget_queue_draw(self->widget);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       return TRUE;
     }
 
@@ -2112,7 +2112,7 @@ static void _interpolator_callback(GtkWidget *widget, dt_iop_module_t *self)
     p->curve_type[g->channel] = MONOTONE_HERMITE;
 
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
@@ -2227,7 +2227,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     x += feather;
     if(x > 0.f && x < 1.f) _add_node(curve, &p->curve_num_nodes[ch_curve], x, .5f);
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   dt_control_queue_redraw_widget(self->widget);

@@ -2899,7 +2899,7 @@ static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gp
   gui_changed(self, NULL, NULL);
 
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=commit_profile\n");
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)
@@ -2941,7 +2941,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   gui_changed(self, NULL, NULL);
 
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=ui_pipe_finished\n");
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void _preview_pipe_finished_callback(gpointer instance, gpointer user_data)
@@ -3689,7 +3689,7 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
 
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=illum_xy_callback slider=%p\n",
            (void *)slider);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -4082,7 +4082,7 @@ static void _channelmixerrgb_mixer_mode_callback(GtkWidget *combo, gpointer user
     if(changed)
     {
       dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=mixer_mode_primaries\n");
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
 }
@@ -4129,7 +4129,7 @@ static void _channelmixerrgb_simple_slider_callback(GtkWidget *slider, gpointer 
   gui_changed(self, slider, NULL);
 
   dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=simple_slider slider=%p\n", (void *)slider);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void _channelmixerrgb_primaries_slider_callback(GtkWidget *slider, gpointer user_data)
@@ -4184,7 +4184,7 @@ static void _channelmixerrgb_primaries_slider_callback(GtkWidget *slider, gpoint
   gui_changed(self, slider, NULL);
 
   dt_print(DT_DEBUG_DEV, "[channelmixerrgb] history commit source=primaries_slider slider=%p\n", (void *)slider);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 

@@ -956,7 +956,7 @@ static void target_L_callback(GtkWidget *slider, gpointer user_data)
     p->target_L[g->patch] = dt_bauhaus_slider_get(slider);
   else
     p->target_L[g->patch] = p->source_L[g->patch] + dt_bauhaus_slider_get(slider);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_a_callback(GtkWidget *slider, gpointer user_data)
@@ -988,7 +988,7 @@ static void target_a_callback(GtkWidget *slider, gpointer user_data)
     dt_bauhaus_slider_set(g->scale_C, Cout-Cin);
     dt_gui_freeze_end();
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_b_callback(GtkWidget *slider, gpointer user_data)
@@ -1020,7 +1020,7 @@ static void target_b_callback(GtkWidget *slider, gpointer user_data)
     dt_bauhaus_slider_set(g->scale_C, Cout-Cin);
     dt_gui_freeze_end();
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_C_callback(GtkWidget *slider, gpointer user_data)
@@ -1056,7 +1056,7 @@ static void target_C_callback(GtkWidget *slider, gpointer user_data)
     dt_bauhaus_slider_set(g->scale_b, p->target_b[g->patch] - p->source_b[g->patch]);
     dt_gui_freeze_end();
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_callback(GtkWidget *combo, gpointer user_data)
@@ -1225,7 +1225,7 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
     p->target_L[patch] = p->source_L[patch];
     p->target_a[patch] = p->source_a[patch];
     p->target_b[patch] = p->source_b[patch];
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_gui_freeze_begin();
     _colorchecker_update_sliders(self);
     dt_gui_freeze_end();
@@ -1243,7 +1243,7 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
     memmove(p->source_a+patch, p->source_a+patch+1, sizeof(float)*(p->num_patches-1-patch));
     memmove(p->source_b+patch, p->source_b+patch+1, sizeof(float)*(p->num_patches-1-patch));
     p->num_patches--;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_gui_freeze_begin();
     _colorchecker_rebuild_patch_list(self);
     _colorchecker_update_sliders(self);
@@ -1280,7 +1280,7 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
       p->target_L[patch] = p->source_L[patch] = self->picked_color[0];
       p->target_a[patch] = p->source_a[patch] = self->picked_color[1];
       p->target_b[patch] = p->source_b[patch] = self->picked_color[2];
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
       dt_gui_freeze_begin();
       _colorchecker_rebuild_patch_list(self);
