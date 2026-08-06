@@ -58,6 +58,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/colorspaces_inline_conversions.h"
 #endif
 #include <assert.h>
 #include <lcms2.h>

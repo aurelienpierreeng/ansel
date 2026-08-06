@@ -128,9 +128,19 @@ def strip_comments_and_strings(text):
     return text
 
 
+ATTRIBUTE_RE = re.compile(r'__attribute__\s*\(\((?:[^()]|\([^()]*\))*\)\)')
+
+
 def declared_names(text):
     names = set()
     body = strip_comments_and_strings(text)
+    # Drop __attribute__((...)) before looking for declarations: in
+    #   static inline __attribute__((always_inline)) void dt_Lab_to_XYZ(...)
+    # the first identifier followed by "(" is __attribute__, so every attributed inline
+    # function was invisible. That made common/colorspaces_inline_conversions.h look as
+    # though it declared nothing, and its consumers were wrongly told they did not need
+    # it -- which broke three files in the CI nofeatures configuration.
+    body = ATTRIBUTE_RE.sub(' ', body)
     for pat in DECL_PATTERNS:
         for m in pat.finditer(body):
             names.add(m.group(1))

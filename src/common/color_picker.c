@@ -28,6 +28,7 @@
 */
 
 #include "common/color_picker.h"
+#include "common/colorspaces_inline_conversions.h"
 #include "common/bspline.h"
 #include "common/macros.h"
 #include "common/openmp.h"

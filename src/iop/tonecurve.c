@@ -66,6 +66,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "gui/gdkkeys.h"
+#include "common/colorspaces_inline_conversions.h"
 #include "config.h"
 #endif
 #include <assert.h>

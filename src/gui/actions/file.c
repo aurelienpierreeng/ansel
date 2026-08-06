@@ -27,6 +27,9 @@
 #include "control/signal.h"
 #include "gui/gtk.h"
 #include "gui/actions/menu.h"
+#ifdef __APPLE__
+#include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
+#endif
 #include "common/collection.h"
 #include "common/image.h"
 #include "common/selection.h"
