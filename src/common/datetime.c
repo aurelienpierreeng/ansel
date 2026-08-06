@@ -20,27 +20,31 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "common/datetime.h"
 
 #define DT_DATETIME_ORIGIN "0001-01-01 00:00:00.000"
 #define DT_DATETIME_EPOCH "1970-01-01 00:00:00.000"
 #define DT_DATETIME_EXIF_FORMAT "%Y:%m:%d %H:%M:%S"
 
+/* Owned here rather than in the application struct: datetime.c is the only file that
+ * ever touches them, and every reader already goes through the two accessors below. */
+static GTimeZone *_utc_tz = NULL;
+static GDateTime *_origin_gdt = NULL;
+
 void dt_datetime_init()
 {
-  darktable.utc_tz =  g_time_zone_new_utc();
-  darktable.origin_gdt = g_date_time_new_from_iso8601(DT_DATETIME_ORIGIN, darktable.utc_tz);
+  _utc_tz = g_time_zone_new_utc();
+  _origin_gdt = g_date_time_new_from_iso8601(DT_DATETIME_ORIGIN, _utc_tz);
 }
 
 GTimeZone *dt_datetime_utc_tz(void)
 {
-  return darktable.utc_tz;
+  return _utc_tz;
 }
 
 GDateTime *dt_datetime_origin(void)
 {
-  return darktable.origin_gdt;
+  return _origin_gdt;
 }
 
 gboolean _datetime_gdatetime_to_numbers(dt_datetime_t *dt, GDateTime *gdt)

@@ -39,7 +39,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/logging.h"
@@ -60,6 +59,7 @@
 #include "gui/draw.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "views/view.h"
 
 #include <math.h>
 
@@ -233,7 +233,7 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
   if(IS_NULL_PTR(d)) return;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
 
   if(d->selected >= 1 && d->selected <= d->size)
   {
@@ -329,9 +329,9 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
       else if(d->hover_line) dt_control_queue_cursor_by_name(d->vertical ? "col-resize" : "row-resize");
       else
       {
-        dt_view_t *view = darktable.view_manager->proxy.darkroom.view;
-        if(!IS_NULL_PTR(view) && !IS_NULL_PTR(darktable.view_manager->proxy.darkroom.set_default_cursor))
-          darktable.view_manager->proxy.darkroom.set_default_cursor(view, pointerx, pointery);
+        dt_view_t *view = dt_view_manager_get_global()->proxy.darkroom.view;
+        if(!IS_NULL_PTR(view) && !IS_NULL_PTR(dt_view_manager_get_global()->proxy.darkroom.set_default_cursor))
+          dt_view_manager_get_global()->proxy.darkroom.set_default_cursor(view, pointerx, pointery);
         else
           dt_control_queue_cursor_by_name("left_ptr");
       }
@@ -342,7 +342,7 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 int button_released(struct dt_lib_module_t *self, double x, double y, int which, uint32_t state)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
-  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(dt_dev_get_global());
 
   if(!visible_picker && d->selected > 0 && which == 1)
   {
@@ -367,7 +367,7 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
 
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(dt_dev_get_global());
   
   if(!visible_picker && d->selected > 0)
   {
@@ -421,7 +421,7 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(dt_dev_get_global());
 
   if(!visible_picker && d->selected > 0)
   {
@@ -579,7 +579,7 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   // this click, instead of a rotated slot 0 stuck showing a label for a snapshot that was never
   // created.
   dt_lib_snapshot_t scratch = { 0 };
-  if(_lib_snapshot_capture_state(&scratch, darktable.develop))
+  if(_lib_snapshot_capture_state(&scratch, dt_dev_get_global()))
   {
     _lib_snapshot_clear_state(&scratch);
     return;
@@ -621,10 +621,10 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   char label[64];
   const gchar *name = _("original");
   gchar *dynamic_name = NULL;
-  if(dt_dev_get_history_end_ext(darktable.develop) > 0)
+  if(dt_dev_get_history_end_ext(dt_dev_get_global()) > 0)
   {
-    dt_dev_history_item_t *history_item = g_list_nth_data(darktable.develop->history,
-                                                          dt_dev_get_history_end_ext(darktable.develop) - 1);
+    dt_dev_history_item_t *history_item = g_list_nth_data(dt_dev_get_global()->history,
+                                                          dt_dev_get_history_end_ext(dt_dev_get_global()) - 1);
     if(!IS_NULL_PTR(history_item) && !IS_NULL_PTR(history_item->module))
     {
       dynamic_name = dt_history_item_get_name(history_item->module);
@@ -633,7 +633,7 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
     else
       name = _("unknown");
   }
-  g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end_ext(darktable.develop));
+  g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end_ext(dt_dev_get_global()));
   if(!IS_NULL_PTR(dynamic_name)) dt_free(dynamic_name);
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[0].button))), label);
 

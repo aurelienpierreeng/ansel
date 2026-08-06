@@ -57,7 +57,6 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include <assert.h>
 #include <stddef.h>
 #include <glib/gprintf.h>
@@ -100,7 +99,7 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
   GList *res = NULL;
   dt_iop_module_t *module;
   dt_iop_module_so_t *module_so;
-  GList *iop = g_list_first(darktable.iop);
+  GList *iop = g_list_first(dt_iop_get_modules_so());
   while(iop)
   {
     module_so = (dt_iop_module_so_t *)iop->data;
@@ -947,7 +946,7 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 
   const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
 
-  if(first_run && dev == darktable.develop)
+  if(first_run && dev == dt_dev_get_global())
   {
     // Resync our private copy of image image with DB,
     // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag.
@@ -963,7 +962,7 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  if(first_run && dev == darktable.develop)
+  if(first_run && dev == dt_dev_get_global())
   {
     dt_dev_append_changed_tag(imgid);
     dt_dev_history_notify_change(dev, imgid);
@@ -1677,7 +1676,7 @@ void dt_dev_signal_modules_moved(dt_develop_t *dev)
 
 void dt_dev_undo_start_record(dt_develop_t *dev)
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
 
   /* record current history state : before change (needed for undo) */
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
@@ -1688,7 +1687,7 @@ void dt_dev_undo_start_record(dt_develop_t *dev)
 
 void dt_dev_undo_end_record(dt_develop_t *dev)
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
 
   /* record current history state : after change (needed for undo) */
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)

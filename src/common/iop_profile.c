@@ -41,7 +41,6 @@
 #endif
 
 #include "common/colorspaces.h"
-#include "common/darktable.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/iop_profile.h"
 #include "common/debug.h"
@@ -918,7 +917,7 @@ void dt_ioppr_get_work_profile_type(struct dt_develop_t *dev,
   // use introspection to get the params values
   dt_iop_module_so_t *colorin_so = NULL;
   dt_iop_module_t *colorin = NULL;
-  for(const GList *modules = darktable.iop; modules; modules = g_list_next(modules))
+  for(const GList *modules = dt_iop_get_modules_so(); modules; modules = g_list_next(modules))
   {
     dt_iop_module_so_t *module_so = (dt_iop_module_so_t *)(modules->data);
     if(!strcmp(module_so->op, "colorin"))
@@ -965,7 +964,7 @@ void dt_ioppr_get_export_profile_type(struct dt_develop_t *dev,
   // use introspection to get the params values
   dt_iop_module_so_t *colorout_so = NULL;
   dt_iop_module_t *colorout = NULL;
-  for(const GList *modules = g_list_last(darktable.iop); modules; modules = g_list_previous(modules))
+  for(const GList *modules = g_list_last(dt_iop_get_modules_so()); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_so_t *module_so = (dt_iop_module_so_t *)(modules->data);
     if(!strcmp(module_so->op, "colorout"))

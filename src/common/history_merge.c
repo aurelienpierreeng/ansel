@@ -81,7 +81,6 @@
 #include "common/history_merge.h"
 #include "common/history_merge_gui.h"
 
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/iop_order.h"
 #include "common/topological_sort.h"
@@ -703,7 +702,7 @@ static int _iop_rules(GHashTable *keep, GList **out_nodes)
    */
   GList *iop_rules = NULL;
   // Walk the global rule list; each entry yields two nodes (prev,next) and one predecessor edge.
-  for(const GList *rules = g_list_first(darktable.iop_order_rules); rules; rules = g_list_next(rules))
+  for(const GList *rules = g_list_first(dt_ioppr_get_iop_order_rules_global()); rules; rules = g_list_next(rules))
   {
     const dt_iop_order_rule_t *const restrict rule = (dt_iop_order_rule_t *)rules->data;
 
@@ -847,7 +846,7 @@ static int _hm_topo_build_id_info_table(_hm_topo_merge_ctx_t *ctx, dt_develop_t 
 
   // Also register fence rules (base instances only, multi_name="") so they can participate in constraints.
   // These don't have module pointers; they participate only as ordering constraints.
-  for(const GList *rules = g_list_first(darktable.iop_order_rules); rules; rules = g_list_next(rules))
+  for(const GList *rules = g_list_first(dt_ioppr_get_iop_order_rules_global()); rules; rules = g_list_next(rules))
   {
     const dt_iop_order_rule_t *rule = (dt_iop_order_rule_t *)rules->data;
     _hm_id_info_upsert(ctx->id_ht, rule->op_next, "", HM_ID_FROM_RULE, NULL, NULL, NULL);

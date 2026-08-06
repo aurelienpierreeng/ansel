@@ -37,7 +37,6 @@
 
 #include "common/collection.h"
 #include "control/jobs/control_jobs.h"
-#include "common/darktable.h"
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/macros.h"
@@ -111,7 +110,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
   const int32_t imgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "imgid"));
 
-  if(imgid == darktable.develop->image_storage.id)
+  if(imgid == dt_dev_get_global()->image_storage.id)
   {
     // we find the duplicate image to show now
     for(GList *l = d->thumbs; l; l = g_list_next(l))
@@ -142,7 +141,7 @@ static gboolean _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventB
 {
   if(event->button == 1 && event->type == GDK_BUTTON_PRESS)
   {
-    dt_develop_t *dev = darktable.develop;
+    dt_develop_t *dev = dt_dev_get_global();
     if(IS_NULL_PTR(dev)) return FALSE;
 
     dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
@@ -196,7 +195,7 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
   if(IS_NULL_PTR(d) || d->imgid <= 0 || d->preview_cached_imgid != d->imgid) return;
 
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   float image_box[4] = { 0.0f };
   dt_dev_get_image_box_in_widget(dev, width, height, image_box);
   if(image_box[2] <= 0.0f || image_box[3] <= 0.0f) return;
@@ -246,7 +245,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   dt_gui_container_destroy_children(GTK_CONTAINER(d->duplicate_box));
   // retrieve all the versions of the image
   sqlite3_stmt *stmt;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
 
   int count = 0;
 

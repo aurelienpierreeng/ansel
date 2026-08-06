@@ -37,7 +37,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "control/conf.h"
 #include "common/mipmap_cache.h"
 #include <glib.h>
@@ -68,6 +67,7 @@
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "views/view.h"
 
 #include <glib/gstdio.h>
 
@@ -828,7 +828,7 @@ static void _set_printer(const dt_lib_module_t *self, const char *printer_name)
     dt_printing_setup_page(&ps->imgs, width, height, ps->prt.printer.resolution);
   }
 
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 }
 
 static void
@@ -860,7 +860,7 @@ _paper_changed(GtkWidget *combo, const dt_lib_module_t *self)
   dt_printing_setup_page(&ps->imgs, width, height, ps->prt.printer.resolution);
 
   dt_conf_set_string("plugins/print/print/paper", paper_name);
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   _update_slider(ps);
 }
@@ -880,7 +880,7 @@ _media_changed(GtkWidget *combo, const dt_lib_module_t *self)
     memcpy(&ps->prt.medium, medium, sizeof(dt_medium_info_t));
 
   dt_conf_set_string("plugins/print/print/medium", medium_name);
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   _update_slider(ps);
 }
@@ -888,7 +888,7 @@ _media_changed(GtkWidget *combo, const dt_lib_module_t *self)
 static void
 _update_slider(dt_lib_print_settings_t *ps)
 {
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   // if widget are created, let's display the current image size
 
@@ -1273,7 +1273,7 @@ static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
   if(buf.size != DT_MIPMAP_NONE)
   {
     ps->prt.page.landscape = (buf.width > buf.height);
-    dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+    dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
     dt_bauhaus_combobox_set(ps->orientation, ps->prt.page.landscape == TRUE ? 1 : 0);
   }
 
@@ -1370,7 +1370,7 @@ void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct d
 
   // Re-publish the settings payload on each entry so the print view never
   // keeps a stale or not-yet-initialized images box between switches.
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   // user activated a new image via the filmstrip or user entered view
   // mode which activates an image: get image_id and orientation
@@ -2144,7 +2144,7 @@ void gui_init(dt_lib_module_t *self)
   d->has_changed = FALSE;
 
   dt_init_print_info(&d->prt);
-  dt_view_print_settings(darktable.view_manager, &d->prt, &d->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &d->prt, &d->imgs);
 
   d->profiles = _get_profiles();
 

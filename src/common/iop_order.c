@@ -37,13 +37,13 @@
 #include "config.h"
 #endif
 
-#include "common/darktable.h"
 #include "common/iop_order.h"
 #include "common/styles.h"
 #include "common/debug.h"
 #include "common/deprecations.h"
 #include "common/image.h"
 #include "common/image_cache.h"
+#include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 
@@ -1427,16 +1427,16 @@ static void dt_ioppr_migrate_iop_order(struct dt_develop_t *dev, const int32_t i
 void dt_ioppr_change_iop_order(struct dt_develop_t *dev, const int32_t imgid, GList *new_iop_list)
 {
   GList *iop_list = dt_ioppr_iop_order_copy_deep(new_iop_list);
-  GList *mi = dt_ioppr_extract_multi_instances_list(darktable.develop->iop_order_list);
+  GList *mi = dt_ioppr_extract_multi_instances_list(dt_dev_get_global()->iop_order_list);
 
   if(mi) iop_list = dt_ioppr_merge_multi_instance_iop_order_list(iop_list, mi);
 
-  dt_dev_write_history(darktable.develop, FALSE);
+  dt_dev_write_history(dt_dev_get_global(), FALSE);
   dt_ioppr_write_iop_order(DT_IOP_ORDER_CUSTOM, iop_list, imgid);
   g_list_free_full(iop_list, dt_free_gpointer);
   iop_list = NULL;
 
-  dt_ioppr_migrate_iop_order(darktable.develop, imgid);
+  dt_ioppr_migrate_iop_order(dt_dev_get_global(), imgid);
 }
 
 /**
@@ -2098,7 +2098,7 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
 
         // is there a rule about swapping this two?
         int rule_found = 0;
-        for(const GList *rules = darktable.iop_order_rules; rules; rules = g_list_next(rules))
+        for(const GList *rules = dt_ioppr_get_iop_order_rules_global(); rules; rules = g_list_next(rules))
         {
           const dt_iop_order_rule_t *const restrict rule = (dt_iop_order_rule_t *)rules->data;
 
@@ -2172,7 +2172,7 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
 
         // is there a rule about swapping this two?
         int rule_found = 0;
-        for(const GList *rules = darktable.iop_order_rules; rules; rules = g_list_next(rules))
+        for(const GList *rules = dt_ioppr_get_iop_order_rules_global(); rules; rules = g_list_next(rules))
         {
           const dt_iop_order_rule_t *const restrict rule = (dt_iop_order_rule_t *)rules->data;
 
@@ -2345,7 +2345,7 @@ static void _ioppr_check_rules(GList *iop_list, const int32_t imgid, const char 
     }
 
     // we have a module, now check each rule
-    for(const GList *rules = darktable.iop_order_rules; rules; rules = g_list_next(rules))
+    for(const GList *rules = dt_ioppr_get_iop_order_rules_global(); rules; rules = g_list_next(rules))
     {
       const dt_iop_order_rule_t *const restrict rule = (dt_iop_order_rule_t *)rules->data;
 

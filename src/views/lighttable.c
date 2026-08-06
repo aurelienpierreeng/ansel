@@ -76,7 +76,6 @@
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
 #include "common/colorlabels.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/grouping.h"
@@ -145,7 +144,7 @@ static void _view_lighttable_activate_callback(gpointer instance, int32_t imgid,
 {
   if(imgid > UNKNOWN_IMAGE)
   {
-    dt_view_manager_switch(darktable.view_manager, "darkroom");
+    dt_view_manager_switch(dt_view_manager_get_global(), "darkroom");
   }
 }
 

@@ -57,7 +57,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
@@ -68,6 +67,7 @@
 #include "common/utility.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "develop/develop.h"
 #include "develop/imageop.h"
 
 
@@ -566,7 +566,7 @@ gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable,
     // If the target module is already marked as focused, modulegroups focus
     // signal may not be emitted and tab visibility can stay stale. Drop focus
     // once so the next focus request re-emits the full focus/update sequence.
-    if(!IS_NULL_PTR(darktable.develop) && darktable.develop->gui_module == module)
+    if(!IS_NULL_PTR(dt_dev_get_global()) && dt_dev_get_global()->gui_module == module)
       dt_iop_request_focus(NULL);
 
     w->module->focus(w->module, FALSE);

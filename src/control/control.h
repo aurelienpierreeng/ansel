@@ -91,6 +91,13 @@ typedef struct dt_control_pointer_input_t
 // called from gui
 void *dt_control_expose(void *voidptr);
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state);
+
+/** Message painted over the main preview while the pipeline is working. Written by the
+ * pipeline (develop/pixelpipe_hb.c), rendered by control/control.c; the storage belongs
+ * to the orchestrator. dt_set_main_message() TAKES OWNERSHIP of `message` and frees the
+ * previous one; pass NULL to clear. */
+const char *dt_get_main_message(void);
+void dt_set_main_message(char *message);
 void dt_control_button_released(double x, double y, int which, uint32_t state);
 void dt_control_mouse_moved(double x, double y, double pressure, int which);
 void dt_control_set_pointer_input(const dt_control_pointer_input_t *input);

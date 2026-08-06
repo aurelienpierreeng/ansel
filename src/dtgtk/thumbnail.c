@@ -45,7 +45,6 @@
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
 #include "common/datetime.h"
-#include "common/darktable.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "common/focus.h"
@@ -929,16 +928,16 @@ static gboolean _event_audio_release(GtkWidget *widget, GdkEventButton *event, g
   if(event->button == 1)
   {
     gboolean start_audio = TRUE;
-    if(darktable.view_manager->audio.audio_player_id != -1)
+    if(dt_view_manager_get_global()->audio.audio_player_id != -1)
     {
       // don't start the audio for the image we just killed it for
-      if(darktable.view_manager->audio.audio_player_id == thumb->info.id) start_audio = FALSE;
-      dt_view_audio_stop(darktable.view_manager);
+      if(dt_view_manager_get_global()->audio.audio_player_id == thumb->info.id) start_audio = FALSE;
+      dt_view_audio_stop(dt_view_manager_get_global());
     }
 
     if(start_audio)
     {
-      dt_view_audio_start(darktable.view_manager, thumb->info.id);
+      dt_view_audio_start(dt_view_manager_get_global(), thumb->info.id);
     }
   }
   return FALSE;

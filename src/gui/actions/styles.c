@@ -16,7 +16,6 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "gui/styles.h"
@@ -71,12 +70,13 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
 
   if(is_darkroom_image_in_list)
   {
-    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
-    dt_dev_undo_start_record(darktable.develop);
-    const gboolean applied = dt_history_style_on_image(darktable.develop->image_storage.id, style_name, duplicate);
-    dt_dev_undo_end_record(darktable.develop);
+    dt_develop_t *const dev = dt_dev_get_global();
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(dev->image_storage.id));
+    dt_dev_undo_start_record(dev);
+    const gboolean applied = dt_history_style_on_image(dev->image_storage.id, style_name, duplicate);
+    dt_dev_undo_end_record(dev);
     if(applied)
-      dt_apply_dev_history_update(darktable.develop);
+      dt_apply_dev_history_update(dev);
   }
 
   if(imgs) dt_history_style_on_list(imgs, style_name, duplicate);

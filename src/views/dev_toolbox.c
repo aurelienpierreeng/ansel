@@ -17,7 +17,6 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
 #include "common/file_location.h"
 #include "common/usermanual_url.h"
 #include "control/conf.h"
@@ -634,7 +633,7 @@ static GtkWidget *_create_one_button(dt_develop_t *dev, dt_view_type_flags_t vie
   g_object_set_data(G_OBJECT(button), DT_DEV_TOOLBOX_BUTTON_TYPE_KEY, GINT_TO_POINTER(type));
   gtk_widget_set_tooltip_text(button, tooltip);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(_button_clicked), dev);
-  dt_view_manager_module_toolbox_add(darktable.view_manager, button, views);
+  dt_view_manager_module_toolbox_add(dt_view_manager_get_global(), button, views);
   return button;
 }
 

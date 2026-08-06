@@ -22,8 +22,8 @@ python3 tools/include_graph.py                    # cycles, inversions, god-head
 | `mean_closure` (per header) | 19.5 | **13.6** | −30% |
 | `tu_median_closure` (headers per TU) | 76 | **65** | −14% |
 | `tu_mean_closure_lines` | 16967 | **15355** | −9.5% |
-| `darktable_h_reach` | 517 | **95** | −82% |
-| `darktable_h_direct_includers` | 343 | **93** | −73% |
+| `darktable_h_reach` | 517 | **17** | −97% |
+| `darktable_h_direct_includers` | 343 | **16** | −95% |
 | `max_closure` | 84 | **82** | |
 
 `darktable_h_reach` is the number of files that reach `common/darktable.h` transitively — i.e.
@@ -176,8 +176,12 @@ lands inside those structs — a mistake worth making exactly once.
    Mostly `common/` code calling `dt_control_*` / `dt_conf_*` and reaching into pipeline types.
 2. **Removing `#pragma once`** in favour of include guards is now *possible* — the graph being a
    DAG is the precondition. Needs a maintainer decision.
-3. **The remaining 95 files that still reach `darktable.h`.** These are genuine application-level
-   consumers; the rest of the globals census is in `doc/globals-migration.md`.
+3. **The 12 `.c` files that still include `darktable.h`** — and they are the right ones:
+   four application entry points (`main.c`, `cli/main.c`, `cltest/main.c`,
+   `generate-cache/main.c`) calling `dt_init()`/`dt_cleanup()`; six subsystem owners that
+   *are* the thing the global names (`darktable.c`, `control.c`, `gtk.c`, `opencl.c`,
+   `conf.c`, `imageop.c`, `exif.cc`); and `dbus.c` for `dt_load_from_string()`. No header
+   includes it at all. The rest of the globals census is in `doc/globals-migration.md`.
 4. **Dead code the build never compiles**, found while sweeping: `src/iop/useless.c` (commented
    out of `iop/CMakeLists.txt`) and `src/chart/{main,colorchart,pfm,tonecurve}.c` (only
    `chart/common.c` is built). `useless.c` and `chart/{main,colorchart}.c` do not compile at all

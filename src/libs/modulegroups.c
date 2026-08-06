@@ -46,7 +46,6 @@
 
 
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/iop_order.h"
@@ -164,7 +163,7 @@ static gboolean _modulegroups_reorder_target(GtkWidget *target);
 static void _modulegroups_sync_section_label_margins(dt_lib_modulegroups_t *d)
 {
   GtkWidget *reference = NULL;
-  for(const GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
+  for(const GList *modules = g_list_first(dt_dev_get_global()->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     if(!dt_iop_is_hidden(module) && module->expander)
@@ -204,10 +203,10 @@ static void _modulegroups_clear_drop_state(dt_lib_modulegroups_t *d)
     d->drag_highlight = NULL;
   }
 
-  if(IS_NULL_PTR(darktable.develop)) return;
+  if(IS_NULL_PTR(dt_dev_get_global())) return;
 
   /* Walk every module and clear the before/after classes that motion handlers add. */
-  for(const GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+  for(const GList *modules = g_list_last(dt_dev_get_global()->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
     if(!module->expander) continue;
@@ -538,7 +537,7 @@ static gboolean _modulegroups_reorder_target(GtkWidget *target)
   int position = 0;
 
   /* Walk the whole pipeline in reverse order and keep only the modules currently parented here. */
-  for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+  for(GList *modules = g_list_last(dt_dev_get_global()->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
@@ -623,9 +622,9 @@ static gboolean _modulegroups_drag_motion(GtkWidget *widget, GdkDragContext *dc,
   if(module_dest && module_src != module_dest)
   {
     if(module_src->iop_order < module_dest->iop_order)
-      can_move = dt_ioppr_check_can_move_after_iop(darktable.develop->iop, module_src, module_dest);
+      can_move = dt_ioppr_check_can_move_after_iop(dt_dev_get_global()->iop, module_src, module_dest);
     else
-      can_move = dt_ioppr_check_can_move_before_iop(darktable.develop->iop, module_src, module_dest);
+      can_move = dt_ioppr_check_can_move_before_iop(dt_dev_get_global()->iop, module_src, module_dest);
   }
 
   if(!can_move)
@@ -707,7 +706,7 @@ static gboolean _modulegroups_switch_tab_next(GtkAccelGroup *accel_group, GObjec
                                               GdkModifierType modifier, gpointer data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)data;
-  dt_iop_module_t *focused = darktable.develop->gui_module;
+  dt_iop_module_t *focused = dt_dev_get_global()->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
 
   const dt_modulesgroups_tabs_t current = _get_current_tab(self);
@@ -721,7 +720,7 @@ static gboolean _modulegroups_switch_tab_previous(GtkAccelGroup *accel_group, GO
                                                   GdkModifierType modifier, gpointer data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)data;
-  dt_iop_module_t *focused = darktable.develop->gui_module;
+  dt_iop_module_t *focused = dt_dev_get_global()->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
 
   const dt_modulesgroups_tabs_t current = _get_current_tab(self);
@@ -771,7 +770,7 @@ static gboolean _focus_previous_module(GtkAccelGroup *accel_group, GObject *acce
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
-  dt_iop_module_t *focused = darktable.develop->gui_module;
+  dt_iop_module_t *focused = dt_dev_get_global()->gui_module;
 
   // When filmstrip owns keyboard focus, keep PageUp routed to filmstrip navigation.
   dt_thumbtable_t *filmstrip = dt_gui_get_ui()->thumbtable_filmstrip;
@@ -819,7 +818,7 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
-  dt_iop_module_t *focused = darktable.develop->gui_module;
+  dt_iop_module_t *focused = dt_dev_get_global()->gui_module;
 
   // When filmstrip owns keyboard focus, keep PageDown routed to filmstrip navigation.
   dt_thumbtable_t *filmstrip = dt_gui_get_ui()->thumbtable_filmstrip;
@@ -945,7 +944,7 @@ static void _focus_widget(GtkWidget *widget)
 
 static gboolean _focus_next_control()
 {
-  dt_iop_module_t *focused = darktable.develop->gui_module;
+  dt_iop_module_t *focused = dt_dev_get_global()->gui_module;
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
@@ -975,7 +974,7 @@ static gboolean _focus_next_control()
 
 static gboolean _focus_previous_control()
 {
-  dt_iop_module_t *focused = darktable.develop->gui_module;
+  dt_iop_module_t *focused = dt_dev_get_global()->gui_module;
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
@@ -1098,12 +1097,12 @@ void gui_cleanup(dt_lib_module_t *self)
     _modulegroups_clear_visible_expanders_cache(d);
     _modulegroups_clear_drop_state(d);
     GtkBox *root = dt_ui_get_container(dt_gui_get_ui(), DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
-    if(darktable.develop && root)
+    if(dt_dev_get_global() && root)
     {
       /* Hand module expanders back to the right-panel root before destroying
        * our page boxes, otherwise Gtk would destroy the module widgets along
        * with the page containers. */
-      for(GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
+      for(GList *modules = g_list_first(dt_dev_get_global()->iop); modules; modules = g_list_next(modules))
       {
         dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
         if(module->expander) _modulegroups_move_widget(module->expander, GTK_WIDGET(root));
@@ -1122,7 +1121,7 @@ void gui_cleanup(dt_lib_module_t *self)
 
 static gboolean _is_module_in_history(const dt_iop_module_t *module)
 {
-  for(GList *history = g_list_last(darktable.develop->history); history; history = g_list_previous(history))
+  for(GList *history = g_list_last(dt_dev_get_global()->history); history; history = g_list_previous(history))
   {
     const dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)(history->data);
     if(hitem->module == module) return TRUE;
@@ -1147,8 +1146,9 @@ static gboolean _modulegroups_move_widget(GtkWidget *widget, GtkWidget *target)
 
 static gboolean _update_iop_visibility(gpointer user_data)
 {
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
-  if(IS_NULL_PTR(darktable.develop)) return G_SOURCE_REMOVE;
+  if(IS_NULL_PTR(dev)) return G_SOURCE_REMOVE;
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
   const dt_modulesgroups_tabs_t tab = _get_current_tab(self);
 
@@ -1159,9 +1159,9 @@ static gboolean _update_iop_visibility(gpointer user_data)
   for(int i = 0; i < MOD_TAB_LAST; i++) gtk_widget_set_visible(d->pages[i], i == tab);
 
   /* Walk every develop module and decide whether it belongs to the active tab and which box should host it. */
-  const int history_end = dt_dev_get_history_end_ext(darktable.develop);
+  const int history_end = dt_dev_get_history_end_ext(dev);
 
-  for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+  for(GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     if(dt_iop_is_hidden(module)) continue; // Hidden modules don't have a widget
@@ -1180,9 +1180,9 @@ static gboolean _update_iop_visibility(gpointer user_data)
     // FIXME: at some point, we will need to embrace the nodal paradigm and use a "create instance"
     // approach, even for the first instance, instead of mixing GUI toolboxes à la Lightroom for the first
     // (base) instance and then nodal approach for the others.
-    dt_pthread_rwlock_rdlock(&darktable.develop->history_mutex);
-    const gboolean in_history = !IS_NULL_PTR(dt_dev_history_get_last_item_by_module(darktable.develop->history, module, history_end));
-    dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
+    dt_pthread_rwlock_rdlock(&dev->history_mutex);
+    const gboolean in_history = !IS_NULL_PTR(dt_dev_history_get_last_item_by_module(dev->history, module, history_end));
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
 
     if(visible && (in_history || module->multi_priority == 0))
     {
@@ -1192,7 +1192,7 @@ static gboolean _update_iop_visibility(gpointer user_data)
     }
     else
     {
-      if(darktable.develop->gui_module == module) 
+      if(dev->gui_module == module) 
       {
         dt_iop_request_focus(NULL);
         dt_iop_gui_set_expanded(module, FALSE, TRUE);
@@ -1205,10 +1205,10 @@ static gboolean _update_iop_visibility(gpointer user_data)
   /* Multishow may hide extra instances, so we only compute section occupancy
    * and final ordering after it has settled the visible module set. */
   // FIXME: ditch that
-  dt_dev_modules_update_multishow(darktable.develop);
+  dt_dev_modules_update_multishow(dev);
 
   // Ensure the module is visible
-  dt_iop_module_t *active = darktable.develop->gui_module;
+  dt_iop_module_t *active = dev->gui_module;
   if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander))
   {
     if(dt_gui_get_global()->scroll_to[1] != active->header)

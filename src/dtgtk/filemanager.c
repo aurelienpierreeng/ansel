@@ -22,7 +22,6 @@
  *        lives in thumbtable.c; see thumbtable_internal.h for the ops contract.
  */
 
-#include "common/darktable.h"
 #include "control/conf.h"
 #include "common/collection.h"
 #include "common/selection.h"
@@ -33,6 +32,7 @@
 #include "dtgtk/thumbnail.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
+#include "views/view.h"
 
 #include <math.h>
 
@@ -260,7 +260,7 @@ static void _grid_grab_focus(dt_thumbtable_t *table)
   // This runs from a g_idle() callback (see dt_thumbtable_schedule_focus), so by the time it
   // fires the user may already have switched to another view (e.g. Studio Capture). Grabbing
   // the grid's focus regardless would steal it back from that view's own center widget.
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   if(IS_NULL_PTR(current_view) || strcmp(current_view->module_name, "lighttable")) return;
 
   GtkWidget *focused = NULL;

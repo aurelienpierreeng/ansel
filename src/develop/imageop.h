@@ -704,6 +704,12 @@ void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state);
  * pipeline hash even while bypass_cache itself stays TRUE. */
 void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant);
 
+/** The list of loaded iop module shared objects (dt_iop_module_so_t*), built once at
+ * startup by dt_iop_load_modules_so() in develop/imageop.c, which owns it. Readers use
+ * this accessor instead of reaching into the application struct, so they need neither
+ * common/darktable.h nor knowledge of where the list is stored. */
+GList *dt_iop_get_modules_so(void);
+
 
 #ifdef __cplusplus
 }

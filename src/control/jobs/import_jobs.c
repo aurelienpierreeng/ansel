@@ -15,7 +15,6 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "control/conf.h"
 #include "import_jobs.h"
 #include "common/collection.h"
@@ -34,6 +33,7 @@
 #include <glob.h>
 #endif
 #include <string.h>
+#include <glib/gstdio.h>
 #include "common/utility.h"
 #ifdef __APPLE__
 #include "osx/osx.h"

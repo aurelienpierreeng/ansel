@@ -54,7 +54,7 @@
 #include "common/colorspaces.h"
 #include "common/capabilities.h"
 #include "common/sys_resources.h"
-#include "common/darktable.h"
+#include "common/global_mutexes.h"
 #include "common/hash.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
@@ -972,10 +972,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
     gchar *module_label = dt_history_item_get_name(module);
     dt_control_t *const control = dt_control_get_global();
     dt_pthread_mutex_lock(&control->log_mutex);
-    dt_free(darktable.main_message);
-    darktable.main_message = g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."),
-                                             module_label, dt_pixelpipe_get_pipe_name(pipe->type),
-                                             piece->roi_out.width, piece->roi_out.height, piece->roi_out.scale * 100.f);
+    dt_set_main_message(g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."),
+                                        module_label, dt_pixelpipe_get_pipe_name(pipe->type),
+                                        piece->roi_out.width, piece->roi_out.height,
+                                        piece->roi_out.scale * 100.f));
     dt_pthread_mutex_unlock(&control->log_mutex);
     dt_free(module_label);
     dt_control_queue_redraw_center();
@@ -1198,8 +1198,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   {
     dt_control_t *const control = dt_control_get_global();
     dt_pthread_mutex_lock(&control->log_mutex);
-    dt_free(darktable.main_message);
-    darktable.main_message = NULL;
+    dt_set_main_message(NULL);
     dt_pthread_mutex_unlock(&control->log_mutex);
     dt_control_queue_redraw_center();
   }
@@ -1290,7 +1289,7 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
       g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_form_unref);                                       \
       pipe->forms = NULL;                                                                                         \
     }                                                                                                             \
-    dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);                                                      \
+    dt_pthread_mutex_unlock(dt_pipeline_threadsafe_mutex());                                                      \
     return 1;                                                                                                     \
   }
 
@@ -1540,7 +1539,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   // at full size, we allow only one pipeline at a time to run.
   // This is because wavelets decompositions and such use 6 copies,
   // so the RAM usage can go out of control here.
-  dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
+  dt_pthread_mutex_lock(dt_pipeline_threadsafe_mutex());
 
   if(dt_dev_pixelpipe_has_reentry(pipe))
   {
@@ -1686,7 +1685,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     }
   }
 
-  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
+  dt_pthread_mutex_unlock(dt_pipeline_threadsafe_mutex());
 
   // release resources:
   if(pipe->forms)

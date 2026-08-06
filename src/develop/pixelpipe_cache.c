@@ -48,7 +48,6 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe.h"
 #include "develop/supervisor.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/opencl.h"
 #include "develop/format.h"
@@ -1234,11 +1233,11 @@ float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float 
                                                 const char *message)
 {
   if(IS_NULL_PTR(cl_mem_input)) return input;
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
 
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cl_mem_input, roi_in,
                                                          CL_MAP_READ, in_bpp, module, message);
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
   return fail ? NULL : input;
 }
 
@@ -1288,7 +1287,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
     const cl_mem mem = (cl_mem)*cl_mem_input;
     if(dt_opencl_is_pinned_memory(mem))
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
       *locked_input_entry = input_entry;
     }
     return 0;
@@ -1300,7 +1299,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
     return 1;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
 
   // Try to reuse a cached pinned buffer; otherwise allocate a new pinned image backed by `input`.
   gboolean input_reused_from_cache = FALSE;
@@ -1347,7 +1346,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
   if(keep_lock)
     *locked_input_entry = input_entry;
   else
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
 
   return fail ? 1 : 0;
 }
@@ -1947,11 +1946,11 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
    * teardown into a SIGSEGV. Skip the arena free and the accounting in that case -- the arena is
    * unmapped wholesale right after, so nothing actually leaks. */
   dt_dev_pixelpipe_cache_t *cache = cache_entry->cache;
-  if(cache != darktable.pixelpipe_cache)
+  if(cache != dt_pixelpipe_cache_get_global())
   {
     fprintf(stderr, "[pixelpipe] cache entry %p has a corrupted back-reference (%p, expected %p); "
                     "skipping arena free to avoid a crash\n",
-            (void *)cache_entry, (void *)cache, (void *)darktable.pixelpipe_cache);
+            (void *)cache_entry, (void *)cache, (void *)dt_pixelpipe_cache_get_global());
     cache = NULL;
   }
 

@@ -52,11 +52,11 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "gui/gdkkeys.h"
 #include "libs/lib.h"
+#include "views/view.h"
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/macros.h"
@@ -702,7 +702,7 @@ static int dt_lib_load_module(void *m, const char *libname, const char *module_n
   gboolean load = FALSE;
   for(const char **view_m = module->views(module); *view_m; ++view_m)
   {
-    for(GList *iter = darktable.view_manager->views; iter; iter = g_list_next(iter))
+    for(GList *iter = dt_view_manager_get_global()->views; iter; iter = g_list_next(iter))
     {
       dt_view_t *view = (dt_view_t *)iter->data;
       if(!g_strcmp0(view->module_name, *view_m) || !g_strcmp0("*", *view_m) || !g_strcmp0("special", *view_m))
@@ -1115,7 +1115,7 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 
   /* store expanded state of module */
   char var[1024];
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
   dt_conf_set_bool(var, expanded);
 }
@@ -1130,7 +1130,7 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
     if(!module->widget)
     {
       char var[1024];
-      const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+      const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
       if(IS_NULL_PTR(current_view)) return true;
       snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
       return dt_conf_get_bool(var);
@@ -1140,7 +1140,7 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
   if(!module->widget)
   {
     char var[1024];
-    const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+    const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
     snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
     return dt_conf_get_bool(var);
   }
@@ -1151,7 +1151,7 @@ static void _toggle_expanded(dt_lib_module_t *module, gboolean close_all)
 {
   if(close_all)
   {
-    const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
+    const dt_view_t *v = dt_view_manager_get_current_view(dt_view_manager_get_global());
     gboolean all_other_closed = TRUE;
     uint32_t container = module->container(module);
 
@@ -1389,8 +1389,8 @@ void dt_lib_presets_add(const char *name, const char *plugin_name, const int32_t
 
 static gchar *_get_lib_view_path(dt_lib_module_t *module, char *suffix)
 {
-  if(IS_NULL_PTR(darktable.view_manager) || !module || IS_NULL_PTR(suffix) || module->plugin_name[0] == '\0') return NULL;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  if(IS_NULL_PTR(dt_view_manager_get_global()) || !module || IS_NULL_PTR(suffix) || module->plugin_name[0] == '\0') return NULL;
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
   if(IS_NULL_PTR(cv) || cv->module_name[0] == '\0') return NULL;
   // in lighttable, we store panels states per layout
   char lay[32] = "";
@@ -1400,7 +1400,7 @@ static gchar *_get_lib_view_path(dt_lib_module_t *module, char *suffix)
   }
   else if(g_strcmp0(cv->module_name, "darkroom") == 0)
   {
-    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(darktable.view_manager));
+    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(dt_view_manager_get_global()));
   }
 
   return g_strdup_printf("plugins/%s/%s%s%s", cv->module_name, lay, module->plugin_name, suffix);
@@ -1459,7 +1459,7 @@ gchar *dt_lib_get_localized_name(const gchar *plugin_name)
 
 void dt_lib_colorpicker_set_box_area(dt_lib_t *lib, const dt_boundingbox_t box)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(sample)) return;
 
@@ -1481,7 +1481,7 @@ void dt_lib_colorpicker_set_box_area(dt_lib_t *lib, const dt_boundingbox_t box)
 
 void dt_lib_colorpicker_set_point(dt_lib_t *lib, const float pos[2])
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(sample)) return;
 

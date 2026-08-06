@@ -58,7 +58,6 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "control/conf.h"
 #include "common/history.h"
 
@@ -670,7 +669,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
 
   // Ensure all UI pieces (history treeview, iop order, etc.) resync after undo/redo.
   // Undo callbacks bypass dt_dev_undo_end_record(), so we need to raise the change signal here.
-  if(dt_gui_get_global() && dev->gui_attached && dev == darktable.develop)
+  if(dt_gui_get_global() && dev->gui_attached && dev == dt_dev_get_global())
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }
 
@@ -1422,8 +1421,8 @@ void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
 
 gboolean dt_dev_history_is_image_in_dev(GList *imgs)
 {
-  return !IS_NULL_PTR(darktable.develop)
-    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+  dt_develop_t *const dev = dt_dev_get_global();
+  return !IS_NULL_PTR(dev) && g_list_find(imgs, GINT_TO_POINTER(dev->image_storage.id));
 }
 
 void dt_apply_dev_history_update(dt_develop_t *dev)
@@ -2602,7 +2601,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
     {
       deleted_module_found = 1;
 
-      if(darktable.develop->gui_module == mod) dt_iop_request_focus(NULL);
+      if(dev->gui_module == mod) dt_iop_request_focus(NULL);
 
       dt_gui_freeze_begin();
 

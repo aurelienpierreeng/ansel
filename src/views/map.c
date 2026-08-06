@@ -40,7 +40,6 @@
 */
 
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/gpx.h"
 #include "common/geo.h"
@@ -2092,17 +2091,18 @@ void enter(dt_view_t *self)
   gtk_widget_show_all(GTK_WIDGET(lib->map));
 
   /* setup proxy functions */
-  darktable.view_manager->proxy.map.center_on_location = _view_map_center_on_location;
-  darktable.view_manager->proxy.map.center_on_bbox = _view_map_center_on_bbox;
-  darktable.view_manager->proxy.map.show_osd = _view_map_show_osd;
-  darktable.view_manager->proxy.map.set_map_source = _view_map_set_map_source;
-  darktable.view_manager->proxy.map.add_marker = _view_map_add_marker;
-  darktable.view_manager->proxy.map.remove_marker = _view_map_remove_marker;
-  darktable.view_manager->proxy.map.add_location = _view_map_add_location;
-  darktable.view_manager->proxy.map.location_action = _view_map_location_action;
-  darktable.view_manager->proxy.map.redraw = _view_map_redraw;
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  vm->proxy.map.center_on_location = _view_map_center_on_location;
+  vm->proxy.map.center_on_bbox = _view_map_center_on_bbox;
+  vm->proxy.map.show_osd = _view_map_show_osd;
+  vm->proxy.map.set_map_source = _view_map_set_map_source;
+  vm->proxy.map.add_marker = _view_map_add_marker;
+  vm->proxy.map.remove_marker = _view_map_remove_marker;
+  vm->proxy.map.add_location = _view_map_add_location;
+  vm->proxy.map.location_action = _view_map_location_action;
+  vm->proxy.map.redraw = _view_map_redraw;
 
-  darktable.view_manager->proxy.map.view = self;
+  vm->proxy.map.view = self;
 
   /* Map opts into single-click filmstrip commits explicitly so generic
    * thumbtable activation can keep its double-click semantics. */
@@ -2146,7 +2146,7 @@ void leave(dt_view_t *self)
     gtk_container_remove(GTK_CONTAINER(dt_ui_center_base(dt_gui_get_ui())), GTK_WIDGET(lib->map));
 
   /* reset proxy */
-  darktable.view_manager->proxy.map.view = NULL;
+  dt_view_manager_get_global()->proxy.map.view = NULL;
 }
 
 /* Merged in gui/actions/edit.h without the callback blocks
@@ -2564,7 +2564,7 @@ static void _view_map_collection_changed(gpointer instance, dt_collection_change
   dt_view_t *self = (dt_view_t *)user_data;
   dt_map_t *lib = (dt_map_t *)self->data;
   // avoid to centre the map on collection while a location is active
-  if(darktable.view_manager->proxy.map.view && !lib->loc.main.id)
+  if(dt_view_manager_get_global()->proxy.map.view && !lib->loc.main.id)
   {
     _view_map_center_on_image_list(self, "memory.collected_images");
   }
@@ -2572,7 +2572,7 @@ static void _view_map_collection_changed(gpointer instance, dt_collection_change
   if(dt_conf_get_bool("plugins/map/filter_images_drawn"))
   {
     // only redraw when map mode is currently active, otherwise enter() does the magic
-    if(darktable.view_manager->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
+    if(dt_view_manager_get_global()->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
   }
 }
 
@@ -2588,7 +2588,7 @@ static void _view_map_selection_changed(gpointer instance, gpointer user_data)
      filmstrip's highlight the instant any other view calls dt_selection_select_single(), since
      its internal clear+select briefly raises this signal with an empty selection.
      Only touch it when map is actually the active view, exactly like the redraw below. */
-  if(darktable.view_manager->proxy.map.view)
+  if(dt_view_manager_get_global()->proxy.map.view)
   {
     dt_view_active_images_reset(FALSE);
     GList *selection = dt_selection_get_list(dt_selection_get_global());
@@ -2609,7 +2609,7 @@ static void _view_map_geotag_changed(gpointer instance, GList *imgs, const int l
   {
     dt_view_t *self = (dt_view_t *)user_data;
     dt_map_t *lib = (dt_map_t *)self->data;
-    if(darktable.view_manager->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
+    if(dt_view_manager_get_global()->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
   }
 }
 

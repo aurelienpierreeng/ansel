@@ -112,6 +112,7 @@
 #include "common/darktable.h"
 #include "common/anonymous_ids.h"
 #include "common/capabilities.h"
+#include "common/global_mutexes.h"
 #include "common/sys_resources.h"
 #include "common/datetime.h"
 #include "common/exif.h"
@@ -518,6 +519,88 @@ int dt_get_num_openmp_threads(void)
 struct dt_gui_gtk_t *dt_gui_get_global(void)
 {
   return darktable.gui;
+}
+
+struct dt_develop_t *dt_dev_get_global(void)
+{
+  return darktable.develop;
+}
+
+GList *dt_iop_get_modules_so(void)
+{
+  return darktable.iop;
+}
+
+GList *dt_ioppr_get_iop_order_rules_global(void)
+{
+  return darktable.iop_order_rules;
+}
+
+void dt_dev_set_global(struct dt_develop_t *dev)
+{
+  darktable.develop = dev;
+}
+
+GList *dt_guides_get_list(void)
+{
+  return darktable.guides;
+}
+
+GList **dt_guides_get_list_ref(void)
+{
+  return &darktable.guides;
+}
+
+GList *dt_gui_get_themes(void)
+{
+  return darktable.themes;
+}
+
+void dt_gui_set_themes(GList *themes)
+{
+  g_list_free_full(darktable.themes, dt_free_gpointer);
+  darktable.themes = themes;
+}
+
+const char *dt_get_main_message(void)
+{
+  return darktable.main_message;
+}
+
+void dt_set_main_message(char *message)
+{
+  dt_free(darktable.main_message);
+  darktable.main_message = message;
+}
+
+struct dt_view_manager_t *dt_view_manager_get_global(void)
+{
+  return darktable.view_manager;
+}
+
+dt_pthread_mutex_t *dt_plugin_threadsafe_mutex(void)
+{
+  return &darktable.plugin_threadsafe;
+}
+
+dt_pthread_mutex_t *dt_pipeline_threadsafe_mutex(void)
+{
+  return &darktable.pipeline_threadsafe;
+}
+
+dt_pthread_mutex_t *dt_exiv2_threadsafe_mutex(void)
+{
+  return &darktable.exiv2_threadsafe;
+}
+
+dt_pthread_mutex_t *dt_readfile_mutex(void)
+{
+  return &darktable.readFile_mutex;
+}
+
+dt_pthread_rwlock_t *dt_database_threadsafe_lock(void)
+{
+  return &darktable.database_threadsafe;
 }
 
 struct dt_image_cache_t *dt_image_cache_get_global(void)

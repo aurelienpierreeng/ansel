@@ -57,7 +57,6 @@
 
 #include "bauhaus/bauhaus.h"
 #include "control/conf.h"
-#include "common/darktable.h"
 #include "gui/gdkkeys.h"
 #include "common/capabilities.h"
 #include "common/debug.h"
@@ -162,7 +161,7 @@ static GtkWidget *_preferences_dialog;
 
 ///////////// gui theme selection
 
-static void load_themes_dir(const char *basedir)
+static GList *load_themes_dir(GList *themes, const char *basedir)
 {
   char *themes_dir = g_build_filename(basedir, "themes", NULL);
   GDir *dir = g_dir_open(themes_dir, 0, NULL);
@@ -172,17 +171,17 @@ static void load_themes_dir(const char *basedir)
 
     const gchar *d_name;
     while((d_name = g_dir_read_name(dir)))
-      darktable.themes = g_list_append(darktable.themes, g_strdup(d_name));
+      themes = g_list_append(themes, g_strdup(d_name));
     g_dir_close(dir);
   }
   dt_free(themes_dir);
+  return themes;
 }
 
 static void load_themes(void)
 {
   // Clear theme list...
-  g_list_free_full(darktable.themes, dt_free_gpointer);
-  darktable.themes = NULL;
+  dt_gui_set_themes(NULL);
 
   // check themes dirs
   gchar configdir[PATH_MAX] = { 0 };
@@ -190,8 +189,10 @@ static void load_themes(void)
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
-  load_themes_dir(datadir);
-  load_themes_dir(configdir);
+  GList *themes = NULL;
+  themes = load_themes_dir(themes, datadir);
+  themes = load_themes_dir(themes, configdir);
+  dt_gui_set_themes(themes);
 }
 
 static void reload_ui_last_theme(void)
@@ -204,7 +205,7 @@ static void reload_ui_last_theme(void)
 static void theme_callback(GtkWidget *widget, gpointer user_data)
 {
   const int selected = gtk_combo_box_get_active(GTK_COMBO_BOX(widget));
-  gchar *theme = g_list_nth(darktable.themes, selected)->data;
+  gchar *theme = g_list_nth(dt_gui_get_themes(), selected)->data;
   gchar *i = g_strrstr(theme, ".");
   if(i) *i = '\0';
   dt_gui_load_theme(theme);
@@ -378,7 +379,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   char *theme_name = dt_conf_get_string("ui_last/theme");
   int selected = 0;
   int k = 0;
-  for(GList *iter = darktable.themes; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_gui_get_themes(); iter; iter = g_list_next(iter))
   {
     gchar *name = g_strdup((gchar*)(iter->data));
     // remove extension

@@ -20,7 +20,6 @@
 
 #include "common/act_on.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/history.h"
@@ -40,6 +39,7 @@
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "gui/hist_dialog.h"
+#include "views/view.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -228,7 +228,7 @@ gboolean dt_history_copy(int32_t imgid)
 
   if(imgid <= 0) return FALSE;
 
-  darktable.view_manager->copy_paste.copied_imageid = imgid;
+  dt_view_manager_get_global()->copy_paste.copied_imageid = imgid;
 
   return TRUE;
 }
@@ -239,7 +239,7 @@ gboolean dt_history_copy_parts(int32_t imgid)
   {
     // run dialog, it will insert into selops the selected moduel
 
-    if(dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste), imgid, TRUE) == GTK_RESPONSE_CANCEL)
+    if(dt_gui_hist_dialog_new(&(dt_view_manager_get_global()->copy_paste), imgid, TRUE) == GTK_RESPONSE_CANCEL)
       return FALSE;
     return TRUE;
   }
@@ -255,12 +255,13 @@ typedef struct _paste_action_ctx_t
 static gboolean _history_paste_apply(const int32_t imgid, void *user_data)
 {
   _paste_action_ctx_t *ctx = (_paste_action_ctx_t *)user_data;
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
+  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
   if(imgid <= 0) return FALSE;
 
-  const gboolean pasted = dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
+  const gboolean pasted = dt_history_copy_and_paste_on_image(copy_paste->copied_imageid,
                                                              imgid,
-                                                             darktable.view_manager->copy_paste.selops,
+                                                             copy_paste->selops,
                                                              FALSE,
                                                              dt_conf_get_int("history/paste/mode"),
                                                              dt_conf_get_bool("history/paste/copy_iop_order"),
@@ -275,7 +276,7 @@ gboolean dt_history_paste_on_image(const int32_t imgid)
 
 gboolean dt_history_paste_on_list(const GList *list)
 {
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
+  if(dt_view_manager_get_global()->copy_paste.copied_imageid <= 0) return FALSE;
   _paste_action_ctx_t ctx = { 0 };
   const gboolean changed = _history_action_on_list(list, _history_paste_apply, &ctx);
   dt_hm_batch_state_cleanup(&ctx.batch);
@@ -284,11 +285,11 @@ gboolean dt_history_paste_on_list(const GList *list)
 
 gboolean dt_history_paste_parts_prepare(void)
 {
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
+  dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
 
   // we launch the dialog
-  const int res = dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste),
-                                         darktable.view_manager->copy_paste.copied_imageid, FALSE);
+  const int res = dt_gui_hist_dialog_new(copy_paste, copy_paste->copied_imageid, FALSE);
 
   if(res != GTK_RESPONSE_OK)
   {
@@ -301,13 +302,14 @@ gboolean dt_history_paste_parts_prepare(void)
 static gboolean _history_paste_parts_apply(const int32_t imgid, void *user_data)
 {
   _paste_action_ctx_t *ctx = (_paste_action_ctx_t *)user_data;
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
-  if(IS_NULL_PTR(darktable.view_manager->copy_paste.selops)) return FALSE;
+  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
+  if(IS_NULL_PTR(copy_paste->selops)) return FALSE;
   if(imgid <= 0) return FALSE;
 
-  const gboolean pasted = dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
+  const gboolean pasted = dt_history_copy_and_paste_on_image(copy_paste->copied_imageid,
                                                              imgid,
-                                                             darktable.view_manager->copy_paste.selops,
+                                                             copy_paste->selops,
                                                              FALSE,
                                                              dt_conf_get_int("history/paste/mode"),
                                                              dt_conf_get_bool("history/paste/copy_iop_order"),
@@ -322,8 +324,9 @@ gboolean dt_history_paste_parts_on_image(const int32_t imgid)
 
 gboolean dt_history_paste_parts_on_list(const GList *list)
 {
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
-  if(IS_NULL_PTR(darktable.view_manager->copy_paste.selops))
+  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
+  if(IS_NULL_PTR(copy_paste->selops))
     return FALSE;
   _paste_action_ctx_t ctx = { 0 };
   const gboolean changed = _history_action_on_list(list, _history_paste_parts_apply, &ctx);
@@ -499,17 +502,19 @@ gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, g
 
   gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
 
+  dt_develop_t *dev = dt_dev_get_global();
+
   if(is_darkroom_image_in_list)
   {
-    dt_dev_undo_start_record(darktable.develop);
+    dt_dev_undo_start_record(dev);
   }
 
   dt_history_delete_on_list(imgs, TRUE);
 
   if(is_darkroom_image_in_list)
   {
-    dt_dev_undo_end_record(darktable.develop);
-    dt_apply_dev_history_update(darktable.develop);
+    dt_dev_undo_end_record(dev);
+    dt_apply_dev_history_update(dev);
   }
 
   dt_control_queue_redraw_center();

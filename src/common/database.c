@@ -58,10 +58,10 @@
 
 #include "common/atomic.h"
 #include "common/database.h"
-#include "common/darktable.h"
 #include "common/datetime.h"
 #include "common/debug.h"
 #include "common/file_location.h"
+#include "common/global_mutexes.h"
 #include "common/iop_order.h"
 #include "common/styles.h"
 #include "common/history.h"
@@ -4647,7 +4647,7 @@ void dt_database_start_transaction_debug(const struct dt_database_t *db)
     return;
   }
 
-  dt_pthread_rwlock_wrlock(&darktable.database_threadsafe);
+  dt_pthread_rwlock_wrlock(dt_database_threadsafe_lock());
   g_atomic_pointer_set(&_trx_owner, owner);
 
   const int trxid = dt_atomic_add_int(&_trxid, 1);
@@ -4704,7 +4704,7 @@ void dt_database_release_transaction_debug(const struct dt_database_t *db)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "COMMIT TRANSACTION", NULL, NULL, NULL);
     g_atomic_pointer_set(&_trx_owner, NULL);
-    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
+    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
@@ -4737,7 +4737,7 @@ void dt_database_rollback_transaction(const struct dt_database_t *db)
     dt_atomic_set_int(&_trx_batch_level, 0);
     g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
+    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
@@ -4758,7 +4758,7 @@ void dt_database_begin_transaction_batch(const struct dt_database_t *db)
     return;
   }
 
-  dt_pthread_rwlock_wrlock(&darktable.database_threadsafe);
+  dt_pthread_rwlock_wrlock(dt_database_threadsafe_lock());
   g_atomic_pointer_set(&_trx_owner, owner);
   g_atomic_pointer_set(&_trx_batch_owner, owner);
 
@@ -4785,7 +4785,7 @@ void dt_database_end_transaction_batch(const struct dt_database_t *db)
     dt_atomic_set_int(&_trx_batch_level, 0);
     g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
+    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
     return;
   }
 
@@ -4794,7 +4794,7 @@ void dt_database_end_transaction_batch(const struct dt_database_t *db)
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "COMMIT TRANSACTION", NULL, NULL, NULL);
     g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
+    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
   }
 }
 

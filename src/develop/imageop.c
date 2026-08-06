@@ -412,14 +412,14 @@ int default_iop_focus(dt_gui_module_t *m, gboolean toggle)
   dt_iop_module_t *module = (dt_iop_module_t *) m;
 
   // Expand and scroll
-  if(darktable.develop->gui_module != module)
+  if(module->dev->gui_module != module)
   {
     dt_iop_request_focus(module);
     dt_iop_gui_set_expanded(module, TRUE, TRUE);
   }
   else if(toggle)
   {
-    darktable.develop->gui_module = NULL;
+    module->dev->gui_module = NULL;
     dt_iop_gui_set_expanded(module, FALSE, TRUE);
     dt_gui_refocus_center();
   }
@@ -1610,15 +1610,16 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
   dt_free(module->default_blendop_params);
 
   // don't have a picker pointing to a disappeared module
-  if(darktable.develop
-     && darktable.develop->color_picker.picker
-     && darktable.develop->color_picker.picker->module == module)
+  dt_develop_t *const dev = dt_dev_get_global();
+  if(dev
+     && dev->color_picker.picker
+     && dev->color_picker.picker->module == module)
   {
-    darktable.develop->color_picker.picker = NULL;
-    darktable.develop->color_picker.widget = NULL;
-    darktable.develop->color_picker.module = NULL;
-    darktable.develop->color_picker.enabled = FALSE;
-    darktable.develop->color_picker.update_pending = FALSE;
+    dev->color_picker.picker = NULL;
+    dev->color_picker.widget = NULL;
+    dev->color_picker.module = NULL;
+    dev->color_picker.enabled = FALSE;
+    dev->color_picker.update_pending = FALSE;
   }
 
   dt_free(module->histogram);
@@ -2230,11 +2231,12 @@ static void _presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
 
 void dt_iop_request_focus(dt_iop_module_t *module)
 {
-  dt_iop_module_t *out_focus_module = darktable.develop->gui_module;
+  dt_develop_t *const dev = dt_dev_get_global();
+  dt_iop_module_t *out_focus_module = dev->gui_module;
 
   if(dt_gui_widgets_suppressed() || (out_focus_module == module)) return;
 
-  darktable.develop->gui_module = module;
+  dev->gui_module = module;
   if(!IS_NULL_PTR(module))
   {
     const gboolean scroll_new_instance_to_header
@@ -2314,7 +2316,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     }
 
     // we also add the focus css class
-    GtkWidget *iop_w = gtk_widget_get_parent(dt_iop_gui_get_pluginui(darktable.develop->gui_module));
+    GtkWidget *iop_w = gtk_widget_get_parent(dt_iop_gui_get_pluginui(dev->gui_module));
     dt_gui_add_class(iop_w, "dt_module_focus");
   }
 
@@ -2374,7 +2376,7 @@ static void _gui_set_single_expanded(dt_iop_module_t *module, gboolean expanded)
 /** Dim all modules except the one referenced, if any reference, or undim all */
 void _iop_dim_all_but(dt_iop_module_t *module, gboolean dim)
 {
-  for(GList *iop = g_list_first(darktable.develop->iop); iop; iop = g_list_next(iop))
+  for(GList *iop = g_list_first(dt_dev_get_global()->iop); iop; iop = g_list_next(iop))
   {
     dt_iop_module_t *m = (dt_iop_module_t *)iop->data;
 
@@ -2393,7 +2395,7 @@ void dt_iop_gui_set_expanded(dt_iop_module_t *module, gboolean expanded, gboolea
   if(IS_NULL_PTR(module) || !module->expander) return;
   if(collapse_others)
   {
-    for(GList *iop = g_list_first(darktable.develop->iop); iop; iop = g_list_next(iop))
+    for(GList *iop = g_list_first(module->dev->iop); iop; iop = g_list_next(iop))
     {
       dt_iop_module_t *m = (dt_iop_module_t *)iop->data;
       if(m != module) _gui_set_single_expanded(m, FALSE);
@@ -3021,7 +3023,7 @@ void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant)
 
 dt_iop_module_t *dt_iop_get_colorout_module(void)
 {
-  return dt_iop_get_module_from_list(darktable.develop->iop, "colorout");
+  return dt_iop_get_module_from_list(dt_dev_get_global()->iop, "colorout");
 }
 
 dt_iop_module_t *dt_iop_get_module_from_list(GList *iop_list, const char *op)
@@ -3043,7 +3045,7 @@ dt_iop_module_t *dt_iop_get_module_from_list(GList *iop_list, const char *op)
 
 dt_iop_module_t *dt_iop_get_module(const char *op)
 {
-  return dt_iop_get_module_from_list(darktable.develop->iop, op);
+  return dt_iop_get_module_from_list(dt_dev_get_global()->iop, op);
 }
 
 int dt_iop_get_module_flags(const char *op)
@@ -3224,7 +3226,7 @@ gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
 void dt_iop_throttled_history_update(gpointer data)
 {
   dt_iop_module_t *self = (dt_iop_module_t*)data;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_text, const char *purpose, const char *input, const char *process,
@@ -3250,7 +3252,7 @@ void dt_iop_gui_changed(dt_iop_module_t *action, GtkWidget *widget, gpointer dat
 
   dt_iop_color_picker_reset(module, TRUE);
 
-  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 
   if(!IS_NULL_PTR(widget) && g_object_get_data(G_OBJECT(widget), "dt-blendop-header-update"))
     dt_iop_gui_update_header(module);

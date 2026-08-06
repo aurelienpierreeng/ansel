@@ -35,7 +35,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/styles.h"
@@ -648,7 +647,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
         /* lookup history item module */
         gboolean enabled = TRUE;
         dt_iop_module_t *module = NULL;
-        GList *modules = darktable.develop->iop;
+        GList *modules = dt_dev_get_global()->iop;
         if(modules)
         {
           GList *result = g_list_find_custom(

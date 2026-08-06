@@ -18,7 +18,6 @@
 
 #include "develop/dev_snapshot.h"
 
-#include "common/darktable.h"
 #include "common/history.h"
 #include "common/iop_order.h"
 #include "common/mipmap_cache.h"
@@ -461,7 +460,8 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
   // captured snapshot/preview soft-proofs the same way the live pipe does. Harmless when frozen
   // is the same image dev->preview_pipe already reflects; still correct when it's a different
   // one, since ICC intent/profile are a display-wide GUI setting, not per-image state.
-  live_preview = darktable.develop ? darktable.develop->preview_pipe : NULL;
+  dt_develop_t *const live_dev = dt_dev_get_global();
+  live_preview = live_dev ? live_dev->preview_pipe : NULL;
 
   for(int i = 0; i < 2; i++)
   {

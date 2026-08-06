@@ -19,7 +19,6 @@
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs/control_jobs.h"
-#include "common/darktable.h"
 #include "control/crawler.h"
 #include "common/collection.h"
 #include "common/mipmap_cache.h"
@@ -27,6 +26,7 @@
 #include "common/utility.h"
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
+#include "develop/develop.h"
 
 /// Job parameters for preloading image cache with a maximum mipmap size.
 typedef struct _preload_cache_params_t
@@ -36,8 +36,9 @@ typedef struct _preload_cache_params_t
 
 static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_dev_pixelpipe_reset_all(darktable.develop);
-  dt_dev_pixelpipe_resync_history_all(darktable.develop);
+  dt_develop_t *const dev = dt_dev_get_global();
+  dt_dev_pixelpipe_reset_all(dev);
+  dt_dev_pixelpipe_resync_history_all(dev);
   return TRUE;
 }
 

@@ -14,8 +14,9 @@
 */
 
 #include "common/folder_survey.h"
+#include <glib/gstdio.h>
+#include "common/image_extensions.h"
 
-#include "common/darktable.h"
 #include "common/datetime.h"
 #include "common/file_location.h"
 #include "common/imageio.h"
@@ -278,7 +279,7 @@ static int _folder_survey_collect(const char *folder, GHashTable *observed)
  */
 static GList *_folder_survey_styles_for_import()
 {
-  const dt_view_t *view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   if(IS_NULL_PTR(view)) return NULL;
 
   char *conf = dt_conf_get_string(DT_FOLDER_SURVEY_STYLES_CONF_KEY);
@@ -1062,7 +1063,7 @@ gboolean dt_folder_survey_propose_resume()
     return G_SOURCE_REMOVE;
   }
 
-  dt_view_manager_switch(darktable.view_manager, "studio_capture");
+  dt_view_manager_switch(dt_view_manager_get_global(), "studio_capture");
 
   // dt_folder_survey_start() itself offers to import any images already
   // sitting in the folder, covering files that appeared while Ansel was

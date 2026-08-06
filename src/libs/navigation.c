@@ -44,7 +44,6 @@
 */
 
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/macros.h"
@@ -155,7 +154,7 @@ static void _lib_navigation_history_resync_callback(gpointer instance, gpointer 
 
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   if(IS_NULL_PTR(d) || IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe)) return;
 
   dt_dev_pixelpipe_cache_wait_set_owner(&d->preview_wait, "navigation-preview", self);
@@ -232,7 +231,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   dt_times_t start;
   dt_get_times(&start);
 
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
@@ -444,7 +443,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
 static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double y, int alloc_wd, int alloc_ht)
 {
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   const dt_lib_navigation_t *d = (const dt_lib_navigation_t *)self->data;
   if(!(dev && d->dragging && dev->roi.scaling > 1.f)) return;
 
@@ -472,7 +471,7 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
   gtk_widget_queue_draw(d->area);
 
   /* redraw pipe */
-  dt_dev_pixelpipe_change_zoom_main(darktable.develop);
+  dt_dev_pixelpipe_change_zoom_main(dt_dev_get_global());
 }
 
 static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event,
@@ -487,7 +486,7 @@ static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEve
 
 static void _zoom_preset_change(dt_lib_zoom_t zoom)
 {
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   if(IS_NULL_PTR(dev)) return;
 
   switch(zoom)

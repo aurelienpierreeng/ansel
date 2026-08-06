@@ -23,7 +23,6 @@
 #endif
 
 #include "common/telemetry.h"
-#include "common/darktable.h"
 #include "common/times.h"
 
 #ifdef HAVE_TELEMETRY

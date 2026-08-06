@@ -38,7 +38,6 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "control/control.h"
 #include "control/jobs/control_jobs.h"
 #include "dtgtk/togglebutton.h"
@@ -320,7 +319,7 @@ static void _remove_images_from_map(dt_lib_module_t *self)
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
     if(im->image)
     {
-      dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_THUMB, im->image);
+      dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_THUMB, im->image);
       im->image = NULL;
     }
   }
@@ -341,7 +340,7 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
     }
     else if(im->segid == segid && !active && im->image)
     {
-      dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_THUMB, im->image);
+      dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_THUMB, im->image);
       im->image = NULL;
       im->gl.latitude = NAN;
     }
@@ -365,7 +364,7 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
         p.longitude = im->gl.longitude;
         p.count = count == 1 ? 0 : count;
         GList *img = g_list_prepend(NULL, &p);
-        im->image = dt_view_map_add_marker(darktable.view_manager, MAP_DISPLAY_THUMB, img);
+        im->image = dt_view_map_add_marker(dt_view_manager_get_global(), MAP_DISPLAY_THUMB, img);
         g_list_free(img);
         img = NULL;
         count = 0;
@@ -519,7 +518,7 @@ static void _remove_tracks_from_map(dt_lib_module_t *self)
     {
       if(d->map.tracks->td[i].track)
       {
-        dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_TRACK,
+        dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_TRACK,
                                   d->map.tracks->td[i].track);
         d->map.tracks->td[i].track = NULL;
       }
@@ -548,7 +547,7 @@ static gboolean _refresh_display_track(const gboolean active, const int segid, d
   {
     GList *pts = dt_gpx_get_trkpts(d->map.gpx, segid);
     if(!d->map.tracks->td[segid].track)
-      d->map.tracks->td[segid].track = dt_view_map_add_marker(darktable.view_manager,
+      d->map.tracks->td[segid].track = dt_view_map_add_marker(dt_view_manager_get_global(),
                                                               MAP_DISPLAY_TRACK, pts);
     osm_gps_map_track_set_color((OsmGpsMapTrack *)d->map.tracks->td[segid].track, &color[segid % 6]);
     grow = _update_map_box(segid, pts, self);
@@ -558,7 +557,7 @@ static gboolean _refresh_display_track(const gboolean active, const int segid, d
   else
   {
     if(d->map.tracks->td[segid].track !=  NULL)
-      dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_TRACK,
+      dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_TRACK,
                                 d->map.tracks->td[segid].track);
     d->map.tracks->td[segid].track =  NULL;
     _update_map_box(segid, NULL, self);
@@ -583,7 +582,7 @@ static void _refresh_display_all_tracks(dt_lib_module_t *self)
 
   if(grow)
   {
-    dt_view_map_center_on_bbox(darktable.view_manager, d->map.map_box.lon1, d->map.map_box.lat1,
+    dt_view_map_center_on_bbox(dt_view_manager_get_global(), d->map.map_box.lon1, d->map.map_box.lat1,
                                                        d->map.map_box.lon2, d->map.map_box.lat2);
   }
   _refresh_displayed_images(self);
@@ -607,7 +606,7 @@ static void _track_seg_toggled(GtkCellRendererToggle *cell_renderer, gchar *path
   active = !active;
   if(_refresh_display_track(active, segid, self))
   {
-    dt_view_map_center_on_bbox(darktable.view_manager, d->map.map_box.lon1, d->map.map_box.lat1,
+    dt_view_map_center_on_bbox(dt_view_manager_get_global(), d->map.map_box.lon1, d->map.map_box.lat1,
                                                        d->map.map_box.lon2, d->map.map_box.lat2);
   }
 
@@ -637,7 +636,7 @@ static void _all_tracks_toggled(GtkTreeViewColumn *column, dt_lib_module_t *self
   }
   if(active && grow)
   {
-    dt_view_map_center_on_bbox(darktable.view_manager, d->map.map_box.lon1, d->map.map_box.lat1,
+    dt_view_map_center_on_bbox(dt_view_manager_get_global(), d->map.map_box.lon1, d->map.map_box.lat1,
                                                        d->map.map_box.lon2, d->map.map_box.lat2);
   }
   _refresh_displayed_images(self);

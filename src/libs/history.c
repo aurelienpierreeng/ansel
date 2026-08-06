@@ -50,7 +50,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/history_actions.h"
 #include "common/macros.h"
@@ -359,7 +358,7 @@ static gchar *_lib_history_change_text(dt_introspection_field_t *field, const ch
 static const dt_dev_history_item_t * _find_previous_history_step(const dt_dev_history_item_t *hitem)
 {
   // Find the immediate previous history instance matching the current module
-  for(const GList *find_old = g_list_find(darktable.develop->history, hitem);
+  for(const GList *find_old = g_list_find(dt_dev_get_global()->history, hitem);
       find_old;
       find_old = g_list_previous(find_old))
   {
@@ -603,7 +602,7 @@ static void _lib_history_view_cell_set_foreground(GtkTreeViewColumn *column, Gtk
 
 static void _history_apply_history_end(const int history_end)
 {
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
 
   dt_dev_undo_start_record(dev);
 
@@ -634,11 +633,11 @@ static void _history_show_module_for_end(const int history_end)
 {
   if(history_end <= 0) return;
 
-  dt_pthread_rwlock_rdlock(&darktable.develop->history_mutex);
+  dt_pthread_rwlock_rdlock(&dt_dev_get_global()->history_mutex);
   dt_dev_history_item_t *hist
-      = (dt_dev_history_item_t *)g_list_nth_data(darktable.develop->history, history_end - 1);
+      = (dt_dev_history_item_t *)g_list_nth_data(dt_dev_get_global()->history, history_end - 1);
   dt_iop_module_t *module = hist ? hist->module : NULL;
-  dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
+  dt_pthread_rwlock_unlock(&dt_dev_get_global()->history_mutex);
   if(module)
   {
     dt_iop_request_focus(module);
@@ -763,16 +762,16 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
   // Read-only access: don't take a write lock here. This callback can run
   // while the pixelpipe holds a read lock, and a write lock would deadlock
   // the UI thread when history change signals are emitted.
-  dt_pthread_rwlock_rdlock(&darktable.develop->history_mutex);
+  dt_pthread_rwlock_rdlock(&dt_dev_get_global()->history_mutex);
 
   _history_store_add_original(d);
 
   int history_pos = 0;
-  for(const GList *history = darktable.develop->history; history; history = g_list_next(history), history_pos++)
+  for(const GList *history = dt_dev_get_global()->history; history; history = g_list_next(history), history_pos++)
     _history_store_prepend_item(d, (const dt_dev_history_item_t *)history->data, history_pos + 1);
 
-  const int history_end = dt_dev_get_history_end_ext(darktable.develop);
-  dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
+  const int history_end = dt_dev_get_history_end_ext(dt_dev_get_global());
+  dt_pthread_rwlock_unlock(&dt_dev_get_global()->history_mutex);
 
   _history_select_row_for_end(d, history_end);
   d->selection_reset = FALSE;
@@ -790,7 +789,7 @@ static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpo
 
   int history_end = 0;
   gtk_tree_model_get(model, &iter, DT_HISTORY_VIEW_COL_HISTORY_END, &history_end, -1);
-  if(history_end == dt_dev_get_history_end_ext(darktable.develop)) return;
+  if(history_end == dt_dev_get_history_end_ext(dt_dev_get_global())) return;
 
   _history_apply_history_end(history_end);
 }

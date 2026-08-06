@@ -17,7 +17,6 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/logging.h"
@@ -2156,10 +2155,12 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
 
   dt_control_log("%s", result->message[0] ? result->message : _("background layer job finished"));
 
+  dt_develop_t *dev = dt_dev_get_global();
+
   gboolean cleared_initiator = FALSE;
-  if(darktable.develop && darktable.develop->image_storage.id == result->imgid)
+  if(dev && dev->image_storage.id == result->imgid)
   {
-    for(GList *modules = darktable.develop->iop; modules; modules = g_list_next(modules))
+    for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
       if(!module || g_strcmp0(module->op, "drawlayer")) continue;
@@ -2182,9 +2183,9 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
     }
   }
 
-  if(!cleared_initiator && darktable.develop)
+  if(!cleared_initiator && dev)
   {
-    for(GList *modules = darktable.develop->iop; modules; modules = g_list_next(modules))
+    for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
       if(!module || g_strcmp0(module->op, "drawlayer")) continue;

@@ -27,7 +27,6 @@
 */
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
@@ -39,6 +38,7 @@
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "views/view.h"
 #include "gui/preferences.h"
 #include <gdk/gdkkeysyms.h>
 
@@ -75,12 +75,12 @@ int position()
 
 static void _show_osd_toggled(GtkToggleButton *button, gpointer data)
 {
-  dt_view_map_show_osd(darktable.view_manager);
+  dt_view_map_show_osd(dt_view_manager_get_global());
 }
 
 static void _parameter_changed(GtkToggleButton *button, gpointer data)
 {
-  dt_view_map_redraw(darktable.view_manager);
+  dt_view_map_redraw(dt_view_manager_get_global());
 }
 
 static void _map_source_changed(GtkWidget *widget, gpointer data)
@@ -98,7 +98,7 @@ static void _map_source_changed(GtkWidget *widget, gpointer data)
     gtk_tree_model_get_value(model, &iter, 1, &value);
     map_source = g_value_get_int(&value);
     g_value_unset(&value);
-    dt_view_map_set_map_source(darktable.view_manager, map_source);
+    dt_view_map_set_map_source(dt_view_manager_get_global(), map_source);
   }
 }
 

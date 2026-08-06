@@ -17,7 +17,6 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "common/utility.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -59,15 +58,16 @@ const char *_ui_panel_config_names[]
 gchar * panels_get_view_path(char *suffix)
 {
 
-  if(IS_NULL_PTR(darktable.view_manager)) return NULL;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm)) return NULL;
+  const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return NULL;
   char lay[32] = "";
 
   if(!strcmp(cv->module_name, "lighttable"))
     g_snprintf(lay, sizeof(lay), "%d/", 0);
   else if(!strcmp(cv->module_name, "darkroom"))
-    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(darktable.view_manager));
+    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(vm));
 
   return g_strdup_printf("%s/ui/%s%s", cv->module_name, lay, suffix);
 }
@@ -308,10 +308,11 @@ static gboolean _ui_scroll_target_is_live_widget(const GtkWidget *target, const 
     }
   }
 
-  if(side == RIGHT_PANNEL && !IS_NULL_PTR(darktable.develop))
+  const dt_develop_t *const dev = dt_dev_get_global();
+  if(side == RIGHT_PANNEL && !IS_NULL_PTR(dev))
   {
     // Walk darkroom iop modules and accept either header or expander scroll anchors.
-    for(const GList *iops = darktable.develop->iop; iops; iops = g_list_next(iops))
+    for(const GList *iops = dev->iop; iops; iops = g_list_next(iops))
     {
       const dt_iop_module_t *module = (const dt_iop_module_t *)iops->data;
       if(IS_NULL_PTR(module)) continue;

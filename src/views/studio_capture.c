@@ -24,7 +24,6 @@
 
 #include "common/atomic.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
@@ -424,7 +423,7 @@ static void _studio_set_image(dt_studio_capture_t *d, const int32_t imgid)
     dt_control_set_mouse_over_id(imgid);
     dt_control_set_keyboard_over_id(imgid);
     // Only feed the scopes while the atelier owns the global develop pointer.
-    if(darktable.develop == d->dev) _studio_dev_setup(d, imgid);
+    if(dt_dev_get_global() == d->dev) _studio_dev_setup(d, imgid);
   }
 
   dt_control_queue_redraw_center();
@@ -482,7 +481,7 @@ static void _studio_history_changed_callback(gpointer instance, gpointer user_da
   // read from d->dev's preview pipe, not from the fetcher's mipmap-based surface —
   // catch up at the same time as the center image. Skip dt_dev_history_gui_update():
   // it walks dev->iop expecting module GUIs, which this viewer never initializes.
-  if(d->dev_loaded && darktable.develop == d->dev)
+  if(d->dev_loaded && dt_dev_get_global() == d->dev)
   {
     dt_dev_reload_history_items(d->dev, d->imgid);
     dt_dev_history_pixelpipe_update(d->dev, TRUE);
@@ -498,8 +497,8 @@ void enter(dt_view_t *self)
 
   // Publish our develop so the scopes/navigation modules and the pixelpipe read
   // this viewer's pipeline while the atelier is active.
-  d->saved_develop = darktable.develop;
-  darktable.develop = d->dev;
+  d->saved_develop = dt_dev_get_global();
+  dt_dev_set_global(d->dev);
 
   // The Scopes module binds its instance and refresh callback onto whichever
   // develop is active at application startup (always darkroom's, since that
@@ -508,7 +507,7 @@ void enter(dt_view_t *self)
   // likewise created once at startup and wired to darkroom's specific
   // primary_sample struct: share that instance while we are active so the
   // readout displays here too (own_primary_sample is restored in leave()).
-  const dt_view_t *const darkroom_view = darktable.view_manager->proxy.darkroom.view;
+  const dt_view_t *const darkroom_view = dt_view_manager_get_global()->proxy.darkroom.view;
   if(!IS_NULL_PTR(darkroom_view) && !IS_NULL_PTR(darkroom_view->data))
   {
     const dt_develop_t *const darkroom_dev = (const dt_develop_t *)darkroom_view->data;
@@ -589,7 +588,7 @@ void leave(dt_view_t *self)
   // Tear down the pipeline while our develop is still the global one, then
   // restore the previous global develop pointer.
   _studio_dev_teardown(d);
-  darktable.develop = d->saved_develop;
+  dt_dev_set_global(d->saved_develop);
   // Force a fresh setup on the next enter even if the same image is shown.
   d->imgid = UNKNOWN_IMAGE;
 
@@ -607,7 +606,7 @@ void configure(dt_view_t *self, int width, int height)
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
   // Only the active view owns a valid center allocation.
-  if(dt_view_manager_get_current_view(darktable.view_manager) != self) return;
+  if(dt_view_manager_get_current_view(dt_view_manager_get_global()) != self) return;
 
   d->dev_width = width;
   d->dev_height = height;
@@ -1236,7 +1235,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
       if(d->imgid > UNKNOWN_IMAGE)
       {
         // _studio_set_image() already synced the global selection to d->imgid.
-        dt_view_manager_switch(darktable.view_manager, "darkroom");
+        dt_view_manager_switch(dt_view_manager_get_global(), "darkroom");
       }
       else
         dt_control_log(_("No image to open in darkroom."));

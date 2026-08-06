@@ -52,7 +52,6 @@
 
 #include "common/colorspaces.h"
 #include "common/colormatrices.c"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/file_location.h"
@@ -831,7 +830,7 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int3
   static const dt_iop_module_so_t *colorin = NULL;
   if(IS_NULL_PTR(colorin))
   {
-    for(const GList *modules = darktable.iop; modules; modules = g_list_next(modules))
+    for(const GList *modules = dt_iop_get_modules_so(); modules; modules = g_list_next(modules))
     {
       const dt_iop_module_so_t *module = (const dt_iop_module_so_t *)(modules->data);
       if(!strcmp(module->op, "colorin"))
@@ -1194,7 +1193,8 @@ const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32_t imgi
     dt_colorspaces_get_profile_name(profile, lang, lang + 3, container->name, sizeof(container->name));
 
     // add it to the stack of dt profiles so it gets freed properly when we don't need it anymore
-    darktable.color_profiles->profiles = g_list_append(darktable.color_profiles->profiles, container);
+    dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
+    color_profiles->profiles = g_list_append(color_profiles->profiles, container);
   }
 
   return (const dt_colorspaces_color_profile_t *)container;
@@ -1487,7 +1487,7 @@ static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_prof
   return prof;
 }
 
-// this function is basically thread safe, at least when not called on the global darktable.color_profiles
+// this function is basically thread safe, at least when not called on the global color profiles
 static void _update_display_transforms(dt_colorspaces_t *self)
 {
   if(self->transform_srgb_to_display) cmsDeleteTransform(self->transform_srgb_to_display);
@@ -1543,10 +1543,10 @@ static void _update_display_transforms(dt_colorspaces_t *self)
 }
 
 // update cached transforms for color management of thumbnails
-// make sure that darktable.color_profiles->xprofile_lock is held when calling this!
+// make sure that dt_colorspaces_get_global()->xprofile_lock is held when calling this!
 void dt_colorspaces_update_display_transforms()
 {
-  _update_display_transforms(darktable.color_profiles);
+  _update_display_transforms(dt_colorspaces_get_global());
 }
 
 void dt_colorspaces_transform_rgba_float_row(const cmsHTRANSFORM transform, const float *in, float *out,
@@ -1603,17 +1603,19 @@ void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, cons
   }
 }
 
-// make sure that darktable.color_profiles->xprofile_lock is held when calling this!
+// make sure that dt_colorspaces_get_global()->xprofile_lock is held when calling this!
 static void _update_display_profile(guchar *tmp_data, gsize size, char *name, size_t name_size)
 {
-  dt_free(darktable.color_profiles->xprofile_data);
-  darktable.color_profiles->xprofile_data = tmp_data;
-  darktable.color_profiles->xprofile_size = size;
+  dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
+
+  dt_free(color_profiles->xprofile_data);
+  color_profiles->xprofile_data = tmp_data;
+  color_profiles->xprofile_size = size;
 
   cmsHPROFILE profile = cmsOpenProfileFromMem(tmp_data, size);
   if(profile)
   {
-    for(GList *iter = darktable.color_profiles->profiles; iter; iter = g_list_next(iter))
+    for(GList *iter = color_profiles->profiles; iter; iter = g_list_next(iter))
     {
       dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
       if(p->type == DT_COLORSPACE_DISPLAY)
@@ -2020,7 +2022,9 @@ const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type,
 #ifdef USE_COLORDGTK
 static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, GAsyncResult *res, gpointer user_data)
 {
-  pthread_rwlock_wrlock(&darktable.color_profiles->xprofile_lock);
+  dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
+
+  pthread_rwlock_wrlock(&color_profiles->xprofile_lock);
 
   int profile_changed = 0;
   CdWindow *window = CD_WINDOW(source);
@@ -2031,20 +2035,20 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
     const gchar *filename = cd_profile_get_filename(profile);
     if(filename)
     {
-      if(g_strcmp0(filename, darktable.color_profiles->colord_profile_file))
+      if(g_strcmp0(filename, color_profiles->colord_profile_file))
       {
         /* the profile has changed (either because the user changed the colord settings or because we are on a
          * different screen now) */
-        // update darktable.color_profiles->colord_profile_file
-        dt_free(darktable.color_profiles->colord_profile_file);
-        darktable.color_profiles->colord_profile_file = g_strdup(filename);
+        // update the cached colord profile file
+        dt_free(color_profiles->colord_profile_file);
+        color_profiles->colord_profile_file = g_strdup(filename);
 
         // read the file
         guchar *tmp_data = NULL;
         gsize size;
         g_file_get_contents(filename, (gchar **)&tmp_data, &size, NULL);
-        profile_changed = size > 0 && (darktable.color_profiles->xprofile_size != size
-                                        || memcmp(darktable.color_profiles->xprofile_data, tmp_data, size) != 0);
+        profile_changed = size > 0 && (color_profiles->xprofile_size != size
+                                        || memcmp(color_profiles->xprofile_data, tmp_data, size) != 0);
 
         if(profile_changed)
         {
@@ -2062,7 +2066,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
   if(profile) g_object_unref(profile);
   g_object_unref(window);
 
-  pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+  pthread_rwlock_unlock(&color_profiles->xprofile_lock);
 
   if(profile_changed) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_CHANGED);
 }
@@ -2092,10 +2096,13 @@ static int _gtk_get_monitor_num(GdkMonitor *monitor)
 void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_t profile_type)
 {
   if(!dt_control_running()) return;
+
+  dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
+
   // make sure that no one gets a broken profile
   // FIXME: benchmark if the try is really needed when moving/resizing the window. Maybe we can just lock it
   // and block
-  if(pthread_rwlock_trywrlock(&darktable.color_profiles->xprofile_lock))
+  if(pthread_rwlock_trywrlock(&color_profiles->xprofile_lock))
     return; // we are already updating the profile. Or someone is reading right now. Too bad we can't
             // distinguish that. Whatever ...
 
@@ -2159,7 +2166,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
 
 #elif defined GDK_WINDOWING_QUARTZ
 #if 0
-  GtkWidget *widget = (profile_type == DT_COLORSPACE_DISPLAY2) ? darktable.develop->second_window.second_wnd : dt_gui_center_widget();
+  GtkWidget *widget = (profile_type == DT_COLORSPACE_DISPLAY2) ? dt_dev_get_global()->second_window.second_wnd : dt_gui_center_widget();
   GdkScreen *screen = gtk_widget_get_screen(widget);
   if(IS_NULL_PTR(screen)) screen = gdk_screen_get_default();
   int monitor = gdk_screen_get_monitor_at_window(screen, gtk_widget_get_window(widget));
@@ -2219,8 +2226,8 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   profile_source = g_strdup("windows color profile api");
 #endif
 
-  int profile_changed = buffer_size > 0 && (darktable.color_profiles->xprofile_size != buffer_size
-                              || memcmp(darktable.color_profiles->xprofile_data, buffer, buffer_size) != 0);
+  int profile_changed = buffer_size > 0 && (color_profiles->xprofile_size != buffer_size
+                              || memcmp(color_profiles->xprofile_data, buffer, buffer_size) != 0);
 
   if(profile_changed)
   {
@@ -2233,7 +2240,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   {
     dt_free(buffer);
   }
-  pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+  pthread_rwlock_unlock(&color_profiles->xprofile_lock);
   if(profile_changed) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_CHANGED);
   dt_free(profile_source);
 }
@@ -2531,7 +2538,7 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_profile(dt_colorspaces_
                                                                  const char *filename,
                                                                  dt_colorspaces_profile_direction_t direction)
 {
-  return _get_profile(darktable.color_profiles, type, filename, direction);
+  return _get_profile(dt_colorspaces_get_global(), type, filename, direction);
 }
 
 // Copied from dcraw's pseudoinverse()

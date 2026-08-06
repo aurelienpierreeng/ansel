@@ -1984,7 +1984,7 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
 #endif
 
   // themes not yet loaded, no CSS add some manual padding
-  const int padding = darktable.themes ? 0 : 5;
+  const int padding = dt_gui_get_themes() ? 0 : 5;
 
   gtk_window_set_icon_name(GTK_WINDOW(window), "ansel");
   gtk_window_set_title(GTK_WINDOW(window), title);
@@ -2089,7 +2089,7 @@ int dt_gui_show_standalone_three_choice_dialog(const char *title, const char *ma
 #endif
 
   // themes not yet loaded, no CSS add some manual padding
-  const int padding = darktable.themes ? 0 : 5;
+  const int padding = dt_gui_get_themes() ? 0 : 5;
 
   gtk_window_set_icon_name(GTK_WINDOW(window), "ansel");
   gtk_window_set_title(GTK_WINDOW(window), title);

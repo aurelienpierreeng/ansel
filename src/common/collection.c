@@ -69,7 +69,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "common/collection.h"
 #include "common/debug.h"
 #include "common/colorlabels.h"
@@ -84,6 +83,7 @@
 #include "common/selection.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "views/view.h"
 
 #include <assert.h>
 #include <glib.h>
@@ -2491,7 +2491,7 @@ static inline gboolean _collection_can_switch_folder(const int32_t imgid, const 
 
 void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image)
 {
-  const dt_view_t *current_atelier = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *current_atelier = dt_view_manager_get_current_view(dt_view_manager_get_global());
 
   // Go out if conditions are not reunited
   if(_collection_can_switch_folder(imgid, current_atelier))

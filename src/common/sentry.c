@@ -23,8 +23,9 @@
 #endif
 
 #include "common/sentry.h"
-#include "common/darktable.h"
 #include "common/times.h"
+
+#include <glib/gstdio.h> // for g_unlink
 
 #ifdef HAVE_SENTRY
 

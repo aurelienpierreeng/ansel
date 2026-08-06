@@ -278,6 +278,10 @@ typedef struct dt_view_manager_t
 
 } dt_view_manager_t;
 
+/** The application's single view manager, owned by the orchestrator. Declared here so
+ * consumers do not need common/darktable.h for it. Implemented in common/darktable.c. */
+struct dt_view_manager_t *dt_view_manager_get_global(void);
+
 void dt_view_manager_init(dt_view_manager_t *vm);
 void dt_view_manager_gui_init(dt_view_manager_t *vm);
 void dt_view_manager_cleanup(dt_view_manager_t *vm);

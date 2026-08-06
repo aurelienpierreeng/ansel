@@ -18,6 +18,12 @@
 #ifndef DT_COMMON_PATHS_H
 #define DT_COMMON_PATHS_H
 
+/* g_open() takes O_BINARY on Windows and does not define it elsewhere. Kept here rather
+ * than in common/darktable.h so that opening a file does not require the application. */
+#if !defined(O_BINARY)
+#define O_BINARY 0
+#endif
+
 /* Path/filename length constants and path splicing. Application-free on purpose:
  * include this instead of common/darktable.h. */
 

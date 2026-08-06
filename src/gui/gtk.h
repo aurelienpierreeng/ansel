@@ -175,6 +175,12 @@ struct dt_gui_gtk_t *dt_gui_get_global(void);
 struct dt_ui_t *dt_gui_get_ui(void);
 struct dt_accels_t *dt_gui_get_accels(void);
 GtkWidget *dt_gui_main_window(void);
+
+/** The list of available GTK theme names (gchar*), rebuilt by the preferences dialog,
+ * read by gtk.c for padding decisions. dt_gui_set_themes() TAKES OWNERSHIP and frees
+ * the previous list. */
+GList *dt_gui_get_themes(void);
+void dt_gui_set_themes(GList *themes);
 GtkWidget *dt_gui_center_widget(void);
 
 // Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.

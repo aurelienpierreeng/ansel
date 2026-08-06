@@ -42,7 +42,6 @@
 */
 #include "common/film.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/mipmap_cache.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
@@ -156,7 +155,7 @@ int dt_film_open(const int32_t id)
   // TODO: prefetch to cache using image_open
   dt_film_set_query(id);
   dt_control_queue_redraw_center();
-  dt_view_manager_reset(darktable.view_manager);
+  dt_view_manager_reset(dt_view_manager_get_global());
   return 0;
 }
 

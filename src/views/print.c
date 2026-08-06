@@ -32,7 +32,6 @@
 #include "common/collection.h"
 #include "common/cups_print.h"
 #include "common/printing.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/module_versioning.h"
@@ -164,8 +163,8 @@ init(dt_view_t *self)
     dt_view_image_surface_fetcher_init(&prt->screen_fetchers[k]);
 
   /* initialize CB to get the print settings from corresponding lib module */
-  darktable.view_manager->proxy.print.view = self;
-  darktable.view_manager->proxy.print.print_settings = _view_print_settings;
+  dt_view_manager_get_global()->proxy.print.view = self;
+  dt_view_manager_get_global()->proxy.print.print_settings = _view_print_settings;
 }
 
 void cleanup(dt_view_t *self)

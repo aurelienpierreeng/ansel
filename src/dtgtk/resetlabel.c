@@ -27,7 +27,6 @@
 */
 
 #include "dtgtk/resetlabel.h"
-#include "common/darktable.h"
 #include "develop/develop.h"
 
 static void _reset_label_class_init(GtkDarktableResetLabelClass *klass);
@@ -49,7 +48,7 @@ static gboolean _reset_label_callback(GtkDarktableResetLabel *label, GdkEventBut
     memcpy(((char *)label->module->params) + label->offset,
            ((char *)label->module->default_params) + label->offset, label->size);
     if(label->module->gui_update) label->module->gui_update(label->module);
-    dt_dev_add_history_item(darktable.develop, label->module, FALSE, TRUE);
+    dt_dev_add_history_item(dt_dev_get_global(), label->module, FALSE, TRUE);
     return TRUE;
   }
   return FALSE;

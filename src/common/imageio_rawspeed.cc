@@ -63,10 +63,10 @@
 #include "glib.h"
 
 #include "common/colorspaces.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/file_location.h"
+#include "common/global_mutexes.h"
 #include "common/imageio.h"
 #include "common/imageio_rawspeed.h"
 #include "common/tags.h"
@@ -96,7 +96,7 @@ static void dt_rawspeed_load_meta()
   /* Load rawspeed cameras.xml meta file once */
   if(IS_NULL_PTR(meta))
   {
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     if(IS_NULL_PTR(meta))
     {
       char datadir[PATH_MAX] = { 0 }, camfile[PATH_MAX] = { 0 };
@@ -105,7 +105,7 @@ static void dt_rawspeed_load_meta()
       // never cleaned up (only when dt closes)
       meta = new CameraMetaData(camfile);
     }
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   }
 }
 
@@ -195,9 +195,9 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
   {
     dt_rawspeed_load_meta();
 
-    dt_pthread_mutex_lock(&darktable.readFile_mutex);
+    dt_pthread_mutex_lock(dt_readfile_mutex());
     auto [storage, storageBuf] = f.readFile();
-    dt_pthread_mutex_unlock(&darktable.readFile_mutex);
+    dt_pthread_mutex_unlock(dt_readfile_mutex());
 
     RawParser t(storageBuf);
     std::unique_ptr<RawDecoder> d = t.getDecoder(meta);

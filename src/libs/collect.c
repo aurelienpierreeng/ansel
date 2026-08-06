@@ -126,7 +126,6 @@
 #include "libs/collect.h"
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/datetime.h"
 #include "common/debug.h"
 #include "common/film.h"
@@ -627,10 +626,10 @@ static void _commit_colllection()
 static void _commit_quiet()
 {
   dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
-                                  darktable.view_manager->proxy.module_collect.module);
+                                  dt_view_manager_get_global()->proxy.module_collect.module);
   _commit_colllection();
   dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
-                                    darktable.view_manager->proxy.module_collect.module);
+                                    dt_view_manager_get_global()->proxy.module_collect.module);
 }
 
 static dt_lib_collect_t *get_collect(dt_lib_collect_rule_t *r)
@@ -1790,7 +1789,7 @@ static void row_activated(GtkTreeView *view, GtkTreePath *path, GdkEventButton *
 
 static dt_lib_module_t *_self()
 {
-  return darktable.view_manager->proxy.module_collect.module;
+  return dt_view_manager_get_global()->proxy.module_collect.module;
 }
 
 static void _force_refresh(dt_lib_collect_t *d)
@@ -2070,7 +2069,7 @@ static gboolean _en_folders(int property, int n)
 // but silently do nothing beyond a log message.
 static gboolean _en_folders_lighttable(int property, int n)
 {
-  const dt_view_t *cv = darktable.view_manager->current_view;
+  const dt_view_t *cv = dt_view_manager_get_global()->current_view;
   return item_is_folder(property) && cv && cv->view(cv) == DT_VIEW_LIGHTTABLE;
 }
 static gboolean _en_tags(int property, int n)
@@ -3002,10 +3001,10 @@ static void tag_changed(gpointer instance, gpointer self)
   if(uses_tag)
   {
     dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
-                                    darktable.view_manager->proxy.module_collect.module);
+                                    dt_view_manager_get_global()->proxy.module_collect.module);
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_TAG, NULL);
     dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
-                                      darktable.view_manager->proxy.module_collect.module);
+                                      dt_view_manager_get_global()->proxy.module_collect.module);
   }
   _lib_collect_gui_update(self);
 }
@@ -3020,11 +3019,11 @@ static void geotag_changed(gpointer instance, GList *imgs, const int locid, gpoi
     get_active_rule(d)->typing = FALSE;
     _lib_collect_gui_update(self);
     dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
-                                    darktable.view_manager->proxy.module_collect.module);
+                                    dt_view_manager_get_global()->proxy.module_collect.module);
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GEOTAGGING,
                                NULL);
     dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
-                                      darktable.view_manager->proxy.module_collect.module);
+                                      dt_view_manager_get_global()->proxy.module_collect.module);
   }
 }
 
@@ -3243,8 +3242,8 @@ void gui_init(dt_lib_module_t *self)
                      TRUE, TRUE, 0);
 
   // proxy used by other code to force a refresh
-  darktable.view_manager->proxy.module_collect.module = self;
-  darktable.view_manager->proxy.module_collect.update = _lib_collect_gui_update;
+  dt_view_manager_get_global()->proxy.module_collect.module = self;
+  dt_view_manager_get_global()->proxy.module_collect.update = _lib_collect_gui_update;
 
   _lib_collect_gui_update(self);
 
@@ -3283,7 +3282,7 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(tag_changed), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(geotag_changed), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(metadata_changed), self);
-  darktable.view_manager->proxy.module_collect.module = NULL;
+  dt_view_manager_get_global()->proxy.module_collect.module = NULL;
 
   dt_free(d->params);
   dt_free(d->last_folders_string);

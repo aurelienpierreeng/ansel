@@ -52,7 +52,6 @@
 #include "backend_kwallet.h"
 #endif
 
-#include "common/darktable.h"
 #include "control/conf.h"
 #include "control/control.h"
 

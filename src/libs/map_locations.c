@@ -24,7 +24,6 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "common/tags.h"
 #include "dtgtk/togglebutton.h"
 #include "dtgtk/paint.h"
@@ -38,6 +37,7 @@
 #include "control/control.h"
 
 #include "libs/lib.h"
+#include "views/view.h"
 
 // map position module uses the tag dictionary with dt_geo_tag_root as a prefix.
 // Synonym field is used to store positions coordinates in ascii format.
@@ -373,7 +373,7 @@ static void _show_all_button_clicked(GtkButton *button, dt_lib_module_t *self)
   dt_lib_map_locations_t *d = (dt_lib_map_locations_t *)self->data;
   dt_conf_set_bool("plugins/map/showalllocations",
                   gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->show_all_button)));
-  dt_view_map_location_action(darktable.view_manager, MAP_LOCATION_ACTION_UPDATE_OTHERS);
+  dt_view_map_location_action(dt_view_manager_get_global(), MAP_LOCATION_ACTION_UPDATE_OTHERS);
 }
 
 // delete a path of the tag tree
@@ -564,7 +564,7 @@ static void _name_editing_done(GtkCellEditable *editable, dt_lib_module_t *self)
             g.lon = g.lat = NAN;
             g.delta1 = g.delta2 = 0.0;
             g.polygons = d->polygons;
-            dt_view_map_add_location(darktable.view_manager, &g, locid);
+            dt_view_map_add_location(dt_view_manager_get_global(), &g, locid);
             const int count = dt_map_location_get_images_count(locid);
             if(g_strstr_len(name, -1, "|"))
             {
@@ -712,7 +712,7 @@ static void _pop_menu_delete_location(GtkWidget *menuitem, dt_lib_module_t *self
     gtk_tree_model_get(model, &iter, DT_MAP_LOCATION_COL_ID, &locid, -1);
     if(locid > 0)
     {
-      dt_view_map_location_action(darktable.view_manager, MAP_LOCATION_ACTION_REMOVE);
+      dt_view_map_location_action(dt_view_manager_get_global(), MAP_LOCATION_ACTION_REMOVE);
       dt_map_location_delete(locid);
       _signal_location_change(self);
     }
@@ -756,13 +756,13 @@ static void _show_location(dt_lib_module_t *self)
     if(locid)
     {
       dt_map_location_data_t *p = dt_map_location_get_data(locid);
-      dt_view_map_add_location(darktable.view_manager, p, locid);
+      dt_view_map_add_location(dt_view_manager_get_global(), p, locid);
       dt_free(p);
     }
     else
     {
       // this is not a location (only a parent). remove location from map if any
-      dt_view_map_location_action(darktable.view_manager, MAP_LOCATION_ACTION_REMOVE);
+      dt_view_map_location_action(dt_view_manager_get_global(), MAP_LOCATION_ACTION_REMOVE);
     }
   }
 }
@@ -796,7 +796,7 @@ static void _pop_menu_update_filmstrip(GtkWidget *menuitem, dt_lib_module_t *sel
 static void _pop_menu_goto_collection(GtkWidget *menuitem, dt_lib_module_t *self)
 {
   if(_set_location_collection(self))
-    dt_view_manager_switch(darktable.view_manager, "lighttable");
+    dt_view_manager_switch(dt_view_manager_get_global(), "lighttable");
 }
 
 static void _pop_menu_view(GtkWidget *view, GdkEventButton *event, dt_lib_module_t *self)
@@ -868,7 +868,7 @@ static void _selection_changed(GtkTreeSelection *selection, dt_lib_module_t *sel
   }
   else
   {
-    dt_view_map_location_action(darktable.view_manager, MAP_LOCATION_ACTION_REMOVE);
+    dt_view_map_location_action(dt_view_manager_get_global(), MAP_LOCATION_ACTION_REMOVE);
   }
   _display_buttons(self);
 }

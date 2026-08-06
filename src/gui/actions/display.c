@@ -17,12 +17,12 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "control/conf.h"
 #include "common/mipmap_cache.h"
 #include "common/collection.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
+#include "develop/develop.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "views/view.h"
@@ -81,7 +81,7 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
   gtk_window_move(GTK_WINDOW(window), geometry.x + geometry.width - w, geometry.y + geometry.height - h);
 #endif
 
-  dt_dev_pixelpipe_change_zoom_main(darktable.develop);
+  dt_dev_pixelpipe_change_zoom_main(dt_dev_get_global());
 
   return TRUE;
 }
@@ -107,7 +107,7 @@ static gboolean _toggle_side_borders_accel_callback(GtkAccelGroup *accel_group, 
   dt_ui_toggle_panels_visibility(dt_gui_get_ui());
 
   /* trigger invalidation of centerview to reprocess pipe */
-  dt_dev_pixelpipe_change_zoom_main(darktable.develop);
+  dt_dev_pixelpipe_change_zoom_main(dt_dev_get_global());
   return TRUE;
 }
 
@@ -242,7 +242,7 @@ static gboolean panel_top_checked_callback(GtkWidget *widget)
 static gboolean available_in_lighttable_callback()
 {
   // Filmstrip is not visible in lighttable
-  const dt_view_t *view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   return (view && strcmp(view->module_name, "lighttable"));
 }
 

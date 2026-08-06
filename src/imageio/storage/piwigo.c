@@ -30,8 +30,8 @@
 */
 
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
 #include "common/file_location.h"
+#include "common/global_mutexes.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
@@ -46,6 +46,7 @@
 #include "gui/gtk.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <curl/curl.h>
+#include <glib/gstdio.h>
 #include <json-glib/json-glib.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1048,7 +1049,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     result = 1;
     goto cleanup;
   }
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   {
     gboolean status = TRUE;
     dt_storage_piwigo_params_t *p = (dt_storage_piwigo_params_t *)sdata;
@@ -1088,7 +1089,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
       dt_free(p->tags);
     }
   }
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
 cleanup:
 

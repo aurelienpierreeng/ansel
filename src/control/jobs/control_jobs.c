@@ -80,7 +80,6 @@
 #include "control/jobs/control_jobs.h"
 #include "control/control.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/film.h"
@@ -1627,7 +1626,8 @@ void dt_control_monochrome_images(const int32_t mode)
 
 gboolean dt_control_remove_images()
 {
-  if(darktable.view_manager->current_view->view(darktable.view_manager->current_view) != DT_VIEW_LIGHTTABLE)
+  const dt_view_t *const cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
+  if(cv->view(cv) != DT_VIEW_LIGHTTABLE)
   {
     dt_control_log(_("removing images from library is only possible in Lighttable view"));
     return FALSE;
@@ -1673,7 +1673,8 @@ gboolean dt_control_remove_images()
 
 void dt_control_delete_images()
 {
-  if(darktable.view_manager->current_view->view(darktable.view_manager->current_view) != DT_VIEW_LIGHTTABLE)
+  const dt_view_t *const cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
+  if(cv->view(cv) != DT_VIEW_LIGHTTABLE)
   {
     dt_control_log(_("Deleting images from library is only possible in Lighttable view"));
     return;
@@ -1720,7 +1721,8 @@ void dt_control_delete_images()
 
 void dt_control_delete_image(int32_t imgid)
 {
-  if(darktable.view_manager->current_view->view(darktable.view_manager->current_view) != DT_VIEW_LIGHTTABLE)
+  const dt_view_t *const cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
+  if(cv->view(cv) != DT_VIEW_LIGHTTABLE)
   {
     dt_control_log(_("Deleting images from library is only possible in Lighttable view"));
     return;

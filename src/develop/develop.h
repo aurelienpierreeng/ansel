@@ -873,6 +873,18 @@ gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev);
 // Update the mouse bounding box size according to current zoom level, dpp and DPI.
 void dt_dev_update_mouse_effect_radius(dt_develop_t *dev);
 
+/** The darkroom's current dt_develop_t, owned by the application orchestrator.
+ * Declared here rather than reached through `darktable.develop` so that modules and
+ * libraries do not have to include common/darktable.h -- and therefore the whole
+ * application -- just to find the image being edited. Implemented in
+ * common/darktable.c. Returns NULL outside darkroom. */
+struct dt_develop_t *dt_dev_get_global(void);
+
+/** Publish `dev` as the live darkroom develop. Only the views that own that lifetime
+ * call this: darkroom's enter(), and studio_capture's enter()/leave() swap. Pass NULL
+ * to clear. Does NOT take ownership. */
+void dt_dev_set_global(struct dt_develop_t *dev);
+
 #ifdef __cplusplus
 }
 #endif

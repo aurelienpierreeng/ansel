@@ -25,7 +25,6 @@
 #include "common/cache.h"
 #include "common/collection.h"
 #include "common/film.h"
-#include "common/darktable.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/debug.h"

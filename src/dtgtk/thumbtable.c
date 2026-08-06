@@ -40,7 +40,7 @@
 */
 /** a class to manage a table of thumbnail for lighttable and filmstrip.  */
 
-#include "common/darktable.h"
+#include "common/image_extensions.h"
 #include "control/conf.h"
 #include "control/jobs/control_jobs.h"
 #include "gui/gdkkeys.h"
@@ -991,7 +991,7 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
       }
     }
 
-    if(darktable.view_manager->image_info_id == imgid)
+    if(dt_view_manager_get_global()->image_info_id == imgid)
       dt_view_image_info_update(imgid);
   }
 

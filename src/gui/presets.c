@@ -59,7 +59,6 @@
 #include "control/conf.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/presets.h"
@@ -1012,7 +1011,7 @@ void dt_gui_presets_apply_preset(const gchar* name, dt_iop_module_t *module)
   }
   sqlite3_finalize(stmt);
   dt_iop_gui_update(module);
-  dt_dev_add_history_item(darktable.develop, module, FALSE, TRUE);
+  dt_dev_add_history_item(dt_dev_get_global(), module, FALSE, TRUE);
   gtk_widget_queue_draw(module->widget);
 }
 

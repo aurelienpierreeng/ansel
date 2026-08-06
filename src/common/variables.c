@@ -48,11 +48,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/debug.h"
-#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/variables.h"
 #include "common/colorlabels.h"
-#include "common/darktable.h"
 #include "common/file_location.h"
 #include "common/image.h"
 #include "common/image_cache.h"

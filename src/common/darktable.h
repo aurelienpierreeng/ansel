@@ -73,10 +73,7 @@
 // needs to be defined before any system header includes for control/conf.h to work in C++ code
 #define __STDC_FORMAT_MACROS
 
-#if !defined(O_BINARY)
-// To have portable g_open() on *nix and on Windows
-#define O_BINARY 0
-#endif
+/* O_BINARY moved to common/paths.h, next to the other path/file portability. */
 
 #include "external/ThreadSafetyAnalysis.h"
 
@@ -229,8 +226,6 @@ typedef struct darktable_t
   GList *themes;
   int32_t unmuted_signal_dbg_acts;
   gboolean unmuted_signal_dbg[DT_SIGNAL_COUNT];
-  GTimeZone *utc_tz;
-  GDateTime *origin_gdt;
   struct dt_sys_resources_t dtresources;
 
   // Working message displayed over the main preview when working
@@ -250,8 +245,7 @@ void dt_cleanup();
 /* dt_capabilities_* moved to common/capabilities.h */
 
 
-/** \brief check if file is a supported image */
-gboolean dt_supported_image(const gchar *filename);
+/* dt_supported_image() moved to common/image_extensions.h */
 
 
 // helper function which loads whatever image_to_load points to: single image files or whole directories

@@ -49,8 +49,8 @@
 */
 
 #include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
 #include "common/exif.h"
+#include "common/global_mutexes.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
@@ -269,7 +269,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   gboolean fail = FALSE;
   // we're potentially called in parallel. have sequence number synchronized:
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   {
 try_again:
     // avoid braindead export which is bound to overwrite at random:
@@ -342,7 +342,7 @@ try_again:
     {
       if(g_file_test(filename, G_FILE_TEST_EXISTS))
       {
-        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
         fprintf(stderr, "[export_job] skipping `%s'\n", filename);
         dt_control_log(ngettext("%d/%d skipping `%s'", "%d/%d skipping `%s'", num),
                        num, total, filename);
@@ -350,7 +350,7 @@ try_again:
       }
     }
   } // end of critical block
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   if(fail) return 1;
 
   /* export image to file */

@@ -56,7 +56,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/global_mutexes.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/mem_alloc.h"
@@ -593,7 +593,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
   // rsvg (or some part of cairo which is used underneath) isn't thread safe, for example when handling fonts
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
 
   RsvgHandle *svg = NULL;
   if(type == DT_WTM_SVG)
@@ -607,7 +607,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       cairo_surface_destroy(surface);
       dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       fprintf(stderr, "[watermark] error processing svg file: %s\n", error->message);
       g_error_free(error);
       return 0;
@@ -635,7 +635,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         cairo_surface_destroy(surface);
         dt_free(image);
         dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
         return 0;
       }
       dimension.width = cairo_image_surface_get_width(surface_two);
@@ -746,7 +746,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       g_object_unref(svg);
       dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       return 1;
     }
     surface_two = cairo_image_surface_create_for_data(image_two, CAIRO_FORMAT_ARGB32, watermark_width,
@@ -760,7 +760,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       dt_free(image);
       dt_free(image_two);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       return 0;
     }
   }
@@ -831,7 +831,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   cairo_paint(cr);
 
   // no more non-thread safe rsvg usage
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
   cairo_destroy(cr);
   cairo_destroy(cr_two);

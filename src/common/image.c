@@ -72,8 +72,8 @@
 */
 
 #include "common/image.h"
+#include "develop/imageop.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
 #include "common/exif.h"
@@ -98,6 +98,7 @@
 #include "control/jobs.h"
 #include "develop/lightroom.h"
 #include "develop/develop.h"
+#include "views/view.h"
 #include "win/filepath.h"
 #include <assert.h>
 #include <ctype.h>
@@ -1194,7 +1195,7 @@ static dt_image_orientation_t _image_get_history_orientation(const int32_t imgid
   static dt_iop_module_so_t *flip = NULL;
   if(IS_NULL_PTR(flip))
   {
-    for(const GList *modules = darktable.iop; modules; modules = g_list_next(modules))
+    for(const GList *modules = dt_iop_get_modules_so(); modules; modules = g_list_next(modules))
     {
       dt_iop_module_so_t *module = (dt_iop_module_so_t *)(modules->data);
       if(!strcmp(module->op, "flip"))
@@ -1259,8 +1260,8 @@ dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
 void dt_image_flip(const int32_t imgid, const int32_t cw)
 {
   // this is light table only:
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(darktable.develop->image_storage.id == imgid && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM) return;
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
+  if(dt_dev_get_global()->image_storage.id == imgid && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM) return;
 
   dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
   hist->imgid = imgid;

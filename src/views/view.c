@@ -74,7 +74,6 @@
 #include "common/variables.h"
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
-#include "common/darktable.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "common/debug.h"
@@ -1301,27 +1300,29 @@ char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const g
 
 void dt_view_active_images_reset(gboolean raise)
 {
-  if(IS_NULL_PTR(darktable.view_manager->active_images)) return;
-  g_list_free(darktable.view_manager->active_images);
-  darktable.view_manager->active_images = NULL;
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm->active_images)) return;
+  g_list_free(vm->active_images);
+  vm->active_images = NULL;
 
   if(raise) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_active_images_add(int32_t imgid, gboolean raise)
 {
-  darktable.view_manager->active_images
-      = g_list_append(darktable.view_manager->active_images, GINT_TO_POINTER(imgid));
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  vm->active_images = g_list_append(vm->active_images, GINT_TO_POINTER(imgid));
   if(raise)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_active_images_remove(int32_t imgid, gboolean raise)
 {
-  GList *link = g_list_find(darktable.view_manager->active_images, GINT_TO_POINTER(imgid));
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  GList *link = g_list_find(vm->active_images, GINT_TO_POINTER(imgid));
   if(link)
   {
-    darktable.view_manager->active_images = g_list_delete_link(darktable.view_manager->active_images, link);
+    vm->active_images = g_list_delete_link(vm->active_images, link);
 
     if(raise)
       DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
@@ -1335,24 +1336,26 @@ gboolean dt_view_active_images_has_imgid(int32_t imgid)
 
 GList *dt_view_active_images_get_all()
 {
-  return darktable.view_manager->active_images;
+  return dt_view_manager_get_global()->active_images;
 }
 
 int32_t dt_view_active_images_get_first()
 {
-  if(IS_NULL_PTR(darktable.view_manager->active_images)) return -1;
-  return GPOINTER_TO_INT(darktable.view_manager->active_images->data);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm->active_images)) return -1;
+  return GPOINTER_TO_INT(vm->active_images->data);
 }
 
 void dt_view_active_images_set(GList *images, gboolean raise)
 {
-  if(!IS_NULL_PTR(darktable.view_manager->active_images)
-     && darktable.view_manager->active_images != images)
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(!IS_NULL_PTR(vm->active_images)
+     && vm->active_images != images)
   {
-    g_list_free(darktable.view_manager->active_images);
+    g_list_free(vm->active_images);
   }
 
-  darktable.view_manager->active_images = images;
+  vm->active_images = images;
 
   if(raise)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
@@ -1504,7 +1507,7 @@ void dt_view_audio_stop(dt_view_manager_t *vm)
 
 void dt_view_image_info_update(int32_t imgid)
 {
-  darktable.view_manager->image_info_id = imgid;
+  dt_view_manager_get_global()->image_info_id = imgid;
 
   if(imgid == UNKNOWN_IMAGE)
   {
