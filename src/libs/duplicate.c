@@ -43,16 +43,13 @@
 #include "common/module_versioning.h"
 #include "common/history.h"
 #include "common/metadata.h"
-#include "common/selection.h"
 #include "common/styles.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_snapshot.h"
 #include "dtgtk/thumbnail.h"
 
 #include "gui/gtk.h"
-#include "gui/styles.h"
 #include "libs/lib.h"
 
 #include <sqlite3.h>

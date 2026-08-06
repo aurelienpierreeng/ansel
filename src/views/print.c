@@ -29,21 +29,17 @@
 */
 
 /** this is the view for the print module.  */
-#include "common/collection.h"
 #include "common/cups_print.h"
 #include "common/printing.h"
-#include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "views/view.h"
 #include "views/view_api.h"
 

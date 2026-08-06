@@ -19,10 +19,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/debug.h"
-#include "control/conf.h"
 #include "control/control.h"
-#include "develop/develop.h"
 #include "gui/gtk.h"
 
 #include "gui/actions/menu.h"

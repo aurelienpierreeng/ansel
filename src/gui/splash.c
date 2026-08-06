@@ -22,7 +22,6 @@
 #include "common/mem_alloc.h"
 #include "common/paths.h"
 #include "common/file_location.h"
-#include "common/l10n.h"
 #include "gui/gtk.h"
 
 #include <glib/gi18n.h>

@@ -50,18 +50,14 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/debug.h"
 #include "common/history_actions.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/styles.h"
-#include "common/undo.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/masks.h"
 
 #include "gui/gtk.h"
-#include "gui/styles.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include <complex.h>

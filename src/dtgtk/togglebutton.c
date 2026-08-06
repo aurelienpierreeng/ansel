@@ -36,7 +36,6 @@
 */
 #include "togglebutton.h"
 #include "bauhaus/bauhaus.h"
-#include "button.h"
 #include "gui/gtk.h"
 #include <string.h>
 

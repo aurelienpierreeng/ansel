@@ -28,7 +28,6 @@
 #include "dtgtk/togglebutton.h"
 #include "dtgtk/paint.h"
 #include "common/collection.h"
-#include "common/debug.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"

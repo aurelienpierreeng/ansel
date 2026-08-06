@@ -19,15 +19,10 @@
 #include "dtgtk/thumbtable_info.h"
 
 #include "common/database.h"
-#include "common/datetime.h"
 #include "common/debug.h"
 #include "common/image.h"
 #include "common/image_cache.h"
-#include "common/imageio.h"
 #include "common/macros.h"
-#include "common/ratings.h"
-#include "develop/imageop.h"
-#include "views/view.h"
 
 #include <glib.h>
 #include <glib/gi18n.h>

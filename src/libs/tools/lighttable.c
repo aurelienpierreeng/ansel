@@ -41,13 +41,8 @@
 #include <gdk/gdkkeysyms.h>
 
 #include "common/collection.h"
-#include "common/debug.h"
-#include "common/selection.h"
 #include "control/conf.h"
-#include "control/control.h"
-#include "dtgtk/button.h"
 #include "dtgtk/thumbtable.h"
-#include "dtgtk/togglebutton.h"
 #include "gui/actions/menu.h"
 
 #include "gui/gtk.h"

@@ -26,14 +26,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "bauhaus/bauhaus.h"
-#include "common/collection.h"
-#include "common/debug.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
-#include "common/selection.h"
 #include "control/conf.h"
-#include "control/control.h"
-#include "dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "libs/lib.h"
