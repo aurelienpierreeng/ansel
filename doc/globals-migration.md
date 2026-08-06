@@ -74,6 +74,7 @@ Done, on `refactor/strip-darktable-h`:
 | `db` | 0 | two accessors: `dt_database_get_sqlite3_global()` (353 sites) + `dt_database_get_global()` (56) |
 | `signals` | 0 | `dt_control_signal_get_global()` — **end state**, not interim (see below) |
 | `develop` **in `develop/blend_gui.c`** | 52 → 0 | `module->dev`/`self->dev`, `data->module->dev`; 4 context-less helpers gained a dev parameter |
+| `gui` | 786 → 0 outside owners | split by consumer: `dt_gui_main_window()`/`dt_gui_center_widget()` (153 sites), `dt_gui_get_ui()` (128), `dt_gui_get_accels()` (157), `dt_gui_get_global()` (rest). Sub-accessors implemented in gui/gtk.c, which owns the struct |
 | `lib`, `imageio`, `l10n`, `dbus`, `pwstorage`, `points`, `noiseprofile_parser` | 0 | `dt_*_get_global()` — end state (process-wide singletons). Fixed a latent break: `common/points.h`'s inlines dereferenced the global without including darktable.h |
 | `opencl`, `color_profiles` | 0 **outside their own TU** | `dt_opencl_get_global()`, `dt_colorspaces_get_global()`; external `->inited` reads now use `dt_opencl_is_inited()`. `opencl.c`/`colorspaces.c` keep direct access — see below |
 
