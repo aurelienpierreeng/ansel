@@ -57,6 +57,39 @@ Then: `collection` 97/27, `undo` 91/16, `selection` 88/24, `mipmap_cache` 70/19,
 - **C — pass at init, store in the subsystem's own struct**: for services with a natural
   owner (bauhaus handle on `dt_gui_module_t`, pixelpipe cache handle on `dt_dev_pixelpipe_t`).
 
+## 3b. Progress (updated as the migration lands)
+
+Done, on `refactor/strip-darktable-h`:
+
+| Member | Result | Note |
+|---|---|---|
+| the 9 path constants | 0 refs outside `file_location.c` | interned `dt_loc_datadir()` family |
+| `utc_tz`, `origin_gdt` | 0 outside `datetime.c` | `dt_datetime_utc_tz()`, `dt_datetime_origin()` |
+| `unmuted`, `unmuted_signal_dbg*` | 0 outside `darktable.c` | `dt_get_debug_flags()`, `dt_get_signal_debug{,_acts}()` |
+| `dtresources`, `start_wtime` | 0 outside `darktable.c` | `dt_get_total_mem()`, `dt_get_start_wtime()`, existing mem getters |
+| `num_openmp_threads` | 0 | `dt_get_num_openmp_threads()` (end state: it is a constant) |
+| `develop` **in `iop/`** | 289 → 4 | `self->dev`; the 4 are drawlayer's lifetime-decoupled job callback |
+| `image_cache`, `mipmap_cache`, `selection`, `undo` | 0 | `dt_*_get_global()` accessors (interim, Strategy B) |
+| `collection` | 0 | idem; `libs/tools/filter.c` still reads `->params`/`->tagid` directly — wrap in named API later |
+| `db` | 0 | two accessors: `dt_database_get_sqlite3_global()` (353 sites) + `dt_database_get_global()` (56) |
+| `signals` | 0 | `dt_control_signal_get_global()` — **end state**, not interim (see below) |
+
+**Refinement learned while migrating**: not every member should end up threaded through
+arguments. Three categories have emerged, and classifying a member *before* touching it
+avoids double churn:
+
+1. **App-lifetime constants** (paths, timezone, debug mask, thread count) — getters are the
+   final answer; threading them would add parameters carrying a value that cannot differ.
+2. **Process-wide buses with no per-call context** (`signals`, and `conf` already) — an
+   accessor/free-function API is the final answer for the same reason.
+3. **Service handles with a natural carrier** (`pixelpipe_cache` → `pipe`, `bauhaus` →
+   `dt_gui_module_t`, `develop` → `self->dev`) — these are the real injection targets, and for
+   them the interim accessor is *churn*: convert them straight to the carrier instead.
+
+Consequently `pixelpipe_cache` was deliberately **not** given an interim accessor sweep: its
+carrier (`dt_dev_pixelpipe_t`, already threaded through every pipeline function) is available
+today, so it should go directly to Strategy A.
+
 ## 4. Recommended order
 
 | Order | Item | Strategy | Files | Refs | Risk |
