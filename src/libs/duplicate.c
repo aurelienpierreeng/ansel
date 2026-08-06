@@ -44,7 +44,6 @@
 #include "common/module_versioning.h"
 #include "common/history.h"
 #include "common/metadata.h"
-#include "common/styles.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_snapshot.h"

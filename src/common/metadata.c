@@ -38,7 +38,6 @@
 #include "common/collection.h"
 #include "common/undo.h"
 #include "control/conf.h"
-#include "views/view.h"
 
 #include <stdlib.h>
 #include "common/utility.h"
