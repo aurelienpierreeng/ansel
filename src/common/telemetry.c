@@ -265,7 +265,7 @@ static JsonObject *_telemetry_session_end_properties(void)
 {
   JsonObject *p = json_object_new();
 
-  const double dur = dt_get_wtime() - darktable.start_wtime;
+  const double dur = dt_get_wtime() - dt_get_start_wtime();
   json_object_set_double_member(p, "session_seconds", (dur > 0.0) ? dur : 0.0);
 
   // Stamp the release on session_end too (not only session_start), so average
@@ -337,9 +337,9 @@ static JsonObject *_telemetry_system_properties(void)
   }
 
   json_object_set_int_member(p, "cpu_cores", g_get_num_processors());
-  if(darktable.dtresources.total_memory > 0)
+  if(dt_get_total_mem() > 0)
     json_object_set_double_member(p, "ram_gb",
-                                  (double)darktable.dtresources.total_memory / (1024.0 * 1024.0 * 1024.0));
+                                  (double)dt_get_total_mem() / (1024.0 * 1024.0 * 1024.0));
 
   const gboolean cl = dt_opencl_is_enabled();
   json_object_set_boolean_member(p, "opencl", cl);

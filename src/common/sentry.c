@@ -84,11 +84,11 @@ static char _processed_pipeline[32] = { 0 };
 // the website can report "images processed before a crash".
 static volatile int _processed_image_count = 0;
 
-// Length of the running session, in seconds. darktable.start_wtime is stamped at
+// Length of the running session, in seconds. The start wtime is stamped at
 // the very start of dt_init().
 static double _sentry_session_seconds(void)
 {
-  const double dur = dt_get_wtime() - darktable.start_wtime;
+  const double dur = dt_get_wtime() - dt_get_start_wtime();
   return (dur > 0.0) ? dur : 0.0;
 }
 
@@ -385,9 +385,9 @@ static void _sentry_set_context(void)
   sentry_value_set_by_key(device, "cpu_logical_cores", sentry_value_new_int32(g_get_num_processors()));
   sentry_value_set_by_key(device, "openmp_threads", sentry_value_new_int32(darktable.num_openmp_threads));
 
-  if(darktable.dtresources.total_memory > 0)
+  if(dt_get_total_mem() > 0)
   {
-    const double mem_gb = (double)darktable.dtresources.total_memory / (1024.0 * 1024.0 * 1024.0);
+    const double mem_gb = (double)dt_get_total_mem() / (1024.0 * 1024.0 * 1024.0);
     sentry_value_set_by_key(device, "memory_gb", sentry_value_new_double(mem_gb));
   }
 

@@ -864,7 +864,7 @@ void dt_mipmap_cache_get_usage(dt_mipmap_cache_t *cache, size_t *current, size_t
   g_array_free(entries, TRUE);
 
   if(current) *current = used;
-  if(max) *max = darktable.dtresources.mipmap_memory; // user-specified mipmap RAM budget
+  if(max) *max = dt_get_mipmap_mem(); // user-specified mipmap RAM budget
 }
 
 GArray *dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_t *cache)

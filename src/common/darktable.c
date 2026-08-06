@@ -1624,6 +1624,11 @@ void dt_cleanup()
   }
 }
 
+double dt_get_start_wtime(void)
+{
+  return darktable.start_wtime;
+}
+
 int32_t dt_get_debug_flags(void)
 {
   return darktable.unmuted;
@@ -1947,6 +1952,11 @@ size_t dt_get_available_mem()
 size_t dt_get_mipmap_mem()
 {
   return darktable.dtresources.mipmap_memory;
+}
+
+size_t dt_get_total_mem(void)
+{
+  return darktable.dtresources.total_memory;
 }
 
 size_t dt_get_memory_pressure_floor(void)

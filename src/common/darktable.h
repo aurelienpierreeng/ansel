@@ -300,6 +300,11 @@ size_t dt_get_available_mem();
 // Get the maximum size for the whole mipmap cache
 size_t dt_get_mipmap_mem();
 
+// Get the total memory (bytes) the process budgets against: physical RAM, capped by
+// a container/cgroup limit and the host_memory_limit config. Set once at startup by
+// dt_configure_runtime_performance(), never mutated afterwards.
+size_t dt_get_total_mem(void);
+
 // Probe the system for currently-available (free + reclaimable) physical RAM, in bytes.
 // This is a live system-wide measurement, unrelated to our internal budgets: it shrinks
 // when OTHER applications allocate memory. On Linux it also honors a cgroup v2 memory

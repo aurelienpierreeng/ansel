@@ -789,7 +789,7 @@ static JsonObject *_envelope(const dt_sv_op_t op, const char *domain, const uint
                              const gboolean resurrected)
 {
   JsonObject *o = json_object_new();
-  json_object_set_double_member(o, "ts", dt_get_wtime() - darktable.start_wtime);
+  json_object_set_double_member(o, "ts", dt_get_wtime() - dt_get_start_wtime());
   json_object_set_string_member(o, "thread", _thread_tag());
   json_object_set_string_member(o, "op", _op_str(op));
   json_object_set_string_member(o, "domain", domain);
