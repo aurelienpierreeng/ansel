@@ -35,6 +35,14 @@
 #include <glib.h>
 #include <stddef.h>
 
+/* Consumed by C++ translation units (iop/lens.cc, iop/bilateral.cc, ...) through
+ * develop/pixelpipe_cache_alloc.h. Without this guard those TUs mangle the declarations
+ * as C++ and fail to link against the C definitions -- invisible on ELF, which permits
+ * undefined symbols in shared objects, but fatal on Mach-O. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct dt_dev_pixelpipe_t;
 struct dt_iop_module_t;
 struct dt_iop_roi_t;
@@ -771,6 +779,10 @@ void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const ui
  */
 int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t old_hash,
                                  const uint64_t new_hash, struct dt_pixel_cache_entry_t *entry);
+
+#ifdef __cplusplus
+}
+#endif
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -65,6 +65,12 @@
 #include <gtk/gtk.h>
 #include <stdint.h>
 
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* --- Moved from common/darktable.h: GUI-flavored helpers belong to the GUI layer, and
  * the orchestrator header must not export GTK/Pango API to the whole application. --- */
 
@@ -151,11 +157,6 @@ static inline gchar *strip_markup(const char *s)
   pango_attr_list_unref(attrs);
   return plain;
 }
-
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Application-wide GUI singleton accessor: declared here by the owning lib, implemented by
  * the orchestrator (common/darktable.c, next to dt_pixelpipe_cache_get_global()). It binds
