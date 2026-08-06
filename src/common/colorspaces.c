@@ -74,17 +74,17 @@
 #endif
 
 #ifdef HAVE_OPENJPEG
-#include "common/imageio_j2k.h"
+#include "imageio/imageio_j2k.h"
 #endif
-#include "common/imageio_jpeg.h"
-#include "common/imageio_png.h"
-#include "common/imageio_tiff.h"
+#include "imageio/imageio_jpeg.h"
+#include "imageio/imageio_png.h"
+#include "imageio/imageio_tiff.h"
 #include "common/target_clones.h"
 #ifdef HAVE_LIBAVIF
-#include "common/imageio_avif.h"
+#include "imageio/imageio_avif.h"
 #endif
 #ifdef HAVE_LIBHEIF
-#include "common/imageio_heif.h"
+#include "imageio/imageio_heif.h"
 #endif
 
 #if 0

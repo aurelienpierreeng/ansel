@@ -39,7 +39,7 @@
 #endif
 #include "common/exif.h"
 #include "common/imageio.h"
-#include "common/imageio_jpeg.h"
+#include "imageio/imageio_jpeg.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 #include <glib/gstdio.h>
 #include <setjmp.h>

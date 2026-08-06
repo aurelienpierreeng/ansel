@@ -47,7 +47,7 @@
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/math.h"
 #include "control/conf.h"
 #include "control/control.h"

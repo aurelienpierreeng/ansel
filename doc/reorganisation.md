@@ -106,7 +106,7 @@ The GUI layer interfacing with `dt_image_t` object for user read/write is the [l
 
 #### Mipmap cache
 
-The [mipmap cache](@ref mipmap_cache.h) loads images from the disk, decodes them through codecs from `src/common/imageio_*` and stores them in RAM. It is used for cached thumbnails as well as input RAW images. As mentionned above, the codecs update the `dt_image_t.dsc` buffer descriptor.
+The [mipmap cache](@ref mipmap_cache.h) loads images from the disk, decodes them through codecs from `src/imageio/imageio_*` and stores them in RAM. It is used for cached thumbnails as well as input RAW images. As mentionned above, the codecs update the `dt_image_t.dsc` buffer descriptor.
 
 The mipmap cache is used when initing histories in `dt_dev_load_image()` and in `thumbnail.c` when fetching the base image to display in thumbnails.
 

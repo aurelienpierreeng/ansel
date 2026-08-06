@@ -92,15 +92,15 @@ FILE(GLOB SOURCE_FILES
   "common/image_extensions.c"
   "common/imagebuf.c"
   "common/imageio.c"
-  "common/imageio_jpeg.c"
-  "common/imageio_png.c"
-  "common/imageio_module.c"
-  "common/imageio_pfm.c"
-  "common/imageio_pnm.c"
-  "common/imageio_rgbe.c"
-  "common/imageio_tiff.c"
-  "common/imageio_im.c"
-  "common/imageio_gm.c"
+  "imageio/imageio_jpeg.c"
+  "imageio/imageio_png.c"
+  "imageio/imageio_module.c"
+  "imageio/imageio_pfm.c"
+  "imageio/imageio_pnm.c"
+  "imageio/imageio_rgbe.c"
+  "imageio/imageio_tiff.c"
+  "imageio/imageio_im.c"
+  "imageio/imageio_gm.c"
   "common/import_session.c"
   "common/import.c"
   "common/interpolation.c"
@@ -407,7 +407,7 @@ if(USE_OPENEXR)
     target_link_libraries(ansel_deps INTERFACE OpenEXR::OpenEXR)
     add_definitions(${OpenEXR_DEFINITIONS})
     add_definitions(-DHAVE_OPENEXR=1)
-    list(APPEND SOURCES "common/imageio_exr.cc")
+    list(APPEND SOURCES "imageio/imageio_exr.cc")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} exr CACHE INTERNAL "")
   endif(OpenEXR_FOUND)
 endif(USE_OPENEXR)
@@ -418,7 +418,7 @@ if(USE_WEBP)
     target_link_libraries(ansel_deps INTERFACE WebP::WebP)
     add_definitions(${WebP_DEFINITIONS})
     add_definitions(-DHAVE_WEBP=1)
-    list(APPEND SOURCES "common/imageio_webp.c")
+    list(APPEND SOURCES "imageio/imageio_webp.c")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} webp CACHE INTERNAL "")
   endif(WebP_FOUND)
 endif(USE_WEBP)
@@ -428,7 +428,7 @@ if(USE_AVIF)
   if(libavif_FOUND AND libavif_VERSION VERSION_GREATER_EQUAL 0.8.2 AND TARGET avif)
     target_link_libraries(ansel_deps INTERFACE avif)
     add_definitions(-DHAVE_LIBAVIF=1)
-    list(APPEND SOURCES common/imageio_avif.c)
+    list(APPEND SOURCES imageio/imageio_avif.c)
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
   else()
     # Fallback path (MSYS2 / older distros)
@@ -436,7 +436,7 @@ if(USE_AVIF)
     if(TARGET PkgConfig::AVIF)
       target_link_libraries(ansel_deps INTERFACE PkgConfig::AVIF)
       target_compile_definitions(ansel_deps INTERFACE HAVE_LIBAVIF=1)
-      list(APPEND SOURCES common/imageio_avif.c )
+      list(APPEND SOURCES imageio/imageio_avif.c )
       set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
     endif()
   endif()
@@ -451,7 +451,7 @@ if(USE_HEIF)
   if(libheif_FOUND AND libheif_VERSION VERSION_GREATER_EQUAL 1.13.0 AND TARGET heif)
     target_link_libraries(ansel_deps INTERFACE heif)
     add_definitions(-DHAVE_LIBHEIF=1)
-    list(APPEND SOURCES common/imageio_heif.c )
+    list(APPEND SOURCES imageio/imageio_heif.c )
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} heif heic hif CACHE INTERNAL "")
     # libheif may also support AVIF
     if(NOT libavif_FOUND)
@@ -485,7 +485,7 @@ if(USE_OPENJPEG)
   if(OpenJPEG_FOUND)
     target_link_libraries(ansel_deps INTERFACE OpenJPEG::OpenJPEG)
     add_definitions(-DHAVE_OPENJPEG=1)
-    list(APPEND SOURCES "common/imageio_j2k.c")
+    list(APPEND SOURCES "imageio/imageio_j2k.c")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} j2c j2k jp2 jpc CACHE INTERNAL "")
   endif(OpenJPEG_FOUND)
 endif(USE_OPENJPEG)
@@ -651,7 +651,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.cmake.h" "${CMAKE_CURRENT_BIN
 # Actual defination of the target is in `external/CMakeLists.txt`.
 target_include_directories(whereami PUBLIC external/whereami)
 
-add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
+add_library(lib_ansel_imageio_rawspeed STATIC imageio/imageio_rawspeed.cc)
 target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
 target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_deps)
 
@@ -687,7 +687,7 @@ if(USE_LIBRAW)
   endif()
 
   if(libraw_FOUND)
-    add_library(lib_ansel_imageio_libraw STATIC common/imageio_libraw.c)
+    add_library(lib_ansel_imageio_libraw STATIC imageio/imageio_libraw.c)
     target_link_libraries(lib_ansel_imageio_libraw PRIVATE ansel_libraw)
     target_link_libraries(lib_ansel_imageio_libraw PUBLIC ansel_deps)
     add_definitions(-DHAVE_LIBRAW=1)

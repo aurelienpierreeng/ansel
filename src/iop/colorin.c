@@ -83,7 +83,7 @@
 
 #ifdef HAVE_OPENJPEG
 #endif
-#include "common/imageio_jpeg.h"
+#include "imageio/imageio_jpeg.h"
 #ifdef HAVE_LIBAVIF
 #endif
 #ifdef HAVE_LIBHEIF

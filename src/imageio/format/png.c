@@ -56,7 +56,7 @@
 #include <glib/gstdio.h>
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "control/conf.h"
 #include "gui/gtk.h"
 #include "imageio/format/imageio_format_api.h"

@@ -49,12 +49,12 @@
 #include "common/module_versioning.h"
 #include "common/exif.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "imageio/format/imageio_format_api.h"
 
-#include "common/imageio_exr.hh"
+#include "imageio/imageio_exr.hh"
 
 #include <OpenEXR/ImfChannelList.h>
 #include <OpenEXR/ImfFrameBuffer.h>

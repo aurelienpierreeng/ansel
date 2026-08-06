@@ -33,7 +33,7 @@
 #include "common/openmp.h"
 #include "common/mem_alloc.h"
 #include "common/exif.h"
-#include "common/imageio_j2k.h"
+#include "imageio/imageio_j2k.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 
 #include <assert.h>

@@ -43,7 +43,7 @@
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "control/control.h"
 #include "dtgtk/paint.h"
 #include "imageio/storage/imageio_storage_api.h"

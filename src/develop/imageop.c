@@ -74,7 +74,7 @@
 #include "common/exif.h"
 #include "common/history.h"
 #include "common/imagebuf.h"
-#include "common/imageio_rawspeed.h"
+#include "imageio/imageio_rawspeed.h"
 #include "common/interpolation.h"
 #include "common/module.h"
 #include "common/opencl.h"

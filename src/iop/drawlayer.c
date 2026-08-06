@@ -32,7 +32,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "common/dtpthread.h"
 #include "common/imagebuf.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"
 #include "control/conf.h"

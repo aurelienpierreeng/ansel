@@ -56,7 +56,7 @@
 #include <glib/gstdio.h>
 #include "common/image.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/metadata.h"
 #include "common/utility.h"
 #include "common/variables.h"

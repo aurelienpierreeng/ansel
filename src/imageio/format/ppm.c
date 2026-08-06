@@ -29,7 +29,7 @@
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "imageio/format/imageio_format_api.h"
 #include <glib/gstdio.h>
 #include <inttypes.h>
