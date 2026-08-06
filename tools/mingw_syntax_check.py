@@ -84,6 +84,50 @@ def _drop_unbuildable(flags):
     return keep
 
 
+def _in_repo(path):
+    """Keep project include paths, drop the host toolchain's own -I/-isystem: those are
+    Linux headers and must not leak into a MinGW cross check."""
+    return not os.path.isabs(path) or REPO in path
+
+
+def _relevant_flags(argv):
+    """The -D / -include / project -I flags from one compile command."""
+    flags, i = [], 0
+    while i < len(argv):
+        a = argv[i]
+        if a.startswith('-std='):
+            # Take the language standard from the build too: RawSpeed's headers need
+            # C++20, and forcing gnu++17 made common/imageio_rawspeed.cc fail inside a
+            # submodule header -- a harness artefact, not a defect in our code.
+            flags.append(a)
+        elif a.startswith('-D'):
+            flags.append(a)
+        elif a == '-include' and i + 1 < len(argv):
+            flags += ['-include', argv[i + 1]]
+            i += 1
+        elif a in ('-I', '-isystem') and i + 1 < len(argv):
+            if _in_repo(argv[i + 1]):
+                flags += ['-I', argv[i + 1]]
+            i += 1
+        elif a.startswith('-I') and len(a) > 2 and _in_repo(a[2:]):
+            flags.append(a)
+        i += 1
+    return flags
+
+
+def _source_for(entry_file):
+    """Map a compdb entry back to the source we care about. Generated
+    introspection_X.c carries the flags for the src/iop/X.c it textually includes."""
+    base = os.path.basename(entry_file)
+    if not base.startswith('introspection_'):
+        rel = os.path.relpath(entry_file, REPO) if os.path.isabs(entry_file) else entry_file
+        return [os.path.normpath(rel)]
+    stem = base[len('introspection_'):]
+    return [os.path.normpath(d + stem)
+            for d in ('src/iop/', 'src/libs/', 'src/imageio/format/', 'src/imageio/storage/')
+            if os.path.exists(d + stem)]
+
+
 def build_flag_map(compdb='build/compile_commands.json'):
     """Per-file -D/-include/project -I flags, taken from the BUILD SYSTEM.
 
@@ -115,32 +159,9 @@ def build_flag_map(compdb='build/compile_commands.json'):
             argv = shlex.split(cmd)
         except ValueError:
             continue
-        flags, i = [], 0
-        while i < len(argv):
-            a = argv[i]
-            if a.startswith('-D'):
-                flags.append(a)
-            elif a == '-include' and i + 1 < len(argv):
-                flags += ['-include', argv[i + 1]]
-                i += 1
-            elif a in ('-I', '-isystem') and i + 1 < len(argv):
-                if not os.path.isabs(argv[i + 1]) or REPO in argv[i + 1]:
-                    flags += ['-I', argv[i + 1]]
-                i += 1
-            elif a.startswith('-I') and len(a) > 2:
-                if not os.path.isabs(a[2:]) or REPO in a[2:]:
-                    flags.append(a)
-            i += 1
-        base = os.path.basename(f)
-        if base.startswith('introspection_'):
-            stem = base[len('introspection_'):]
-            for cand in ('src/iop/' + stem, 'src/libs/' + stem, 'src/imageio/format/' + stem,
-                         'src/imageio/storage/' + stem):
-                if os.path.exists(cand):
-                    out.setdefault(os.path.normpath(cand), flags)
-        else:
-            rel = os.path.relpath(f, REPO) if os.path.isabs(f) else f
-            out.setdefault(os.path.normpath(rel), flags)
+        flags = _relevant_flags(argv)
+        for src in _source_for(f):
+            out.setdefault(src, flags)
     return out
 
 
@@ -178,14 +199,41 @@ def sources(args):
     return sorted(out)
 
 
+def _missing_unavailable_header(stderr):
+    """The header name if this failure is only 'we do not have it cross-built'."""
+    m = MISSING_HEADER.search(stderr)
+    if not m:
+        return None
+    if UNAVAILABLE.search(m.group(1)) or not os.path.exists(os.path.join('src', m.group(1))):
+        return m.group(1)
+    return None
+
+
+def _unverifiable_with_full_flags(cmd, own, fmap, path):
+    """Dropping a feature define can hide declarations a feature-only file legitimately
+    uses (src/libs/map_locations.c is entirely map code). Retry with the ORIGINAL flags:
+    if it then dies on a header we do not have cross-built, the file is unverifiable
+    here rather than broken."""
+    full = fmap.get(os.path.normpath(path))
+    if full is None or full == own or not own:
+        return None
+    head = cmd[:cmd.index(own[0])]
+    tail = cmd[cmd.index(own[0]) + len(own):]
+    r = subprocess.run(head + full + tail, capture_output=True, text=True)
+    if r.returncode == 0:
+        return None
+    return _missing_unavailable_header(r.stderr)
+
+
 def check(path, flags, fmap):
     cxx = path.endswith(('.cc', '.cpp'))
     own = fmap.get(os.path.normpath(path))
     own = _drop_unbuildable(own) if own is not None else None
     if own is None:
         return ('skip', path, '<not compiled by this build>')
-    cmd = [CXX if cxx else CC, '-fsyntax-only',
-           '-std=gnu++17' if cxx else '-std=gnu11',
+    has_std = any(f.startswith('-std=') for f in (own or []))
+    cmd = [CXX if cxx else CC, '-fsyntax-only'] + \
+          ([] if has_std else ['-std=gnu++17' if cxx else '-std=gnu11']) + [
            '-I', 'src', '-I', 'build/src', '-I', 'src/external/OpenCL'] + own + WIN_DEFINES + [
            '-fopenmp', '-Wno-attributes', '-Wno-unknown-pragmas'] + flags + [path]
     r = subprocess.run(cmd, capture_output=True, text=True)
@@ -198,28 +246,16 @@ def check(path, flags, fmap):
     if m and not os.path.exists(os.path.join('src', m.group(1))):
         # some other header we simply do not have cross-built
         return ('skip', path, m.group(1))
-    # Dropping a feature define (UNBUILDABLE_FEATURES) can hide declarations a
-    # feature-only file legitimately uses -- src/libs/map_locations.c is entirely map
-    # code. Retry with the ORIGINAL flags: if it then dies on a header we simply do not
-    # have cross-built, the file is unverifiable here rather than broken.
-    full = fmap.get(os.path.normpath(path))
-    if full is not None and full != own:
-        cmd2 = [c for c in cmd]
-        cmd2[cmd2.index(path)] = path
-        cmd2 = cmd2[:cmd2.index(own[0])] + full + cmd2[cmd2.index(own[0]) + len(own):] if own else cmd2
-        r2 = subprocess.run(cmd2, capture_output=True, text=True)
-        if r2.returncode != 0:
-            m2 = MISSING_HEADER.search(r2.stderr)
-            if m2 and (UNAVAILABLE.search(m2.group(1))
-                       or not os.path.exists(os.path.join('src', m2.group(1)))):
-                return ('skip', path, m2.group(1))
+    unverifiable = _unverifiable_with_full_flags(cmd, own, fmap, path)
+    if unverifiable:
+        return ('skip', path, unverifiable)
 
     first = [ln for ln in log.splitlines() if ' error:' in ln][:3]
     return ('fail', path, '\n'.join(first) or log.strip().splitlines()[-1] if log.strip() else '?')
 
 
 def main():
-    if not subprocess.run(['which', CC], capture_output=True).returncode == 0:
+    if subprocess.run(['which', CC], capture_output=True).returncode != 0:
         print('%s not found -- install mingw64-gcc (see the docstring)' % CC, file=sys.stderr)
         return 2
     args = sys.argv[1:]
