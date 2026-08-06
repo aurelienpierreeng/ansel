@@ -550,7 +550,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
       // collection by hand (issue #860). So always run a collection update afterwards: it
       // re-runs the current query and makes newly-imported matching images appear.
       if(index == 0)
-        dt_collection_load_filmroll(darktable.collection, imgid, FALSE);
+        dt_collection_load_filmroll(dt_collection_get_global(), imgid, FALSE);
 
       // Throttled: dt_collection_update_query() fully rebuilds memory.collected_images and its
       // DT_SIGNAL_COLLECTION_CHANGED triggers a full lighttable/thumbtable re-layout on the GUI
@@ -562,7 +562,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
       const gint64 now = g_get_monotonic_time();
       if(now - last_collection_refresh > 250000) // 250ms
       {
-        dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+        dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
         last_collection_refresh = now;
       }
 
@@ -572,7 +572,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
 
   // Guarantee the final state is reflected even if the last few images landed inside the throttle window.
   if(index > 0)
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
   if(index == 0)
   {
@@ -587,7 +587,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   {
     if(data->folder_survey)
       dt_control_log(_("Capture: imported 1 image."));
-    dt_collection_load_filmroll(darktable.collection, imgid, TRUE);
+    dt_collection_load_filmroll(dt_collection_get_global(), imgid, TRUE);
   }
   else
   {

@@ -322,7 +322,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
     //   one, update the interface
     if(pending >= 4 && curr_time - last_update > 0.5)
     {
-      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+      dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                                  g_list_copy(imgs));
       g_list_free(imgs);
       imgs = NULL;
@@ -339,7 +339,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   // only redraw at the end, to not spam the cpu with exposure events
   dt_control_queue_redraw_center();
 
-  dt_collection_load_filmroll(darktable.collection, imgid, g_list_length(all_imgs) == 1);
+  dt_collection_load_filmroll(dt_collection_get_global(), imgid, g_list_length(all_imgs) == 1);
 
   //QUESTION: should this come after _apply_filmroll_gpx, since that can change geotags again?
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, all_imgs, 0);

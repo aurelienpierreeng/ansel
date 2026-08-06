@@ -182,6 +182,9 @@ typedef struct dt_collection_t
 const char *dt_collection_name(dt_collection_properties_t prop);
 
 /** instantiates a collection context */
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+dt_collection_t *dt_collection_get_global(void);
+
 dt_collection_t *dt_collection_new();
 /** frees a collection context. */
 void dt_collection_free(const dt_collection_t *collection);

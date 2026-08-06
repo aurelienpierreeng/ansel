@@ -240,9 +240,9 @@ static gboolean _text_entry_changed_wait(gpointer user_data)
       char *text = _encode_text_filter(gtk_entry_get_text(GTK_ENTRY(d->text)));
 
       // avoids activating twice the same query
-      if(g_strcmp0(dt_collection_get_text_filter(darktable.collection), text))
+      if(g_strcmp0(dt_collection_get_text_filter(dt_collection_get_global()), text))
       {
-        dt_collection_set_text_filter(darktable.collection, text);
+        dt_collection_set_text_filter(dt_collection_get_global(), text);
         _lib_filter_update_query(self, DT_COLLECTION_PROP_SORT);
       }
       else dt_free(text);
@@ -273,14 +273,14 @@ static void _text_entry_changed(GtkEntry *entry, dt_lib_module_t *self)
 static void _reset_text_filter(dt_lib_module_t *self)
 {
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
-  dt_collection_set_text_filter(darktable.collection, strdup(""));
+  dt_collection_set_text_filter(dt_collection_get_global(), strdup(""));
   gtk_entry_set_text(GTK_ENTRY(d->text), "");
 }
 
 static void _reset_text_entry(GtkButton *button, dt_lib_module_t *self)
 {
   _reset_text_filter(self);
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_SORT, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_SORT, NULL);
 }
 
 gboolean _focus_search_action(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
@@ -318,7 +318,7 @@ static void _dtgtk_button_set_active(GtkWidget *w, gboolean active)
 static void _update_colors_filter(dt_lib_module_t *self)
 {
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
-  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(darktable.collection);
+  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(dt_collection_get_global());
   for(int i = 0; i <= DT_COLORLABELS_LAST; i++)
     _dtgtk_button_set_active(d->colors[i], flags & colors[i]);
 }
@@ -333,7 +333,7 @@ static gboolean _colorlabel_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_modu
     return TRUE;
   }
 
-  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(darktable.collection);
+  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(dt_collection_get_global());
 
   // Toggle state
   dtgtk_button_set_active(DTGTK_BUTTON(w), !dtgtk_button_get_active(DTGTK_BUTTON(w)));
@@ -347,7 +347,7 @@ static gboolean _colorlabel_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_modu
       flags &= ~colors[i];
   }
 
-  dt_collection_set_filter_flags(darktable.collection, flags);
+  dt_collection_set_filter_flags(dt_collection_get_global(), flags);
   _update_colors_filter(self);
   _lib_filter_update_query(self, DT_COLLECTION_PROP_COLORLABEL);
   return TRUE;
@@ -356,7 +356,7 @@ static gboolean _colorlabel_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_modu
 static void _update_altered_filters(dt_lib_module_t *self)
 {
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
-  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(darktable.collection);
+  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(dt_collection_get_global());
   _dtgtk_button_set_active(d->altered, flags & COLLECTION_FILTER_ALTERED);
   _dtgtk_button_set_active(d->unaltered, flags & COLLECTION_FILTER_UNALTERED);
 }
@@ -370,7 +370,7 @@ static gboolean _altered_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_module_
     return TRUE;
   }
 
-  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(darktable.collection);
+  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(dt_collection_get_global());
 
   // Toggle state
   dtgtk_button_set_active(DTGTK_BUTTON(w), !dtgtk_button_get_active(DTGTK_BUTTON(w)));
@@ -381,7 +381,7 @@ static gboolean _altered_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_module_
   else
     flags &= ~COLLECTION_FILTER_ALTERED;
 
-  dt_collection_set_filter_flags(darktable.collection, flags);
+  dt_collection_set_filter_flags(dt_collection_get_global(), flags);
   _update_altered_filters(self);
   _lib_filter_update_query(self, DT_COLLECTION_PROP_COLORLABEL);
   return TRUE;
@@ -395,7 +395,7 @@ static gboolean _unaltered_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_modul
     return TRUE;
   }
 
-  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(darktable.collection);
+  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(dt_collection_get_global());
 
   // Toggle state
   dtgtk_button_set_active(DTGTK_BUTTON(w), !dtgtk_button_get_active(DTGTK_BUTTON(w)));
@@ -406,7 +406,7 @@ static gboolean _unaltered_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_modul
   else
     flags &= ~COLLECTION_FILTER_UNALTERED;
 
-  dt_collection_set_filter_flags(darktable.collection, flags);
+  dt_collection_set_filter_flags(dt_collection_get_global(), flags);
   _update_altered_filters(self);
   _lib_filter_update_query(self, DT_COLLECTION_PROP_COLORLABEL);
   return TRUE;
@@ -427,13 +427,13 @@ static void _culling_mode(GtkWidget *widget, gpointer data)
   // Force-rebuild the whole thumbtable on the next collection update
   dt_thumbtable_reset_collection(darktable.gui->ui->thumbtable_lighttable);
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_SELECTION_CHANGED);
 }
 
 static void _refresh_collection_callback(GtkButton *button, gpointer user_data)
 {
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
 void _widget_align_left(GtkWidget *widget)
@@ -459,7 +459,7 @@ const dt_collection_filter_flag_t ratings[7] =
 static void _update_rating_filter(dt_lib_module_t *self)
 {
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
-  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(darktable.collection);
+  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(dt_collection_get_global());
 
   // Update GUI button state
   for(int i = 0; i < 7; i++)
@@ -489,7 +489,7 @@ static gboolean _rating_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_module_t
     return TRUE;
   }
 
-  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(darktable.collection);
+  dt_collection_filter_flag_t flags = dt_collection_get_filter_flags(dt_collection_get_global());
 
   // Do range selection for >= rating if Shift + Click
   if(dt_modifier_is(e->state, GDK_SHIFT_MASK))
@@ -516,7 +516,7 @@ static gboolean _rating_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_module_t
       flags &= ~ratings[i];
   }
 
-  dt_collection_set_filter_flags(darktable.collection, flags);
+  dt_collection_set_filter_flags(dt_collection_get_global(), flags);
   _update_rating_filter(self);
   _lib_filter_update_query(self, DT_COLLECTION_PROP_RATING);
   return TRUE;
@@ -525,7 +525,7 @@ static gboolean _rating_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_module_t
 
 static void _select_all_callback(GtkWidget *widget, dt_lib_module_t *self)
 {
-  dt_collection_set_filter_flags(darktable.collection, COLLECTION_FILTER_ALL);
+  dt_collection_set_filter_flags(dt_collection_get_global(), COLLECTION_FILTER_ALL);
   _update_rating_filter(self);
   _update_colors_filter(self);
   _update_altered_filters(self);
@@ -534,7 +534,7 @@ static void _select_all_callback(GtkWidget *widget, dt_lib_module_t *self)
 
 static void _select_none_callback(GtkWidget *widget, dt_lib_module_t *self)
 {
-  dt_collection_set_filter_flags(darktable.collection, COLLECTION_FILTER_NONE);
+  dt_collection_set_filter_flags(dt_collection_get_global(), COLLECTION_FILTER_NONE);
   _update_rating_filter(self);
   _update_colors_filter(self);
   _update_altered_filters(self);
@@ -699,7 +699,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
 
   /* sort combobox */
-  const dt_collection_sort_t sort = dt_collection_get_sort_field(darktable.collection);
+  const dt_collection_sort_t sort = dt_collection_get_sort_field(dt_collection_get_global());
 
   d->sort = gtk_combo_box_text_new();
 
@@ -713,7 +713,7 @@ void gui_init(dt_lib_module_t *self)
 
   /* reverse order checkbutton */
   d->reverse = dtgtk_togglebutton_new(dtgtk_cairo_paint_sortby, CPF_DIRECTION_UP, NULL);
-  if(darktable.collection->params.descending)
+  if(dt_collection_get_global()->params.descending)
     dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(d->reverse), dtgtk_cairo_paint_sortby,
                                  CPF_DIRECTION_DOWN, NULL);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->reverse), FALSE, FALSE, 0);
@@ -721,7 +721,7 @@ void gui_init(dt_lib_module_t *self)
 
   /* select the last value and connect callback */
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->reverse),
-                               dt_collection_get_sort_descending(darktable.collection));
+                               dt_collection_get_sort_descending(dt_collection_get_global()));
   g_signal_connect(G_OBJECT(d->reverse), "toggled", G_CALLBACK(_lib_filter_reverse_button_changed),
                    (gpointer)self);
 
@@ -732,7 +732,7 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_disconnect_on_text_input(d->text);
   gtk_widget_set_hexpand(d->text, TRUE);
   dt_gui_add_class(GTK_WIDGET(d->text), "menu-text-entry");
-  char *text = _decode_text_filter(dt_collection_get_text_filter(darktable.collection));
+  char *text = _decode_text_filter(dt_collection_get_text_filter(dt_collection_get_global()));
   gtk_entry_set_text(GTK_ENTRY(d->text), text);
   gtk_entry_set_placeholder_text(GTK_ENTRY(d->text), _("Search an image..."));
   dt_free(text);
@@ -804,7 +804,7 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_accels_remove_shortcut(darktable.gui->accels, path);
   dt_free(path);
 
-  dt_collection_set_text_filter(darktable.collection, NULL);
+  dt_collection_set_text_filter(dt_collection_get_global(), NULL);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_filter_images_order_change), self);
   dt_free(self->data);
 }
@@ -813,11 +813,11 @@ void gui_cleanup(dt_lib_module_t *self)
 static void _lib_filter_set_tag_order(dt_lib_module_t *self)
 {
   dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
-  if(darktable.collection->tagid)
+  if(dt_collection_get_global()->tagid)
   {
     const uint32_t sort = items[gtk_combo_box_get_active(GTK_COMBO_BOX(d->sort))];
     const gboolean descending = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->reverse));
-    dt_tag_set_tag_order_by_id(darktable.collection->tagid, sort, descending);
+    dt_tag_set_tag_order_by_id(dt_collection_get_global()->tagid, sort, descending);
   }
 }
 
@@ -839,7 +839,7 @@ static void _lib_filter_reverse_button_changed(GtkDarktableToggleButton *widget,
   gtk_widget_queue_draw(GTK_WIDGET(widget));
 
   /* update last settings */
-  dt_collection_set_sort(darktable.collection, DT_COLLECTION_SORT_NONE, reverse);
+  dt_collection_set_sort(dt_collection_get_global(), DT_COLLECTION_SORT_NONE, reverse);
 
   /* save the images order */
   _lib_filter_set_tag_order(user_data);
@@ -851,7 +851,7 @@ static void _lib_filter_reverse_button_changed(GtkDarktableToggleButton *widget,
 static void _lib_filter_sort_combobox_changed(GtkWidget *widget, gpointer user_data)
 {
   /* update the ui last settings */
-  dt_collection_set_sort(darktable.collection, items[gtk_combo_box_get_active(GTK_COMBO_BOX(widget))], -1);
+  dt_collection_set_sort(dt_collection_get_global(), items[gtk_combo_box_get_active(GTK_COMBO_BOX(widget))], -1);
 
   /* save the images order */
   _lib_filter_set_tag_order(user_data);
@@ -863,10 +863,10 @@ static void _lib_filter_sort_combobox_changed(GtkWidget *widget, gpointer user_d
 static void _lib_filter_update_query(dt_lib_module_t *self, dt_collection_properties_t changed_property)
 {
   /* sometimes changes */
-  dt_collection_set_query_flags(darktable.collection, COLLECTION_QUERY_FULL);
+  dt_collection_set_query_flags(dt_collection_get_global(), COLLECTION_QUERY_FULL);
 
   /* updates query */
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, changed_property, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, changed_property, NULL);
 }
 
 // clang-format off

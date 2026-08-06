@@ -25,7 +25,7 @@
 
 gboolean select_all_sensitive_callback()
 {
-  return dt_collection_get_count(darktable.collection) > dt_selection_get_length(dt_selection_get_global())
+  return dt_collection_get_count(dt_collection_get_global()) > dt_selection_get_length(dt_selection_get_global())
     && _is_lighttable();
 }
 

@@ -546,7 +546,7 @@ static gboolean _history_style_apply(const int32_t imgid, void *user_data)
                                                                dt_conf_get_bool("history/style/copy_iop_order"),
                                                                NULL) == 0;
 
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 
     return pasted;
   }

@@ -133,7 +133,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
       _ratings_apply_to_image(ratings->imgid, (action == DT_ACTION_UNDO) ? ratings->before : ratings->after);
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(ratings->imgid));
     }
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
   }
 }
 
@@ -211,7 +211,7 @@ void dt_ratings_apply_on_list(GList *img, const int rating, const gboolean undo_
       dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
       dt_undo_end_group(dt_undo_get_global());
     }
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
     dt_toast_log(_("Rating set to %s for %i image(s)"), dt_ratings_get_name(rating), g_list_length(img));
   }
 }

@@ -1481,7 +1481,7 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
     // to write history onto it (duplicate-with-history, style-on-duplicate) must skip this and
     // reload themselves once that is done -- see dt_image_duplicate_no_reload().
     if(reload)
-      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+      dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
   }
   return newid;
 }
@@ -1718,7 +1718,7 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
     {
       // now it is safe to set the duplicate group-id
       dt_grouping_add_to_group(grpid, newid);
-      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+      dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
     }
 
     count_xmps_processed++;
@@ -2567,7 +2567,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
 
         dt_history_copy_and_paste_on_image(imgid, newid, NULL, TRUE, DT_HISTORY_MERGE_REPLACE, FALSE, NULL);
 
-        dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+        dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                                    NULL);
       }
 

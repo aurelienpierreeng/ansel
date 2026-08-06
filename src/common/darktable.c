@@ -518,6 +518,11 @@ struct dt_undo_t *dt_undo_get_global(void)
   return darktable.undo;
 }
 
+struct dt_collection_t *dt_collection_get_global(void)
+{
+  return darktable.collection;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

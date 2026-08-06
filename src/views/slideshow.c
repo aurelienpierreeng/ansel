@@ -156,7 +156,7 @@ static int32_t _slideshow_get_imgid_from_rank(const dt_slideshow_t *d, const int
     return link ? GPOINTER_TO_INT(link->data) : UNKNOWN_IMAGE;
   }
 
-  const gchar *query = dt_collection_get_query(darktable.collection);
+  const gchar *query = dt_collection_get_query(dt_collection_get_global());
   if(IS_NULL_PTR(query)) return UNKNOWN_IMAGE;
 
   int32_t id = 0;
@@ -342,7 +342,7 @@ int try_enter(dt_view_t *self)
   if(!d->incoming_selection && dt_view_active_images_get_all())
     d->incoming_selection = g_list_copy((GList *)dt_view_active_images_get_all());
 
-  if(d->incoming_selection || dt_collection_get_count(darktable.collection) != 0) return 0;
+  if(d->incoming_selection || dt_collection_get_count(dt_collection_get_global()) != 0) return 0;
 
   dt_control_log(_("there are no images in this collection"));
   return 1;
@@ -391,7 +391,7 @@ void enter(dt_view_t *self)
     d->playlist = g_list_copy(dt_view_active_images_get_all());
   }
 
-  d->col_count = d->playlist ? g_list_length(d->playlist) : dt_collection_get_count(darktable.collection);
+  d->col_count = d->playlist ? g_list_length(d->playlist) : dt_collection_get_count(dt_collection_get_global());
 
   for(int k = S_LEFT; k < S_SLOT_LAST; k++)
   {

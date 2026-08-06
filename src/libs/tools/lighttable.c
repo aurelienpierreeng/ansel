@@ -126,7 +126,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
   if(darktable.gui->culling_mode)
   {
     int current_level = dt_conf_get_int("plugins/lighttable/images_in_row");
-    int num_images = dt_collection_get_count(darktable.collection);
+    int num_images = dt_collection_get_count(dt_collection_get_global());
 
     switch(num_images)
     {

@@ -200,11 +200,11 @@ static char * or_operator(int *term)
 
 void dt_collection_memory_update()
 {
-  if(IS_NULL_PTR(darktable.collection) || IS_NULL_PTR(darktable.db)) return;
+  if(IS_NULL_PTR(dt_collection_get_global()) || IS_NULL_PTR(darktable.db)) return;
   sqlite3_stmt *stmt;
 
   /* check if we can get a query from collection */
-  gchar *query = g_strdup(dt_collection_get_query(darktable.collection));
+  gchar *query = g_strdup(dt_collection_get_query(dt_collection_get_global()));
   if(IS_NULL_PTR(query)) return;
 
   // Handle culling mode across re-queryings : re-restrict collection to selection
@@ -240,8 +240,8 @@ void dt_collection_memory_update()
   if(darktable.gui && darktable.gui->culling_mode)
     dt_selection_to_culling_mode();
 
-  _dt_collection_compute_count(darktable.collection);
-  dt_collection_hint_message(darktable.collection);
+  _dt_collection_compute_count(dt_collection_get_global());
+  dt_collection_hint_message(dt_collection_get_global());
 }
 
 static void _dt_collection_set_selq_pre_sort(const dt_collection_t *collection, char **selq_pre)
@@ -799,7 +799,7 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
 static int _dt_collection_store(const dt_collection_t *collection, gchar *query)
 {
   /* store flags to conf */
-  if(collection == darktable.collection)
+  if(collection == dt_collection_get_global())
   {
     dt_conf_set_int("plugins/collection/query_flags", collection->params.query_flags);
     dt_conf_set_int("plugins/collection/filter_flags", collection->params.filter_flags);
@@ -1768,7 +1768,7 @@ static dt_collection_name_value_t *_name_value_new(char *name, int id, int count
 GList *dt_collection_get_property_values(const dt_collection_properties_t property, const int rule)
 {
   GList *out = NULL;
-  gchar *where_ext = dt_collection_get_extended_where(darktable.collection, rule);
+  gchar *where_ext = dt_collection_get_extended_where(dt_collection_get_global(), rule);
 
   // Camera is special: it groups on two text columns and combines them into a display name.
   if(property == DT_COLLECTION_PROP_CAMERA)
@@ -2125,7 +2125,7 @@ void dt_collection_deserialize(const char *buf)
       if(buf[0] == '$') buf++;
     }
   }
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
 /* Store the n most recent collections in config for re-use in menu */
@@ -2471,7 +2471,7 @@ static inline gboolean _collection_can_switch_folder(const int32_t imgid, const 
 
   // Go out if we are not in lighttable or Studio Capture: those are the only two ateliers whose
   // filmstrip/grid should follow newly-imported images into their folder. Studio Capture's own
-  // filmstrip is driven by the same darktable.collection query as lighttable's grid, so without
+  // filmstrip is driven by the same dt_collection_get_global() query as lighttable's grid, so without
   // this it never picks up an auto-imported capture that lands outside the currently browsed
   // folder.
   result |= current_atelier && g_strcmp0(current_atelier->module_name, "lighttable")

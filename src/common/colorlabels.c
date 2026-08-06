@@ -154,7 +154,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
       _pop_undo_execute(undocolorlabels->imgid, before, after);
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undocolorlabels->imgid));
     }
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
   }
 }
 
@@ -332,7 +332,7 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
     dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_COLORLABELS, undo, _pop_undo, _colorlabels_undo_data_free);
     dt_undo_end_group(dt_undo_get_global());
   }
-  dt_collection_hint_message(darktable.collection);
+  dt_collection_hint_message(dt_collection_get_global());
   dt_toast_log(_("Color label set to %s for %i image(s)"), dt_colorlabels_get_name(color), g_list_length(list));
 }
 

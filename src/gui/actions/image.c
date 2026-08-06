@@ -63,7 +63,7 @@ static gboolean group_images_callback(GtkAccelGroup *group, GObject *acceleratab
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
   }
   sqlite3_finalize(stmt);
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, imgs);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, imgs);
   return TRUE;
 }
 
@@ -87,7 +87,7 @@ static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *accelerat
   sqlite3_finalize(stmt);
   if(!IS_NULL_PTR(imgs))
   {
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING,
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING,
                                g_list_reverse(imgs));
     dt_control_queue_redraw_center();
   }

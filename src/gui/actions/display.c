@@ -408,7 +408,7 @@ static gboolean group_borders_checked_callback()
 static gboolean collapse_grouped_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   dt_conf_set_bool("ui_last/grouping", !dt_conf_get_bool("ui_last/grouping"));
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, NULL);
   return TRUE;
 }
 
@@ -428,7 +428,7 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
   const int mode = GPOINTER_TO_INT(get_custom_data(GTK_WIDGET(user_data)));
   if(mode != dt_conf_get_int("lighttable/embedded_jpg"))
   {
-    GList *imgs = dt_collection_get_all(darktable.collection, -1);
+    GList *imgs = dt_collection_get_all(dt_collection_get_global(), -1);
 
     // Empty the mipmap cache for the current collection, but only on RAM
     // Don't delete disk cache, but RAM cache may be flushed to disk if user param sets it.

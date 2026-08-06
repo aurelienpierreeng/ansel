@@ -2398,7 +2398,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     dt_iop_gui_leave_critical_section(self);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
     if(was_mask) dt_dev_pixelpipe_update_history_main(self->dev);
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
   }
   else
   {

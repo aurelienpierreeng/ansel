@@ -61,7 +61,7 @@ typedef struct dt_selection_t
 // Signal the GUI that selection got changed and trigger a selected images counter update
 static void _update_gui()
 {
-  dt_collection_hint_message(darktable.collection);
+  dt_collection_hint_message(dt_collection_get_global());
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_SELECTION_CHANGED);
 }
 

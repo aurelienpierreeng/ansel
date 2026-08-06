@@ -547,7 +547,7 @@ void enter(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                                   G_CALLBACK(_studio_history_changed_callback), self);
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 
   // Start from the current selection when there is one.
   const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());

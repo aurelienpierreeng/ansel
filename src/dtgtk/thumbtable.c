@@ -1084,12 +1084,12 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
 static gboolean _dt_collection_get_hash(dt_thumbtable_t *table)
 {
   // Hash the collection query string
-  const char *const query = dt_collection_get_query(darktable.collection);
+  const char *const query = dt_collection_get_query(dt_collection_get_global());
   size_t len = strlen(query);
   uint64_t hash = dt_hash(5384, query, len);
 
   // Factor in the number of images in the collection result
-  uint32_t num_pics = dt_collection_get_count(darktable.collection);
+  uint32_t num_pics = dt_collection_get_count(dt_collection_get_global());
   hash = dt_hash(hash, (char *)&num_pics, sizeof(uint32_t));
 
   if(hash != table->collection_hash || table->reset_collection)

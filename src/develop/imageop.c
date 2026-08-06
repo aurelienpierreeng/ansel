@@ -2276,7 +2276,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     gtk_widget_queue_draw(out_focus_module->expander);
 
     /* and finally collection restore hinter messages */
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
 
     // we also remove the focus css class
     GtkWidget *iop_w = gtk_widget_get_parent(dt_iop_gui_get_pluginui(out_focus_module));

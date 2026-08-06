@@ -1352,7 +1352,7 @@ gboolean _switch_to_next_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   dt_view_t *view = (dt_view_t *)data;
   dt_develop_t *dev = (dt_develop_t *)view->data;
   int32_t current_img = dev->image_storage.id;
-  GList *current_collection = dt_collection_get_all(darktable.collection, -1);
+  GList *current_collection = dt_collection_get_all(dt_collection_get_global(), -1);
   GList *current_item = g_list_find(current_collection, GINT_TO_POINTER(current_img));
 
   if(current_item && current_item->next)
@@ -1377,7 +1377,7 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   dt_view_t *view = (dt_view_t *)data;
   dt_develop_t *dev = (dt_develop_t *)view->data;
   int32_t current_img = dev->image_storage.id;
-  GList *current_collection = dt_collection_get_all(darktable.collection, -1);
+  GList *current_collection = dt_collection_get_all(dt_collection_get_global(), -1);
   GList *current_item = g_list_find(current_collection, GINT_TO_POINTER(current_img));
 
   if(current_item && current_item->prev)

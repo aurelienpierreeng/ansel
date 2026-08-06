@@ -163,7 +163,7 @@ void enter(dt_view_t *self)
 
   dt_undo_clear(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   dt_gui_refocus_center();
-  dt_collection_hint_message(darktable.collection);
+  dt_collection_hint_message(dt_collection_get_global());
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
 
@@ -179,7 +179,7 @@ void enter(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                             G_CALLBACK(_view_lighttable_activate_callback), self);
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
 void init(dt_view_t *self)

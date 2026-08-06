@@ -615,7 +615,7 @@ static void _commit_colllection()
   else
     d->has_last_folders = FALSE; // a real filter change elsewhere supersedes the remembered folder
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
 // Like _commit_colllection() but without bouncing back into our own collection_updated() handler.
@@ -707,7 +707,7 @@ void gui_reset(dt_lib_module_t *self)
   dt_lib_collect_t *d = (dt_lib_collect_t *)self->data;
   d->active_rule = 0;
   d->view_rule = -1;
-  dt_collection_set_query_flags(darktable.collection, COLLECTION_QUERY_FULL);
+  dt_collection_set_query_flags(dt_collection_get_global(), COLLECTION_QUERY_FULL);
   _commit_colllection();
 }
 
@@ -1679,7 +1679,7 @@ static gboolean _adopt_tag_order(const char *text, int *order)
   const uint32_t tagid = dt_tag_get_tag_id_by_name(text);
   if(!tagid)
   {
-    dt_collection_set_tag_id((dt_collection_t *)darktable.collection, 0);
+    dt_collection_set_tag_id((dt_collection_t *)dt_collection_get_global(), 0);
     return FALSE;
   }
   uint32_t sort = DT_COLLECTION_SORT_NONE;
@@ -1691,7 +1691,7 @@ static gboolean _adopt_tag_order(const char *text, int *order)
     *order = DT_COLLECTION_SORT_FILENAME;
     dt_tag_set_tag_order_by_id(tagid, *order & ~DT_COLLECTION_ORDER_FLAG, *order & DT_COLLECTION_ORDER_FLAG);
   }
-  dt_collection_set_tag_id((dt_collection_t *)darktable.collection, tagid);
+  dt_collection_set_tag_id((dt_collection_t *)dt_collection_get_global(), tagid);
   return TRUE;
 }
 
@@ -2170,7 +2170,7 @@ static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GL
   {
     dt_collection_memory_update();
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
     _force_refresh(d);
     dt_control_queue_redraw_center();
   }
@@ -2978,7 +2978,7 @@ static void filmrolls_removed(gpointer instance, gpointer self)
 
 static void preferences_changed(gpointer instance, gpointer self)
 {
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
 static void tag_changed(gpointer instance, gpointer self)
@@ -2998,7 +2998,7 @@ static void tag_changed(gpointer instance, gpointer self)
   {
     dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(collection_updated),
                                     darktable.view_manager->proxy.module_collect.module);
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_TAG, NULL);
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_TAG, NULL);
     dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(collection_updated),
                                       darktable.view_manager->proxy.module_collect.module);
   }
@@ -3016,7 +3016,7 @@ static void geotag_changed(gpointer instance, GList *imgs, const int locid, gpoi
     _lib_collect_gui_update(self);
     dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(collection_updated),
                                     darktable.view_manager->proxy.module_collect.module);
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GEOTAGGING,
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GEOTAGGING,
                                NULL);
     dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(collection_updated),
                                       darktable.view_manager->proxy.module_collect.module);
@@ -3034,7 +3034,7 @@ static void metadata_changed(gpointer instance, int type, gpointer self)
   const int prop = _combo_get_active_collection(get_active_rule(d)->combo);
   if(type == DT_METADATA_SIGNAL_HIDDEN
      || (prop >= DT_COLLECTION_PROP_METADATA && prop < DT_COLLECTION_PROP_METADATA + DT_METADATA_NUMBER))
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_METADATA,
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_METADATA,
                                NULL);
 }
 

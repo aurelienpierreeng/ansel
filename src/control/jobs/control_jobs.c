@@ -213,7 +213,7 @@ static int32_t _generic_dt_control_fileop_images_job_run(dt_job_t *job,
   }
   dt_film_remove_empty();
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
   dt_control_queue_redraw_center();
   return 0;
@@ -599,7 +599,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   dt_free(directory);
 
   // refresh the thumbtable view
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_prepend(NULL, GINT_TO_POINTER(imageid)));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
   dt_control_queue_redraw_center();
@@ -637,7 +637,7 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
       else
         dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, DT_HISTORY_MERGE_REPLACE, FALSE, NULL);
 
-      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+      dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
     }
     t = g_list_next(t);
     fraction += 1.0 / total;
@@ -712,7 +712,7 @@ static int32_t dt_control_monochrome_images_job_run(dt_job_t *job)
 
   dt_undo_end_group(dt_undo_get_global());
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
   dt_control_queue_redraw_center();
   return 0;
@@ -831,7 +831,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
   // update remove status
   _set_remove_flag(imgs);
 
-  dt_collection_update(darktable.collection);
+  dt_collection_update(dt_collection_get_global());
 
   // We need a list of files to regenerate .xmp files if there are duplicates
   GList *list = _get_full_pathname(imgs);
@@ -850,7 +850,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
 
   _resync_xmp_duplicates(list);
   dt_film_remove_empty();
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
   dt_control_queue_redraw_center();
@@ -1069,7 +1069,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
 
   sqlite3_stmt *stmt;
 
-  dt_collection_update(darktable.collection);
+  dt_collection_update(dt_collection_get_global());
 
   // We need a list of files to regenerate .xmp files if there are duplicates
   GList *list = _get_full_pathname(imgs);
@@ -1163,7 +1163,7 @@ delete_next_file:
   _resync_xmp_duplicates(list);
   list = NULL;
   dt_film_remove_empty();
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
   dt_control_queue_redraw_center();
@@ -1307,7 +1307,7 @@ static int32_t dt_control_local_copy_images_job_run(dt_job_t *job)
     dt_control_job_set_progress(job, fraction);
   }
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_LOCAL_COPY,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_LOCAL_COPY,
                              g_list_copy(params->index));
   if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
@@ -1364,7 +1364,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
     fraction += 1.0 / total;
     dt_control_job_set_progress(job, fraction);
   }
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
   dt_control_queue_redraw_center();

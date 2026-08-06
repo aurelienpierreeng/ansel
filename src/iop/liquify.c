@@ -2874,7 +2874,7 @@ void gui_focus(struct dt_iop_module_t *module, gboolean in)
 {
   if(!in)
   {
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
     btn_make_radio_callback(NULL, NULL, module);
   }
 }

@@ -128,7 +128,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
 
   // and we remove the image
   dt_control_delete_image(imgid);
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_prepend(NULL, GINT_TO_POINTER(imgid)));
 }
 
