@@ -523,6 +523,16 @@ struct dt_collection_t *dt_collection_get_global(void)
   return darktable.collection;
 }
 
+struct dt_database_t *dt_database_get_global(void)
+{
+  return (struct dt_database_t *)darktable.db;
+}
+
+sqlite3 *dt_database_get_sqlite3_global(void)
+{
+  return dt_database_get(darktable.db);
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

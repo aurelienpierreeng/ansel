@@ -445,7 +445,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 void init_presets(dt_iop_module_so_t *self)
 {
   dt_iop_flip_params_t p = (dt_iop_flip_params_t){ ORIENTATION_NONE };
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   p.orientation = ORIENTATION_NULL;
   dt_gui_presets_add_generic(_("autodetect"), self->op,
@@ -476,7 +476,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("rotate by 180 degrees"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 void reload_defaults(dt_iop_module_t *self)
@@ -491,7 +491,7 @@ void reload_defaults(dt_iop_module_t *self)
      && self->dev->image_storage.legacy_flip.user_flip != 0xff)
   {
     sqlite3_stmt *stmt;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT * FROM main.history WHERE imgid = ?1 AND operation = 'flip'", -1, &stmt,
                                 NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, self->dev->image_storage.id);

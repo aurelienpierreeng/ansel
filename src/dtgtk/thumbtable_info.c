@@ -56,7 +56,7 @@ sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
   if(IS_NULL_PTR(_thumbtable_collection_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         // Batch-fetch thumbnail metadata in one SQL query to avoid one query per image
         // through the image cache. This keeps scrolling lightweight and predictable.
         "SELECT im.id, im.group_id, "

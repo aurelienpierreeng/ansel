@@ -609,7 +609,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_gui_presets_add_generic(_("swap R and B"), self->op, self->version(),
                              &(dt_iop_channelmixer_params_t){ { 0, 0, 0, 0, 0, 1, 0 },
@@ -723,7 +723,7 @@ void init_presets(dt_iop_module_so_t *self)
                              sizeof(dt_iop_channelmixer_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 // clang-format off

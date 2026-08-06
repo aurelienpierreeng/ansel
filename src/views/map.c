@@ -2645,7 +2645,7 @@ static gboolean _view_map_center_on_image_list(dt_view_t *self, const char* tabl
                                 table);
   // clang-format on
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
     min_latitude = sqlite3_column_double(stmt, 0);
@@ -2854,7 +2854,7 @@ static void _view_map_build_main_query(dt_map_t *lib)
   // clang-format on
 
   /* prepare the main query statement */
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), geo_query, -1, &lib->main_query, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), geo_query, -1, &lib->main_query, NULL);
 
   dt_free(geo_query);
 }

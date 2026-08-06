@@ -124,7 +124,7 @@ GList *dt_control_crawler_run(void)
   GList *result = NULL;
 
   // clang-format off
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
                      "SELECT i.id, write_timestamp, version,"
                      "       folder || '" G_DIR_SEPARATOR_S "' || filename, flags"
                      " FROM main.images i, main.film_rolls f"
@@ -132,12 +132,12 @@ GList *dt_control_crawler_run(void)
                      " ORDER BY f.id, filename",
                      -1, &stmt, NULL);
   // clang-format on
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
                      "UPDATE main.images SET flags = ?1 WHERE id = ?2", -1,
                      &inner_stmt, NULL);
 
   // let's wrap this into a transaction, it might make it a little faster.
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -254,7 +254,7 @@ GList *dt_control_crawler_run(void)
     dt_free(extra_path);
   }
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 
   sqlite3_finalize(stmt);
   sqlite3_finalize(inner_stmt);
@@ -352,7 +352,7 @@ static void _db_update_timestamp(const int id, const time_t timestamp)
   // Update DB writing timestamp with XMP file timestamp
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2
-    (dt_database_get(darktable.db),
+    (dt_database_get_sqlite3_global(),
      "UPDATE main.images"
      " SET write_timestamp = ?2"
      " WHERE id = ?1", -1, &stmt, NULL);

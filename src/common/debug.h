@@ -56,7 +56,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(): %s\n", __FILE__, __LINE__, __FUNCTION__,              \
-              sqlite3_errmsg(dt_database_get(darktable.db)));                                                     \
+              sqlite3_errmsg(dt_database_get_sqlite3_global()));                                                     \
     }                                                                                                             \
     assert(x == SQLITE_OK);                                                                                       \
     _Pragma("GCC diagnostic pop")                                                                                 \
@@ -67,7 +67,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(), query \"%s\": %s\n", __FILE__, __LINE__, __FUNCTION__,\
-              (query), sqlite3_errmsg(dt_database_get(darktable.db)));                                            \
+              (query), sqlite3_errmsg(dt_database_get_sqlite3_global()));                                            \
     }                                                                                                             \
     assert(x == SQLITE_OK);                                                                                       \
     _Pragma("GCC diagnostic pop")                                                                                 \
@@ -79,7 +79,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(): %s\n", __FILE__, __LINE__, __FUNCTION__,              \
-              sqlite3_errmsg(dt_database_get(darktable.db)));                                                     \
+              sqlite3_errmsg(dt_database_get_sqlite3_global()));                                                     \
     }                                                                                                             \
     _Pragma("GCC diagnostic pop")                                                                                 \
   }
@@ -89,7 +89,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(), query \"%s\": %s\n", __FILE__, __LINE__, __FUNCTION__,\
-              (query), sqlite3_errmsg(dt_database_get(darktable.db)));                                            \
+              (query), sqlite3_errmsg(dt_database_get_sqlite3_global()));                                            \
     }                                                                                                             \
     _Pragma("GCC diagnostic pop")                                                                                 \
   }

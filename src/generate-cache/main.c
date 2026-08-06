@@ -77,7 +77,7 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
   // some progress counter
   sqlite3_stmt *stmt;
   size_t image_count = 0, counter = 0;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT COUNT(*) FROM main.images WHERE id >= ?1 AND id <= ?2", -1, &stmt, 0);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, min_imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, max_imgid);
@@ -101,7 +101,7 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
   }
 
   // go through all images:
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id, filename FROM main.images WHERE id >= ?1 AND id <= ?2", -1, &stmt, 0);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, min_imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, max_imgid);

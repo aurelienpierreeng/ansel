@@ -925,7 +925,7 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
   d->nb_imgs = 0;
 
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT imgid FROM main.selected_images",
                               -1, &stmt, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)

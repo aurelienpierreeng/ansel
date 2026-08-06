@@ -1468,7 +1468,7 @@ void init_presets(dt_lib_module_t *self)
   if(!_export_presets_stmt)
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "SELECT rowid, op_version, op_params, name FROM data.presets WHERE operation='export'", -1,
         &_export_presets_stmt, NULL);
   }
@@ -1490,7 +1490,7 @@ void init_presets(dt_lib_module_t *self)
                       "expected. dropping preset.\n",
               name, op_version, version);
       sqlite3_stmt *innerstmt;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "DELETE FROM data.presets WHERE rowid=?1", -1,
                                   &innerstmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(innerstmt, 1, rowid);
@@ -1587,7 +1587,7 @@ void init_presets(dt_lib_module_t *self)
                 "[export_init_presets] updating export preset '%s' from versions %d/%d to versions %d/%d\n",
                 name, fversion, sversion, new_fversion, new_sversion);
         sqlite3_stmt *innerstmt;
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                     "UPDATE data.presets SET op_params=?1 WHERE rowid=?2",
                                     -1, &innerstmt, NULL);
         DT_DEBUG_SQLITE3_BIND_BLOB(innerstmt, 1, new_params, new_params_size, SQLITE_TRANSIENT);
@@ -1609,7 +1609,7 @@ void init_presets(dt_lib_module_t *self)
                       "versions %d/%d. dropping preset\n",
               name, fversion, sversion, new_fversion, new_sversion);
       sqlite3_stmt *innerstmt;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "DELETE FROM data.presets WHERE rowid=?1", -1,
                                   &innerstmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(innerstmt, 1, rowid);

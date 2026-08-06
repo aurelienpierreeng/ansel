@@ -49,7 +49,7 @@ static gboolean group_images_callback(GtkAccelGroup *group, GObject *acceleratab
   GList *imgs = NULL;
   sqlite3_stmt *stmt;
   int32_t new_group_id = UNKNOWN_IMAGE;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1, &stmt,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
                               NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -72,7 +72,7 @@ static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *accelerat
 {
   GList *imgs = NULL;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1,
                               &stmt, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {

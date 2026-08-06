@@ -509,7 +509,7 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
   sqlite3_stmt *stmt;
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT op_params, name"
                               " FROM data.presets"
                               " WHERE operation='ioporder'"
@@ -574,7 +574,7 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
   gchar *active_id = g_strdup("__custom__");
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT name"
                               " FROM data.presets"
                               " WHERE operation='ioporder' AND op_version=?1"

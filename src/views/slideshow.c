@@ -161,7 +161,7 @@ static int32_t _slideshow_get_imgid_from_rank(const dt_slideshow_t *d, const int
 
   int32_t id = 0;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rank);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, 1);
   if(sqlite3_step(stmt) == SQLITE_ROW) id = sqlite3_column_int(stmt, 0);

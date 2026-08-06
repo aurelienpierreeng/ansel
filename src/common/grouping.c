@@ -69,7 +69,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
   if(img_group_id == image_id)
   {
     // get a new group_id for all the others in the group. also write it to the dt_image_t struct.
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT id FROM main.images WHERE group_id = ?1 AND id != ?2", -1, &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img_group_id);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, image_id);
@@ -85,7 +85,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
     sqlite3_finalize(stmt);
     if(new_group_id != -1)
     {
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "UPDATE main.images SET group_id = ?1 WHERE group_id = ?2 AND id != ?3", -1, &stmt,
                                   NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, new_group_id);
@@ -125,7 +125,7 @@ int dt_grouping_change_representative(const int32_t image_id)
   dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
   GList *imgs = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT id FROM main.images WHERE group_id = ?1", -1,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT id FROM main.images WHERE group_id = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, group_id);
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -152,7 +152,7 @@ GList *dt_grouping_get_group_images(const int32_t imgid)
     dt_image_cache_read_release(dt_image_cache_get_global(), image);
 
     sqlite3_stmt *stmt;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT id FROM main.images WHERE group_id = ?1", -1, &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img_group_id);
 
@@ -189,7 +189,7 @@ void dt_grouping_add_grouped_images(GList **images)
             "  WHERE group_id = %d AND id IN (%s)",
             img_group_id, dt_collection_get_query(dt_collection_get_global()));
         // clang-format on
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
 
         while(sqlite3_step(stmt) == SQLITE_ROW)
         {

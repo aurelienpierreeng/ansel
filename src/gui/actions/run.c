@@ -39,13 +39,13 @@ static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratab
 
 static gboolean optimize_database_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_database_perform_maintenance(darktable.db);
+  dt_database_perform_maintenance(dt_database_get_global());
   return TRUE;
 }
 
 static gboolean backup_database_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_database_snapshot(darktable.db);
+  dt_database_snapshot(dt_database_get_global());
   return TRUE;
 }
 

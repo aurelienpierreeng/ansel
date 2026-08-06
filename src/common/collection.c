@@ -200,7 +200,7 @@ static char * or_operator(int *term)
 
 void dt_collection_memory_update()
 {
-  if(IS_NULL_PTR(dt_collection_get_global()) || IS_NULL_PTR(darktable.db)) return;
+  if(IS_NULL_PTR(dt_collection_get_global()) || IS_NULL_PTR(dt_database_get_global())) return;
   sqlite3_stmt *stmt;
 
   /* check if we can get a query from collection */
@@ -214,11 +214,11 @@ void dt_collection_memory_update()
   // 1. drop previous data
 
   // clang-format off
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
                         "DELETE FROM memory.collected_images",
                         NULL, NULL, NULL);
   // reset autoincrement. need in star_key_accel_callback
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
                         "DELETE FROM memory.sqlite_sequence"
                         " WHERE name='collected_images'",
                         NULL, NULL, NULL);
@@ -227,7 +227,7 @@ void dt_collection_memory_update()
   // 2. insert collected images into the temporary table
   gchar *ins_query = g_strdup_printf("INSERT INTO memory.collected_images (imgid) %s", query);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), ins_query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), ins_query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, 0);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, -1);
   sqlite3_step(stmt);
@@ -821,7 +821,7 @@ static uint32_t _dt_collection_compute_count(dt_collection_t *collection)
   uint32_t count = 1;
   if(IS_NULL_PTR(_collection_count_stmt))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT COUNT(DISTINCT imgid) from memory.collected_images",
                                 -1, &_collection_count_stmt, NULL);
   }
@@ -848,7 +848,7 @@ GList *dt_collection_get(const dt_collection_t *collection, int limit)
     {
       if(IS_NULL_PTR(_collection_get_limit_stmt))
       {
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                     "SELECT imgid FROM memory.collected_images LIMIT -1, ?1",
                                     -1, &_collection_get_limit_stmt, NULL);
       }
@@ -867,7 +867,7 @@ GList *dt_collection_get(const dt_collection_t *collection, int limit)
     {
       if(IS_NULL_PTR(_collection_get_stmt))
       {
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                     "SELECT imgid FROM memory.collected_images",
                                     -1, &_collection_get_stmt, NULL);
       }
@@ -897,7 +897,7 @@ int dt_collection_get_nth(const dt_collection_t *collection, int nth)
     return -1;
   const gchar *query = dt_collection_get_query(collection);
   sqlite3_stmt *stmt = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, nth);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, 1);
 
@@ -1131,7 +1131,7 @@ void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList
 
   if(IS_NULL_PTR(_collection_get_makermodels_stmt))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT maker, model FROM main.images GROUP BY maker, model",
                                 -1, &_collection_get_makermodels_stmt, NULL);
   }
@@ -1735,7 +1735,7 @@ GList *dt_collection_get_images_for_rule(const dt_collection_properties_t proper
   dt_free(where);
 
   sqlite3_stmt *stmt = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   if(stmt)
   {
     while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -1777,7 +1777,7 @@ GList *dt_collection_get_property_values(const dt_collection_properties_t proper
                                " WHERE %s GROUP BY maker, model", where_ext);
     g_free(where_ext);
     sqlite3_stmt *stmt = NULL;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), q, -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), q, -1, &stmt, NULL);
     int index = 0;
     while(stmt && sqlite3_step(stmt) == SQLITE_ROW)
     {
@@ -1993,7 +1993,7 @@ GList *dt_collection_get_property_values(const dt_collection_properties_t proper
   if(!query) return NULL;
 
   sqlite3_stmt *stmt = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   while(stmt && sqlite3_step(stmt) == SQLITE_ROW)
   {
     char *name;
@@ -2235,7 +2235,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
                                     txt, txt);
     // clang-format on
     sqlite3_stmt *stmt2;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt2, NULL);
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt2, NULL);
     if(sqlite3_step(stmt2) == SQLITE_ROW)
     {
       next = sqlite3_column_int(stmt2, 0);
@@ -2256,7 +2256,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
                               " ORDER BY rowid DESC LIMIT 1",
                               txt, txt);
       // clang-format on
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt2, NULL);
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt2, NULL);
       if(sqlite3_step(stmt2) == SQLITE_ROW)
       {
         next = sqlite3_column_int(stmt2, 0);
@@ -2327,8 +2327,8 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
 void dt_pop_collection()
 {
   // Restore previous collection
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.collected_images", NULL, NULL, NULL);
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.collected_images", NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
                         "INSERT INTO memory.collected_images"
                         " SELECT * FROM memory.collected_backup",
                         NULL, NULL, NULL);
@@ -2337,8 +2337,8 @@ void dt_pop_collection()
 void dt_push_collection()
 {
   // Backup current collection
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.collected_backup", NULL, NULL, NULL);
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.collected_backup", NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
                         "INSERT INTO memory.collected_backup"
                         " SELECT * FROM memory.collected_images",
                         NULL, NULL, NULL);
@@ -2350,7 +2350,7 @@ void dt_selection_to_culling_mode()
 
   // Remove non-selected from collected images, aka culling mode
   dt_push_collection();
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
                         "DELETE FROM memory.collected_images"
                         "  WHERE imgid NOT IN "
                         "  (SELECT imgid FROM main.selected_images)",
@@ -2419,7 +2419,7 @@ static int dt_collection_image_offset_with_collection(const dt_collection_t *col
   int offset = 0;
   if(IS_NULL_PTR(_collection_image_offset_stmt))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT imgid FROM memory.collected_images",
                                 -1, &_collection_image_offset_stmt, NULL);
   }

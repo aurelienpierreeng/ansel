@@ -47,7 +47,7 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   // get max snapshot
 
   *snap_id = 0;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT MAX(id) FROM memory.undo_history WHERE imgid=?1", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
 
@@ -55,13 +55,13 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
     *snap_id = sqlite3_column_int(stmt, 0) + 1;
   sqlite3_finalize(stmt);
 
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   if(*history_end == 0)
   {
     // insert a dummy undo_histroy to ensure proper snap_id later
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "INSERT INTO memory.undo_history"
                                 "  VALUES (?1, ?2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
                                 , -1, &stmt, NULL);
@@ -76,7 +76,7 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   // copy current state into undo_history
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO memory.undo_history"
                               "  SELECT ?1, imgid, num, module, operation, op_params, enabled, "
                               "         blendop_params, blendop_version, multi_priority, multi_name "
@@ -91,7 +91,7 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   // copy current state into undo_masks_history
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO memory.undo_masks_history"
                               "  SELECT ?1, imgid, num, formid, form, name, version,"
                               "         points, points_count, source"
@@ -106,7 +106,7 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   // copy the module order
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO memory.undo_module_order"
                               "  SELECT ?1, imgid, version, iop_list"
                               "  FROM main.module_order"
@@ -121,10 +121,10 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   sqlite3_finalize(stmt);
 
   if(all_ok)
-    dt_database_release_transaction(darktable.db);
+    dt_database_release_transaction(dt_database_get_global());
   else
   {
-    dt_database_rollback_transaction(darktable.db);
+    dt_database_rollback_transaction(dt_database_get_global());
     fprintf(stderr, "[dt_history_snapshot_undo_create] fails to create a snapshot for %d\n", imgid);
   }
 }
@@ -135,7 +135,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   sqlite3_stmt *stmt;
   gboolean all_ok = TRUE;
 
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_history_delete_on_image_ext(imgid, FALSE);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
@@ -149,7 +149,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   // copy undo_history snapshot back as current history state
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO main.history"
                               "  SELECT imgid, num, module, operation, op_params, enabled, "
                               "         blendop_params, blendop_version, multi_priority, multi_name "
@@ -164,7 +164,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   // copy undo_masks_history snapshot back as current masks_history state
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO main.masks_history"
                               "  SELECT imgid, num, formid, form, name, version, "
                               "         points, points_count, source"
@@ -180,7 +180,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   // restore module order
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO main.module_order"
                               "  SELECT imgid, version, iop_list"
                               "  FROM memory.undo_module_order"
@@ -197,10 +197,10 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   all_ok &= dt_history_set_end(imgid, history_end);
 
   if(all_ok)
-    dt_database_release_transaction(darktable.db);
+    dt_database_release_transaction(dt_database_get_global());
   else
   {
-    dt_database_rollback_transaction(darktable.db);
+    dt_database_rollback_transaction(dt_database_get_global());
     fprintf(stderr, "[_history_snapshot_undo_restore] fails to restore a snapshot for %d\n", imgid);
   }
 
@@ -217,21 +217,21 @@ static void _clear_undo_snapshot(const int32_t imgid, const int snap_id)
 {
   sqlite3_stmt *stmt;
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "DELETE FROM memory.undo_history WHERE id=?1 AND imgid=?2", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "DELETE FROM memory.undo_masks_history WHERE id=?1 AND imgid=?2", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "DELETE FROM memory.undo_module_order WHERE id=?1 AND imgid=?2", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);

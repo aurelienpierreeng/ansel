@@ -59,7 +59,7 @@ void dt_presets_save_to_file(const int rowid, const char *preset_name, const cha
   dt_free(presetname);
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT op_params, blendop_params, name, description, operation,"
                               "   autoapply, model, maker, lens, iso_min, iso_max, exposure_min,"
                               "   exposure_max, aperture_min, aperture_max, focal_length_min,"
@@ -254,7 +254,7 @@ int dt_presets_import_from_file(const char *preset_path)
   int result = 0;
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
      "INSERT OR REPLACE"
      "  INTO data.presets"
      "    (name, description, operation, autoapply,"

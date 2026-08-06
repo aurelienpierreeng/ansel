@@ -158,7 +158,7 @@ static void dt_control_image_enumerator_job_film_init(dt_control_image_enumerato
 {
   sqlite3_stmt *stmt;
   /* get a list of images in filmroll */
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT id FROM main.images WHERE film_id = ?1", -1,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT id FROM main.images WHERE film_id = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
 
@@ -741,7 +741,7 @@ static char *_get_image_list(GList *l)
 static void _set_remove_flag(char *imgs)
 {
   sqlite3_stmt *stmt = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "UPDATE main.images SET flags = (flags|?1) WHERE id IN (?2)", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, DT_IMAGE_REMOVE);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, imgs, -1, SQLITE_STATIC);
@@ -754,7 +754,7 @@ static GList *_get_full_pathname(char *imgs)
   sqlite3_stmt *stmt = NULL;
   GList *list = NULL;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT DISTINCT folder || '" G_DIR_SEPARATOR_S "' || filename FROM "
                               "main.images i, main.film_rolls f "
                               "ON i.film_id = f.id WHERE i.id IN (?1)",
@@ -805,7 +805,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
 
   // check that we can safely remove the image
   gboolean remove_ok = TRUE;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id FROM main.images WHERE id IN (?2) AND flags&?1=?1", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, DT_IMAGE_LOCAL_COPY);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, imgs, -1, SQLITE_STATIC);
@@ -1076,7 +1076,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
 
   dt_free(imgs);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT COUNT(*) FROM main.images WHERE filename IN (SELECT filename FROM "
                               "main.images WHERE id = ?1) AND film_id IN (SELECT film_id FROM main.images WHERE "
                               "id = ?1)", -1, &stmt, NULL);

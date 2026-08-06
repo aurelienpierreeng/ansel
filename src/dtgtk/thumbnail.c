@@ -114,7 +114,7 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
   // and the other images
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id, version, filename"
                               " FROM main.images"
                               " WHERE group_id = ?1", -1, &stmt,
@@ -222,7 +222,7 @@ static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
   (void)widget;
   if(IS_NULL_PTR(thumb)) return;
 
-  sqlite3 *handle = dt_database_get(darktable.db);
+  sqlite3 *handle = dt_database_get_sqlite3_global();
   if(IS_NULL_PTR(handle)) return;
 
   static const char *sql =

@@ -1321,7 +1321,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
   if(IS_NULL_PTR(_iop_presets_select_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "SELECT name, op_version, op_params, blendop_version, blendop_params FROM data.presets WHERE operation = ?1",
         -1, &_iop_presets_select_stmt, NULL);
   }
@@ -1347,7 +1347,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       // the module version from that.
 
       sqlite3_stmt *stmt2;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "SELECT module FROM main.history WHERE operation = ?1 AND op_params = ?2", -1,
                                   &stmt2, NULL);
       DT_DEBUG_SQLITE3_BIND_TEXT(stmt2, 1, module_so->op, -1, SQLITE_TRANSIENT);
@@ -1374,7 +1374,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       fprintf(stderr, "[imageop_init_presets] Found version %d for '%s' preset '%s'\n", old_params_version,
               module_so->op, name);
 
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "UPDATE data.presets SET op_version=?1 WHERE operation=?2 AND name=?3", -1,
                                   &stmt2, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, old_params_version);
@@ -1426,7 +1426,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       // and write the new params back to the database
       sqlite3_stmt *stmt2;
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "UPDATE data.presets "
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "UPDATE data.presets "
                                                                  "SET op_version=?1, op_params=?2 "
                                                                  "WHERE operation=?3 AND name=?4",
                                   -1, &stmt2, NULL);
@@ -1490,7 +1490,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       // and write the new blend params back to the database
       sqlite3_stmt *stmt2;
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "UPDATE data.presets "
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "UPDATE data.presets "
                                                                  "SET blendop_version=?1, blendop_params=?2 "
                                                                  "WHERE operation=?3 AND name=?4",
                                   -1, &stmt2, NULL);
@@ -1558,10 +1558,10 @@ static void _init_module_so(void *m)
 void dt_iop_load_modules_so(void)
 {
   // Batch presets initialization in a single transaction to avoid per-module BEGIN/COMMIT overhead.
-  dt_database_begin_transaction_batch(darktable.db);
+  dt_database_begin_transaction_batch(dt_database_get_global());
   darktable.iop = dt_module_load_modules("/plugins", sizeof(dt_iop_module_so_t), dt_iop_load_module_so,
                                          _init_module_so, NULL);
-  dt_database_end_transaction_batch(darktable.db);
+  dt_database_end_transaction_batch(dt_database_get_global());
 }
 
 int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, dt_develop_t *dev)
@@ -3062,12 +3062,12 @@ void dt_iop_set_darktable_iop_table()
   // Faster than building a huge VALUES string: reuse a prepared statement and bind per module.
   sqlite3_stmt *stmt = NULL;
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "INSERT INTO memory.darktable_iop_names (operation, name) VALUES (?1, ?2)",
       -1, &stmt, NULL);
   if(IS_NULL_PTR(stmt)) return;
 
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
   for(GList *iop = darktable.iop; iop; iop = g_list_next(iop))
   {
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)iop->data;
@@ -3077,7 +3077,7 @@ void dt_iop_set_darktable_iop_table()
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, module->name(), -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
   }
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
   sqlite3_finalize(stmt);
 }
 

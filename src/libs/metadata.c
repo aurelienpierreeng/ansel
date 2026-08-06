@@ -219,7 +219,7 @@ static void _update(dt_lib_module_t *self)
     if(!_metadata_update_stmt)
     {
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "SELECT m.key, m.value, COUNT(m.id) AS ct"
                                   " FROM main.meta_data AS m"
                                   " JOIN main.selected_images AS s ON s.imgid = m.id"

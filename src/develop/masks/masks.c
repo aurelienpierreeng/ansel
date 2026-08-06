@@ -2109,7 +2109,7 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
   sqlite3_stmt *statement = NULL;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT imgid, formid, form, name, version, points, points_count, source, num "
       "FROM main.masks_history WHERE imgid = ?1 ORDER BY num",
       -1, &statement, NULL);
@@ -2222,7 +2222,7 @@ void dt_masks_write_masks_history_item(const int32_t image_id, const int history
 
   // write the form into the database
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO main.masks_history (imgid, num, formid, form, name, "
                               "version, points, points_count,source) VALUES "
                               "(?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",

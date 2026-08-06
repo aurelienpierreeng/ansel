@@ -44,6 +44,11 @@ struct dt_database_t *dt_database_init(const char *alternative, const gboolean l
 void dt_database_destroy(const struct dt_database_t *);
 /** get handle */
 sqlite3 *dt_database_get(const struct dt_database_t *);
+
+// Interim accessors (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+// The sqlite3 variant exists because nearly every consumer wants the connection, not the wrapper.
+struct dt_database_t *dt_database_get_global(void);
+sqlite3 *dt_database_get_sqlite3_global(void);
 /** Returns database path */
 const gchar *dt_database_get_path(const struct dt_database_t *db);
 /** test if database was already locked by another instance */

@@ -51,7 +51,7 @@ void dt_map_location_delete(const guint locid)
     if(g_str_has_prefix(name, location_tag_prefix))
     {
       sqlite3_stmt *stmt;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "DELETE FROM data.locations WHERE tagid=?1",
                                   -1, &stmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, locid);
@@ -95,7 +95,7 @@ int dt_map_location_get_images_count(const guint locid)
   int count = 0;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT COUNT (*)"
                               "  FROM main.tagged_images"
                               "  WHERE tagid = ?1",
@@ -129,7 +129,7 @@ GList *dt_map_location_get_locations_by_path(const gchar *path,
 
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT t.id, t.name, ti.count"
                               "  FROM data.tags AS t"
                               "  LEFT JOIN (SELECT tagid,"
@@ -172,7 +172,7 @@ GList *dt_map_location_get_locations_on_map(const dt_map_box_t *const bbox)
 
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT *"
                               "  FROM data.locations AS t"
                               "  WHERE latitude IS NOT NULL"
@@ -214,7 +214,7 @@ void dt_map_location_get_polygons(dt_location_draw_t *ld)
     return;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT polygons FROM data.locations AS t"
                               "  WHERE tagid = ?1",
                               -1, &stmt, NULL);
@@ -334,7 +334,7 @@ dt_map_location_data_t *dt_map_location_get_data(const guint locid)
   dt_map_location_data_t *g = NULL;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT type, longitude, latitude, delta1, delta2, ratio"
                               "  FROM data.locations"
                               "  JOIN data.tags ON id = tagid"
@@ -365,7 +365,7 @@ void dt_map_location_set_data(const guint locid, const dt_map_location_data_t *g
   if(locid == -1) return;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT OR REPLACE INTO data.locations"
                               "  (tagid, type, longitude, latitude, delta1, delta2, ratio, polygons)"
                               "  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -397,7 +397,7 @@ GList *dt_map_location_find_locations(const int32_t imgid)
   GList *tags = NULL;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT l.tagid, l.type, i.longitude, i.latitude FROM main.images AS i"
                               "  JOIN data.locations AS l"
                               "  ON (l.type = ?2"
@@ -428,7 +428,7 @@ GList *dt_map_location_find_locations(const int32_t imgid)
       pt.lon = sqlite3_column_double(stmt, 2);
       pt.lat = sqlite3_column_double(stmt, 3);
       sqlite3_stmt *stmt2;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "SELECT polygons FROM data.locations "
                                   " WHERE tagid = ?1",
                                   -1, &stmt2, NULL);
@@ -459,7 +459,7 @@ GList *_map_location_find_images(dt_location_draw_t *ld)
   sqlite3_stmt *stmt;
   if(ld->data.shape == MAP_LOCATION_SHAPE_ELLIPSE)
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT i.id FROM main.images AS i"
                                 "  JOIN data.locations AS l"
                                 "  ON (l.type = ?2"
@@ -472,7 +472,7 @@ GList *_map_location_find_images(dt_location_draw_t *ld)
   // clang-format on
   else if(ld->data.shape == MAP_LOCATION_SHAPE_RECTANGLE)
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT i.id FROM main.images AS i"
                                 "  JOIN data.locations AS l"
                                 "  ON (l.type = ?2"
@@ -485,7 +485,7 @@ GList *_map_location_find_images(dt_location_draw_t *ld)
   // clang-format on
   else // MAP_LOCATION_SHAPE_POLYGONS
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT i.id, i.longitude, i.latitude FROM main.images AS i"
                                 "  JOIN data.locations AS l"
                                 "  ON (l.type = ?2"
@@ -524,7 +524,7 @@ void dt_map_location_update_locations(const int32_t imgid, const GList *tags)
   GList *old_tags = NULL;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT t.id FROM main.tagged_images ti"
                               "  JOIN data.tags AS t ON t.id = ti.tagid"
                               "  JOIN data.locations AS l ON l.tagid = t.id"

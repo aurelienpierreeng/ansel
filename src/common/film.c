@@ -95,7 +95,7 @@ void dt_film_set_query(const int32_t id)
   dt_conf_set_int("plugins/lighttable/collect/item0", 0);
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id, folder"
                               " FROM main.film_rolls"
                               " WHERE id = ?1", -1, &stmt, NULL);
@@ -113,7 +113,7 @@ int32_t dt_film_get_id(const char *folder)
 {
   int32_t filmroll_id = -1;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
 #ifdef _WIN32
                               "SELECT id FROM main.film_rolls WHERE folder LIKE ?1",
 #else
@@ -130,7 +130,7 @@ int dt_film_open(const int32_t id)
 {
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id, folder"
                               " FROM main.film_rolls"
                               " WHERE id = ?1", -1, &stmt, NULL);
@@ -141,7 +141,7 @@ int dt_film_open(const int32_t id)
     sqlite3_finalize(stmt);
 
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "UPDATE main.film_rolls"
                                 " SET access_timestamp = strftime('%s', 'now')"
                                 " WHERE id = ?1", -1, &stmt,
@@ -180,7 +180,7 @@ int dt_film_new(dt_film_t *film, const char *directory)
     // create a new filmroll
     /* insert a new film roll into database */
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "INSERT INTO main.film_rolls (id, access_timestamp, folder)"
                                 "  VALUES (NULL, strftime('%s', 'now'), ?1)",
                                 -1, &stmt, NULL);
@@ -189,7 +189,7 @@ int dt_film_new(dt_film_t *film, const char *directory)
     const int rc = sqlite3_step(stmt);
     if(rc != SQLITE_DONE)
       fprintf(stderr, "[film_new] failed to insert film roll! %s\n",
-              sqlite3_errmsg(dt_database_get(darktable.db)));
+              sqlite3_errmsg(dt_database_get_sqlite3_global()));
     sqlite3_finalize(stmt);
     /* requery for filmroll and fetch new id */
     film->id = dt_film_get_id(film->dirname);
@@ -198,7 +198,7 @@ int dt_film_new(dt_film_t *film, const char *directory)
       // add it to the table memory.film_folder
       sqlite3_stmt *stmt2;
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "INSERT INTO memory.film_folder (id, status) "
                                   "VALUES (?1, 1)",
                                   -1, &stmt2, NULL);
@@ -213,7 +213,7 @@ int dt_film_new(dt_film_t *film, const char *directory)
   {
     // make sure we reuse the same path case
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT folder FROM main.film_rolls WHERE id = ?1",
                                 -1, &stmt, NULL);
     // clang-format on
@@ -347,7 +347,7 @@ void dt_film_remove_empty()
   gboolean ask_before_rmdir = dt_conf_get_bool("ask_before_rmdir");
   gboolean raise_signal = FALSE;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id,folder"
                               " FROM main.film_rolls AS B"
                               " WHERE (SELECT COUNT(*)"
@@ -360,7 +360,7 @@ void dt_film_remove_empty()
     raise_signal = TRUE;
     const gint id = sqlite3_column_int(stmt, 0);
     const gchar *folder = (const gchar *)sqlite3_column_text(stmt, 1);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "DELETE FROM main.film_rolls WHERE id=?1", -1,
                                 &inner_stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(inner_stmt, 1, id);
@@ -385,7 +385,7 @@ gboolean dt_film_is_empty(const int id)
 {
   gboolean empty = FALSE;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id FROM main.images WHERE film_id = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
@@ -404,7 +404,7 @@ void dt_film_remove(const int id)
 
   gboolean remove_ok = TRUE;
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id FROM main.images WHERE film_id = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
@@ -427,7 +427,7 @@ void dt_film_remove(const int id)
   }
 
   // query is needed a second time for mipmap and image cache
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id FROM main.images WHERE film_id = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
@@ -442,7 +442,7 @@ void dt_film_remove(const int id)
 
   // due to foreign keys, all images with references to the film roll are deleted,
   // and likewise all entries with references to those images
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "DELETE FROM main.film_rolls WHERE id = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
@@ -461,7 +461,7 @@ void dt_film_relocate(const char *old_path, const char *new_path)
   // not mutate the table while still iterating the SELECT.
   sqlite3_stmt *stmt;
   gchar *like = g_strdup_printf("%s%%", old_path);
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, like, -1, SQLITE_TRANSIENT);
   g_free(like);
@@ -480,7 +480,7 @@ void dt_film_relocate(const char *old_path, const char *new_path)
   sqlite3_finalize(stmt);
 
   sqlite3_stmt *up;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "UPDATE main.film_rolls SET folder=?1 WHERE id=?2", -1, &up, NULL);
   for(GList *i = ids, *f = folders; i && f; i = g_list_next(i), f = g_list_next(f))
   {
@@ -499,7 +499,7 @@ GList *dt_film_get_image_ids(const int filmid)
 {
   GList *result = NULL;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id FROM main.images WHERE film_id = ?1",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
@@ -515,18 +515,18 @@ GList *dt_film_get_image_ids(const int filmid)
 void dt_film_set_folder_status()
 {
   sqlite3_stmt *stmt, *stmt2;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "DELETE FROM memory.film_folder",
                               -1, &stmt, NULL);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT id, folder FROM main.film_rolls",
                               -1, &stmt, NULL);
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO memory.film_folder (id, status) "
                               "VALUES (?1, ?2)",
                               -1, &stmt2, NULL);

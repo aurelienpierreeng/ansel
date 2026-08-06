@@ -2537,12 +2537,12 @@ static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
   const int cnt = pos->count();
 
   sqlite3_stmt *stmt_sel_id, *stmt_ins_tags, *stmt_ins_tagged;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT id FROM data.tags WHERE name = ?1", -1,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT id FROM data.tags WHERE name = ?1", -1,
                               &stmt_sel_id, NULL);
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "INSERT INTO data.tags (id, name) VALUES (NULL, ?1)",
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "INSERT INTO data.tags (id, name) VALUES (NULL, ?1)",
                               -1, &stmt_ins_tags, NULL);
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO main.tagged_images (tagid, imgid, position)"
                               "  VALUES (?1, ?2,"
                               "    (SELECT (IFNULL(MAX(position),0) & 0xFFFFFFFF00000000) + (1 << 32)"
@@ -3132,7 +3132,7 @@ static void add_mask_entry_to_db(int32_t imgid, mask_entry_t *entry)
   sqlite3_stmt *stmt;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-    dt_database_get(darktable.db),
+    dt_database_get_sqlite3_global(),
                               "INSERT INTO main.masks_history (imgid, num, formid, form, name, version, points, points_count, source) "
                               "VALUES (?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                               -1, &stmt, NULL);
@@ -3334,7 +3334,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     // now add all masks that are not used for cloning. keeping them might be useful.
     // TODO: make this configurable? or remove it altogether?
-    dt_database_start_transaction(darktable.db);
+    dt_database_start_transaction(dt_database_get_global());
 
     if(xmp_version < 3)
     {
@@ -3350,7 +3350,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       }
     }
 
-    dt_database_release_transaction(darktable.db);
+    dt_database_release_transaction(dt_database_get_global());
 
     // history
     int num = 0;
@@ -3373,12 +3373,12 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       return 1;
     }
 
-    dt_database_start_transaction(darktable.db);
+    dt_database_start_transaction(dt_database_get_global());
 
     if(!dt_history_db_delete_history(img->id))
     {
       fprintf(stderr, "[exif] error deleting history for image %d\n", img->id);
-      fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+      fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
       all_ok = FALSE;
       goto end;
     }
@@ -3406,7 +3406,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
                                            entry->multi_name ? entry->multi_name : ""))
       {
         fprintf(stderr, "[exif] error adding history entry for image %d\n", img->id);
-        fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+        fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
         all_ok = FALSE;
         goto end;
       }
@@ -3477,7 +3477,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     // if masks have been read, create a mask manager entry in history
     if(xmp_version < 3)
     {
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "SELECT COUNT(*) FROM main.masks_history WHERE imgid = ?1", -1,
                                   &stmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
@@ -3491,14 +3491,14 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
         if(!dt_history_db_shift_history_nums(img->id, 1))
         {
           fprintf(stderr, "[exif] error shifting history nums for image %d\n", img->id);
-          fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+          fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
           all_ok = FALSE;
           goto end;
         }
         if(!dt_history_db_write_history_item(img->id, 0, "mask_manager", NULL, 0, 1, 0, NULL, 0, 0, 0, ""))
         {
           fprintf(stderr, "[exif] error adding mask history entry for image %d\n", img->id);
-          fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+          fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
           all_ok = FALSE;
           goto end;
         }
@@ -3516,7 +3516,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if(!dt_history_set_end(img->id, history_end))
       {
         fprintf(stderr, "[exif] error writing history_end for image %d\n", img->id);
-        fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+        fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
         all_ok = FALSE;
         goto end;
       }
@@ -3528,7 +3528,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if(!dt_history_set_end(img->id, history_end))
       {
         fprintf(stderr, "[exif] error writing history_end for image %d\n", img->id);
-        fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+        fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
         all_ok = FALSE;
         goto end;
       }
@@ -3536,7 +3536,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     if(!dt_ioppr_write_iop_order_list(iop_order_list, img->id))
     {
       fprintf(stderr, "[exif] error writing iop_list for image %d\n", img->id);
-      fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+      fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
       all_ok = FALSE;
       goto end;
     }
@@ -3572,7 +3572,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     if(all_ok)
     {
-      dt_database_release_transaction(darktable.db);
+      dt_database_release_transaction(dt_database_get_global());
 
       // history_hash (current only)
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history_current_hash"))) != xmpData.end())
@@ -3592,7 +3592,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     else
     {
       std::cerr << "[exif] error reading history from '" << filename << "'" << std::endl;
-      dt_database_rollback_transaction(darktable.db);
+      dt_database_rollback_transaction(dt_database_get_global());
       return 1;
     }
 
@@ -3624,7 +3624,7 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
   xmpData.add(Exiv2::XmpKey("Xmp.darktable.masks_history"), &tvm);
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT imgid, formid, form, name, version, points, points_count, source, num"
       " FROM main.masks_history"
       " WHERE imgid = ?1"
@@ -3678,7 +3678,7 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
   xmpData.add(Exiv2::XmpKey("Xmp.darktable.history"), &tv);
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT module, operation, op_params, enabled, blendop_params, "
       "       blendop_version, multi_priority, multi_name, num"
       " FROM main.history"
@@ -3759,7 +3759,7 @@ static void set_xmp_timestamps(Exiv2::XmpData &xmpData, const int32_t imgid)
   sqlite3_stmt *stmt;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT import_timestamp, change_timestamp, export_timestamp, print_timestamp"
       " FROM main.images"
       " WHERE id = ?1",
@@ -3882,7 +3882,7 @@ static void dt_set_xmp_dt_metadata(Exiv2::XmpData &xmpData, const int32_t imgid,
 {
   sqlite3_stmt *stmt;
   // metadata
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT key, value FROM main.meta_data WHERE id = ?1",
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT key, value FROM main.meta_data WHERE id = ?1",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -3907,7 +3907,7 @@ static void dt_set_xmp_dt_metadata(Exiv2::XmpData &xmpData, const int32_t imgid,
   std::unique_ptr<Exiv2::Value> v(Exiv2::Value::create(Exiv2::xmpSeq)); // or xmpBag or xmpAlt.
 
   /* Already initialized v = Exiv2::Value::create(Exiv2::xmpSeq); // or xmpBag or xmpAlt.*/
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT color FROM main.color_labels WHERE imgid=?1",
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT color FROM main.color_labels WHERE imgid=?1",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -3956,7 +3956,7 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
   // get stars and raw params from db
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT filename, flags, raw_parameters, "
                               "       longitude, latitude, altitude, history_end, datetime_taken"
                               " FROM main.images"
@@ -4088,7 +4088,7 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
   // get stars and raw params from db
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT filename, flags, raw_parameters, "
                               "       longitude, latitude, altitude, history_end, datetime_taken"
                               " FROM main.images"

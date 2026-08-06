@@ -248,7 +248,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   // clang-format off
   if(IS_NULL_PTR(_duplicate_versions_stmt))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT i.version, i.id, m.value"
                                 " FROM images AS i"
                                 " LEFT JOIN meta_data AS m ON m.id = i.id AND m.key = ?3"

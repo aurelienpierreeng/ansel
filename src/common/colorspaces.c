@@ -850,7 +850,7 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int3
     sqlite3_stmt *stmt;
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT op_params FROM main.history WHERE imgid=?1 AND operation='colorin' ORDER BY num DESC LIMIT 1", -1,
       &stmt, NULL);
     // clang-format on

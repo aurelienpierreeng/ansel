@@ -497,7 +497,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
 
     // count duplicates
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT COUNT(1)"
                                 " FROM images AS i1"
                                 " WHERE EXISTS (SELECT 'y' FROM images AS i2"

@@ -822,7 +822,7 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
                                                      cairo_image_surface_get_stride(check_cst),
                                                      cairo_destroy_from_pixbuf, check_cr);
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT rowid, name, operation, autoapply, model, maker, lens, iso_min, "
                               "iso_max, exposure_min, exposure_max, aperture_min, aperture_max, "
                               "focal_length_min, focal_length_max, writeprotect FROM data.presets ORDER BY "
@@ -1168,7 +1168,7 @@ static gboolean tree_key_press_presets(GtkWidget *widget, GdkEventKey *event, gp
       sqlite3_stmt *stmt;
       gchar* operation = NULL;
 
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT name, operation FROM data.presets WHERE rowid = ?1",
                               -1, &stmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rowid);
@@ -1267,9 +1267,9 @@ static void export_preset(GtkButton *button, gpointer data)
     sqlite3_stmt *stmt;
 
     // we have n+1 selects for saving presets, using single transaction for whole process saves us microlocks
-    dt_database_start_transaction(darktable.db);
+    dt_database_start_transaction(dt_database_get_global());
 
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT rowid, name, operation FROM data.presets WHERE writeprotect = 0",
                                 -1, &stmt, NULL);
 
@@ -1287,7 +1287,7 @@ static void export_preset(GtkButton *button, gpointer data)
 
     sqlite3_finalize(stmt);
 
-    dt_database_release_transaction(darktable.db);
+    dt_database_release_transaction(dt_database_get_global());
 
     dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
 

@@ -269,7 +269,7 @@ void init_presets(dt_iop_module_so_t *self)
 {
   dt_iop_lowlight_params_t p;
 
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -434,7 +434,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("night"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 // fills in new parameters based on mouse position (in 0,1)

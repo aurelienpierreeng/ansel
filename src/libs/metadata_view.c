@@ -562,7 +562,7 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
                                   images, images, images, images, images, images, images, images, images);
   // clang-format on
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
 
   sqlite3_stmt *stmt_tags = NULL;
   // clang-format off
@@ -572,7 +572,7 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
                                       "ON data.tags.id = main.tagged_images.tagid AND name NOT LIKE 'darktable|%%' "
                                       "WHERE imgid in (%s) GROUP BY tagid", images);
   // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), tag_query, -1, &stmt_tags, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), tag_query, -1, &stmt_tags, NULL);
   dt_free(tag_query);
   dt_free(query);
 
@@ -997,7 +997,7 @@ static void _jump_to()
   {
     sqlite3_stmt *stmt;
 
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1, &stmt,
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
                                 NULL);
 
     if(sqlite3_step(stmt) == SQLITE_ROW) imgid = sqlite3_column_int(stmt, 0);

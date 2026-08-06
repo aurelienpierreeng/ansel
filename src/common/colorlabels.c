@@ -91,7 +91,7 @@ int dt_colorlabels_get_labels(const int32_t imgid)
   if(IS_NULL_PTR(_colorlabels_get_labels_stmt))
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT color FROM main.color_labels WHERE imgid = ?1",
                                 -1, &_colorlabels_get_labels_stmt, NULL);
     // clang-format on
@@ -169,7 +169,7 @@ void dt_colorlabels_remove_labels(const int32_t imgid)
 {
   if(IS_NULL_PTR(_colorlabels_remove_labels_stmt))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "DELETE FROM main.color_labels WHERE imgid=?1",
                                 -1, &_colorlabels_remove_labels_stmt, NULL);
   }
@@ -185,7 +185,7 @@ void dt_colorlabels_set_label(const int32_t imgid, const int color)
   if(IS_NULL_PTR(_colorlabels_set_label_stmt))
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "INSERT OR IGNORE INTO main.color_labels (imgid, color) VALUES (?1, ?2)",
                                 -1, &_colorlabels_set_label_stmt, NULL);
     // clang-format on
@@ -203,7 +203,7 @@ void dt_colorlabels_remove_label(const int32_t imgid, const int color)
   if(IS_NULL_PTR(_colorlabels_remove_label_stmt))
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "DELETE FROM main.color_labels WHERE imgid=?1 AND color=?2",
                                 -1, &_colorlabels_remove_label_stmt, NULL);
     // clang-format on
@@ -341,7 +341,7 @@ int dt_colorlabels_check_label(const int32_t imgid, const int color)
   if(imgid <= 0) return 0;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT * FROM main.color_labels WHERE imgid=?1 AND color=?2 LIMIT 1",
                               -1, &stmt, NULL);
   // clang-format on

@@ -93,7 +93,7 @@ static void _update_last_ids(dt_selection_t *selection)
 // WARNING: that doesn't take care of visible/unvisible image group members in GUI
 static void _clean_missing_ids(dt_selection_t *selection)
 {
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
                         "DELETE FROM main.selected_images"
                         " WHERE imgid NOT IN"
                         " (SELECT imgid FROM memory.collected_images)", NULL, NULL, NULL);
@@ -107,7 +107,7 @@ static GList *_selection_database_to_glist(dt_selection_t *selection)
   if(!_selection_database_to_glist_stmt)
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT imgid FROM main.selected_images ORDER BY imgid DESC",
                                 -1, &_selection_database_to_glist_stmt, NULL);
     // clang-format on
@@ -188,7 +188,7 @@ static void _selection_select(dt_selection_t *selection, int32_t imgid)
   if(imgid < 0) return;
 
   gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.selected_images VALUES (%d)", imgid);
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
   dt_free(query);
 }
 
@@ -197,7 +197,7 @@ static void _selection_deselect(dt_selection_t *selection, int32_t imgid)
   if(imgid < 0) return;
 
   gchar *query = g_strdup_printf("DELETE FROM main.selected_images WHERE imgid = %d", imgid);
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
   dt_free(query);
 }
 
@@ -206,8 +206,8 @@ void dt_selection_push(dt_selection_t *selection)
   // Backup current selection
   if(!darktable.gui->selection_stacked)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.selected_backup", NULL, NULL, NULL);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "INSERT INTO memory.selected_backup"
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.selected_backup", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO memory.selected_backup"
                                                          " SELECT * FROM main.selected_images", NULL, NULL, NULL);
     darktable.gui->selection_stacked = TRUE;
 
@@ -223,8 +223,8 @@ void dt_selection_pop(dt_selection_t *selection)
   // Restore current selection
   if(darktable.gui->selection_stacked)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM main.selected_images", NULL, NULL, NULL);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "INSERT INTO main.selected_images"
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM main.selected_images", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO main.selected_images"
                                                          " SELECT * FROM memory.selected_backup", NULL, NULL, NULL);
     darktable.gui->selection_stacked = FALSE;
 
@@ -265,7 +265,7 @@ void dt_selection_free(dt_selection_t *selection)
 
 void dt_selection_clear(dt_selection_t *selection)
 {
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM main.selected_images", NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM main.selected_images", NULL, NULL, NULL);
   _reset_ids_list(selection);
   _update_gui();
 }
@@ -333,7 +333,7 @@ void dt_selection_select_list(struct dt_selection_t *selection, const GList *con
       ids = dt_util_dstrcat(ids, (ids[0] != '\0') ? ", (%i)" : "(%i)", imgid);
     }
     gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.selected_images VALUES %s", ids);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
     dt_free(query);
   }
 
@@ -356,7 +356,7 @@ void dt_selection_deselect_list(struct dt_selection_t *selection, const GList *c
       ids = dt_util_dstrcat(ids, (ids[0] != '\0') ? ", %i" : "%i", imgid);
     }
     gchar *query = g_strdup_printf("DELETE FROM main.selected_images WHERE imgid IN (%s)", ids);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
     dt_free(query);
     dt_free(ids);
   }

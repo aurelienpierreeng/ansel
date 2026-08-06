@@ -202,7 +202,7 @@ static int dt_mipmap_cache_get_filename(gchar *mipmapfilename, size_t size)
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
 
   // Build the mipmap filename fram hashing the path of the library DB
-  const gchar *dbfilename = dt_database_get_path(darktable.db);
+  const gchar *dbfilename = dt_database_get_path(dt_database_get_global());
 
   if(!strcmp(dbfilename, ":memory:"))
   {

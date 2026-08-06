@@ -164,7 +164,7 @@ static void _image_cache_write_history_hash(const dt_image_t *img)
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "INSERT INTO main.history_hash (imgid, current_hash, basic_hash, auto_hash, mipmap_hash)"
         " VALUES (?1, ?2, NULL, NULL, ?3)"
         " ON CONFLICT (imgid)"
@@ -188,7 +188,7 @@ static sqlite3_stmt *_image_cache_get_stmt(void)
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "SELECT i.id, i.group_id, "
         "       (SELECT COUNT(id) FROM main.images WHERE group_id = i.group_id), "
         "       (SELECT COUNT(imgid) FROM main.history WHERE imgid = i.id), "
@@ -353,7 +353,7 @@ static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid, c
   {
     img->id = -1;
     fprintf(stderr, "[image_cache_reload] failed to open image %" PRIu32 " from database: %s\n", imgid,
-            sqlite3_errmsg(dt_database_get(darktable.db)));
+            sqlite3_errmsg(dt_database_get_sqlite3_global()));
   }
 
   dt_pthread_mutex_unlock(&_image_cache_stmt_mutex);
@@ -663,7 +663,7 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
 
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "UPDATE main.images"
                               " SET width = ?1, height = ?2, filename = ?3, maker = ?4, model = ?5,"
                               "     lens = ?6, exposure = ?7, aperture = ?8, iso = ?9, focal_length = ?10,"
