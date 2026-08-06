@@ -306,9 +306,10 @@ static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, g
 
   if(profile_changed)
   {
-    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
   return TRUE;
@@ -342,9 +343,10 @@ static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, gu
   if(new_intent != old_intent)
   {
     dt_colorspaces_get_global()->display_intent = new_intent;
-    pthread_rwlock_rdlock(&dt_colorspaces_get_global()->xprofile_lock);
+    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&dt_colorspaces_get_global()->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
   return TRUE;
