@@ -28,8 +28,10 @@
    de-glueing it often comes after headers that already pulled windows.h. In that case
    including winsock2.h here cannot fix the ordering retroactively -- it only emits
    MinGW's "Please include winsock2.h before windows.h" warning, which -Werror turns
-   fatal. So only force the ordering when we still can. */
-#ifndef _WINDOWS_H
+   fatal. So only force the ordering when we still can: winsock2.h emits that warning from
+   an "#ifdef _INC_WINDOWS" test, so test the same macro here (plus the legacy MinGW32
+   spelling _WINDOWS_H) rather than guessing. */
+#if !defined(_INC_WINDOWS) && !defined(_WINDOWS_H)
 #include <winsock2.h>
 #endif
 #include <windows.h>
