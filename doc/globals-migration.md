@@ -93,8 +93,7 @@ avoids double churn:
    final answer; threading them would add parameters carrying a value that cannot differ.
 2. **Process-wide buses with no per-call context** (`signals`, and `conf` already) — an
    accessor/free-function API is the final answer for the same reason.
-3. **Service handles with a natural carrier** (`bauhaus` →
-   `dt_gui_module_t`, `develop` → `self->dev`) — these are the real injection targets, and for
+3. **Service handles with a natural carrier** (`develop` → `self->dev`) — these are the real injection targets, and for
    them the interim accessor is *churn*: convert them straight to the carrier instead.
 
 **Correction — `pixelpipe_cache` is category 2, not category 3.** §4 below ordered it for
@@ -125,7 +124,7 @@ not from where a convenient carrier happens to be threaded.
 | 2 | `image_cache`, `undo`, `selection`, `mipmap_cache` | B→C | 98 | ~470 | low |
 | 3 | `collection` | B→C | 27 | 97 | low-med (import jobs mutate from workers) |
 | 4 | `db` | B (`dt_database_get_global()` collapses 353 sites) | 58 | 423 | medium (transaction rwlock semantics untouched) |
-| 5 | `bauhaus` | A via `dt_gui_module_t` + theme getters | 68 | 356 | low |
+| ~~5~~ | `bauhaus` | **DONE via accessor** — Strategy A infeasible: 71 of the constructor call sites pass `DT_GUI_MODULE(NULL)`, so there is no module to carry the handle. Note bauhaus.c itself had zero global refs (already fully parameterized). Follow-up: ~111 theme-field reads want `dt_bauhaus_theme_*()` getters | 67 | 354 | — |
 | 6 | `signals` | B interim + context-sourced macros where `self` exists | 90 | 424 | medium (worker-thread raises) |
 | ~~7~~ | `pixelpipe_cache` | **DONE via accessor** — Strategy A rejected, see the §3b correction (cross-pipe singleton) | 28 | 282 | — |
 | 8 | `develop` outside `iop/` | A (darkroom keeps its refs: it IS a dispatch point) | 45 | ~630 | medium |
