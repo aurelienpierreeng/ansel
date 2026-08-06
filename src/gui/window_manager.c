@@ -577,7 +577,7 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   ui->center_base = ocda;
 
   /* center should redraw when signal redraw center is raised*/
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_REDRAW_CENTER,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_REDRAW_CENTER,
                             G_CALLBACK(_ui_widget_redraw_callback), ui->center);
 
   gtk_widget_show_all(container);

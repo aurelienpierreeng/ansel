@@ -1269,7 +1269,7 @@ void dt_iop_gui_init(dt_iop_module_t *module)
   if(module->gui_init) module->gui_init(module);
   if(module->color_picker_apply)
   {
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PICKERDATA_READY,
                                     G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
   // the freeze ends here as the scope guard goes out of scope
@@ -1583,11 +1583,11 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
   // gui_init on its modules), and dt_iop_gui_cleanup_module() itself only invokes the module's own
   // gui_cleanup() -- which does the DT_DEBUG_CONTROL_SIGNAL_DISCONNECT() calls -- when gui_data is
   // non-NULL. Any signal a module connected in gui_init() (module_moved_callback in lut3d.c,
-  // _develop_ui_pipe_started_callback in toneequal.c...) is broadcast globally on darktable.signals,
+  // _develop_ui_pipe_started_callback in toneequal.c...) is broadcast globally on the signal bus,
   // so a single missed disconnect leaves a dangling self pointer that a later, unrelated dev's signal
   // raise will invoke -- SIGSEGV on the freed instance. Disconnecting everything keyed on this module's
   // address here, unconditionally, guarantees no module can be invoked again once freed.
-  dt_control_signal_disconnect_all(darktable.signals, module);
+  dt_control_signal_disconnect_all(dt_control_signal_get_global(), module);
 
   module->cleanup(module);
 
@@ -2082,7 +2082,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
 
   if(module->color_picker_apply)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_iop_color_picker_data_ready_callback), module);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
   // History refresh can delete pipeline-only modules created for ordering/history
   // resolution. They have a module GUI cleanup callback but no module GUI data.
@@ -2190,7 +2190,7 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
       dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
       // FIXME: ask the user if he wants to delete the mask, or just unlink them.
       if(grp) dt_masks_form_delete(module, NULL, grp);
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, -1, -1, DT_MASKS_EVENT_RESET);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, -1, -1, DT_MASKS_EVENT_RESET);
     }
     /* reset to default params */
     dt_iop_reload_defaults(module);
@@ -2314,7 +2314,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     dt_gui_add_class(iop_w, "dt_module_focus");
   }
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
   dt_control_queue_cursor(GDK_LEFT_PTR);
   dt_control_queue_redraw_center();
 }

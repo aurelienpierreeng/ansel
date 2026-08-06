@@ -1231,7 +1231,7 @@ static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *
 {
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   g->preview_ready = TRUE;
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_preview_updated_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_event_preview_updated_callback), self);
   // force max size to be recomputed
   g->clip_max_pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 }
@@ -1247,7 +1247,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   {
     if(in)
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                       G_CALLBACK(_event_preview_updated_callback), self);
 
       // got focus, grab stuff to gui:
@@ -1259,7 +1259,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     }
     else
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                       G_CALLBACK(_event_preview_updated_callback), self);
 
       // lost focus, commit current params:

@@ -651,19 +651,19 @@ void init(dt_view_t *self)
   _view_map_build_main_query(lib);
 
   /* connect collection changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_view_map_collection_changed), (gpointer)self);
   /* connect selection changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_view_map_selection_changed), (gpointer)self);
   /* connect preference changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE,
                             G_CALLBACK(_view_map_check_preference_changed), (gpointer)self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                             G_CALLBACK(_view_changed), (gpointer)self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED,
                             G_CALLBACK(_view_map_geotag_changed), (gpointer)self);
 }
 
@@ -671,11 +671,11 @@ void cleanup(dt_view_t *self)
 {
   dt_map_t *lib = (dt_map_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_selection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_check_preference_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_selection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_check_preference_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
 
   if(darktable.gui)
   {
@@ -734,11 +734,11 @@ int try_enter(dt_view_t *self)
 static void _view_map_signal_change_raise(gpointer user_data)
 {
   dt_view_t *self = (dt_view_t *)user_data;
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, 0);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, 0);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
 }
 
 // updating collection when mouse scrolls to resize the location is too demanding
@@ -1038,7 +1038,7 @@ static void _view_map_update_location_geotag(dt_view_t *self)
     // update coordinates
     dt_map_location_set_data(lib->loc.main.id, &lib->loc.main.data);
     if(dt_map_location_update_images(&lib->loc.main))
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
   }
 }
 
@@ -1917,11 +1917,11 @@ static gboolean _view_map_button_press_callback(GtkWidget *w, GdkEventButton *e,
         dt_location_draw_t *d = (dt_location_draw_t *)other->data;
         if(dt_map_location_included(lon, lat, &d->data))
         {
-          dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-          dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, d->id);
-          dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-          dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+          dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+          dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, d->id);
+          dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+          dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
           return TRUE;
         }
       }
@@ -2103,9 +2103,9 @@ void enter(dt_view_t *self)
 
   /* Map opts into single-click filmstrip commits explicitly so generic
    * thumbtable activation can keep its double-click semantics. */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_view_map_filmstrip_activate_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
                             G_CALLBACK(_view_map_filmstrip_drag_begin_callback), self);
 
   const int32_t active_imgid = dt_view_active_images_get_first();
@@ -2126,9 +2126,9 @@ void leave(dt_view_t *self)
   _view_map_set_map_source_g_object(self, OSM_GPS_MAP_SOURCE_NULL);
 
   /* disconnect from filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_filmstrip_activate_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_filmstrip_activate_callback),
                                (gpointer)self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_filmstrip_drag_begin_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_filmstrip_drag_begin_callback),
                                (gpointer)self);
   dt_map_t *lib = (dt_map_t *)self->data;
   lib->drop_filmstrip_activated = FALSE;
@@ -2157,11 +2157,11 @@ static void _view_map_undo_callback(dt_action_t *action)
   dt_map_t *lib = (dt_map_t *)self->data;
 
   // let current map view unchanged (avoid to center the map on collection)
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
   dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_MAP);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
   g_signal_emit_by_name(lib->map, "changed");
 }
 
@@ -2171,11 +2171,11 @@ static void _view_map_redo_callback(dt_action_t *action)
   dt_map_t *lib = (dt_map_t *)self->data;
 
   // let current map view unchanged (avoid to center the map on collection)
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
   dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_MAP);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
   g_signal_emit_by_name(lib->map, "changed");
 }
 */
@@ -2742,10 +2742,10 @@ static void _drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, 
         // TODO redraw the image group
         // it seems that at this time osm_gps_map doesn't answer before dt_image_set_locations(). Locked in some way ?
         const dt_image_geoloc_t geoloc = { longitude, latitude, NAN };
-        dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
+        dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
         dt_image_set_locations(imgs, &geoloc, TRUE);
-        dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
+        dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
         g_signal_emit_by_name(lib->map, "changed");
         success = TRUE;
       }

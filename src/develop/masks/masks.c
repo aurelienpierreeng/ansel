@@ -1099,7 +1099,7 @@ static gboolean _masks_remove_or_delete_finish(struct dt_iop_module_t *module, d
   }
 
   dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_id, signal_parent_id,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, form_id, signal_parent_id,
                                 signal_event);
 
   if(res && next_formid > 0)
@@ -1490,12 +1490,12 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
 
     if(!IS_NULL_PTR(module))
     {
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, group_entry->formid,
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, group_entry->formid,
                                     group_entry->parentid, DT_MASKS_EVENT_ADD);
     }
     else
     {
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, mask_form->formid,
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, mask_form->formid,
                                     0, DT_MASKS_EVENT_ADD);
     }
 
@@ -2511,7 +2511,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   const gboolean prev_any_selected = dt_masks_is_anything_selected(mask_gui);
   const int prev_group_selected = mask_gui->group_selected;
 
-  /*DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);*/
+  /*DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);*/
 
   if(mask_form->type & DT_MASKS_GROUP)
     _dt_masks_events_group_update_selection(mask_form, mask_gui);

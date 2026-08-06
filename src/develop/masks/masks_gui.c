@@ -86,7 +86,7 @@ static void _masks_shape_buttons_deactivate_signal(gpointer instance, GtkWidget 
 
 void dt_masks_shape_buttons_deactivate_all(GtkWidget *active_button)
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE, active_button);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE, active_button);
 }
 
 static int _masks_shape_button_index(const dt_masks_shape_buttons_data_t *data, GtkWidget *button)
@@ -166,7 +166,7 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
 
 static void _masks_shape_buttons_destroy(GtkWidget *widget, dt_masks_shape_buttons_data_t *data)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
   dt_free(data);
 }
 
@@ -234,7 +234,7 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
     if(config->types) config->types[def->index] = def->type;
   }
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
                                   G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
   g_signal_connect(G_OBJECT(data->box), "destroy", G_CALLBACK(_masks_shape_buttons_destroy), data);
 
@@ -264,7 +264,7 @@ static void _masks_gui_interaction_commit(dt_masks_gui_interaction_slider_t *dat
   if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
 
   dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED,
                                 data->form_group->formid, data->form_group->parentid,
                                 DT_MASKS_EVENT_UPDATE);
 }
@@ -601,7 +601,7 @@ static void _masks_move_up_down_callback(gpointer user_data, const int up)
 
   dt_masks_form_move(grp, fpt->formid, up);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, fpt->formid, fpt->parentid, DT_MASKS_EVENT_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, fpt->formid, fpt->parentid, DT_MASKS_EVENT_CHANGE);
 }
 
 static void _masks_moveup_callback(GtkWidget *menu, gpointer user_data)
@@ -635,7 +635,7 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 
   apply_operation(form_op, state_op);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_op->formid, form_op->parentid, DT_MASKS_EVENT_UPDATE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, form_op->formid, form_op->parentid, DT_MASKS_EVENT_UPDATE);
 }
 
 #define masks_gtk_menu_item_new_bold(label, selected, state, icon)                                        \

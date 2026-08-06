@@ -661,11 +661,11 @@ static void _raise_signal_tag_changed(dt_lib_module_t *self)
   if(!d->collection[0])
   {
     // raises change only for other modules
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
   }
 }
 
@@ -1502,9 +1502,9 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   GList *tagged_images = NULL;
   dt_tag_get_tags_images(tagname, &tag_family, &tagged_images);
 
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
   tag_count = dt_tag_remove_list(tag_family);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
   dt_control_log(_("%d tags removed"), tag_count);
 
   GtkTreeIter store_iter;
@@ -2050,9 +2050,9 @@ static void _pop_menu_dictionary_goto_tag_collection(GtkWidget *menuitem, dt_lib
     {
       if(!d->collection[0]) dt_collection_serialize(d->collection, 4096);
       gchar *tag_collection = g_strdup_printf("1:0:%d:%s$", DT_COLLECTION_PROP_TAG, path);
-      dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+      dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
       dt_collection_deserialize(tag_collection);
-      dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+      dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
       dt_free(tag_collection);
     }
     dt_free(path);
@@ -2064,9 +2064,9 @@ static void _pop_menu_dictionary_goto_collection_back(GtkWidget *menuitem, dt_li
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   if(d->collection[0])
   {
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
     dt_collection_deserialize(d->collection);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
     d->collection[0] = '\0';
   }
 }
@@ -3423,13 +3423,13 @@ void gui_init(dt_lib_module_t *self)
 #undef NEW_TOGGLE_BUTTON
 
   /* connect to mouse over id */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_lib_tagging_redraw_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_TAG_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED,
                             G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_lib_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_collection_updated_callback), self);
 
   d->collection = g_malloc(4096);
@@ -3479,10 +3479,10 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_accels_remove_accel(darktable.gui->accels, path, self);
   dt_free(path);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_tagging_redraw_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_redraw_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_selection_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
   if(d->manage_window) gtk_widget_destroy(d->manage_window);
   if(d->collection_tags) g_hash_table_destroy(d->collection_tags);
   // d kept its own ref on both attached stores so the view could switch between them

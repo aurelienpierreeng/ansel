@@ -493,9 +493,9 @@ static void _view_map_location_changed(gpointer instance, GList *polygons, dt_li
 
 static void _signal_location_change(dt_lib_module_t *self)
 {
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, 0);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, 0);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
 }
 
 static void _name_editing_done(GtkCellEditable *editable, dt_lib_module_t *self)
@@ -1020,10 +1020,10 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(selection), "changed", G_CALLBACK(_selection_changed), self);
 
   // connect geotag changed signal
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED,
                                   G_CALLBACK(_view_map_geotag_changed), (gpointer)self);
   // connect location changed signal
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_LOCATION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_LOCATION_CHANGED,
                                   G_CALLBACK(_view_map_location_changed), (gpointer)self);
 }
 
@@ -1032,8 +1032,8 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   dt_free(self->data);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_location_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_location_changed), self);
 }
 
 // clang-format off

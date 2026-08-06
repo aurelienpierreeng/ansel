@@ -354,7 +354,7 @@ static int32_t dt_get_selected_files(dt_import_t *import)
     // _process_file_list, leaving the dialog looking frozen. scan_errors rides along so the
     // label can report folders that failed to scan (permission denied, etc.) -- see
     // _set_selected_files_label().
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, import->files, import->elements, 1,
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILELIST_CHANGED, import->files, import->elements, 1,
                                   import->scan_errors);
     // Signal receivers only observe this list. Ownership stays in dt_import_t and is released in dt_import_cleanup.
   }
@@ -1155,7 +1155,7 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
   else
     dt_control_log(_("No files to import. Check your selection."));
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_process_file_list), (gpointer)d);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_process_file_list), (gpointer)d);
   gui_cleanup(d);
   _cleanup(d);
 
@@ -1166,7 +1166,7 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
 void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t *d)
 {
   // Stop capturing the filelist changes for the in-popup label file counter.
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_filelist_changed_callback), (gpointer)d);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_filelist_changed_callback), (gpointer)d);
 
   switch(response_id)
   {
@@ -1179,7 +1179,7 @@ void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t
       }
 
       // The next file list change will now only fire the importer job
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, G_CALLBACK(_process_file_list), (gpointer)d);
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_FILELIST_CHANGED, G_CALLBACK(_process_file_list), (gpointer)d);
 
       // It would be swell if we could just re-use the file list computed on "select" callback.
       // However, it depends on the file filter used, and we can't refresh the list when
@@ -1479,7 +1479,7 @@ static void gui_init(dt_lib_import_t *d)
   gtk_widget_set_visible(GTK_WIDGET(grid), dt_conf_get_bool("ui_last/import_copy"));
 
   // Update the number of selected files string because Gtk forces a default selection at opening time
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_FILELIST_CHANGED,
                                   G_CALLBACK(_filelist_changed_callback), d);
 }
 
@@ -1626,8 +1626,8 @@ static void _cleanup(dt_lib_import_t *d)
 {
   // Teardown can be entered from multiple control paths. Ensure no pending global signal
   // callback can still target this module state after memory is released.
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_filelist_changed_callback), (gpointer)d);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_process_file_list), (gpointer)d);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_filelist_changed_callback), (gpointer)d);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_process_file_list), (gpointer)d);
 
   if(!IS_NULL_PTR(d->scan_state))
   {

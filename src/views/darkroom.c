@@ -250,7 +250,7 @@ void cleanup(dt_view_t *self)
 
   _release_expose_source_caches();
   dt_gui_throttle_cancel(dev);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
   if(_autoset_manager)
   {
     if(!IS_NULL_PTR(_autoset_manager->input_wait))
@@ -1115,7 +1115,7 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   dt_dev_undo_end_record(dev);
 
   /* signal that darktable.develop is initialized and ready to be used */
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_INITIALIZE);
 
   dt_image_check_camera_missing_sample(&dev->image_storage);
 
@@ -1128,7 +1128,7 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
 
   dt_control_queue_redraw_center();
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
 
   dt_view_image_info_update(dev->image_storage.id);
 
@@ -1506,7 +1506,7 @@ void gui_init(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_preview_pipe_finished), self);
 
   dt_accels_new_darkroom_action(_switch_to_next_picture, self, N_("Darkroom/Actions"),
@@ -1711,7 +1711,7 @@ void gui_init(dt_view_t *self)
                                   N_("Focus guide lines options"), 0, 0,
                                   _("Shows the options popover"));
     // we want to update button state each time the view change
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                                     G_CALLBACK(_guides_view_changed), dev);
   }
 
@@ -1743,11 +1743,11 @@ void gui_init(dt_view_t *self)
     _darkroom_autoset_popover_rebuild(dev);
     _darkroom_autoset_button_set_running(FALSE);
 
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                                     G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
                                     G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_REMOVE,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULE_REMOVE,
                                     G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
   }
 
@@ -1856,7 +1856,7 @@ void enter(dt_view_t *self)
   dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
 
   /* connect signal for filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                                   G_CALLBACK(_view_darkroom_filmstrip_activate_callback), self);
 
   gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui)); // ensure the center view has focus for keybindings to work
@@ -1939,7 +1939,7 @@ void leave(dt_view_t *self)
   dt_accels_detach_scroll_handler(darktable.gui->accels);
 
   /* disconnect from filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_darkroom_filmstrip_activate_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_darkroom_filmstrip_activate_callback),
   (gpointer)self);
 
   dt_iop_color_picker_cleanup();

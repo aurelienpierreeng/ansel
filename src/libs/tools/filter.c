@@ -428,7 +428,7 @@ static void _culling_mode(GtkWidget *widget, gpointer data)
   dt_thumbtable_reset_collection(darktable.gui->ui->thumbtable_lighttable);
 
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_SELECTION_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED);
 }
 
 static void _refresh_collection_callback(GtkButton *button, gpointer user_data)
@@ -759,7 +759,7 @@ void gui_init(dt_lib_module_t *self)
 
   _insert_section_sep(self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGES_ORDER_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_IMAGES_ORDER_CHANGE,
                             G_CALLBACK(_lib_filter_images_order_change), self);
 
   // context menu
@@ -805,7 +805,7 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_free(path);
 
   dt_collection_set_text_filter(dt_collection_get_global(), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_filter_images_order_change), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_filter_images_order_change), self);
   dt_free(self->data);
 }
 

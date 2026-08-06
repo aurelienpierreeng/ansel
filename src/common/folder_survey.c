@@ -916,7 +916,7 @@ int dt_folder_survey_start()
   dt_free(canonical_folder);
   dt_free(configured_folder);
   _folder_survey_reschedule();
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FOLDER_SURVEY_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FOLDER_SURVEY_CHANGED);
   return 0;
 }
 
@@ -932,7 +932,7 @@ void dt_folder_survey_halt()
   if(active)
   {
     dt_control_log(_("Folder survey stopped."));
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FOLDER_SURVEY_CHANGED);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FOLDER_SURVEY_CHANGED);
   }
 }
 

@@ -1360,10 +1360,10 @@ void gui_init(dt_lib_module_t *self)
   _apply_preferences(pref, self);
 
   /* lets signup for mouse over image change signals */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                                   G_CALLBACK(_mouse_over_image_callback), self);
 }
 
@@ -1382,7 +1382,7 @@ static void _free_metadata_queue(dt_lib_metadata_info_t *m)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_mouse_over_image_callback), self);
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
   g_list_free_full(d->metadata, (GDestroyNotify)_free_metadata_queue);

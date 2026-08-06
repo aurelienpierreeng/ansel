@@ -1513,7 +1513,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
                 ? dt_supervisor_node_key(pipe->type, requested_piece->module->op,
                                          requested_piece->module->multi_priority)
                 : DT_PIXELPIPE_CACHE_HASH_INVALID;
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CACHELINE_READY, requested_hash,
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY, requested_hash,
                                     ready_node_key);
     }
     return 0;

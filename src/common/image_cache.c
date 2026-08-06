@@ -733,7 +733,7 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   // FIXME: that a memory leak ?
   GList *imgs = NULL;
   imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, imgs);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED, imgs);
 }
 
 

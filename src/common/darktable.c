@@ -533,6 +533,11 @@ sqlite3 *dt_database_get_sqlite3_global(void)
   return dt_database_get(darktable.db);
 }
 
+struct dt_control_signal_t *dt_control_signal_get_global(void)
+{
+  return darktable.signals;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

@@ -2241,7 +2241,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   {
     if(!g->preview_signal_connected)
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
                                       G_CALLBACK(_cacheline_ready_callback), self);
       g->preview_signal_connected = TRUE;
     }
@@ -2251,7 +2251,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
   else if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-focus-leave");
@@ -2282,7 +2282,7 @@ void gui_cleanup(dt_iop_module_t *self)
   dt_lut_viewer_destroy(&g->viewer);
   if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
   }
   dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-gui-cleanup");

@@ -651,7 +651,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     // GUI widgets that need an image buffer will connect to this signal to grab
     // the global_hash of the module they are waiting for, even though it's still not ready.
     if(history_resynced)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_HISTORY_RESYNC);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC);
 
     // Second, compute pipelines.
     // Always service preview first, then the main pipe, so the main pipe can reuse the cache state
@@ -806,12 +806,12 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       {
         if(pipe->type == DT_DEV_PIXELPIPE_FULL)
         {
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
           dt_control_queue_redraw_center();
         }
         if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW || has_preview_size)
         {
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
           dt_control_queue_redraw();
         }
 
@@ -1234,7 +1234,7 @@ int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
 void dt_dev_modulegroups_switch_tab(dt_develop_t *dev, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return;
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
 }
 
 void dt_dev_masks_list_change(dt_develop_t *dev)
@@ -1672,7 +1672,7 @@ dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(struct dt_dev_pixelpipe_t *p
 void dt_dev_signal_modules_moved(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
 
 void dt_dev_undo_start_record(dt_develop_t *dev)
@@ -1694,7 +1694,7 @@ void dt_dev_undo_end_record(dt_develop_t *dev)
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
   {
     dt_dev_history_undo_end_record(dev);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
 }
 
@@ -1739,7 +1739,7 @@ void dt_dev_append_changed_tag(const int32_t imgid)
   guint tagid = 0;
   dt_tag_new("darktable|changed", &tagid);
   const gboolean tag_change = dt_tag_attach(tagid, imgid, FALSE, FALSE);
-  if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 }
 
 void dt_dev_masks_update_hash(dt_develop_t *dev)

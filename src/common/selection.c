@@ -62,7 +62,7 @@ typedef struct dt_selection_t
 static void _update_gui()
 {
   dt_collection_hint_message(dt_collection_get_global());
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_SELECTION_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED);
 }
 
 
@@ -243,7 +243,7 @@ dt_selection_t *dt_selection_new()
   dt_selection_reload_from_database(selection);
 
   /* setup signal handler for collection update to sanitize selection imgids */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_selection_update_collection), (gpointer)selection);
 
   return selection;
@@ -251,7 +251,7 @@ dt_selection_t *dt_selection_new()
 
 void dt_selection_free(dt_selection_t *selection)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_selection_update_collection),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_selection_update_collection),
                                      (gpointer)selection);
   g_list_free(selection->ids);
   selection->ids = NULL;

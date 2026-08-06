@@ -2320,7 +2320,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
 
   /* raise signal of collection change, only if this is an original */
   dt_collection_memory_update();
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED, query_change, changed_property,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED, query_change, changed_property,
                                 list, next);
 }
 
@@ -2559,7 +2559,7 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
   dt_selection_select(dt_selection_get_global(), imgid);
 
   // New images are untagged, that may need an update of the collection module for untagged count
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
   if(current_atelier) _dt_collection_change_view_after_import(current_atelier, open_single_image);
 }

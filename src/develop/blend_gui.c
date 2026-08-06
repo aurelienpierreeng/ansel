@@ -1290,7 +1290,7 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
   dt_iop_gui_blend_data_t *data = module->blend_data;
   _blendop_masks_mode_callback(mask_mode, data);
   dt_iop_add_remove_mask_indicator(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
   dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
   dt_iop_gui_update_header(data->module);
 }
@@ -1860,7 +1860,7 @@ static void _blendop_masks_group_name_commit(dt_iop_module_t *module, const gcha
   g_free(text);
 
   _blendop_masks_refresh_lists(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, group_form->formid, 0,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, group_form->formid, 0,
                                 DT_MASKS_EVENT_CHANGE);
 }
 
@@ -1903,7 +1903,7 @@ static void _blendop_masks_all_name_edited(GtkCellRendererText *cell, gchar *pat
 
   dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
   _blendop_masks_refresh_lists(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, mask_form->formid, 0,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, mask_form->formid, 0,
                                 DT_MASKS_EVENT_CHANGE);
 }
 
@@ -2012,7 +2012,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
   _blendop_masks_apply_and_commit(module);
 
   const int parentid_after = group_form ? group_form->formid : parentid_before;
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid,
                                 active ? parentid_before : parentid_after,
                                 active ? DT_MASKS_EVENT_REMOVE : DT_MASKS_EVENT_ADD);
 }
@@ -2031,7 +2031,7 @@ static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
   dt_masks_change_form_gui(NULL);
   dt_masks_form_delete(module, NULL, mask_form);
   _blendop_masks_apply_and_commit(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
 }
 
 static void _blendop_masks_all_delete_callback(GtkWidget *menu_item, dt_iop_module_t *module)
@@ -2050,7 +2050,7 @@ static void _blendop_masks_all_duplicate_callback(GtkWidget *menu_item, dt_iop_m
   if(dt_masks_form_duplicate(darktable.develop, formid) <= 0) return;
 
   _blendop_masks_apply_and_commit(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, 0, 0, DT_MASKS_EVENT_RESET);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, 0, DT_MASKS_EVENT_RESET);
 }
 
 static void _blendop_masks_all_rename_callback(GtkWidget *menu_item, dt_iop_module_t *module)
@@ -2217,7 +2217,7 @@ static void _blendop_masks_group_operation_callback(GtkWidget *menu_item, gpoint
   if(group_entry->state == old_state) return;
 
   _blendop_masks_apply_and_commit(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, parentid,
                                 DT_MASKS_EVENT_UPDATE);
 }
 
@@ -2320,7 +2320,7 @@ static void _blendop_masks_group_move_callback(GtkWidget *menu_item, dt_iop_modu
 
   dt_masks_change_form_gui(NULL);
   _blendop_masks_apply_and_commit(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, 0, parentid, DT_MASKS_EVENT_UPDATE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, parentid, DT_MASKS_EVENT_UPDATE);
 }
 
 static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_iop_module_t *module)
@@ -2467,7 +2467,7 @@ static void _blendop_masks_group_unlink(dt_iop_module_t *module, const int formi
 
   _blendop_masks_apply_and_commit(module);
   _blendop_masks_refresh_lists(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, parentid,
                                 DT_MASKS_EVENT_REMOVE);
 }
 
@@ -2488,7 +2488,7 @@ static void _blendop_masks_group_delete(dt_iop_module_t *module, const int formi
 
   _blendop_masks_apply_and_commit(module);
   _blendop_masks_refresh_lists(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, parentid,
                                 DT_MASKS_EVENT_REMOVE);
 }
 
@@ -4234,7 +4234,7 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
   dt_iop_gui_cleanup_blending_body(module);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_blendop_masks_handler_callback), module);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_blendop_masks_handler_callback), module);
 
   dt_pthread_mutex_lock(&bd->lock);
   if(bd->timeout_handle)
@@ -5089,7 +5089,7 @@ void dt_iop_gui_init_blending(dt_iop_module_t *module)
 
   if(bd->masks_support)
   {
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED,
                                     G_CALLBACK(_blendop_masks_handler_callback), module);
   }
 }

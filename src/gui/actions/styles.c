@@ -341,7 +341,7 @@ void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
   _styles_index = index;
   if(!_styles_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_STYLE_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED,
                                     G_CALLBACK(_styles_menu_rebuild_callback), NULL);
     _styles_signal_connected = TRUE;
   }

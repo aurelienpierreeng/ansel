@@ -1742,7 +1742,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   gtk_widget_show(widget);
 
   /* connect to signal redraw all */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_REDRAW_ALL,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_REDRAW_ALL,
                             G_CALLBACK(_ui_widget_redraw_callback), gui->ui->main_window);
 
   container = widget;
@@ -1786,11 +1786,11 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   //gtk_overlay_reorder_overlay(GTK_OVERLAY(darktable.gui->ui->center_base), eb, -1);
 
   /* update log message label */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_LOG_REDRAW, G_CALLBACK(_ui_log_redraw_callback),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_LOG_REDRAW, G_CALLBACK(_ui_log_redraw_callback),
                             darktable.gui->ui->log_msg);
 
   /* update toast message label */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_TOAST_REDRAW, G_CALLBACK(_ui_toast_redraw_callback),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_TOAST_REDRAW, G_CALLBACK(_ui_toast_redraw_callback),
                             darktable.gui->ui->toast_msg);
 
 
@@ -2494,7 +2494,7 @@ GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const ch
 static void _notebook_switch_page_signal_relay(GtkNotebook *notebook, GtkWidget *page, guint page_num,
                                                gpointer user_data)
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED, user_data);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED, user_data);
 }
 
 void dt_ui_notebook_set_picker_owner(GtkNotebook *notebook, gpointer owner)

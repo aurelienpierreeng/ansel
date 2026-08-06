@@ -575,7 +575,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   dev->color_picker.picker->update_pending = FALSE;
   dev->color_picker.update_pending = FALSE;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PICKERDATA_READY);
   dev->color_picker.pending_module = NULL;
   dev->color_picker.pending_pipe = NULL;
   dev->color_picker.piece_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -1004,25 +1004,25 @@ static void _iop_color_picker_notebook_tab_changed_callback(gpointer instance, g
 
 void dt_iop_color_picker_init(void)
 {
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC,
                                   G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
                                   G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_iop_color_picker_pipe_finished_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED,
                                   G_CALLBACK(_iop_color_picker_notebook_tab_changed_callback), NULL);
 }
 
 void dt_iop_color_picker_cleanup(void)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_pipe_finished_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_notebook_tab_changed_callback), NULL);
 }
 

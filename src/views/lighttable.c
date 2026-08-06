@@ -176,7 +176,7 @@ void enter(dt_view_t *self)
   dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_lighttable);
 
   /* connect signal for thumbnail image activate */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                             G_CALLBACK(_view_lighttable_activate_callback), self);
 
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
@@ -202,7 +202,7 @@ void leave(dt_view_t *self)
   gtk_widget_show(dt_ui_center(darktable.gui->ui));
 
   /* disconnect from filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_lighttable_activate_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_lighttable_activate_callback),
                                      (gpointer)self);
 }
 

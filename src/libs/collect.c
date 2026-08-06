@@ -621,10 +621,10 @@ static void _commit_colllection()
 // Like _commit_colllection() but without bouncing back into our own collection_updated() handler.
 static void _commit_quiet()
 {
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(collection_updated),
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
                                   darktable.view_manager->proxy.module_collect.module);
   _commit_colllection();
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(collection_updated),
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
                                     darktable.view_manager->proxy.module_collect.module);
 }
 
@@ -1773,7 +1773,7 @@ static void row_activated(GtkTreeView *view, GtkTreePath *path, GdkEventButton *
   else
     update_view(active_rule);
 
-  if(order_request) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGES_ORDER_CHANGE, order);
+  if(order_request) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGES_ORDER_CHANGE, order);
   _commit_quiet();
   dt_gui_refocus_center();
   dt_control_queue_redraw_center();
@@ -1945,7 +1945,7 @@ static void _act_folders_relocate(dt_lib_collect_t *d, GList *rows)
       }
       dt_film_set_folder_status();
       dt_collection_memory_update();
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED);
       _force_refresh(d);
       dt_free(chosen);
     }
@@ -1973,7 +1973,7 @@ static void _act_tags_remove(dt_lib_collect_t *d, GList *rows)
     const guint tagid = IS_NULL_PTR(r->path) ? 0 : dt_tag_get_tag_id_by_name(r->path);
     if(tagid) dt_tag_remove(tagid, TRUE);
   }
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
   _force_refresh(d);
 }
 
@@ -1988,7 +1988,7 @@ static void _act_tag_rename(dt_lib_collect_t *d, GList *rows)
   {
     dt_tag_rename(tagid, newname);
     dt_free(newname);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
     _force_refresh(d);
   }
 }
@@ -2169,7 +2169,7 @@ static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GL
   if(moved)
   {
     dt_collection_memory_update();
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED);
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
     _force_refresh(d);
     dt_control_queue_redraw_center();
@@ -2192,9 +2192,9 @@ static gboolean _drop_attach_tag(dt_lib_collect_t *d, const char *tagpath, GList
   // this tag", i.e. the `%`/mixed-view bug), so block it for the duration of the broadcast.
   // Other modules (tagging, metadata) still receive DT_SIGNAL_TAG_CHANGED and refresh.
   dt_lib_module_t *self = _self();
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(tag_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(tag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(tag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(tag_changed), self);
 
   _force_refresh(d); // refresh the tag counts in the treeview, without touching the collection
   return TRUE;
@@ -2996,10 +2996,10 @@ static void tag_changed(gpointer instance, gpointer self)
   get_active_rule(d)->typing = FALSE;
   if(uses_tag)
   {
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(collection_updated),
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
                                     darktable.view_manager->proxy.module_collect.module);
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_TAG, NULL);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(collection_updated),
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
                                       darktable.view_manager->proxy.module_collect.module);
   }
   _lib_collect_gui_update(self);
@@ -3014,11 +3014,11 @@ static void geotag_changed(gpointer instance, GList *imgs, const int locid, gpoi
     d->view_rule = -1;
     get_active_rule(d)->typing = FALSE;
     _lib_collect_gui_update(self);
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(collection_updated),
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
                                     darktable.view_manager->proxy.module_collect.module);
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GEOTAGGING,
                                NULL);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(collection_updated),
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(collection_updated),
                                       darktable.view_manager->proxy.module_collect.module);
   }
 }
@@ -3252,17 +3252,17 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->vmonitor), "mounts-changed", G_CALLBACK(_mount_changed), self);
 #endif
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED, G_CALLBACK(collection_updated),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED, G_CALLBACK(collection_updated),
                                   self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILMROLLS_CHANGED, G_CALLBACK(filmrolls_updated),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED, G_CALLBACK(filmrolls_updated),
                                   self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE, G_CALLBACK(preferences_changed),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE, G_CALLBACK(preferences_changed),
                                   self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILMROLLS_REMOVED, G_CALLBACK(filmrolls_removed),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_REMOVED, G_CALLBACK(filmrolls_removed),
                                   self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_TAG_CHANGED, G_CALLBACK(tag_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, G_CALLBACK(geotag_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_METADATA_CHANGED, G_CALLBACK(metadata_changed),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED, G_CALLBACK(tag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, G_CALLBACK(geotag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_METADATA_CHANGED, G_CALLBACK(metadata_changed),
                                   self);
 }
 
@@ -3271,13 +3271,13 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_collect_t *d = (dt_lib_collect_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(collection_updated), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(filmrolls_updated), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(preferences_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(filmrolls_removed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(tag_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(geotag_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(metadata_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(collection_updated), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(filmrolls_updated), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(preferences_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(filmrolls_removed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(tag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(geotag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(metadata_changed), self);
   darktable.view_manager->proxy.module_collect.module = NULL;
 
   dt_free(d->params);

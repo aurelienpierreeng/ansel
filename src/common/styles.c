@@ -434,7 +434,7 @@ void dt_styles_update(const char *name, const char *newname, const char *newdesc
   /* backup style to disk */
   dt_styles_save_to_file(newname, NULL, TRUE);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
 
   dt_free(desc);
 }
@@ -514,7 +514,7 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
     dt_styles_save_to_file(newname, NULL, FALSE);
 
     dt_control_log(_("style named '%s' successfully created"), newname);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
   }
 }
 
@@ -592,7 +592,7 @@ gboolean dt_styles_create_from_image(const char *name, const char *description,
     /* backup style to disk */
     dt_styles_save_to_file(name, NULL, FALSE);
 
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
     return TRUE;
   }
   return FALSE;
@@ -1068,7 +1068,7 @@ void dt_styles_delete_by_name_adv(const char *name, const gboolean raise)
     sqlite3_finalize(stmt);
 
     if(raise)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
   }
 }
 
@@ -1618,7 +1618,7 @@ void dt_styles_import_from_file(const char *style_path)
   dt_styles_style_data_free(style, TRUE);
   fclose(style_file);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
 }
 
 gchar *dt_styles_get_description(const char *name)

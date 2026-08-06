@@ -802,7 +802,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
       _cache_wait_manager.pending = g_list_prepend(_cache_wait_manager.pending, record);
       if(!_cache_wait_manager.connected)
       {
-        DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+        DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
                                         G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
         _cache_wait_manager.connected = TRUE;
       }
@@ -920,7 +920,7 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
 
   if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
     _cache_wait_manager.connected = FALSE;
   }
@@ -995,7 +995,7 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
   _cache_wait_manager.cancelled_requests++;
   if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
     _cache_wait_manager.connected = FALSE;
   }

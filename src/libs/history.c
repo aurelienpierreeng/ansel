@@ -183,14 +183,14 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_show_all(self->widget);
 
   /* connect to history change signal for updating the history view */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                             G_CALLBACK(_lib_history_change_callback), self);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
   if(IS_NULL_PTR(self->data)) return;
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_change_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_history_change_callback), self);
   dt_lib_history_t *d = (dt_lib_history_t *)self->data;
   if(d && d->history_store) g_object_unref(d->history_store);
   dt_free(self->data);

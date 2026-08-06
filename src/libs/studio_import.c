@@ -507,7 +507,7 @@ void gui_init(dt_lib_module_t *self)
   _studio_import_update_preview(d);
   _studio_import_update_state(d);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FOLDER_SURVEY_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_FOLDER_SURVEY_CHANGED,
                                   G_CALLBACK(_studio_import_survey_changed_callback), d);
 }
 
@@ -519,7 +519,7 @@ void view_enter(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_studio_import_survey_changed_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_studio_import_survey_changed_callback),
                                      self->data);
   g_free(self->data);
   self->data = NULL;

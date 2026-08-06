@@ -837,7 +837,7 @@ static gboolean _event_main_press(GtkWidget *widget, GdkEventButton *event, gpoi
   if(event->button == 1 && event->type == GDK_2BUTTON_PRESS)
   {
     thumb->dragging = FALSE;
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, thumb->info.id);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, thumb->info.id);
     return TRUE;
   }
   else if(event->button == GDK_BUTTON_SECONDARY && event->type == GDK_BUTTON_PRESS)
@@ -873,7 +873,7 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
   else if(event->button == 1
           && thumb->table && thumb->table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE, thumb->info.id);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE, thumb->info.id);
     return TRUE;
   }
   return FALSE;

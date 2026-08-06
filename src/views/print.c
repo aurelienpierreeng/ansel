@@ -489,9 +489,9 @@ void enter(dt_view_t *self)
   int32_t startup_imgid = prt->pending_imgid;
   if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = prt->imgs->imgid_to_load;
   if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = dt_selection_get_first_id(dt_selection_get_global());
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_view_print_filmstrip_activate_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
                             G_CALLBACK(_view_print_filmstrip_drag_begin_callback), self);
 
   dt_gui_refocus_center();
@@ -521,10 +521,10 @@ void leave(dt_view_t *self)
   dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
 
   /* disconnect from filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                G_CALLBACK(_view_print_filmstrip_activate_callback),
                                (gpointer)self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                G_CALLBACK(_view_print_filmstrip_drag_begin_callback),
                                (gpointer)self);
 

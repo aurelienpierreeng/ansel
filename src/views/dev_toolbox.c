@@ -481,7 +481,7 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
 end:
   if(profile_changed)
   {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                                   DT_COLORSPACES_PROFILE_TYPE_SOFTPROOF);
     dt_dev_pixelpipe_resync_history_main(dev);
   }
@@ -542,7 +542,7 @@ static void _display_brightness_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_conf_set_int("display/brightness", (int)(dt_bauhaus_slider_get(slider)));
   dt_control_queue_redraw_center();
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DARKROOM_UI_CHANGED);
 }
 
 static void _display_borders_callback(GtkWidget *slider, gpointer user_data)
@@ -551,7 +551,7 @@ static void _display_borders_callback(GtkWidget *slider, gpointer user_data)
   dt_conf_set_int("plugins/darkroom/ui/border_size", (int)dt_bauhaus_slider_get(slider));
   dt_dev_toolbox_apply_iso_12646_size(dev);
   dt_dev_pixelpipe_change_zoom_main(dev);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DARKROOM_UI_CHANGED);
 }
 
 static void _build_display_popover(dt_develop_t *dev)

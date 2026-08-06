@@ -900,7 +900,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   d->apply_gainmaps = (p->flat_field == FLAT_FIELD_EMBEDDED) && _own_gainmaps(self, d);
 
   if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_METADATA_UPDATE);
 
   // Image-type gating (needs_rawprepare && !normalized) is handled at history level by
   // enable()/force_enable()/reload_defaults(); it is no longer duplicated here.

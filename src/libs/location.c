@@ -320,7 +320,7 @@ static void _show_location(dt_lib_location_t *lib, _lib_location_result_t *p)
   lib->marker_type = p->marker_type;
   lib->selected_location = p;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_LOCATION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_LOCATION_CHANGED,
                                 p->marker_type == MAP_DISPLAY_POLYGON ? p->marker_points : NULL);
 }
 

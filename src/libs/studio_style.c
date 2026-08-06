@@ -465,7 +465,7 @@ static void _studio_style_apply_callback(GtkWidget *widget, gpointer user_data)
   // History went straight to DB: refresh cached metadata, mipmap and thumbnails,
   // then let listeners (studio center view) re-fetch their surfaces.
   dt_image_history_changed(imgid, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   dt_control_log(ngettext("Applied %d style.", "Applied %d styles.", applied), applied);
 }
 
@@ -623,13 +623,13 @@ void gui_init(dt_lib_module_t *self)
   _studio_style_populate_styles_tree(d);
   _studio_style_rebuild_pool_ui(d);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_STYLE_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED,
                                   G_CALLBACK(_studio_style_changed_callback), d);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_studio_style_changed_callback), self->data);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_studio_style_changed_callback), self->data);
   dt_lib_studio_style_t *d = (dt_lib_studio_style_t *)self->data;
   if(!IS_NULL_PTR(d))
   {

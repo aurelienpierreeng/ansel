@@ -580,7 +580,7 @@ static int _print_job_run(dt_job_t *job)
   {
     if(params->imgs.box[k].imgid > UNKNOWN_IMAGE)
       if(dt_tag_attach(tagid, params->imgs.box[k].imgid, FALSE, FALSE))
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
     /* register print timestamp in cache */
     dt_image_cache_set_print_timestamp(dt_image_cache_get_global(), params->imgs.box[k].imgid);
@@ -1365,7 +1365,7 @@ void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct d
 
   // user activated a new image via the filmstrip or user entered view
   // mode which activates an image: get image_id and orientation
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_print_settings_activate_or_update_callback), self);
 
   // NOTE: it would be proper to set image_id here to -1, but this seems to make no difference
@@ -1373,7 +1373,7 @@ void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct d
 
 void view_leave(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct dt_view_t *new_view)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                G_CALLBACK(_print_settings_activate_or_update_callback),
                                self);
 }

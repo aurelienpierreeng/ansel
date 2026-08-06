@@ -342,7 +342,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   dt_collection_load_filmroll(dt_collection_get_global(), imgid, g_list_length(all_imgs) == 1);
 
   //QUESTION: should this come after _apply_filmroll_gpx, since that can change geotags again?
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, all_imgs, 0);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, all_imgs, 0);
 
   _apply_filmroll_gpx(cfr);
 

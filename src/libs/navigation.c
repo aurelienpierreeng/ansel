@@ -193,9 +193,9 @@ void gui_init(dt_lib_module_t *self)
   self->widget = dt_ui_resizable_drawing_area(d->area, "plugins/darkroom/navigation/height", 175, 100);
 
   /* connect redraw callbacks to targeted preview cache publication and explicit redraw requests */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC,
                             G_CALLBACK(_lib_navigation_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_NAVIGATION_REDRAW,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NAVIGATION_REDRAW,
                             G_CALLBACK(_lib_navigation_control_redraw_callback), self);
 
   darktable.lib->proxy.navigation.module = self;
@@ -207,8 +207,8 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
   /* disconnect from signal */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_navigation_control_redraw_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_navigation_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_navigation_control_redraw_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_navigation_history_resync_callback), self);
   dt_dev_pixelpipe_cache_wait_cleanup(&d->preview_wait, "navigation-gui-cleanup");
 
   if(!IS_NULL_PTR(d->image_surface)) cairo_surface_destroy(d->image_surface);

@@ -138,7 +138,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   dt_database_start_transaction(dt_database_get_global());
 
   dt_history_delete_on_image_ext(imgid, FALSE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
   // if no history end it means the image history was discarded, nothing more to restore
   if(history_end == 0)

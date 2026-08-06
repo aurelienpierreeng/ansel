@@ -2654,7 +2654,7 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, gboole
     // never-served case, doc/pipeline-cache.md §8). INVALID for non-module outputs
     // (raster masks, republished inputs): waiters simply fall back to hash match.
     if(cache_entry && cache_entry->hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CACHELINE_READY, cache_entry->hash,
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY, cache_entry->hash,
                                     cache_entry->producer_node_key);
   }
 }

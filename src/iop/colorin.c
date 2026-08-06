@@ -533,7 +533,7 @@ static void profile_changed(GtkWidget *widget, gpointer user_data)
       memcpy(p->filename, pp->filename, sizeof(p->filename));
       dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_INPUT);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_INPUT);
       return;
     }
   }
@@ -581,7 +581,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
     }
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_WORK);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_WORK);
 
     dt_dev_pixelpipe_rebuild_all(self->dev);
   }

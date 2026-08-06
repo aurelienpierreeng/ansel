@@ -44,7 +44,7 @@ static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
   // Disconnect from DARKROOM_UI_CHANGED before freeing: otherwise the handler keeps
   // firing with a dangling `preview` pointer and crashes on the next UI change
   // (e.g. moving the border-size slider).
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preview_redraw), preview);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_preview_redraw), preview);
   dt_view_image_surface_fetcher_cleanup(&preview->fetcher);
   dt_free(preview);
 }
@@ -186,7 +186,7 @@ void dt_preview_window_spawn(const int32_t imgid)
   gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), preview->area, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(preview->area), "draw", G_CALLBACK(_thumb_draw_image), preview);
   g_signal_connect(G_OBJECT(preview->area), "size-allocate", G_CALLBACK(_preview_window_size_allocate), preview);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED, G_CALLBACK(_preview_redraw), preview);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DARKROOM_UI_CHANGED, G_CALLBACK(_preview_redraw), preview);
 
   gtk_widget_set_visible(preview->area, TRUE);
   gtk_widget_show_all(dialog);

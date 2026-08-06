@@ -351,6 +351,13 @@ gboolean dt_get_signal_debug(const int signal);
 
 /* inititialize the signal framework */
 struct dt_control_signal_t *dt_control_signal_init();
+
+/* The application-wide signal bus. Unlike the other service handles, this is
+ * global by nature (a process-wide broadcast bus with no per-call context to
+ * ride on), so this accessor is the intended end state, not an interim step —
+ * same shape as the fully-encapsulated dt_conf_* API. Implemented by the
+ * orchestrator (common/darktable.c). */
+struct dt_control_signal_t *dt_control_signal_get_global(void);
 /* cleanup the signal framework */
 void dt_control_signal_cleanup(struct dt_control_signal_t *ctlsig);
 /* raises a signal */

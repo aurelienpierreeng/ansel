@@ -319,7 +319,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
     const int error = new_view->try_enter(new_view);
     if(error)
     {
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CANNOT_CHANGE, old_view, new_view);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CANNOT_CHANGE, old_view, new_view);
       return error;
     }
   }
@@ -424,13 +424,13 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
   dt_telemetry_record_module_usage("view", new_view->module_name);
 
   /* raise view changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED, old_view, new_view);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED, old_view, new_view);
 
   // update log visibility
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_LOG_REDRAW);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_LOG_REDRAW);
 
   // update toast visibility
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_TOAST_REDRAW);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_TOAST_REDRAW);
   return 0;
 }
 
@@ -1301,7 +1301,7 @@ void dt_view_active_images_reset(gboolean raise)
   g_list_free(darktable.view_manager->active_images);
   darktable.view_manager->active_images = NULL;
 
-  if(raise) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  if(raise) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_active_images_add(int32_t imgid, gboolean raise)
@@ -1309,7 +1309,7 @@ void dt_view_active_images_add(int32_t imgid, gboolean raise)
   darktable.view_manager->active_images
       = g_list_append(darktable.view_manager->active_images, GINT_TO_POINTER(imgid));
   if(raise)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_active_images_remove(int32_t imgid, gboolean raise)
@@ -1320,7 +1320,7 @@ void dt_view_active_images_remove(int32_t imgid, gboolean raise)
     darktable.view_manager->active_images = g_list_delete_link(darktable.view_manager->active_images, link);
 
     if(raise)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
   }
 }
 
@@ -1351,7 +1351,7 @@ void dt_view_active_images_set(GList *images, gboolean raise)
   darktable.view_manager->active_images = images;
 
   if(raise)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_manager_module_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t views)

@@ -669,7 +669,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   // Ensure all UI pieces (history treeview, iop order, etc.) resync after undo/redo.
   // Undo callbacks bypass dt_dev_undo_end_record(), so we need to raise the change signal here.
   if(darktable.gui && dev->gui_attached && dev == darktable.develop)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }
 
 void dt_dev_history_undo_start_record(dt_develop_t *dev)
@@ -1436,7 +1436,7 @@ void dt_apply_dev_history_update(dt_develop_t *dev)
   // stale ROI -- same fix as _history_apply_history_end() in libs/history.c.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
   dt_dev_history_pixelpipe_update(dev, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }
 
 /**

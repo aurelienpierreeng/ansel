@@ -404,7 +404,7 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
     init_collection_line(NULL, DT_COLLECTION_CHANGE_NONE, DT_COLLECTION_PROP_UNDEF, NULL, 0, this);
 
     // Connect init to collection_changed signal for future updates
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                               G_CALLBACK(init_collection_line), (gpointer)this);
   }
 
