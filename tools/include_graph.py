@@ -171,5 +171,45 @@ def main():
     for h in sorted(headers, key=lambda x: -len(closure(x)))[:12]:
         print(f"  {len(closure(h)):5d}  {h}")
 
+    if '--summary' in sys.argv:
+        print("\n=== SUMMARY ===")
+        summary(files, graph, headers, closure, comps, viol)
+    if '--mermaid' in sys.argv:
+        print("\n=== DIRECTORY GRAPH (dotted = layering inversion) ===")
+        mermaid(graph, set(viol.keys()))
+
+def summary(files, graph, headers, closure, comps, viol):
+    """One-line-per-metric output, for before/after comparison."""
+    orphan_headers = [h for h in headers if not any(h in graph.get(f, ()) for f in files)]
+    print(f"nodes\t{len(files)}")
+    print(f"headers\t{len(headers)}")
+    print(f"direct_edges\t{sum(len(v) for v in graph.values())}")
+    print(f"cycles\t{len(comps)}")
+    print(f"cycle_nodes\t{sum(len(c) for c in comps)}")
+    print(f"layering_violations\t{sum(len(v) for v in viol.values())}")
+    print(f"max_closure\t{max((len(closure(h)) for h in headers), default=0)}")
+    print(f"mean_closure\t{sum(len(closure(h)) for h in headers) / max(len(headers), 1):.1f}")
+    tot = sum(len(closure(f)) for f in files)
+    print(f"total_transitive_edges\t{tot}")
+
+def mermaid(graph, viol_pairs):
+    """Directory-level aggregate, renderable inline in a GitHub comment."""
+    agg = defaultdict(int)
+    for a, targets in graph.items():
+        da = a.split(os.sep)[1] if len(a.split(os.sep)) > 1 else '?'
+        for b in targets:
+            db = b.split(os.sep)[1] if len(b.split(os.sep)) > 1 else '?'
+            if da != db:
+                agg[(da, db)] += 1
+    print("```mermaid")
+    print("graph LR")
+    for (a, b), n in sorted(agg.items(), key=lambda kv: -kv[1]):
+        if n < 5:
+            continue
+        bad = (a, b) in viol_pairs
+        arrow = "-. %d .->" % n if bad else "-- %d -->" % n
+        print(f"  {a} {arrow} {b}")
+    print("```")
+
 if __name__ == '__main__':
     main()
