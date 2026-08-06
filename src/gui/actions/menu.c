@@ -19,17 +19,13 @@
 */
 
 #include "common/act_on.h"
-#include "common/debug.h"
-#include "common/collection.h"
 #include "common/selection.h"
-#include "control/conf.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 #include "math.h"
 #include "menu.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 typedef struct dt_masks_form_gui_t dt_masks_form_gui_t;

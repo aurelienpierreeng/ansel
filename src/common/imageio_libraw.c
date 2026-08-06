@@ -25,11 +25,8 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "imageio.h"
-#include "imageio_gm.h"
 #include "develop/develop.h"
 #include "common/exif.h"
-#include "common/colorspaces.h"
-#include "control/conf.h"
 
 #include <memory.h>
 #include <stdio.h>

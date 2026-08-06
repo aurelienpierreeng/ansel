@@ -90,15 +90,12 @@
 #include "gui/presets.h"
 #include "dtgtk/button.h"
 #include "dtgtk/expander.h"
-#include "dtgtk/gradientslider.h"
-#include "dtgtk/icon.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 #include "gui/presets.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include "common/hash.h"

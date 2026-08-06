@@ -39,9 +39,7 @@
 #include "common/mem_alloc.h"
 #include "common/logging.h"
 #include "common/exif.h"
-#include "control/conf.h"
 #include "develop/develop.h"
-#include "imageio.h"
 
 #include <inttypes.h>
 #include <memory.h>

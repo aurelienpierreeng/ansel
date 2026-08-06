@@ -67,7 +67,6 @@
 #include "develop/develop.h"
 #include "dtgtk/button.h"
 #include "dtgtk/expander.h"
-#include "dtgtk/icon.h"
 
 #include "gui/color_picker_proxy.h"
 #include "libs/colorpicker.h"

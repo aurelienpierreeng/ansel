@@ -75,10 +75,8 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"
-#include "dtgtk/button.h"
 
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #ifdef GDK_WINDOWING_QUARTZ

@@ -50,7 +50,6 @@
 #include "common/imageio_png.h"
 #include "common/imagebuf.h"
 #include "common/colorspaces.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/file_location.h"
 #include "common/iop_profile.h"
 #include "common/lut3d.h"

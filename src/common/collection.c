@@ -75,7 +75,6 @@
 #include "common/colorlabels.h"
 #include "common/image.h"
 #include "common/imageio.h"
-#include "common/imageio_rawspeed.h"
 #include "common/iop_order.h"
 #include "common/metadata.h"
 #include "common/utility.h"
@@ -96,7 +95,6 @@
 
 #ifdef _WIN32
 //MSVCRT does not have strptime implemented
-#include "win/strptime.h"
 #endif
 
 

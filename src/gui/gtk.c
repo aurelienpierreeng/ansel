@@ -72,26 +72,19 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
-#include "common/collection.h"
 #include "common/colorspaces.h"
 #include "common/l10n.h"
 #include "common/file_location.h"
-#include "common/ratings.h"
-#include "common/image.h"
-#include "common/image_cache.h"
 #include "common/utility.h"
 #include "gui/guides.h"
 #include "bauhaus/bauhaus.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "dtgtk/button.h"
 #include "dtgtk/expander.h"
-#include "dtgtk/sidepanel.h"
 
 #include "gui/gtk.h"
 #include "gui/splash.h"
 
-#include "common/styles.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"

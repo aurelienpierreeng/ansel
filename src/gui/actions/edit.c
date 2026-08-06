@@ -21,10 +21,12 @@
 #include "common/history_actions.h"
 #include "control/jobs/control_jobs.h"
 #include "gui/actions/menu.h"
+#ifdef __APPLE__
+#include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
+#endif
 #include "gui/preferences.h"
 #include "common/undo.h"
 #include "common/selection.h"
-#include "common/collection.h"
 #include "common/image_cache.h"
 #include "common/history.h"
 #include "common/history_merge.h"

@@ -35,12 +35,10 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/history.h"
-#include "common/styles.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "gui/gtk.h"
 #include "gui/hist_dialog.h"
-#include "gui/styles.h"
 #include "gui/draw.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"

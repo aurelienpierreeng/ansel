@@ -55,11 +55,9 @@
 #include "gui/gdkkeys.h"
 #include "common/debug.h"
 #include "control/conf.h"
-#include "control/control.h"
 
 static sqlite3_stmt *_metadata_update_stmt = NULL;
 #include "control/signal.h"
-#include "dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "libs/lib.h"

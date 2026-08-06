@@ -57,7 +57,6 @@
 #include "common/file_location.h"
 #include "common/math.h"
 #include "common/matrices.h"
-#include "common/srgb_tone_curve_values.h"
 #include "common/utility.h"
 #include "control/conf.h"
 #include "control/control.h"

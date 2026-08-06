@@ -31,11 +31,7 @@
 #include "common/mem_alloc.h"
 #include "common/utility.h"
 #include "gui/gdkkeys.h"
-#include "common/debug.h"
 #include "common/imageio_module.h"
-#include "control/conf.h"
-#include "control/control.h"
-#include "control/signal.h"
 #include "dtgtk/button.h"
 
 #include "gui/gtk.h"

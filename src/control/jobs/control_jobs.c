@@ -93,7 +93,6 @@
 #include "common/imageio.h"
 #include "common/imageio_dng.h"
 #include "common/imageio_module.h"
-#include "common/mipmap_cache.h"
 #include "common/tags.h"
 #include "common/undo.h"
 #include "common/grouping.h"
@@ -103,7 +102,6 @@
 #include "develop/imageop_math.h"
 #include "develop/develop.h"
 
-#include "common/selection.h"
 
 #include "gui/gtk.h"
 

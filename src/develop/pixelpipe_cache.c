@@ -48,7 +48,6 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe.h"
 #include "develop/supervisor.h"
-#include "common/debug.h"
 #include "common/opencl.h"
 #include "develop/format.h"
 

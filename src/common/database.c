@@ -59,17 +59,13 @@
 #include "common/atomic.h"
 #include "common/database.h"
 #include "common/datetime.h"
-#include "common/debug.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
 #include "common/iop_order.h"
 #include "common/styles.h"
 #include "common/history.h"
 #ifdef HAVE_ICU
-#include "common/sqliteicu.h"
 #endif
-#include "control/conf.h"
-#include "control/control.h"
 #include "gui/legacy_presets.h"
 
 #include <gio/gio.h>

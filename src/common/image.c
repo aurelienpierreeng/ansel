@@ -87,8 +87,6 @@
 #include "common/image_cache.h"
 #include "common/image_extensions.h"
 #include "common/imageio.h"
-#include "common/imageio_rawspeed.h"
-#include "common/imageio_libraw.h"
 #include "common/mipmap_cache.h"
 #include "common/ratings.h"
 #include "common/tags.h"

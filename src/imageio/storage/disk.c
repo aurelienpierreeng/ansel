@@ -49,10 +49,8 @@
 */
 
 #include "bauhaus/bauhaus.h"
-#include "common/exif.h"
 #include "common/global_mutexes.h"
 #include "common/image.h"
-#include "common/image_cache.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"
 #include "common/utility.h"
@@ -65,7 +63,6 @@
 #include "gui/gtkentry.h"
 #include "imageio/storage/imageio_storage_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 #include <glib.h>
 #include <glib/gstdio.h>
