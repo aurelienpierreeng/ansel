@@ -1019,10 +1019,10 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   {
     // Paint background
     cairo_rectangle(cr, 0, 0, width, height);
-    set_color(cr, darktable.bauhaus->graph_bg);
+    set_color(cr, dt_bauhaus_get_global()->graph_bg);
     cairo_fill(cr);
 
-    set_color(cr, darktable.bauhaus->graph_grid);
+    set_color(cr, dt_bauhaus_get_global()->graph_grid);
     dt_draw_grid(cr, 4, 0, 0, width, height);
 
     cairo_save(cr);
@@ -1033,7 +1033,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
 
     for(int k = 0; k < 3; k++)
     {
-      set_color(cr, darktable.bauhaus->graph_colors[k]);
+      set_color(cr, dt_bauhaus_get_global()->graph_colors[k]);
       dt_draw_histogram_8(cr, bins, 4, k, FALSE);
     }
 
@@ -1977,7 +1977,7 @@ static void _process_restricted_text(dt_lib_histogram_t *d, cairo_t *cr, const i
     cairo_set_operator(cr, DT_LIB_HISTOGRAM_SCOPE_RESTRICTED_LABEL_OPERATOR);
 
     PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(12.) * PANGO_SCALE);
     pango_layout_set_font_description(layout, desc);
     pango_layout_set_text(layout, _("Restricted"), -1);
@@ -1991,7 +1991,7 @@ static void _process_restricted_text(dt_lib_histogram_t *d, cairo_t *cr, const i
     const double label_x = padding;
     const double label_y = MAX(padding, height - logical.height - 2. * text_padding - padding);
 
-    set_color(cr, darktable.bauhaus->graph_scope_restricted);
+    set_color(cr, dt_bauhaus_get_global()->graph_scope_restricted);
     cairo_move_to(cr, label_x + text_padding - ink.x, label_y + text_padding);
     pango_cairo_show_layout(cr, layout);
 
@@ -3080,7 +3080,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(d->cs.container), picker_row, TRUE, TRUE, 0);
 
   d->statistic_selector = dt_bauhaus_combobox_new_full(
-      darktable.bauhaus, NULL, NULL, _("select which statistic to show"), d->statistic,
+      dt_bauhaus_get_global(), NULL, NULL, _("select which statistic to show"), d->statistic,
       (GtkCallback)_statistic_changed, self, dt_lib_colorpicker_statistic_names);
   dt_bauhaus_combobox_set_entries_ellipsis(d->statistic_selector, PANGO_ELLIPSIZE_NONE);
   dt_bauhaus_widget_set_label(d->statistic_selector, NULL);
@@ -3088,7 +3088,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(picker_row), d->statistic_selector, TRUE, TRUE, 0);
 
   d->color_mode_selector = dt_bauhaus_combobox_new_full(
-      darktable.bauhaus, NULL, NULL, _("select which color mode to use"), d->model,
+      dt_bauhaus_get_global(), NULL, NULL, _("select which color mode to use"), d->model,
       (GtkCallback)_color_mode_changed, self, dt_lib_colorpicker_model_names);
   dt_bauhaus_combobox_set_entries_ellipsis(d->color_mode_selector, PANGO_ELLIPSIZE_NONE);
   dt_bauhaus_widget_set_label(d->color_mode_selector, NULL);

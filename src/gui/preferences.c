@@ -195,7 +195,7 @@ static void reload_ui_last_theme(void)
 {
   const char *theme = dt_conf_get_string_const("ui_last/theme");
   dt_gui_load_theme(theme);
-  dt_bauhaus_load_theme(darktable.bauhaus);
+  dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
 static void theme_callback(GtkWidget *widget, gpointer user_data)
@@ -205,7 +205,7 @@ static void theme_callback(GtkWidget *widget, gpointer user_data)
   gchar *i = g_strrstr(theme, ".");
   if(i) *i = '\0';
   dt_gui_load_theme(theme);
-  dt_bauhaus_load_theme(darktable.bauhaus);
+  dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
 static void usercss_callback(GtkWidget *widget, gpointer user_data)
@@ -227,7 +227,7 @@ static void dpi_scaling_changed_callback(GtkWidget *widget, gpointer user_data)
   dt_conf_set_float("screen_dpi_overwrite", dpi);
   restart_required = TRUE;
   dt_configure_ppd_dpi(darktable.gui);
-  dt_bauhaus_load_theme(darktable.bauhaus);
+  dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
 static void use_sys_font_callback(GtkWidget *widget, gpointer user_data)

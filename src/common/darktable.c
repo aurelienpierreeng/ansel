@@ -583,6 +583,11 @@ struct dt_colorspaces_t *dt_colorspaces_get_global(void)
   return darktable.color_profiles;
 }
 
+struct dt_bauhaus_t *dt_bauhaus_get_global(void)
+{
+  return darktable.bauhaus;
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();

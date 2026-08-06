@@ -2956,7 +2956,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(layer_tab), preview_title, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_tab), preview_box, FALSE, FALSE, 0);
 
-  g->controls.brush_mode = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->controls.brush_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("paint"));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("erase"));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("blur"));
@@ -2980,7 +2980,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.color_row, TRUE, TRUE, 0);
   GtkWidget *picker_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.image_colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA, NULL, IOP_CS_NONE);
-  g->controls.image_colorpicker_source = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->controls.image_colorpicker_source = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("input"));
   dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("output"));
   dt_bauhaus_widget_set_label(g->controls.image_colorpicker_source, _("Pick from"));
@@ -2989,7 +2989,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(brush_tab), picker_controls, TRUE, TRUE, 0);
 
   g->controls.hdr_exposure
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 4.0f, 0.1f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 4.0f, 0.1f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.hdr_exposure, _("HDR exposure"));
   dt_bauhaus_slider_set_format(g->controls.hdr_exposure, _(" EV"));
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.hdr_exposure, TRUE, TRUE, 0);
@@ -3007,22 +3007,22 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.brush_shape, TRUE, TRUE, 0);
 
   g->controls.size
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 1.0f, 2048.0f, 1.0f, 64.0f, 0);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 1.0f, 2048.0f, 1.0f, 64.0f, 0);
   dt_bauhaus_widget_set_label(g->controls.size, _("Size"));
   dt_bauhaus_slider_set_format(g->controls.size, _(" px"));
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.size, TRUE, TRUE, 0);
   g->controls.distance
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.distance, _("Sampling distance"));
   dt_bauhaus_slider_set_format(g->controls.distance, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.distance, TRUE, TRUE, 0);
   g->controls.smoothing
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.smoothing, _("Smoothing"));
   dt_bauhaus_slider_set_format(g->controls.smoothing, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.smoothing, TRUE, TRUE, 0);
   g->controls.softness
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 1.0f, 0.01f, 0.5f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 1.0f, 0.01f, 0.5f, 2);
   dt_bauhaus_widget_set_label(g->controls.softness, _("Hardness"));
   dt_bauhaus_slider_set_factor(g->controls.softness, 100.0f);
   dt_bauhaus_slider_set_format(g->controls.softness, "%");
@@ -3033,12 +3033,12 @@ void gui_init(dt_iop_module_t *self)
   dt_gui_add_class(thickness_title, "dt_section_label");
   gtk_box_pack_start(GTK_BOX(brush_tab), thickness_title, TRUE, TRUE, 0);
   g->controls.opacity
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.opacity, _("Opacity"));
   dt_bauhaus_slider_set_format(g->controls.opacity, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.opacity, TRUE, TRUE, 0);
   g->controls.flow
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.flow, _("Flow"));
   dt_bauhaus_slider_set_format(g->controls.flow, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.flow, TRUE, TRUE, 0);
@@ -3048,17 +3048,17 @@ void gui_init(dt_iop_module_t *self)
   dt_gui_add_class(texture_title, "dt_section_label");
   gtk_box_pack_start(GTK_BOX(brush_tab), texture_title, TRUE, TRUE, 0);
   g->controls.sprinkles
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.sprinkles, _("Sprinkles"));
   dt_bauhaus_slider_set_format(g->controls.sprinkles, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkles, TRUE, TRUE, 0);
   g->controls.sprinkle_size
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 1.0f, 256.0f, 1.0f, 3.0f, 0);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 1.0f, 256.0f, 1.0f, 3.0f, 0);
   dt_bauhaus_widget_set_label(g->controls.sprinkle_size, _("Sprinkle size"));
   dt_bauhaus_slider_set_format(g->controls.sprinkle_size, _(" px"));
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_size, TRUE, TRUE, 0);
   g->controls.sprinkle_coarseness
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 50.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 50.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.sprinkle_coarseness, _("Coarseness"));
   dt_bauhaus_slider_set_format(g->controls.sprinkle_coarseness, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
@@ -3076,7 +3076,7 @@ void gui_init(dt_iop_module_t *self)
   g->controls.layer_action_row = layer_action_row;
   GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.layer_fill_row = layer_fill_row;
-  g->controls.layer_select = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->controls.layer_select = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
   g->controls.delete_layer = gtk_button_new_with_label(_("delete layer"));
   g->controls.create_layer = gtk_button_new_with_label(_("create new layer"));
@@ -3132,7 +3132,7 @@ void gui_init(dt_iop_module_t *self)
       *targets[r][c] = gtk_check_button_new();
       gtk_grid_attach(GTK_GRID(grid), *targets[r][c], c + 1, r + 1, 1, 1);
     }
-    *profiles[r] = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+    *profiles[r] = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
     dt_bauhaus_combobox_add(*profiles[r], _("linear"));
     dt_bauhaus_combobox_add(*profiles[r], _("quadratic"));
     dt_bauhaus_combobox_add(*profiles[r], _("square root"));

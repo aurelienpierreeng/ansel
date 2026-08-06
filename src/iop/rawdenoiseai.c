@@ -1789,7 +1789,7 @@ void gui_init(dt_iop_module_t *self)
                                                   "coarse chroma pass and the low-band fusion — high quality,\n"
                                                   "recommended for high ISO."));
 
-  g->custom_model = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->custom_model = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->custom_model, N_("custom model"));
   gtk_box_pack_start(GTK_BOX(box_raw), g->custom_model, TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(g->custom_model,

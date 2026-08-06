@@ -469,7 +469,7 @@ static void _update_rating_filter(dt_lib_module_t *self)
     {
       // fill stars if active
       if(active)
-        DTGTK_BUTTON(d->stars[i])->icon_data = &darktable.bauhaus->color_fg;
+        DTGTK_BUTTON(d->stars[i])->icon_data = &dt_bauhaus_get_global()->color_fg;
       else
         DTGTK_BUTTON(d->stars[i])->icon_data = NULL;
     }

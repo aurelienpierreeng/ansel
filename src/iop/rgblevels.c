@@ -365,13 +365,13 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
         cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
         for(int k=DT_IOP_RGBLEVELS_R; k<DT_IOP_RGBLEVELS_MAX_CHANNELS; k++)
         {
-          set_color(cr, darktable.bauhaus->graph_colors[k]);
+          set_color(cr, dt_bauhaus_get_global()->graph_colors[k]);
           dt_draw_histogram_8(cr, hist, 4, k, is_linear);
         }
       }
       else if(p->autoscale == DT_IOP_RGBLEVELS_INDEPENDENT_CHANNELS)
       {
-        set_color(cr, darktable.bauhaus->graph_colors[ch]);
+        set_color(cr, dt_bauhaus_get_global()->graph_colors[ch]);
         dt_draw_histogram_8(cr, hist, 4, ch, is_linear);
       }
 

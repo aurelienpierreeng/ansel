@@ -1549,7 +1549,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   cairo_surface_t *cst =
     dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   PangoFontDescription *desc =
-    pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   cairo_t *cr = cairo_create(cst);
   PangoLayout *layout = pango_cairo_create_layout(cr);
 
@@ -1626,7 +1626,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   cairo_translate(cr, margin_left, margin_top);
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-  set_color(cr, darktable.bauhaus->graph_bg);
+  set_color(cr, dt_bauhaus_get_global()->graph_bg);
   cairo_rectangle(cr, 0, 0, graph_width, graph_height);
   cairo_fill_preserve(cr);
   cairo_clip(cr);
@@ -1647,7 +1647,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     for(size_t c = 0; c < 3; c++) LUT[c][k] = output[c];
   }
 
-  GdkRGBA fg_color = darktable.bauhaus->graph_fg;
+  GdkRGBA fg_color = dt_bauhaus_get_global()->graph_fg;
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.));
 
   for(size_t c = 0; c < 3; c++)

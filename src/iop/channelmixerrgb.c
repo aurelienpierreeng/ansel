@@ -4834,8 +4834,8 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(hbox), g->approx_cct, FALSE, FALSE, 0);
 
   g->illum_color = GTK_WIDGET(gtk_drawing_area_new());
-  gtk_widget_set_size_request(g->illum_color, 2 * DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width),
-                                              DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width));
+  gtk_widget_set_size_request(g->illum_color, 2 * DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width),
+                                              DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->illum_color),
                               _("this is the color of the scene illuminant before chromatic adaptation\n"
                                 "this color will be turned into pure white by the adaptation."));
@@ -4856,13 +4856,13 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->temperature = dt_bauhaus_slider_from_params(self, N_("temperature"));
 
-  g->illum_x = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), 0., ILLUM_X_MAX, 0, 0, 1, 0);
+  g->illum_x = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0., ILLUM_X_MAX, 0, 0, 1, 0);
   dt_bauhaus_widget_set_label(g->illum_x, N_("hue"));
   dt_bauhaus_slider_set_format(g->illum_x, "\302\260");
   g_signal_connect(G_OBJECT(g->illum_x), "value-changed", G_CALLBACK(illum_xy_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->illum_x), FALSE, FALSE, 0);
 
-  g->illum_y = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0., 100., 0, 0, 1);
+  g->illum_y = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0., 100., 0, 0, 1);
   dt_bauhaus_widget_set_label(g->illum_y, N_("chroma"));
   dt_bauhaus_slider_set_format(g->illum_y, "%");
   dt_bauhaus_slider_set_hard_max(g->illum_y, ILLUM_Y_MAX);
@@ -4888,7 +4888,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_widget_set_tooltip_text(g->csspot.expander, _("use a color checker target to autoset CAT and channels"));
 
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->spot_mode, DT_GUI_MODULE(self), N_("spot mode"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), g->spot_mode, DT_GUI_MODULE(self), N_("spot mode"),
                                 _("\"correction\" automatically adjust the illuminant\n"
                                   "such that the input color is mapped to the target.\n"
                                   "\"measure\" simply shows how an input color is mapped by the CAT\n"
@@ -4914,8 +4914,8 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(vvbox), dt_ui_section_label_new(_("input")), FALSE, FALSE, 0);
 
   g->origin_spot = GTK_WIDGET(gtk_drawing_area_new());
-  gtk_widget_set_size_request(g->origin_spot, 2 * DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width),
-                                              DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width));
+  gtk_widget_set_size_request(g->origin_spot, 2 * DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width),
+                                              DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->origin_spot),
                               _("the input color that should be mapped to the target"));
 
@@ -4934,29 +4934,29 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(vvbox), dt_ui_section_label_new(_("target")), TRUE, TRUE, 0);
 
   g->target_spot = GTK_WIDGET(gtk_drawing_area_new());
-  gtk_widget_set_size_request(g->target_spot, 2 * DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width),
-                                              DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width));
+  gtk_widget_set_size_request(g->target_spot, 2 * DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width),
+                                              DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->target_spot),
                               _("the desired target color after mapping"));
 
   g_signal_connect(G_OBJECT(g->target_spot), "draw", G_CALLBACK(target_color_draw), self);
   gtk_box_pack_start(GTK_BOX(vvbox), g->target_spot, TRUE, TRUE, 0);
 
-  g->lightness_spot = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0., LIGHTNESS_MAX, 0, 0, 1);
+  g->lightness_spot = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0., LIGHTNESS_MAX, 0, 0, 1);
   dt_bauhaus_widget_set_label(g->lightness_spot, N_("lightness"));
   dt_bauhaus_slider_set_format(g->lightness_spot, "%");
   dt_bauhaus_slider_set_default(g->lightness_spot, 50.f);
   gtk_box_pack_start(GTK_BOX(vvbox), GTK_WIDGET(g->lightness_spot), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->lightness_spot), "value-changed", G_CALLBACK(_spot_settings_changed_callback), self);
 
-  g->hue_spot = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), 0., HUE_MAX, 0, 0, 1, 0);
+  g->hue_spot = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0., HUE_MAX, 0, 0, 1, 0);
   dt_bauhaus_widget_set_label(g->hue_spot, N_("hue"));
   dt_bauhaus_slider_set_format(g->hue_spot, "\302\260");
   dt_bauhaus_slider_set_default(g->hue_spot, 0.f);
   gtk_box_pack_start(GTK_BOX(vvbox), GTK_WIDGET(g->hue_spot), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->hue_spot), "value-changed", G_CALLBACK(_spot_settings_changed_callback), self);
 
-  g->chroma_spot = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0., CHROMA_MAX, 0, 0, 1);
+  g->chroma_spot = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0., CHROMA_MAX, 0, 0, 1);
   dt_bauhaus_widget_set_label(g->chroma_spot, N_("chroma"));
   dt_bauhaus_slider_set_default(g->chroma_spot, 0.f);
   gtk_box_pack_start(GTK_BOX(vvbox), GTK_WIDGET(g->chroma_spot), TRUE, TRUE, 0);
@@ -4967,7 +4967,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(g->csspot.container), GTK_WIDGET(hhbox), FALSE, FALSE, 0);
 
   GtkWidget *mixer_page = dt_ui_notebook_page(g->notebook, N_("Mixer"), _("channel mixing"));
-  g->mixer_mode = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->mixer_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->mixer_mode, N_("mode"));
   dt_bauhaus_combobox_add(g->mixer_mode, _("Complete"));
   dt_bauhaus_combobox_add(g->mixer_mode, _("Simple"));
@@ -5012,7 +5012,7 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *mixer_simple = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_stack_add_named(GTK_STACK(g->mixer_stack), mixer_simple, "simple");
 
-  g->simple_theta = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->simple_theta = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->simple_theta, N_("global hue rotation"));
   dt_bauhaus_slider_set_factor(g->simple_theta, 180.f);
   dt_bauhaus_slider_set_format(g->simple_theta, "\302\260");
@@ -5022,7 +5022,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_simple), dt_ui_section_label_new(_("chroma")), FALSE, FALSE, 0);
 
-  g->simple_psi = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->simple_psi = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->simple_psi, N_("chroma (u,v) axes orientation"));
   dt_bauhaus_slider_set_factor(g->simple_psi, 90.f);
   dt_bauhaus_slider_set_format(g->simple_psi, "\302\260");
@@ -5030,13 +5030,13 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_psi), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_psi), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
-  g->simple_stretch_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
+  g->simple_stretch_1 = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->simple_stretch_1, N_("u stretch"));
   gtk_widget_set_tooltip_text(g->simple_stretch_1, _("stretch along the first principal chroma axis. 0 neutralizes chroma, 1 keeps identity, -1 reverses chroma and +/-1.5 add contrast."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_1), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_stretch_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
-  g->simple_stretch_2 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
+  g->simple_stretch_2 = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->simple_stretch_2, N_("v stretch"));
   gtk_widget_set_tooltip_text(g->simple_stretch_2, _("stretch along the second principal chroma axis. 0 neutralizes chroma, 1 keeps identity, -1 reverses chroma and +/-1.5 add contrast."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_2), FALSE, FALSE, 0);
@@ -5044,7 +5044,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_simple), dt_ui_section_label_new(_("achromatic coupling")), FALSE, FALSE, 0);
 
-  g->simple_coupling_2 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->simple_coupling_2 = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->simple_coupling_2, N_("achromatic coupling hue"));
   dt_bauhaus_slider_set_factor(g->simple_coupling_2, 180.f);
   dt_bauhaus_slider_set_format(g->simple_coupling_2, "\302\260");
@@ -5052,7 +5052,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_2), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_coupling_2), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
-  g->simple_coupling_1 = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 1.f, 0, 0, 3);
+  g->simple_coupling_1 = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->simple_coupling_1, N_("achromatic coupling amount"));
   gtk_widget_set_tooltip_text(g->simple_coupling_1, _("strength of the chroma-to-achromatic coupling in the fixed chroma basis."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_coupling_1), FALSE, FALSE, 0);
@@ -5063,7 +5063,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("achromatic axis")), FALSE, FALSE, 0);
 
-  g->primaries_achromatic_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.f, 2.f, 0, 0, 3);
+  g->primaries_achromatic_hue = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.f, 2.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->primaries_achromatic_hue, N_("white hue"));
   dt_bauhaus_slider_set_factor(g->primaries_achromatic_hue, 90.f);
   dt_bauhaus_slider_set_format(g->primaries_achromatic_hue, "\302\260");
@@ -5073,7 +5073,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->primaries_achromatic_hue), "value-changed",
                    G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
 
-  g->primaries_achromatic_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 0, 3);
+  g->primaries_achromatic_purity = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->primaries_achromatic_purity, N_("white purity"));
   gtk_widget_set_tooltip_text(g->primaries_achromatic_purity,
                               _("distance of the custom white vector from the D50 white within the current mixer basis."));
@@ -5083,7 +5083,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("red primary")), FALSE, FALSE, 0);
 
-  g->primaries_red_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->primaries_red_hue = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->primaries_red_hue, N_("red hue"));
   dt_bauhaus_slider_set_factor(g->primaries_red_hue, 90.f);
   dt_bauhaus_slider_set_format(g->primaries_red_hue, "\302\260");
@@ -5093,7 +5093,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->primaries_red_hue), "value-changed",
                    G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
 
-  g->primaries_red_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+  g->primaries_red_purity = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->primaries_red_purity, N_("red purity"));
   gtk_widget_set_tooltip_text(g->primaries_red_purity,
                               _("radial scaling of the first basis vector inside the affine primaries footprint."));
@@ -5103,7 +5103,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("green primary")), FALSE, FALSE, 0);
 
-  g->primaries_green_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->primaries_green_hue = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->primaries_green_hue, N_("green hue"));
   dt_bauhaus_slider_set_factor(g->primaries_green_hue, 90.f);
   dt_bauhaus_slider_set_format(g->primaries_green_hue, "\302\260");
@@ -5113,7 +5113,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->primaries_green_hue), "value-changed",
                    G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
 
-  g->primaries_green_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+  g->primaries_green_purity = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->primaries_green_purity, N_("green purity"));
   gtk_widget_set_tooltip_text(g->primaries_green_purity,
                               _("radial scaling of the second basis vector inside the affine primaries footprint."));
@@ -5123,7 +5123,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("blue primary")), FALSE, FALSE, 0);
 
-  g->primaries_blue_hue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
+  g->primaries_blue_hue = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);
   dt_bauhaus_widget_set_label(g->primaries_blue_hue, N_("blue hue"));
   dt_bauhaus_slider_set_factor(g->primaries_blue_hue, 90.f);
   dt_bauhaus_slider_set_format(g->primaries_blue_hue, "\302\260");
@@ -5133,7 +5133,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->primaries_blue_hue), "value-changed",
                    G_CALLBACK(_channelmixerrgb_primaries_slider_callback), self);
 
-  g->primaries_blue_purity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+  g->primaries_blue_purity = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->primaries_blue_purity, N_("blue purity"));
   gtk_widget_set_tooltip_text(g->primaries_blue_purity,
                               _("radial scaling of the third basis vector inside the affine primaries footprint."));
@@ -5143,7 +5143,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(mixer_primaries), dt_ui_section_label_new(_("gain correction")), FALSE, FALSE, 0);
 
-  g->primaries_gain = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -8.f, 8.f, 0, 1.f, 3);
+  g->primaries_gain = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -8.f, 8.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->primaries_gain, N_("gain"));
   gtk_widget_set_tooltip_text(g->primaries_gain,
                               _("global gain multiplying the custom white vector after the affine primaries transform."));
@@ -5214,7 +5214,7 @@ void gui_init(struct dt_iop_module_t *self)
     dt_free(user_CGATS_dir);
   }
 
-  g->checkers_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->checkers_list = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->checkers_list, N_("Chart"));
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_list), TRUE, TRUE, 0);
   dt_bauhaus_combobox_set(g->checkers_list, 0);
@@ -5224,7 +5224,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_free(tooltip);
   g_signal_connect(G_OBJECT(g->checkers_list), "value-changed", G_CALLBACK(checker_changed_callback), (gpointer)self);
 
-  g->checkers_color_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->checkers_color_list = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->checkers_color_list, N_("Chart color"));
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_color_list), TRUE, TRUE, 0);
 
@@ -5248,7 +5248,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 
 
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->optimize, DT_GUI_MODULE(self), N_("optimize for"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), g->optimize, DT_GUI_MODULE(self), N_("optimize for"),
                                 _("choose the colors that will be optimized with higher priority.\n"
                                   "neutral colors gives the lowest average delta E but a high maximum delta E\n"
                                   "saturated colors gives the lowest maximum delta E but a high average delta E\n"
@@ -5265,7 +5265,7 @@ void gui_init(struct dt_iop_module_t *self)
                                 N_("maximum delta E"));
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->optimize), TRUE, TRUE, 0);
 
-  g->safety = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), 0., 1., 0, 0.5, 3, TRUE);
+  g->safety = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0., 1., 0, 0.5, 3, TRUE);
   dt_bauhaus_widget_set_label(g->safety, N_("patch scale"));
   gtk_widget_set_tooltip_text(g->safety, _("reduce the radius of the patches to select the more or less central part.\n"
                                            "useful when the perspective correction is sloppy or\n"

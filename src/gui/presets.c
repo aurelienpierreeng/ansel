@@ -670,8 +670,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   // exposure
   label = gtk_label_new(_("exposure"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
-  g->exposure_min = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
-  g->exposure_max = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  g->exposure_min = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
+  g->exposure_max = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   gtk_widget_set_tooltip_text(g->exposure_min, _("minimum exposure time"));
   gtk_widget_set_tooltip_text(g->exposure_max, _("maximum exposure time"));
   for(int k = 0; k < dt_gui_presets_exposure_value_cnt; k++)
@@ -685,8 +685,8 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
   // aperture
   label = gtk_label_new(_("aperture"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
-  g->aperture_min = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
-  g->aperture_max = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  g->aperture_min = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
+  g->aperture_max = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   gtk_widget_set_tooltip_text(g->aperture_min, _("minimum aperture value"));
   gtk_widget_set_tooltip_text(g->aperture_max, _("maximum aperture value"));
   for(int k = 0; k < dt_gui_presets_aperture_value_cnt; k++)

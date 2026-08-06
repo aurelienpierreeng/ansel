@@ -1608,7 +1608,7 @@ void gui_init(dt_view_t *self)
     GtkWidget *vbox = gtk_bin_get_child(GTK_BIN(dev->display.floating_window));
 
     GtkWidget *rendering;
-    DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, rendering, NULL, 
+    DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), rendering, NULL, 
                                 N_("Rendering size"), 
                                 _("Choose at what size the main preview is rendered.\n"
                                   "Full resolution renders the pipeline at the raw original resolution.\n"
@@ -1656,7 +1656,7 @@ void gui_init(dt_view_t *self)
     gtk_box_pack_start(GTK_BOX(vbox), checker_2_row, FALSE, FALSE, 0);
 
     GtkWidget *checker_size
-        = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 2., 32., 1., 8., 0);
+        = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 2., 32., 1., 8., 0);
     dt_bauhaus_slider_set(checker_size,
                           dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size"));
     dt_bauhaus_slider_set_format(checker_size, " px");
@@ -1847,7 +1847,7 @@ void enter(dt_view_t *self)
   dt_accels_attach_scroll_handler(darktable.gui->accels, _scroll_on_focus, dev);
 
   // Attach bauhaus default signal callback to IOP
-  darktable.bauhaus->default_value_changed_callback = dt_bauhaus_value_changed_default_callback;
+  dt_bauhaus_get_global()->default_value_changed_callback = dt_bauhaus_value_changed_default_callback;
 
   // This gets the first selected ID to scroll where relevant, so
   // runs it before clearing the selection

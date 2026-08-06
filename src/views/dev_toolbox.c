@@ -343,20 +343,20 @@ static void _build_overexposed_popover(dt_develop_t *dev)
   gtk_container_add(GTK_CONTAINER(dev->overexposed.floating_window), vbox);
 
   GtkWidget *mode;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, mode, NULL, N_("clipping preview mode"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("clipping preview mode"),
                                _("select the metric you want to preview\nfull gamut is the combination of all other modes"),
                                dev->overexposed.mode, _overexposed_mode_callback, dev,
                                N_("full gamut"), N_("any RGB channel"), N_("luminance only"), N_("saturation only"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mode), TRUE, TRUE, 0);
 
   GtkWidget *colorscheme;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, colorscheme, NULL, N_("color scheme"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), colorscheme, NULL, N_("color scheme"),
                                _("select colors to indicate clipping"), dev->overexposed.colorscheme,
                                _overexposed_colorscheme_callback, dev, N_("black & white"), N_("red & blue"),
                                N_("purple & green"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(colorscheme), TRUE, TRUE, 0);
 
-  GtkWidget *lower = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), -32., -4., 1., -12.69, 2);
+  GtkWidget *lower = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), -32., -4., 1., -12.69, 2);
   dt_bauhaus_slider_set(lower, dev->overexposed.lower);
   dt_bauhaus_slider_set_format(lower, _(" EV"));
   dt_bauhaus_widget_set_label(lower, N_("lower threshold"));
@@ -371,7 +371,7 @@ static void _build_overexposed_popover(dt_develop_t *dev)
   g_signal_connect(G_OBJECT(lower), "value-changed", G_CALLBACK(_overexposed_lower_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(lower), TRUE, TRUE, 0);
 
-  GtkWidget *upper = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0.0, 100.0, 0.1, 99.99, 2);
+  GtkWidget *upper = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0.0, 100.0, 0.1, 99.99, 2);
   dt_bauhaus_slider_set(upper, dev->overexposed.upper);
   dt_bauhaus_slider_set_format(upper, "%");
   dt_bauhaus_widget_set_label(upper, N_("upper threshold"));
@@ -420,13 +420,13 @@ static void _build_rawoverexposed_popover(dt_develop_t *dev)
   gtk_container_add(GTK_CONTAINER(dev->rawoverexposed.floating_window), vbox);
 
   GtkWidget *mode;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, mode, NULL, N_("mode"), _("select how to mark the clipped pixels"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("mode"), _("select how to mark the clipped pixels"),
                                dev->rawoverexposed.mode, _rawoverexposed_mode_callback, dev,
                                N_("mark with CFA color"), N_("mark with solid color"), N_("false color"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mode), TRUE, TRUE, 0);
 
   // FIXME can't use DT_BAUHAUS_COMBOBOX_NEW_FULL because of (unnecessary?) translation context
-  GtkWidget *colorscheme = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  GtkWidget *colorscheme = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(colorscheme, N_("color scheme"));
   dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "red"));
   dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "green"));
@@ -438,7 +438,7 @@ static void _build_rawoverexposed_popover(dt_develop_t *dev)
   g_signal_connect(G_OBJECT(colorscheme), "value-changed", G_CALLBACK(_rawoverexposed_colorscheme_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(colorscheme), TRUE, TRUE, 0);
 
-  GtkWidget *threshold = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0.0, 2.0, 0.01, 1.0, 3);
+  GtkWidget *threshold = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0.0, 2.0, 0.01, 1.0, 3);
   dt_bauhaus_slider_set(threshold, dev->rawoverexposed.threshold);
   dt_bauhaus_widget_set_label(threshold, N_("clipping threshold"));
   gtk_widget_set_tooltip_text(threshold,
@@ -507,7 +507,7 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   dt_loc_get_datadir(datadir, sizeof(datadir));
 
-  GtkWidget *softproof_profile = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  GtkWidget *softproof_profile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(softproof_profile, N_("softproof profile"));
   dt_bauhaus_combobox_set_entries_ellipsis(softproof_profile, PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(vbox), softproof_profile, TRUE, TRUE, 0);
@@ -564,14 +564,14 @@ static void _build_display_popover(dt_develop_t *dev)
   gtk_widget_set_margin_bottom(vbox, DT_PIXEL_APPLY_DPI(DT_GUI_BOX_SPACING));
   gtk_container_add(GTK_CONTAINER(dev->display.floating_window), vbox);
 
-  GtkWidget *brightness = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0, 100, 5, 50, 0);
+  GtkWidget *brightness = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0, 100, 5, 50, 0);
   dt_bauhaus_slider_set(brightness, (int)dt_conf_get_int("display/brightness"));
   dt_bauhaus_widget_set_label(brightness, N_("Background brightness"));
   dt_bauhaus_slider_set_format(brightness, "%");
   g_signal_connect(G_OBJECT(brightness), "value-changed", G_CALLBACK(_display_brightness_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(brightness), TRUE, TRUE, 0);
 
-  GtkWidget *borders = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0, 250, 5, 10, 0);
+  GtkWidget *borders = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0, 250, 5, 10, 0);
   dt_bauhaus_slider_set(borders, dt_conf_get_int("plugins/darkroom/ui/border_size"));
   dt_bauhaus_widget_set_label(borders, N_("Picture margins"));
   dt_bauhaus_slider_set_format(borders, "px");

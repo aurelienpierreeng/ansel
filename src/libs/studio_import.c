@@ -431,7 +431,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(source_page), d->delete_source, FALSE, FALSE, 0);
 
   /* Destination tab */
-  d->copy = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  d->copy = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add_full(d->copy, _("Add to library"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
                                 GINT_TO_POINTER(0), NULL, TRUE);
   dt_bauhaus_combobox_add_full(d->copy, _("Copy to disk"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
@@ -445,7 +445,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_no_show_all(d->copy_options, TRUE);
   gtk_box_pack_start(GTK_BOX(destination_page), d->copy_options, FALSE, FALSE, 0);
 
-  d->on_conflict = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  d->on_conflict = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   {
     dt_bauhaus_widget_set_label(d->on_conflict, N_("On conflict"));
     dt_bauhaus_combobox_add_full(d->on_conflict, _("Skip"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,

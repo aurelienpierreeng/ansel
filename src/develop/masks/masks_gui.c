@@ -396,7 +396,7 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
   gtk_widget_add_events(menu_item, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                    | GDK_POINTER_MOTION_MASK | GDK_SCROLL_MASK);
 
-  GtkWidget *slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, module ? DT_GUI_MODULE(module) : NULL,
+  GtkWidget *slider = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), module ? DT_GUI_MODULE(module) : NULL,
                                                        min, max, step, value, digits);
   dt_bauhaus_widget_set_label(slider, label);
   dt_bauhaus_slider_set_digits(slider, digits);

@@ -1168,10 +1168,10 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     cairo_clip(background_cr);
 
     cairo_set_line_width(background_cr, DT_PIXEL_APPLY_DPI(0.5f));
-    set_color(background_cr, darktable.bauhaus->graph_border);
+    set_color(background_cr, dt_bauhaus_get_global()->graph_border);
     dt_draw_grid(background_cr, 8, 0, 0, graph_width, graph_height);
 
-    set_color(background_cr, darktable.bauhaus->graph_fg);
+    set_color(background_cr, dt_bauhaus_get_global()->graph_fg);
     cairo_set_line_width(background_cr, DT_PIXEL_APPLY_DPI(1.f));
     cairo_move_to(background_cr, 0.f, 0.5f * graph_height);
     cairo_line_to(background_cr, graph_width, 0.5f * graph_height);
@@ -1214,7 +1214,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   {
     const float picker_x = dt_colorrings_hue_to_curve_x(g->picker_hue) * graph_width;
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5f));
-    set_color(cr, darktable.bauhaus->graph_fg);
+    set_color(cr, dt_bauhaus_get_global()->graph_fg);
     cairo_move_to(cr, picker_x, 0.f);
     cairo_line_to(cr, picker_x, graph_height + DT_IOP_COLOREQUAL_AXIS_HEIGHT);
     cairo_stroke(cr);
@@ -1243,7 +1243,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   cairo_clip(cr);
 
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.f));
-  set_color(cr, darktable.bauhaus->graph_fg);
+  set_color(cr, dt_bauhaus_get_global()->graph_fg);
 
   for(int k = 0; k < DT_IOP_COLOREQUAL_GRAPH_RES; k++)
   {
@@ -1267,9 +1267,9 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     const float y = (1.f - curve[k].y) * graph_height;
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.f));
     cairo_arc(cr, x, y, DT_PIXEL_APPLY_DPI(k == g->selected[ring][channel] ? 5.f : 4.f), 0.f, 2.f * M_PI_F);
-    set_color(cr, darktable.bauhaus->graph_fg);
+    set_color(cr, dt_bauhaus_get_global()->graph_fg);
     cairo_stroke_preserve(cr);
-    set_color(cr, darktable.bauhaus->graph_bg);
+    set_color(cr, dt_bauhaus_get_global()->graph_bg);
     cairo_fill(cr);
   }
 

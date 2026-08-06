@@ -1576,7 +1576,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_end(GTK_BOX(g->buttonbar), g->btn_asshot, TRUE, TRUE, 0);
   gtk_box_pack_start(box_enabled, g->buttonbar, TRUE, TRUE, 0);
 
-  g->presets = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->presets = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->presets, N_("settings")); // relabel to settings to remove confusion between module presets and white balance settings
   gtk_widget_set_tooltip_text(g->presets, _("choose white balance setting"));
   gtk_box_pack_start(box_enabled, g->presets, TRUE, TRUE, 0);
@@ -1596,14 +1596,14 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(box_enabled, temp_label_box, TRUE, TRUE, 0);
 
   //Match UI order: temp first, then tint (like every other app ever)
-  g->scale_k = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), DT_IOP_LOWEST_TEMPERATURE, DT_IOP_HIGHEST_TEMPERATURE,
+  g->scale_k = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), DT_IOP_LOWEST_TEMPERATURE, DT_IOP_HIGHEST_TEMPERATURE,
                                                              0, 5000.0, 0, feedback);
   dt_bauhaus_slider_set_format(g->scale_k, " K");
   dt_bauhaus_widget_set_label(g->scale_k, N_("temperature"));
   gtk_widget_set_tooltip_text(g->scale_k, _("color temperature (in Kelvin)"));
   gtk_box_pack_start(box_enabled, g->scale_k, TRUE, TRUE, 0);
 
-  g->scale_tint = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), DT_IOP_LOWEST_TINT, DT_IOP_HIGHEST_TINT,
+  g->scale_tint = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), DT_IOP_LOWEST_TINT, DT_IOP_HIGHEST_TINT,
                                                                 0, 1.0, 3, feedback);
   dt_bauhaus_widget_set_label(g->scale_tint, N_("tint"));
   gtk_widget_set_tooltip_text(g->scale_tint, _("color tint of the image, from magenta (value < 1) to green (value > 1)"));

@@ -3800,7 +3800,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     PangoRectangle ink;
     PangoLayout *layout;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     const float fontsize = DT_PIXEL_APPLY_DPI(16);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE / zoom_scale);
@@ -5897,13 +5897,13 @@ void gui_init(struct dt_iop_module_t *self)
                                    _("rotation only"),
                                    _("lens shift only"), NULL };
   g->fitting_option
-      = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(self), _("Fit for"), NULL, ASHIFT_FITTING_ALL,
+      = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(self), _("Fit for"), NULL, ASHIFT_FITTING_ALL,
                                      (GtkCallback)fitting_option_changed, self, option_labels);
   gtk_box_pack_start(GTK_BOX(self->widget), g->fitting_option, TRUE, TRUE, 0);
 
   const gchar *crop_labels[] = { _("off"), _("largest area"), _("original format"), NULL };
   g->cropmode
-      = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(self), _("automatic cropping"), NULL,
+      = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(self), _("automatic cropping"), NULL,
                                      ((dt_iop_ashift_params_t *)self->params)->cropmode,
                                      (GtkCallback)cropmode_callback, self, crop_labels);
   dt_bauhaus_combobox_set_default(g->cropmode,

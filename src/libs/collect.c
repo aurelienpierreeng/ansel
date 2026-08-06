@@ -3095,7 +3095,7 @@ void gui_init(dt_lib_module_t *self)
     gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(box), TRUE, TRUE, 0);
     gtk_widget_set_name(GTK_WIDGET(box), "lib-dtbutton");
 
-    d->rule[i].combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+    d->rule[i].combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
     dt_bauhaus_combobox_set_selected_text_align(d->rule[i].combo, DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT);
     _populate_collect_combo(d->rule[i].combo);
     g_signal_connect(G_OBJECT(d->rule[i].combo), "value-changed", G_CALLBACK(combo_changed), d->rule + i);
@@ -3142,7 +3142,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->recursive_check), "toggled", G_CALLBACK(_recursive_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->recursive_check, FALSE, FALSE, 0);
 
-  d->sort_by = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->sort_by = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->sort_by, _("sort by"));
   dt_bauhaus_combobox_add(d->sort_by, _("name"));
   dt_bauhaus_combobox_add(d->sort_by, _("id"));

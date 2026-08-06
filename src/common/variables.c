@@ -647,7 +647,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     for(GList *res_iter = res; res_iter; res_iter = g_list_next(res_iter))
     {
       const int dot_index = GPOINTER_TO_INT(res_iter->data);
-      const GdkRGBA c = darktable.bauhaus->colorlabels[dot_index];
+      const GdkRGBA c = dt_bauhaus_get_global()->colorlabels[dot_index];
       result = dt_util_dstrcat(result,
                                "<span foreground='#%02x%02x%02x'>\342\254\244 </span>",
                                (guint)(c.red*255), (guint)(c.green*255), (guint)(c.blue*255));

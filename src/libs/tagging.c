@@ -3117,7 +3117,7 @@ void gui_init(dt_lib_module_t *self)
   hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   // "view" combobox: render the attached list above as a flat list, or as a hierarchical tree
-  d->attached_view_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->attached_view_combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->attached_view_combo, _("view"));
   dt_bauhaus_combobox_add(d->attached_view_combo, _("list"));
   dt_bauhaus_combobox_add(d->attached_view_combo, _("tree"));
@@ -3129,7 +3129,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(hbox, d->attached_view_combo, TRUE, TRUE, 0);
 
   // "sort" combobox: by name or by image count
-  d->sort_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->sort_combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->sort_combo, _("Sort by"));
   dt_bauhaus_combobox_add(d->sort_combo, _("name"));
   dt_bauhaus_combobox_add(d->sort_combo, _("count"));

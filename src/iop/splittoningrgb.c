@@ -1114,7 +1114,7 @@ static void _build_complete_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui
     for(int col = 0; col < 3; col++)
     {
       g->point[point].complete[row][col]
-          = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.f, 2.f, 0, row == col, 3);
+          = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.f, 2.f, 0, row == col, 3);
       dt_bauhaus_widget_set_label(g->point[point].complete[row][col], input_label[col]);
       _tag_widget(g->point[point].complete[row][col], point);
       g_signal_connect(G_OBJECT(g->point[point].complete[row][col]), "value-changed", G_CALLBACK(_general_callback),
@@ -1133,33 +1133,33 @@ static void _build_simple_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui_d
                              GtkWidget *container)
 {
   g->point[point].simple_theta
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].simple_theta, N_("global hue rotation"));
   dt_bauhaus_slider_set_factor(g->point[point].simple_theta, 180.f);
   dt_bauhaus_slider_set_format(g->point[point].simple_theta, "\302\260");
 
   g->point[point].simple_psi
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].simple_psi, N_("chroma (u,v) axes orientation"));
   dt_bauhaus_slider_set_factor(g->point[point].simple_psi, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].simple_psi, "\302\260");
 
   g->point[point].simple_stretch_1
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].simple_stretch_1, N_("u stretch"));
 
   g->point[point].simple_stretch_2
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].simple_stretch_2, N_("v stretch"));
 
   g->point[point].simple_coupling_2
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].simple_coupling_2, N_("achromatic coupling hue"));
   dt_bauhaus_slider_set_factor(g->point[point].simple_coupling_2, 180.f);
   dt_bauhaus_slider_set_format(g->point[point].simple_coupling_2, "\302\260");
 
   g->point[point].simple_coupling_1
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 1.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].simple_coupling_1, N_("achromatic coupling amount"));
 
   GtkWidget *widgets[] = {
@@ -1188,47 +1188,47 @@ static void _build_primaries_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gu
                                 GtkWidget *container)
 {
   g->point[point].primaries_achromatic_hue
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.f, 2.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.f, 2.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_achromatic_hue, N_("white hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_achromatic_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_achromatic_hue, "\302\260");
 
   g->point[point].primaries_achromatic_purity
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_achromatic_purity, N_("white purity"));
 
   g->point[point].primaries_red_hue
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_red_hue, N_("red hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_red_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_red_hue, "\302\260");
 
   g->point[point].primaries_red_purity
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_red_purity, N_("red purity"));
 
   g->point[point].primaries_green_hue
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_green_hue, N_("green hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_green_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_green_hue, "\302\260");
 
   g->point[point].primaries_green_purity
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_green_purity, N_("green purity"));
 
   g->point[point].primaries_blue_hue
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_blue_hue, N_("blue hue"));
   dt_bauhaus_slider_set_factor(g->point[point].primaries_blue_hue, 90.f);
   dt_bauhaus_slider_set_format(g->point[point].primaries_blue_hue, "\302\260");
 
   g->point[point].primaries_blue_purity
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.f, 2.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_blue_purity, N_("blue purity"));
 
   g->point[point].primaries_gain
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -8.f, 8.f, 0, 1.f, 3);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -8.f, 8.f, 0, 1.f, 3);
   dt_bauhaus_widget_set_label(g->point[point].primaries_gain, N_("gain"));
 
   GtkWidget *widgets[] = {
@@ -1283,7 +1283,7 @@ void gui_init(struct dt_iop_module_t *self)
 
     g->point[point].ev = dt_color_picker_new(
         self, DT_COLOR_PICKER_AREA,
-        dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -16.f, 16.f, 0,
+        dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -16.f, 16.f, 0,
                                          point == 0 ? -16.f : 0.f, 2));
     dt_bauhaus_widget_set_label(g->point[point].ev, N_("brightness"));
     dt_bauhaus_slider_set_format(g->point[point].ev, " EV");
@@ -1293,7 +1293,7 @@ void gui_init(struct dt_iop_module_t *self)
     gtk_box_pack_start(GTK_BOX(page), g->point[point].ev, FALSE, FALSE, 0);
 
     g->point[point].temperature
-        = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 1667.f, 25000.f, 0, 5003.f, 0);
+        = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 1667.f, 25000.f, 0, 5003.f, 0);
     dt_bauhaus_widget_set_label(g->point[point].temperature, N_("temperature"));
     dt_bauhaus_slider_set_soft_range(g->point[point].temperature, 3000.f, 7000.f);
     dt_bauhaus_slider_set_format(g->point[point].temperature, " K");
@@ -1301,7 +1301,7 @@ void gui_init(struct dt_iop_module_t *self)
     g_signal_connect(G_OBJECT(g->point[point].temperature), "value-changed", G_CALLBACK(_general_callback), self);
     gtk_box_pack_start(GTK_BOX(page), g->point[point].temperature, FALSE, FALSE, 0);
 
-    g->point[point].mixer_mode = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+    g->point[point].mixer_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
     dt_bauhaus_widget_set_label(g->point[point].mixer_mode, N_("mode"));
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Complete"));
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Simple"));

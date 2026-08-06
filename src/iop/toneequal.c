@@ -2330,7 +2330,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   char text[256];
   PangoLayout *layout;
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
 
   // Avoid text resizing based on zoom level
   const int old_size = pango_font_description_get_size(desc);
@@ -2493,7 +2493,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
   g->layout = pango_cairo_create_layout(g->cr);
 
   if(g->desc) pango_font_description_free(g->desc);
-  g->desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  g->desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
 
   pango_layout_set_font_description(g->layout, g->desc);
   dt_gui_set_pango_resolution(g->layout);
@@ -2515,7 +2515,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
 
   // Set the sizes, margins and paddings
   g->inner_padding = INNER_PADDING;
-  g->inset = g->inner_padding + darktable.bauhaus->quad_width;
+  g->inset = g->inner_padding + dt_bauhaus_get_global()->quad_width;
   g->graph_left_space = g->line_height + g->inner_padding;
   g->graph_width = g->allocation.width - g->inset - 2.0 * g->line_height; // align the right border on sliders
   g->graph_height = g->allocation.height - g->inset - 2.0 * g->line_height; // give room to nodes
@@ -2532,7 +2532,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
   cairo_translate(g->cr, g->line_height + 2 * g->inner_padding, g->line_height + 3 * g->inner_padding);
 
   // display x-axis and y-axis legends (EV)
-  set_color(g->cr, darktable.bauhaus->graph_fg);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
 
   float value = -8.0f;
 
@@ -2590,7 +2590,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
 
   // Draw frame borders
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(0.5));
-  set_color(g->cr, darktable.bauhaus->graph_border);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_border);
   cairo_rectangle(g->cr, 0, 0, g->graph_width, g->graph_height);
   cairo_stroke_preserve(g->cr);
 
@@ -2653,16 +2653,16 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   // Draw graph background
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(0.5));
   cairo_rectangle(g->cr, 0, 0, g->graph_width, g->graph_height);
-  set_color(g->cr, darktable.bauhaus->graph_bg);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_bg);
   cairo_fill(g->cr);
 
   // draw grid
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(0.5));
-  set_color(g->cr, darktable.bauhaus->graph_border);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_border);
   dt_draw_grid(g->cr, 8, 0, 0, g->graph_width, g->graph_height);
 
   // draw ground level
-  set_color(g->cr, darktable.bauhaus->graph_fg);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(1));
   cairo_move_to(g->cr, 0, 0.5 * g->graph_height);
   cairo_line_to(g->cr, g->graph_width, 0.5 * g->graph_height);
@@ -2671,7 +2671,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   if(g->histogram_valid && self->enabled)
   {
     // draw the inset histogram
-    set_color(g->cr, darktable.bauhaus->inset_histogram);
+    set_color(g->cr, dt_bauhaus_get_global()->inset_histogram);
     cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(4.0));
     cairo_move_to(g->cr, 0, g->graph_height);
 
@@ -2711,7 +2711,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   if(g->lut_valid)
   {
     // draw the interpolation curve
-    set_color(g->cr, darktable.bauhaus->graph_fg);
+    set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
     cairo_move_to(g->cr, 0, g->gui_lut[0] * g->graph_height);
     cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(3));
 
@@ -2740,7 +2740,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
       // fill bars
       cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(6));
-      set_color(g->cr, darktable.bauhaus->color_fill);
+      set_color(g->cr, dt_bauhaus_get_global()->color_fill);
       cairo_move_to(g->cr, xn, 0.5 * g->graph_height);
       cairo_line_to(g->cr, xn, yn);
       cairo_stroke(g->cr);
@@ -2748,13 +2748,13 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
       // bullets
       cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(3));
       cairo_arc(g->cr, xn, yn, DT_PIXEL_APPLY_DPI(4), 0, 2. * M_PI);
-      set_color(g->cr, darktable.bauhaus->graph_fg);
+      set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
       cairo_stroke_preserve(g->cr);
 
       if(g->area_active_node == k)
-        set_color(g->cr, darktable.bauhaus->graph_fg);
+        set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
       else
-        set_color(g->cr, darktable.bauhaus->graph_bg);
+        set_color(g->cr, dt_bauhaus_get_global()->graph_bg);
 
       cairo_fill(g->cr);
     }
@@ -2768,7 +2768,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
       cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(1.5));
       const float y =g->gui_lut[(int)CLAMP(((UI_SAMPLES - 1) * g->area_x / g->graph_width), 0, UI_SAMPLES - 1)];
       cairo_arc(g->cr, g->area_x, y * g->graph_height, radius, 0, 2. * M_PI);
-      set_color(g->cr, darktable.bauhaus->graph_fg);
+      set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
       cairo_stroke(g->cr);
     }
 
@@ -2787,7 +2787,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
       }
       else
       {
-        set_color(g->cr, darktable.bauhaus->graph_fg);
+        set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
         cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(1.5));
       }
 
@@ -3454,7 +3454,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->area), "motion-notify-event", G_CALLBACK(area_motion_notify), self);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("double-click to reset the curve"));
 
-  g->smoothing = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.33f, +1.67f, 0, 0.0f, 2);
+  g->smoothing = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.33f, +1.67f, 0, 0.0f, 2);
   dt_bauhaus_slider_set_soft_range(g->smoothing, -1.0f, 1.0f);
   dt_bauhaus_widget_set_label(g->smoothing, N_("curve smoothing"));
   gtk_widget_set_tooltip_text(g->smoothing, _("positive values will produce more progressive tone transitions\n"

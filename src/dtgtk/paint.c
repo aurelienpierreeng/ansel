@@ -1881,7 +1881,7 @@ void dtgtk_cairo_paint_label(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
 
   if(color < DT_COLORLABELS_LAST)
   {
-    set_color(cr, darktable.bauhaus->colorlabels[color]);
+    set_color(cr, dt_bauhaus_get_global()->colorlabels[color]);
   }
   else
   {
@@ -1918,7 +1918,7 @@ void dtgtk_cairo_paint_label_sel(cairo_t *cr, gint x, gint y, gint w, gint h, gi
 
   if(color < DT_COLORLABELS_LAST)
   {
-    GdkRGBA rgba = darktable.bauhaus->colorlabels[color];
+    GdkRGBA rgba = dt_bauhaus_get_global()->colorlabels[color];
     cairo_set_source_rgba(cr, rgba.red, rgba.green, rgba.blue, .7);
   }
   else
@@ -2170,35 +2170,35 @@ void dtgtk_cairo_paint_label_flower(cairo_t *cr, gint x, gint y, gint w, gint h,
   if(flags & (1 << DT_COLORLABELS_RED))
   {
     cairo_arc(cr, r, r, r, 0, 2.0f * M_PI);
-    set_color(cr, darktable.bauhaus->colorlabels[DT_COLORLABELS_RED]);
+    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_RED]);
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_COLORLABELS_YELLOW))
   {
     cairo_arc(cr, 1.0 - r, r, r, 0, 2.0f * M_PI);
-    set_color(cr, darktable.bauhaus->colorlabels[DT_COLORLABELS_YELLOW]);
+    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_YELLOW]);
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_COLORLABELS_GREEN))
   {
     cairo_arc(cr, 0.5, 0.5, r, 0, 2.0f * M_PI);
-    set_color(cr, darktable.bauhaus->colorlabels[DT_COLORLABELS_GREEN]);
+    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_GREEN]);
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_COLORLABELS_BLUE))
   {
     cairo_arc(cr, r, 1.0 - r, r, 0, 2.0f * M_PI);
-    set_color(cr, darktable.bauhaus->colorlabels[DT_COLORLABELS_BLUE]);
+    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_BLUE]);
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_COLORLABELS_PURPLE))
   {
     cairo_arc(cr, 1.0 - r, 1.0 - r, r, 0, 2.0f * M_PI);
-    set_color(cr, darktable.bauhaus->colorlabels[DT_COLORLABELS_PURPLE]);
+    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_PURPLE]);
     cairo_fill(cr);
   }
 

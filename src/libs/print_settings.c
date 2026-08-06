@@ -1857,7 +1857,7 @@ void gui_post_expose(struct dt_lib_module_t *self, cairo_t *cr, int32_t width, i
     char dimensions[16];
     PangoLayout *layout;
     PangoRectangle ext;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE);
     layout = pango_cairo_create_layout(cr);
@@ -2205,19 +2205,19 @@ void gui_init(dt_lib_module_t *self)
   ////////////////////////// PRINTER SETTINGS
 
   // create papers combo as filled when adding printers
-  d->papers = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->papers = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
   label = dt_ui_section_label_new(_("printer"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_settings_printer"));
-  d->printers = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->printers = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
   gtk_box_pack_start(GTK_BOX(self->widget), d->printers, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(d->printers), "value-changed", G_CALLBACK(_printer_changed), self);
 
   //// media
 
-  d->media = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->media = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
   dt_bauhaus_widget_set_label(d->media, N_("media"));
 
@@ -2226,7 +2226,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add printer profile combo
 
-  d->pprofile = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->pprofile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->pprofile, N_("profile"));
 
   int combo_idx, n;
@@ -2277,7 +2277,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add printer intent combo
 
-  d->pintent = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->pintent = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->pintent, N_("intent"));
   dt_bauhaus_combobox_add(d->pintent, _("perceptual"));
   dt_bauhaus_combobox_add(d->pintent, _("relative colorimetric"));
@@ -2318,7 +2318,7 @@ void gui_init(dt_lib_module_t *self)
 
   //// portrait / landscape
 
-  d->orientation = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->orientation = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->orientation, N_("orientation"));
   dt_bauhaus_combobox_add(d->orientation, _("portrait"));
   dt_bauhaus_combobox_add(d->orientation, _("landscape"));
@@ -2327,7 +2327,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->orientation), TRUE, TRUE, 0);
 
   // NOTE: units has no label, which makes for cleaner UI but means that no action can be assigned
-  GtkWidget *ucomb = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(NULL), _("measurement units"), NULL, (int)d->unit,
+  GtkWidget *ucomb = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), _("measurement units"), NULL, (int)d->unit,
                                                   (GtkCallback)_unit_changed, self, _unit_names);
   gtk_box_pack_start(GTK_BOX(self->widget), ucomb, TRUE, TRUE, 0);
 
@@ -2554,7 +2554,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add export profile combo
 
-  d->profile = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->profile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->profile, N_("profile"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->profile), TRUE, TRUE, 0);
@@ -2600,7 +2600,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add export intent combo
 
-  d->intent = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->intent = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->intent, N_("intent"));
 
   dt_bauhaus_combobox_add(d->intent, _("image settings"));
@@ -2616,7 +2616,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add export style combo
 
-  d->style = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->style = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->style, N_("style"));
 
   dt_bauhaus_combobox_add(d->style, _("none"));

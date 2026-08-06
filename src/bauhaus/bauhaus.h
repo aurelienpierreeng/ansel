@@ -294,6 +294,15 @@ struct dt_bauhaus_t
 dt_bauhaus_t * dt_bauhaus_init();
 void dt_bauhaus_cleanup(dt_bauhaus_t *bauhaus);
 
+/* The application-wide bauhaus context. The subsystem itself is already fully
+ * parameterized (bauhaus.c never reads a global), and the widget constructors take a
+ * dt_bauhaus_t * so a different context can be injected; this accessor only gives
+ * callers a handle source. It is the end state: the context is process-wide (one
+ * theme, one font, one popup) and a third of the constructor call sites pass
+ * DT_GUI_MODULE(NULL), so the handle cannot ride on the module either.
+ * Implemented by the orchestrator (common/darktable.c). */
+dt_bauhaus_t *dt_bauhaus_get_global(void);
+
 // load theme colors, fonts, etc
 void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus);
 
