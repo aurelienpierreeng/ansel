@@ -308,10 +308,22 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
   dt_aligned_pixel_t boost[MAX_NUM_SCALES];
   float sharp[MAX_NUM_SCALES];
   const int max_scale = get_scales(thrs, boost, sharp, d, roi_in, piece);
-  const int max_mult = 1u << (max_scale - 1);
 
   const int width = roi_out->width;
   const int height = roi_out->height;
+
+  // get_scales() returns MIN(floor(log2(min(w,h))) - 2, i), which is <= 0 once the ROI's
+  // smaller side is 4 px or under, and negative below that. `1u << (max_scale - 1)` is
+  // then a shift by a negative count: undefined behaviour. Such a ROI is below the
+  // wavelet's minimum size anyway, which is exactly what the guard further down bails
+  // on, so treat it as the same corner case instead of computing the shift at all.
+  if(max_scale <= 0)
+  {
+    dt_iop_image_copy_by_size(o, i, width, height, 4);
+    return 0;
+  }
+
+  const int max_mult = 1u << (max_scale - 1);
 
   if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
