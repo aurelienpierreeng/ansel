@@ -27,7 +27,8 @@
     Copyright 2004-2008 by Shawn Freeman, Udi Fuchs
 */
 
-#pragma once
+#ifndef DT_COMMON_CURVE_TOOLS_H
+#define DT_COMMON_CURVE_TOOLS_H
 
 // Curve Types
 #define CUBIC_SPLINE 0
@@ -133,6 +134,8 @@ float *interpolate_set(int n, float x[], float y[], unsigned int type);
  *      yval  - interpolated value at xval
  *******************************************************************/
 float interpolate_val(int n, float x[], float xval, float y[], float tangents[], unsigned int type);
+
+#endif // DT_COMMON_CURVE_TOOLS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

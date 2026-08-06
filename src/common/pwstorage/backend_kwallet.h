@@ -32,7 +32,8 @@
 // You should have received a copy of the GNU General Public License
 // along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 
-#pragma once
+#ifndef DT_COMMON_PWSTORAGE_BACKEND_KWALLET_H
+#define DT_COMMON_PWSTORAGE_BACKEND_KWALLET_H
 
 #include "pwstorage.h"
 #include <gio/gio.h>
@@ -61,6 +62,8 @@ gboolean dt_pwstorage_kwallet_set(const backend_kwallet_context_t *context, cons
                                   GHashTable *table);
 /** Load (key,value) pairs. */
 GHashTable *dt_pwstorage_kwallet_get(const backend_kwallet_context_t *context, const gchar *slot);
+
+#endif // DT_COMMON_PWSTORAGE_BACKEND_KWALLET_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

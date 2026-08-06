@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_GUIDES_H
+#define DT_GUI_GUIDES_H
 
 #include "develop/imageop.h"
 #include "views/view.h"
@@ -62,6 +63,8 @@ void dt_guides_update_button_state();
 void dt_guides_button_toggled(gboolean active);
 
 void dt_guides_set_overlay_colors();
+
+#endif // DT_GUI_GUIDES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

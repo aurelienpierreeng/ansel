@@ -26,7 +26,8 @@
  This file is licensed under a BSD license.
 */
 
-#pragma once
+#ifndef DT_WIN_GETRUSAGE_H
+#define DT_WIN_GETRUSAGE_H
 
 #include <sys/time.h> /* for struct timeval */
 
@@ -62,6 +63,8 @@ struct rusage {
 #endif
 
 extern int getrusage(int who, struct rusage *rusage);
+
+#endif // DT_WIN_GETRUSAGE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

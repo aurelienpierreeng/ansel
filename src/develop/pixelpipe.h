@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_PIXELPIPE_H
+#define DT_DEVELOP_PIXELPIPE_H
 
 #include <stdint.h>
 
@@ -120,6 +121,8 @@ uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const struct dt_dev_pixelpipe_iop_
  * the pipeline.
  */
 void dt_dev_clear_rawdetail_mask(struct dt_dev_pixelpipe_t *pipe);
+
+#endif // DT_DEVELOP_PIXELPIPE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

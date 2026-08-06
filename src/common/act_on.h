@@ -18,7 +18,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_ACT_ON_H
+#define DT_COMMON_ACT_ON_H
 
 #include <gui/gtk.h>
 
@@ -31,6 +32,8 @@ int dt_act_on_get_images_nb(const gboolean only_visible, const gboolean force);
 
 // get the imgid of the first active image if any, else -1
 int32_t dt_act_on_get_first_image();
+
+#endif // DT_COMMON_ACT_ON_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -21,7 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DBUS_H
+#define DT_COMMON_DBUS_H
 
 #include <glib.h>
 #include <gio/gio.h>
@@ -51,6 +52,8 @@ struct dt_dbus_t *dt_dbus_get_global(void);
 /** have we managed to get the dbus name? when not, then there is already another instance of darktable
  * running */
 gboolean dt_dbus_connected(const dt_dbus_t *);
+
+#endif // DT_COMMON_DBUS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

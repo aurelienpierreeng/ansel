@@ -22,7 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_BILATERALCL_H
+#define DT_COMMON_BILATERALCL_H
 
 #ifdef HAVE_OPENCL
 #ifdef HAVE_CONFIG_H
@@ -70,6 +71,8 @@ cl_int dt_bilateral_slice_cl(dt_bilateral_cl_t *b, cl_mem in, cl_mem out, const 
 void dt_bilateral_free_cl_global(dt_bilateral_cl_global_t *b);
 
 #endif // HAVE_OPENCL
+
+#endif // DT_COMMON_BILATERALCL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

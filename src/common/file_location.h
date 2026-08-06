@@ -30,7 +30,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_FILE_LOCATION_H
+#define DT_COMMON_FILE_LOCATION_H
 
 #include <gtk/gtk.h>
 #include <string.h>
@@ -92,6 +93,8 @@ void dt_loc_get_user_cache_dir(char *cachedir, size_t bufsize);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_FILE_LOCATION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

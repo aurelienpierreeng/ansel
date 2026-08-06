@@ -16,7 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_COLOREQUAL_SHARED_H
+#define DT_COMMON_COLOREQUAL_SHARED_H
 
 #include "common/dtpthread.h"
 #include "common/iop_profile.h"
@@ -139,3 +140,4 @@ void dt_colorrings_eval_sparse_local_field(const float x[3], const dt_colorrings
 void dt_colorrings_fill_lut_sparse_local_field(float *lut, int level, const dt_colorrings_sparse_anchor_t *anchors,
                                                int anchor_count, float inv_sigma_L, float inv_sigma_rho,
                                                float inv_sigma_theta, float rho0);
+#endif // DT_COMMON_COLOREQUAL_SHARED_H

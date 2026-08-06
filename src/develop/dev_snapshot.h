@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_DEVELOP_DEV_SNAPSHOT_H
+#define DT_DEVELOP_DEV_SNAPSHOT_H
 
 #include <cairo.h>
 #include <glib.h>
@@ -85,6 +86,8 @@ gboolean dt_dev_snapshot_is_valid(const dt_dev_snapshot_t *snap);
 void dt_dev_snapshot_draw(dt_dev_snapshot_t *snap, cairo_t *cri, struct dt_develop_t *dev,
                            int32_t width, int32_t height,
                            double clip_x, double clip_y, double clip_w, double clip_h);
+
+#endif // DT_DEVELOP_DEV_SNAPSHOT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

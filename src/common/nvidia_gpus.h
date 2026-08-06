@@ -25,7 +25,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_NVIDIA_GPUS_H
+#define DT_COMMON_NVIDIA_GPUS_H
 
 #include <strings.h>
 
@@ -285,6 +286,9 @@ static int dt_nvidia_gpu_supports_sm_20(const char *model)
   return 1;
 #endif
 }
+
+#endif // DT_COMMON_NVIDIA_GPUS_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

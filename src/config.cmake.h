@@ -30,7 +30,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 // CMake uses config.cmake.h to generate config.h within the build folder.
-#pragma once
+#ifndef DT_CONFIG_CMAKE_H
+#define DT_CONFIG_CMAKE_H
 
 #include <stddef.h>
 
@@ -121,6 +122,8 @@ static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUP
 // OpenCL 3.0 is the highest version supported by Nvidia drivers as of 2025
 // and AMD caught up to 2.0.
 #define CL_TARGET_OPENCL_VERSION 200
+
+#endif // DT_CONFIG_CMAKE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

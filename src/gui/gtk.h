@@ -51,7 +51,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_GTK_H
+#define DT_GUI_GTK_H
 
 #include "common/dtpthread.h"
 #include "common/glib_utils.h"
@@ -820,6 +821,8 @@ void dt_gui_refocus_center();
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_GUI_GTK_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

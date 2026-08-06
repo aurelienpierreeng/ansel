@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_COMMON_H
+#define DT_IOP_HIGHLIGHTS_COMMON_H
 
 #include "common/openmp.h"        // HL_PFOR/__OMP_PARALLEL_FOR__
 #include "common/simd.h"          // dt_aligned_pixel_t + SIMD macros
@@ -595,3 +596,4 @@ enum wavelets_scale_t
   FIRST_SCALE = 1 << 1, // first wavelets scale : reconstruct = 0
   LAST_SCALE = 1 << 2,  // last wavelets scale  : reconstruct += residual
 };
+#endif // DT_IOP_HIGHLIGHTS_COMMON_H

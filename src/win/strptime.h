@@ -22,11 +22,14 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_WIN_STRPTIME_H
+#define DT_WIN_STRPTIME_H
 
 #ifdef _WIN32
 char *strptime(const char *buf, const char *format, struct tm *tm);
 #endif
+
+#endif // DT_WIN_STRPTIME_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

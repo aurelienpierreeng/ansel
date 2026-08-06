@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_IMAGE_EXTENSIONS_H
+#define DT_COMMON_IMAGE_EXTENSIONS_H
 
 #include <glib.h>
 
@@ -71,6 +72,8 @@ const char *const *dt_image_ext_hdr_list(void);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_IMAGE_EXTENSIONS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

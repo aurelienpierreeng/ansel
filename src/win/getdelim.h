@@ -22,10 +22,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_WIN_GETDELIM_H
+#define DT_WIN_GETDELIM_H
 
 ssize_t getdelim(char **lineptr, size_t *n, int delimiter, FILE *fp);
 ssize_t getline(char **lineptr, size_t *n, FILE *stream);
+
+#endif // DT_WIN_GETDELIM_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

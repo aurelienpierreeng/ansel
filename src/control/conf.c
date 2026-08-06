@@ -57,6 +57,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
+#include "common/utility.h"
 
 typedef struct dt_conf_dreggn_t
 {

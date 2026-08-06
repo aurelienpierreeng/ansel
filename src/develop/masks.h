@@ -106,7 +106,8 @@ GList dev->forms
 
 */
 
-#pragma once
+#ifndef DT_DEVELOP_MASKS_H
+#define DT_DEVELOP_MASKS_H
 
 #include "common/atomic.h"
 #include "common/logging.h"
@@ -1598,6 +1599,8 @@ gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_MASKS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

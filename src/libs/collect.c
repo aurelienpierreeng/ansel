@@ -131,9 +131,12 @@
 #include "common/debug.h"
 #include "common/film.h"
 #include "common/image.h"
+#include "common/macros.h"
 #include "common/map_locations.h"
 #include "common/metadata.h"
 #include "common/mipmap_cache.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
 #include "common/selection.h"
 #include "common/tags.h"
 #include "common/utility.h"
@@ -150,6 +153,8 @@
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
+#include <glib/gi18n.h>
+#include <glib/gstdio.h>
 #ifndef _WIN32
 #include <gio/gunixmounts.h>
 #endif

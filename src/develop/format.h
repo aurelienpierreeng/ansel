@@ -27,7 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_FORMAT_H
+#define DT_DEVELOP_FORMAT_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -116,6 +117,7 @@ int default_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpi
 }
 #endif
 
+#endif // DT_DEVELOP_FORMAT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

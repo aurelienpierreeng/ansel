@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_HASH_H
+#define DT_COMMON_HASH_H
 
 /* dt_hash(): the content-addressing primitive of the whole app (history, pipeline,
  * caches). Pure and dependency-free on purpose: low-level compute units include this
@@ -107,6 +108,8 @@ static inline uint64_t dt_hash(uint64_t hash, const char *str, size_t size)
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_HASH_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

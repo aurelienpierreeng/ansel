@@ -39,7 +39,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_UTILITY_H
+#define DT_COMMON_UTILITY_H
 
 #include <gtk/gtk.h>
 #include <string.h>
@@ -161,6 +162,8 @@ GDateTime *dt_util_get_file_datetime(const char *const path);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_UTILITY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

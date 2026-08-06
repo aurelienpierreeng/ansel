@@ -50,6 +50,10 @@
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/iop_order.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "common/usermanual_url.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
@@ -58,6 +62,8 @@
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+
+#include <glib/gstdio.h>
 
 DT_MODULE(1)
 

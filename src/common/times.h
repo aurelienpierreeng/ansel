@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_TIMES_H
+#define DT_COMMON_TIMES_H
 
 /* Wall-clock / CPU-time measurement helpers. The dt_show_times* implementations
  * live in common/darktable.c (they honor the runtime perf-debug flag), but the
@@ -66,6 +67,8 @@ void dt_show_times_f(const dt_times_t *start, const char *prefix, const char *su
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_TIMES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

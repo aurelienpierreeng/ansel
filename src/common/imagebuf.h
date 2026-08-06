@@ -20,7 +20,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_IMAGEBUF_H
+#define DT_COMMON_IMAGEBUF_H
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #include "develop/pixelpipe_cache_alloc.h"
@@ -139,6 +140,8 @@ void dt_iop_image_linear_blend(float *const __restrict__ buf, const float lambda
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_IMAGEBUF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

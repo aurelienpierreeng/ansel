@@ -21,7 +21,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_LOCALLAPLACIAN_H
+#define DT_COMMON_LOCALLAPLACIAN_H
 
 #include "develop/imageop.h"
 #include "develop/pixelpipe_cache_alloc.h"
@@ -87,6 +88,8 @@ size_t local_laplacian_memory_use(const int width,      // width of input image
 
 size_t local_laplacian_singlebuffer_size(const int width,       // width of input image
                                          const int height);     // height of input image
+
+#endif // DT_COMMON_LOCALLAPLACIAN_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

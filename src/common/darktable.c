@@ -110,6 +110,9 @@
 #include "common/colorspaces.h"
 #include "common/colorlabels.h"
 #include "common/darktable.h"
+#include "common/anonymous_ids.h"
+#include "common/capabilities.h"
+#include "common/sys_resources.h"
 #include "common/datetime.h"
 #include "common/exif.h"
 #include "common/history.h"
@@ -190,6 +193,7 @@
 #endif
 
 #include "dbus.h"
+#include "common/utility.h"
 
 #if defined(__SUNOS__)
 #include <sys/varargs.h>

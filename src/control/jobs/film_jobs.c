@@ -39,6 +39,8 @@
 #include "common/collection.h"
 #include "common/film.h"
 #include <stdlib.h>
+#include "common/times.h"
+#include "common/utility.h"
 
 typedef struct dt_film_import1_t
 {

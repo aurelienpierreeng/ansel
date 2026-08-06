@@ -22,7 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_IMAGEOP_GUI_H
+#define DT_DEVELOP_IMAGEOP_GUI_H
 
 #include "control/signal.h"
 #include "develop/imageop.h"
@@ -56,6 +57,8 @@ gboolean dt_mask_scroll_increases(int up);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_IMAGEOP_GUI_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

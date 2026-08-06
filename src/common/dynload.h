@@ -22,7 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DYNLOAD_H
+#define DT_COMMON_DYNLOAD_H
 
 #ifdef HAVE_OPENCL
 
@@ -56,6 +57,8 @@ dt_gmodule_t *dt_gmodule_open(const char *);
 int dt_gmodule_symbol(dt_gmodule_t *, const char *, void (**)(void));
 
 #endif // HAVE_OPENCL
+
+#endif // DT_COMMON_DYNLOAD_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

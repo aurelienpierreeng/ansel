@@ -28,7 +28,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DTGTK_GRADIENTSLIDER_H
+#define DT_DTGTK_GRADIENTSLIDER_H
 
 #define GRADIENT_SLIDER_MAX_POSITIONS 10
 
@@ -214,6 +215,8 @@ void dtgtk_gradient_slider_multivalue_set_increment(GtkDarktableGradientSlider *
 void dtgtk_gradient_slider_multivalue_set_scale_callback(GtkDarktableGradientSlider *gslider, float (*callback)(GtkWidget *self, float value, int dir));
 
 G_END_DECLS
+
+#endif // DT_DTGTK_GRADIENTSLIDER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -21,7 +21,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_CHART_COLORCHART_H
+#define DT_CHART_COLORCHART_H
 
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
@@ -71,6 +72,7 @@ chart_t *parse_cht(const char *filename);
 int parse_it8(const char *filename, chart_t *chart);
 void checker_set_color(box_t *box, dt_colorspaces_color_profile_type_t color_space, float c0, float c1, float c2);
 
+#endif // DT_CHART_COLORCHART_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

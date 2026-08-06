@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_TELEMETRY_H
+#define DT_COMMON_TELEMETRY_H
 
 #include <glib.h>
 #include <json-glib/json-glib.h>
@@ -80,6 +81,8 @@ void dt_telemetry_record_file_type(const struct dt_image_t *img, const char *pip
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_TELEMETRY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

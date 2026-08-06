@@ -27,10 +27,15 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_COMMON_IMPORT_H
+#define DT_COMMON_IMPORT_H
+
 
 /** Open the image importer popup and process user input **/
 struct dt_variables_params_t;
 void dt_images_import();
+
+#endif // DT_COMMON_IMPORT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

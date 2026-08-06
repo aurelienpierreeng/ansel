@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_FAST_GUIDED_FILTER_H
+#define DT_COMMON_FAST_GUIDED_FILTER_H
 
 #include <assert.h>
 #include <math.h>
@@ -354,6 +355,8 @@ static inline int fast_surface_blur(float *const restrict image,
   dt_pixelpipe_cache_free_align(ds_image);
   return 0;
 }
+
+#endif // DT_COMMON_FAST_GUIDED_FILTER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

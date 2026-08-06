@@ -19,7 +19,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_COMMON_SOLVERS_THINPLATE_H
+#define DT_COMMON_SOLVERS_THINPLATE_H
 
 #include "chart/tonecurve.h"
 
@@ -36,6 +37,8 @@ int thinplate_match(const tonecurve_t *curve, // tonecurve to apply after this (
                     double *maxerr);          // max error
 
 float thinplate_color_pos(float L, float a, float b);
+
+#endif // DT_COMMON_SOLVERS_THINPLATE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

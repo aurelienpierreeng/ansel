@@ -81,6 +81,7 @@
 #include "common/imageio_jpeg.h"
 #include "common/imageio_png.h"
 #include "common/imageio_tiff.h"
+#include "common/target_clones.h"
 #ifdef HAVE_LIBAVIF
 #include "common/imageio_avif.h"
 #endif

@@ -38,7 +38,10 @@
 #include "common/collection.h"
 #include "control/jobs/control_jobs.h"
 #include "common/darktable.h"
+#include "common/database.h"
 #include "common/debug.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "common/history.h"
 #include "common/metadata.h"
 #include "common/selection.h"
@@ -52,6 +55,8 @@
 #include "gui/gtk.h"
 #include "gui/styles.h"
 #include "libs/lib.h"
+
+#include <sqlite3.h>
 
 DT_MODULE(1)
 

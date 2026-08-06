@@ -18,7 +18,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_WIN_WIN_H
+#define DT_WIN_WIN_H
 
 #define XMD_H
 
@@ -47,6 +48,8 @@
 
 #define sleep(n) Sleep(1000 * n)
 #define HAVE_BOOLEAN
+
+#endif // DT_WIN_WIN_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

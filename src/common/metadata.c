@@ -43,6 +43,7 @@
 #include "control/signal.h"
 
 #include <stdlib.h>
+#include "common/utility.h"
 
 // this array should contain all dt metadata
 

@@ -28,7 +28,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_UNDO_H
+#define DT_COMMON_UNDO_H
 
 #include "common/dtpthread.h"  // for dt_pthread_mutex_t
 #include <glib.h>              // for gpointer, GList, gboolean
@@ -114,6 +115,8 @@ void dt_undo_disable_next(dt_undo_t *self);
 // Mostly meant to disable GUI undo/redo controls if they wouldn't have any effect.
 gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter);
 gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter);
+
+#endif // DT_COMMON_UNDO_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

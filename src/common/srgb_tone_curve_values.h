@@ -17,7 +17,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_SRGB_TONE_CURVE_VALUES_H
+#define DT_COMMON_SRGB_TONE_CURVE_VALUES_H
 
 static const uint16_t dt_srgb_tone_curve_values[] = {
   0,     5,     10,    15,    20,    25,    30,    35,    40,    45,    50,    55,    59,    64,    69,
@@ -92,6 +93,8 @@ static const uint16_t dt_srgb_tone_curve_values[] = {
 };
 
 static const guint dt_srgb_tone_curve_values_n = G_N_ELEMENTS(dt_srgb_tone_curve_values);
+
+#endif // DT_COMMON_SRGB_TONE_CURVE_VALUES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

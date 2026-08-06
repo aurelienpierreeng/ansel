@@ -23,7 +23,8 @@
     You should have received a copy of the GNU Lesser General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_GUI_COLOR_PICKER_PROXY_H
+#define DT_GUI_COLOR_PICKER_PROXY_H
 
 /*
   This API encapsulates color-picker state ownership, cache sampling, and
@@ -150,6 +151,8 @@ GtkWidget *dt_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker_kind
 /* link color picker to widget and initialize color picker color space with given value */
 GtkWidget *dt_color_picker_new_with_cst(dt_iop_module_t *module, dt_iop_color_picker_kind_t kind, GtkWidget *w,
                                         const dt_iop_colorspace_type_t cst);
+
+#endif // DT_GUI_COLOR_PICKER_PROXY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

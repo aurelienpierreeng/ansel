@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_IOP_CHANNELMIXERRGB_SHARED_H
+#define DT_IOP_CHANNELMIXERRGB_SHARED_H
 
 #include "common/chromatic_adaptation.h"
 #include "common/iop_profile.h"
@@ -119,3 +120,4 @@ void dt_iop_channelmixer_shared_paint_primaries_sliders(
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_IOP_CHANNELMIXERRGB_SHARED_H

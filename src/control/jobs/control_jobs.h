@@ -35,7 +35,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_JOBS_CONTROL_JOBS_H
+#define DT_CONTROL_JOBS_CONTROL_JOBS_H
 
 #include "common/imageio_module.h"
 #include "common/image.h"
@@ -90,6 +91,8 @@ void dt_control_refresh_exif();
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_CONTROL_JOBS_CONTROL_JOBS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

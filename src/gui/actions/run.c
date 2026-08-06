@@ -24,6 +24,7 @@
 #include "common/collection.h"
 #include "common/mipmap_cache.h"
 #include "common/selection.h"
+#include "common/utility.h"
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
 

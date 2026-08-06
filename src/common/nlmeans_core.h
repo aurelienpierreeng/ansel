@@ -17,7 +17,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_NLMEANS_CORE_H
+#define DT_COMMON_NLMEANS_CORE_H
 
 #include "iop/iop_api.h"
 #include "develop/develop.h"
@@ -57,6 +58,9 @@ int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
 int nlmeans_denoiseprofile_cl(const dt_nlmeans_param_t *const params, const int devid,
                               cl_mem dev_in, cl_mem dev_out, const dt_iop_roi_t *const roi_in);
 #endif /* HAVE_OPENCL */
+
+#endif // DT_COMMON_NLMEANS_CORE_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

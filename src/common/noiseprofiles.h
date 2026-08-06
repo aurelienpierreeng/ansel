@@ -35,7 +35,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_NOISEPROFILES_H
+#define DT_COMMON_NOISEPROFILES_H
 
 #include "common/image.h"
 
@@ -78,6 +79,8 @@ void dt_noiseprofile_interpolate(
   const dt_noiseprofile_t *const p1,  // the smaller iso
   const dt_noiseprofile_t *const p2,  // the larger iso (can't be == iso1)
   dt_noiseprofile_t *out);            // has iso initialized
+
+#endif // DT_COMMON_NOISEPROFILES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

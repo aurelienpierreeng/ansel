@@ -33,6 +33,7 @@
 
 
 #include "common/darktable.h"
+#include "common/sys_resources.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "develop/tiling.h"
 #include "common/opencl.h"

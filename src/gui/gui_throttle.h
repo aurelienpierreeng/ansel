@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_GUI_GUI_THROTTLE_H
+#define DT_GUI_GUI_THROTTLE_H
 
 #include <glib.h>
 
@@ -19,3 +20,4 @@ gint64 dt_gui_throttle_get_timeout_us(void);
 
 void dt_gui_throttle_queue(gpointer source, dt_gui_throttle_callback_t callback, gpointer user_data);
 void dt_gui_throttle_cancel(gpointer source);
+#endif // DT_GUI_GUI_THROTTLE_H

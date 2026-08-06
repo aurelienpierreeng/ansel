@@ -39,7 +39,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_CONTROL_H
+#define DT_CONTROL_CONTROL_H
 
 #include "common/dtpthread.h"
 
@@ -343,6 +344,8 @@ void dt_control_set_keyboard_over_id(int32_t value);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_CONTROL_CONTROL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_PROCESS_H
+#define DT_IOP_HIGHLIGHTS_PROCESS_H
 
 // Top-level CFA-agnostic CPU driver and the hybrid OpenCL driver.
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
@@ -65,3 +66,4 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
                            const dt_aligned_pixel_t clips);
 
 #endif
+#endif // DT_IOP_HIGHLIGHTS_PROCESS_H

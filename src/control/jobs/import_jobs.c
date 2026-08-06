@@ -34,6 +34,7 @@
 #include <glob.h>
 #endif
 #include <string.h>
+#include "common/utility.h"
 #ifdef __APPLE__
 #include "osx/osx.h"
 #endif

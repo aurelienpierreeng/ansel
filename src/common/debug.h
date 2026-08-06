@@ -26,7 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DEBUG_H
+#define DT_COMMON_DEBUG_H
 
 /* Self-containment: the DT_DEBUG_SQLITE3_* macros below expand to
  * dt_database_get_sqlite3_global() (common/database.h), dt_print()/DT_DEBUG_SQL
@@ -146,6 +147,8 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_DEBUG_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

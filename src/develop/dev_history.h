@@ -22,7 +22,8 @@
 
 #include <glib.h>
 
-#pragma once
+#ifndef DT_DEVELOP_DEV_HISTORY_H
+#define DT_DEVELOP_DEV_HISTORY_H
 
 /**
  * @file develop/dev_history.h
@@ -632,3 +633,4 @@ gboolean dt_dev_transient_params_active(struct dt_develop_t *dev, const struct d
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_DEVELOP_DEV_HISTORY_H

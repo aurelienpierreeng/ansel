@@ -26,6 +26,7 @@
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/module_versioning.h"
 #include "common/selection.h"
 #include "control/conf.h"
 #include "control/control.h"

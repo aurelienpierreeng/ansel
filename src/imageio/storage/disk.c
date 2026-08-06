@@ -71,6 +71,7 @@
 #include <glib/gstdio.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "common/module_versioning.h"
 
 DT_MODULE(3)
 

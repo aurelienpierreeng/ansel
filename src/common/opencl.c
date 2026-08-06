@@ -51,6 +51,7 @@
 #ifdef HAVE_OPENCL
 
 #include "common/opencl.h"
+#include "common/capabilities.h"
 #include "common/bilateralcl.h"
 #include "common/darktable.h"
 #include "common/dlopencl.h"

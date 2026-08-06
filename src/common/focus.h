@@ -27,7 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_FOCUS_H
+#define DT_COMMON_FOCUS_H
 
 #include "common/image_cache.h"
 #include "develop/develop.h"
@@ -370,6 +371,8 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
 #undef CHANNEL
 #undef gbuf
 #undef FOCUS_THRS
+
+#endif // DT_COMMON_FOCUS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

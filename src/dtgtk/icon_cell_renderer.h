@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_DTGTK_ICON_CELL_RENDERER_H
+#define DT_DTGTK_ICON_CELL_RENDERER_H
 #include <gtk/gtk.h>
 
 G_BEGIN_DECLS
@@ -28,3 +29,4 @@ G_DECLARE_FINAL_TYPE(DtGtkCellRendererButton, dtgtk_cell_renderer_button, DTGTK,
 GtkCellRenderer *dtgtk_cell_renderer_button_new(void);
 
 G_END_DECLS
+#endif // DT_DTGTK_ICON_CELL_RENDERER_H

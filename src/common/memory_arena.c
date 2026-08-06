@@ -19,11 +19,14 @@
 #define _GNU_SOURCE
 
 #include "common/darktable.h"
+#include "common/sys_resources.h"
 #include "common/memory_arena.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include "common/macros.h"
+#include "common/logging.h"
 
 #ifdef _WIN32
 #include <windows.h>

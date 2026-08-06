@@ -27,9 +27,12 @@
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/darktable.h"
+#include "common/database.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/iop_order.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/format.h"
@@ -45,6 +48,7 @@
 #include <gtk/gtk.h>
 #include <limits.h>
 #include <math.h>
+#include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
 

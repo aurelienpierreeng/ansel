@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_REGION_H
+#define DT_IOP_HIGHLIGHTS_REGION_H
 
 // Per-region gather/composite + the region reconstruction driver (CPU + OpenCL).
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
@@ -62,3 +63,4 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
                                 const int width, const _hl_region_t *const region, const dt_dev_pixelpipe_t *pipe,
                                 const float solid_color, const float floor_gate);
 #endif
+#endif // DT_IOP_HIGHLIGHTS_REGION_H

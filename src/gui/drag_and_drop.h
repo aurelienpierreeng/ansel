@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_DRAG_AND_DROP_H
+#define DT_GUI_DRAG_AND_DROP_H
 
 #define _BYTE 8
 #define _WORD 16
@@ -57,6 +58,8 @@ static const guint n_targets_tags = G_N_ELEMENTS(target_list_tags);
 static const GtkTargetEntry target_list_tags_dest[]
     = { { "image-id", GTK_TARGET_SAME_APP, DND_TARGET_IMGID }, { "tags-dnd", GTK_TARGET_SAME_WIDGET, DND_TARGET_TAG } };
 static const guint n_targets_tags_dest = G_N_ELEMENTS(target_list_tags_dest);
+
+#endif // DT_GUI_DRAG_AND_DROP_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

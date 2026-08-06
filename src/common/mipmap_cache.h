@@ -26,7 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_MIPMAP_CACHE_H
+#define DT_COMMON_MIPMAP_CACHE_H
 
 #include "common/atomic.h"
 #include "common/cache.h"
@@ -215,6 +216,8 @@ void dt_mipmap_get_cache_dir(char path[PATH_MAX], const dt_mipmap_cache_t *cache
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_MIPMAP_CACHE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

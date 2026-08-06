@@ -51,6 +51,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include "common/module_versioning.h"
+#include "common/times.h"
+#include "common/utility.h"
 
 DT_MODULE(1)
 

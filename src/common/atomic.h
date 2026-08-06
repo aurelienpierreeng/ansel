@@ -19,7 +19,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_ATOMIC_H
+#define DT_COMMON_ATOMIC_H
 
 #include <stdint.h>
 
@@ -220,6 +221,8 @@ static inline void dt_atomic_and_int(dt_atomic_int *var, int flags)
 }
 
 #endif // __STDC_NO_ATOMICS__
+
+#endif // DT_COMMON_ATOMIC_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

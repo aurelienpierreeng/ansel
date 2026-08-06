@@ -58,6 +58,10 @@
 #include "darktable.h"
 #include "file_location.h"
 #include "whereami.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
+#include "common/utility.h"
 
 void dt_loc_init(const char *datadir, const char *moduledir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir, const char *kerneldir)
 {

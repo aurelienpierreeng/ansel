@@ -21,7 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_IMAGEIO_EXR_H
+#define DT_COMMON_IMAGEIO_EXR_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
@@ -35,6 +36,8 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_IMAGEIO_EXR_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

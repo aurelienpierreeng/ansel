@@ -21,7 +21,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_CHART_COMMON_H
+#define DT_CHART_COMMON_H
 
 #include "chart/colorchart.h"
 
@@ -55,6 +56,8 @@ int get_homography(const point_t *source, const point_t *target, float *h);
 point_t apply_homography(point_t p, const float *h);
 // Gives a factor of scaling areas at point p
 float apply_homography_scaling(point_t p, const float *h);
+
+#endif // DT_CHART_COMMON_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

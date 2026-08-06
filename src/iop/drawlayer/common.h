@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_COMMON_H
+#define DT_IOP_DRAWLAYER_COMMON_H
 
 #include "develop/imageop.h"
 #include "iop/drawlayer/paint.h"
@@ -49,3 +50,4 @@ void dt_drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t
                                                const char *title,
                                                const char *message);
 void gui_update(dt_iop_module_t *self);
+#endif // DT_IOP_DRAWLAYER_COMMON_H

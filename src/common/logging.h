@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_LOGGING_H
+#define DT_COMMON_LOGGING_H
 
 /* Debug-channel flags and the dt_print() family. The implementations live in
  * common/darktable.c (they read the runtime `darktable.unmuted` mask), but the
@@ -86,6 +87,8 @@ void dt_vprint(dt_debug_thread_t thread, const char *msg, ...) __attribute__((fo
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_LOGGING_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

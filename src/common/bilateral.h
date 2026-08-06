@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_BILATERAL_H
+#define DT_COMMON_BILATERAL_H
 
 #include <stddef.h> // for size_t
 
@@ -75,6 +76,8 @@ void dt_bilateral_slice_to_output(const dt_bilateral_t *const b, const float *co
                                   const float detail);
 
 void dt_bilateral_free(dt_bilateral_t *b);
+
+#endif // DT_COMMON_BILATERAL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

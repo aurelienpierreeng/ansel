@@ -44,7 +44,11 @@
 #include "dtgtk/togglebutton.h"
 #include "libs/lib.h"
 #include "gui/gdkkeys.h"
+#include "common/database.h"
 #include "common/debug.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
 #include "common/file_location.h"
 #include "common/image_cache.h"
 #include "common/collection.h"
@@ -65,6 +69,8 @@
 #endif
 
 #include <gdk/gdkkeysyms.h>
+#include <glib/gstdio.h>
+#include <sqlite3.h>
 
 DT_MODULE(1)
 

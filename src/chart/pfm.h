@@ -19,10 +19,13 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_CHART_PFM_H
+#define DT_CHART_PFM_H
 
 float *read_pfm(const char *filename, int *wd, int *ht);
 void write_pfm(const char *filename, int width, int height, float *data);
+
+#endif // DT_CHART_PFM_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

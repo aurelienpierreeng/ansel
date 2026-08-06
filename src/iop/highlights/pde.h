@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_PDE_H
+#define DT_IOP_HIGHLIGHTS_PDE_H
 
 // Sparse-SPD PDE assembly/solve on the region grid (screened Poisson / diffusion), CPU + OpenCL.
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
@@ -137,3 +138,4 @@ cl_int _region_blur1_cl(const int devid, cl_mem in, cl_mem out, const int region
 cl_int _region_pde_cg_cl(const int devid, void *gd_void, cl_mem solution, cl_mem hole, const int region_w,
                          const int region_h, const float dscalar, const float tscalar, const int maxiter);
 #endif
+#endif // DT_IOP_HIGHLIGHTS_PDE_H

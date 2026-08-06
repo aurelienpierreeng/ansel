@@ -59,11 +59,13 @@
 #include "control/conf.h"
 #include "common/darktable.h"
 #include "gui/gdkkeys.h"
+#include "common/capabilities.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/l10n.h"
 #include "common/opencl.h"
 #include "common/presets.h"
+#include "common/utility.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 

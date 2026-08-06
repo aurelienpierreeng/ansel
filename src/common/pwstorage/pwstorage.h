@@ -33,7 +33,8 @@
 // You should have received a copy of the GNU General Public License
 // along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 
-#pragma once
+#ifndef DT_COMMON_PWSTORAGE_PWSTORAGE_H
+#define DT_COMMON_PWSTORAGE_PWSTORAGE_H
 
 #include <glib.h>
 
@@ -63,6 +64,8 @@ const struct dt_pwstorage_t *dt_pwstorage_get_global(void);
 gboolean dt_pwstorage_set(const gchar *slot, GHashTable *table);
 /** Load (key,value) pairs. */
 GHashTable *dt_pwstorage_get(const gchar *slot);
+
+#endif // DT_COMMON_PWSTORAGE_PWSTORAGE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

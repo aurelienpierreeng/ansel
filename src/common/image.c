@@ -110,6 +110,7 @@
 #include <glob.h>
 #endif
 #include <glib/gstdio.h>
+#include "common/utility.h"
 
 static sqlite3_stmt *_image_altered_stmt = NULL;
 static dt_pthread_mutex_t _image_stmt_mutex;

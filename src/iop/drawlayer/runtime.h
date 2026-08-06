@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_RUNTIME_H
+#define DT_IOP_DRAWLAYER_RUNTIME_H
 
 #include "iop/drawlayer/coordinates.h"
 #include "common/dtpthread.h"
@@ -369,3 +370,4 @@ void dt_drawlayer_runtime_manager_bind_piece(dt_drawlayer_runtime_manager_t *hea
                                              dt_drawlayer_runtime_manager_t **runtime_manager,
                                              dt_drawlayer_process_state_t **runtime_process,
                                              gboolean *runtime_display_pipe);
+#endif // DT_IOP_DRAWLAYER_RUNTIME_H

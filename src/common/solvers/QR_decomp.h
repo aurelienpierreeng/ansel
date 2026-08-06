@@ -16,6 +16,9 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_COMMON_SOLVERS_QR_DECOMP_H
+#define DT_COMMON_SOLVERS_QR_DECOMP_H
+
 /**
  * @file
  * @brief QR decomposition helpers used by the experimental SVD and polar decomposition code.
@@ -131,3 +134,5 @@ inline void QR_dec(double *A, double *Q, double *R, int rows, int cols)
     }
   }
 }
+
+#endif // DT_COMMON_SOLVERS_QR_DECOMP_H

@@ -52,6 +52,7 @@
 */
 
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "bauhaus/bauhaus.h"
 #include "common/atomic.h"
@@ -66,7 +67,14 @@
 #include "common/iop_profile.h"
 #include "common/imagebuf.h"
 #include "common/image_cache.h"
+#include "common/logging.h"
+#include "common/macros.h"
 #include "common/math.h"
+#include "common/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/openmp.h"
+#include "common/simd.h"
+#include "common/times.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "control/signal.h"

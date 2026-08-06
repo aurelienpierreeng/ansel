@@ -57,6 +57,12 @@
 */
 
 #include "common/darktable.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "common/mem_alloc.h"
+#include "common/openmp.h"
+#include "common/target_clones.h"
+#include "common/paths.h"
 #include "control/conf.h"
 #include "bauhaus/bauhaus.h"
 #include "common/imagebuf.h"

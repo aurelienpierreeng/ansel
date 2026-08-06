@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_PREFERENCES_H
+#define DT_GUI_PREFERENCES_H
 
 /** shows the preferences dialog and blocks until it's closed. */
 void dt_gui_preferences_show();
@@ -46,6 +47,8 @@ void dt_gui_preferences_string_reset(GtkWidget *widget);
 
 /** update enum widget to the current preference value. */
 void dt_gui_preferences_enum_update(GtkWidget *widget);
+
+#endif // DT_GUI_PREFERENCES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

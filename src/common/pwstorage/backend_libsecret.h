@@ -18,7 +18,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_PWSTORAGE_BACKEND_LIBSECRET_H
+#define DT_COMMON_PWSTORAGE_BACKEND_LIBSECRET_H
 
 #include <glib.h>
 
@@ -62,6 +63,8 @@ gboolean dt_pwstorage_libsecret_set(const backend_libsecret_context_t *context, 
  * @return table List of (key,value) pairs
  */
 GHashTable *dt_pwstorage_libsecret_get(const backend_libsecret_context_t *context, const gchar *slot);
+
+#endif // DT_COMMON_PWSTORAGE_BACKEND_LIBSECRET_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

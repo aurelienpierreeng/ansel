@@ -49,6 +49,7 @@
 #include "common/file_location.h"
 #include "config.h"              // for GETTEXT_PACKAGE, etc
 #include "control/conf.h"        // for dt_conf_get_bool
+#include "common/utility.h"
 
 #ifdef __APPLE__
 #include "osx/osx.h"

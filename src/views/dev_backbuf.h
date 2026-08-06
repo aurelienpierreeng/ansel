@@ -13,7 +13,8 @@
     GNU General Public License for more details.
 */
 
-#pragma once
+#ifndef DT_VIEWS_DEV_BACKBUF_H
+#define DT_VIEWS_DEV_BACKBUF_H
 
 #include <cairo.h>
 #include <glib.h>
@@ -90,3 +91,4 @@ void dt_dev_draw_iso12646_border(cairo_t *cr, double width, double height, int b
  * corner when dt_colorspaces_get_global()->mode is not DT_PROFILE_NORMAL; a
  * no-op otherwise. */
 void dt_dev_draw_profile_mode_label(cairo_t *cri, int height);
+#endif // DT_VIEWS_DEV_BACKBUF_H

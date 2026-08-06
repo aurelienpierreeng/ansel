@@ -22,10 +22,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_CALCULATOR_H
+#define DT_COMMON_CALCULATOR_H
 
 /** solve the mathematical expression in formula, the only allowed variable is 'x' */
 float dt_calculator_solve(const float x, const char *formula);
+
+#endif // DT_COMMON_CALCULATOR_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

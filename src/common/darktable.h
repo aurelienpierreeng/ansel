@@ -58,7 +58,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DARKTABLE_H
+#define DT_COMMON_DARKTABLE_H
 
 
 // just to be sure. the build system should set this for us already:
@@ -82,62 +83,35 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "common/database.h"
-#include "common/fp_mode.h"
-#include "common/dtpthread.h"
-#include "common/utility.h"
 
-/* Low-level modular libs: darktable.h is the top-level orchestrator and only
- * INHERITS them. New low-level code should include the specific lib it needs
- * instead of this header, which additionally drags the whole application
- * (database, GTK, signals, the darktable_t global) into the translation unit. */
-#include "common/macros.h"
-#include "common/openmp.h"
-#include "common/target_clones.h"
-#include "common/mem_alloc.h"
-#include "common/simd.h"
-#include "common/hash.h"
-#include "common/logging.h"
-#include "common/times.h"
-#include "common/glib_utils.h"
-#include "common/module_versioning.h"
-#include "common/paths.h"
+/* Only what the DECLARATIONS below actually need. darktable.h used to carry a large
+ * umbrella of includes for the benefit of its consumers; that is what welded the whole
+ * application into every translation unit. A file needing dt_print(), dt_alloc_align()
+ * or DT_MODULE() must include common/logging.h, common/mem_alloc.h or
+ * common/module_versioning.h itself. */
+#include "common/dtpthread.h"   // dt_pthread_mutex_t / rwlock members of darktable_t
+#include "common/sys_resources.h" // dt_sys_resources_t member of darktable_t
+#include "control/signal.h"     // DT_SIGNAL_COUNT sizes the unmuted_signal_dbg array
 
-/* Win32 API surface (windows.h/psapi) plus the #undef of the legacy `near`/`interface`
- * macros windows.h defines. The orchestrator carries it because app-level TUs
- * (darktable.c, main.c) call Win32 memory/file APIs directly. Low-level code must NOT
- * rely on inheriting this: identifiers colliding with those macros are renamed at the
- * source instead. */
+#include <glib.h>
+#include <json-glib/json-glib.h>
+#include <stdint.h>
+
 #if defined _WIN32
+/* windows.h/psapi, plus the #undef of the legacy `near`/`interface` macros it defines.
+ * The orchestrator carries it because app-level TUs (darktable.c, main.c) call Win32
+ * APIs directly. Low-level code must NOT rely on inheriting this: identifiers colliding
+ * with those macros are renamed at the source instead. */
 #include "win/win.h"
 #endif
 
-#ifdef _WIN32
-#include "win/getrusage.h"
-#else
-#include <sys/resource.h>
-#endif
-#include <stdint.h>
-#include <glib.h>
-#include <glib/gstdio.h>
-#include <glib/gi18n.h>
-#include <inttypes.h>
-#include <json-glib/json-glib.h>
-#include <math.h>
-#include <sqlite3.h>
-#include <stdio.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-
 #ifndef _RELEASE
+/* poison.h #pragma-poisons malloc/fopen/... so they cannot be used unqualified. It
+ * MUST come after every system header that legitimately declares them -- glib/gstdio.h
+ * is included here for exactly that reason, not for the benefit of consumers. */
+#include <glib/gstdio.h>
 #include "common/poison.h"
 #endif
-
-#include "common/usermanual_url.h"
-
-// for signal debugging symbols
-#include "control/signal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -151,17 +125,7 @@ extern "C" {
 #define DT_PERF_INFOSIZE 4096
 
 
-/** Stable, anonymous identifier for the current process/run (a random UUID
- * generated once). Sent to both crash reporting (Sentry) and usage analytics
- * (PostHog) so the same session can be correlated across the two without being
- * double-counted. Not tied to the user or machine. */
-const char *dt_session_id(void);
-
-/** Stable, anonymous per-installation identifier (a random UUID persisted in
- * conf). Used as the Sentry user id and the PostHog distinct_id so the same
- * installation/user can be de-duplicated across both systems. Not tied to the
- * machine or any account. */
-const char *dt_install_id(void);
+/* dt_session_id() / dt_install_id() moved to common/anonymous_ids.h */
 
 #ifdef __cplusplus
 }
@@ -191,14 +155,6 @@ struct dt_undo_t;
 struct dt_colorspaces_t;
 struct dt_l10n_t;
 
-typedef struct dt_sys_resources_t
-{
-  size_t total_memory;          // All RAM on system
-  size_t mipmap_memory;         // RAM allocated to mipmap cache
-  size_t headroom_memory;       // RAM left to OS & other Apps
-  size_t pixelpipe_memory;      // RAM used by the pixelpipe cache (approx.)
-  size_t pressure_floor_memory; // System-wide available RAM under which we shed caches
-} dt_sys_resources_t;
 
 typedef struct darktable_t
 {
@@ -291,64 +247,15 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 void dt_cleanup();
 
 
-// Number of workers, on top of reserved workers (1 for main preview, 1 for thumbnail in darkroom)
-// This is currently set to 2, so 4 workers total, without user config.
-// Workers will process a queue of jobs that they share together (except for reserved ones). 
-// It is useless to use more than 2 workers
-// since those jobs very often lock some mutex that prevents concurrent running.
-// All jobs finding an idle worker will "start" immediately, as far as the OS knows from outside the program,
-// but may do nothing internally except for waiting a mutex locked by another worker/thread.
-// In that situation, we loose the ability to flush the queue, since jobs are "running".
-// So it's better to have few workers with long queues, rather
-// than many workers, to be able to control queued jobs.
-int dt_worker_threads();
-
-// Get the remaining memory available for pipeline allocations,
-// once we subtracted caches memory and headroom from system memory
-size_t dt_get_available_mem();
-
-// Get the maximum size for the whole mipmap cache
-size_t dt_get_mipmap_mem();
-
-// Get the total memory (bytes) the process budgets against: physical RAM, capped by
-// a container/cgroup limit and the host_memory_limit config. Set once at startup by
-// dt_configure_runtime_performance(), never mutated afterwards.
-size_t dt_get_total_mem(void);
-
-// Probe the system for currently-available (free + reclaimable) physical RAM, in bytes.
-// This is a live system-wide measurement, unrelated to our internal budgets: it shrinks
-// when OTHER applications allocate memory. On Linux it also honors a cgroup v2 memory
-// limit (containers, Flatpak, systemd slices) when one is set. Returns 0 when the
-// platform gives us no way to know — callers must treat 0 as "no information", not as
-// "out of memory".
-// The value is cached for a few tens of milliseconds (the probe reads several /proc and
-// /sys files), so it may lag reality by that much.
-size_t dt_get_system_available_mem(void);
-
-// Drop the cached probe value so the next dt_get_system_available_mem() re-reads the OS.
-// For callers that just changed the situation themselves (freeing caches) and need the
-// resulting number to be ground truth rather than a pre-change snapshot.
-void dt_invalidate_system_available_mem(void);
-
-// System-wide available RAM floor (bytes) under which caches must be shed to
-// keep the OS and other applications breathing, regardless of anselrc budgets.
-// See dt_configure_runtime_performance() for how it is derived.
-size_t dt_get_memory_pressure_floor(void);
+/* Memory budgets and dt_worker_threads() moved to common/sys_resources.h */
 
 
-int dt_capabilities_check(char *capability);
-void dt_capabilities_add(char *capability);
-void dt_capabilities_remove(char *capability);
-void dt_capabilities_cleanup();
+/* dt_capabilities_* moved to common/capabilities.h */
 
 
 /** \brief check if file is a supported image */
 gboolean dt_supported_image(const gchar *filename);
 
-
-void dt_print_mem_usage();
-
-void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean init_gui);
 
 // helper function which loads whatever image_to_load points to: single image files or whole directories
 // it tells you if it was a single image or a directory in single_image (when it's not NULL)
@@ -361,6 +268,8 @@ int dt_load_from_string(const gchar *image_to_load, gboolean open_image_in_dr, g
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_DARKTABLE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

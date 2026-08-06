@@ -20,7 +20,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_IMAGEIO_J2K_H
+#define DT_COMMON_IMAGEIO_J2K_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
@@ -29,6 +30,8 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
 
 /** reads the color profile attached to the image */
 int dt_imageio_j2k_read_profile(const char *filename, uint8_t **out);
+
+#endif // DT_COMMON_IMAGEIO_J2K_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

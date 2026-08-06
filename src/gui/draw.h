@@ -36,7 +36,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_DRAW_H
+#define DT_GUI_DRAW_H
 
 /** some common drawing routines. */
 
@@ -971,6 +972,8 @@ static inline GdkPixbuf *dt_draw_get_pixbuf_from_cairo(DTGTKCairoPaintIconFunc p
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_GUI_DRAW_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

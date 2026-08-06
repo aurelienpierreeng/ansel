@@ -23,12 +23,15 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_PREFERENCES_DIALOGS_H
+#define DT_GUI_PREFERENCES_DIALOGS_H
 
 GtkWidget *dt_prefs_init_dialog_collect(GtkWidget *dialog);
 GtkWidget *dt_prefs_init_dialog_recentcollect(GtkWidget *dialog);
 GtkWidget *dt_prefs_init_dialog_import(GtkWidget *dialog);
 GtkWidget *dt_prefs_init_dialog_tagging(GtkWidget *dialog);
+
+#endif // DT_GUI_PREFERENCES_DIALOGS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

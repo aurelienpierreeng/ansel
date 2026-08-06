@@ -27,7 +27,8 @@
  * (dt_masks_cow_touch).
  */
 
-#pragma once
+#ifndef DT_DEVELOP_MASKS_MASKS_HISTORY_H
+#define DT_DEVELOP_MASKS_MASKS_HISTORY_H
 
 /* Deliberately does NOT include develop/masks.h: that header includes this one at
  * its bottom (dt_masks_form_t must be complete first), so including it back formed
@@ -71,3 +72,4 @@ GList *dt_masks_snapshot_current_forms(struct dt_develop_t *dev, gboolean reset_
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_DEVELOP_MASKS_MASKS_HISTORY_H

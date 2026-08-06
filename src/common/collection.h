@@ -43,7 +43,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_COLLECTION_H
+#define DT_COMMON_COLLECTION_H
 
 #include <glib.h>
 #include <glib/gi18n.h>
@@ -289,6 +290,8 @@ void dt_collection_memory_update();
 void dt_selection_to_culling_mode();
 /** restore initial collection and selection when exiting culling mode */
 void dt_culling_mode_to_selection();
+
+#endif // DT_COMMON_COLLECTION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

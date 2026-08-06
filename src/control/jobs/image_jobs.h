@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_JOBS_IMAGE_JOBS_H
+#define DT_CONTROL_JOBS_IMAGE_JOBS_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
@@ -31,6 +32,8 @@
 #include <inttypes.h>
 
 dt_job_t *dt_image_import_job_create(uint32_t filmid, const char *filename);
+
+#endif // DT_CONTROL_JOBS_IMAGE_JOBS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

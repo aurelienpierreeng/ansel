@@ -50,7 +50,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_LAPLACIAN_H
+#define DT_IOP_HIGHLIGHTS_LAPLACIAN_H
 
 // Guided-laplacian (2021 a-trous) highlight reconstruction, CPU + OpenCL.
 // Public API of this highlights mode (a compiled TU); internals are static in the .c.
@@ -86,3 +87,4 @@ cl_int process_laplacian_passthrough_cl(struct dt_iop_module_t *self, const dt_d
                                         const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                         const dt_aligned_pixel_t clips);
 #endif // HAVE_OPENCL
+#endif // DT_IOP_HIGHLIGHTS_LAPLACIAN_H

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_DEVELOP_PIXELPIPE_CPU_H
+#define DT_DEVELOP_PIXELPIPE_CPU_H
 
 #include "develop/pixelpipe_process.h"
 
@@ -7,3 +8,4 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
                              dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
                              gboolean *cache_output,
                              dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry);
+#endif // DT_DEVELOP_PIXELPIPE_CPU_H

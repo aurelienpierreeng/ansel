@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_MEM_ALLOC_H
+#define DT_COMMON_MEM_ALLOC_H
 
 /* Cacheline-aligned memory: alignment constants/attributes and the dt_alloc/dt_free
  * family. Self-contained on purpose: low-level compute units include this instead of
@@ -168,6 +169,8 @@ static inline void memset_zero(void *const buffer, size_t size)
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_MEM_ALLOC_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

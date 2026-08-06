@@ -34,6 +34,7 @@
 #include "bauhaus/bauhaus.h"
 #include "control/conf.h"
 #include "common/darktable.h"
+#include "common/utility.h"
 #include "develop/imageop_gui.h"
 #include "dtgtk/button.h"
 #include "gui/guides.h"

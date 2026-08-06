@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_ILLUMINANTS_H
+#define DT_COMMON_ILLUMINANTS_H
 
 #include "common/chromatic_adaptation.h"
 #include "common/image.h"
@@ -581,6 +582,9 @@ __OMP_PARALLEL_FOR__(reduction(pairmin:min_radius))
 
   return min_radius.temperature;
 }
+
+#endif // DT_COMMON_ILLUMINANTS_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

@@ -53,6 +53,8 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/history_actions.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "common/styles.h"
 #include "common/undo.h"
 #include "control/control.h"

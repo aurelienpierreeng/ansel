@@ -25,7 +25,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_MATRICES_H
+#define DT_COMMON_MATRICES_H
 
 #include "common/math.h"
 
@@ -204,7 +205,7 @@ static inline void dot_product(const dt_aligned_pixel_t v_in, const dt_colormatr
   for(size_t i = 0; i < 3; ++i) v_out[i] = scalar_product(v_in, M[i]);
 }
 
-
+#endif // DT_COMMON_MATRICES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

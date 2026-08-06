@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_SELFTESTS_H
+#define DT_IOP_HIGHLIGHTS_SELFTESTS_H
 
 // CPU/GPU parity self-tests of the harmonic OpenCL port (each vs a CPU replica).
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
@@ -108,3 +109,4 @@ void _region_guided_filter_cl_selftest(const int devid, void *gd_void, const dt_
 // difference. Runs once per process.
 void _knee_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe_t *pipe);
 #endif
+#endif // DT_IOP_HIGHLIGHTS_SELFTESTS_H

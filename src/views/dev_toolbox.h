@@ -13,7 +13,8 @@
     GNU General Public License for more details.
 */
 
-#pragma once
+#ifndef DT_VIEWS_DEV_TOOLBOX_H
+#define DT_VIEWS_DEV_TOOLBOX_H
 
 #include <stddef.h>
 
@@ -112,3 +113,4 @@ void dt_dev_toolbox_popover_set_preshow(GtkWidget *popover, void (*preshow)(gpoi
  * it to look a button's popover back up (e.g. a "focus this popover"
  * accelerator). */
 #define DT_DEV_TOOLBOX_POPOVER_KEY "dt-dev-toolbox-popover"
+#endif // DT_VIEWS_DEV_TOOLBOX_H

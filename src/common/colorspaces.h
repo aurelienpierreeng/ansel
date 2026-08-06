@@ -37,7 +37,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_COLORSPACES_H
+#define DT_COMMON_COLORSPACES_H
 
 #include "common/matrices.h"
 #include "common/simd.h"
@@ -388,6 +389,8 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_COLORSPACES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

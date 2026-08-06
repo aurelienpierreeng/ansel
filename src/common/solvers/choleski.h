@@ -23,6 +23,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_COMMON_SOLVERS_CHOLESKI_H
+#define DT_COMMON_SOLVERS_CHOLESKI_H
+
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <math.h>
@@ -434,6 +437,7 @@ error:
   return err;
 }
 
+#endif // DT_COMMON_SOLVERS_CHOLESKI_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

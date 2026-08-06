@@ -24,7 +24,8 @@
 #include "osx/osx.h"
 #endif
 
-#pragma once
+#ifndef DT_GUI_ACTIONS_MENU_H
+#define DT_GUI_ACTIONS_MENU_H
 
 typedef enum dt_menu_icon_t
 {
@@ -233,3 +234,4 @@ cb##__accel (GtkAccelGroup      *group,                                   \
 }
 
 #define GET_ACCEL_WRAPPER(cb) cb##__accel
+#endif // DT_GUI_ACTIONS_MENU_H

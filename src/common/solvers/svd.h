@@ -31,7 +31,8 @@
  * shipped with XLISP-STAT 2.1, itself credited to Luke Tierney and David Betz.
  */
 
-#pragma once
+#ifndef DT_COMMON_SOLVERS_SVD_H
+#define DT_COMMON_SOLVERS_SVD_H
 
 #include <math.h>
 #include <stdio.h>
@@ -354,6 +355,8 @@ static inline int dsvd(
   dt_free(rv1);
   return 1;
 }
+
+#endif // DT_COMMON_SOLVERS_SVD_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

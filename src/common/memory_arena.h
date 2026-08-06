@@ -16,7 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_MEMORY_ARENA_H
+#define DT_COMMON_MEMORY_ARENA_H
 
 #include "common/dtpthread.h"
 #include <glib.h>
@@ -73,3 +74,4 @@ int dt_cache_arena_init(dt_cache_arena_t *a, size_t total_size);
 void dt_cache_arena_cleanup(dt_cache_arena_t *a);
 
 gboolean dt_cache_arena_ptr_in(const dt_cache_arena_t *a, const void *ptr);
+#endif // DT_COMMON_MEMORY_ARENA_H

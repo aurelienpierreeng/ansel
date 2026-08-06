@@ -23,12 +23,15 @@
     Copyright 2004-2008 by Shawn Freeman, Udi Fuchs
 */
 
-#pragma once
+#ifndef DT_COMMON_CURL_TOOLS_H
+#define DT_COMMON_CURL_TOOLS_H
 
 #include "curl/curl.h"
 
 /* reset connection and set initial setup */
 void dt_curl_init(CURL *curl, gboolean verbose);
+
+#endif // DT_COMMON_CURL_TOOLS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

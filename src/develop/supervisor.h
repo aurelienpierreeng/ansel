@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_SUPERVISOR_H
+#define DT_DEVELOP_SUPERVISOR_H
 
 #include <glib.h>
 #include <stdint.h>
@@ -310,3 +311,4 @@ gchar *dt_supervisor_describe(uint64_t hash);
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_DEVELOP_SUPERVISOR_H

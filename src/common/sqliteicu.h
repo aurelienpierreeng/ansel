@@ -16,6 +16,9 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#ifndef DT_COMMON_SQLITEICU_H
+#define DT_COMMON_SQLITEICU_H
 /*
 ** 2008 May 26
 **
@@ -42,6 +45,9 @@ int sqlite3IcuInit(sqlite3 *db);
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif  /* __cplusplus */
+
+#endif // DT_COMMON_SQLITEICU_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

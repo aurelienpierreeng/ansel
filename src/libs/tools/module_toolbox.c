@@ -25,6 +25,8 @@
 */
 
 #include "common/darktable.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "control/signal.h"
 #include "dtgtk/button.h"
 #include "gui/gtk.h"

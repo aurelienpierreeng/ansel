@@ -32,7 +32,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_EXIF_H
+#define DT_COMMON_EXIF_H
 
 #include "common/colorspaces.h"
 #include "common/image.h"
@@ -134,6 +135,8 @@ void dt_exif_get_datetime_taken(const uint8_t *data, size_t size, char *datetime
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_EXIF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

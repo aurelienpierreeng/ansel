@@ -18,7 +18,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_SSE_H
+#define DT_COMMON_SSE_H
 
 #include <xmmintrin.h>
 
@@ -144,6 +145,8 @@ static inline float _mm_vectorGetByIndex( __m128 V, unsigned int i)
   converter.v = V;
   return converter.a[i];
 }
+
+#endif // DT_COMMON_SSE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

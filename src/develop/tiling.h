@@ -25,7 +25,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_TILING_H
+#define DT_DEVELOP_TILING_H
 
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -87,6 +88,8 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_TILING_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

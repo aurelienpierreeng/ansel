@@ -27,7 +27,8 @@
  *  see the main() function in pdf.c to see an example how to use this.
  */
 
-#pragma once
+#ifndef DT_COMMON_PDF_H
+#define DT_COMMON_PDF_H
 
 #include <glib.h>
 #include <glib/gi18n.h>
@@ -128,6 +129,8 @@ void dt_pdf_finish(dt_pdf_t *pdf, dt_pdf_page_t **pages, int n_pages);
 // general helpers
 int dt_pdf_parse_length(const char *str, float *length);
 int dt_pdf_parse_paper_size(const char *str, float *width, float *height);
+
+#endif // DT_COMMON_PDF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

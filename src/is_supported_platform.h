@@ -22,7 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IS_SUPPORTED_PLATFORM_H
+#define DT_IS_SUPPORTED_PLATFORM_H
 
 // WARNING: do not #include anything in here!
 
@@ -64,6 +65,8 @@
 #if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ < 8
 #error "Unfortunately we only work on the 64-bit architectures amd64, ARMv8-A and PPC64."
 #endif
+
+#endif // DT_IS_SUPPORTED_PLATFORM_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

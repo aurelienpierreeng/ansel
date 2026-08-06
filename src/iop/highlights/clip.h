@@ -50,7 +50,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_CLIP_H
+#define DT_IOP_HIGHLIGHTS_CLIP_H
 
 // Simple highlight-clip and the raw-clip visualization mode.
 // Public API of this highlights mode (a compiled TU); internals are static in the .c.
@@ -64,3 +65,4 @@ void process_clip(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, 
 void process_visualize(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
                        const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out, const uint32_t filters,
                        dt_iop_highlights_data_t *data);
+#endif // DT_IOP_HIGHLIGHTS_CLIP_H

@@ -20,6 +20,9 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef DT_COMMON_RGB_NORMS_H
+#define DT_COMMON_RGB_NORMS_H
+
 #include "common/iop_profile.h"
 
  typedef enum dt_iop_rgb_norms_t
@@ -72,6 +75,8 @@ static inline float dt_rgb_norm(const float *in, const int norm, const dt_iop_or
   }
   else return (in[0] + in[1] + in[2]) / 3.0f;
 }
+
+#endif // DT_COMMON_RGB_NORMS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

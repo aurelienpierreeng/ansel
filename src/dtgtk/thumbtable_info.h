@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DTGTK_THUMBTABLE_INFO_H
+#define DT_DTGTK_THUMBTABLE_INFO_H
 
 #include "common/image.h"
 #include "common/image_cache.h"
@@ -54,6 +55,8 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DTGTK_THUMBTABLE_INFO_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

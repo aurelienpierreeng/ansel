@@ -16,4 +16,9 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_DTGTK_PREVIEW_WINDOW_H
+#define DT_DTGTK_PREVIEW_WINDOW_H
+
 void dt_preview_window_spawn(const int32_t imgid);
+
+#endif // DT_DTGTK_PREVIEW_WINDOW_H

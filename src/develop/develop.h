@@ -43,7 +43,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_DEVELOP_H
+#define DT_DEVELOP_DEVELOP_H
 
 #include <cairo.h>
 #include <glib.h>
@@ -875,6 +876,8 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_DEVELOP_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

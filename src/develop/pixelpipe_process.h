@@ -2,7 +2,8 @@
     Private pixelpipe process API shared by pixelpipe_hb.c, pixelpipe_cpu.c and pixelpipe_gpu.c.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_PIXELPIPE_PROCESS_H
+#define DT_DEVELOP_PIXELPIPE_PROCESS_H
 
 #include "common/macros.h"
 #include "develop/pixelpipe_hb.h"
@@ -83,3 +84,4 @@ dt_pixelpipe_blend_transform_t dt_dev_pixelpipe_transform_for_blend(const dt_iop
 
 gboolean dt_dev_pixelpipe_cache_gpu_device_buffer(const dt_dev_pixelpipe_t *pipe,
                                                   const dt_pixel_cache_entry_t *cache_entry);
+#endif // DT_DEVELOP_PIXELPIPE_PROCESS_H

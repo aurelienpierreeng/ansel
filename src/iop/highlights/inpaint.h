@@ -50,7 +50,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_INPAINT_H
+#define DT_IOP_HIGHLIGHTS_INPAINT_H
 
 // Colour-inpainting highlight reconstruction (a1ex's magiclantern idea), Bayer + X-Trans.
 // Public API of this highlights mode (a compiled TU); internals are static in the .c. It scans the
@@ -69,3 +70,4 @@ void process_inpaint_bayer(const void *const ivoid, void *const ovoid, const dt_
 void process_inpaint_xtrans(const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                             const dt_iop_roi_t *const roi_out, const float clips[4],
                             const uint8_t (*const xtrans)[6]);
+#endif // DT_IOP_HIGHLIGHTS_INPAINT_H

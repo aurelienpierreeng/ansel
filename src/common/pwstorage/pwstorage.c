@@ -39,6 +39,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/capabilities.h"
 #endif
 
 #include "pwstorage.h"

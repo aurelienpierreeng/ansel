@@ -28,7 +28,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_GUIDED_FILTER_H
+#define DT_COMMON_GUIDED_FILTER_H
 
 #include "common/macros.h"
 #include "common/opencl.h"
@@ -112,6 +113,9 @@ int guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, int width, 
                      float sqrt_eps, float guide_weight, float min, float max);
 
 #endif
+
+#endif // DT_COMMON_GUIDED_FILTER_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

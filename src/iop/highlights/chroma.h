@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_CHROMA_H
+#define DT_IOP_HIGHLIGHTS_CHROMA_H
 
 // Anisotropic (divergence-form) chrominance-coherence stage (CPU + OpenCL).
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
@@ -108,3 +109,4 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
                        const int region_w, const int region_h, const float radius, const float floor_gate,
                        const float solid_color, const dt_dev_pixelpipe_t *pipe);
 #endif
+#endif // DT_IOP_HIGHLIGHTS_CHROMA_H

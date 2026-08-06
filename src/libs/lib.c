@@ -57,8 +57,11 @@
 #include "common/telemetry.h"
 #include "gui/gdkkeys.h"
 #include "libs/lib.h"
+#include "common/database.h"
 #include "common/debug.h"
+#include "common/macros.h"
 #include "common/module.h"
+#include "common/module_versioning.h" // dt_version(), used by libs/lib_api.h below
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -75,6 +78,7 @@
 #endif
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sqlite3.h>
 
 static sqlite3_stmt *_lib_presets_remove_stmt = NULL;
 static sqlite3_stmt *_lib_presets_add_stmt = NULL;

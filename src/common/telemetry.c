@@ -18,10 +18,13 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/anonymous_ids.h"
+#include "common/sys_resources.h"
 #endif
 
 #include "common/telemetry.h"
 #include "common/darktable.h"
+#include "common/times.h"
 
 #ifdef HAVE_TELEMETRY
 

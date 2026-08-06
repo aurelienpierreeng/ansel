@@ -26,7 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_OPENCL_DRIVERS_BLACKLIST_H
+#define DT_COMMON_OPENCL_DRIVERS_BLACKLIST_H
 
 #include <string.h>
 
@@ -60,6 +61,8 @@ static gboolean dt_opencl_check_driver_blacklist(const char *device_version)
   dt_free(device);
   return FALSE;
 }
+
+#endif // DT_COMMON_OPENCL_DRIVERS_BLACKLIST_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

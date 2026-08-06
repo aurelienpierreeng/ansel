@@ -101,6 +101,9 @@
 #include "osx/osx.h"
 #endif
 
+#include "common/hash.h"
+#include "common/module_versioning.h"
+
 #include <assert.h>
 #include <gmodule.h>
 #include <math.h>

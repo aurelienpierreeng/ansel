@@ -8,7 +8,8 @@
     (at your option) any later version.
 */
 
-#pragma once
+#ifndef DT_COMMON_FOLDER_SURVEY_H
+#define DT_COMMON_FOLDER_SURVEY_H
 
 #include <glib.h>
 
@@ -109,3 +110,4 @@ void dt_folder_survey_stop();
  * @brief Release folder survey state after control workers have stopped.
  */
 void dt_folder_survey_cleanup();
+#endif // DT_COMMON_FOLDER_SURVEY_H

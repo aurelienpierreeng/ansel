@@ -19,7 +19,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_INTROSPECTION_H
+#define DT_COMMON_INTROSPECTION_H
 
 #include <inttypes.h>
 #include <glib.h>
@@ -343,6 +344,8 @@ static inline gboolean dt_introspection_get_enum_value(dt_introspection_field_t 
 
   return FALSE;
 }
+
+#endif // DT_COMMON_INTROSPECTION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

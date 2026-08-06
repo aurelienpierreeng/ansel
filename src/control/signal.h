@@ -39,7 +39,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_SIGNAL_H
+#define DT_CONTROL_SIGNAL_H
 
 #include <glib-object.h>
 #include <stdint.h>
@@ -420,6 +421,8 @@ void dt_control_signal_unblock_by_func(const struct dt_control_signal_t *ctlsig,
   } while (0)
 
 G_END_DECLS
+
+#endif // DT_CONTROL_SIGNAL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

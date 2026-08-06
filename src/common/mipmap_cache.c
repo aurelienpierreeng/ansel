@@ -47,6 +47,7 @@
 */
 
 #include "common/mipmap_cache.h"
+#include "common/sys_resources.h"
 #include "common/darktable.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/debug.h"

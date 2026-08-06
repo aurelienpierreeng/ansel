@@ -18,6 +18,9 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_DEVELOP_NOISE_GENERATOR_H
+#define DT_DEVELOP_NOISE_GENERATOR_H
+
 #include "develop/openmp_maths.h"
 
 
@@ -229,6 +232,9 @@ static inline void dt_noise_generator_simd(const dt_noise_distribution_t distrib
     }
   }
 }
+
+#endif // DT_DEVELOP_NOISE_GENERATOR_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

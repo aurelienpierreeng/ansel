@@ -26,7 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_SELECTION_H
+#define DT_COMMON_SELECTION_H
 
 #include <glib.h>
 #include <inttypes.h>
@@ -113,6 +114,8 @@ gboolean dt_selection_is_id_selected(struct dt_selection_t *selection, int32_t i
 void dt_selection_reload_from_database_real(struct dt_selection_t *selection);
 
 #define dt_selection_reload_from_database(selection) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_SQL, dt_selection_reload_from_database_real, (selection))
+
+#endif // DT_COMMON_SELECTION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

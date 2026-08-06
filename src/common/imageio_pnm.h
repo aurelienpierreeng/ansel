@@ -20,12 +20,15 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_IMAGEIO_PNM_H
+#define DT_COMMON_IMAGEIO_PNM_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
 
 dt_imageio_retval_t dt_imageio_open_pnm(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
+
+#endif // DT_COMMON_IMAGEIO_PNM_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

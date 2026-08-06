@@ -52,7 +52,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/colorspaces.h"
+#include "common/capabilities.h"
+#include "common/sys_resources.h"
 #include "common/darktable.h"
+#include "common/hash.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "common/imageio.h"

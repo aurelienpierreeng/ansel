@@ -38,7 +38,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_BAUHAUS_BAUHAUS_H
+#define DT_BAUHAUS_BAUHAUS_H
 
 #include "common/colorlabels.h"
 #include "common/gui_module_api.h"
@@ -468,6 +469,8 @@ void dt_bauhaus_set_use_default_callback(GtkWidget *widget);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_BAUHAUS_BAUHAUS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -21,7 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_CHROMATIC_ADAPTATION_H
+#define DT_COMMON_CHROMATIC_ADAPTATION_H
 
 #include "common/math.h"
 #include "common/colorspaces_inline_conversions.h"
@@ -370,6 +371,9 @@ static inline void convert_D50_to_LMS(const dt_adaptation_t adaptation, dt_align
     }
   }
 }
+
+#endif // DT_COMMON_CHROMATIC_ADAPTATION_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

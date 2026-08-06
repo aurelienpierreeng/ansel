@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_HISTORY_ACTIONS_H
+#define DT_COMMON_HISTORY_ACTIONS_H
 
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -60,3 +61,4 @@ int dt_history_load_and_apply_on_list(gchar *filename, const GList *list);
 /** load a dt file and applies to specified image */
 int dt_history_load_and_apply(const int32_t imgid, gchar *filename, int history_only);
 int dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only);
+#endif // DT_COMMON_HISTORY_ACTIONS_H

@@ -57,7 +57,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_IMAGE_H
+#define DT_COMMON_IMAGE_H
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -698,6 +699,8 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_IMAGE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -19,6 +19,9 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_COMMON_DEPRECATIONS_H
+#define DT_COMMON_DEPRECATIONS_H
+
 #include <string.h>
 
 /**
@@ -52,3 +55,5 @@ int dt_deprecated(const char *op)
   }
   return 0;
 }
+
+#endif // DT_COMMON_DEPRECATIONS_H

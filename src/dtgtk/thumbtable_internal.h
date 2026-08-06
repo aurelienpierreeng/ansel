@@ -28,7 +28,8 @@
  * it; external callers keep using dtgtk/thumbtable.h.
  */
 
-#pragma once
+#ifndef DT_DTGTK_THUMBTABLE_INTERNAL_H
+#define DT_DTGTK_THUMBTABLE_INTERNAL_H
 
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/thumbnail.h"
@@ -164,3 +165,4 @@ int dt_thumbtable_find_rowid_from_imgid(dt_thumbtable_t *table, const int32_t im
 // Keyboard navigation step inside the collection (used by the grid frontend's handle_key).
 void dt_thumbtable_move_in_grid(dt_thumbtable_t *table, GdkEventKey *event,
                                 dt_thumbtable_direction_t direction, int origin_imgid);
+#endif // DT_DTGTK_THUMBTABLE_INTERNAL_H

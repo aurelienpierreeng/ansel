@@ -38,7 +38,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_CONF_H
+#define DT_CONTROL_CONF_H
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -156,6 +157,8 @@ gchar* dt_conf_expand_default_dir(const char *dir);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_CONTROL_CONF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

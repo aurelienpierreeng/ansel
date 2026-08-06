@@ -156,6 +156,20 @@ leaf headers. `common/` is now the bottom of the graph in fact and not only in i
 top fan-in headers (`macros.h`, `mem_alloc.h`, `openmp.h`, `simd.h`, `dtpthread.h`) each drag
 in **zero or one** other project header.
 
+## `#pragma once` is gone
+
+All 259 headers that used `#pragma once` now carry an explicit
+`#ifndef DT_<PATH>_H` guard, plus 17 headers that had **no guard at all** (a latent
+double-inclusion bug each). Converted mechanically with `tools/pragma_once_to_guards.py`;
+`--verify` re-runs the check and exits non-zero if one reappears. The rule and its rationale
+are in `CLAUDE.md`.
+
+Five headers deliberately keep no guard and no includes of their own — `common/module_api.h`,
+`views/view_api.h`, `libs/lib_api.h`, `imageio/{format,storage}/imageio_*_api.h`. They are
+X-macro headers: re-included several times per translation unit with different macros defined,
+and expanded *inside struct bodies* to generate members. An `#include` at the top of one of them
+lands inside those structs — a mistake worth making exactly once.
+
 ## What is left
 
 1. **The `common/ → develop/` (124) and `common/ → control/` (104) inversions.** Now explicit.

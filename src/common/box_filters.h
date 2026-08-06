@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_BOX_FILTERS_H
+#define DT_COMMON_BOX_FILTERS_H
 
 #include <stdlib.h>
 
@@ -47,6 +48,8 @@ int dt_box_mean_vertical(float *const buf, const size_t height, const size_t wid
 
 int dt_box_min(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
 int dt_box_max(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
+
+#endif // DT_COMMON_BOX_FILTERS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

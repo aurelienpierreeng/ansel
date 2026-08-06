@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_SIMD_H
+#define DT_COMMON_SIMD_H
 
 /* SIMD pixel primitives: the 4-float aligned pixel type, its vector helpers and the
  * per-channel loop macros. Self-contained on purpose: low-level compute units include
@@ -221,6 +222,8 @@ static inline void copy_pixel(float *const __restrict__ out, const float *const 
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_SIMD_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

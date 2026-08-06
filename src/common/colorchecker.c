@@ -36,6 +36,7 @@
 #include <glib.h>
 #include <inttypes.h>
 #include <lcms2.h>
+#include "common/logging.h"
 
 // In some environments ERROR is already defined, ie: WIN32
 #if defined(ERROR)

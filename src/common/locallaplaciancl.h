@@ -19,7 +19,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_LOCALLAPLACIANCL_H
+#define DT_COMMON_LOCALLAPLACIANCL_H
 #ifdef HAVE_OPENCL
 typedef struct dt_local_laplacian_cl_global_t
 {
@@ -67,6 +68,9 @@ dt_local_laplacian_cl_t *dt_local_laplacian_init_cl(
 void dt_local_laplacian_free_cl(dt_local_laplacian_cl_t *g);
 cl_int dt_local_laplacian_cl(dt_local_laplacian_cl_t *g, cl_mem input, cl_mem output);
 #endif
+
+#endif // DT_COMMON_LOCALLAPLACIANCL_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

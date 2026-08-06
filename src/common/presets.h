@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_PRESETS_H
+#define DT_COMMON_PRESETS_H
 
 #include <glib.h>
 
@@ -36,6 +37,9 @@ int dt_presets_import_from_file(const char *preset_path);
 
 // does the module support autoapplying presets ?
 gboolean dt_presets_module_can_autoapply(const gchar *operation);
+
+#endif // DT_COMMON_PRESETS_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

@@ -16,7 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_LUT_VIEWER_H
+#define DT_COMMON_LUT_VIEWER_H
 
 #include "common/dtpthread.h"
 #include "common/gui_module_api.h"
@@ -74,3 +75,4 @@ void dt_lut_viewer_set_control_nodes(dt_lut_viewer_t *viewer,
  * Queue a redraw of the drawing area after the cache has been invalidated.
  */
 void dt_lut_viewer_queue_draw(dt_lut_viewer_t *viewer);
+#endif // DT_COMMON_LUT_VIEWER_H

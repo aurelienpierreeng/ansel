@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_NN_MODEL_H
+#define DT_COMMON_NN_MODEL_H
 
 #include <stddef.h>
 
@@ -167,3 +168,4 @@ int dt_nn_unet_apply_stage_cl(const dt_nn_model_t *model, int stage, dt_nn_cl_t 
                               cl_mem dev_out, int width, int height);
 
 #endif
+#endif // DT_COMMON_NN_MODEL_H

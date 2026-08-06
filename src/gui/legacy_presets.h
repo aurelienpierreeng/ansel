@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_LEGACY_PRESETS_H
+#define DT_GUI_LEGACY_PRESETS_H
 
 #include "common/database.h"
 
@@ -1133,6 +1134,8 @@ static void dt_legacy_presets_create(const struct dt_database_t *db)
   for(int i = 0; i < num_sql_lines; i++)
     sqlite3_exec(dt_database_get(db), sql_lines[i], NULL, NULL, NULL);
 }
+
+#endif // DT_GUI_LEGACY_PRESETS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

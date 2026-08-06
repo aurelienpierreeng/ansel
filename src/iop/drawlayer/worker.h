@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_WORKER_H
+#define DT_IOP_DRAWLAYER_WORKER_H
 
 #include "iop/iop_api.h"
 #include "iop/drawlayer/paint.h"
@@ -89,3 +90,4 @@ gboolean dt_drawlayer_worker_enqueue_input(dt_drawlayer_worker_t *worker,
 /** @brief Enqueue stroke-end marker carrying final raw input sample. */
 gboolean dt_drawlayer_worker_enqueue_stroke_end(dt_drawlayer_worker_t *worker,
                                                 const dt_drawlayer_paint_raw_input_t *input);
+#endif // DT_IOP_DRAWLAYER_WORKER_H

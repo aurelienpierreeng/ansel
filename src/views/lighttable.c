@@ -82,6 +82,7 @@
 #include "common/grouping.h"
 #include "common/history.h"
 #include "common/image_cache.h"
+#include "common/module_versioning.h"
 #include "common/ratings.h"
 #include "common/selection.h"
 #include "common/undo.h"

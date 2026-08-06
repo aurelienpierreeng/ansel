@@ -22,13 +22,16 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_STYLES_H
+#define DT_GUI_STYLES_H
 
 /** shows a dialog for creating a new style */
 void dt_gui_styles_dialog_new(int32_t imgid);
 
 /** shows a dialog for editing existing style */
 void dt_gui_styles_dialog_edit(const char *name);
+
+#endif // DT_GUI_STYLES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

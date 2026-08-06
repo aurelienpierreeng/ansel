@@ -27,7 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_IMAGEOP_MATH_H
+#define DT_DEVELOP_IMAGEOP_MATH_H
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -230,6 +231,8 @@ static inline int fcol(const int row, const int col, const uint32_t filters, con
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_IMAGEOP_MATH_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

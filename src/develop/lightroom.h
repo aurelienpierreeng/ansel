@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_LIGHTROOM_H
+#define DT_DEVELOP_LIGHTROOM_H
 
 #include "develop/imageop.h"
 
@@ -35,6 +36,8 @@ gboolean dt_lightroom_import(int32_t imgid, struct dt_develop_t *dev, gboolean i
 
 /* returns NULL if not found, or g_strdup'ed pathname, the caller should g_free it. */
 char *dt_get_lightroom_xmp(int32_t imgid);
+
+#endif // DT_DEVELOP_LIGHTROOM_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

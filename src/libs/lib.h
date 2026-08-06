@@ -36,7 +36,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_LIBS_LIB_H
+#define DT_LIBS_LIB_H
 
 #include "common/iop_profile.h"
 #include "common/gui_module_api.h"
@@ -164,6 +165,8 @@ gboolean dt_handle_dialog_enter(GtkWidget *widget, GdkEventKey *event, gpointer 
 /** TODO: figure out where to handle that */
 GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpointer callback, gpointer data,
                                 const gchar *tooltip, guint accel_key, GdkModifierType mods);
+
+#endif // DT_LIBS_LIB_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

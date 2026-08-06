@@ -26,7 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_COLOR_PICKER_H
+#define DT_COMMON_COLOR_PICKER_H
 
 #include "common/iop_profile.h"
 
@@ -40,6 +41,8 @@ void dt_color_picker_helper(const struct dt_iop_buffer_dsc_t *dsc, const float *
                             const enum dt_iop_colorspace_type_t image_cst,
                             const enum dt_iop_colorspace_type_t picker_cst,
                             const dt_iop_order_iccprofile_info_t *const profile);
+
+#endif // DT_COMMON_COLOR_PICKER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

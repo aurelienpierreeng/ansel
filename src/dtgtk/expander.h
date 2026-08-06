@@ -19,7 +19,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DTGTK_EXPANDER_H
+#define DT_DTGTK_EXPANDER_H
 
 #include <glib-object.h>
 #include <gtk/gtk.h>
@@ -65,6 +66,8 @@ gboolean dtgtk_expander_get_expanded(GtkDarktableExpander *expander);
 GtkWidget *dtgtk_expander_new(GtkWidget *header, GtkWidget *body);
 
 G_END_DECLS
+
+#endif // DT_DTGTK_EXPANDER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -26,6 +26,7 @@
 #include "common/history_merge_gui.h"
 #include "common/styles.h"
 #include "common/undo.h"
+#include "common/usermanual_url.h"
 #include "develop/dev_history.h"
 #include "gui/accelerators.h"
 #include "control/conf.h"

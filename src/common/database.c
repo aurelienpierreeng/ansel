@@ -81,6 +81,7 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include "common/utility.h"
 
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!

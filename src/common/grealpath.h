@@ -25,7 +25,8 @@
  According to http://git.gnome.org/browse/gobject-introspection/tree/COPYING it's licensed under the LGPLv2+.
 */
 
-#pragma once
+#ifndef DT_COMMON_GREALPATH_H
+#define DT_COMMON_GREALPATH_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -91,6 +92,8 @@ static inline gchar *g_realpath(const char *path)
   return buffer;
 #endif
 }
+
+#endif // DT_COMMON_GREALPATH_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

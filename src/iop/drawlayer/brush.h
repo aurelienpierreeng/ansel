@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_BRUSH_H
+#define DT_IOP_DRAWLAYER_BRUSH_H
 
 #include <glib.h>
 #include <stdint.h>
@@ -149,3 +150,4 @@ gboolean dt_drawlayer_brush_rasterize_dab_rgbaf(const dt_drawlayer_brush_dab_t *
                                                  float center_x, float center_y,
                                                  float opacity_multiplier,
                                                  const float background_rgb[3]);
+#endif // DT_IOP_DRAWLAYER_BRUSH_H

@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_DEVELOP_DEV_PIXELPIPE_H
+#define DT_DEVELOP_DEV_PIXELPIPE_H
 
 #include <inttypes.h>
 #include <stdint.h>
@@ -274,3 +275,4 @@ gboolean dt_dev_pixelpipe_is_pipeline_valid(struct dt_dev_pixelpipe_t *pipe);
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_DEVELOP_DEV_PIXELPIPE_H

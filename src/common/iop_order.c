@@ -50,6 +50,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "common/utility.h"
 
 #define DT_IOP_ORDER_VERSION 5
 

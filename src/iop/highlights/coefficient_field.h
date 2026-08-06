@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_COEFFICIENT_FIELD_H
+#define DT_IOP_HIGHLIGHTS_COEFFICIENT_FIELD_H
 
 // Coefficient-field colour-line transport + HF-refit stage (CPU + OpenCL).
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
@@ -114,3 +115,4 @@ cl_int _hf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
                     const int region_h, const float cf_sigma, const float cf_fmin, const float cf_binv);
 
 #endif // HAVE_OPENCL
+#endif // DT_IOP_HIGHLIGHTS_COEFFICIENT_FIELD_H

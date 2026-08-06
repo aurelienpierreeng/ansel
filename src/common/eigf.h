@@ -19,7 +19,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_EIGF_H
+#define DT_COMMON_EIGF_H
 
 #include "common/fast_guided_filter.h"
 #include "develop/pixelpipe_cache_alloc.h"
@@ -342,6 +343,9 @@ error:
   dt_pixelpipe_cache_free_align(mask);
   return err;
 }
+
+#endif // DT_COMMON_EIGF_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

@@ -24,10 +24,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_FOCUS_PEAKING_H
+#define DT_COMMON_FOCUS_PEAKING_H
 
 int dt_focuspeaking(cairo_t *cr, uint8_t *const restrict image, const int buf_width,
                     const int buf_height, gboolean draw, float *x, float *y);
+
+#endif // DT_COMMON_FOCUS_PEAKING_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

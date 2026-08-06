@@ -27,7 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DATABASE_H
+#define DT_COMMON_DATABASE_H
 
 #include <glib.h>
 #include <sqlite3.h>
@@ -85,6 +86,8 @@ void dt_database_end_transaction_batch(const struct dt_database_t *db);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_DATABASE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
