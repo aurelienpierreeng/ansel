@@ -229,3 +229,51 @@ The cycle check is the important one: every cycle in this codebase was created b
 convenience `#include` at the bottom of a header, and each one silently inflated the closure
 of every file that touched the subsystem. Catching the first one costs a grep; catching the
 sixth costs a week.
+
+---
+
+## 6. Two independent checks, added after the first sweep
+
+### clang-tidy `misc-include-cleaner` corroborates, and covers what our tool cannot
+
+`clang-tidy -p build --checks="-*,misc-include-cleaner"` is an AST-based implementation of
+the same idea, written by someone else. Run over the files this branch changed it flagged
+**none of the ~690 removals as wrong** — useful corroboration, since a text heuristic
+agreeing with itself proves nothing.
+
+It also found **122 further unused includes**, concentrated in a category
+`tools/include_unused.py` never looks at: **system `<...>` headers** (`strings.h`,
+`config.h`, `memory.h`, `unistd.h`). Our tool only resolves project `"..."` includes. That
+is the next easy tranche.
+
+Its other findings are IWYU-strict "no header providing X is directly included" —
+`int32_t`, `GList`, `IS_NULL_PTR`, `PATH_MAX` used without including the header that
+declares them. That is exactly the rule this series applies to project headers, extended
+to system ones; worth doing, but it is a large mechanical change of its own.
+
+### `tools/symbol_coupling.py` — inversions as a work list, not a number
+
+`include_graph.py` measures what a file *reads*. This measures what actually *links*: per
+object file, defined vs undefined symbols, resolved to the module that defines them. An
+include edge can be an accident; a symbol edge is a call that exists at runtime.
+
+Measured on the current build (721 objects, 7488 exported symbols, 1023 cross-module edges):
+
+| inversion | symbols |
+|---|---:|
+| `common → develop` | 95 |
+| `common → control` | 53 |
+| `gui → develop` | 45 |
+| `common → gui` | 36 |
+| `dtgtk → develop` | 12 |
+| `common → bauhaus` | 12 |
+
+`--edge common control` lists the 53, and they are overwhelmingly **`dt_conf_*`**
+(`dt_conf_get_bool`, `dt_conf_get_int`, `dt_conf_key_exists`, `dt_conf_init`, ...). That
+settles the question §4 left open: the `common/ → control/` edge is dominated by
+configuration reads, so **moving `conf` into `common/` erases most of it** — confirmed at
+the linker level, not inferred from include counts.
+
+`common → develop` (95) is the larger and harder one: base-layer code reaching into
+pipeline and iop internals. That is genuine design work, not a relocation.
+
