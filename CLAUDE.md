@@ -26,6 +26,22 @@ Enforcement: `python3 tools/pragma_once_to_guards.py --verify` exits non-zero if
 `#pragma once` reappears. `python3 tools/include_graph.py --summary` must keep reporting
 `cycles 0`.
 
+**`common/darktable.h` has no guard either — it has a TRIPWIRE.** It ends up included by
+at most one path per translation unit (an entry point calling `dt_init()`, or a subsystem
+that owns one of the `darktable` members), so a *second* inclusion is never legitimate: it
+means the header arrived through a path nobody intended. A guard would absorb that
+silently; instead the file `#error`s on re-inclusion. If you hit it, do not add a guard —
+find who included it and give that code the specific lib it needs (`common/logging.h`,
+`common/mem_alloc.h`, …) or the accessor for the global it wants (`dt_dev_get_global()`,
+`dt_control_get_global()`, …). **No header may include it**; as of this writing none does.
+
+**When auditing this, grep for `darktable\.h"`, not `common/darktable.h"`.** Includes can be
+written relative to the including file's own directory, so `src/common/*` spells it
+`#include "darktable.h"`. Three files (and one *header*, `common/colorchecker.h`) hid behind
+that spelling through several audits of this series; the compile-time tripwire is what
+finally caught them. `tools/include_graph.py` resolves both spellings and was right when the
+ad-hoc greps were wrong.
+
 **Five headers deliberately have NO guard at all** and must never get one:
 `common/module_api.h`, `views/view_api.h`, `libs/lib_api.h`,
 `imageio/format/imageio_format_api.h`, `imageio/storage/imageio_storage_api.h`. They are

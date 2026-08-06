@@ -170,6 +170,19 @@ X-macro headers: re-included several times per translation unit with different m
 and expanded *inside struct bodies* to generate members. An `#include` at the top of one of them
 lands inside those structs — a mistake worth making exactly once.
 
+## `common/darktable.h` carries a tripwire, not a guard
+
+It has no include guard. A second inclusion in one translation unit is never legitimate
+for the orchestrator, so instead of absorbing it silently the header `#error`s. That is
+the same principle as banning `#pragma once`, taken to its end for the one header where
+"included once" is a real invariant rather than a convenience.
+
+Installing it immediately caught what several greps had missed: `common/colorchecker.h`
+— a *header* — plus `colorchecker.c` and `sqliteicu.c` were including it as
+`#include "darktable.h"` (relative to `src/common/`), not `#include "common/darktable.h"`.
+All three were vestigial and are gone. Audit this with `grep -r 'darktable\.h"'`; the
+qualified spelling alone under-reports.
+
 ## What is left
 
 1. **The `common/ → develop/` (124) and `common/ → control/` (104) inversions.** Now explicit.

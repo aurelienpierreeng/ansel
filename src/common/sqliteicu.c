@@ -46,7 +46,6 @@
 **     provide case-independent matching.
 */
 
-#include "darktable.h"
 
 #if !defined(SQLITE_CORE)                  \
  || defined(SQLITE_ENABLE_ICU)             \

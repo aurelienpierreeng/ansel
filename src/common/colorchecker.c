@@ -30,7 +30,6 @@
 
 #include "colorchecker.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "darktable.h"
 #include "file_location.h"
 
 #include <glib.h>

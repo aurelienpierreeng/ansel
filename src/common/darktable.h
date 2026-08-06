@@ -58,7 +58,24 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_DARKTABLE_H
+/* NO include guard -- a TRIPWIRE instead, on purpose.
+ *
+ * A guard makes a second inclusion a silent no-op. For the application orchestrator
+ * that is exactly the wrong behaviour: this header must be included at most ONCE, by a
+ * translation unit that genuinely needs the application (an entry point calling
+ * dt_init(), or a subsystem that owns one of the `darktable` members). Reaching it a
+ * second time means it arrived through a path nobody intended -- most likely a header
+ * started including it again, which is what this whole series removed.
+ *
+ * So: fail loudly rather than absorb it. If you hit this #error, do not add a guard --
+ * find who included it and give that code the specific lib it actually needs
+ * (common/logging.h, common/mem_alloc.h, ... ) or the accessor for the global it wants
+ * (dt_dev_get_global(), dt_control_get_global(), ...). See doc/include-graph.md.
+ *
+ * NEVER include this header from another header. As of this commit, zero headers do. */
+#ifdef DT_COMMON_DARKTABLE_H
+#error "common/darktable.h included more than once in this translation unit -- see the comment at the top of that file"
+#endif
 #define DT_COMMON_DARKTABLE_H
 
 
@@ -260,7 +277,6 @@ int dt_load_from_string(const gchar *image_to_load, gboolean open_image_in_dr, g
 }
 #endif
 
-#endif // DT_COMMON_DARKTABLE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

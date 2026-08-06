@@ -25,7 +25,6 @@
 #ifndef DT_COMMON_COLORCHECKER_H
 #define DT_COMMON_COLORCHECKER_H
 
-#include "darktable.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/simd.h"
