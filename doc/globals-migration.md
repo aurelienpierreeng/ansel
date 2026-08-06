@@ -93,7 +93,7 @@ avoids double churn:
    final answer; threading them would add parameters carrying a value that cannot differ.
 2. **Process-wide buses with no per-call context** (`signals`, and `conf` already) — an
    accessor/free-function API is the final answer for the same reason.
-3. **Service handles with a natural carrier** (`pixelpipe_cache` → `pipe`, `bauhaus` →
+3. **Service handles with a natural carrier** (`bauhaus` →
    `dt_gui_module_t`, `develop` → `self->dev`) — these are the real injection targets, and for
    them the interim accessor is *churn*: convert them straight to the carrier instead.
 
@@ -127,7 +127,7 @@ not from where a convenient carrier happens to be threaded.
 | 4 | `db` | B (`dt_database_get_global()` collapses 353 sites) | 58 | 423 | medium (transaction rwlock semantics untouched) |
 | 5 | `bauhaus` | A via `dt_gui_module_t` + theme getters | 68 | 356 | low |
 | 6 | `signals` | B interim + context-sourced macros where `self` exists | 90 | 424 | medium (worker-thread raises) |
-| 7 | `pixelpipe_cache` | A via `pipe` | 30 | 299 | med-high (worker hot path) |
+| ~~7~~ | `pixelpipe_cache` | **DONE via accessor** — Strategy A rejected, see the §3b correction (cross-pipe singleton) | 28 | 282 | — |
 | 8 | `develop` outside `iop/` | A (darkroom keeps its refs: it IS a dispatch point) | 45 | ~630 | medium |
 | 9 | `opencl` | C + `dt_opencl_is_available()` for the `inited` flag | 21 | 211 | medium |
 | 10 | `color_profiles` | C (display/softproof settings + xprofile_lock move together) | 18 | 124 | med-high |
