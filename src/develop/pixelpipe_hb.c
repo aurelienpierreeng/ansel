@@ -225,16 +225,16 @@ static int _abort_module_shutdown_cleanup(dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 
   if(!IS_NULL_PTR(input_entry))
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-    dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+    dt_dev_pixelpipe_cache_auto_destroy_apply(dt_pixelpipe_cache_get_global(), input_entry);
   }
 
   if(!IS_NULL_PTR(output_entry))
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
 
-    if(dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, output_entry))
-      dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
+    if(dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, output_entry))
+      dt_dev_pixelpipe_cache_flag_auto_destroy(dt_pixelpipe_cache_get_global(), output_entry);
   }
 
   if(output) *output = NULL;
@@ -518,7 +518,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
    * objects this pipe produced on the device it last ran on -- but only that
    * device, so we never touch cache entries another, still-running pipe holds
    * on a different (or the same) OpenCL device. */
-  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(darktable.pixelpipe_cache, pipe->last_devid);
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), pipe->last_devid);
 
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
@@ -528,16 +528,16 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   {
     /* Backbuffer ownership belongs to the pipeline, not its GUI consumers. Once the pipe itself is
      * torn down, always release that keepalive ref and invalidate the published backbuffer metadata. */
-    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, old_backbuf_hash);
+    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), old_backbuf_hash);
 
     if(pipe->no_cache)
     {
       dt_pixel_cache_entry_t *old_backbuf_entry
-          = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, old_backbuf_hash);
+          = dt_dev_pixelpipe_cache_get_entry(dt_pixelpipe_cache_get_global(), old_backbuf_hash);
       if(old_backbuf_entry)
       {
-        dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, old_backbuf_entry);
-        dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, old_backbuf_entry);
+        dt_dev_pixelpipe_cache_flag_auto_destroy(dt_pixelpipe_cache_get_global(), old_backbuf_entry);
+        dt_dev_pixelpipe_cache_auto_destroy_apply(dt_pixelpipe_cache_get_global(), old_backbuf_entry);
       }
     }
   }
@@ -557,7 +557,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   for(guint k = 0; k < pipe->raster_mask_hashes->len; k++)
   {
     const uint64_t hash = g_array_index(pipe->raster_mask_hashes, uint64_t, k);
-    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, hash);
+    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), hash);
   }
   g_array_free(pipe->raster_mask_hashes, TRUE);
   pipe->raster_mask_hashes = NULL;
@@ -882,7 +882,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
    * evicted between peek() and ref_count_entry(). */
   const gboolean exact_output_cache_hit
       = !_bypass_cache(pipe, piece)
-        && dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, hash,
+        && dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_pixelpipe_cache_get_global(), hash,
                                                     &existing_output, &existing_cache)
         && !IS_NULL_PTR(existing_output);
 
@@ -896,7 +896,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   else if(existing_cache)
   {
     /* ref_entry_by_hash succeeded but data was NULL (device-only entry); undo the ref. */
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, existing_cache);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, existing_cache);
   }
 
   // 3) now recurse through the pipeline.
@@ -919,9 +919,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   // lookup, because exact-hit intentionally rejects auto-destroy entries while the parent recursion
   // still needs to consume transient outputs in the same run.
   dt_pixel_cache_entry_t *input_entry
-      = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, input_hash);
+      = dt_dev_pixelpipe_cache_get_entry(dt_pixelpipe_cache_get_global(), input_hash);
   if(!IS_NULL_PTR(previous_piece))
-    input_entry = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, input_hash);
+    input_entry = dt_dev_pixelpipe_cache_get_entry(dt_pixelpipe_cache_get_global(), input_hash);
   if(IS_NULL_PTR(input_entry) && !(module->flags() & IOP_FLAGS_TAKE_NO_INPUT))
   {
     dt_print(DT_DEBUG_DEV,
@@ -998,7 +998,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
    * place just because the pipe is running in realtime. */
   const gboolean allow_rekey_reuse = !(dt_get_debug_flags() & DT_DEBUG_NOCACHE_REUSE) && !cache_ram_output;
   const dt_dev_pixelpipe_cache_writable_status_t acquire_status
-      = dt_dev_pixelpipe_cache_get_writable(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
+      = dt_dev_pixelpipe_cache_get_writable(dt_pixelpipe_cache_get_global(), hash, bufsize, name, pipe->type,
                                             cache_ram_output, allow_rekey_reuse,
                                             &piece->cache_entry,
                                             &output, &output_entry);
@@ -1010,22 +1010,22 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
      * publisher has not finished exposing the exact-hit payload yet. Wait for that
      * publication to complete instead of aborting the whole recursion. */
     dt_pixel_cache_entry_t *exact_entry
-        = dt_dev_pixelpipe_cache_get_entry(darktable.pixelpipe_cache, hash);
+        = dt_dev_pixelpipe_cache_get_entry(dt_pixelpipe_cache_get_global(), hash);
     if(IS_NULL_PTR(exact_entry))
     {
       dt_print(DT_DEBUG_DEV,
                "[pipeline] module=%s exact-hit entry missing output_hash=%" PRIu64 "\n",
                module->op, hash);
       if(input_entry)
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
       return 1;
     }
 
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, exact_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, exact_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, exact_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, exact_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, exact_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, exact_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, exact_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, exact_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, exact_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, exact_entry);
 
     dt_print(DT_DEBUG_DEV,
              "[pipeline] module=%s writable-exact-hit output_hash=%" PRIu64 " has_host_data=%d"
@@ -1044,7 +1044,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
     {
       void *restored = NULL;
       const gboolean restored_ok
-          = dt_dev_pixelpipe_cache_restore_host_payload(darktable.pixelpipe_cache, exact_entry, pipe->devid,
+          = dt_dev_pixelpipe_cache_restore_host_payload(dt_pixelpipe_cache_get_global(), exact_entry, pipe->devid,
                                                         &restored);
       dt_print(DT_DEBUG_DEV,
                "[pipeline] module=%s exact-hit was device-only, host materialize %s output_hash=%" PRIu64 "\n",
@@ -1055,7 +1055,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
                        dt_pixel_cache_entry_get_data(exact_entry), exact_entry, FALSE);
 
     if(input_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
     *out_hash = hash;
     *out_piece = piece;
     return 0;
@@ -1067,7 +1067,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
              " acquire_status=%d\n",
              module->op, hash, acquire_status);
     if(input_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
     return 1;
   }
   const gboolean new_entry = (acquire_status == DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED);
@@ -1141,17 +1141,17 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
     _trace_cache_owner(pipe, module, "error-cleanup", "output", hash, output, output_entry, FALSE);
     // Ensure we always release locks and cache references on error, otherwise cache eviction/GC will stall.
     _reset_piece_cache_entry(piece);
-    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
     if(input_entry)
     {
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-      dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+      dt_dev_pixelpipe_cache_auto_destroy_apply(dt_pixelpipe_cache_get_global(), input_entry);
     }
 
     // No point in keeping garbled output
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
-    if(dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, output_entry))
-      dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
+    if(dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, output_entry))
+      dt_dev_pixelpipe_cache_flag_auto_destroy(dt_pixelpipe_cache_get_global(), output_entry);
     return 1;
   }
 
@@ -1188,7 +1188,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   // otherwise thumbnail/export callers only see a missing exact-hit and fall back to invalid
   // placeholder pixels.
   if(_bypass_cache(pipe, piece) && !keep_final_output)
-    dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, output_entry);
+    dt_dev_pixelpipe_cache_flag_auto_destroy(dt_pixelpipe_cache_get_global(), output_entry);
 
   if(pipe->dev->gui_attached)
   {
@@ -1217,7 +1217,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   if(!IS_NULL_PTR(output_entry))
     output_entry->producer_node_key
         = dt_supervisor_node_key(pipe->type, module->op, module->multi_priority);
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
   
   KILL_SWITCH_AND_FLUSH_CACHE;
 
@@ -1225,16 +1225,16 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   _trace_cache_owner(pipe, module, "release", "input", input_hash, input, input_entry, FALSE);
   if(input_entry)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-    dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+    dt_dev_pixelpipe_cache_auto_destroy_apply(dt_pixelpipe_cache_get_global(), input_entry);
   }
 
   // Print min/max/Nan in debug mode only
   if((dt_get_debug_flags() & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && !IS_NULL_PTR(output))
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, output_entry);
     _print_nan_debug(pipe, cl_mem_output, output, &piece->roi_out, &piece->dsc_out, module);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
   }
 
   KILL_SWITCH_AND_FLUSH_CACHE;
@@ -1320,7 +1320,7 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
      || entry_hash == DT_PIXELPIPE_CACHE_HASH_INVALID
      || entry_hash != requested_hash)
   {
-    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe->backbuf));
+    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&pipe->backbuf));
     dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                        dt_dev_pixelpipe_get_history_hash(pipe));
     return;
@@ -1332,8 +1332,8 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
   const gboolean hash_changed = (dt_dev_backbuf_get_hash(&pipe->backbuf) != entry_hash);
   if(hash_changed)
   {
-    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe->backbuf));
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, entry);
+    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&pipe->backbuf));
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
   }
 
   int bpp = 0;
@@ -1400,7 +1400,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     dt_print_mem_usage();
   }
 
-  dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
+  dt_dev_pixelpipe_cache_print(dt_pixelpipe_cache_get_global());
 
   if(pipe->dev->gui_attached)
   {
@@ -1441,7 +1441,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 
       const uint64_t mask_hash = dt_dev_pixelpipe_raster_mask_hash(piece, mask_id);
       if(dt_dev_pixelpipe_cache_ref_entry_by_hash(
-             darktable.pixelpipe_cache, mask_hash, NULL, NULL))
+             dt_pixelpipe_cache_get_global(), mask_hash, NULL, NULL))
         g_array_append_val(pipe->raster_mask_hashes, mask_hash);
     }
   }
@@ -1449,7 +1449,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   for(guint k = 0; k < previous_raster_refs; k++)
   {
     const uint64_t hash = g_array_index(pipe->raster_mask_hashes, uint64_t, k);
-    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, hash);
+    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), hash);
   }
   if(previous_raster_refs > 0)
     g_array_remove_range(pipe->raster_mask_hashes, 0, previous_raster_refs);
@@ -1489,7 +1489,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   dt_pixel_cache_entry_t *entry = NULL;
   if(!_bypass_cache(pipe, requested_piece)
      && requested_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, requested_hash, &buf, &entry,
+     && dt_dev_pixelpipe_cache_peek(dt_pixelpipe_cache_get_global(), requested_hash, &buf, &entry,
                                     pipe->devid, NULL)
      && !IS_NULL_PTR(buf))
   {
@@ -1566,7 +1566,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
     }
 
     const int retained = dt_dev_pixelpipe_cache_invalidate_hashes(
-        darktable.pixelpipe_cache, invalidated_hashes, invalidated_count);
+        dt_pixelpipe_cache_get_global(), invalidated_hashes, invalidated_count);
     dt_print(DT_DEBUG_DEV,
              "[raster masks] invalidated %" G_GSIZE_FORMAT " cache states at retry from provider=%" PRIu64
              " retained=%d pipe=%s\n",
@@ -1657,14 +1657,14 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
       void *final_buf = NULL;
       if(!requested_backbuf)
       {
-        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);
+        dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), final_hash);
       }
-      else if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), &final_buf,
+      else if(dt_dev_pixelpipe_cache_peek(dt_pixelpipe_cache_get_global(), dt_dev_pixelpipe_get_hash(pipe), &final_buf,
                                           &final_entry, pipe->devid, NULL)
               && !IS_NULL_PTR(final_buf))
       {
         _update_backbuf_cache_reference(pipe, roi, final_entry);
-        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);
+        dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), final_hash);
       }
       else
       {
@@ -1673,7 +1673,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
                  " devid=%d err=%d\n",
                  dt_pixelpipe_get_pipe_name(pipe->type), dt_dev_pixelpipe_get_hash(pipe),
                  dt_dev_pixelpipe_get_history_hash(pipe), pipe->devid, err);
-        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, final_hash);
+        dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), final_hash);
       }
 
       // Note : the last output (backbuf) of the pixelpipe cache is internally locked
@@ -1696,7 +1696,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
   }
 
   // terminate
-  dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
+  dt_dev_pixelpipe_cache_print(dt_pixelpipe_cache_get_global());
 
   // If an intermediate module set that, be sure to reset it at the end
   pipe->flush_cache = FALSE;

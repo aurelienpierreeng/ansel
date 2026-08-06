@@ -468,7 +468,7 @@ void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
 
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
-  dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, -1);
+  dt_dev_pixelpipe_cache_flush(dt_pixelpipe_cache_get_global(), -1);
   if(dt_gui_widgets_suppressed() || IS_NULL_PTR(dev) || !dev->gui_attached) return;
   dt_dev_pixelpipe_rebuild_all(dev);
 }
@@ -737,7 +737,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
   // entry is reported as a miss, so the request below waits for the pipeline to publish a host copy
   // (modules whose output the GUI samples, e.g. initialscale, already cache to RAM).
   if(display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, display_hash, &buffer, &entry, -1, NULL)
+     && dt_dev_pixelpipe_cache_peek(dt_pixelpipe_cache_get_global(), display_hash, &buffer, &entry, -1, NULL)
      &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
     // These counters are only diagnostic; cache consumers should not wait for

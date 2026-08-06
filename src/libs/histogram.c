@@ -273,7 +273,7 @@ static void _clear_histogram_backbuf(dt_backbuf_t *backbuf)
 
   /* Global histogram backbuffers keep one structural ref on top of the module-output lifetime.
    * Clearing that published view therefore means releasing the extra GUI-side keepalive ref here. */
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(backbuf));
   dt_dev_set_backbuf(backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
 }
 
@@ -327,8 +327,8 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
   {
     /* The module output already owns its producer ref. Tagging it as a global histogram backbuffer
      * reserves one additional consumer ref so GUI readers only need `peek()` and read locks later. */
-    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, previous_hash);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, entry);
+    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), previous_hash);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
   }
 
   dt_dev_set_backbuf(backbuf, roi->width, roi->height, dsc->bpp, hash, DT_PIXELPIPE_CACHE_HASH_INVALID);
@@ -361,8 +361,8 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
                                       _histogram_restart_cache_wait, histogram_module))
     return FALSE;
 
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
 
   const float *histogram_input = input;
   float *transformed_input = NULL;
@@ -377,8 +377,8 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
 
     if(IS_NULL_PTR(transformed_input))
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
       return FALSE;
     }
 
@@ -396,8 +396,8 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
 
   _refresh_module_histogram(dev->preview_pipe, piece, histogram_input, module);
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
   dt_free_align(transformed_input);
 
   return TRUE;
@@ -975,7 +975,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
 
   dt_histogram_scope_buf_t oriented = _orient_scope_buf(data, backbuf, op);
 
@@ -983,7 +983,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   if(IS_NULL_PTR(bins))
   {
     if(oriented.owned) dt_free_align(oriented.data);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
     return;
   }
 
@@ -1010,7 +1010,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   }
 
   if(oriented.owned) dt_free_align(oriented.data);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
 
   uint32_t overall_histogram_max = _find_max_histogram(bins, 4 * HISTOGRAM_BINS);
 
@@ -1240,7 +1240,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
 
   dt_histogram_scope_buf_t oriented = _orient_scope_buf(data, backbuf, op);
 
@@ -1592,7 +1592,7 @@ error:;
   dt_pixelpipe_cache_free_align(bins);
   dt_pixelpipe_cache_free_align(image);
   if(oriented.owned) dt_free_align(oriented.data);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
 }
 
 static float _Luv_to_vectorscope_coord_zoom(const float value, const float zoom)
@@ -1750,7 +1750,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
 
   uint32_t *const restrict vectorscope = dt_pixelpipe_cache_alloc_align_cache(
       HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint32_t),
@@ -1910,7 +1910,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
 error:;
   dt_pixelpipe_cache_free_align(image);
   dt_pixelpipe_cache_free_align(vectorscope);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
 }
 
 gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int height)
@@ -2186,7 +2186,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
 
   const float *const pixel = data;
   dt_iop_buffer_dsc_t dsc = {
@@ -2252,7 +2252,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   }
   else
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
     return;
   }
 
@@ -2281,7 +2281,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
     dt_XYZ_to_Lab(XYZ, sample->lab[k]);
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
 }
 
 static void _pixelpipe_pick_samples(dt_lib_histogram_t *d)

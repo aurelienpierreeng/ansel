@@ -2013,8 +2013,8 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
     return FALSE;
   }
 
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
 
   const float point_preview[2] = { (float)g->cursor_pos_x, (float)g->cursor_pos_y };
   float point_image[2] = { point_preview[0], point_preview[1] };
@@ -2041,8 +2041,8 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   input_rgb[2] = input_rgbf[2];
   input_rgb[3] = 0.f;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
 
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, dev->preview_pipe);
   const dt_iop_order_iccprofile_info_t *const lut_profile = g->viewer_lut.lut_profile;

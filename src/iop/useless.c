@@ -393,21 +393,21 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        darktable.pixelpipe_cache, mask_hash, mask_size, "useless raster mask",
+        dt_pixelpipe_cache_get_global(), mask_hash, mask_size, "useless raster mask",
         pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
         dt_dev_pixelpipe_cache_wrlock_entry(
-            darktable.pixelpipe_cache, FALSE, mask_entry);
+            dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
         dt_dev_pixelpipe_cache_ref_count_entry(
-            darktable.pixelpipe_cache, FALSE, mask_entry);
+            dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
         if(created)
           dt_dev_pixelpipe_cache_remove(
-              darktable.pixelpipe_cache, TRUE, mask_entry);
+              dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
       }
       dt_pixelpipe_cache_free_align(mask);
       return 1;
@@ -417,7 +417,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
       memcpy(cache_data, mask, mask_size);
       dt_dev_pixelpipe_cache_wrlock_entry(
-          darktable.pixelpipe_cache, FALSE, mask_entry);
+          dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
     }
     dt_dev_pixelpipe_t *mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
     g_array_append_val(mutable_pipe->raster_mask_hashes, mask_hash);
