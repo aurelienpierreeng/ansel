@@ -38,7 +38,7 @@ LAYERS = [
     ('develop', 5),
     ('iop', 6), ('imageio', 6),
     ('libs', 7), ('views', 7), ('chart', 7),
-    ('cli', 8), ('generate-cache', 8), ('cltest', 8),
+    ('apps', 10),   # executables link the orchestrator, so they sit ABOVE it
     ('app', 9),                       # main.c, darktable.c/h -- directly in src/
 ]
 LAYER = dict(LAYERS)

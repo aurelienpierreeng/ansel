@@ -1,9 +1,9 @@
-add_executable(ansel-cmstest main.c ${CMAKE_CURRENT_BINARY_DIR}/../version_gen.c)
-target_include_directories(ansel-cmstest PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/..)
+add_executable(ansel-cmstest main.c ${CMAKE_CURRENT_BINARY_DIR}/../../version_gen.c)
+target_include_directories(ansel-cmstest PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/../..)
 
 # cmake implicitly sets GENERATED on the source file in the directory of the custom command
 # since this isn't the same directory we do have to manually set it
-set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/../version_gen.c PROPERTIES GENERATED TRUE)
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/../../version_gen.c PROPERTIES GENERATED TRUE)
 add_dependencies(ansel-cmstest generate_version)
 
 target_link_libraries(ansel-cmstest
