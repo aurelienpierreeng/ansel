@@ -58,7 +58,7 @@ static gboolean on_match_select(GtkEntryCompletion *widget, GtkTreeModel *model,
                                 gpointer user_data)
 {
   const char *trigger_char = (const char *)user_data;
-  const size_t trigger_char_len = strnlen(trigger_char, -1);
+  const size_t trigger_char_len = strlen(trigger_char);
 
   const gchar *varname;
   GtkEditable *e = (GtkEditable *)gtk_entry_completion_get_entry(widget);
@@ -111,7 +111,7 @@ static gboolean on_match_func(GtkEntryCompletion *completion, const gchar *key, 
 {
   gboolean ret = FALSE;
   const char *trigger_char = (const char *)user_data;
-  const size_t trigger_char_len = strnlen(trigger_char, -1);
+  const size_t trigger_char_len = strlen(trigger_char);
 
   GtkEditable *e = (GtkEditable *)gtk_entry_completion_get_entry(completion);
   gint cur_pos = gtk_editable_get_position(e); /* returns 1..* */

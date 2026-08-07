@@ -101,12 +101,15 @@ gboolean dt_database_show_error(struct dt_database_t *db)
         }
 
         else
-          dt_gui_show_standalone_yes_no_dialog
-            (_("Error"), g_markup_printf_escaped(
+        {
+          // The dialog copies the markup rather than taking ownership, so this is ours to free.
+          gchar *err_text = g_markup_printf_escaped(
               _("\nAt least one lock file could not be removed.\n"
                 "You may try to manually delete the files <i>data.db.lock</i> and <i>library.db.lock</i>\n"
-                "in folder <a href=\"file:///%s\">%s</a>.\n"), lck_dirname, lck_dirname),
-             _("Quit"), NULL);
+                "in folder <a href=\"file:///%s\">%s</a>.\n"), lck_dirname, lck_dirname);
+          dt_gui_show_standalone_yes_no_dialog(_("Error"), err_text, _("Quit"), NULL);
+          dt_free(err_text);
+        }
       }
     }
 

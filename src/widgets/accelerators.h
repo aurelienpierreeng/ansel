@@ -32,12 +32,6 @@
 #include <gtk/gtk.h>
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
-/* Shorthand for a darkroom-scoped action shortcut, resolved through this module's own
- * instance rather than through the application's GUI struct. */
-#define dt_accels_new_darkroom_action(a, b, c, d, e, f, g)                                    \
-  dt_accels_new_action_shortcut(dt_accels_get_global(), a, b,                                 \
-                                dt_accels_get_global()->darkroom_accels, c, d, e, f, FALSE, g)
-
 #endif
 
 #include "common/dtpthread.h"
@@ -414,6 +408,12 @@ typedef gchar *(*dt_accels_recent_get_handler_t)(int index);
 typedef void (*dt_accels_recent_set_handler_t)(int index, const char *value);
 void dt_accels_set_recent_handlers(dt_accels_recent_get_handler_t get,
                                    dt_accels_recent_set_handler_t set);
+
+/* Shorthand for a darkroom-scoped action shortcut, resolved through this module's own
+ * instance rather than through the application's GUI struct. */
+#define dt_accels_new_darkroom_action(a, b, c, d, e, f, g)                                    \
+  dt_accels_new_action_shortcut(dt_accels_get_global(), a, b,                                 \
+                                dt_accels_get_global()->darkroom_accels, c, d, e, f, FALSE, g)
 
 G_END_DECLS
 
