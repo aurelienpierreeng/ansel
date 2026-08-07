@@ -16,8 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_PRIVACY_CONSENT_H
-#define DT_COMMON_PRIVACY_CONSENT_H
+#ifndef DT_GUI_PRIVACY_CONSENT_H
+#define DT_GUI_PRIVACY_CONSENT_H
 
 #include <glib.h>
 
@@ -48,7 +48,7 @@ void dt_privacy_ask_consent(const gboolean have_gui);
 }
 #endif
 
-#endif // DT_COMMON_PRIVACY_CONSENT_H
+#endif // DT_GUI_PRIVACY_CONSENT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

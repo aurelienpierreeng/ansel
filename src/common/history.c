@@ -40,6 +40,7 @@
 */
 
 #include "common/database.h"
+#include "common/thumbnail_notify.h"
 #include "common/history.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
@@ -168,8 +169,7 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
   dt_tag_detach_by_string("darktable|changed", imgid, FALSE, FALSE);
 
   // signal that the mipmap need to be updated
-  dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, imgid, TRUE);
-  dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_filmstrip, imgid, TRUE);
+  dt_thumbnail_notify_image_changed(imgid, TRUE);
 
   if(undo)
   {

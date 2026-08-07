@@ -83,6 +83,8 @@
 #include "gui/dtgtk/expander.h"
 
 #include "gui/gtk.h"
+#include "common/thumbnail_notify.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "gui/splash.h"
 
 #include "common/conf.h"
@@ -1197,6 +1199,22 @@ static const char* _get_axis_name(int pos)
   return AXIS_NAMES[pos];
 }
 
+/* common/ announces that an image's thumbnail is stale; this turns that into the two
+ * widget refreshes. Registered at the end of dt_gui_gtk_init(), so headless runs never
+ * have a handler and the notification is a no-op there. */
+static void _gui_refresh_thumbnail(int32_t imgid, gboolean refresh_filmstrip)
+{
+  struct dt_ui_t *ui = dt_gui_get_ui();
+  if(IS_NULL_PTR(ui)) return;
+
+  dt_thumbtable_refresh_thumbnail(ui->thumbtable_lighttable, imgid, TRUE);
+
+  // Best-effort: refreshing the filmstrip spawns an export thread that competes with the
+  // realtime darkroom main preview, so darkroom write paths ask for it to be skipped.
+  if(refresh_filmstrip)
+    dt_thumbtable_refresh_thumbnail(ui->thumbtable_filmstrip, imgid, TRUE);
+}
+
 int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 {
   /* lets zero mem */
@@ -1381,6 +1399,10 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // for some reason this is needed on some systems to pick up the correctly themed cursor
   dt_control_change_cursor(GDK_LEFT_PTR);
   gui->mouse.effect_radius = DT_UI_SCALE_DEVICE(15.0f);
+
+  // Tell common/ how to repaint a stale thumbnail. The backend announces staleness and
+  // knows nothing about thumbtables; this is the only place the two are connected.
+  dt_thumbnail_notify_set_handler(_gui_refresh_thumbnail);
 
   return 0;
 }

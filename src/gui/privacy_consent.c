@@ -20,7 +20,7 @@
 #include "config.h"
 #endif
 
-#include "common/privacy_consent.h"
+#include "gui/privacy_consent.h"
 
 #if defined(HAVE_SENTRY) || defined(HAVE_TELEMETRY)
 
