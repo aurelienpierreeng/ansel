@@ -9,14 +9,14 @@ type, @ref dt_thumbtable_t, backs two visually and behaviourally different front
 - the **filmstrip** — the single-row, horizontally-scrolling strip shared by the darkroom, map and
   print views.
 
-Both are built from the same low-level thumbnail widget (@ref dt_thumbnail_t, `dtgtk/thumbnail.c`)
+Both are built from the same low-level thumbnail widget (@ref dt_thumbnail_t, `gui/dtgtk/thumbnail.c`)
 and share one engine, but their layout and scrolling are genuinely different. This page documents
 how the responsibilities are split so the shared parts stay shared and the divergent parts stay
 isolated.
 
 ## Why the split exists
 
-Historically all of this lived in one `dtgtk/thumbtable.c` with a `mode` field and ~35 inline
+Historically all of this lived in one `gui/dtgtk/thumbtable.c` with a `mode` field and ~35 inline
 `if(mode == FILEMANAGER / FILMSTRIP)` branches. That mode-sharing was a recurring source of bugs:
 a change for one consumer silently altered the other, and the two could not express the layout
 policies they actually needed. The most visible symptom was
@@ -30,12 +30,12 @@ The code is now an **engine + two frontends** connected by a **layout-ops vtable
 
 | File | Role |
 |------|------|
-| `dtgtk/thumbtable.h`          | Public API + the @ref dt_thumbtable_t struct (with an opaque `ops` pointer). This is the only header external callers include. |
-| `dtgtk/thumbtable_internal.h` | **Private** interface shared by the three thumbtable translation units: the @ref dt_thumbtable_layout_ops_t vtable typedef, the shared-static prototypes and the `CLAMP_ROW` / `IS_COLLECTION_EDGE` helpers. Not included by callers. |
-| `dtgtk/thumbtable.c`          | The **engine**: lifecycle, the collection LUT, the thumbnail hash, populate/resize, image refresh, drag-and-drop, selection, mouse-over dispatch, signal wiring, and the public API entry points that delegate to `ops`. |
-| `dtgtk/filemanager.c`         | The **FILEMANAGER** frontend: grid ops + the grid-only public API (`dt_thumbtable_set_zoom` / `dt_thumbtable_get_zoom` / `dt_thumbtable_offset_zoom` / `dt_thumbtable_apply_grid_configuration`). |
-| `dtgtk/filmstrip.c`           | The **FILMSTRIP** frontend: strip ops, backed by a GtkLayout scroll implementation. |
-| `dtgtk/thumbnail.{c,h}`       | The individual thumbnail widget. Shared, mode-agnostic, unchanged by the split. |
+| `gui/dtgtk/thumbtable.h`          | Public API + the @ref dt_thumbtable_t struct (with an opaque `ops` pointer). This is the only header external callers include. |
+| `gui/dtgtk/thumbtable_internal.h` | **Private** interface shared by the three thumbtable translation units: the @ref dt_thumbtable_layout_ops_t vtable typedef, the shared-static prototypes and the `CLAMP_ROW` / `IS_COLLECTION_EDGE` helpers. Not included by callers. |
+| `gui/dtgtk/thumbtable.c`          | The **engine**: lifecycle, the collection LUT, the thumbnail hash, populate/resize, image refresh, drag-and-drop, selection, mouse-over dispatch, signal wiring, and the public API entry points that delegate to `ops`. |
+| `gui/dtgtk/filemanager.c`         | The **FILEMANAGER** frontend: grid ops + the grid-only public API (`dt_thumbtable_set_zoom` / `dt_thumbtable_get_zoom` / `dt_thumbtable_offset_zoom` / `dt_thumbtable_apply_grid_configuration`). |
+| `gui/dtgtk/filmstrip.c`           | The **FILMSTRIP** frontend: strip ops, backed by a GtkLayout scroll implementation. |
+| `gui/dtgtk/thumbnail.{c,h}`       | The individual thumbnail widget. Shared, mode-agnostic, unchanged by the split. |
 
 \htmlonly
 <pre class="mermaid">

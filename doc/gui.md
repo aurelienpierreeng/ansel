@@ -219,7 +219,7 @@ dt_gui_set_pango_resolution(layout);                        // screen DPI
 /* ... set_text, update_layout, show_layout ... */
 ```
 
-Font *family/weight/style* therefore always come from CSS (the `GTK_STYLE_PROPERTY_FONT` of the widget's style context), never hardcoded — which keeps cairo-drawn text on the same theming path as everything else. The bauhaus text renderer (`src/bauhaus/bauhaus.c`) is the reference implementation; it additionally merges only the style fields of the CSS font while keeping its own resolved size.
+Font *family/weight/style* therefore always come from CSS (the `GTK_STYLE_PROPERTY_FONT` of the widget's style context), never hardcoded — which keeps cairo-drawn text on the same theming path as everything else. The bauhaus text renderer (`src/gui/bauhaus.c`) is the reference implementation; it additionally merges only the style fields of the CSS font while keeping its own resolved size.
 
 ### GtkTextView: background, border and padding
 

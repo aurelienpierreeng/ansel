@@ -104,7 +104,7 @@ geometry, not module API. That struct moved to `develop/format.h` beside `dt_iop
 module sees exactly what it saw before; **zero module churn**.
 
 Same reasoning rehomed `dt_sfence()` / `dt_omploop_sfence()` from `develop/imageop.h` to
-`common/openmp.h`: memory-fence helpers with no module API involvement, already used by
+`system/openmp.h`: memory-fence helpers with no module API involvement, already used by
 `common/interpolation.c` and `common/iop_profile.c`.
 
 ## Directory graph
@@ -196,6 +196,6 @@ qualified spelling alone under-reports.
    `conf.c`, `imageop.c`, `exif.cc`); and `dbus.c` for `dt_load_from_string()`. No header
    includes it at all. The rest of the globals census is in `doc/globals-migration.md`.
 4. **Dead code the build never compiles**, found while sweeping: `src/iop/useless.c` (commented
-   out of `iop/CMakeLists.txt`) and `src/chart/{main,colorchart,pfm,tonecurve}.c` (only
+   out of `iop/CMakeLists.txt`) and `src/apps/ansel-chart/{main,colorchart,pfm,tonecurve}.c` (only
    `chart/common.c` is built). `useless.c` and `chart/{main,colorchart}.c` do not compile at all
    any more, independently of this series — verified by building pristine `HEAD` copies.
