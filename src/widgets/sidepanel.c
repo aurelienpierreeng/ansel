@@ -21,8 +21,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/dtgtk/sidepanel.h"
-#include "common/conf.h"
+#include "widgets/sidepanel.h"
 
 #include <gtk/gtk.h>
 
@@ -40,6 +39,13 @@ static void dtgtk_side_panel_get_preferred_width(GtkWidget *widget, gint *minimu
   *minimum_size = *natural_size = class->width;
 }
 
+static int _min_panel_width = 350;
+
+void dtgtk_side_panel_set_min_width(int width)
+{
+  _min_panel_width = width;
+}
+
 static void dtgtk_side_panel_class_init(GtkDarktableSidePanelClass *class)
 {
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(class);
@@ -47,8 +53,9 @@ static void dtgtk_side_panel_class_init(GtkDarktableSidePanelClass *class)
   widget_class->get_request_mode = dtgtk_side_panel_get_request_mode;
   widget_class->get_preferred_width = dtgtk_side_panel_get_preferred_width;
 
-  class->width
-      = dt_conf_get_int("min_panel_width"); // this is the miminum width, real size has to be applied after
+  // Minimum width only; the real size is applied later. The application overrides this from
+  // its preferences via dtgtk_side_panel_set_min_width() -- a widget does not read conf.
+  class->width = _min_panel_width;
 }
 
 static void dtgtk_side_panel_init(GtkDarktableSidePanel *panel)

@@ -66,6 +66,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "gui/gdkkeys.h"
+#include "widgets/widget_settings.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "config.h"
 #endif
@@ -1126,7 +1127,7 @@ void gui_init(struct dt_iop_module_t *self)
   // FIXME: that tooltip goes in the way of the numbers when you hover a node to get a reading
   //gtk_widget_set_tooltip_text(GTK_WIDGET(c->area), _("double click to reset curve"));
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_widget_scroll_mask()
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   gtk_widget_set_can_focus(GTK_WIDGET(c->area), TRUE);

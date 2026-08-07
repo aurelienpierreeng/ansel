@@ -8,16 +8,38 @@ repository.
 
 ## The rule that defines this directory
 
-A file belongs here only if it has **no application state**:
+A file belongs here only if it carries **no application state**:
 
 * no `darktable.*` globals,
 * no `dt_*_get_global()` accessor of any kind,
 * no `dt_conf_*` — a widget is configured by its caller, not by reading preferences,
-* no `#include` from `common/`, `develop/`, `control/`, `views/`, `libs/` or `imageio/`.
+* no `#include` from `common/`, `develop/`, `control/`, `views/`, `libs/` or `imageio/`
+  *except* pure macro headers that carry no state (`common/macros.h` for `IS_NULL_PTR`),
+  which sit at a lower layer and are legitimate to depend on.
 
-Everything currently here satisfies all four, verified rather than assumed. **If a change
-would introduce any of them, the file does not belong here** — either pass the value in as a
-parameter, or the widget is really an application component and belongs in `gui/`.
+**Every file here satisfies the first three — verified, zero violations.** Configuration
+arrives through setters (`dtgtk_side_panel_set_min_width()`), shared toolkit state lives in
+`widget_settings.h`, and behaviour that needs the application is announced as a signal for
+the caller to act on (`resetlabel` emits `"reset"`; `develop/imageop_gui.c` attaches the
+IOP meaning).
+
+### Not yet true: independence from `gui/`
+
+Seven files still include `gui/gtk.h`, `gui/bauhaus.h`, `gui/draw.h` or `gui/gdkkeys.h`.
+`gui/` is the *same* layer, so this is not a layering violation, but it does mean these
+files are not yet droppable into another GTK application. The dependency is small and
+entirely toolkit-level — measured, not estimated:
+
+| symbol | uses | where it should end up |
+|---|---:|---|
+| `dt_gui_add_class` | 7 | a CSS helper — belongs in `widgets/` |
+| `dt_bauhaus_get_global` | 7 | `paint.c` reads bauhaus colours; needs bauhaus reworked first |
+| `dt_draw_star` | 3 | a drawing primitive — belongs in `widgets/` |
+| `dt_gui_widgets_suppressed`, `dt_gui_get_scroll_unit_delta` | 3 | toolkit helpers — `widget_settings` |
+| `dt_pixelpipe_cache_alloc_*` | 3 | `focus_peaking.c` buffer allocation — should take a caller-provided buffer |
+
+Until those move, treat "reusable" as *"holds no application state"*, which is true and
+enforced, rather than *"compiles standalone"*, which is not yet.
 
 | file | what it is |
 |---|---|

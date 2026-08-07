@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/control.h"
+#include "widgets/widget_settings.h"
 #include "common/act_on.h"
 #include "control/settings.h"
 #include "control/jobs/control_jobs.h"
@@ -1542,7 +1543,7 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
       gtk_box_pack_start(box, dt->widget[i], FALSE, FALSE, 0);
       if(type == 0)
       {
-        gtk_widget_add_events(dt->widget[i], dt_gui_get_global()->scroll_mask);
+        gtk_widget_add_events(dt->widget[i], dt_widget_scroll_mask());
       }
       else
       {

@@ -41,6 +41,7 @@
 #include <string.h>
 
 #include "common/macros.h"
+#include "widgets/widget_settings.h"
 #include "system/mem_alloc.h"
 #include "gui/gdkkeys.h"
 #include "math/math.h"
@@ -295,7 +296,7 @@ static gboolean _gradient_slider_button_press(GtkWidget *widget, GdkEventButton 
   g_return_val_if_fail(DTGTK_IS_GRADIENT_SLIDER(widget), FALSE);
 
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
-  dt_gui_get_global()->has_scroll_focus = widget;
+  dt_widget_set_scroll_focus(widget);
 
   // reset slider
   if(event->button == 1 && event->type == GDK_2BUTTON_PRESS && gslider->is_resettable)
@@ -409,7 +410,7 @@ static gboolean _gradient_slider_scroll_event(GtkWidget *widget, GdkEventScroll 
 {
   g_return_val_if_fail(DTGTK_IS_GRADIENT_SLIDER(widget), TRUE);
 
-  if(dt_gui_get_global()->has_scroll_focus != widget) return FALSE;
+  if(dt_widget_scroll_focus() != widget) return FALSE;
 
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
   const gint selected = _get_active_marker(gslider);
@@ -492,7 +493,7 @@ static void _gradient_slider_init(GtkDarktableGradientSlider *gslider)
                         GDK_KEY_PRESS_MASK |
                         GDK_KEY_RELEASE_MASK |
                         GDK_POINTER_MOTION_MASK |
-                        dt_gui_get_global()->scroll_mask);
+                        dt_widget_scroll_mask());
 
   gtk_widget_set_has_window(widget, TRUE);
   gtk_widget_set_can_focus(widget, TRUE);

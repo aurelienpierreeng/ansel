@@ -33,6 +33,7 @@
 */
 
 #include "common/database.h"
+#include "widgets/widget_settings.h"
 #include "common/image.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
@@ -490,7 +491,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     cairo_save(cr);
     cairo_translate(cr, tr_width, tr_height);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_widget_image_filter());
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);

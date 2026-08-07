@@ -21,10 +21,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_DTGTK_RESETLABEL_H
-#define DT_GUI_DTGTK_RESETLABEL_H
+#ifndef DT_WIDGETS_RESETLABEL_H
+#define DT_WIDGETS_RESETLABEL_H
 
-#include "develop/imageop.h"
 #include <gtk/gtk.h>
 
 G_BEGIN_DECLS
@@ -39,9 +38,6 @@ typedef struct _GtkDarktableResetLabel
 {
   GtkEventBox widget;
   GtkLabel *lb;
-  dt_iop_module_t *module;
-  int offset; // offset in params to reset
-  int size;   // size of param to reset
 } GtkDarktableResetLabel;
 
 typedef struct _GtkDarktableResetLabelClass
@@ -51,14 +47,15 @@ typedef struct _GtkDarktableResetLabelClass
 
 GType dtgtk_reset_label_get_type(void);
 
-/** instantiate a new darktable reset label for the given module and param. */
-GtkWidget *dtgtk_reset_label_new(const gchar *label, dt_iop_module_t *module, void *param, int param_size);
+/** A label that emits "reset" when double-clicked. What "reset" means is the caller's
+ *  business -- see dt_iop_gui_reset_label_new() for the IOP-parameter version. */
+GtkWidget *dtgtk_reset_label_new(const gchar *label);
 /** Sets the text within the GtkResetLabel widget. It overwrites any text that was there before. */
 void dtgtk_reset_label_set_text(GtkDarktableResetLabel *label, const gchar *str);
 
 G_END_DECLS
 
-#endif // DT_GUI_DTGTK_RESETLABEL_H
+#endif // DT_WIDGETS_RESETLABEL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

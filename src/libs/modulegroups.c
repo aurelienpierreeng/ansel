@@ -46,6 +46,7 @@
 
 
 #include "gui/bauhaus.h"
+#include "widgets/widget_settings.h"
 #include "common/iop_order.h"
 #include "common/logging.h"
 #include "common/macros.h"
@@ -935,7 +936,7 @@ static GList *_find_previous_visible_widget(GList *widgets)
 static void _focus_widget(GtkWidget *widget)
 {
   gtk_widget_grab_focus(widget);
-  dt_gui_get_global()->has_scroll_focus = widget;
+  dt_widget_set_scroll_focus(widget);
 }
 
 
@@ -945,7 +946,7 @@ static gboolean _focus_next_control()
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
-  GtkWidget *current_widget = dt_gui_get_global()->has_scroll_focus;
+  GtkWidget *current_widget = dt_widget_scroll_focus();
   GList *first_item = _find_next_visible_widget(g_list_first(m->widget_list));
 
   if(!current_widget && first_item)
@@ -975,7 +976,7 @@ static gboolean _focus_previous_control()
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
-  GtkWidget *current_widget = dt_gui_get_global()->has_scroll_focus;
+  GtkWidget *current_widget = dt_widget_scroll_focus();
   GList *last_item = _find_previous_visible_widget(g_list_last(m->widget_list));
 
   if(!current_widget && last_item)
@@ -1046,7 +1047,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_notebook_set_scrollable(GTK_NOTEBOOK(d->notebook), TRUE);
   g_signal_connect(G_OBJECT(d->notebook), "switch_page", G_CALLBACK(_switch_page), self);
   g_signal_connect(G_OBJECT(d->notebook), "scroll-event", G_CALLBACK(_scroll_event), self);
-  gtk_widget_add_events(GTK_WIDGET(d->notebook), dt_gui_get_global()->scroll_mask);
+  gtk_widget_add_events(GTK_WIDGET(d->notebook), dt_widget_scroll_mask());
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->notebook), TRUE, TRUE, 0);
   gtk_widget_show_all(self->widget);

@@ -343,11 +343,9 @@ typedef struct dt_gui_gtk_t
   GtkWidget *scroll_to[2]; // one for left, one for right
   GtkWidget *scroll_to_header_once; // one-shot: module expander that should scroll to its header once
 
-  gint scroll_mask;
 
   // scrolling focus
   // This emulates the same feature as Gtk focus, but to capture scrolling events
-  GtkWidget *has_scroll_focus;
 
   cairo_filter_t filter_image;    // filtering used for all modules expect darkroom
   cairo_filter_t dr_filter_image; // filtering used in the darkroom

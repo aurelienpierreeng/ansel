@@ -50,6 +50,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "widgets/widget_settings.h"
 #endif
 #include "gui/bauhaus.h"
 #include "pixel/bilateral.h"
@@ -506,7 +507,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK
                                              | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
-                                             | GDK_LEAVE_NOTIFY_MASK | dt_gui_get_global()->scroll_mask);
+                                             | GDK_LEAVE_NOTIFY_MASK | dt_widget_scroll_mask());
   g_signal_connect(G_OBJECT(g->area), "draw", G_CALLBACK(dt_iop_monochrome_draw), self);
   g_signal_connect(G_OBJECT(g->area), "button-press-event", G_CALLBACK(dt_iop_monochrome_button_press), self);
   g_signal_connect(G_OBJECT(g->area), "button-release-event", G_CALLBACK(dt_iop_monochrome_button_release),

@@ -55,6 +55,7 @@
 #include <inttypes.h>
 
 #include "gui/bauhaus.h"
+#include "widgets/widget_settings.h"
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
 #include "common/pixelpipe_cache_alloc.h"
@@ -3014,7 +3015,7 @@ void gui_init(dt_lib_module_t *self)
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   d->scope_draw = gtk_drawing_area_new();
-  gtk_widget_add_events(GTK_WIDGET(d->scope_draw), dt_gui_get_global()->scroll_mask);
+  gtk_widget_add_events(GTK_WIDGET(d->scope_draw), dt_widget_scroll_mask());
   d->scope_height = dt_conf_key_exists(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
       ? dt_conf_get_int(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
       : DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_DEFAULT_HEIGHT);

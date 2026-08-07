@@ -22,6 +22,9 @@
 */
 
 #include "develop/imageop_gui.h"
+#include "develop/dev_history.h"
+#include "develop/develop.h"
+#include "widgets/resetlabel.h"
 #include "common/conf.h"
 #include "develop/imageop.h"
 #include "gui/bauhaus.h"
@@ -369,3 +372,36 @@ gboolean dt_mask_scroll_increases(int up)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
+
+/* Attached to each reset label; freed with the widget. */
+typedef struct dt_iop_reset_label_t
+{
+  dt_iop_module_t *module;
+  int offset; // offset of the parameter inside module->params
+  int size;   // its size in bytes
+} dt_iop_reset_label_t;
+
+static void _iop_reset_label_reset(GtkWidget *widget, gpointer user_data)
+{
+  dt_iop_reset_label_t *d = (dt_iop_reset_label_t *)user_data;
+  if(IS_NULL_PTR(d) || IS_NULL_PTR(d->module)) return;
+
+  memcpy(((char *)d->module->params) + d->offset, ((char *)d->module->default_params) + d->offset, d->size);
+  if(d->module->gui_update) d->module->gui_update(d->module);
+  dt_dev_add_history_item(dt_dev_get_global(), d->module, FALSE, TRUE);
+}
+
+GtkWidget *dt_iop_gui_reset_label_new(const gchar *label, dt_iop_module_t *module, void *param,
+                                      int param_size)
+{
+  GtkWidget *w = dtgtk_reset_label_new(label);
+
+  dt_iop_reset_label_t *d = (dt_iop_reset_label_t *)g_malloc0(sizeof(dt_iop_reset_label_t));
+  d->module = module;
+  d->offset = param - (void *)module->params;
+  d->size = param_size;
+
+  g_signal_connect_data(G_OBJECT(w), "reset", G_CALLBACK(_iop_reset_label_reset), d,
+                        (GClosureNotify)g_free, 0);
+  return w;
+}

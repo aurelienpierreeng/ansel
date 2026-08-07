@@ -82,6 +82,7 @@
 /** this is the view for the darkroom module.  */
 
 #include "gui/bauhaus.h"
+#include "widgets/widget_settings.h"
 #include <glib/gstdio.h>
 #include "common/paths.h"
 #include "common/collection.h"
@@ -1756,10 +1757,10 @@ void gui_init(dt_view_t *self)
 static gboolean _is_scroll_captured_by_widget()
 {
   dt_accels_t *accels = dt_gui_get_accels();
-  if(!dt_gui_get_global()->has_scroll_focus || accels->active_key.accel_key == 0) return FALSE;
+  if(!dt_widget_scroll_focus() || accels->active_key.accel_key == 0) return FALSE;
 
   // When declaring shortcuts, bauhaus widgets write their accel path into a private data field
-  gchar *accel_path = g_object_get_data(G_OBJECT(dt_gui_get_global()->has_scroll_focus), "accel-path");
+  gchar *accel_path = g_object_get_data(G_OBJECT(dt_widget_scroll_focus()), "accel-path");
 
   // Find if the registered accel keys matches currently pressed keys
   GtkAccelKey key = { 0 };
@@ -1779,7 +1780,7 @@ gboolean _scroll_on_focus(GdkEventScroll event, void *data)
   {
     // Pass-through the scrolling event to the scrolling handler of the widget
     gboolean ret;
-    g_signal_emit_by_name(G_OBJECT(dt_gui_get_global()->has_scroll_focus), "scroll-event", &event, &ret);
+    g_signal_emit_by_name(G_OBJECT(dt_widget_scroll_focus()), "scroll-event", &event, &ret);
     return ret;
   }
 

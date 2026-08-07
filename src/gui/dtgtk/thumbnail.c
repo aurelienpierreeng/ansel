@@ -46,7 +46,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "gui/dtgtk/focus.h"
-#include "gui/dtgtk/focus_peaking.h"
+#include "widgets/focus_peaking.h"
 #include "common/grouping.h"
 #include "common/database.h"
 #include "common/ratings.h"
