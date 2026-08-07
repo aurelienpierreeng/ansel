@@ -1682,6 +1682,7 @@ void dt_cleanup()
   dt_colorlabels_cleanup();
   dt_history_cleanup();
   dt_dev_history_cleanup();
+  dt_masks_history_cleanup();
   dt_metadata_cleanup();
   dt_image_cleanup();
   dt_tags_cleanup();

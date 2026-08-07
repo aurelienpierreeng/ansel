@@ -2118,12 +2118,22 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
   dt_dev_history_item_t *last_history_item = NULL;
   int previous_num = -1;
 
+  // Keyed by "content_key" (see query below): the rowid of whichever masks_history row actually
+  // carries a given form's content. A form shared unchanged across many history steps resolves
+  // to the same content_key on every row, so it only gets parsed/allocated once per image load --
+  // later rows just dt_masks_form_ref() the object already materialized here.
+  GHashTable *materialized = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+
   sqlite3_stmt *statement = NULL;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
       dt_database_get_sqlite3_global(),
-      "SELECT imgid, formid, form, name, version, points, points_count, source, num "
-      "FROM main.masks_history WHERE imgid = ?1 ORDER BY num",
+      "SELECT m.imgid, m.formid, COALESCE(c.form, m.form), COALESCE(c.name, m.name), "
+      "COALESCE(c.version, m.version), COALESCE(c.points, m.points), "
+      "COALESCE(c.points_count, m.points_count), COALESCE(c.source, m.source), m.num, "
+      "COALESCE(m.content_ref, m.rowid) "
+      "FROM main.masks_history m LEFT JOIN main.masks_history c ON c.rowid = m.content_ref "
+      "WHERE m.imgid = ?1 ORDER BY m.num",
       -1, &statement, NULL);
   // clang-format on
   DT_DEBUG_SQLITE3_BIND_INT(statement, 1, image_id);
@@ -2131,60 +2141,75 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
   while(sqlite3_step(statement) == SQLITE_ROW)
   {
     // db record:
-    // 0-img, 1-formid, 2-form_type, 3-name, 4-version, 5-points, 6-points_count, 7-source, 8-num
+    // 0-img, 1-formid, 2-form_type, 3-name, 4-version, 5-points, 6-points_count, 7-source, 8-num,
+    // 9-content_key (the rowid of the row that actually carries this content)
 
     // we get the values
 
     const int form_id = sqlite3_column_int(statement, 1);
     const int history_num = sqlite3_column_int(statement, 8);
-    const dt_masks_type_t mask_type = sqlite3_column_int(statement, 2);
-    dt_masks_form_t *mask_form = dt_masks_create(mask_type);
-    mask_form->formid = form_id;
-    const char *form_name = (const char *)sqlite3_column_text(statement, 3);
-    g_strlcpy(mask_form->name, form_name, sizeof(mask_form->name));
-    mask_form->version = sqlite3_column_int(statement, 4);
-    mask_form->points = NULL;
-    const int point_count = sqlite3_column_int(statement, 6);
-    memcpy(mask_form->source, sqlite3_column_blob(statement, 7), sizeof(float) * 2);
+    const gint64 content_key = sqlite3_column_int64(statement, 9);
 
-    // and now we "read" the blob
-    if(mask_form->functions)
+    dt_masks_form_t *mask_form = (dt_masks_form_t *)g_hash_table_lookup(materialized, &content_key);
+    if(mask_form)
     {
-      const char *const point_buffer = (char *)sqlite3_column_blob(statement, 5);
-      const size_t point_struct_size = mask_form->functions->point_struct_size;
-      for(int point_index = 0; point_index < point_count; point_index++)
-      {
-        char *point_data = (char *)malloc(point_struct_size);
-        memcpy(point_data, point_buffer + point_index * point_struct_size, point_struct_size);
-        mask_form->points = g_list_append(mask_form->points, point_data);
-      }
+      mask_form = dt_masks_form_ref(mask_form);
     }
-
-    if(mask_form->version != dt_masks_version())
+    else
     {
-      if(dt_masks_legacy_params(develop, mask_form, mask_form->version, dt_masks_version()))
+      const dt_masks_type_t mask_type = sqlite3_column_int(statement, 2);
+      mask_form = dt_masks_create(mask_type);
+      mask_form->formid = form_id;
+      const char *form_name = (const char *)sqlite3_column_text(statement, 3);
+      g_strlcpy(mask_form->name, form_name, sizeof(mask_form->name));
+      mask_form->version = sqlite3_column_int(statement, 4);
+      mask_form->points = NULL;
+      const int point_count = sqlite3_column_int(statement, 6);
+      memcpy(mask_form->source, sqlite3_column_blob(statement, 7), sizeof(float) * 2);
+
+      // and now we "read" the blob
+      if(mask_form->functions)
       {
-        const char *fname = develop->image_storage.filename + strlen(develop->image_storage.filename);
-        while(fname > develop->image_storage.filename && *fname != '/') fname--;
-        if(fname > develop->image_storage.filename) fname++;
-
-        fprintf(stderr,
-                "[_dev_read_masks_history] %s (imgid `%i'): mask version mismatch: history is %d, dt %d.\n",
-                fname, image_id, mask_form->version, dt_masks_version());
-        dt_control_log(_("%s: mask version mismatch: %d != %d"),
-                       fname, dt_masks_version(), mask_form->version);
-
-        continue;
+        const char *const point_buffer = (char *)sqlite3_column_blob(statement, 5);
+        const size_t point_struct_size = mask_form->functions->point_struct_size;
+        for(int point_index = 0; point_index < point_count; point_index++)
+        {
+          char *point_data = (char *)malloc(point_struct_size);
+          memcpy(point_data, point_buffer + point_index * point_struct_size, point_struct_size);
+          mask_form->points = g_list_append(mask_form->points, point_data);
+        }
       }
+
+      if(mask_form->version != dt_masks_version())
+      {
+        if(dt_masks_legacy_params(develop, mask_form, mask_form->version, dt_masks_version()))
+        {
+          const char *fname = develop->image_storage.filename + strlen(develop->image_storage.filename);
+          while(fname > develop->image_storage.filename && *fname != '/') fname--;
+          if(fname > develop->image_storage.filename) fname++;
+
+          fprintf(stderr,
+                  "[_dev_read_masks_history] %s (imgid `%i'): mask version mismatch: history is %d, dt %d.\n",
+                  fname, image_id, mask_form->version, dt_masks_version());
+          dt_control_log(_("%s: mask version mismatch: %d != %d"),
+                         fname, dt_masks_version(), mask_form->version);
+
+          continue;
+        }
+      }
+
+      gint64 *key = g_new(gint64, 1);
+      *key = content_key;
+      g_hash_table_insert(materialized, key, mask_form);
     }
 
     // Not computed here: dt_masks_replace_current_forms() below (via
     // dt_masks_form_update_gravity_center() in masks_history.c) already computes it for
     // every form that actually ends up live in dev->forms. Computing it here too would
     // redundantly do it for every history step's row read from masks_history -- including
-    // every duplicate of a form shared unchanged across many steps (see the un-deduped
-    // masks_history table, doc/masks_history_dedup.md) -- for forms that are either
-    // superseded (never read again) or about to be recomputed anyway.
+    // every duplicate of a form shared unchanged across many steps (see
+    // doc/masks_history_dedup.md) -- for forms that are either superseded (never read again) or
+    // about to be recomputed anyway.
 
     // if this is a new history entry let's find it
     if(previous_num != history_num)
@@ -2201,12 +2226,10 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
       }
       previous_num = history_num;
     }
-    // add the form to the history entry
-    // FIXME: there is no reason to hack history_item to add a forms snapshot that doesn't
-    // belong to it because dt_dev_write_history_item() doesn't save history_item->forms to the DB.
-    // So this forms snapshot should be attached to its own object, and that object should be
-    // linked by ID to the history_item object. That would allow to share one forms snapshot
-    // between several history items without duplication.
+    // add the form to the history entry. On-disk sharing across history items without
+    // duplication is handled above via content_ref (see doc/masks_history_dedup.md); in memory
+    // each history_item->forms entry still holds its own reference to the (possibly shared)
+    // dt_masks_form_t*, per the copy-on-write refcounting scheme in masks_history.h.
     if(history_item)
     {
       history_item->forms = g_list_append(history_item->forms, mask_form);
@@ -2219,52 +2242,108 @@ void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
     if(history_num < dt_dev_get_history_end_ext(develop)) last_history_item = history_item;
   }
   sqlite3_finalize(statement);
+  g_hash_table_destroy(materialized);
 
   // and we update the current forms snapshot
   dt_masks_replace_current_forms(develop, (last_history_item) ? last_history_item->forms : NULL);
 }
 
-void dt_masks_write_masks_history_item(const int32_t image_id, const int history_num,
-                                       dt_masks_form_t *mask_form)
+// Cached prepared statement for dt_masks_write_masks_history_item(), mirroring the pattern in
+// src/common/history.c (avoids a PREPARE_V2/finalize pair on every single form write -- this
+// runs once per form per history commit, i.e. very often).
+static sqlite3_stmt *_masks_history_write_stmt = NULL;
+static dt_pthread_mutex_t _masks_history_write_stmt_mutex;
+static gsize _masks_history_write_stmt_mutex_inited = 0;
+
+static inline void _masks_history_write_stmt_mutex_ensure(void)
 {
-  sqlite3_stmt *statement = NULL;
+  if(g_once_init_enter(&_masks_history_write_stmt_mutex_inited))
+  {
+    dt_pthread_mutex_init(&_masks_history_write_stmt_mutex, NULL);
+    g_once_init_leave(&_masks_history_write_stmt_mutex_inited, 1);
+  }
+}
 
-  dt_print(DT_DEBUG_HISTORY, "[dt_masks_write_masks_history_item] writing mask %s of type %i for image %i\n",
-           mask_form->name, mask_form->type, image_id);
+void dt_masks_history_cleanup(void)
+{
+  _masks_history_write_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_masks_history_write_stmt_mutex);
+  if(_masks_history_write_stmt)
+  {
+    sqlite3_finalize(_masks_history_write_stmt);
+    _masks_history_write_stmt = NULL;
+  }
+  dt_pthread_mutex_unlock(&_masks_history_write_stmt_mutex);
+}
 
-  // write the form into the database
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO main.masks_history (imgid, num, formid, form, name, "
-                              "version, points, points_count,source) VALUES "
-                              "(?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                              -1, &statement, NULL);
-  // clang-format on
+int64_t dt_masks_write_masks_history_item(const int32_t image_id, const int history_num,
+                                          dt_masks_form_t *mask_form, const int64_t content_ref)
+{
+  dt_print(DT_DEBUG_HISTORY, "[dt_masks_write_masks_history_item] writing mask %s of type %i for image %i%s\n",
+           mask_form->name, mask_form->type, image_id, content_ref > 0 ? " (deduplicated)" : "");
+
+  _masks_history_write_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_masks_history_write_stmt_mutex);
+
+  if(!_masks_history_write_stmt)
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "INSERT INTO main.masks_history (imgid, num, formid, form, name, "
+                                "version, points, points_count, source, content_ref) VALUES "
+                                "(?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10)",
+                                -1, &_masks_history_write_stmt, NULL);
+    // clang-format on
+  sqlite3_stmt *statement = _masks_history_write_stmt;
+  sqlite3_reset(statement);
+  sqlite3_clear_bindings(statement);
+
   DT_DEBUG_SQLITE3_BIND_INT(statement, 1, image_id);
   DT_DEBUG_SQLITE3_BIND_INT(statement, 9, history_num);
   DT_DEBUG_SQLITE3_BIND_INT(statement, 2, mask_form->formid);
   DT_DEBUG_SQLITE3_BIND_INT(statement, 3, mask_form->type);
   DT_DEBUG_SQLITE3_BIND_TEXT(statement, 4, mask_form->name, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_BLOB(statement, 8, mask_form->source, 2 * sizeof(float), SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(statement, 5, mask_form->version);
-  if(mask_form->functions)
+
+  char *point_buffer = NULL;
+  if(content_ref > 0)
   {
-    const size_t point_struct_size = mask_form->functions->point_struct_size;
-    const guint point_count = g_list_length(mask_form->points);
-    char *const restrict point_buffer = (char *)malloc(point_count * point_struct_size);
-    int buffer_offset = 0;
-    for(GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
-    {
-      memcpy(point_buffer + buffer_offset, point_node->data, point_struct_size);
-      buffer_offset += point_struct_size;
-    }
-    DT_DEBUG_SQLITE3_BIND_BLOB(statement, 6, point_buffer,
-                               point_count * point_struct_size, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_INT(statement, 7, point_count);
-    sqlite3_step(statement);
-    sqlite3_finalize(statement);
-    dt_free(point_buffer);
+    // Dedup: an earlier row already carries this exact content -- the copy-on-write invariant
+    // (develop/masks/masks_history.h) guarantees identical content whenever the caller hands us
+    // back the same dt_masks_form_t* it saw last time. Leave points/points_count/source NULL and
+    // just point at the earlier row instead of re-serializing them.
+    DT_DEBUG_SQLITE3_BIND_INT64(statement, 10, content_ref);
   }
+  else
+  {
+    DT_DEBUG_SQLITE3_BIND_BLOB(statement, 8, mask_form->source, 2 * sizeof(float), SQLITE_TRANSIENT);
+    if(mask_form->functions)
+    {
+      const size_t point_struct_size = mask_form->functions->point_struct_size;
+      const guint point_count = g_list_length(mask_form->points);
+      point_buffer = (char *)malloc(point_count * point_struct_size);
+      int buffer_offset = 0;
+      for(GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
+      {
+        memcpy(point_buffer + buffer_offset, point_node->data, point_struct_size);
+        buffer_offset += point_struct_size;
+      }
+      DT_DEBUG_SQLITE3_BIND_BLOB(statement, 6, point_buffer,
+                                 point_count * point_struct_size, SQLITE_TRANSIENT);
+      DT_DEBUG_SQLITE3_BIND_INT(statement, 7, point_count);
+    }
+  }
+
+  sqlite3_step(statement);
+  // Reliable only because every caller of this function runs inside a
+  // dt_database_start_transaction() block: that holds dt_database_threadsafe_lock() as writer
+  // for its whole duration, so no other thread's INSERT on this shared connection can land
+  // between our sqlite3_step() and this read and get misattributed to us.
+  const int64_t rowid = sqlite3_last_insert_rowid(dt_database_get_sqlite3_global());
+  dt_free(point_buffer);
+
+  dt_pthread_mutex_unlock(&_masks_history_write_stmt_mutex);
+
+  return rowid;
 }
 
 void dt_masks_free_form(dt_masks_form_t *mask_form)

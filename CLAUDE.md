@@ -674,8 +674,8 @@ the persistence boundary, so a form shared unchanged across 100 history steps st
 points BLOB serialized 100 times on every commit (`dt_dev_write_history_ext` rewrites the whole
 image's history + masks_history every time). Known, not yet fixed — see
 `doc/masks_history_dedup.md` for the full design (developed on a dedicated branch, merged only
-when Ansel 1.0 is prepared, per explicit instruction not to migrate any user's live DB
-prematurely).
+when the project's version is bumped to 0.1, per explicit instruction not to migrate any user's
+live DB prematurely).
 
 ---
 

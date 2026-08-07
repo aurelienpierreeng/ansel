@@ -81,7 +81,7 @@
 
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!
-#define CURRENT_DATABASE_VERSION_LIBRARY 36
+#define CURRENT_DATABASE_VERSION_LIBRARY 37
 #define CURRENT_DATABASE_VERSION_DATA     9
 
 // #define USE_NESTED_TRANSACTIONS
@@ -2090,6 +2090,20 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
     TRY_EXEC("DROP TABLE `images_new`", "[init] can't drop temp images table\n");
     new_version = 36;
   }
+  else if(version == 36)
+  {
+    // 36 -> 37 added masks_history.content_ref, for the in-DB masks-history dedup: a row can now
+    // point at an earlier row (by rowid) that carries its actual points/points_count/source
+    // instead of duplicating them. Every pre-existing row gets content_ref = NULL, which is
+    // already the correct meaning ("this row carries its own content") -- no data transform.
+    sqlite3_exec(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
+    // clang-format off
+    TRY_EXEC("ALTER TABLE main.masks_history ADD COLUMN content_ref INTEGER",
+             "[init] can't add `content_ref' column to `masks_history' table\n");
+    // clang-format on
+    sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
+    new_version = 37;
+  }
   else
     new_version = version; // should be the fallback so that calling code sees that we are in an infinite loop
 
@@ -2417,7 +2431,7 @@ static void _create_library_schema(dt_database_t *db)
   ////////////////////////////// masks history
   sqlite3_exec(db->handle,
                "CREATE TABLE main.masks_history (imgid INTEGER, num INTEGER, formid INTEGER, form INTEGER, name VARCHAR(256), "
-               "version INTEGER, points BLOB, points_count INTEGER, source BLOB, "
+               "version INTEGER, points BLOB, points_count INTEGER, source BLOB, content_ref INTEGER, "
                 "FOREIGN KEY(imgid) REFERENCES images(id) ON UPDATE CASCADE ON DELETE CASCADE)",
                  NULL, NULL, NULL);
 
@@ -2540,7 +2554,8 @@ static void _create_memory_schema(dt_database_t *db)
   sqlite3_exec(
       db->handle,
       "CREATE TABLE memory.undo_masks_history (id INTEGER, imgid INTEGER, num INTEGER, formid INTEGER,"
-      " form INTEGER, name VARCHAR(256), version INTEGER, points BLOB, points_count INTEGER, source BLOB)",
+      " form INTEGER, name VARCHAR(256), version INTEGER, points BLOB, points_count INTEGER, source BLOB,"
+      " content_ref INTEGER, orig_rowid INTEGER)",
       NULL, NULL, NULL);
   sqlite3_exec(
       db->handle,

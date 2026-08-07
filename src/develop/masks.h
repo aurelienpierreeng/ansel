@@ -929,8 +929,15 @@ struct dt_iop_module_t *dt_masks_get_mask_manager(struct dt_develop_t *dev);
 
 /** read the forms from the db */
 void dt_masks_read_masks_history(dt_develop_t *dev, const int32_t imgid);
-/** write the forms into the db */
-void dt_masks_write_masks_history_item(const int32_t imgid, const int num, dt_masks_form_t *form);
+/** write the forms into the db. content_ref > 0 writes a dedup pointer row referencing an
+ * earlier row's rowid instead of duplicating points/points_count/source; pass 0 for a full
+ * write. Returns the rowid of the row just written (used by the caller to dedup subsequent,
+ * unchanged writes of the same form). */
+int64_t dt_masks_write_masks_history_item(const int32_t imgid, const int num, dt_masks_form_t *form,
+                                          const int64_t content_ref);
+/** finalize the cached statement used by dt_masks_write_masks_history_item(), mirroring
+ * dt_history_cleanup() in common/history.c. */
+void dt_masks_history_cleanup(void);
 void dt_masks_free_form(dt_masks_form_t *form);
 void dt_masks_cleanup_unused(dt_develop_t *dev);
 
