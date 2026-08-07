@@ -130,6 +130,7 @@
 #include "common/file_location.h"
 #include "common/film.h"
 #include "common/folder_survey.h"
+#include "gui/common/folder_survey_gui.h"
 #include "common/grealpath.h"
 #include "common/image.h"
 #include "common/image_cache.h"
