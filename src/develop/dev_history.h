@@ -296,22 +296,30 @@ void dt_dev_add_history_item_real(struct dt_develop_t *dev, struct dt_iop_module
 #define dt_dev_add_history_item(dev, module, enable, redraw) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_add_history_item_real, (dev), (module), (enable), (redraw))
 
 /**
- * @brief Drop every pipeline resync request still queued for @p dev.
+ * @brief Run every history commit still queued for @p dev, now.
  *
- * dt_dev_add_history_item_real() commits the history item immediately but defers the
- * pipeline resync it needs, so that scrolling a widget does not abort the render in
- * progress on every step. Those deferred requests reference @p dev's pipes.
+ * dt_dev_add_history_item_real() queues its commit rather than running it, so that a slider
+ * drag or a combobox scroll does not run one per step. A queued request IS the user's last
+ * edit, so it is run here, not discarded.
  *
- * Any code that is about to tear down @p dev's pipe nodes, iop list or history MUST call
- * this first, or a request draining afterwards touches freed memory -- the darkroom
- * teardown race described in CLAUDE.md, which crashes far from where it is caused.
+ * Any code about to tear down @p dev's pipe nodes, iop list or history MUST call this while
+ * @p dev is still whole -- it is the last moment at which committing is safe, and a request
+ * draining after teardown is the darkroom race described in CLAUDE.md, which crashes far
+ * from where it is caused.
  *
- * Requests are dropped, not run: the history is already committed and written out, and
- * nobody is going to look at a recompute of a view that is being left.
- *
- * @param dev the develop context being torn down, or NULL to drop every pending request.
+ * @param dev the develop context, or NULL to flush every pending request.
  */
-void dt_dev_history_cancel_pending_resyncs(struct dt_develop_t *dev);
+void dt_dev_history_flush_pending_commits(struct dt_develop_t *dev);
+
+/**
+ * @brief Discard every history commit still queued for @p dev, without running it.
+ *
+ * Last-resort counterpart to dt_dev_history_flush_pending_commits(), for a @p dev already
+ * too far torn down to commit to. Prefer the flush wherever the edit can still be saved.
+ *
+ * @param dev the develop context, or NULL to drop every pending request.
+ */
+void dt_dev_history_drop_pending_commits(struct dt_develop_t *dev);
 
 
 /**

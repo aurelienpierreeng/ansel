@@ -488,32 +488,48 @@ crash somewhere unrelated, as Sentry issue 133807805 did. `leave()` needs an exp
 flush-or-drop of the pending queue, written as part of this change rather than discovered
 afterwards.
 
-### What the implementation measured, and how it changed the plan
+### What the first attempt got wrong
 
-The plan above says "enqueue the resync request". Reading the code it defers turned out to
-matter, because it settles what the throttle is actually worth:
+The first implementation deferred **only the resync** and kept the commit synchronous,
+on the theory that the commit was cheap because `dt_dev_add_history_item_ext()` reuses the
+last entry for the same module. Tested, it failed on both counts:
 
-* `dt_dev_pixelpipe_{update,resync}_history_all()` are **not** the expensive part. Each is an
-  OR onto `pipe->changed` plus `dt_atomic_set_int(&pipe->shutdown, TRUE)`. The O(nodes x
-  history) walk is `dt_dev_pixelpipe_change()`, which runs on the darkroom worker and reads
-  the *accumulated* flag -- so N queued requests still cost one walk.
-* `dt_dev_write_history(dev, TRUE)` already coalesces through the `history_write_pending`
-  atomic, so N commits still cost one DB+XMP rewrite.
-* What the throttle therefore buys is **not** avoiding work: it is the `shutdown` atomic.
-  Committing per scroll step aborted the worker's in-flight frame every time, so the view
-  updated on none of them. That is why `dt_dev_add_history_item_real()`'s own two
-  `shutdown` stores at the top of the function had to go with the deferral -- leaving them
-  would have kept the abort storm and made the queue pointless.
+* **The GUI lagged behind the scroll.** The commit runs on the GUI thread, so blocking in
+  it once per scroll tick starves the widget's own `gtk_widget_queue_draw()`. The value the
+  user is scrolling could not repaint.
+* **The queue filled with transient values and hung.** Every intermediate step of a gesture
+  became a queued request. Nothing was merged, as required -- but every one of them still
+  ran a full commit.
 
-Two consequences the plan did not anticipate:
+The measurement that was right: the resync calls themselves are only an OR onto
+`pipe->changed` plus an atomic store, and `dt_dev_write_history()` already coalesces. The
+measurement that was **missing**: everything else in a commit -- an undo record, the
+`history_mutex` writer lock, a full history rehash, an image-cache write, a masks-list
+rebuild -- is not cheap, and none of it coalesces. Deferring the resync alone deferred the
+one part that was already free.
 
-* Only the resync needs deferring. The history item is still committed **synchronously**, so
-  none of the ~270 `dt_dev_add_history_item()` callers that read `dev->history` right
-  afterwards had to be touched -- a far smaller blast radius than deferring the whole call.
-* It is a **batching window, not a debounce**. `gui_throttle` arms its timer on the first
-  request and does not re-arm on the ones after it. A debounce would have frozen the preview
-  for the whole of a sustained drag; this keeps updating once per window. Preserved
-  deliberately.
+### The design that followed
+
+Defer the **whole** commit, with two rules that must not be confused:
+
+1. **Nothing is merged.** As before, and for the same reason.
+2. **A repeat of the pending tail is not a new request.** If the tail of the queue is
+   already "commit this module, this enable state", asking for exactly that again adds
+   nothing: the queued request reads `module->params` when it drains, so it necessarily
+   commits the newest value. Suppression is against the **tail only** -- never a search of
+   the queue, never a combination of two different requests -- so ordering is exact. This is
+   what stops a 300-tick scroll from queueing 300 commits. A transient intermediate value of
+   an ongoing gesture is not a history event, which is the thing the old per-widget throttle
+   knew and the first attempt threw away.
+
+`dt_dev_add_history_item_ext()` is not throttled and never was, so everything that must land
+before the next statement (bulk history loads, style application, image duplication) is
+unaffected -- it already goes through `_ext`.
+
+`dt_dev_history_flush_pending_commits()` **runs** the pending requests at darkroom `leave()`,
+before any teardown: a pending request is the user's last edit, and dropping it would lose
+the value they left a slider on. `dt_dev_history_drop_pending_commits()` is the last-resort
+counterpart for a `dev` already too far gone.
 
 ### Scope this actually reached
 
