@@ -277,3 +277,58 @@ the linker level, not inferred from include counts.
 `common → develop` (95) is the larger and harder one: base-layer code reaching into
 pipeline and iop internals. That is genuine design work, not a relocation.
 
+---
+
+## 7. Next: hoist the GUI out of the backend
+
+Measured with `tools/symbol_coupling.py` on the current build. **94 distinct GUI symbols
+are reached from `common/` and `develop/`, across 23 backend files.**
+
+| edge | symbols |
+|---|---:|
+| `develop → gui` | 45 |
+| `develop → dtgtk` | 41 |
+| `common → gui` | 36 |
+| `common → bauhaus` | 12 |
+| `common → dtgtk` | 2 |
+
+Where the calls actually are:
+
+| file | GUI calls |
+|---|---:|
+| `develop/blend_gui.c` | 172 |
+| `develop/imageop.c` | 66 |
+| `common/lut_viewer.c` | 47 |
+| `common/darktable.c` | 25 |
+| `develop/imageop_gui.c` | 17 |
+| `develop/masks/masks_gui.c` | 13 |
+| `common/history_merge_gui.c` | 12 |
+| `common/import.c` | 12 |
+
+This splits into three very different jobs, and conflating them is what makes it look
+daunting:
+
+1. **Already split by filename, wrong directory.** `blend_gui.c`, `imageop_gui.c`,
+   `masks_gui.c`, `history_merge_gui.c` are GUI files sitting in backend directories —
+   214 of the calls. No splitting needed, only relocation. Simulated: moving the two
+   `common/` ones (`history_merge_gui`, `lut_viewer`) is **−5** violations.
+   `common/lut_viewer.c` is a GUI widget living in `common/` outright.
+
+   Caveat measured, not assumed: these files are not one-directional. `blend_gui.c` also
+   makes 308 backend calls in 5103 lines, so relocating it moves an edge rather than
+   removing it — it becomes `gui → develop`, which is only an improvement if the layer
+   model says so. Simulate each before moving.
+
+2. **Genuinely mixed, needs splitting.** `develop/imageop.c` makes 66 GUI calls inside
+   the module that also owns pipeline logic. This is the real work: separate the module
+   API from its widget plumbing.
+
+3. **Legitimate.** `common/darktable.c` is the orchestrator; initialising the GUI is its
+   job. Not a defect.
+
+The pattern to apply is the one that worked for the two solvers in `math/`: the backend
+should not *decide* to show UI. `choleski.h` called `dt_control_log()` on OOM when it
+already returned an error code the caller checked — the reporting belonged to the caller.
+Most of the 94 are likely to be that shape: a toast, a redraw request, or a widget
+update issued from code whose job is to compute and return.
+
