@@ -66,7 +66,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/paths.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
 #include "common/image_cache.h"
 #include "common/history.h"

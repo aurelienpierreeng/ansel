@@ -69,7 +69,7 @@
 #include "common/opencl.h"
 
 #include "control/settings.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include "develop/pixelpipe_hb.h"
 #include "dtgtk/togglebutton.h"
 #include "gui/gtk.h"

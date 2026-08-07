@@ -21,7 +21,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "develop/format.h"
+#include "pixel/format.h"
 #include "develop/imageop.h"
 #include "develop/develop.h"
 

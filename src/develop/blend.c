@@ -43,7 +43,7 @@
 #include "common/openmp.h"
 #include "common/mem_alloc.h"
 #include "common/logging.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "blend.h"
 #include "pixel/gaussian.h"
 #include "pixel/guided_filter.h"

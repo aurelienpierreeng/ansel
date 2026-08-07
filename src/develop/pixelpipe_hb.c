@@ -65,7 +65,7 @@
 #include "control/signal.h"
 #include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include "develop/imageop_math.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"

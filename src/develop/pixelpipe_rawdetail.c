@@ -9,7 +9,7 @@
  */
 
 #include "pixel/interpolation.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 
 float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *target_module)
 {

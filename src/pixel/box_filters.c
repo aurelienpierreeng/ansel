@@ -34,7 +34,7 @@
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
 #include "common/simd.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/math.h"
 
 #if defined(__x86_64__) || defined(__i386__)

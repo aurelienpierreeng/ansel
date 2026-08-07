@@ -54,7 +54,7 @@
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "pixel/dwt.h"
 #include "develop/imageop.h"

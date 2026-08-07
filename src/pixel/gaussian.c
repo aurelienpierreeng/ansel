@@ -32,7 +32,7 @@
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
 #include "common/simd.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include <assert.h>
 #include <math.h>
 #include "pixel/gaussian.h"

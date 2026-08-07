@@ -57,7 +57,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "common/image.h"
 #include "common/imageio.h"

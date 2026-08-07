@@ -23,7 +23,7 @@
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 
 #ifdef _OPENMP

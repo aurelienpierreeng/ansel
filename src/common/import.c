@@ -23,7 +23,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/cache.h"
 #include "common/film.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/exif.h"
 #include "common/import.h"

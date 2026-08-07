@@ -23,7 +23,7 @@
 #include "common/mem_alloc.h"
 #include "common/simd.h"
 #include "common/target_clones.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "pixel/gaussian.h"
 #include "develop/imageop.h"
 #include "iop/noise_generator.h"

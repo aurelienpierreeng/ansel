@@ -48,7 +48,7 @@
 
 #include "common/mipmap_cache.h"
 #include "common/sys_resources.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"
