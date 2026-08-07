@@ -18,6 +18,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "system/screen_metrics.h"
 #include "common/anonymous_ids.h"
 #include "system/sys_resources.h"
 #endif
@@ -33,7 +34,6 @@
 #include "common/image.h"
 #include "common/opencl.h"
 #include "common/conf.h"
-#include "gui/gtk.h"
 
 #include <sentry.h>
 
@@ -445,12 +445,12 @@ static void _sentry_set_context(void)
   // from the GUI, already computed during dt_gui_gtk_init(). The window size is
   // read from conf, which holds the restored/last geometry and is kept up to date
   // live on every resize - more reliable than the not-yet-mapped window here.
-  if(dt_gui_get_global())
+  if(dt_screen_metrics_probed())
   {
     sentry_value_t scr = sentry_value_new_object();
-    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(dt_gui_get_global()->dpi));
-    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(dt_gui_get_global()->dpi_factor));
-    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(dt_gui_get_global()->ppd));
+    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(dt_screen_dpi()));
+    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(dt_screen_dpi_factor()));
+    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(dt_screen_ppd()));
 
     const int win_w = dt_conf_get_int("ui_last/window_width");
     const int win_h = dt_conf_get_int("ui_last/window_height");

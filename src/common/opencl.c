@@ -67,7 +67,6 @@
 #include "system/nvidia_gpus.h"
 #include "system/opencl_drivers_blacklist.h"
 #include "common/conf.h"
-#include "gui/splash.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"

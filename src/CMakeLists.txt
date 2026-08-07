@@ -53,6 +53,7 @@ FILE(GLOB SOURCE_FILES
   "common/act_on.c"
   "system/atomic.c"
   "system/display_profile.c"
+  "system/screen_metrics.c"
   "pixel/bilateral.c"
   "pixel/bilateralcl.c"
   "pixel/box_filters.c"

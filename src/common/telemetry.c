@@ -18,6 +18,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "system/screen_metrics.h"
 #include "common/anonymous_ids.h"
 #include "system/sys_resources.h"
 #endif
@@ -29,7 +30,6 @@
 
 #include "common/image.h"
 #include "common/opencl.h"
-#include "gui/gtk.h"
 
 #include <curl/curl.h>
 #include <string.h>
@@ -358,10 +358,10 @@ static JsonObject *_telemetry_system_properties(void)
   if(desktop && *desktop) json_object_set_string_member(p, "desktop_environment", desktop);
 #endif
 
-  if(dt_gui_get_global())
+  if(dt_screen_metrics_probed())
   {
-    json_object_set_double_member(p, "dpi", dt_gui_get_global()->dpi);
-    json_object_set_double_member(p, "ppd", dt_gui_get_global()->ppd);
+    json_object_set_double_member(p, "dpi", dt_screen_dpi());
+    json_object_set_double_member(p, "ppd", dt_screen_ppd());
     GdkDisplay *display = gdk_display_get_default();
     GdkMonitor *mon = display ? gdk_display_get_primary_monitor(display) : NULL;
     if(!mon && display && gdk_display_get_n_monitors(display) > 0) mon = gdk_display_get_monitor(display, 0);
