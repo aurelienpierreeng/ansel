@@ -3,18 +3,11 @@
 #ifdef BUILD_TESTING
 extern "C" {
 
-int test_distortion_selector_entries(gboolean has_embedded,
-                                     const char *out_labels[3],
-                                     int out_values[3])
+int test_correction_source_selector_entries(gboolean has_embedded,
+                                            const char *out_labels[3],
+                                            int out_values[3])
 {
-  return distortion_selector_entries(has_embedded, out_labels, out_values);
-}
-
-int test_vignetting_selector_entries(gboolean has_embedded,
-                                      const char *out_labels[3],
-                                      int out_values[3])
-{
-  return vignetting_selector_entries(has_embedded, out_labels, out_values);
+  return correction_source_selector_entries(has_embedded, out_labels, out_values);
 }
 
 int test_tca_selector_entries(gboolean has_embedded,

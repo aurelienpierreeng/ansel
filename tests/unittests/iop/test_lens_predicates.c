@@ -95,12 +95,9 @@
  * does not export these symbols.
  * --------------------------------------------------------------------------- */
 
-int test_distortion_selector_entries(gboolean has_embedded,
-                                     const char *out_labels[3],
-                                     int out_values[3]);
-int test_vignetting_selector_entries(gboolean has_embedded,
-                                      const char *out_labels[3],
-                                      int out_values[3]);
+int test_correction_source_selector_entries(gboolean has_embedded,
+                                           const char *out_labels[3],
+                                           int out_values[3]);
 int test_tca_selector_entries(gboolean has_embedded,
                                const char *out_labels[3],
                                int out_values[3]);
@@ -110,16 +107,16 @@ const char *test_corrections_status_string(int dist, int vig, int tca,
                                             gboolean monochrome);
 
 /* ---------------------------------------------------------------------------
- * distortion_selector_entries (FR-13, FR-14, FR-18)
+ * correction_source_selector_entries (FR-13, FR-14, FR-18)
  * --------------------------------------------------------------------------- */
 
-static void test_distortion_selector_entries_false_returns_2_with_off_and_lensfun_DB(void **state)
+static void test_correction_source_selector_entries_false_returns_2(void **state)
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
   int values[3] = { -1, -1, -1 };
-  TR_STEP("distortion, has_embedded=FALSE -> 2 entries: [off, lensfun DB]");
-  int n = test_distortion_selector_entries(FALSE, labels, values);
+  TR_STEP("correction_source, has_embedded=FALSE -> 2 entries: [off, lensfun DB]");
+  int n = test_correction_source_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 2);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "lensfun DB");
@@ -127,13 +124,13 @@ static void test_distortion_selector_entries_false_returns_2_with_off_and_lensfu
   assert_int_equal(values[1], SOURCE_LENSFUN_DB);
 }
 
-static void test_distortion_selector_entries_true_returns_3_with_embedded(void **state)
+static void test_correction_source_selector_entries_true_returns_3_with_embedded(void **state)
 {
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
   int values[3] = { -1, -1, -1 };
-  TR_STEP("distortion, has_embedded=TRUE -> 3 entries: [off, embedded, lensfun DB]");
-  int n = test_distortion_selector_entries(TRUE, labels, values);
+  TR_STEP("correction_source, has_embedded=TRUE -> 3 entries: [off, embedded, lensfun DB]");
+  int n = test_correction_source_selector_entries(TRUE, labels, values);
   assert_int_equal(n, 3);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "embedded");
@@ -143,57 +140,13 @@ static void test_distortion_selector_entries_true_returns_3_with_embedded(void *
   assert_int_equal(values[2], SOURCE_LENSFUN_DB);
 }
 
-static void test_distortion_selector_entries_null_safe(void **state)
+static void test_correction_source_selector_entries_null_safe(void **state)
 {
   (void)state;
-  TR_STEP("distortion, out_labels=NULL or out_values=NULL -> 0 (defensive narrowing; no deref)");
-  int n = test_distortion_selector_entries(TRUE, NULL, NULL);
+  TR_STEP("correction_source, out_labels=NULL or out_values=NULL -> 0");
+  int n = test_correction_source_selector_entries(TRUE, NULL, NULL);
   assert_int_equal(n, 0);
-  n = test_distortion_selector_entries(FALSE, NULL, NULL);
-  assert_int_equal(n, 0);
-}
-
-/* ---------------------------------------------------------------------------
- * vignetting_selector_entries (FR-13, FR-14, FR-18)
- * --------------------------------------------------------------------------- */
-
-static void test_vignetting_selector_entries_false_returns_2(void **state)
-{
-  (void)state;
-  const char *labels[3] = { NULL, NULL, NULL };
-  int values[3] = { -1, -1, -1 };
-  TR_STEP("vignetting, has_embedded=FALSE -> 2 entries: [off, lensfun DB]");
-  int n = test_vignetting_selector_entries(FALSE, labels, values);
-  assert_int_equal(n, 2);
-  assert_string_equal(labels[0], "off");
-  assert_string_equal(labels[1], "lensfun DB");
-  assert_int_equal(values[0], SOURCE_OFF);
-  assert_int_equal(values[1], SOURCE_LENSFUN_DB);
-}
-
-static void test_vignetting_selector_entries_true_returns_3_with_embedded(void **state)
-{
-  (void)state;
-  const char *labels[3] = { NULL, NULL, NULL };
-  int values[3] = { -1, -1, -1 };
-  TR_STEP("vignetting, has_embedded=TRUE -> 3 entries: [off, embedded, lensfun DB]");
-  int n = test_vignetting_selector_entries(TRUE, labels, values);
-  assert_int_equal(n, 3);
-  assert_string_equal(labels[0], "off");
-  assert_string_equal(labels[1], "embedded");
-  assert_string_equal(labels[2], "lensfun DB");
-  assert_int_equal(values[0], SOURCE_OFF);
-  assert_int_equal(values[1], SOURCE_EMBEDDED);
-  assert_int_equal(values[2], SOURCE_LENSFUN_DB);
-}
-
-static void test_vignetting_selector_entries_null_safe(void **state)
-{
-  (void)state;
-  TR_STEP("vignetting, out_labels=NULL or out_values=NULL -> 0 (defensive narrowing)");
-  int n = test_vignetting_selector_entries(TRUE, NULL, NULL);
-  assert_int_equal(n, 0);
-  n = test_vignetting_selector_entries(FALSE, NULL, NULL);
+  n = test_correction_source_selector_entries(FALSE, NULL, NULL);
   assert_int_equal(n, 0);
 }
 
@@ -526,14 +479,10 @@ static void test_corrections_status_string_all_embedded(void **state)
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
-    /* distortion_selector_entries (3) */
-    cmocka_unit_test(test_distortion_selector_entries_false_returns_2_with_off_and_lensfun_DB),
-    cmocka_unit_test(test_distortion_selector_entries_true_returns_3_with_embedded),
-    cmocka_unit_test(test_distortion_selector_entries_null_safe),
-    /* vignetting_selector_entries (3) */
-    cmocka_unit_test(test_vignetting_selector_entries_false_returns_2),
-    cmocka_unit_test(test_vignetting_selector_entries_true_returns_3_with_embedded),
-    cmocka_unit_test(test_vignetting_selector_entries_null_safe),
+    /* correction_source_selector_entries (3) — merged distortion + vignetting */
+    cmocka_unit_test(test_correction_source_selector_entries_false_returns_2),
+    cmocka_unit_test(test_correction_source_selector_entries_true_returns_3_with_embedded),
+    cmocka_unit_test(test_correction_source_selector_entries_null_safe),
     /* tca_selector_entries (3) */
     cmocka_unit_test(test_tca_selector_entries_false_returns_3_with_manual),
     cmocka_unit_test(test_tca_selector_entries_true_returns_3_with_manual),

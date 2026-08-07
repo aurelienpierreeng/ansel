@@ -3437,7 +3437,7 @@ void gui_init(struct dt_iop_module_t *self)
 
       const char *labels[3];
       int values[3];
-      const int n = vignetting_selector_entries(has_vign, labels, values);
+      const int n = correction_source_selector_entries(has_vign, labels, values);
       for(int i = 0; i < n; i++) dt_bauhaus_combobox_add_full(g->per_correction.vignetting_source,
           _(labels[i]), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, GINT_TO_POINTER(values[i]), NULL, TRUE);
       g_signal_connect(G_OBJECT(g->per_correction.vignetting_source), "value-changed",
@@ -3456,7 +3456,7 @@ void gui_init(struct dt_iop_module_t *self)
 
       const char *labels[3];
       int values[3];
-      const int n = distortion_selector_entries(has_dist, labels, values);
+      const int n = correction_source_selector_entries(has_dist, labels, values);
       for(int i = 0; i < n; i++) dt_bauhaus_combobox_add_full(g->per_correction.distortion_source,
           _(labels[i]), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, GINT_TO_POINTER(values[i]), NULL, TRUE);
       g_signal_connect(G_OBJECT(g->per_correction.distortion_source), "value-changed",
@@ -3616,13 +3616,13 @@ void gui_update(struct dt_iop_module_t *self)
   {
     const char *labels[3];
     int values[3];
-    const int n = vignetting_selector_entries(has_vign, labels, values);
+    const int n = correction_source_selector_entries(has_vign, labels, values);
     rebuild_combobox(g->per_correction.vignetting_source, n, labels, values, n);
   }
   {
     const char *labels[3];
     int values[3];
-    const int n = distortion_selector_entries(has_dist, labels, values);
+    const int n = correction_source_selector_entries(has_dist, labels, values);
     rebuild_combobox(g->per_correction.distortion_source, n, labels, values, n);
   }
   {
