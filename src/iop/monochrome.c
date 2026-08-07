@@ -66,7 +66,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "gui/dtgtk/drawingarea.h"
+#include "widgets/drawingarea.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"

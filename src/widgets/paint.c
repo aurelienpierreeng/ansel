@@ -51,7 +51,7 @@
 
 #include "system/mem_alloc.h"
 #include "gui/bauhaus.h"
-#include "gui/dtgtk/paint.h"
+#include "widgets/paint.h"
 #include "gui/draw.h"
 #include <math.h>
 

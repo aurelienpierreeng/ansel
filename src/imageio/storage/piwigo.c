@@ -40,7 +40,7 @@
 #include "common/curl_tools.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "gui/dtgtk/button.h"
+#include "widgets/button.h"
 #include "gui/gtk.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <curl/curl.h>

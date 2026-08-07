@@ -26,8 +26,8 @@
 */
 #include "common/tags.h"
 #include "control/settings.h"
-#include "gui/dtgtk/togglebutton.h"
-#include "gui/dtgtk/paint.h"
+#include "widgets/togglebutton.h"
+#include "widgets/paint.h"
 #include "common/collection.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"

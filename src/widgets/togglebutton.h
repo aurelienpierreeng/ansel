@@ -27,8 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_DTGTK_TOGGLEBUTTON_H
-#define DT_GUI_DTGTK_TOGGLEBUTTON_H
+#ifndef DT_WIDGETS_TOGGLEBUTTON_H
+#define DT_WIDGETS_TOGGLEBUTTON_H
 
 #include "paint.h"
 #include <gtk/gtk.h>
@@ -66,7 +66,7 @@ void dtgtk_togglebutton_set_paint(GtkDarktableToggleButton *button, DTGTKCairoPa
 
 G_END_DECLS
 
-#endif // DT_GUI_DTGTK_TOGGLEBUTTON_H
+#endif // DT_WIDGETS_TOGGLEBUTTON_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

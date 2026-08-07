@@ -65,8 +65,8 @@
 #include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "gui/dtgtk/button.h"
-#include "gui/dtgtk/expander.h"
+#include "widgets/button.h"
+#include "widgets/expander.h"
 
 #include "gui/color_picker_proxy.h"
 #include "libs/colorpicker.h"

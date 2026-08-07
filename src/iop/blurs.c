@@ -39,7 +39,7 @@
 #include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "gui/dtgtk/drawingarea.h"
+#include "widgets/drawingarea.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 

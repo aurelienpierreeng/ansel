@@ -55,7 +55,7 @@
 #include "common/variables.h"
 #include "control/control.h"
 #include "gui/dtgtk/preview_window.h"
-#include "gui/dtgtk/thumbnail_btn.h"
+#include "widgets/thumbnail_btn.h"
 #include "gui/drag_and_drop.h"
 
 #include "views/view.h"

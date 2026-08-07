@@ -22,7 +22,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/dtgtk/expander.h"
+#include "widgets/expander.h"
 
 #include <gtk/gtk.h>
 

@@ -34,7 +34,7 @@ LAYERS = [
     # infrastructure, below control/ because they must never reach the control loop.
     ('pixel', 2),
     ('control', 3),
-    ('gui', 4),   # dtgtk/ and bauhaus both live under gui/ now and resolve as 'gui'
+    ('gui', 4), ('widgets', 4),   # widgets/ = reusable GTK widgets, no app state
     ('develop', 5),
     ('iop', 6), ('imageio', 6),
     ('libs', 7), ('views', 7), ('chart', 7),
