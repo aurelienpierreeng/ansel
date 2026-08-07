@@ -23,6 +23,7 @@
     panels are intentionally absent: this is a viewer, not an editor. */
 
 #include "system/atomic.h"
+#include "widgets/widget_settings.h"
 #include "common/collection.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
@@ -906,7 +907,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     if(d->zoom == DT_THUMBTABLE_ZOOM_FIT && d->dev->iso_12646.enabled)
       dt_dev_draw_iso12646_border(cr, logical_width, logical_height, d->dev->roi.border_size);
     cairo_set_source_surface(cr, d->surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_widget_image_filter());
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);

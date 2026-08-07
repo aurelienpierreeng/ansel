@@ -64,7 +64,7 @@
 #include "develop/masks.h"
 #include "develop/tiling.h"
 #include "widgets/button.h"
-#include "gui/dtgtk/gradientslider.h"
+#include "widgets/gradientslider.h"
 
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"

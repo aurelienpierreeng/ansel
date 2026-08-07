@@ -53,6 +53,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/sentry.h"
+#include "widgets/widget_settings.h"
 #include "common/telemetry.h"
 #include "gui/gdkkeys.h"
 #include "libs/lib.h"
@@ -683,7 +684,7 @@ static int _lib_plugin_body_button_press(GtkWidget *w, GdkEventButton *e, gpoint
 {
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  dt_gui_get_global()->has_scroll_focus = NULL;
+  dt_widget_set_scroll_focus(NULL);
   int handled = FALSE;
   return handled;
 }
@@ -1191,7 +1192,7 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  dt_gui_get_global()->has_scroll_focus = NULL;
+  dt_widget_set_scroll_focus(NULL);
 
   if(e->button == 1)
   {

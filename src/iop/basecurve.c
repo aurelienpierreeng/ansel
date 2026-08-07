@@ -62,6 +62,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "common/pixelpipe_cache_alloc.h"
+#include "widgets/widget_settings.h"
 #include "gui/gdkkeys.h"
 #include "config.h"
 #endif
@@ -1592,7 +1593,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(c->logbase, N_("scale for graph"));
   gtk_box_pack_start(GTK_BOX(self->widget), c->logbase , TRUE, TRUE, 0);  g_signal_connect(G_OBJECT(c->logbase), "value-changed", G_CALLBACK(logbase_callback), self);
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_widget_scroll_mask()
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   gtk_widget_set_can_focus(GTK_WIDGET(c->area), TRUE);

@@ -63,7 +63,7 @@
 #include "common/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "gui/dtgtk/gradientslider.h"
+#include "widgets/gradientslider.h"
 #include "gui/color_picker_proxy.h"
 
 #include "gui/gtk.h"

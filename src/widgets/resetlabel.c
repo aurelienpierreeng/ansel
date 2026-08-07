@@ -26,15 +26,21 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/dtgtk/resetlabel.h"
-#include "develop/develop.h"
+#include "widgets/resetlabel.h"
+
+#include <glib/gi18n.h>
 
 static void _reset_label_class_init(GtkDarktableResetLabelClass *klass);
 static void _reset_label_init(GtkDarktableResetLabel *label);
 
 
+static guint _reset_signal = 0;
+
 static void _reset_label_class_init(GtkDarktableResetLabelClass *klass)
 {
+  // The widget announces the double-click; the consumer decides what resetting means.
+  _reset_signal = g_signal_new("reset", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL,
+                               g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0);
 }
 
 static void _reset_label_init(GtkDarktableResetLabel *label)
@@ -45,23 +51,17 @@ static gboolean _reset_label_callback(GtkDarktableResetLabel *label, GdkEventBut
 {
   if(event->type == GDK_2BUTTON_PRESS)
   {
-    memcpy(((char *)label->module->params) + label->offset,
-           ((char *)label->module->default_params) + label->offset, label->size);
-    if(label->module->gui_update) label->module->gui_update(label->module);
-    dt_dev_add_history_item(dt_dev_get_global(), label->module, FALSE, TRUE);
+    g_signal_emit(label, _reset_signal, 0);
     return TRUE;
   }
   return FALSE;
 }
 
 // public functions
-GtkWidget *dtgtk_reset_label_new(const gchar *text, dt_iop_module_t *module, void *param, int param_size)
+GtkWidget *dtgtk_reset_label_new(const gchar *text)
 {
   GtkDarktableResetLabel *label;
   label = g_object_new(dtgtk_reset_label_get_type(), NULL);
-  label->module = module;
-  label->offset = param - (void *)module->params;
-  label->size = param_size;
 
   label->lb = GTK_LABEL(gtk_label_new(text));
   gtk_widget_set_halign(GTK_WIDGET(label->lb), GTK_ALIGN_START);

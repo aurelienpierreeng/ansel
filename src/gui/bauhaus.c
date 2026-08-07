@@ -58,6 +58,7 @@
 */
 
 #include "gui/gdkkeys.h"
+#include "widgets/widget_settings.h"
 #include "gui/bauhaus.h"
 #include "common/calculator.h"
 #include "math/math.h"
@@ -479,7 +480,7 @@ static gboolean ensure_focus_idle(gpointer data)
   if(gtk_widget_is_drawable(target))
   {
     gtk_widget_grab_focus(target);
-    dt_gui_get_global()->has_scroll_focus = target;
+    dt_widget_set_scroll_focus(target);
     GtkWidget *gtk_focus = NULL;
     if(!IS_NULL_PTR(dt_gui_get_global()) && !IS_NULL_PTR(dt_gui_get_ui()))
       gtk_focus = gtk_window_get_focus(GTK_WINDOW(dt_gui_main_window()));
@@ -487,8 +488,8 @@ static gboolean ensure_focus_idle(gpointer data)
              "[bauhaus] ensure_focus_idle success target=%s(%p) gtk_focus=%s(%p) scroll_focus=%s(%p)\n",
              gtk_widget_get_name(target), (void *)target,
              !IS_NULL_PTR(gtk_focus) ? gtk_widget_get_name(gtk_focus) : "<null>", (void *)gtk_focus,
-             !IS_NULL_PTR(dt_gui_get_global()->has_scroll_focus) ? gtk_widget_get_name(dt_gui_get_global()->has_scroll_focus) : "<null>",
-             (void *)dt_gui_get_global()->has_scroll_focus);
+             !IS_NULL_PTR(dt_widget_scroll_focus()) ? gtk_widget_get_name(dt_widget_scroll_focus()) : "<null>",
+             (void *)dt_widget_scroll_focus());
     g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY, NULL);
     g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, NULL);
     return G_SOURCE_REMOVE;
@@ -514,7 +515,7 @@ gboolean dt_bauhaus_focus_in_callback(GtkWidget *widget, GdkEventFocus event, gp
   // Scroll focus needs to be managed separately from Gtk focus
   // because of Gtk notebooks (tabs): Gtk gives focus automatically to the first
   // notebook child, which is not what we want for scroll event capture.
-  dt_gui_get_global()->has_scroll_focus = widget;
+  dt_widget_set_scroll_focus(widget);
   gtk_widget_queue_draw(widget);
   return FALSE;
 }
@@ -901,7 +902,7 @@ static gboolean dt_bauhaus_popup_scroll(GtkWidget *widget, GdkEventScroll *event
 {
   dt_bauhaus_t *bh = g_object_get_data(G_OBJECT(widget), "bauhaus");
   dt_bauhaus_widget_t *w = bh->current;
-  dt_gui_get_global()->has_scroll_focus = GTK_WIDGET(w);
+  dt_widget_set_scroll_focus(GTK_WIDGET(w));
   return _widget_scroll(GTK_WIDGET(w), event);
 }
 
@@ -1078,8 +1079,8 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
     const gboolean real_leave = event->mode == GDK_CROSSING_NORMAL
                                 && event->detail != GDK_NOTIFY_INFERIOR
                                 && (!dt_gui_get_global() || !dt_gui_widgets_suppressed());
-    if(real_leave && dt_gui_get_global()->has_scroll_focus == widget)
-      dt_gui_get_global()->has_scroll_focus = NULL;
+    if(real_leave && dt_widget_scroll_focus() == widget)
+      dt_widget_set_scroll_focus(NULL);
   }
 
   gtk_widget_queue_draw(widget);
@@ -1246,8 +1247,8 @@ static void _widget_finalize(GObject *widget)
   if(!IS_NULL_PTR(accel_path) && !IS_NULL_PTR(dt_gui_get_global()) && !IS_NULL_PTR(dt_gui_get_accels()))
     dt_accels_remove_accel(dt_gui_get_accels(), accel_path, widget);
 
-  if(dt_gui_get_global() && dt_gui_get_global()->has_scroll_focus == GTK_WIDGET(w))
-    dt_gui_get_global()->has_scroll_focus = NULL;
+  if(dt_widget_scroll_focus() == GTK_WIDGET(w))
+    dt_widget_set_scroll_focus(NULL);
   dt_gui_throttle_cancel(widget);
   if(w->type == DT_BAUHAUS_SLIDER)
   {
@@ -1426,7 +1427,7 @@ dt_bauhaus_t * dt_bauhaus_init()
   gtk_widget_add_events(bauhaus->popup_area, GDK_POINTER_MOTION_MASK
                                                        | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                                        | GDK_KEY_PRESS_MASK | GDK_LEAVE_NOTIFY_MASK
-                                                       | dt_gui_get_global()->scroll_mask);
+                                                       | dt_widget_scroll_mask());
 
   GObject *window = G_OBJECT(bauhaus->popup_window);
   GObject *area = G_OBJECT(bauhaus->popup_area);
@@ -1538,7 +1539,7 @@ static void _bauhaus_widget_init(dt_bauhaus_t *bauhaus, dt_bauhaus_widget_t *w, 
                                        | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                        | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
                                        | GDK_FOCUS_CHANGE_MASK
-                                       | dt_gui_get_global()->scroll_mask);
+                                       | dt_widget_scroll_mask());
 
   gtk_widget_set_can_focus(GTK_WIDGET(w), TRUE);
   gtk_widget_set_halign(GTK_WIDGET(w), GTK_ALIGN_FILL);
@@ -3183,7 +3184,7 @@ void dt_bauhaus_hide_popup(dt_bauhaus_t *bh)
 
     // Give back focus to the attached widget
     gtk_widget_grab_focus(GTK_WIDGET(bh->current));
-    dt_gui_get_global()->has_scroll_focus = GTK_WIDGET(bh->current);
+    dt_widget_set_scroll_focus(GTK_WIDGET(bh->current));
 
     bh->current = NULL;
   }
@@ -3310,7 +3311,7 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   const gboolean popup_captured = (w->bauhaus->current == w);
-  const gboolean scroll_captured = (dt_gui_get_global()->has_scroll_focus == widget);
+  const gboolean scroll_captured = (dt_widget_scroll_focus() == widget);
   const gboolean key_captured = gtk_widget_has_focus(widget);
   const gboolean smooth = (event->direction == GDK_SCROLL_SMOOTH);
 
@@ -3326,7 +3327,7 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
     return FALSE;
 
   // Keep ownership of the whole touchpad gesture sequence.
-  dt_gui_get_global()->has_scroll_focus = widget;
+  dt_widget_set_scroll_focus(widget);
 
   int delta_x = 0;
   int delta_y = 0;
@@ -3350,7 +3351,7 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
       _slider_add_step(widget, delta_x, event->state);
       return TRUE;
     }
-    else if(vscroll && dt_gui_get_global()->has_scroll_focus)
+    else if(vscroll && dt_widget_scroll_focus())
     {
       // convert vertical scrolling to horizontal only if we have the scroll focus
       _slider_add_step(widget, -delta_y, event->state);
@@ -3362,7 +3363,7 @@ static gboolean _widget_scroll(GtkWidget *widget, GdkEventScroll *event)
   }
   else
   {
-    if(vscroll && dt_gui_get_global()->has_scroll_focus)
+    if(vscroll && dt_widget_scroll_focus())
     {
       _combobox_next_sensitive(w, delta_y);
       return TRUE;
@@ -3438,12 +3439,12 @@ static gboolean dt_bauhaus_combobox_button_press(GtkWidget *widget, GdkEventButt
 
   if(activated == BH_REGION_OUT)
   {
-    dt_gui_get_global()->has_scroll_focus = NULL;
+    dt_widget_set_scroll_focus(NULL);
     return FALSE;
   }
 
   gtk_widget_grab_focus(widget);
-  dt_gui_get_global()->has_scroll_focus = widget;
+  dt_widget_set_scroll_focus(widget);
 
   if(activated == BH_REGION_QUAD && w->quad_toggle)
   {
@@ -3855,12 +3856,12 @@ static gboolean dt_bauhaus_slider_button_press(GtkWidget *widget, GdkEventButton
 
   if(activated == BH_REGION_OUT)
   {
-    dt_gui_get_global()->has_scroll_focus = NULL;
+    dt_widget_set_scroll_focus(NULL);
     return FALSE;
   }
 
   gtk_widget_grab_focus(widget);
-  dt_gui_get_global()->has_scroll_focus = widget;
+  dt_widget_set_scroll_focus(widget);
 
   if(activated == BH_REGION_QUAD && w->quad_toggle)
   {

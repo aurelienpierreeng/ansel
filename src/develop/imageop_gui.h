@@ -53,6 +53,15 @@ GtkWidget *dt_iop_button_new(dt_iop_module_t *self, const gchar *label,
 /* returns up or !up depending on the masks_updown preference */
 gboolean dt_mask_scroll_increases(int up);
 
+
+/* The IOP-parameter flavour of widgets/resetlabel.h: a label that, when double-clicked,
+ * restores one parameter to its default, refreshes the module GUI and records history.
+ *
+ * The widget itself knows none of that -- it only emits "reset". This wrapper is where the
+ * IOP meaning is attached, which is why it lives in develop/ and not in widgets/. */
+GtkWidget *dt_iop_gui_reset_label_new(const gchar *label, dt_iop_module_t *module, void *param,
+                                      int param_size);
+
 #ifdef __cplusplus
 }
 #endif

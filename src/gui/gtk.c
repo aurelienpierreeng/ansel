@@ -72,6 +72,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "darktable.h"
+#include "widgets/widget_settings.h"
 #include "common/colorspaces.h"
 #include "common/l10n.h"
 #include "common/file_location.h"
@@ -1087,7 +1088,7 @@ static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer us
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
 
   /* Reset Gtk focus */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_widget_set_scroll_focus(NULL);
   gtk_widget_grab_focus(w);
 
   const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
@@ -1283,11 +1284,11 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->styles_popup.module = NULL;
 
   // smooth scrolling must be enabled to handle trackpad/touch events
-  gui->scroll_mask = GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK;
+  dt_widget_set_scroll_mask(GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
 
   // Emulates the same feature as Gtk focus but for scrolling events
   // The GtkWidget capturing scrolling events will write its address in this pointer
-  gui->has_scroll_focus = NULL;
+  dt_widget_set_scroll_focus(NULL);
 
   // Init global accels. We localize the config because accels pathes use translated GUI labels.
   // User switching between languages may loose their custom shortcuts if we didn't localize them.
@@ -1405,7 +1406,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   // Gtk seems to capture some reserved shortcuts (Tab). We need to bypass it entirely
   // by hacking all events.
-  gtk_widget_add_events(dt_ui_main_window(gui->ui), gui->scroll_mask);
+  gtk_widget_add_events(dt_ui_main_window(gui->ui), dt_widget_scroll_mask());
   g_signal_connect(G_OBJECT(dt_ui_main_window(gui->ui)), "event", G_CALLBACK(dt_accels_dispatch), gui->accels);
 
   // finally set the cursor to be the default.
@@ -1487,6 +1488,7 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
 
   gui->ppd = dt_get_system_gui_ppd(widget);
   gui->filter_image = CAIRO_FILTER_GOOD;
+  dt_widget_set_image_filter(gui->filter_image);
 
   // get the screen resolution
   const float screen_dpi_overwrite = dt_conf_get_float("screen_dpi_overwrite");
@@ -1823,7 +1825,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   darktable.gui->ui->toast_msg = gtk_label_new("");
   g_signal_connect(G_OBJECT(eb), "button-press-event", G_CALLBACK(_ui_toast_button_press_event),
                    darktable.gui->ui->toast_msg);
-  gtk_widget_set_events(eb, GDK_BUTTON_PRESS_MASK | darktable.gui->scroll_mask);
+  gtk_widget_set_events(eb, GDK_BUTTON_PRESS_MASK | dt_widget_scroll_mask());
   g_signal_connect(G_OBJECT(eb), "scroll-event", G_CALLBACK(_scrolled), NULL);
   gtk_label_set_ellipsize(GTK_LABEL(darktable.gui->ui->toast_msg), PANGO_ELLIPSIZE_MIDDLE);
 

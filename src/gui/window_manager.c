@@ -18,6 +18,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/utility.h"
+#include "widgets/widget_settings.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -26,7 +27,7 @@
 #include "gui/bauhaus.h"
 #include "gui/window_manager.h"
 #include "gui/actions/menu.h"
-#include "gui/dtgtk/sidepanel.h"
+#include "widgets/sidepanel.h"
 #include "libs/lib.h"
 
 #define WINDOW_DEBUG 0
@@ -410,6 +411,10 @@ static void _ui_init_panel_left(dt_ui_t *ui, GtkWidget *container)
   GtkWidget *widget;
 
   /* create left panel main widget and add it to ui */
+  // Configuration reaches the widget from here, not from inside it. Must precede the first
+  // dtgtk_side_panel_new(): the value is read in the GObject class_init.
+  dtgtk_side_panel_set_min_width(dt_conf_get_int("min_panel_width"));
+
   widget = ui->panels[DT_UI_PANEL_LEFT] = dtgtk_side_panel_new();
   gtk_widget_set_name(widget, "left");
   _ui_init_panel_size(widget, ui);
@@ -558,7 +563,7 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   gtk_widget_set_app_paintable(cda, TRUE);
   gtk_widget_set_events(cda, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK
                              | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
-                             | dt_gui_get_global()->scroll_mask);
+                             | dt_widget_scroll_mask());
   // The center canvas is the MAIN child of the overlay (gtk_container_add), NOT an overlay child.
   // GtkOverlay renders overlay children through their own offscreen GdkWindow; on Wayland that
   // path goes stale until a pointer event invalidates it, and because the canvas is the heavily,

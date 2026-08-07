@@ -57,6 +57,7 @@
 */
 
 #include "common/macros.h"
+#include "widgets/widget_settings.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -1637,7 +1638,7 @@ void gui_init(struct dt_iop_module_t *self)
                         GDK_POINTER_MOTION_MASK
                         | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                         | GDK_LEAVE_NOTIFY_MASK | GDK_ENTER_NOTIFY_MASK
-                        | dt_gui_get_global()->scroll_mask);
+                        | dt_widget_scroll_mask());
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(area_draw), self);
   g_signal_connect(G_OBJECT(c->area), "button-press-event", G_CALLBACK(area_button_press), self);

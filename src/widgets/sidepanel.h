@@ -25,8 +25,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_DTGTK_SIDEPANEL_H
-#define DT_GUI_DTGTK_SIDEPANEL_H
+#ifndef DT_WIDGETS_SIDEPANEL_H
+#define DT_WIDGETS_SIDEPANEL_H
 
 #include <glib-object.h>
 #include <gtk/gtk.h>
@@ -58,11 +58,15 @@ typedef struct _GtkDarktableSidePanelClass
 
 GType dtgtk_side_panel_get_type(void);
 
+/** Minimum panel width, in pixels. The application sets this from its preferences before the
+ *  first panel is created; the widget itself never reads configuration. */
+void dtgtk_side_panel_set_min_width(int width);
+
 GtkWidget *dtgtk_side_panel_new();
 
 G_END_DECLS
 
-#endif // DT_GUI_DTGTK_SIDEPANEL_H
+#endif // DT_WIDGETS_SIDEPANEL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

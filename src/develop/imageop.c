@@ -64,6 +64,7 @@
 */
 
 #include "darktable.h"
+#include "widgets/widget_settings.h"
 #include "common/conf.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
@@ -2246,10 +2247,10 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(out_focus_module)
   {
     GtkWidget *out_focus_widget = dt_iop_gui_get_pluginui(out_focus_module);
-    GtkWidget *scroll_focus = dt_gui_get_global()->has_scroll_focus;
+    GtkWidget *scroll_focus = dt_widget_scroll_focus();
     if(scroll_focus && out_focus_widget && gtk_widget_is_ancestor(scroll_focus, out_focus_widget))
     {
-      dt_gui_get_global()->has_scroll_focus = NULL;
+      dt_widget_set_scroll_focus(NULL);
       gtk_widget_queue_draw(scroll_focus);
     }
 
@@ -2419,7 +2420,7 @@ static gboolean _iop_plugin_body_button_press(GtkWidget *w, GdkEventButton *e, g
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  dt_gui_get_global()->has_scroll_focus = NULL;
+  dt_widget_set_scroll_focus(NULL);
 
   gboolean handled = FALSE;
 
@@ -2511,7 +2512,7 @@ static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  dt_gui_get_global()->has_scroll_focus = NULL;
+  dt_widget_set_scroll_focus(NULL);
 
   if(e->button == 1)
   {

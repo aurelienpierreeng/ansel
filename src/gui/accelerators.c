@@ -42,6 +42,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "accelerators.h"
+#include "widgets/widget_settings.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
@@ -2602,7 +2603,8 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   GtkWidget *focused_widget = NULL;
   if(!IS_NULL_PTR(state->main_window))
     focused_widget = gtk_window_get_focus(state->main_window);
-  GtkWidget *scroll_focused_widget = !IS_NULL_PTR(dt_gui_get_global()) ? dt_gui_get_global()->has_scroll_focus : NULL;
+  // no GUI-global test needed: the accessor owns the register, it does not dereference darktable.gui
+  GtkWidget *scroll_focused_widget = dt_widget_scroll_focus();
 
   gboolean target_focused_gtk = FALSE;
   gboolean target_focused_scroll = FALSE;

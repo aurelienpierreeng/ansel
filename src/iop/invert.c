@@ -56,7 +56,8 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "gui/dtgtk/resetlabel.h"
+#include "develop/imageop_gui.h"
+#include "widgets/resetlabel.h"
 #include "gui/color_picker_proxy.h"
 
 #include "gui/gtk.h"
@@ -377,7 +378,7 @@ void gui_init(dt_iop_module_t *self)
   dt_iop_invert_params_t *p = (dt_iop_invert_params_t *)self->params;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->label = DTGTK_RESET_LABEL(dtgtk_reset_label_new("", self, &p->color, sizeof(float) * 4));
+  g->label = DTGTK_RESET_LABEL(dt_iop_gui_reset_label_new("", self, &p->color, sizeof(float) * 4));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->label), TRUE, TRUE, 0);
 
   g->pickerbuttons = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));

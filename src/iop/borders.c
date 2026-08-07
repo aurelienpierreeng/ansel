@@ -62,7 +62,8 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "gui/dtgtk/resetlabel.h"
+#include "develop/imageop_gui.h"
+#include "widgets/resetlabel.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
@@ -1093,7 +1094,7 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *label, *box;
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  label = dtgtk_reset_label_new(_("border color"), self, &p->color, 3 * sizeof(float));
+  label = dt_iop_gui_reset_label_new(_("border color"), self, &p->color, 3 * sizeof(float));
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   g->colorpick = gtk_color_button_new_with_rgba(&color);
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->colorpick), FALSE);
@@ -1105,7 +1106,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), box, TRUE, TRUE, 0);
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  label = dtgtk_reset_label_new(_("frame line color"), self, &p->color, 3 * sizeof(float));
+  label = dt_iop_gui_reset_label_new(_("frame line color"), self, &p->color, 3 * sizeof(float));
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   g->frame_colorpick = gtk_color_button_new_with_rgba(&color);
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->frame_colorpick), FALSE);
