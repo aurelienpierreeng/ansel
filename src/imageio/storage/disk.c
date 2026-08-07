@@ -51,7 +51,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/global_mutexes.h"
 #include "common/image.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "imageio/imageio_module.h"
 #include "common/utility.h"
 #include "common/variables.h"

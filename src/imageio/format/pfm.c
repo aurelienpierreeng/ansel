@@ -30,7 +30,7 @@
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "imageio/imageio_module.h"
 #include "imageio/format/imageio_format_api.h"
 #include <glib/gstdio.h>

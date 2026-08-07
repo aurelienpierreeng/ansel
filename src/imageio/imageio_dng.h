@@ -44,7 +44,7 @@
 #include <string.h>
 
 #include "common/exif.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "math/simd.h"
 
 

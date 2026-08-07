@@ -86,7 +86,7 @@
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
 #include "common/image_extensions.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "common/mipmap_cache.h"
 #include "common/ratings.h"
 #include "common/tags.h"
