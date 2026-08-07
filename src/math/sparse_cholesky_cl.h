@@ -27,7 +27,7 @@
 
 #include "common/logging.h"
 #include "common/macros.h"
-#include "common/solvers/sparse_cholesky.h" // _sp_etree / _sp_ereach (host symbolic)
+#include "math/sparse_cholesky.h" // _sp_etree / _sp_ereach (host symbolic)
 #include "common/times.h"
 
 #ifdef HAVE_OPENCL

@@ -62,7 +62,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "common/solvers/choleski.h" // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
+#include "math/choleski.h" // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

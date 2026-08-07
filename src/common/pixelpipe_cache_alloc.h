@@ -75,6 +75,19 @@ void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache,
   ((int *)dt_pixelpipe_cache_alloc_align((size_t)(count) * sizeof(int), (pipe)))
 #endif
 
+/* Cache-id forms. The `pipe` forms below are sugar for these: a caller that has only
+ * the pipeline TYPE (an int) rather than the pipeline itself -- e.g. a maths solver that
+ * must not depend on develop/ -- uses these directly. */
+#ifndef dt_pixelpipe_cache_alloc_align_int_cache
+#define dt_pixelpipe_cache_alloc_align_int_cache(count, id) \
+  ((int *)dt_pixelpipe_cache_alloc_align_cache((size_t)(count) * sizeof(int), (id)))
+#endif
+
+#ifndef dt_pixelpipe_cache_alloc_align_double_cache
+#define dt_pixelpipe_cache_alloc_align_double_cache(count, id) \
+  ((double *)dt_pixelpipe_cache_alloc_align_cache((size_t)(count) * sizeof(double), (id)))
+#endif
+
 #ifndef dt_pixelpipe_cache_alloc_align_double
 #define dt_pixelpipe_cache_alloc_align_double(count, pipe) \
   ((double *)dt_pixelpipe_cache_alloc_align((size_t)(count) * sizeof(double), (pipe)))

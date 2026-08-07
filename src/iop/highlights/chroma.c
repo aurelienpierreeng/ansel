@@ -303,7 +303,7 @@ int _aniso_div_solve(float *const restrict ratios, const float *const restrict v
 
     if(success)
     {
-      _sp_chol_t *factor = _sp_chol_factor(n_unknowns, matrix_col_ptr, matrix_row_index, matrix_values, pipe);
+      _sp_chol_t *factor = _sp_chol_factor(n_unknowns, matrix_col_ptr, matrix_row_index, matrix_values, pipe->type);
       if(factor)
       {
         for(int c = 0; c < 3; c++)

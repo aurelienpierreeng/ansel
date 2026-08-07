@@ -21,7 +21,7 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/solvers/choleski.h"
+#include "math/choleski.h"
 #include "develop/imageop.h"
 #include "iop/highlights/dome.h"
 #include "iop/highlights/pde.h"
@@ -219,7 +219,7 @@ void _biharmonic_dome(float *const restrict field, const uint8_t *const restrict
           // b = boundary_sum). A is symmetric positive-definite, so the sparse Cholesky applies
           // (SPD factorization annotated in common/solvers/sparse_cholesky.h); a DIRECT solve is
           // exact regardless of conditioning, unlike CG which stalls in float at kappa ~ L^4.
-          _sp_chol_t *factor = _sp_chol_factor(n_unknowns, matrix_col_ptr, matrix_row_index, matrix_values, pipe);
+          _sp_chol_t *factor = _sp_chol_factor(n_unknowns, matrix_col_ptr, matrix_row_index, matrix_values, pipe->type);
           if(factor)
           {
             _sp_chol_solve(factor, right_hand_side);
