@@ -69,7 +69,6 @@ static sqlite3_stmt *_styles_apply_items_stmt = NULL;
 #include "develop/dev_history.h"
 
 
-#include "gui/styles.h"
 #include <libxml/encoding.h>
 #include <libxml/xmlwriter.h>
 
@@ -641,20 +640,6 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
 
   const guint styles_cnt = g_list_length(styles);
   dt_control_log(ngettext("style successfully applied!", "styles successfully applied!", styles_cnt));
-}
-
-void dt_styles_create_from_list(const GList *list)
-{
-  gboolean selected = FALSE;
-  /* for each image create style */
-  for(const GList *l = list; l; l = g_list_next(l))
-  {
-    const int32_t imgid = GPOINTER_TO_INT(l->data);
-    dt_gui_styles_dialog_new(imgid);
-    selected = TRUE;
-  }
-
-  if(!selected) dt_control_log(_("no image selected!"));
 }
 
 static const char *_dt_styles_normalize_multi_name(const char *multi_name)

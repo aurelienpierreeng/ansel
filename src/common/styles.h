@@ -81,9 +81,6 @@ void dt_style_item_free(gpointer data);
 gboolean dt_styles_create_from_image(const char *name, const char *description,
                                      const int32_t imgid, GList *items, gboolean copy_iop_order);
 
-/** creates styles from selection */
-void dt_styles_create_from_list(const GList *list);
-
 /** creates a new style from specified style, items are the style number of items to include in style */
 void dt_styles_create_from_style(const char *name, const char *newname, const char *description,
                                  GList *filter, const int32_t imgid, GList *update,
