@@ -29,11 +29,6 @@ gboolean test_tca_show_manual_sliders(dt_iop_lens_tca_source_t tca_method)
   return tca_show_manual_sliders(tca_method);
 }
 
-gboolean test_tca_show_override_sliders(dt_iop_lens_tca_source_t tca_method)
-{
-  return tca_show_override_sliders(tca_method);
-}
-
 int test_per_axis_modify_flags(dt_iop_lens_correction_source_t dist,
                                 dt_iop_lens_correction_source_t vig,
                                 dt_iop_lens_tca_source_t tca,

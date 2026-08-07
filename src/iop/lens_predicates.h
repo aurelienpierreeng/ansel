@@ -104,11 +104,6 @@ static inline gboolean tca_show_manual_sliders(dt_iop_lens_tca_source_t tca_meth
   return tca_method == dt_iop_lens_tca_source_t::MANUAL;
 }
 
-static inline gboolean tca_show_override_sliders(dt_iop_lens_tca_source_t tca_method)
-{
-  return FALSE;
-}
-
 static inline int per_axis_modify_flags(dt_iop_lens_correction_source_t dist,
                                          dt_iop_lens_correction_source_t vig,
                                          dt_iop_lens_tca_source_t tca,

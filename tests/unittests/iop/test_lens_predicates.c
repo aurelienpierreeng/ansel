@@ -105,7 +105,6 @@ int test_tca_selector_entries(gboolean has_embedded,
                                const char *out_labels[3],
                                int out_values[3]);
 gboolean test_tca_show_manual_sliders(int tca_method);
-gboolean test_tca_show_override_sliders(int tca_method);
 int test_per_axis_modify_flags(int dist, int vig, int tca, gboolean monochrome);
 const char *test_corrections_status_string(int dist, int vig, int tca,
                                             gboolean monochrome);
@@ -268,33 +267,6 @@ static void test_tca_show_manual_sliders_lensfun_DB_false(void **state)
   (void)state;
   TR_STEP("tca_show_manual_sliders(LENSFUN_DB) == FALSE");
   assert_false(test_tca_show_manual_sliders(TCA_LENSFUN_DB));
-}
-
-/* ---------------------------------------------------------------------------
- * tca_show_override_sliders (FR-19: legacy tca_override toggle removed;
- * the predicate is kept as a no-op returning FALSE for transitional
- * call sites that have not yet been updated)
- * --------------------------------------------------------------------------- */
-
-static void test_tca_show_override_sliders_off_false(void **state)
-{
-  (void)state;
-  TR_STEP("tca_show_override_sliders(OFF) == FALSE (FR-19: tca_override removed)");
-  assert_false(test_tca_show_override_sliders(TCA_OFF));
-}
-
-static void test_tca_show_override_sliders_manual_false(void **state)
-{
-  (void)state;
-  TR_STEP("tca_show_override_sliders(MANUAL) == FALSE");
-  assert_false(test_tca_show_override_sliders(TCA_MANUAL));
-}
-
-static void test_tca_show_override_sliders_lensfun_DB_false(void **state)
-{
-  (void)state;
-  TR_STEP("tca_show_override_sliders(LENSFUN_DB) == FALSE");
-  assert_false(test_tca_show_override_sliders(TCA_LENSFUN_DB));
 }
 
 /* ---------------------------------------------------------------------------
@@ -570,10 +542,6 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_tca_show_manual_sliders_off_false),
     cmocka_unit_test(test_tca_show_manual_sliders_manual_true),
     cmocka_unit_test(test_tca_show_manual_sliders_lensfun_DB_false),
-    /* tca_show_override_sliders (3) */
-    cmocka_unit_test(test_tca_show_override_sliders_off_false),
-    cmocka_unit_test(test_tca_show_override_sliders_manual_false),
-    cmocka_unit_test(test_tca_show_override_sliders_lensfun_DB_false),
     /* per_axis_modify_flags (12) */
     cmocka_unit_test(test_per_axis_modify_flags_all_lensfun_DB_color),
     cmocka_unit_test(test_per_axis_modify_flags_all_lensfun_DB_monochrome),
