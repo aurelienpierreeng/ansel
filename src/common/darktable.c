@@ -2218,11 +2218,20 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   // The bounds scale with the envelope: on a normal machine the floor stays within
   // [512 MB, total/4], but inside a small container keeping 512 MB free would eat
   // the whole allotment, so the lower bound relaxes to total/8 there.
+  // An ABSOLUTE reserve, not a fraction of anything. What the kernel and other
+  // applications need in order to keep breathing does not scale with how much RAM the
+  // machine has: 200 MiB is about as useful on a 4 GB laptop as on a 128 GB workstation.
+  //
+  // Deriving it from the headroom (previously half of it) made the floor grow with the
+  // machine, which is backwards -- a 31 GB system ended up reserving 5175 MiB, so once
+  // free RAM dipped under that the pixelpipe cache refused EVERY allocation, including
+  // ones of a few kilobytes, and the application could not even start. Reserving a large
+  // share of a large machine also wastes precisely the memory the user bought it for.
   int64_t pressure_floor = dt_conf_get_int64("memory_pressure_floor") * 1024 * 1024;
-  if(pressure_floor <= 0) pressure_floor = (int64_t)resources->headroom_memory / 2;
-  const int64_t floor_min = MIN((int64_t)512 * 1024 * 1024, (int64_t)resources->total_memory / 8);
-  const int64_t floor_max = MAX((int64_t)resources->total_memory / 4, floor_min);
-  resources->pressure_floor_memory = CLAMP(pressure_floor, floor_min, floor_max);
+  if(pressure_floor <= 0) pressure_floor = DT_MEMORY_PRESSURE_FLOOR_DEFAULT;
+  // Only a sanity clamp for hand-set values: never negative, and never so large on a
+  // small machine that the floor swallows the whole envelope.
+  resources->pressure_floor_memory = CLAMP(pressure_floor, 0, (int64_t)resources->total_memory / 4);
 
   // Keep mipmap cache between 256 MB and a sixth of the system RAM
   resources->mipmap_memory = dt_conf_get_int64("memory_mipmap_cache") * 1024 * 1024;

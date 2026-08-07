@@ -1454,6 +1454,12 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pix
   return entry;
 }
 
+/* Allocations at or below this size bypass the system-pressure valve: they cannot
+ * change the pressure meaningfully, and refusing them breaks functionality for no
+ * benefit. Deliberately small -- this is an escape hatch for scratch and bookkeeping
+ * buffers, not a hole large enough for pipeline tiles. */
+#define DT_PIXELPIPE_CACHE_PRESSURE_EXEMPT_SIZE ((size_t)1024 * 1024)
+
 /* System memory-pressure valve (issue #1083).
  *
  * The internal budget (max_memory) is only a plan made at startup: it says nothing
@@ -1540,8 +1546,29 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
 
   // The post-trim re-probe can itself come back unanswered; absence of information is
   // never a reason to refuse (see the dt_get_system_available_mem() header contract).
-  const gboolean allowed = !cache->sys_probe_valid
-                           || (cache->sys_available_est >= request_size + pressure_floor / 2);
+  /* A request too small to move the needle must never be refused. The valve exists to
+   * stop the cache COMMITTING LARGE BUFFERS into the memory the OS and other
+   * applications need -- not to make Ansel fail. Because the floor term dominates the
+   * comparison below, a system already under the floor refused EVERY allocation
+   * regardless of size, printing the giveaway line
+   *
+   *   [pixelpipe_cache] refusing to allocate 0 MiB: the system has only 1638 MiB ...
+   *
+   * and turning a transient shortage into a hard failure (it segfaulted startup through
+   * an unchecked allocation in common/points.h). Anything at or below this size cannot
+   * meaningfully change system pressure, and refusing it buys nothing. Larger requests
+   * remain fully gated.
+   *
+   * The comparison below uses the WHOLE floor, not half of it. The floor used to be a
+   * large derived number where a half-way hard limit made sense as hysteresis; it is now
+   * an absolute reserve (DT_MEMORY_PRESSURE_FLOOR_DEFAULT, 200 MiB), and "always leave
+   * 200 MiB to the OS" has to mean 200, not 100. The shed/trim step above already ran at
+   * this same threshold, so reaching here means trimming did not recover enough. */
+  const gboolean negligible = request_size <= DT_PIXELPIPE_CACHE_PRESSURE_EXEMPT_SIZE;
+
+  const gboolean allowed = negligible
+                           || !cache->sys_probe_valid
+                           || (cache->sys_available_est >= request_size + pressure_floor);
 
   if(allowed)
   {
