@@ -78,6 +78,26 @@ void dt_film_set_folder_status();
  * does not move files on disk). Used by the library module to fix moved folders. */
 void dt_film_relocate(const char *old_path, const char *new_path);
 
+/* Removing an empty film roll leaves an empty DIRECTORY on disk, and the "ask_before_rmdir"
+ * preference says the user must be asked before it goes. Asking is a dialog, which is not
+ * this layer's business -- so the backend hands the list to whoever can ask, and does the
+ * deleting itself once told to.
+ *
+ * With no handler registered (ansel-cli, ansel-generate-cache, any headless run) the list is
+ * simply freed and nothing is deleted. That is the safe default: "ask first" cannot be
+ * honoured when there is nobody to ask, so the directories stay. */
+
+/** Invoked with the directories that are now empty. TAKES OWNERSHIP of the list: the handler
+ *  must free it with g_list_free_full(list, dt_free_gpointer) when done, which may be after
+ *  it returns (the GUI defers to an idle callback). */
+typedef void (*dt_film_confirm_rmdir_handler_t)(GList *empty_dirs);
+
+/** Install the handler that asks the user about empty directories. NULL removes it. */
+void dt_film_set_confirm_rmdir_handler(dt_film_confirm_rmdir_handler_t handler);
+
+/** rmdir() every path in `dirs`. The list is NOT freed. Call once the user has agreed. */
+void dt_film_remove_directories(const GList *dirs);
+
 #endif // DT_COMMON_FILM_H
 
 // clang-format off

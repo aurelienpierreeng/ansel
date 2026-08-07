@@ -51,6 +51,7 @@
 #ifdef HAVE_OPENCL
 
 #include "common/opencl.h"
+#include "common/startup_progress.h"
 #include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
 #include "system/capabilities.h"
 #include "pixel/bilateralcl.h"
@@ -83,20 +84,13 @@
 #include <sys/stat.h>
 #include <zlib.h>
 
-static gboolean _opencl_splash_active = FALSE;
-
 static inline void _opencl_splash_update_compile(const char *programname)
 {
   if(IS_NULL_PTR(programname)) return;
-  if(IS_NULL_PTR(dt_gui_get_global())) return;
 
-  if(!_opencl_splash_active)
-  {
-    dt_gui_splash_init();
-    _opencl_splash_active = TRUE;
-  }
-
-  dt_gui_splash_updatef(_("Building OpenCL kernels: %s"), programname);
+  // Whether this becomes a splash screen -- and whether one needs opening first -- is the
+  // display's business. No "is there a GUI?" test needed: unhandled reports are no-ops.
+  dt_startup_progress_report(_("Building OpenCL kernels: %s"), programname);
 }
 
 static const char *dt_opencl_get_vendor_by_id(unsigned int id);
@@ -1018,8 +1012,6 @@ end:
 
 void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics)
 {
-  _opencl_splash_active = FALSE;
-
   dt_pthread_mutex_init(&cl->lock, NULL);
   dt_pthread_mutex_init(&cl->mem_sizes_lock, NULL);
   cl->mem_sizes = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
