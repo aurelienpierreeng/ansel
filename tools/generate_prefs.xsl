@@ -59,7 +59,7 @@
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
 #include <gtk/gtk.h>
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/calculator.h"
 
 #define NON_DEF_CHAR "●"

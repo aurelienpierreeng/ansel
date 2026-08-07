@@ -32,7 +32,7 @@
 #include "common/module_versioning.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 

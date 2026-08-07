@@ -85,7 +85,7 @@
 #include "gui/gtk.h"
 #include "gui/splash.h"
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"

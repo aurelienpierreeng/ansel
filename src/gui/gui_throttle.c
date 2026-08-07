@@ -20,7 +20,7 @@
 
 #include "common/atomic.h"
 #include "common/dtpthread.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "develop/pixelpipe_hb.h"
 
 #include <stdint.h>

@@ -39,7 +39,7 @@
 #include "common/lut3d.h"
 #include "common/lut_viewer.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/develop.h"

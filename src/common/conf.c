@@ -48,7 +48,7 @@
 #include "common/darktable.h"
 #include "common/file_location.h"
 #include "common/math.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>

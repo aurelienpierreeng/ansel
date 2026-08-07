@@ -48,7 +48,7 @@
 #include "common/dtpthread.h"
 #include "common/image_cache.h"
 #include "common/tags.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs/film_jobs.h"
 #include "control/jobs.h"

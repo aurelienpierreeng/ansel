@@ -38,7 +38,7 @@
 #include "common/pwstorage/pwstorage.h"
 #include "common/tags.h"
 #include "common/curl_tools.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "dtgtk/button.h"
 #include "gui/gtk.h"

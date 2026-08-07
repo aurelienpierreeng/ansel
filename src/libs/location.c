@@ -41,7 +41,7 @@
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/jobs.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"

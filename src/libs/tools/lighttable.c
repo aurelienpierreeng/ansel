@@ -41,7 +41,7 @@
 #include <gdk/gdkkeysyms.h>
 
 #include "common/collection.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "dtgtk/thumbtable.h"
 #include "gui/actions/menu.h"
 

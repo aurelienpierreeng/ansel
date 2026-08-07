@@ -24,7 +24,7 @@
 
 #if defined(HAVE_SENTRY) || defined(HAVE_TELEMETRY)
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include "gui/gtk.h"
 
 // Non-confgen sentinel: its presence means the user has already been asked. The

@@ -59,7 +59,7 @@
 #include "common/opencl.h"
 #include "common/math.h"
 #include "common/collection.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

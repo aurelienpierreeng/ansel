@@ -23,7 +23,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 
 #include <glib.h>

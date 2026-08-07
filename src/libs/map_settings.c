@@ -28,7 +28,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include "gui/gtk.h"
 #include "libs/lib.h"

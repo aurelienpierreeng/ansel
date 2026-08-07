@@ -122,7 +122,7 @@
 #include "common/utility.h"
 #include "common/history.h"
 #include "common/datetime.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/blend.h"

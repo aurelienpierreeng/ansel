@@ -67,7 +67,7 @@
 #include "pixel/fast_guided_filter.h"
 #include "common/opencl.h"
 #include "develop/imageop_math.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 #include "iop/highlights/gather.h"
 #include "iop/highlights/laplacian.h"
 #include <math.h>

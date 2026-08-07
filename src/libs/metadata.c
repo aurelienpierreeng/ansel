@@ -54,7 +54,7 @@
 #include "common/database.h"
 #include "gui/gdkkeys.h"
 #include "common/debug.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 static sqlite3_stmt *_metadata_update_stmt = NULL;
 #include "control/signal.h"

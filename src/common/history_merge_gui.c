@@ -17,7 +17,7 @@
 */
 
 #include "common/history_merge_gui.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include "common/macros.h"
 #include "common/mem_alloc.h"

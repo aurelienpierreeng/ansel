@@ -16,7 +16,7 @@
 
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
-#include "control/conf.h"
+#include "common/conf.h"
 
 static void _insert_default(const char *name, const char *value)
 {

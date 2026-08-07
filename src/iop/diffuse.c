@@ -51,7 +51,7 @@
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 #include "develop/openmp_maths.h"
 #include "develop/tiling.h"
 #include "dtgtk/paint.h"

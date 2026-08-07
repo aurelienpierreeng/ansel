@@ -35,7 +35,7 @@
 #include "imageio/imageio_module.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/blend.h"

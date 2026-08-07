@@ -41,7 +41,7 @@
 #include "common/selection.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "dtgtk/thumbtable.h"
 

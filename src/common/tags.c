@@ -53,7 +53,7 @@
 #include "common/grouping.h"
 #include "common/selection.h"
 #include "common/undo.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include <glib.h>
 #if defined (_WIN32)
 #include "win/getdelim.h"

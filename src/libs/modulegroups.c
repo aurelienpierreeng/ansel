@@ -51,7 +51,7 @@
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/usermanual_url.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

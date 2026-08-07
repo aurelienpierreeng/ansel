@@ -34,7 +34,7 @@
 #include <winsock2.h>
 #endif
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/fp_mode.h"
 #include "common/logging.h"
 

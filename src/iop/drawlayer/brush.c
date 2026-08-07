@@ -30,7 +30,7 @@
 
 #include "common/macros.h"
 #include "common/simd.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 
 #include <math.h>
 #include <string.h>

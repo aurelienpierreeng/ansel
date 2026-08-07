@@ -20,7 +20,7 @@
 
 #include "common/datetime.h"
 #include "common/file_location.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/jobs/import_jobs.h"

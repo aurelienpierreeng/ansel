@@ -22,7 +22,7 @@
 */
 
 #include "dtgtk/sidepanel.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include <gtk/gtk.h>
 

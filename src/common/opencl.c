@@ -65,7 +65,7 @@
 #include "pixel/locallaplaciancl.h"
 #include "common/nvidia_gpus.h"
 #include "common/opencl_drivers_blacklist.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "gui/splash.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"

@@ -30,7 +30,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/datetime.h"
 #include "common/folder_survey.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/jobs/import_jobs.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"

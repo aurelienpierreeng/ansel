@@ -73,7 +73,7 @@
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
 #include "common/tags.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "control/jobs.h"

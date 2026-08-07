@@ -35,7 +35,7 @@
 #include "control/settings.h"
 #include "common/image_extensions.h"
 #include "control/control.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/jobs/control_jobs.h"
 #include "common/collection.h"
 #include "common/film.h"

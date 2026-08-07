@@ -45,7 +45,7 @@
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
 #include "gui/gdkkeys.h"

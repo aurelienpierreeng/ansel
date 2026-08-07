@@ -44,7 +44,7 @@
 #include "develop/pixelpipe_cache_alloc.h"
 #include "bauhaus/bauhaus.h"
 #include "common/imagebuf.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"

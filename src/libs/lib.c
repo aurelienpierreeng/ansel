@@ -62,7 +62,7 @@
 #include "common/macros.h"
 #include "common/module.h"
 #include "common/module_versioning.h" // dt_version(), used by libs/lib_api.h below
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "dtgtk/button.h"

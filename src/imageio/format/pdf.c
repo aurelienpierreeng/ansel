@@ -29,7 +29,7 @@
  */
 
 #include "common/pdf.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"

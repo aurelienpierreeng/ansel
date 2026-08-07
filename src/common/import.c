@@ -33,7 +33,7 @@
 #include "common/imageio.h"
 #include "common/metadata.h"
 #include "common/datetime.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "control/jobs/import_jobs.h"
