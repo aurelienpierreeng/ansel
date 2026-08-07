@@ -82,6 +82,28 @@ static double _dpi_factor = 1.0, _ppd = 1.0, _em = 16.0;
 
 static dt_widget_cursor_handler_t _cursor_handler = NULL;
 static dt_widget_message_handler_t _message_handler = NULL;
+static dt_widget_root_window_handler_t _root_window_handler = NULL;
+static dt_widget_natural_width_handler_t _natural_width_handler = NULL;
+
+void dt_widget_set_root_window_handler(dt_widget_root_window_handler_t handler)
+{
+  _root_window_handler = handler;
+}
+
+GtkWidget *dt_widget_root_window(void)
+{
+  return _root_window_handler ? _root_window_handler() : NULL;
+}
+
+void dt_widget_set_natural_width_handler(dt_widget_natural_width_handler_t handler)
+{
+  _natural_width_handler = handler;
+}
+
+gint dt_widget_natural_width(GtkWidget *widget)
+{
+  return _natural_width_handler ? _natural_width_handler(widget) : -1;
+}
 
 void dt_widget_set_message_handler(dt_widget_message_handler_t handler)
 {

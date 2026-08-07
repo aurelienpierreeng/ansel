@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/colorequal_shared.h"
 #include "common/macros.h"
 #include "system/openmp.h"
@@ -51,7 +51,7 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "widgets/gui_throttle.h"
 #include "iop/iop_api.h"
 
 #ifdef _OPENMP

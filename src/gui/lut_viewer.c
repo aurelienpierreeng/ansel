@@ -19,7 +19,7 @@
 #include <glib/gstdio.h>
 #include "gui/lut_viewer.h"
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
 #include "system/openmp.h"

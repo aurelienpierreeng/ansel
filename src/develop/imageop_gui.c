@@ -27,7 +27,7 @@
 #include "widgets/resetlabel.h"
 #include "common/conf.h"
 #include "develop/imageop.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "widgets/button.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"

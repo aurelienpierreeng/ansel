@@ -21,6 +21,10 @@
  */
 
 #include "widgets/widget_style.h"
+#include "widgets/widget_settings.h"
+#include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
+
+#include <pango/pangocairo.h>
 
 #include <glib.h>
 #include <string.h>
@@ -72,6 +76,41 @@ void dt_capitalize_label(gchar *text)
   // Callers pass buffers sized exactly for the original string (often g_strdup'd),
   // not a longer one - only mutate in place if the uppercase form fits.
   if(n == orig_len) memcpy(p, utf8_buf, n);
+}
+
+void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget)
+{
+  if(IS_NULL_PTR(cr)) return;
+
+  // Source GTK's resolved text-rendering options (anti-aliasing, hinting, subpixel order,
+  // hint-metrics/kerning), which GTK populates from GtkSettings/Xft/fontconfig. The widget's
+  // Pango context is the same source native widgets use; fall back to the main window, then to the
+  // screen defaults, so an off-screen/scratch Cairo surface never silently reverts to Cairo's
+  // AA-on defaults (which would make our cairo-drawn text look unlike the rest of the UI).
+  const cairo_font_options_t *fo = NULL;
+
+  if(widget)
+  {
+    PangoContext *pc = gtk_widget_get_pango_context(widget);
+    if(pc) fo = pango_cairo_context_get_font_options(pc);
+  }
+  if(!fo)
+  {
+    GtkWidget *root = dt_widget_root_window();
+    if(root)
+    {
+      PangoContext *pc = gtk_widget_get_pango_context(root);
+      if(pc) fo = pango_cairo_context_get_font_options(pc);
+    }
+  }
+  if(!fo)
+  {
+    GdkScreen *screen = gdk_screen_get_default();
+    if(screen) fo = gdk_screen_get_font_options(screen);
+  }
+
+  // cairo_set_font_options() copies internally, so the const pointer's lifetime is not a concern.
+  if(fo) cairo_set_font_options(cr, fo);
 }
 
 // clang-format off

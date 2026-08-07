@@ -49,7 +49,7 @@
 #include "widgets/widget_settings.h"
 #include "common/conf.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "pixel/chromatic_adaptation.h"
 #include "common/macros.h"

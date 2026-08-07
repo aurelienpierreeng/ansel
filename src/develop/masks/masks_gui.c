@@ -19,7 +19,7 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "develop/masks.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/conf.h"
 #include "control/signal.h"
 #include "develop/imageop_gui.h"

@@ -38,8 +38,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_BAUHAUS_H
-#define DT_GUI_BAUHAUS_H
+#ifndef DT_WIDGETS_BAUHAUS_H
+#define DT_WIDGETS_BAUHAUS_H
 
 #include "common/colorlabels.h"
 #include "widgets/cairo_shapes.h"   // set_color
@@ -465,7 +465,7 @@ void dt_bauhaus_set_use_default_callback(GtkWidget *widget);
 }
 #endif
 
-#endif // DT_GUI_BAUHAUS_H
+#endif // DT_WIDGETS_BAUHAUS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

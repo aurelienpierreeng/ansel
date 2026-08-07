@@ -35,7 +35,7 @@
 #include "config.h"
 #endif
 // our includes go first:
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

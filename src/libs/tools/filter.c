@@ -59,7 +59,7 @@
 #include "widgets/button.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 
 DT_MODULE(1)
 

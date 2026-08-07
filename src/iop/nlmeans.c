@@ -49,7 +49,7 @@
 #include "system/simd.h"
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/nlmeans_core.h"
 #include "common/opencl.h"
 #include "develop/imageop.h"

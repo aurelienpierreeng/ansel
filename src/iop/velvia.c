@@ -54,7 +54,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "common/imagebuf.h"

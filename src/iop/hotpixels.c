@@ -52,7 +52,7 @@
 #include "system/target_clones.h"
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/imagebuf.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

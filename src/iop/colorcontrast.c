@@ -46,7 +46,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "develop/imageop.h"

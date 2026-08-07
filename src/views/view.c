@@ -73,7 +73,7 @@
 #include "views/view.h"
 #include "widgets/widget_settings.h"
 #include "common/variables.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "common/image_cache.h"

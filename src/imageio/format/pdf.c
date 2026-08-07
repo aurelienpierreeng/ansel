@@ -30,7 +30,7 @@
 
 #include "common/pdf.h"
 #include "common/conf.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"

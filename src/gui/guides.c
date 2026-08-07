@@ -31,7 +31,7 @@
 
 #include <glib.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/conf.h"
 #include "common/utility.h"
 #include "gui/guides.h"

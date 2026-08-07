@@ -52,7 +52,7 @@
 #include "config.h"
 #endif
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/box_filters.h"
 #include "common/macros.h"
 #include "system/openmp.h"

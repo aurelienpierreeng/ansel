@@ -46,7 +46,7 @@
 #include "config.h"
 #include "common/pixelpipe_cache_alloc.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "pixel/box_filters.h"

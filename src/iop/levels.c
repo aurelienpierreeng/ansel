@@ -60,7 +60,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "common/macros.h"

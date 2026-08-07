@@ -52,7 +52,7 @@
 #include "config.h"
 #include "widgets/widget_settings.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/bilateral.h"
 #include "common/colorspaces.h"
 #include "math/math.h"

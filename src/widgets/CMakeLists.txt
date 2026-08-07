@@ -10,12 +10,14 @@
 
 set(ANSEL_WIDGETS_SOURCES
   accelerators.c
+  bauhaus.c
   button.c
   drawingarea.c
   expander.c
   focus_peaking.c
   gradientslider.c
   gtkentry.c
+  gui_throttle.c
   icon.c
   icon_cell_renderer.c
   paint.c

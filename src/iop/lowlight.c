@@ -48,7 +48,7 @@
 #include "config.h"
 #include "widgets/widget_settings.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"

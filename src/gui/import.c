@@ -20,7 +20,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/cache.h"
 #include "common/film.h"
 #include "common/pixelpipe_cache_alloc.h"

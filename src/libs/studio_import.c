@@ -27,7 +27,7 @@
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/datetime.h"
 #include "common/folder_survey.h"
 #include "common/conf.h"

@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/colorequal_shared.h"
 #include "common/macros.h"
 #include "system/openmp.h"

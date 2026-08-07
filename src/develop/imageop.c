@@ -69,7 +69,7 @@
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "develop/imageop.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/collection.h"
 #include "common/debug.h"
 #include "common/exif.h"
@@ -94,7 +94,7 @@
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "widgets/gui_throttle.h"
 #include "gui/presets.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

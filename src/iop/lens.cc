@@ -80,7 +80,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/interpolation.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"

@@ -49,7 +49,6 @@ add_dependencies(generate_authors_h generate_authors_file)
 add_subdirectory(widgets)
 
 FILE(GLOB SOURCE_FILES
-  "gui/bauhaus.c"
   "gui/bauhaus_conf.c"
   "common/act_on.c"
   "system/atomic.c"
@@ -201,7 +200,6 @@ FILE(GLOB SOURCE_FILES
   "gui/dtgtk/filmstrip.c"
   "gui/guides.c"
   "gui/gtk.c"
-  "gui/gui_throttle.c"
   "gui/splash.c"
   "gui/hist_dialog.c"
   "gui/preferences.c"

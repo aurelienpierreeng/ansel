@@ -43,7 +43,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/times.h"

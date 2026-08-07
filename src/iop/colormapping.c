@@ -40,7 +40,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"

@@ -40,4 +40,9 @@ void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name);
  *  underscore and multi-byte UTF-8. Pure string work; no application involved. */
 void dt_capitalize_label(gchar *text);
 
+/** Copy GTK's resolved text-rendering options (anti-aliasing, hinting, subpixel order) onto
+ *  `cr`, sourced from `widget`'s Pango context, else the host root window, else the screen --
+ *  so cairo-drawn text matches native widgets instead of reverting to cairo's defaults. */
+void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget);
+
 #endif // DT_WIDGETS_WIDGET_STYLE_H

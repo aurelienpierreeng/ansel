@@ -51,6 +51,11 @@ names keep compiling unchanged.
 | `dt_accels_set_top_offset_handler()` | where the host wants the shortcut window placed |
 | `dt_accels_set_refocus_handler()` | return focus to the host's main area |
 | `dt_accels_set_recent_handlers()` | persistence for the shortcut-search history |
+| `dt_widget_set_root_window_handler()` | a window for things that exist before any widget does |
+| `dt_widget_set_natural_width_handler()` | how wide the host's panel wants a widget |
+| `dt_widget_set_cursor_handler()` | pointer shape during a drag |
+| `dt_widget_set_message_handler()` | transient user-facing messages |
+| `dt_gui_throttle_init(saved_runtime_us)` / `_set_timeout_ms()` | persisted state + timeout preference |
 
 Unregistered, each degrades to an inert default — which is what makes headless runs work
 without a single "is there a GUI?" test.
@@ -58,6 +63,12 @@ without a single "is there a GUI?" test.
 **The colour-label indices are pinned.** `widgets/` declares its own so it needs no
 application header; `gui/gtk.c` carries a `_Static_assert` tying them to `dt_colorlabels_enum`,
 because that is the only place both are visible. They cannot drift silently.
+
+### `gui/bauhaus.h` is gone from here too
+
+`paint.c` drew colour labels from `dt_bauhaus_get_global()->colorlabels[]`. The palette is now
+`dt_widget_colorlabel()`, so `bauhaus` could itself become a widget rather than a dependency
+of one.
 
 ### What is still depended on, and legitimately
 
@@ -79,6 +90,8 @@ application as-is, unlike the rest.
 | `focus_peaking.c` | focus-peaking overlay rendering |
 | `resetlabel.c` | a label emitting `"reset"` on double-click |
 | `accelerators.{c,h}` | the whole keyboard-shortcut system (3224 lines) |
+| `bauhaus.{c,h}` | the slider/combobox toolkit (3982 lines) |
+| `gui_throttle.{c,h}` | coalescing/deferral of expensive redraws |
 | `gtkentry.c` | `GtkEntry` completion helper |
 | `gdkkeys.h` | keysym mapping (numpad/main-pad equivalence) |
 | `widget_settings.{c,h}` | toolkit state: scroll, DPI/em metrics, freeze depth, palette |
