@@ -15,8 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_COMMON_IMAGEIO_MAGICK_ABORT_GUARD_H
-#define DT_COMMON_IMAGEIO_MAGICK_ABORT_GUARD_H
+#ifndef DT_IMAGEIO_IMAGEIO_MAGICK_ABORT_GUARD_H
+#define DT_IMAGEIO_IMAGEIO_MAGICK_ABORT_GUARD_H
 
 /*
  * GraphicsMagick/ImageMagick call assert() on malformed input, and the
@@ -112,7 +112,7 @@ static void _dt_magick_abort_handler(int sig)
 
 #endif // defined(HAVE_GRAPHICSMAGICK) || defined(HAVE_IMAGEMAGICK)
 
-#endif // DT_COMMON_IMAGEIO_MAGICK_ABORT_GUARD_H
+#endif // DT_IMAGEIO_IMAGEIO_MAGICK_ABORT_GUARD_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

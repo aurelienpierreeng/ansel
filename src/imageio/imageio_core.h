@@ -30,8 +30,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_IMAGEIO_H
-#define DT_COMMON_IMAGEIO_H
+#ifndef DT_IMAGEIO_IMAGEIO_CORE_H
+#define DT_IMAGEIO_IMAGEIO_CORE_H
 
 #include "system/atomic.h"
 #include "common/image.h"
@@ -170,7 +170,7 @@ dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension);
 }
 #endif
 
-#endif // DT_COMMON_IMAGEIO_H
+#endif // DT_IMAGEIO_IMAGEIO_CORE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

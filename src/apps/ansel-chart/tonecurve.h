@@ -20,8 +20,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_CHART_TONECURVE_H
-#define DT_CHART_TONECURVE_H
+#ifndef DT_APPS_ANSEL_CHART_TONECURVE_H
+#define DT_APPS_ANSEL_CHART_TONECURVE_H
 
 #include <inttypes.h>
 
@@ -41,7 +41,7 @@ double tonecurve_apply(const tonecurve_t *c, const double L);
 
 double tonecurve_unapply(const tonecurve_t *c, const double L);
 
-#endif // DT_CHART_TONECURVE_H
+#endif // DT_APPS_ANSEL_CHART_TONECURVE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

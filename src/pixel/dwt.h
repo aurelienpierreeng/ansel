@@ -20,8 +20,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DEVELOP_DWT_H
-#define DT_DEVELOP_DWT_H
+#ifndef DT_PIXEL_DWT_H
+#define DT_PIXEL_DWT_H
 
 /* structure returned by dt_dwt_init() to be used when calling dwt_decompose() */
 typedef struct dwt_params_t

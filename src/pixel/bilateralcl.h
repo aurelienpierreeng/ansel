@@ -22,8 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_BILATERALCL_H
-#define DT_COMMON_BILATERALCL_H
+#ifndef DT_PIXEL_BILATERALCL_H
+#define DT_PIXEL_BILATERALCL_H
 
 #ifdef HAVE_OPENCL
 #ifdef HAVE_CONFIG_H
@@ -72,7 +72,7 @@ void dt_bilateral_free_cl_global(dt_bilateral_cl_global_t *b);
 
 #endif // HAVE_OPENCL
 
-#endif // DT_COMMON_BILATERALCL_H
+#endif // DT_PIXEL_BILATERALCL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

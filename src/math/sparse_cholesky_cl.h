@@ -16,8 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_COMMON_SOLVERS_SPARSE_CHOLESKY_CL_H
-#define DT_COMMON_SOLVERS_SPARSE_CHOLESKY_CL_H
+#ifndef DT_MATH_SPARSE_CHOLESKY_CL_H
+#define DT_MATH_SPARSE_CHOLESKY_CL_H
 
 // Reusable GPU sparse SPD Cholesky solver (double precision, level-scheduled), factored out
 // of the highlights harmonic-transposition code. Host-side symbolic analysis (reusing the
@@ -565,4 +565,4 @@ static inline int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp
 }
 
 #endif // HAVE_OPENCL
-#endif // DT_COMMON_SOLVERS_SPARSE_CHOLESKY_CL_H
+#endif // DT_MATH_SPARSE_CHOLESKY_CL_H

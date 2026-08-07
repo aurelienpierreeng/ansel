@@ -16,8 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_SYS_RESOURCES_H
-#define DT_COMMON_SYS_RESOURCES_H
+#ifndef DT_SYSTEM_SYS_RESOURCES_H
+#define DT_SYSTEM_SYS_RESOURCES_H
 
 /* Memory and worker budgets. The values are owned by the orchestrator
  * (darktable.c, which fills dt_sys_resources_t once at startup), but the
@@ -100,7 +100,7 @@ void dt_print_mem_usage();
 }
 #endif
 
-#endif // DT_COMMON_SYS_RESOURCES_H
+#endif // DT_SYSTEM_SYS_RESOURCES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

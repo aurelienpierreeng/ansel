@@ -21,8 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_IMAGEIO_TIFF_H
-#define DT_COMMON_IMAGEIO_TIFF_H
+#ifndef DT_IMAGEIO_IMAGEIO_TIFF_H
+#define DT_IMAGEIO_IMAGEIO_TIFF_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
@@ -31,7 +31,7 @@ dt_imageio_retval_t dt_imageio_open_tiff(dt_image_t *img, const char *filename, 
 
 int dt_imageio_tiff_read_profile(const char *filename, uint8_t **out);
 
-#endif // DT_COMMON_IMAGEIO_TIFF_H
+#endif // DT_IMAGEIO_IMAGEIO_TIFF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -22,8 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DTGTK_ICON_H
-#define DT_DTGTK_ICON_H
+#ifndef DT_GUI_DTGTK_ICON_H
+#define DT_GUI_DTGTK_ICON_H
 
 #include "paint.h"
 #include <gtk/gtk.h>
@@ -56,7 +56,7 @@ void dtgtk_icon_set_paint(GtkWidget *icon, DTGTKCairoPaintIconFunc paint, gint p
 
 G_END_DECLS
 
-#endif // DT_DTGTK_ICON_H
+#endif // DT_GUI_DTGTK_ICON_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -20,8 +20,8 @@
  * along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_COMMON_IMAGEIO_HEIF_H
-#define DT_COMMON_IMAGEIO_HEIF_H
+#ifndef DT_IMAGEIO_IMAGEIO_HEIF_H
+#define DT_IMAGEIO_IMAGEIO_HEIF_H
 
 #include "common/colorspaces.h"
 #include "common/image.h"
@@ -34,7 +34,7 @@ int dt_imageio_heif_read_profile(const char *filename,
                                  uint8_t **out,
                                  dt_colorspaces_cicp_t *cicp);
 
-#endif // DT_COMMON_IMAGEIO_HEIF_H
+#endif // DT_IMAGEIO_IMAGEIO_HEIF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -27,8 +27,8 @@
     You should have received a copy of the GNU Lesser General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_IOP_PROFILE_H
-#define DT_IOP_PROFILE_H
+#ifndef DT_COMMON_IOP_PROFILE_H
+#define DT_COMMON_IOP_PROFILE_H
 
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorspaces.h"

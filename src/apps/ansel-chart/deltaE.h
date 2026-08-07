@@ -20,15 +20,15 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_CHART_DELTAE_H
-#define DT_CHART_DELTAE_H
+#ifndef DT_APPS_ANSEL_CHART_DELTAE_H
+#define DT_APPS_ANSEL_CHART_DELTAE_H
 
 #include "system/simd.h"
 
 float dt_colorspaces_deltaE_1976(dt_aligned_pixel_t Lab0, dt_aligned_pixel_t Lab1);
 float dt_colorspaces_deltaE_2000(dt_aligned_pixel_t Lab0, dt_aligned_pixel_t Lab1);
 
-#endif // DT_CHART_DELTAE_H
+#endif // DT_APPS_ANSEL_CHART_DELTAE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

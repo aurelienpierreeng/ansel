@@ -20,8 +20,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_TEA_H
-#define DT_COMMON_TEA_H
+#ifndef DT_PIXEL_TEA_H
+#define DT_PIXEL_TEA_H
 
 #include "common/pixelpipe_cache_alloc.h"
 
@@ -78,7 +78,7 @@ static inline float tpdf(unsigned int urandom)
   return (frandom < 0.5f ? (sqrtf(2.0f * frandom) - 1.0f) : (1.0f - sqrtf(2.0f * (1.0f - frandom))));
 }
 
-#endif // DT_COMMON_TEA_H
+#endif // DT_PIXEL_TEA_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

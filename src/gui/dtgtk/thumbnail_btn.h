@@ -22,8 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DTGTK_THUMBNAIL_BTN_H
-#define DT_DTGTK_THUMBNAIL_BTN_H
+#ifndef DT_GUI_DTGTK_THUMBNAIL_BTN_H
+#define DT_GUI_DTGTK_THUMBNAIL_BTN_H
 
 #include "paint.h"
 #include <gtk/gtk.h>
@@ -59,7 +59,7 @@ gboolean dtgtk_thumbnail_btn_is_hidden(GtkWidget *widget);
 
 G_END_DECLS
 
-#endif // DT_DTGTK_THUMBNAIL_BTN_H
+#endif // DT_GUI_DTGTK_THUMBNAIL_BTN_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

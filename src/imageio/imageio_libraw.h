@@ -24,8 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_IMAGEIO_LIBRAW_H
-#define DT_IMAGEIO_LIBRAW_H
+#ifndef DT_IMAGEIO_IMAGEIO_LIBRAW_H
+#define DT_IMAGEIO_IMAGEIO_LIBRAW_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"

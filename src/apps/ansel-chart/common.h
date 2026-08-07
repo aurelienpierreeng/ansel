@@ -21,8 +21,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_CHART_COMMON_H
-#define DT_CHART_COMMON_H
+#ifndef DT_APPS_ANSEL_CHART_COMMON_H
+#define DT_APPS_ANSEL_CHART_COMMON_H
 
 #include "apps/ansel-chart/colorchart.h"
 
@@ -53,7 +53,7 @@ typedef struct image_t
 } image_t;
 
 
-#endif // DT_CHART_COMMON_H
+#endif // DT_APPS_ANSEL_CHART_COMMON_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

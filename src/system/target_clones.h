@@ -15,8 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_COMMON_TARGET_CLONES_H
-#define DT_COMMON_TARGET_CLONES_H
+#ifndef DT_SYSTEM_TARGET_CLONES_H
+#define DT_SYSTEM_TARGET_CLONES_H
 
 /* Function multi-versioning (target_clones) for SIMD compute functions.
  *
@@ -102,4 +102,4 @@
 #endif
 
 #endif // __DT_CLONE_TARGETS__
-#endif // DT_COMMON_TARGET_CLONES_H
+#endif // DT_SYSTEM_TARGET_CLONES_H

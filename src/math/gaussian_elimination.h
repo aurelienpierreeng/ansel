@@ -34,8 +34,8 @@
 */
 
 
-#ifndef DT_COMMON_SOLVERS_GAUSSIAN_ELIMINATION_H
-#define DT_COMMON_SOLVERS_GAUSSIAN_ELIMINATION_H
+#ifndef DT_MATH_GAUSSIAN_ELIMINATION_H
+#define DT_MATH_GAUSSIAN_ELIMINATION_H
 
 #include <math.h>
 #include "common/pixelpipe_cache_alloc.h"
@@ -211,7 +211,7 @@ error:;
   return err;
 }
 
-#endif // DT_COMMON_SOLVERS_GAUSSIAN_ELIMINATION_H
+#endif // DT_MATH_GAUSSIAN_ELIMINATION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

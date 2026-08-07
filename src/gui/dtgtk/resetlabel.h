@@ -21,8 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DTGTK_RESETLABEL_H
-#define DT_DTGTK_RESETLABEL_H
+#ifndef DT_GUI_DTGTK_RESETLABEL_H
+#define DT_GUI_DTGTK_RESETLABEL_H
 
 #include "develop/imageop.h"
 #include <gtk/gtk.h>
@@ -58,7 +58,7 @@ void dtgtk_reset_label_set_text(GtkDarktableResetLabel *label, const gchar *str)
 
 G_END_DECLS
 
-#endif // DT_DTGTK_RESETLABEL_H
+#endif // DT_GUI_DTGTK_RESETLABEL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

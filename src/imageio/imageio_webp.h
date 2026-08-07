@@ -21,15 +21,15 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_IMAGEIO_WEBP_H
-#define DT_COMMON_IMAGEIO_WEBP_H
+#ifndef DT_IMAGEIO_IMAGEIO_WEBP_H
+#define DT_IMAGEIO_IMAGEIO_WEBP_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
 
 dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
 
-#endif // DT_COMMON_IMAGEIO_WEBP_H
+#endif // DT_IMAGEIO_IMAGEIO_WEBP_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
