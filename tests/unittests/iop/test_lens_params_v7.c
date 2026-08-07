@@ -111,7 +111,10 @@ typedef struct dt_iop_lensfun_gui_data_t_v7
 {
   struct
   {
-    void *target_geom, *tca_r, *tca_b, *scale;
+    void *target_geom;
+    void *tca_r;
+    void *tca_b;
+    void *scale;
   } lensfun_controls;
   struct
   {
@@ -298,7 +301,7 @@ static int legacy_params_v7_stub(test_module_t *self, const void *old_params,
   {
     const dt_iop_lensfun_params_v2_t *o = (const dt_iop_lensfun_params_v2_t *)old_params;
     dt_iop_lensfun_params_t_v7 *n = (dt_iop_lensfun_params_t_v7 *)new_params;
-    dt_iop_lensfun_params_t_v7 *d = (dt_iop_lensfun_params_t_v7 *)self->default_params;
+    const dt_iop_lensfun_params_t_v7 *d = (const dt_iop_lensfun_params_t_v7 *)self->default_params;
 
     *n = *d;
     n->modify_flags = o->modify_flags;
@@ -320,7 +323,7 @@ static int legacy_params_v7_stub(test_module_t *self, const void *old_params,
   {
     const dt_iop_lensfun_params_v3_t *o = (const dt_iop_lensfun_params_v3_t *)old_params;
     dt_iop_lensfun_params_t_v7 *n = (dt_iop_lensfun_params_t_v7 *)new_params;
-    dt_iop_lensfun_params_t_v7 *d = (dt_iop_lensfun_params_t_v7 *)self->default_params;
+    const dt_iop_lensfun_params_t_v7 *d = (const dt_iop_lensfun_params_t_v7 *)self->default_params;
 
     *n = *d;
     n->modify_flags = o->modify_flags;
@@ -342,7 +345,7 @@ static int legacy_params_v7_stub(test_module_t *self, const void *old_params,
   {
     const dt_iop_lensfun_params_v4_t *o = (const dt_iop_lensfun_params_v4_t *)old_params;
     dt_iop_lensfun_params_t_v7 *n = (dt_iop_lensfun_params_t_v7 *)new_params;
-    dt_iop_lensfun_params_t_v7 *d = (dt_iop_lensfun_params_t_v7 *)self->default_params;
+    const dt_iop_lensfun_params_t_v7 *d = (const dt_iop_lensfun_params_t_v7 *)self->default_params;
 
     *n = *d;
     n->modify_flags = o->modify_flags;
@@ -364,7 +367,7 @@ static int legacy_params_v7_stub(test_module_t *self, const void *old_params,
   {
     const dt_iop_lensfun_params_v5_t *o = (const dt_iop_lensfun_params_v5_t *)old_params;
     dt_iop_lensfun_params_t_v7 *n = (dt_iop_lensfun_params_t_v7 *)new_params;
-    dt_iop_lensfun_params_t_v7 *d = (dt_iop_lensfun_params_t_v7 *)self->default_params;
+    const dt_iop_lensfun_params_t_v7 *d = (const dt_iop_lensfun_params_t_v7 *)self->default_params;
 
     *n = *d;
     n->modify_flags = o->modify_flags;
