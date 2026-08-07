@@ -39,7 +39,7 @@
 #include "apps/ansel-chart/common.h"
 #include "apps/ansel-chart/deltaE.h"
 #include "apps/ansel-chart/pfm.h"
-#include "common/solvers/thinplate.h"
+#include "math/attic/thinplate.h"
 #include "apps/ansel-chart/tonecurve.h"
 #include "common/exif.h"
 
@@ -841,7 +841,10 @@ static void add_hdr_patches(int *N, double **target_L, double **target_a, double
     *target_L = realloc(*target_L, sizeof(double) * (*N + n_extra_patches + 4));
     *target_a = realloc(*target_a, sizeof(double) * (*N + n_extra_patches + 4));
     *target_b = realloc(*target_b, sizeof(double) * (*N + n_extra_patches + 4));
-    *colorchecker_Lab = realloc(*colorchecker_Lab, sizeof(double) * 3 * (*N + n_extra_patches));
+    // Same 4-patch slack as the three target_* arrays above. This one holds 3 doubles per
+    // patch, so the slack is 3 * 4 doubles -- the point is to match the sibling arrays
+    // patch-for-patch, not byte-for-byte.
+    *colorchecker_Lab = realloc(*colorchecker_Lab, sizeof(double) * 3 * (*N + n_extra_patches + 4));
 
     memmove(&(*target_L)[n_extra_patches], *target_L, sizeof(double) * *N);
     memmove(&(*target_a)[n_extra_patches], *target_a, sizeof(double) * *N);
