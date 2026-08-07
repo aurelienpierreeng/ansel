@@ -48,7 +48,7 @@
 #include "pixel/interpolation.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/common.h"

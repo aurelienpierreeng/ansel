@@ -1,5 +1,5 @@
-#ifndef DT_WIDGETS_GUI_THROTTLE_H
-#define DT_WIDGETS_GUI_THROTTLE_H
+#ifndef DT_DEVELOP_GUI_THROTTLE_H
+#define DT_DEVELOP_GUI_THROTTLE_H
 
 #include <glib.h>
 
@@ -42,4 +42,4 @@ void dt_gui_throttle_queue(gpointer source, dt_gui_throttle_callback_t callback,
 void dt_gui_throttle_cancel(gpointer source);
 G_END_DECLS
 
-#endif // DT_WIDGETS_GUI_THROTTLE_H
+#endif // DT_DEVELOP_GUI_THROTTLE_H

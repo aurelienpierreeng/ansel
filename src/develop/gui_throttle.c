@@ -16,7 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 #include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
 
 #include "system/atomic.h"

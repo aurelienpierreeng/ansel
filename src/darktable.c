@@ -157,7 +157,7 @@
 #include "develop/supervisor.h"
 
 #include "gui/gtk.h"
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 #include "gui/guides.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
