@@ -19,6 +19,7 @@
 */
 #include "common/utility.h"
 #include "widgets/widget_settings.h"
+#include "widgets/resize_handle.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -225,7 +226,7 @@ void dt_ui_restore_panels(dt_ui_t *ui)
   }
 }
 
-/* The main panels share the generic resize-handle primitive (dt_bauhaus_resize_handle_new),
+/* The main panels share the generic resize-handle primitive (dtgtk_resize_handle_new),
  * so they get the same grip visual, hover border and cursor as every other resizable area.
  * These two callbacks let the handle query and apply the panel size; the panel widget is passed
  * as user_data and identified by its name ("left"/"right"/"bottom"). */
@@ -422,7 +423,7 @@ static void _ui_init_panel_left(dt_ui_t *ui, GtkWidget *container)
   GtkWidget *over = gtk_overlay_new();
   gtk_container_add(GTK_CONTAINER(over), widget);
   // resize grip overlaid on the panel's inner (right) edge: drag right to grow
-  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_HORIZONTAL, FALSE,
+  GtkWidget *handle = dtgtk_resize_handle_new(GTK_ORIENTATION_HORIZONTAL, FALSE,
                                                    _("Drag to resize panel"),
                                                    _panel_handle_get_size, _panel_handle_resize, widget);
   gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
@@ -453,7 +454,7 @@ static void _ui_init_panel_right(dt_ui_t *ui, GtkWidget *container)
   GtkWidget *over = gtk_overlay_new();
   gtk_container_add(GTK_CONTAINER(over), widget);
   // resize grip overlaid on the panel's inner (left) edge: drag left to grow (inverted)
-  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_HORIZONTAL, TRUE,
+  GtkWidget *handle = dtgtk_resize_handle_new(GTK_ORIENTATION_HORIZONTAL, TRUE,
                                                    _("Drag to resize panel"),
                                                    _panel_handle_get_size, _panel_handle_resize, widget);
   gtk_overlay_add_overlay(GTK_OVERLAY(over), handle);
@@ -513,7 +514,7 @@ static void _ui_init_panel_bottom(dt_ui_t *ui, GtkWidget *container)
   // We resize the actual bottom panel widget (named "bottom"), not the overlay wrapper.
   // Otherwise the panel can be grown (outer overlay expands) but not shrunk because the
   // filmstrip panel keeps its previous size request until the view is recreated.
-  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, TRUE,
+  GtkWidget *handle = dtgtk_resize_handle_new(GTK_ORIENTATION_VERTICAL, TRUE,
                                                    _("Drag to resize panel"),
                                                    _panel_handle_get_size, _panel_handle_resize,
                                                    ui->thumbtable_filmstrip->parent_overlay);
