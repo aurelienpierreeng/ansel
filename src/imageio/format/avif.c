@@ -45,7 +45,7 @@
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
 #include "common/exif.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
 #include "control/control.h"

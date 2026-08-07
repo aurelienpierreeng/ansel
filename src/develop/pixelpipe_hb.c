@@ -57,7 +57,7 @@
 #include "common/global_mutexes.h"
 #include "common/hash.h"
 #include "common/histogram.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "common/atomic.h"
 #include "common/opencl.h"
 #include "common/iop_order.h"

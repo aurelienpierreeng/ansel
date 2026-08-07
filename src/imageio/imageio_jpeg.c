@@ -38,7 +38,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #endif
 #include "common/exif.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "imageio/imageio_jpeg.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 #include <glib/gstdio.h>

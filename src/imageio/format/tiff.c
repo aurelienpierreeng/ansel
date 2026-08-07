@@ -46,7 +46,7 @@
 #include "common/module_versioning.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "math/math.h"
 #include "common/conf.h"

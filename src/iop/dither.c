@@ -48,7 +48,7 @@
 #include "common/module_versioning.h"
 #include "common/database.h"
 #include "common/imagebuf.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "math/math.h"
 #include "common/opencl.h"
 #include "pixel/tea.h"
