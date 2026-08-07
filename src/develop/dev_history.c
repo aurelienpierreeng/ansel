@@ -71,6 +71,7 @@
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/supervisor.h"
+#include "widgets/gui_throttle.h"
 
 #include "gui/presets.h"
 
@@ -975,6 +976,154 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
 }
 
 
+/* ---------------------------------------------------------------------------------------
+ * Throttling the pipeline recompute, at the one place every widget already goes through.
+ *
+ * Every history commit ends by telling the pipes their history changed, which also raises
+ * their `shutdown` atomic so the worker abandons the frame it is rendering. Committing on
+ * every step of a slider drag or a combobox scroll therefore does not merely queue extra
+ * work -- it aborts each render before it can finish, so the view updates on none of them.
+ *
+ * Widgets used to dodge that by deferring their own `value-changed` emission through
+ * gui_throttle (bauhaus, and a copy of the same dance in a dozen curve modules). That put
+ * the policy in every widget that wanted it and left every other widget without it. The
+ * request is deferred here instead, where all of them already arrive.
+ *
+ * Deferred: the resync request, and only it. The history item itself is still committed
+ * synchronously, so every caller that reads dev->history right after the call -- most of
+ * the 270-odd of them -- is unaffected.
+ *
+ * The queue is FIFO and NOTHING IS MERGED. A tempting optimisation is to collapse pending
+ * requests into one carrying the union of their flags; do not. Drawn masks, raster masks,
+ * module enable/disable, the mask manager and plain parameter edits each commit with
+ * different resync needs, and any merging rule is somewhere to silently drop one of them.
+ * Keeping every request costs almost nothing: a request is an OR onto `pipe->changed` plus
+ * an atomic store, and the expensive part -- dt_dev_pixelpipe_change() -- runs once for the
+ * whole batch on the worker thread, which reads the accumulated flag when it next ticks.
+ *
+ * This is a batching window, not a debounce: the timer is armed by the first request and is
+ * NOT re-armed by the ones that follow, so a sustained drag keeps updating once per window
+ * instead of freezing until the user stops moving.
+ *
+ * GUI thread only, like the commit path it serves ("always called from GUI controls" below),
+ * hence no lock -- same contract as gui_throttle's own queue.
+ */
+
+typedef struct dt_dev_pending_resync_t
+{
+  dt_develop_t *dev;
+  gboolean full; /**< TRUE: resync the whole pipe; FALSE: only the top-most history item */
+} dt_dev_pending_resync_t;
+
+static GQueue _pending_resyncs = G_QUEUE_INIT;
+static guint _pending_resync_source = 0;
+
+static void _run_pending_resync(const dt_dev_pending_resync_t *request)
+{
+  if(request->full)
+  {
+    // We either don't have a module, meaning we have the mask manager, or
+    // we have a module and it uses masks (drawn or raster), or the current
+    // history commit changes the pipeline topology. The latter happens for
+    // example when enabling/disabling a module or when a module gets its first
+    // history entry. In all these cases, updating only the top-most synced
+    // history tail is insufficient because the set of active pipe nodes itself
+    // may differ from the previous run.
+    // Because masks can affect several modules anywhere, not necessarily sequentially,
+    // we need a full resync of all pipeline with history.
+    // Note that the blendop params (thus their hash) references the raster mask provider
+    // in its consumer, and the consumer in its provider. So updating the whole pipe
+    // resyncs the cumulative hashes too, and triggers a new recompute from the provider on update.
+    dt_dev_pixelpipe_resync_history_all(request->dev);
+  }
+  else
+  {
+    // The module doesn't use drawn or raster masks and the pipeline topology is unchanged,
+    // so we only need to resync the top-most history item with the pipeline.
+    dt_dev_pixelpipe_update_history_all(request->dev);
+  }
+}
+
+static gboolean _drain_pending_resyncs(gpointer user_data)
+{
+  (void)user_data;
+
+  _pending_resync_source = 0;
+
+  // Detach the queue before draining: running a request can commit more history (a module's
+  // post-commit reaction), which would push onto the queue we are iterating.
+  GQueue ready = G_QUEUE_INIT;
+  ready.head = _pending_resyncs.head;
+  ready.tail = _pending_resyncs.tail;
+  ready.length = _pending_resyncs.length;
+  g_queue_init(&_pending_resyncs);
+
+  while(!g_queue_is_empty(&ready))
+  {
+    dt_dev_pending_resync_t *request = (dt_dev_pending_resync_t *)g_queue_pop_head(&ready);
+    _run_pending_resync(request);
+    dt_free(request);
+  }
+
+  return G_SOURCE_REMOVE;
+}
+
+static void _queue_pending_resync(dt_develop_t *dev, const gboolean full)
+{
+  const dt_dev_pending_resync_t request = { .dev = dev, .full = full };
+
+  // A zero timeout means the user turned throttling off in the preferences (and is also what
+  // a headless run gets, since nothing ever sets one there). Same call, same place, just now.
+  const guint timeout_ms = dt_gui_throttle_get_timeout_ms();
+  if(timeout_ms == 0)
+  {
+    _run_pending_resync(&request);
+    return;
+  }
+
+  dt_dev_pending_resync_t *queued = (dt_dev_pending_resync_t *)calloc(1, sizeof(*queued));
+  if(IS_NULL_PTR(queued))
+  {
+    // Out of memory for a 16-byte record: run it now rather than lose the recompute.
+    _run_pending_resync(&request);
+    return;
+  }
+
+  *queued = request;
+  g_queue_push_tail(&_pending_resyncs, queued);
+
+  if(!_pending_resync_source)
+    _pending_resync_source = g_timeout_add(timeout_ms, _drain_pending_resyncs, NULL);
+}
+
+void dt_dev_history_cancel_pending_resyncs(dt_develop_t *dev)
+{
+  // Dropping, not flushing. The caller is tearing `dev` down: its pipes, nodes and iop list
+  // are about to be freed, and a resync landing after that is the teardown race documented in
+  // CLAUDE.md -- it would corrupt the heap and crash somewhere unrelated. There is nothing to
+  // lose by dropping: the history item was committed synchronously and already written out;
+  // only the recompute is discarded, and nobody is going to look at the result.
+  GList *iter = _pending_resyncs.head;
+  while(iter)
+  {
+    GList *next = g_list_next(iter);
+    dt_dev_pending_resync_t *request = (dt_dev_pending_resync_t *)iter->data;
+    if(IS_NULL_PTR(dev) || request->dev == dev)
+    {
+      g_queue_delete_link(&_pending_resyncs, iter);
+      dt_free(request);
+    }
+    iter = next;
+  }
+
+  if(_pending_resync_source && g_queue_is_empty(&_pending_resyncs))
+  {
+    g_source_remove(_pending_resync_source);
+    _pending_resync_source = 0;
+  }
+}
+
+
 // The next 2 functions are always called from GUI controls setting parameters
 // This is why they directly start a pipeline recompute.
 // Otherwise, please keep GUI and pipeline fully separated.
@@ -982,9 +1131,6 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
 void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean redraw)
 {
   gboolean add_new_pipe_node = FALSE;
-
-  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
-  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
   dt_dev_undo_start_record(dev);
   // Measures time actually spent blocked waiting for the lock (e.g. behind the
@@ -1032,30 +1178,12 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
     }
   }
 
-  // Recompute pipeline last
+  // Recompute pipeline last. Which of the two resyncs this commit needs is decided HERE, from
+  // the state this commit just produced, and the request carries the answer. The queue never
+  // recomputes it and never combines it with another request's -- see _queue_pending_resync().
   const gboolean has_raster = module && dt_iop_module_has_raster_mask(module);
-  if(!IS_NULL_PTR(module) && !(has_forms || has_raster) && !add_new_pipe_node)
-  {
-    // If we have a module and it doesn't use drawn or raster masks,
-    // we only need to resync the top-most history item with pipeline
-    dt_dev_pixelpipe_update_history_all(dev);
-  }
-  else
-  {
-    // We either don't have a module, meaning we have the mask manager, or
-    // we have a module and it uses masks (drawn or raster), or the current
-    // history commit changes the pipeline topology. The latter happens for
-    // example when enabling/disabling a module or when a module gets its first
-    // history entry. In all these cases, updating only the top-most synced
-    // history tail is insufficient because the set of active pipe nodes itself
-    // may differ from the previous run.
-    // Because masks can affect several modules anywhere, not necessarily sequentially,
-    // we need a full resync of all pipeline with history.
-    // Note that the blendop params (thus their hash) references the raster mask provider
-    // in its consumer, and the consumer in its provider. So updating the whole pipe
-    // resyncs the cumulative hashes too, and triggers a new recompute from the provider on update.
-    dt_dev_pixelpipe_resync_history_all(dev);
-  }
+  const gboolean needs_full_resync = IS_NULL_PTR(module) || has_forms || has_raster || add_new_pipe_node;
+  _queue_pending_resync(dev, needs_full_resync);
 
   dt_dev_masks_list_update(dev);
 

@@ -222,6 +222,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
   // image_cache does not have to be unref'd, this is done outside develop module.
 
   dt_gui_throttle_cancel(dev);
+  dt_dev_history_cancel_pending_resyncs(dev);
 
   dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_coeffs[0] = 0.f;
