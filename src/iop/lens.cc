@@ -129,7 +129,7 @@ extern "C" {
   typedef struct dt_iop_lensfun_params_t
   {
     int modify_flags;
-    float scale;
+    float scale; // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0
     float crop;
     float focal;
     float aperture;
@@ -137,8 +137,8 @@ extern "C" {
     lfLensType target_geom;
     char camera[128];    // NOSONAR
     char lens[128];      // NOSONAR
-    float tca_r;
-    float tca_b;
+    float tca_r; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0
+    float tca_b; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0
     int has_been_set;
     dt_iop_lens_correction_source_t vignetting_method;
     dt_iop_lens_correction_source_t distortion_method;
