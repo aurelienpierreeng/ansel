@@ -87,6 +87,7 @@
 #include "gui/gtk.h"
 #include "common/thumbnail_notify.h"
 #include "gui/common/film_gui.h"
+#include "gui/common/folder_survey_gui.h"
 #include "gui/common/collection_gui.h"
 #include "common/startup_progress.h"
 #include "gui/dtgtk/thumbtable.h"
@@ -1344,6 +1345,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_startup_progress_set_handler(_gui_startup_progress);
   dt_film_gui_register_handlers();
   dt_collection_gui_register_handlers();
+  dt_folder_survey_gui_register_handlers();
 
   return 0;
 }

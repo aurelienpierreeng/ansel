@@ -86,17 +86,39 @@ int dt_folder_survey_count_new_files();
  */
 void dt_folder_survey_absorb_new_files();
 
-/**
- * @brief Propose to resume an interrupted studio session at application start.
+/* Two questions this module needs a user for, and cannot ask itself.
  *
- * When the previous session quit while monitoring, ask the user whether to
- * resume; on acceptance, switch to the Studio Capture view, then ask whether
- * files that appeared meanwhile should be imported now (with an optional
- * delete-source-after-verified-copy). Call after the GUI and views are ready.
- *
- * @return gboolean always G_SOURCE_REMOVE, so it can be scheduled with g_idle_add().
+ * The resume-at-startup prompt is pure GUI orchestration (ask, switch view, start) and
+ * lives whole in gui/common/folder_survey_gui.c; only the session marker below is backend.
+ * The pending-import prompt is interleaved with private session state, so it is inverted
+ * instead: the backend asks through a handler the GUI registers.
  */
-gboolean dt_folder_survey_propose_resume();
+
+/** Ask whether the @p new_files images found in the surveyed folder should be imported now.
+ *  Return TRUE to import them, FALSE to absorb them into the baseline.
+ *
+ *  With no handler registered the question is not asked AND nothing is absorbed: absorbing
+ *  is the answer to a question nobody put, and would silently hide those files from every
+ *  later scan. They stay pending instead. */
+typedef gboolean (*dt_folder_survey_confirm_import_handler_t)(int new_files);
+
+/** Install the handler that asks about pending imports. NULL removes it. */
+void dt_folder_survey_set_confirm_import_handler(dt_folder_survey_confirm_import_handler_t handler);
+
+/**
+ * @brief Consume the "a session was monitoring when we last closed" marker.
+ *
+ * Returns TRUE when the previous run quit while monitoring, and clears the in-memory marker
+ * either way, so the resume question is asked at most once per start. Persist the cleared
+ * marker with dt_folder_survey_forget_session() if the user declines; accepting leads to
+ * dt_folder_survey_start(), which persists it itself.
+ */
+gboolean dt_folder_survey_take_session_marker();
+
+/**
+ * @brief Persist the cleared session marker, so resume is not proposed again.
+ */
+void dt_folder_survey_forget_session();
 
 /**
  * @brief Stop new scans before control workers begin shutting down.
