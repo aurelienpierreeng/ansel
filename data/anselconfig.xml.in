@@ -210,7 +210,7 @@
     <type>int</type>
     <default>0</default>
     <shortdescription>System memory pressure floor (MiB)</shortdescription>
-    <longdescription>When the system-wide available RAM drops below this, Ansel sheds its pixelpipe cache and returns the memory to the OS, regardless of the memory budgets above, to avoid being killed by the system out-of-memory watchdog. 0 = automatic (half the OS/apps headroom).</longdescription>
+    <longdescription>When the system-wide available RAM drops below this, Ansel sheds its pixelpipe cache and returns the memory to the OS, regardless of the memory budgets above, to avoid being killed by the system out-of-memory watchdog. 0 = automatic (200 MiB). This is an absolute reserve: what the OS needs to keep breathing does not scale with how much RAM the machine has.</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="cpugpu" restart="true">
     <name>processing/timeout</name>

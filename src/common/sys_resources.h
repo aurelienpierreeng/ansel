@@ -27,10 +27,17 @@
 
 #include <glib.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* System-wide free RAM Ansel always leaves to the OS and other applications, in bytes.
+ * Absolute on purpose: the kernel's needs do not scale with installed RAM, so a fixed
+ * reserve is both sufficient on a small machine and non-wasteful on a large one.
+ * Overridable through the `memory_pressure_floor` conf key (MiB, 0 = use this). */
+#define DT_MEMORY_PRESSURE_FLOOR_DEFAULT ((int64_t)200 * 1024 * 1024)
 
 typedef struct dt_sys_resources_t
 {
