@@ -63,8 +63,8 @@
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
 #include "develop/tiling.h"
-#include "dtgtk/button.h"
-#include "dtgtk/gradientslider.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/gradientslider.h"
 
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"

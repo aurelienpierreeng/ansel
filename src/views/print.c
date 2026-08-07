@@ -36,7 +36,7 @@
 #include "common/selection.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
 #include "gui/gtk.h"

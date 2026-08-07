@@ -71,9 +71,9 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/button.h"
-#include "dtgtk/resetlabel.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/resetlabel.h"
+#include "gui/dtgtk/togglebutton.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"

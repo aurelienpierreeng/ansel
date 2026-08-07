@@ -80,7 +80,7 @@
 #include "bauhaus/bauhaus.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "dtgtk/expander.h"
+#include "gui/dtgtk/expander.h"
 
 #include "gui/gtk.h"
 #include "gui/splash.h"

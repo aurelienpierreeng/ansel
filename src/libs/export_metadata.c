@@ -32,7 +32,7 @@
 #include "common/utility.h"
 #include "gui/gdkkeys.h"
 #include "imageio/imageio_module.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"

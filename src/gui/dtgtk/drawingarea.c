@@ -20,7 +20,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "dtgtk/drawingarea.h"
+#include "gui/dtgtk/drawingarea.h"
 
 G_DEFINE_TYPE(GtkDarktableDrawingArea, dtgtk_drawing_area, GTK_TYPE_DRAWING_AREA);
 

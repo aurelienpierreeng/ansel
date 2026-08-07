@@ -42,7 +42,7 @@
 #include "common/act_on.h"
 #include "control/settings.h"
 #include "control/jobs/control_jobs.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/togglebutton.h"
 #include "libs/lib.h"
 #include "gui/gdkkeys.h"
 #include "common/database.h"
@@ -56,7 +56,7 @@
 #include "common/geo.h"
 #include "common/datetime.h"
 #include "common/conf.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 #include "control/jobs.h"
 
 #include "libs/lib_api.h"

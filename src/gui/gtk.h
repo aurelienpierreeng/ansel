@@ -58,7 +58,7 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/paths.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "gui/window_manager.h"
 #include "gui/accelerators.h"
 

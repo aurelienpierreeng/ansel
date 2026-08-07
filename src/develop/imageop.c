@@ -88,8 +88,8 @@
 #include "develop/tiling.h"
 #include "gui/gdkkeys.h"
 #include "gui/presets.h"
-#include "dtgtk/button.h"
-#include "dtgtk/expander.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/expander.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"

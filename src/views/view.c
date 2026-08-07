@@ -86,8 +86,8 @@
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"
-#include "dtgtk/expander.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/expander.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"

@@ -43,7 +43,7 @@
  */
 
 
-#include "dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbnail.h"
 #include "common/debug.h"
 #include "common/logging.h"
 

@@ -69,7 +69,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "dtgtk/drawingarea.h"
+#include "gui/dtgtk/drawingarea.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 

@@ -37,7 +37,7 @@
 #include "common/atomic.h"
 #include "common/debug.h"
 #include "common/logging.h"
-#include "dtgtk/thumbtable_info.h"
+#include "gui/dtgtk/thumbtable_info.h"
 
 #include <glib.h>
 #include <gtk/gtk.h>

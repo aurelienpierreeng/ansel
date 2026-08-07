@@ -57,7 +57,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
+#include "gui/dtgtk/drawingarea.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

@@ -26,7 +26,7 @@
 #include "bauhaus/bauhaus.h"
 #include "gui/window_manager.h"
 #include "gui/actions/menu.h"
-#include "dtgtk/sidepanel.h"
+#include "gui/dtgtk/sidepanel.h"
 #include "libs/lib.h"
 
 #define WINDOW_DEBUG 0

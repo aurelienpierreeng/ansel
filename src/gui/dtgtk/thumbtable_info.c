@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "dtgtk/thumbtable_info.h"
+#include "gui/dtgtk/thumbtable_info.h"
 
 #include "common/database.h"
 #include "common/debug.h"

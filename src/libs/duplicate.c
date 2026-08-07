@@ -36,7 +36,7 @@
 */
 
 #include "common/collection.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 #include "control/jobs/control_jobs.h"
 #include "common/database.h"
 #include "common/debug.h"
@@ -47,7 +47,7 @@
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_snapshot.h"
-#include "dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbnail.h"
 
 #include "gui/gtk.h"
 #include "libs/lib.h"

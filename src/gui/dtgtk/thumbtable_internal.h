@@ -31,8 +31,8 @@
 #ifndef DT_DTGTK_THUMBTABLE_INTERNAL_H
 #define DT_DTGTK_THUMBTABLE_INTERNAL_H
 
-#include "dtgtk/thumbtable.h"
-#include "dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbnail.h"
 
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>

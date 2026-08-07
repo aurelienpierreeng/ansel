@@ -25,9 +25,9 @@
 #include "common/conf.h"
 #include "common/selection.h"
 #include "common/usermanual_url.h"
-#include "dtgtk/thumbtable.h"
-#include "dtgtk/thumbtable_internal.h"
-#include "dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable_internal.h"
+#include "gui/dtgtk/thumbnail.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 

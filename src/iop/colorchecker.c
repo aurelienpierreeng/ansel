@@ -57,7 +57,7 @@
 #include "develop/imageop_math.h"
 #include "math/openmp_maths.h"
 #include "develop/tiling.h"
-#include "dtgtk/drawingarea.h"
+#include "gui/dtgtk/drawingarea.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

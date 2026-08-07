@@ -38,15 +38,15 @@
 */
 /** this is the thumbnail class for the lighttable module.  */
 
-#include "dtgtk/thumbnail.h"
-#include "dtgtk/thumbtable.h"
-#include "dtgtk/thumbtable_info.h"
+#include "gui/dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable_info.h"
 
 #include "bauhaus/bauhaus.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
-#include "dtgtk/focus.h"
-#include "dtgtk/focus_peaking.h"
+#include "gui/dtgtk/focus.h"
+#include "gui/dtgtk/focus_peaking.h"
 #include "common/grouping.h"
 #include "common/database.h"
 #include "common/ratings.h"
@@ -54,8 +54,8 @@
 #include "common/utility.h"
 #include "common/variables.h"
 #include "control/control.h"
-#include "dtgtk/preview_window.h"
-#include "dtgtk/thumbnail_btn.h"
+#include "gui/dtgtk/preview_window.h"
+#include "gui/dtgtk/thumbnail_btn.h"
 #include "gui/drag_and_drop.h"
 
 #include "views/view.h"

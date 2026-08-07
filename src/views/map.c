@@ -50,7 +50,7 @@
 #include "common/utility.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
 #include "gui/draw.h"

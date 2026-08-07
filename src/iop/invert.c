@@ -56,7 +56,7 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/resetlabel.h"
 #include "gui/color_picker_proxy.h"
 
 #include "gui/gtk.h"

@@ -70,7 +70,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"

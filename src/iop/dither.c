@@ -57,7 +57,7 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/gradientslider.h"
+#include "gui/dtgtk/gradientslider.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

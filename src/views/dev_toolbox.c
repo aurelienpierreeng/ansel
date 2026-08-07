@@ -24,9 +24,9 @@
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/dev_pixelpipe.h"
-#include "dtgtk/button.h"
-#include "dtgtk/paint.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/paint.h"
+#include "gui/dtgtk/togglebutton.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
 
