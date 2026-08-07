@@ -32,7 +32,9 @@
 #ifndef DT_COMMON_POINTS_H
 #define DT_COMMON_POINTS_H
 
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/macros.h"
+#include "common/mem_alloc.h"
+#include "common/logging.h"
 
 /* Process-wide singleton with no per-call context to ride on: this accessor is the
  * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
@@ -969,10 +971,31 @@ void init_by_array(sfmt_state_t *s, uint32_t *init_key, int key_length)
 
 static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads)
 {
-  sfmt_state_t *states = (sfmt_state_t *)dt_pixelpipe_cache_alloc_align_cache(
-      sizeof(sfmt_state_t) * num_threads, 0);
+  /* NOT the pixelpipe cache arena. This is a small (~20 kB), permanent, process-wide
+   * allocation made once during dt_init(), long before any pipeline exists. The cache
+   * arena is LRU-managed and refuses allocations when the system is under memory
+   * pressure -- by design -- so asking it for the RNG state made startup fail on a
+   * machine that was merely low on free RAM:
+   *
+   *   [pixelpipe_cache] refusing to allocate 0 MiB: the system has only 1638 MiB
+   *                     of available RAM left (pressure floor: 5175 MiB)
+   *
+   * and the unchecked result then segfaulted in the loop below. A permanent startup
+   * buffer belongs to the ordinary allocator. */
+  sfmt_state_t *states = (sfmt_state_t *)dt_alloc_align(sizeof(sfmt_state_t) * num_threads);
   p->s = (sfmt_state_t **)calloc(num_threads, sizeof(sfmt_state_t *));
   p->num = num_threads;
+
+  if(IS_NULL_PTR(states) || IS_NULL_PTR(p->s))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[points] out of memory allocating the RNG state for %u thread(s)\n", num_threads);
+    dt_free_align(states);
+    dt_free(p->s);
+    p->s = NULL;
+    p->num = 0;
+    return;
+  }
 
   int seed = 0xD71337;
   for(int i = 0; i < (int)num_threads; i++)
@@ -994,8 +1017,11 @@ static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads
 
 static inline void dt_points_cleanup(dt_points_t *p)
 {
-  dt_pixelpipe_cache_free_align(p->s[0]);
+  if(IS_NULL_PTR(p->s)) return;      // init failed, or already cleaned up
+  dt_free_align(p->s[0]);
   dt_free(p->s);
+  p->s = NULL;
+  p->num = 0;
 }
 
 static inline float dt_points_get_for(dt_points_t *p, const unsigned int thread_num)
