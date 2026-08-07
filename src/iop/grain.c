@@ -57,7 +57,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/module_versioning.h"
 #include "common/target_clones.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

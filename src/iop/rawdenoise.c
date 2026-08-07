@@ -60,7 +60,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"

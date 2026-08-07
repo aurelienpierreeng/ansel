@@ -28,10 +28,10 @@
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include "heal.h"
 
 /* Based on the original source code of GIMP's Healing Tool, by Jean-Yves Couleaud

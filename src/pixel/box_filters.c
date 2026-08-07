@@ -33,9 +33,9 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/math.h"
+#include "math/math.h"
 
 #if defined(__x86_64__) || defined(__i386__)
 #define DT_PREFETCH(addr) _mm_prefetch(addr, _MM_HINT_T2)

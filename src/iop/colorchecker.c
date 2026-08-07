@@ -45,24 +45,24 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "bauhaus/bauhaus.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "common/exif.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include "develop/tiling.h"
 #include "dtgtk/drawingarea.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
-#include "common/solvers/gaussian_elimination.h"
+#include "math/gaussian_elimination.h"
 
 #include <assert.h>
 #include <math.h>

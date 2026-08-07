@@ -40,8 +40,8 @@
 #ifndef DT_COMMON_COLORSPACES_H
 #define DT_COMMON_COLORSPACES_H
 
-#include "pixel/matrices.h"
-#include "common/simd.h"
+#include "math/matrices.h"
+#include "math/simd.h"
 
 #include <glib.h>
 #include <lcms2.h>

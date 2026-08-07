@@ -26,11 +26,11 @@
 
 #include "common/macros.h"
 #include "common/openmp.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "gui/gtk.h"
 #include "pixel/eigf.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 
 __OMP_DECLARE_SIMD__()
 static inline float uint8_to_float(const uint8_t i)

@@ -42,7 +42,7 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "pixel/chromatic_adaptation.h"
@@ -51,7 +51,7 @@
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include "develop/imageop_gui.h"
 
 #include "gui/draw.h"

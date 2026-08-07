@@ -53,7 +53,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "pixel/box_filters.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

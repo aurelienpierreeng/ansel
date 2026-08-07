@@ -20,7 +20,7 @@
 #define DT_IOP_HIGHLIGHTS_COMMON_H
 
 #include "common/openmp.h"        // HL_PFOR/__OMP_PARALLEL_FOR__
-#include "common/simd.h"          // dt_aligned_pixel_t + SIMD macros
+#include "math/simd.h"          // dt_aligned_pixel_t + SIMD macros
 #include "pixel/gaussian.h"      // dt_gaussian_t / dt_gaussian_cl_t (in _hl_gauss_slot_t + CL protos)
 #include "develop/pixelpipe_hb.h" // dt_dev_pixelpipe_t (in _hl_region_ctx_t) + dt_dev_pixelpipe_iop_t
 #include <glib.h>                 // CLAMP

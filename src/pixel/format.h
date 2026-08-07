@@ -32,7 +32,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "common/simd.h"
+#include "math/simd.h"
 
 #ifdef __cplusplus
 extern "C" {

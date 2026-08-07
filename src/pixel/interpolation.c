@@ -37,9 +37,9 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/conf.h"
 
 #include <assert.h>

@@ -58,7 +58,7 @@
 #endif
 
 #include "pdf.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/utility.h"
 
 #define SKIP_SPACES(s)  {while(*(s) == ' ')(s)++;}

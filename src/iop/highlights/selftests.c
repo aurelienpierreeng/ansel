@@ -20,7 +20,7 @@
 // for the public API.)
 
 #include "common/macros.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/blur.h"

@@ -33,7 +33,7 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/openmp.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "chart/dtcairo.h"
 #include "chart/colorchart.h"
 #include "chart/common.h"

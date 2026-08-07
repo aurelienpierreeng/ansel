@@ -24,7 +24,7 @@
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "common/iop_profile.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"

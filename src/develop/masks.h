@@ -112,7 +112,7 @@ GList dev->forms
 #include "common/atomic.h"
 #include "common/logging.h"
 #include "common/macros.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/times.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "develop/pixelpipe.h"

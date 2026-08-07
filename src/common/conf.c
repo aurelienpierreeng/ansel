@@ -47,7 +47,7 @@
 #include "common/calculator.h"
 #include "common/darktable.h"
 #include "common/file_location.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/conf.h"
 
 #include <glib.h>

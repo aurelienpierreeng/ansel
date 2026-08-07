@@ -48,7 +48,7 @@
 #include "common/exif.h"
 #include "common/imageio.h"
 #include "imageio/imageio_module.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "imageio/format/imageio_format_api.h"

@@ -54,7 +54,7 @@
 #include "bauhaus/bauhaus.h"
 #include "pixel/bilateral.h"
 #include "common/colorspaces.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"

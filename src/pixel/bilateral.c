@@ -33,10 +33,10 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/logging.h"
 #include "common/pixelpipe_cache_alloc.h" // dt_pixelpipe_cache_alloc_align_float_cache
-#include "common/math.h"      // for CLAMPS, roundf
+#include "math/math.h"      // for CLAMPS, roundf
 #include <glib.h>             // for MIN, MAX
 #include <stdlib.h>           // for size_t, free, malloc, NULL
 #include <string.h>           // for memset

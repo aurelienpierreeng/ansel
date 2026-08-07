@@ -33,7 +33,7 @@
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/pixelpipe_cache_alloc.h"

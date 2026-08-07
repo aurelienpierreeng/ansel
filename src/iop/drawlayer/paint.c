@@ -24,7 +24,7 @@
  */
 
 #include "iop/drawlayer/paint.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/brush_profile.h"
 
@@ -32,7 +32,7 @@
 #include "common/mem_alloc.h"
 #include "common/logging.h"
 #include "common/times.h"
-#include "common/math.h"
+#include "math/math.h"
 
 #include <math.h>
 #include <string.h>

@@ -21,7 +21,7 @@
 #ifndef DT_DEVELOP_NOISE_GENERATOR_H
 #define DT_DEVELOP_NOISE_GENERATOR_H
 
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 
 
 typedef enum dt_noise_distribution_t

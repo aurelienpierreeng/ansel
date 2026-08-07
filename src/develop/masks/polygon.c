@@ -53,7 +53,7 @@
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include "gui/actions/menu.h"
 #include <assert.h>
 

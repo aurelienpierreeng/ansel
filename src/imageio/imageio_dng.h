@@ -45,7 +45,7 @@
 
 #include "common/exif.h"
 #include "common/imageio.h"
-#include "common/simd.h"
+#include "math/simd.h"
 
 
 #define II 1

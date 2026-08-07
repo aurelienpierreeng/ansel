@@ -52,7 +52,7 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/module_versioning.h"
 #include "common/database.h"
 #include "develop/develop.h"
