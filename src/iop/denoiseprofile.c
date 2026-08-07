@@ -68,9 +68,9 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include <json-glib/json-glib.h>
-#include "common/eaw.h"
+#include "pixel/eaw.h"
 #include "common/imagebuf.h"
-#include "common/nlmeans_core.h"
+#include "pixel/nlmeans_core.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
 #include "develop/blend.h"

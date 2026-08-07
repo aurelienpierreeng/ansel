@@ -70,7 +70,7 @@
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "common/image_cache.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/math.h"
 #include "common/opencl.h"
 #include "control/control.h"
@@ -87,7 +87,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/bspline.h"
+#include "pixel/bspline.h"
 
 #include "gui/gtk.h"
 #include "iop/iop_api.h"

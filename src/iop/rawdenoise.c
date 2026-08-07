@@ -56,7 +56,7 @@
 #include "common/module_versioning.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
-#include "common/dwt.h"
+#include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"

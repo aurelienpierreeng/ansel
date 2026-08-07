@@ -66,7 +66,7 @@
 #include "common/database.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "bauhaus/bauhaus.h"
-#include "common/eaw.h"
+#include "pixel/eaw.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "control/conf.h"

@@ -45,7 +45,7 @@
 #include "common/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/chromatic_adaptation.h"
+#include "pixel/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/opencl.h"
 #include "develop/blend.h"

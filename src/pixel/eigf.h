@@ -22,9 +22,9 @@
 #ifndef DT_COMMON_EIGF_H
 #define DT_COMMON_EIGF_H
 
-#include "common/fast_guided_filter.h"
+#include "pixel/fast_guided_filter.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/gaussian.h"
+#include "pixel/gaussian.h"
 
 /***
  * DOCUMENTATION

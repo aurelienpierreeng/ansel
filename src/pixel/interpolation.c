@@ -32,7 +32,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"

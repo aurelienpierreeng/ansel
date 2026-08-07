@@ -81,7 +81,7 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"

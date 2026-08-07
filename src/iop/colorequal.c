@@ -25,7 +25,7 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/colorequal_shared.h"
+#include "pixel/colorequal_shared.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -35,7 +35,7 @@
 #include "common/times.h"
 #include "common/module_versioning.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/lut3d.h"
 #include "common/lut_viewer.h"
 #include "common/opencl.h"

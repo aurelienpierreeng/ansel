@@ -46,7 +46,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/iop_profile.h"
-#include "common/rgb_norms.h"
+#include "pixel/rgb_norms.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"

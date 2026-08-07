@@ -22,7 +22,7 @@
 #endif
 
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/opencl.h"
 #include "develop/blend.h"
 #include "develop/develop.h"

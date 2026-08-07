@@ -31,7 +31,7 @@
 #include "common/openmp.h"           // for __OMP_PARALLEL_FOR__
 #include "common/simd.h"             // for dt_aligned_pixel_t
 #include "common/imageio.h"          // for FILTERS_ARE_4BAYER
-#include "common/interpolation.h"    // for dt_interpolation_new, dt_interp...
+#include "pixel/interpolation.h"    // for dt_interpolation_new, dt_interp...
 #include "develop/imageop.h"         // for dt_iop_roi_t
 
 void dt_iop_flip_and_zoom_8(const uint8_t *in, int32_t iw, int32_t ih, uint8_t *out, int32_t ow, int32_t oh,

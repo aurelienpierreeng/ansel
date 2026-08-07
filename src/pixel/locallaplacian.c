@@ -32,7 +32,7 @@
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/locallaplacian.h"
+#include "pixel/locallaplacian.h"
 #include "common/math.h"
 
 #include <string.h>

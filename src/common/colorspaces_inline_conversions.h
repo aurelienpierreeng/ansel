@@ -28,7 +28,7 @@
 #ifndef DT_COMMON_COLORSPACES_INLINE_CONVERSIONS_H
 #define DT_COMMON_COLORSPACES_INLINE_CONVERSIONS_H
 
-#include "common/matrices.h"
+#include "pixel/matrices.h"
 #include "common/math.h"
 
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t

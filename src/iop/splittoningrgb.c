@@ -22,7 +22,7 @@
 #endif
 
 #include "bauhaus/bauhaus.h"
-#include "common/chromatic_adaptation.h"
+#include "pixel/chromatic_adaptation.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -31,8 +31,8 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/iop_profile.h"
-#include "common/illuminants.h"
-#include "common/matrices.h"
+#include "pixel/illuminants.h"
+#include "pixel/matrices.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"

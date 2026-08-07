@@ -63,7 +63,7 @@
 #include "common/simd.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"
-#include "common/gaussian.h"
+#include "pixel/gaussian.h"
 #include "common/math.h"
 #include "control/control.h"
 #include "develop/develop.h"

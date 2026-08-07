@@ -44,8 +44,8 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
-#include "common/gaussian.h"
+#include "pixel/bilateral.h"
+#include "pixel/gaussian.h"
 #include "develop/develop.h"
 #include "common/macros.h"
 #include "common/openmp.h"

@@ -64,7 +64,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/math.h"
 #include "common/opencl.h"
-#include "common/tea.h"
+#include "pixel/tea.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"

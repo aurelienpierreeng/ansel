@@ -26,7 +26,7 @@
 #include "common/mem_alloc.h"
 #ifdef HAVE_OPENCL
 #include "common/opencl.h"
-#include "common/locallaplaciancl.h"
+#include "pixel/locallaplaciancl.h"
 
 #define max_levels 30
 #define num_gamma 6

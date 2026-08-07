@@ -28,7 +28,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "common/box_filters.h"
+#include "pixel/box_filters.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"

@@ -80,7 +80,7 @@
 #include "common/module_versioning.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/math.h"
 #include "control/conf.h"
 #include "control/control.h"

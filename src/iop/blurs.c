@@ -36,7 +36,7 @@
 #endif
 // our includes go first:
 #include "bauhaus/bauhaus.h"
-#include "common/dwt.h"
+#include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "dtgtk/drawingarea.h"

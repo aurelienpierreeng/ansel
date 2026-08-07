@@ -25,7 +25,7 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/colorequal_shared.h"
+#include "pixel/colorequal_shared.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
