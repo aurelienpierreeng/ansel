@@ -105,7 +105,7 @@ static void dt_rawspeed_load_meta()
       }
       catch(...)
       {
-        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
         throw;
       }
     }

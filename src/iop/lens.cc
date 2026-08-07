@@ -85,7 +85,7 @@
 #include "pixel/interpolation.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -1788,7 +1788,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(IS_NULL_PTR(dev_tmpbuf)) goto error;
 
   dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-  modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
+  modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
   dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
   if(modflags & LF_MODIFY_VIGNETTING)
@@ -2546,9 +2546,6 @@ void reload_defaults(dt_iop_module_t *module)
          */
         g_strlcpy(d->lens, "", sizeof(d->lens));
 
-  const float orig_w = roi_in->scale * piece->buf_in.width;
-  const float orig_h = roi_in->scale * piece->buf_in.height;
-  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
         lens = gd->db->FindLenses(cam[0], NULL, d->lens, 0);
         dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       }
@@ -2775,6 +2772,7 @@ static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
   auto *self = (dt_iop_module_t *)user_data;
   camera_set(self, (lfCamera *)g_object_get_data(G_OBJECT(menuitem), "lfCamera"));
   if(dt_gui_widgets_suppressed()) return;
+  auto p = (dt_iop_lensfun_params_t *)self->params;
   p->has_been_set = 0;
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
@@ -3438,7 +3436,7 @@ void gui_init(struct dt_iop_module_t *self)
       const dt_image_t *img = !IS_NULL_PTR(self->dev) ? &self->dev->image_storage : nullptr;
       const gboolean has_vign = !IS_NULL_PTR(img) && dt_embedded_lens_has_vignetting(img);
 
-      g->per_correction.vignetting_source = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+      g->per_correction.vignetting_source = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
       dt_bauhaus_widget_set_label(g->per_correction.vignetting_source, N_("vignetting"));
       gtk_box_pack_start(GTK_BOX(self->widget), g->per_correction.vignetting_source, TRUE, TRUE, 0);
       gtk_widget_set_tooltip_text(g->per_correction.vignetting_source, _("source of vignetting correction"));
@@ -3457,7 +3455,7 @@ void gui_init(struct dt_iop_module_t *self)
       const dt_image_t *img = !IS_NULL_PTR(self->dev) ? &self->dev->image_storage : nullptr;
       const gboolean has_dist = !IS_NULL_PTR(img) && dt_embedded_lens_has_distortion(img);
 
-      g->per_correction.distortion_source = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+      g->per_correction.distortion_source = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
       dt_bauhaus_widget_set_label(g->per_correction.distortion_source, N_("distortion"));
       gtk_box_pack_start(GTK_BOX(self->widget), g->per_correction.distortion_source, TRUE, TRUE, 0);
       gtk_widget_set_tooltip_text(g->per_correction.distortion_source, _("source of distortion correction"));
@@ -3472,7 +3470,7 @@ void gui_init(struct dt_iop_module_t *self)
     }
 
     // Position 5: Geometry combobox (target_geom) — visible when distortion is LENSFUN_DB
-    g->lensfun_controls.target_geom = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+    g->lensfun_controls.target_geom = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
     dt_bauhaus_widget_set_label(g->lensfun_controls.target_geom, N_("geometry"));
     gtk_box_pack_start(GTK_BOX(self->widget), g->lensfun_controls.target_geom, TRUE, TRUE, 0);
     gtk_widget_set_tooltip_text(g->lensfun_controls.target_geom, _("target geometry"));
@@ -3494,7 +3492,7 @@ void gui_init(struct dt_iop_module_t *self)
       const dt_image_t *img = !IS_NULL_PTR(self->dev) ? &self->dev->image_storage : nullptr;
       const gboolean has_ca = !IS_NULL_PTR(img) && dt_embedded_lens_has_ca(img);
 
-      g->per_correction.tca_source = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+      g->per_correction.tca_source = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
       dt_bauhaus_widget_set_label(g->per_correction.tca_source, N_("TCA"));
       gtk_box_pack_start(GTK_BOX(self->widget), g->per_correction.tca_source, TRUE, TRUE, 0);
       gtk_widget_set_tooltip_text(g->per_correction.tca_source, _("source of TCA correction"));
