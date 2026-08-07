@@ -1104,15 +1104,6 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
 
   if(!dt_gui_widgets_suppressed())
   {
-    /**
-     * Modules may keep a delayed history commit queued while the user edits a
-     * control, for example through gui-throttled graph interactions. Enabling
-     * or disabling a module is an immediate history state change, so any stale
-     * delayed task must be canceled first or it may land afterwards and replay
-     * an older enabled+params state over the newer toggle action.
-     */
-    dt_gui_throttle_cancel(module);
-
     if(gtk_toggle_button_get_active(togglebutton))
     {
       module->enabled = 1;
@@ -3243,12 +3234,6 @@ gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
   }
 
   return is_first;
-}
-
-void dt_iop_throttled_history_update(gpointer data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t*)data;
-  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_text, const char *purpose, const char *input, const char *process,

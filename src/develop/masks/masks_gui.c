@@ -257,10 +257,10 @@ typedef struct dt_masks_gui_interaction_slider_t
 // Push the new value to history (so the pipeline re-renders) and refresh the mask
 // treeviews (opacity text, etc.).
 //
-// This is called from the slider "value-changed" handler. The bauhaus slider already
-// throttles that emission through dt_gui_throttle_queue() while dragging, so the commit
-// is debounced at the slider-value level: transient values do not flood the pipeline with
-// renders, yet the image updates without waiting for the context menu to be closed.
+// This is called from the slider "value-changed" handler, which fires on every step of a
+// drag. That is fine: the history commit batches the pipeline resync it triggers, so
+// transient values do not flood the pipeline with renders, yet the image updates without
+// waiting for the context menu to be closed.
 static void _masks_gui_interaction_commit(dt_masks_gui_interaction_slider_t *data)
 {
   if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group) || IS_NULL_PTR(data->gui)) return;

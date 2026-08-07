@@ -999,7 +999,7 @@ static gboolean _move_point_internal(dt_iop_module_t *self, GtkWidget *widget, f
 
   gtk_widget_queue_draw(widget);
 
-  dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   return TRUE;
 }
 
@@ -1178,7 +1178,6 @@ void gui_cleanup(struct dt_iop_module_t *self)
   dt_draw_curve_destroy(c->minmax_curve[ch_L]);
   dt_draw_curve_destroy(c->minmax_curve[ch_a]);
   dt_draw_curve_destroy(c->minmax_curve[ch_b]);
-  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

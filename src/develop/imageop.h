@@ -603,9 +603,6 @@ gboolean dt_iop_gui_move_module_after(dt_iop_module_t *module, dt_iop_module_t *
 // initializes memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table();
 
-/** shared callback for throttled module history updates */
-void dt_iop_throttled_history_update(gpointer data);
-
 /** add/remove mask indicator to iop module header */
 void dt_iop_add_remove_mask_indicator(dt_iop_module_t *module);
 
