@@ -38,18 +38,25 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "control/control.h"
+#include "common/act_on.h"
+#include "control/settings.h"
+#include "control/jobs/control_jobs.h"
+#include "gui/dtgtk/togglebutton.h"
+#include "libs/lib.h"
 #include "gui/gdkkeys.h"
+#include "common/database.h"
 #include "common/debug.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "common/file_location.h"
 #include "common/image_cache.h"
-#include "common/collection.h"
 #include "common/selection.h"
 #include "common/gpx.h"
 #include "common/geo.h"
 #include "common/datetime.h"
-#include "control/conf.h"
-#include "dtgtk/button.h"
+#include "common/conf.h"
+#include "gui/dtgtk/button.h"
 #include "control/jobs.h"
 
 #include "libs/lib_api.h"
@@ -61,6 +68,8 @@
 #endif
 
 #include <gdk/gdkkeysyms.h>
+#include <glib/gstdio.h>
+#include <sqlite3.h>
 
 DT_MODULE(1)
 
@@ -266,7 +275,7 @@ static int _count_images_per_track(dt_gpx_track_segment_t *t, dt_gpx_track_segme
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
     if(im->segid == -1)
     {
-      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, darktable.utc_tz, d->offset);
+      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, dt_datetime_utc_tz(), d->offset);
       if((g_date_time_compare(dt, t->start_dt) >= 0
           && g_date_time_compare(dt, t->end_dt) <= 0)
          || (n && g_date_time_compare(dt, t->end_dt) >= 0
@@ -310,7 +319,7 @@ static void _remove_images_from_map(dt_lib_module_t *self)
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
     if(im->image)
     {
-      dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_THUMB, im->image);
+      dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_THUMB, im->image);
       im->image = NULL;
     }
   }
@@ -324,14 +333,14 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
     dt_sel_img_t *im = (dt_sel_img_t *)i->data;
     if(im->segid == segid && active)
     {
-      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, darktable.utc_tz, d->offset);
+      GDateTime *dt = _localtime_text_to_utc_timeval(im->dt, d->tz_camera, dt_datetime_utc_tz(), d->offset);
       if(!dt_gpx_get_location(d->map.gpx, dt, &im->gl))
         im->gl.latitude = NAN;
       g_date_time_unref(dt);
     }
     else if(im->segid == segid && !active && im->image)
     {
-      dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_THUMB, im->image);
+      dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_THUMB, im->image);
       im->image = NULL;
       im->gl.latitude = NAN;
     }
@@ -355,7 +364,7 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
         p.longitude = im->gl.longitude;
         p.count = count == 1 ? 0 : count;
         GList *img = g_list_prepend(NULL, &p);
-        im->image = dt_view_map_add_marker(darktable.view_manager, MAP_DISPLAY_THUMB, img);
+        im->image = dt_view_map_add_marker(dt_view_manager_get_global(), MAP_DISPLAY_THUMB, img);
         g_list_free(img);
         img = NULL;
         count = 0;
@@ -509,7 +518,7 @@ static void _remove_tracks_from_map(dt_lib_module_t *self)
     {
       if(d->map.tracks->td[i].track)
       {
-        dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_TRACK,
+        dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_TRACK,
                                   d->map.tracks->td[i].track);
         d->map.tracks->td[i].track = NULL;
       }
@@ -538,7 +547,7 @@ static gboolean _refresh_display_track(const gboolean active, const int segid, d
   {
     GList *pts = dt_gpx_get_trkpts(d->map.gpx, segid);
     if(!d->map.tracks->td[segid].track)
-      d->map.tracks->td[segid].track = dt_view_map_add_marker(darktable.view_manager,
+      d->map.tracks->td[segid].track = dt_view_map_add_marker(dt_view_manager_get_global(),
                                                               MAP_DISPLAY_TRACK, pts);
     osm_gps_map_track_set_color((OsmGpsMapTrack *)d->map.tracks->td[segid].track, &color[segid % 6]);
     grow = _update_map_box(segid, pts, self);
@@ -548,7 +557,7 @@ static gboolean _refresh_display_track(const gboolean active, const int segid, d
   else
   {
     if(d->map.tracks->td[segid].track !=  NULL)
-      dt_view_map_remove_marker(darktable.view_manager, MAP_DISPLAY_TRACK,
+      dt_view_map_remove_marker(dt_view_manager_get_global(), MAP_DISPLAY_TRACK,
                                 d->map.tracks->td[segid].track);
     d->map.tracks->td[segid].track =  NULL;
     _update_map_box(segid, NULL, self);
@@ -573,7 +582,7 @@ static void _refresh_display_all_tracks(dt_lib_module_t *self)
 
   if(grow)
   {
-    dt_view_map_center_on_bbox(darktable.view_manager, d->map.map_box.lon1, d->map.map_box.lat1,
+    dt_view_map_center_on_bbox(dt_view_manager_get_global(), d->map.map_box.lon1, d->map.map_box.lat1,
                                                        d->map.map_box.lon2, d->map.map_box.lat2);
   }
   _refresh_displayed_images(self);
@@ -597,7 +606,7 @@ static void _track_seg_toggled(GtkCellRendererToggle *cell_renderer, gchar *path
   active = !active;
   if(_refresh_display_track(active, segid, self))
   {
-    dt_view_map_center_on_bbox(darktable.view_manager, d->map.map_box.lon1, d->map.map_box.lat1,
+    dt_view_map_center_on_bbox(dt_view_manager_get_global(), d->map.map_box.lon1, d->map.map_box.lat1,
                                                        d->map.map_box.lon2, d->map.map_box.lat2);
   }
 
@@ -627,7 +636,7 @@ static void _all_tracks_toggled(GtkTreeViewColumn *column, dt_lib_module_t *self
   }
   if(active && grow)
   {
-    dt_view_map_center_on_bbox(darktable.view_manager, d->map.map_box.lon1, d->map.map_box.lat1,
+    dt_view_map_center_on_bbox(dt_view_manager_get_global(), d->map.map_box.lon1, d->map.map_box.lat1,
                                                        d->map.map_box.lon2, d->map.map_box.lat2);
   }
   _refresh_displayed_images(self);
@@ -638,8 +647,8 @@ static void _all_tracks_toggled(GtkTreeViewColumn *column, dt_lib_module_t *self
 static void _select_images(GtkWidget *widget, dt_lib_module_t *self)
 {
   GList *imgs = _get_images_on_active_tracks(self);
-  dt_selection_clear(darktable.selection);
-  dt_selection_select_list(darktable.selection, imgs);
+  dt_selection_clear(dt_selection_get_global());
+  dt_selection_select_list(dt_selection_get_global(), imgs);
   g_list_free(imgs);
   imgs = NULL;
 }
@@ -793,10 +802,10 @@ static void _refresh_selected_images_datetime(dt_lib_module_t *self)
   for(GList *i = d->imgs; i; i = g_list_next(i))
   {
     dt_sel_img_t *img = i->data;
-    const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, img->imgid, 'r');
+    const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), img->imgid, 'r');
     if(IS_NULL_PTR(cimg)) continue;
     dt_datetime_img_to_exif(img->dt, sizeof(img->dt), cimg);
-    dt_image_cache_read_release(darktable.image_cache, cimg);
+    dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
   }
 }
 
@@ -833,7 +842,7 @@ static gboolean _row_tooltip_setup(GtkWidget *view, gint x, gint y, gboolean kb_
 static void _preview_gpx_file(GtkWidget *widget, dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
             _("GPX file track segments"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
             _("done"), GTK_RESPONSE_CANCEL, NULL);
@@ -925,17 +934,17 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
   d->nb_imgs = 0;
 
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT imgid FROM main.selected_images",
                               -1, &stmt, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const int32_t imgid = sqlite3_column_int(stmt, 0);
-    const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     char dt[DT_DATETIME_LENGTH];
     if(IS_NULL_PTR(cimg)) continue;
     dt_datetime_img_to_exif(dt, sizeof(dt), cimg);
-    dt_image_cache_read_release(darktable.image_cache, cimg);
+    dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
 
     dt_sel_img_t *img = g_malloc0(sizeof(dt_sel_img_t));
     if(IS_NULL_PTR(img)) continue;
@@ -951,7 +960,7 @@ static void _choose_gpx_callback(GtkWidget *widget, dt_lib_module_t *self)
 {
   // bring a filechooser to select the gpx file to apply to selection
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *filechooser = gtk_file_chooser_dialog_new(
             _("open GPX file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
             _("preview"), GTK_RESPONSE_ACCEPT,
@@ -1333,7 +1342,7 @@ static GDateTime *_read_datetime_entry(dt_lib_module_t *self)
   const int millisecond = atoi(gtk_entry_get_text(GTK_ENTRY(d->dt.widget[6])));
   const gdouble second2 = (gdouble)second + (gdouble)millisecond * 0.001;
 
-  return g_date_time_new(darktable.utc_tz, year, month, day, hour, minute, second2);
+  return g_date_time_new(dt_datetime_utc_tz(), year, month, day, hour, minute, second2);
 }
 
 static void _new_datetime(GDateTime *datetime, dt_lib_module_t *self)
@@ -1377,7 +1386,7 @@ static GDateTime *_get_image_datetime(dt_lib_module_t *self)
   char datetime_s[DT_DATETIME_LENGTH];
   dt_image_get_datetime(imgid, datetime_s);
   if(datetime_s[0] != '\0')
-    datetime = dt_datetime_exif_to_gdatetime(datetime_s, darktable.utc_tz);
+    datetime = dt_datetime_exif_to_gdatetime(datetime_s, dt_datetime_utc_tz());
   else
     datetime = NULL;
 
@@ -1533,7 +1542,7 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
       gtk_box_pack_start(box, dt->widget[i], FALSE, FALSE, 0);
       if(type == 0)
       {
-        gtk_widget_add_events(dt->widget[i], darktable.gui->scroll_mask);
+        gtk_widget_add_events(dt->widget[i], dt_gui_get_global()->scroll_mask);
       }
       else
       {
@@ -1577,7 +1586,7 @@ static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_l
       if(dt_conf_get_bool("/views/map/enable") && d->map.view)
         _refresh_track_list(self);
 #endif
-      gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+      gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
       d->editing = FALSE;
       return FALSE;
     }
@@ -1631,7 +1640,7 @@ static void _timezone_save(dt_lib_module_t *self)
   gtk_entry_set_text(GTK_ENTRY(d->timezone), name ? name : "UTC");
   gtk_label_set_text(GTK_LABEL (d->timezone_changed), "");
 
-  gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+  gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
 #ifdef HAVE_MAP
   if(dt_conf_get_bool("/views/map/enable") && d->map.view)
     _refresh_track_list(self);
@@ -1649,7 +1658,7 @@ static gboolean _timezone_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_l
       _timezone_save(self);
       return TRUE;
     case GDK_KEY_Escape:
-      gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+      gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
       return TRUE;
     default: ;
       dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
@@ -1967,20 +1976,20 @@ void gui_init(dt_lib_module_t *self)
     g_signal_connect(d->dt.widget[i], "key-press-event", G_CALLBACK(_datetime_key_pressed), self);
     g_signal_connect(d->dt.widget[i], "scroll-event", G_CALLBACK(_datetime_scroll_over), self);
   }
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                                   G_CALLBACK(_mouse_over_image_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                                   G_CALLBACK(_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED,
                             G_CALLBACK(_image_info_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE,
                             G_CALLBACK(_dt_pref_change_callback), self);
 #ifdef HAVE_MAP
   if(dt_conf_get_bool("/views/map/enable"))
   {
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                               G_CALLBACK(_view_changed), self);
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED,
                               G_CALLBACK(_geotag_changed), self);
   }
 #endif
@@ -1992,13 +2001,13 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_info_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_pref_change_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_mouse_over_image_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_selection_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_image_info_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_dt_pref_change_callback), self);
 #ifdef HAVE_MAP
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_geotag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_geotag_changed), self);
 #endif
   if(IS_NULL_PTR(self->data)) return;
 
@@ -2028,8 +2037,8 @@ void gui_cleanup(dt_lib_module_t *self)
   if(dt_conf_get_bool("/views/map/enable"))
   {
     _remove_tracks_from_map(self);
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_changed), self);
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_geotag_changed), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_changed), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_geotag_changed), self);
   }
 #endif
   dt_free(self->data);

@@ -21,13 +21,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/database.h"
 #include "common/presets.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
 #include "common/debug.h"
 #include "common/exif.h"
-#include "common/file_location.h"
-#include "develop/blend.h"
-#include "develop/imageop.h"
 #include "libs/lib.h"
 
 #include <libxml/encoding.h>
@@ -59,7 +58,7 @@ void dt_presets_save_to_file(const int rowid, const char *preset_name, const cha
   dt_free(presetname);
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT op_params, blendop_params, name, description, operation,"
                               "   autoapply, model, maker, lens, iso_min, iso_max, exposure_min,"
                               "   exposure_max, aperture_min, aperture_max, focal_length_min,"
@@ -254,7 +253,7 @@ int dt_presets_import_from_file(const char *preset_path)
   int result = 0;
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
      "INSERT OR REPLACE"
      "  INTO data.presets"
      "    (name, description, operation, autoapply,"
@@ -312,7 +311,7 @@ int dt_presets_import_from_file(const char *preset_path)
 
 gboolean dt_presets_module_can_autoapply(const gchar *operation)
 {
-  for(const GList *lib_modules = darktable.lib->plugins; lib_modules; lib_modules = g_list_next(lib_modules))
+  for(const GList *lib_modules = dt_lib_get_global()->plugins; lib_modules; lib_modules = g_list_next(lib_modules))
   {
     dt_lib_module_t *lib_module = (dt_lib_module_t *)lib_modules->data;
     if(!strcmp(lib_module->plugin_name, operation))

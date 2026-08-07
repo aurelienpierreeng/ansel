@@ -48,29 +48,27 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
-#include "common/exif.h"
+#include "gui/bauhaus.h"
+#include "common/global_mutexes.h"
 #include "common/image.h"
-#include "common/image_cache.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
 #include "common/utility.h"
 #include "common/variables.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
-#include "dtgtk/button.h"
-#include "dtgtk/paint.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/paint.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
 #include "imageio/storage/imageio_storage_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "common/module_versioning.h"
 
 DT_MODULE(3)
 
@@ -148,7 +146,7 @@ void *legacy_params(dt_imageio_module_storage_t *self, const void *const old_par
 static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
 {
   disk_t *d = (disk_t *)self->gui_data;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_select as output destination"), _("_cancel"));
@@ -221,7 +219,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(GTK_BOX(hbox), widget, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(widget), "clicked", G_CALLBACK(button_clicked), self);
 
-  d->onsave_action = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->onsave_action = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->onsave_action, N_("on conflict"));
   gtk_widget_set_tooltip_text(d->onsave_action, _("Expected behaviour if the current naming pattern\n"
                                                   "produces a filename that already exists."));
@@ -268,7 +266,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   gboolean fail = FALSE;
   // we're potentially called in parallel. have sequence number synchronized:
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   {
 try_again:
     // avoid braindead export which is bound to overwrite at random:
@@ -341,7 +339,7 @@ try_again:
     {
       if(g_file_test(filename, G_FILE_TEST_EXISTS))
       {
-        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
         fprintf(stderr, "[export_job] skipping `%s'\n", filename);
         dt_control_log(ngettext("%d/%d skipping `%s'", "%d/%d skipping `%s'", num),
                        num, total, filename);
@@ -349,7 +347,7 @@ try_again:
       }
     }
   } // end of critical block
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   if(fail) return 1;
 
   /* export image to file */

@@ -16,12 +16,13 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_SUPERVISOR_H
+#define DT_DEVELOP_SUPERVISOR_H
 
 #include <glib.h>
 #include <stdint.h>
 
-#include "common/darktable.h"
+#include "common/logging.h"
 
 struct dt_image_t;
 struct dt_iop_module_t;
@@ -93,7 +94,7 @@ extern gint dt_supervisor_recording;
 // call sites with this so the per-event metadata gathering is skipped when off.
 static inline gboolean dt_supervisor_active(void)
 {
-  return (darktable.unmuted & DT_DEBUG_SUPERVISOR) || g_atomic_int_get(&dt_supervisor_recording);
+  return (dt_get_debug_flags() & DT_DEBUG_SUPERVISOR) || g_atomic_int_get(&dt_supervisor_recording);
 }
 
 /**
@@ -310,3 +311,4 @@ gchar *dt_supervisor_describe(uint64_t hash);
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_DEVELOP_SUPERVISOR_H

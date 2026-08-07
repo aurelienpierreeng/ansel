@@ -22,10 +22,10 @@
 */
 
 #include "common/imagebuf.h"
-#include "common/math.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include <math.h>
 
 

@@ -22,12 +22,10 @@
     surface fetcher (fit-to-window or 100% with panning); the darkroom editing
     panels are intentionally absent: this is a viewer, not an editor. */
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/collection.h"
-#include "common/darktable.h"
-#include "common/debug.h"
+#include "common/module_versioning.h"
 #include "common/selection.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"
@@ -36,7 +34,7 @@
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gdkkeys.h"
 #include "gui/gtk.h"
@@ -178,7 +176,7 @@ void gui_init(dt_view_t *self)
   // Accelerators for the same buttons, bound to the accel group this view
   // actually connects (see enter(): dt_accels_connect_active_group(...,
   // "lighttable")) instead of darkroom's darkroom_accels.
-  dt_dev_toolbox_add_accels(d->dev, darktable.gui->accels->lighttable_accels, N_("Studio capture/Toolbox"),
+  dt_dev_toolbox_add_accels(d->dev, dt_gui_get_accels()->lighttable_accels, N_("Studio capture/Toolbox"),
                             studio_capture_toolbox_buttons, G_N_ELEMENTS(studio_capture_toolbox_buttons));
 }
 
@@ -310,13 +308,13 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   // Taking each busy lock waits for the running pipe to release it.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
   dt_dev_set_backbuf(&dev->pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache,
+  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(),
                                     dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
   dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
@@ -326,16 +324,16 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   {
     dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
     dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
-    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache,
+    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(),
                                       dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
     dt_dev_set_backbuf(&dev->virtual_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                        DT_PIXELPIPE_CACHE_HASH_INVALID);
     dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
   }
 
-  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(darktable.pixelpipe_cache, dev->pipe->last_devid);
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->pipe->last_devid);
   if(dev->preview_pipe->last_devid != dev->pipe->last_devid)
-    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(darktable.pixelpipe_cache, dev->preview_pipe->last_devid);
+    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->preview_pipe->last_devid);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
@@ -381,11 +379,11 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   dev->image_storage.id = -1;
 
   // Release the histogram backbuf cache references.
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->raw_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->raw_histogram));
   dt_dev_backbuf_set_hash(&dev->raw_histogram, -1);
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->output_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->output_histogram));
   dt_dev_backbuf_set_hash(&dev->output_histogram, -1);
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->display_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->display_histogram));
   dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 }
 
@@ -414,7 +412,7 @@ static void _studio_set_image(dt_studio_capture_t *d, const int32_t imgid)
     // (a new import, a filmstrip activate...): darkroom's try_enter() falls
     // back to the selection, not to our own active-image tracking, and the
     // user expects "what's shown" and "what's selected" to be the same thing.
-    dt_selection_select_single(darktable.selection, imgid);
+    dt_selection_select_single(dt_selection_get_global(), imgid);
     // darkroom's try_enter() checks mouse_over_id BEFORE falling back to the
     // selection, and its own enter() sets both mouse_over_id and
     // keyboard_over_id to the image it is about to load. Mirror that here so
@@ -423,7 +421,7 @@ static void _studio_set_image(dt_studio_capture_t *d, const int32_t imgid)
     dt_control_set_mouse_over_id(imgid);
     dt_control_set_keyboard_over_id(imgid);
     // Only feed the scopes while the atelier owns the global develop pointer.
-    if(darktable.develop == d->dev) _studio_dev_setup(d, imgid);
+    if(dt_dev_get_global() == d->dev) _studio_dev_setup(d, imgid);
   }
 
   dt_control_queue_redraw_center();
@@ -481,7 +479,7 @@ static void _studio_history_changed_callback(gpointer instance, gpointer user_da
   // read from d->dev's preview pipe, not from the fetcher's mipmap-based surface —
   // catch up at the same time as the center image. Skip dt_dev_history_gui_update():
   // it walks dev->iop expecting module GUIs, which this viewer never initializes.
-  if(d->dev_loaded && darktable.develop == d->dev)
+  if(d->dev_loaded && dt_dev_get_global() == d->dev)
   {
     dt_dev_reload_history_items(d->dev, d->imgid);
     dt_dev_history_pixelpipe_update(d->dev, TRUE);
@@ -497,8 +495,8 @@ void enter(dt_view_t *self)
 
   // Publish our develop so the scopes/navigation modules and the pixelpipe read
   // this viewer's pipeline while the atelier is active.
-  d->saved_develop = darktable.develop;
-  darktable.develop = d->dev;
+  d->saved_develop = dt_dev_get_global();
+  dt_dev_set_global(d->dev);
 
   // The Scopes module binds its instance and refresh callback onto whichever
   // develop is active at application startup (always darkroom's, since that
@@ -507,7 +505,7 @@ void enter(dt_view_t *self)
   // likewise created once at startup and wired to darkroom's specific
   // primary_sample struct: share that instance while we are active so the
   // readout displays here too (own_primary_sample is restored in leave()).
-  const dt_view_t *const darkroom_view = darktable.view_manager->proxy.darkroom.view;
+  const dt_view_t *const darkroom_view = dt_view_manager_get_global()->proxy.darkroom.view;
   if(!IS_NULL_PTR(darkroom_view) && !IS_NULL_PTR(darkroom_view->data))
   {
     const dt_develop_t *const darkroom_dev = (const dt_develop_t *)darkroom_view->data;
@@ -528,32 +526,32 @@ void enter(dt_view_t *self)
 
   dt_view_active_images_reset(FALSE);
 
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, TRUE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, TRUE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_LEFT, TRUE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM, TRUE, TRUE);
 
   // Attach shortcuts
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "lighttable");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "lighttable");
 
-  gtk_widget_show(dt_ui_center(darktable.gui->ui));
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+  gtk_widget_show(dt_gui_center_widget());
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                                   G_CALLBACK(_studio_filmstrip_activate_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGE_IMPORT,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_IMPORT,
                                   G_CALLBACK(_studio_image_imported_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                                   G_CALLBACK(_studio_history_changed_callback), self);
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 
   // Start from the current selection when there is one.
-  const int32_t imgid = dt_selection_get_first_id(darktable.selection);
+  const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
   if(imgid > UNKNOWN_IMAGE) _studio_set_image(d, imgid);
 
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   dt_gui_refocus_center();
 }
 
@@ -561,11 +559,11 @@ void leave(dt_view_t *self)
 {
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_studio_filmstrip_activate_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_studio_filmstrip_activate_callback),
                                      (gpointer)self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_studio_image_imported_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_studio_image_imported_callback),
                                      (gpointer)self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_studio_history_changed_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_studio_history_changed_callback),
                                      (gpointer)self);
 
   if(d->refresh_timeout)
@@ -588,16 +586,16 @@ void leave(dt_view_t *self)
   // Tear down the pipeline while our develop is still the global one, then
   // restore the previous global develop pointer.
   _studio_dev_teardown(d);
-  darktable.develop = d->saved_develop;
+  dt_dev_set_global(d->saved_develop);
   // Force a fresh setup on the next enter even if the same image is shown.
   d->imgid = UNKNOWN_IMAGE;
 
   dt_view_image_surface_fetcher_invalidate(&d->fetcher, &d->surface);
   d->panning = FALSE;
 
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
 
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
   dt_view_active_images_reset(FALSE);
 }
 
@@ -606,7 +604,7 @@ void configure(dt_view_t *self, int width, int height)
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
   // Only the active view owns a valid center allocation.
-  if(dt_view_manager_get_current_view(darktable.view_manager) != self) return;
+  if(dt_view_manager_get_current_view(dt_view_manager_get_global()) != self) return;
 
   d->dev_width = width;
   d->dev_height = height;
@@ -854,7 +852,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   // is a cached async fetch, not a re-decode, on frames where nothing relevant changed.
   const dt_view_surface_value_t res
       = dt_view_image_get_surface_async(&d->fetcher, d->imgid, MAX(2, width), MAX(2, height), &d->surface,
-                                        dt_ui_center(darktable.gui->ui), d->zoom);
+                                        dt_gui_center_widget(), d->zoom);
   if(res != DT_VIEW_SURFACE_OK || IS_NULL_PTR(d->surface))
   {
     dt_control_draw_busy_msg(cr, width, height);
@@ -908,7 +906,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     if(d->zoom == DT_THUMBTABLE_ZOOM_FIT && d->dev->iso_12646.enabled)
       dt_dev_draw_iso12646_border(cr, logical_width, logical_height, d->dev->roi.border_size);
     cairo_set_source_surface(cr, d->surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);
@@ -980,8 +978,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 {
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
-  if(dt_iop_color_picker_is_visible(d->dev) && darktable.control->button_down
-     && darktable.control->button_down_which == 1)
+  if(dt_iop_color_picker_is_visible(d->dev) && dt_control_get_global()->button_down
+     && dt_control_get_global()->button_down_which == 1)
   {
     if(d->picker_dragging_box)
     {
@@ -992,7 +990,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
                                        MIN(d->picker_box_anchor[1], point[1]),
                                        MAX(d->picker_box_anchor[0], point[0]),
                                        MAX(d->picker_box_anchor[1], point[1]) };
-        dt_lib_colorpicker_set_box_area(darktable.lib, box);
+        dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
         dt_control_queue_redraw_center();
       }
     }
@@ -1003,7 +1001,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       float point[2] = { 0.0f };
       if(_studio_widget_to_image_norm(d, x, y, point))
       {
-        dt_lib_colorpicker_set_point(darktable.lib, point);
+        dt_lib_colorpicker_set_point(dt_lib_get_global(), point);
         dt_control_queue_redraw_center();
       }
     }
@@ -1035,7 +1033,7 @@ static void _studio_picker_left_click(dt_studio_capture_t *d, const float point[
   if(sample->size != DT_LIB_COLORPICKER_SIZE_BOX)
   {
     d->picker_dragging_box = FALSE;
-    dt_lib_colorpicker_set_point(darktable.lib, point);
+    dt_lib_colorpicker_set_point(dt_lib_get_global(), point);
     return;
   }
 
@@ -1069,7 +1067,7 @@ static void _studio_picker_left_click(dt_studio_capture_t *d, const float point[
     d->picker_box_anchor[1] = point[1];
     const dt_boundingbox_t box = { fmaxf(0.0f, point[0] - delta), fmaxf(0.0f, point[1] - delta),
                                    fminf(1.0f, point[0] + delta), fminf(1.0f, point[1] + delta) };
-    dt_lib_colorpicker_set_box_area(darktable.lib, box);
+    dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
   }
 
   d->picker_dragging_box = TRUE;
@@ -1102,7 +1100,7 @@ static void _studio_picker_right_click(dt_studio_capture_t *d, const float point
         dt_dev_coordinates_raw_norm_to_image_norm(dev, live_box, 2);
         if(point[0] < live_box[0] || point[0] > live_box[2] || point[1] < live_box[1] || point[1] > live_box[3])
           continue;
-        dt_lib_colorpicker_set_box_area(darktable.lib, live_box);
+        dt_lib_colorpicker_set_box_area(dt_lib_get_global(), live_box);
         return;
       }
       else if(live_sample->size == DT_LIB_COLORPICKER_SIZE_POINT && sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
@@ -1110,7 +1108,7 @@ static void _studio_picker_right_click(dt_studio_capture_t *d, const float point
         float live_point[2] = { live_sample->point[0], live_sample->point[1] };
         dt_dev_coordinates_raw_norm_to_image_norm(dev, live_point, 1);
         if(fabsf(point[0] - live_point[0]) > slop_x || fabsf(point[1] - live_point[1]) > slop_y) continue;
-        dt_lib_colorpicker_set_point(darktable.lib, live_point);
+        dt_lib_colorpicker_set_point(dt_lib_get_global(), live_point);
         return;
       }
     }
@@ -1119,7 +1117,7 @@ static void _studio_picker_right_click(dt_studio_capture_t *d, const float point
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
     const dt_boundingbox_t reset = { 0.01f, 0.01f, 0.99f, 0.99f };
-    dt_lib_colorpicker_set_box_area(darktable.lib, reset);
+    dt_lib_colorpicker_set_box_area(dt_lib_get_global(), reset);
   }
 }
 
@@ -1234,8 +1232,8 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     {
       if(d->imgid > UNKNOWN_IMAGE)
       {
-        // _studio_set_image() already synced darktable.selection to d->imgid.
-        dt_view_manager_switch(darktable.view_manager, "darkroom");
+        // _studio_set_image() already synced the global selection to d->imgid.
+        dt_view_manager_switch(dt_view_manager_get_global(), "darkroom");
       }
       else
         dt_control_log(_("No image to open in darkroom."));

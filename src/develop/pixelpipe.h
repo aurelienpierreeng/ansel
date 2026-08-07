@@ -24,13 +24,17 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_PIXELPIPE_H
+#define DT_DEVELOP_PIXELPIPE_H
 
 #include <stdint.h>
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+
+struct dt_dev_pixelpipe_t;
+struct dt_dev_pixelpipe_iop_t;
 
 typedef enum dt_dev_pixelpipe_type_t
 {
@@ -78,7 +82,10 @@ typedef void dt_iop_params_t;
 
 const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe);
 
-#include "develop/pixelpipe_hb.h"
+/* No trailing #include of develop/pixelpipe_hb.h: that header includes
+ * develop/imageop.h, which includes this one back. This file is the small shared
+ * TYPE header (pipe type/request enums, histogram params); consumers that need the
+ * full pipeline API include develop/pixelpipe_hb.h explicitly. */
 
 /**
  * @brief Build the shared cache key for one raster mask published by a module.
@@ -114,6 +121,8 @@ uint64_t dt_dev_pixelpipe_rawdetail_mask_hash(const struct dt_dev_pixelpipe_iop_
  * the pipeline.
  */
 void dt_dev_clear_rawdetail_mask(struct dt_dev_pixelpipe_t *pipe);
+
+#endif // DT_DEVELOP_PIXELPIPE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

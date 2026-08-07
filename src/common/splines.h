@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_SPLINES_H
+#define DT_COMMON_SPLINES_H
 
 #if defined(__cplusplus)
 extern "C"
@@ -41,6 +42,9 @@ extern "C"
 #if defined(__cplusplus)
 }
 #endif
+
+#endif // DT_COMMON_SPLINES_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

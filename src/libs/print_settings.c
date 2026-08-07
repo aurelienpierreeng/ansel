@@ -37,29 +37,36 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/conf.h"
+#include "common/mipmap_cache.h"
 #include <glib.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/collection.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/cups_print.h"
 #include "common/file_location.h"
 #include "common/image_cache.h"
+#include "common/logging.h"
+#include "common/macros.h"
 #include "common/metadata.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
 #include "common/pdf.h"
 #include "common/printprof.h"
 #include "common/printing.h"
 #include "common/styles.h"
 #include "common/tags.h"
+#include "common/usermanual_url.h"
+#include "common/utility.h"
 #include "common/variables.h"
 #include "control/jobs.h"
-#include "dtgtk/resetlabel.h"
 
-#include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "views/view.h"
+
+#include <glib/gstdio.h>
 
 DT_MODULE(4)
 
@@ -579,10 +586,10 @@ static int _print_job_run(dt_job_t *job)
   {
     if(params->imgs.box[k].imgid > UNKNOWN_IMAGE)
       if(dt_tag_attach(tagid, params->imgs.box[k].imgid, FALSE, FALSE))
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
     /* register print timestamp in cache */
-    dt_image_cache_set_print_timestamp(darktable.image_cache, params->imgs.box[k].imgid);
+    dt_image_cache_set_print_timestamp(dt_image_cache_get_global(), params->imgs.box[k].imgid);
   }
 
   return 0;
@@ -716,7 +723,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   }
   else
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(IS_NULL_PTR(img))
     {
       // in this case no need to release from cache what we couldn't get
@@ -725,7 +732,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
       return;
     }
     params->job_title = g_strdup(img->filename);
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
   }
   // FIXME: ellipsize title/printer as the export completed message is ellipsized
   gchar *message = g_strdup_printf(_("processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
@@ -745,7 +752,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   params->p_icc_intent = ps->v_pintent;
   params->black_point_compensation = ps->v_black_point_compensation;
 
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_EXPORT, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_EXPORT, job);
 }
 
 static void _set_printer(const dt_lib_module_t *self, const char *printer_name)
@@ -818,7 +825,7 @@ static void _set_printer(const dt_lib_module_t *self, const char *printer_name)
     dt_printing_setup_page(&ps->imgs, width, height, ps->prt.printer.resolution);
   }
 
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 }
 
 static void
@@ -850,7 +857,7 @@ _paper_changed(GtkWidget *combo, const dt_lib_module_t *self)
   dt_printing_setup_page(&ps->imgs, width, height, ps->prt.printer.resolution);
 
   dt_conf_set_string("plugins/print/print/paper", paper_name);
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   _update_slider(ps);
 }
@@ -870,7 +877,7 @@ _media_changed(GtkWidget *combo, const dt_lib_module_t *self)
     memcpy(&ps->prt.medium, medium, sizeof(dt_medium_info_t));
 
   dt_conf_set_string("plugins/print/print/medium", medium_name);
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   _update_slider(ps);
 }
@@ -878,7 +885,7 @@ _media_changed(GtkWidget *combo, const dt_lib_module_t *self)
 static void
 _update_slider(dt_lib_print_settings_t *ps)
 {
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   // if widget are created, let's display the current image size
 
@@ -1254,7 +1261,7 @@ _intent_callback(GtkWidget *widget, dt_lib_module_t *self)
 static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf,
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf,
                       imgid, DT_MIPMAP_0, DT_MIPMAP_BLOCKING, 'r');
 
   // If there's a mipmap available, figure out orientation based upon
@@ -1263,11 +1270,11 @@ static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
   if(buf.size != DT_MIPMAP_NONE)
   {
     ps->prt.page.landscape = (buf.width > buf.height);
-    dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+    dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
     dt_bauhaus_combobox_set(ps->orientation, ps->prt.page.landscape == TRUE ? 1 : 0);
   }
 
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
   dt_control_queue_redraw_center();
 }
 
@@ -1313,7 +1320,7 @@ static GList* _get_profiles()
   list = g_list_prepend(list, prof);
 
   // add the profiles from datadir/color/out/*.icc
-  for(GList *iter = darktable.color_profiles->profiles; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_colorspaces_get_global()->profiles; iter; iter = g_list_next(iter))
   {
     dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
     if(p->type == DT_COLORSPACE_FILE)
@@ -1360,11 +1367,11 @@ void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct d
 
   // Re-publish the settings payload on each entry so the print view never
   // keeps a stale or not-yet-initialized images box between switches.
-  dt_view_print_settings(darktable.view_manager, &ps->prt, &ps->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &ps->prt, &ps->imgs);
 
   // user activated a new image via the filmstrip or user entered view
   // mode which activates an image: get image_id and orientation
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_print_settings_activate_or_update_callback), self);
 
   // NOTE: it would be proper to set image_id here to -1, but this seems to make no difference
@@ -1372,7 +1379,7 @@ void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct d
 
 void view_leave(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct dt_view_t *new_view)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                G_CALLBACK(_print_settings_activate_or_update_callback),
                                self);
 }
@@ -1856,7 +1863,7 @@ void gui_post_expose(struct dt_lib_module_t *self, cairo_t *cr, int32_t width, i
     char dimensions[16];
     PangoLayout *layout;
     PangoRectangle ext;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE);
     layout = pango_cairo_create_layout(cr);
@@ -2134,7 +2141,7 @@ void gui_init(dt_lib_module_t *self)
   d->has_changed = FALSE;
 
   dt_init_print_info(&d->prt);
-  dt_view_print_settings(darktable.view_manager, &d->prt, &d->imgs);
+  dt_view_print_settings(dt_view_manager_get_global(), &d->prt, &d->imgs);
 
   d->profiles = _get_profiles();
 
@@ -2204,19 +2211,19 @@ void gui_init(dt_lib_module_t *self)
   ////////////////////////// PRINTER SETTINGS
 
   // create papers combo as filled when adding printers
-  d->papers = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->papers = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
   label = dt_ui_section_label_new(_("printer"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_settings_printer"));
-  d->printers = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->printers = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
   gtk_box_pack_start(GTK_BOX(self->widget), d->printers, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(d->printers), "value-changed", G_CALLBACK(_printer_changed), self);
 
   //// media
 
-  d->media = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->media = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
   dt_bauhaus_widget_set_label(d->media, N_("media"));
 
@@ -2225,7 +2232,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add printer profile combo
 
-  d->pprofile = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->pprofile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->pprofile, N_("profile"));
 
   int combo_idx, n;
@@ -2276,7 +2283,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add printer intent combo
 
-  d->pintent = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->pintent = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->pintent, N_("intent"));
   dt_bauhaus_combobox_add(d->pintent, _("perceptual"));
   dt_bauhaus_combobox_add(d->pintent, _("relative colorimetric"));
@@ -2317,7 +2324,7 @@ void gui_init(dt_lib_module_t *self)
 
   //// portrait / landscape
 
-  d->orientation = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->orientation = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->orientation, N_("orientation"));
   dt_bauhaus_combobox_add(d->orientation, _("portrait"));
   dt_bauhaus_combobox_add(d->orientation, _("landscape"));
@@ -2326,7 +2333,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->orientation), TRUE, TRUE, 0);
 
   // NOTE: units has no label, which makes for cleaner UI but means that no action can be assigned
-  GtkWidget *ucomb = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(NULL), _("measurement units"), NULL, (int)d->unit,
+  GtkWidget *ucomb = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), _("measurement units"), NULL, (int)d->unit,
                                                   (GtkCallback)_unit_changed, self, _unit_names);
   gtk_box_pack_start(GTK_BOX(self->widget), ucomb, TRUE, TRUE, 0);
 
@@ -2553,7 +2560,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add export profile combo
 
-  d->profile = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->profile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->profile, N_("profile"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->profile), TRUE, TRUE, 0);
@@ -2599,7 +2606,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add export intent combo
 
-  d->intent = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->intent = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->intent, N_("intent"));
 
   dt_bauhaus_combobox_add(d->intent, _("image settings"));
@@ -2615,7 +2622,7 @@ void gui_init(dt_lib_module_t *self)
 
   //  Add export style combo
 
-  d->style = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->style = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->style, N_("style"));
 
   dt_bauhaus_combobox_add(d->style, _("none"));

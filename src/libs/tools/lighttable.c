@@ -34,17 +34,15 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "control/signal.h"
 #include <gdk/gdkkeysyms.h>
 
 #include "common/collection.h"
-#include "common/debug.h"
-#include "common/selection.h"
-#include "control/conf.h"
-#include "control/control.h"
-#include "dtgtk/button.h"
-#include "dtgtk/thumbtable.h"
-#include "dtgtk/togglebutton.h"
+#include "common/conf.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "gui/actions/menu.h"
 
 #include "gui/gtk.h"
@@ -123,10 +121,10 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
   if(IS_NULL_PTR(user_data)) return;
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
 
-  if(darktable.gui->culling_mode)
+  if(dt_gui_get_global()->culling_mode)
   {
     int current_level = dt_conf_get_int("plugins/lighttable/images_in_row");
-    int num_images = dt_collection_get_count(darktable.collection);
+    int num_images = dt_collection_get_count(dt_collection_get_global());
 
     switch(num_images)
     {
@@ -168,20 +166,20 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
   }
 
   // Reset zoom
-  dt_thumbtable_set_zoom(darktable.gui->ui->thumbtable_lighttable, 0);
+  dt_thumbtable_set_zoom(dt_gui_get_ui()->thumbtable_lighttable, 0);
 }
 
 static gboolean _zoom_combobox_changed(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   const int level = GPOINTER_TO_INT(get_custom_data(GTK_WIDGET(user_data)));
-  dt_thumbtable_set_zoom(darktable.gui->ui->thumbtable_lighttable, level);
+  dt_thumbtable_set_zoom(dt_gui_get_ui()->thumbtable_lighttable, level);
   return TRUE;
 }
 
 static gboolean _zoom_checked(GtkWidget *widget)
 {
   const int level = GPOINTER_TO_INT(get_custom_data(widget));
-  return dt_thumbtable_get_zoom(darktable.gui->ui->thumbtable_lighttable) == level;
+  return dt_thumbtable_get_zoom(dt_gui_get_ui()->thumbtable_lighttable) == level;
 }
 
 
@@ -207,7 +205,7 @@ static gboolean _thumbtable_scroll(GtkWidget *widget, GdkEventScroll *event, gpo
 
 static gboolean _focus_toggle_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
   gboolean state = dt_thumbtable_get_focus_regions(table);
   dt_thumbtable_set_focus_regions(table, !state);
   return TRUE;
@@ -215,13 +213,13 @@ static gboolean _focus_toggle_callback(GtkAccelGroup *group, GObject *accelerata
 
 gboolean _focus_checked(GtkWidget *widget)
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
   return dt_thumbtable_get_focus_regions(table);
 }
 
 static gboolean focus_peaking_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
   gboolean focus_peaking = dt_thumbtable_get_focus_peaking(table);
   dt_thumbtable_set_focus_peaking(table, !focus_peaking);
   return TRUE;
@@ -229,7 +227,7 @@ static gboolean focus_peaking_callback(GtkAccelGroup *group, GObject *accelerata
 
 static gboolean focus_peaking_checked_callback()
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
   return dt_thumbtable_get_focus_peaking(table);
 }
 
@@ -268,7 +266,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_hexpand(self->widget, FALSE);
 
   // Thumbnail menu
-  GtkAccelGroup *accel_group = darktable.gui->accels->lighttable_accels;
+  GtkAccelGroup *accel_group = dt_gui_get_accels()->lighttable_accels;
   GtkWidget *menu_bar = gtk_menu_bar_new();
   GtkWidget *menus[1];
   const int index = 0;
@@ -296,7 +294,7 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_new_lighttable_action(_columns_out_action, self, N_("Lighttable/Actions"), N_("Zoom out the thumbtable grid"),
                                   GDK_KEY_minus, GDK_CONTROL_MASK, _("Triggers the action"));
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                                   G_CALLBACK(_dt_collection_changed_callback), self);
 
   _lib_lighttable_columns_slider_changed(d->columns, self); // the slider defaults to 1 and GTK doesn't
@@ -304,7 +302,7 @@ void gui_init(dt_lib_module_t *self)
                                                       // it to 1 => empty text box
 
   // Wire a scroll event handler on thumbtable here. This avoids us a proxy
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
   d->scroll_handler_id
       = g_signal_connect(G_OBJECT(table->scroll_window), "scroll-event", G_CALLBACK(_thumbtable_scroll), self);
 }
@@ -314,11 +312,11 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_tool_lighttable_t *d = (dt_lib_tool_lighttable_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_collection_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_dt_collection_changed_callback), self);
 
   if(d->scroll_handler_id > 0)
   {
-    dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+    dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
     if(!IS_NULL_PTR(table) && !IS_NULL_PTR(table->scroll_window))
       g_signal_handler_disconnect(G_OBJECT(table->scroll_window), d->scroll_handler_id);
     d->scroll_handler_id = 0;
@@ -355,7 +353,7 @@ static void _set_columns(dt_lib_module_t *self, int columns)
   // 2. Thumbnail updates and resizing
   // 3. Scrolling to active selection
   // This prevents partial updates and ensures synchronization.
-  dt_thumbtable_apply_grid_configuration(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_apply_grid_configuration(dt_gui_get_ui()->thumbtable_lighttable);
 }
 
 static void _lib_lighttable_columns_slider_changed(GtkWidget *widget, gpointer user_data)

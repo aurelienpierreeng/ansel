@@ -22,7 +22,15 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "darktable.h"
+#ifndef DT_COMMON_COLORCHECKER_H
+#define DT_COMMON_COLORCHECKER_H
+
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+
+#include <glib/gi18n.h>
 
 /**
  * These are the CIELab values of Color Checker reference targets
@@ -746,6 +754,8 @@ int dt_colorchecker_find_color(GList **color_label)
 
   return *color_label ? total : 0;
 }
+
+#endif // DT_COMMON_COLORCHECKER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

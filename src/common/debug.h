@@ -26,9 +26,20 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DEBUG_H
+#define DT_COMMON_DEBUG_H
+
+/* Self-containment: the DT_DEBUG_SQLITE3_* macros below expand to
+ * dt_database_get_sqlite3_global() (common/database.h), dt_print()/DT_DEBUG_SQL
+ * (common/logging.h) and fprintf() (<stdio.h>). Include them here rather than
+ * making every consumer of the macros do it: this header used to compile only
+ * because darktable.h happened to be included first. */
+
+#include "common/database.h"
+#include "common/logging.h"
 
 #include <sqlite3.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,7 +67,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(): %s\n", __FILE__, __LINE__, __FUNCTION__,              \
-              sqlite3_errmsg(dt_database_get(darktable.db)));                                                     \
+              sqlite3_errmsg(dt_database_get_sqlite3_global()));                                                     \
     }                                                                                                             \
     assert(x == SQLITE_OK);                                                                                       \
     _Pragma("GCC diagnostic pop")                                                                                 \
@@ -67,7 +78,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(), query \"%s\": %s\n", __FILE__, __LINE__, __FUNCTION__,\
-              (query), sqlite3_errmsg(dt_database_get(darktable.db)));                                            \
+              (query), sqlite3_errmsg(dt_database_get_sqlite3_global()));                                            \
     }                                                                                                             \
     assert(x == SQLITE_OK);                                                                                       \
     _Pragma("GCC diagnostic pop")                                                                                 \
@@ -79,7 +90,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(): %s\n", __FILE__, __LINE__, __FUNCTION__,              \
-              sqlite3_errmsg(dt_database_get(darktable.db)));                                                     \
+              sqlite3_errmsg(dt_database_get_sqlite3_global()));                                                     \
     }                                                                                                             \
     _Pragma("GCC diagnostic pop")                                                                                 \
   }
@@ -89,7 +100,7 @@ extern "C" {
     if(x != SQLITE_OK)                                                                                            \
     {                                                                                                             \
       fprintf(stderr, "sqlite3 error: %s:%d, function %s(), query \"%s\": %s\n", __FILE__, __LINE__, __FUNCTION__,\
-              (query), sqlite3_errmsg(dt_database_get(darktable.db)));                                            \
+              (query), sqlite3_errmsg(dt_database_get_sqlite3_global()));                                            \
     }                                                                                                             \
     _Pragma("GCC diagnostic pop")                                                                                 \
   }
@@ -136,6 +147,8 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_DEBUG_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

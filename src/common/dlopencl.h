@@ -22,7 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DLOPENCL_H
+#define DT_COMMON_DLOPENCL_H
 
 #ifdef HAVE_OPENCL
 
@@ -239,6 +240,8 @@ void dt_dlopencl_noop(void);
 dt_dlopencl_t *dt_dlopencl_init(const char *);
 
 #endif // HAVE_OPENCL
+
+#endif // DT_COMMON_DLOPENCL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

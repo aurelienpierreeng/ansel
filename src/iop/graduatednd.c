@@ -52,18 +52,24 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/debug.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -71,7 +77,6 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/gradientslider.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
@@ -100,7 +105,7 @@ typedef struct dt_iop_graduatednd_global_data_t
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_gui_presets_add_generic(_("neutral gray ND2 (soft)"), self->op, self->version(),
                              &(dt_iop_graduatednd_params_t){ 1, 0, 0, 50, 0, 0 },
@@ -148,7 +153,7 @@ void init_presets(dt_iop_module_so_t *self)
                              &(dt_iop_graduatednd_params_t){ 2, 0, 0, 50, 0.082927, 0.25 },
                              sizeof(dt_iop_graduatednd_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 typedef struct grad_point_t
@@ -425,7 +430,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   update_saturation_slider_end_color(g->saturation, p->hue);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -607,7 +612,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     p->rotation = rotation;
     p->offset = offset;
     g->dragging = 0;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   g->dragging = 0;

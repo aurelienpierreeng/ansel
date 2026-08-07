@@ -47,43 +47,43 @@ add_dependencies(generate_authors_h generate_authors_file)
 # Add files for libansel
 #
 FILE(GLOB SOURCE_FILES
-  "bauhaus/bauhaus.c"
+  "gui/bauhaus.c"
   "common/act_on.c"
-  "common/atomic.c"
-  "common/bilateral.c"
-  "common/bilateralcl.c"
-  "common/box_filters.c"
+  "system/atomic.c"
+  "pixel/bilateral.c"
+  "pixel/bilateralcl.c"
+  "pixel/box_filters.c"
   "common/cache.c"
   "common/calculator.c"
   "common/collection.c"
   "common/color_picker.c"
   "common/color_vocabulary.c"
   "common/colorlabels.c"
-  "common/colorequal_shared.c"
+  "pixel/colorequal_shared.c"
   "common/colorspaces.c"
   "common/curve_tools.c"
   "common/splines.cpp"
   "common/curl_tools.c"
-  "common/darktable.c"
+  "darktable.c"
   "common/database.c"
   "common/datetime.c"
   "common/dbus.c"
   "common/dtpthread.c"
-  "common/eaw.c"
-  "common/memory_arena.c"
+  "pixel/eaw.c"
+  "system/memory_arena.c"
   "common/exif.cc"
   "common/film.c"
   "common/file_location.c"
   "common/folder_survey.c"
-  "common/focus_peaking.c"
+  "gui/dtgtk/focus_peaking.c"
   "common/fp_mode.c"
-  "common/gaussian.c"
+  "pixel/gaussian.c"
   "common/grouping.c"
-  "common/guided_filter.c"
+  "pixel/guided_filter.c"
   "common/history.c"
   "common/history_actions.c"
   "common/history_merge.c"
-  "common/history_merge_gui.c"
+  "gui/history_merge_gui.c"
   "common/history_snapshot.c"
   "common/topological_sort.c"
   "common/gpx.c"
@@ -91,32 +91,30 @@ FILE(GLOB SOURCE_FILES
   "common/image_cache.c"
   "common/image_extensions.c"
   "common/imagebuf.c"
-  "common/imageio.c"
-  "common/imageio_jpeg.c"
-  "common/imageio_png.c"
-  "common/imageio_module.c"
-  "common/imageio_pfm.c"
-  "common/imageio_pnm.c"
-  "common/imageio_rgbe.c"
-  "common/imageio_tiff.c"
-  "common/imageio_im.c"
-  "common/imageio_gm.c"
-  "common/import_session.c"
-  "common/import.c"
-  "common/interpolation.c"
-  "common/locallaplacian.c"
-  "common/locallaplaciancl.c"
+  "imageio/imageio_core.c"
+  "imageio/imageio_jpeg.c"
+  "imageio/imageio_png.c"
+  "imageio/imageio_module.c"
+  "imageio/imageio_pfm.c"
+  "imageio/imageio_pnm.c"
+  "imageio/imageio_rgbe.c"
+  "imageio/imageio_tiff.c"
+  "imageio/imageio_im.c"
+  "imageio/imageio_gm.c"
+  "gui/import.c"
+  "pixel/interpolation.c"
+  "pixel/locallaplacian.c"
+  "pixel/locallaplaciancl.c"
   "common/l10n.c"
   "common/lut3d.c"
-  "common/lut_viewer.c"
-  "common/matrices.c"
+  "gui/lut_viewer.c"
   "common/metadata.c"
   "common/metadata_export.c"
   "common/mipmap_cache.c"
   "common/module.c"
   "common/noiseprofiles.c"
   "common/nn_model.c"
-  "common/nlmeans_core.c"
+  "pixel/nlmeans_core.c"
   "common/pdf.c"
   "common/presets.c"
   "common/styles.c"
@@ -139,16 +137,14 @@ FILE(GLOB SOURCE_FILES
   "common/histogram.c"
   "common/undo.c"
   "common/usermanual_url.c"
-  "common/iop_group.c"
   "common/iop_order.c"
   "common/iop_profile.c"
   "common/dng_opcode.c"
-  "control/conf.c"
+  "common/conf.c"
   "control/control.c"
   "control/crawler.c"
   "control/jobs.c"
   "control/jobs/control_jobs.c"
-  "control/jobs/develop_jobs.c"
   "control/jobs/film_jobs.c"
   "control/jobs/image_jobs.c"
   "control/jobs/import_jobs.c"
@@ -175,8 +171,8 @@ FILE(GLOB SOURCE_FILES
   "develop/blends/blendif_rgb_jzczhz.c"
   "develop/tiling.c"
   "common/colorchecker.c"
-  "common/dwt.c"
-  "common/heal.c"
+  "pixel/dwt.c"
+  "pixel/heal.c"
   "common/iop-autoset.c"
   "develop/masks/brush.c"
   "develop/masks/circle.c"
@@ -188,24 +184,23 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/masks_history.c"
   "develop/masks/polygon.c"
   "develop/format.c"
-  "dtgtk/button.c"
-  "dtgtk/culling.c"
-  "dtgtk/drawingarea.c"
-  "dtgtk/expander.c"
-  "dtgtk/gradientslider.c"
-  "dtgtk/icon.c"
-  "dtgtk/icon_cell_renderer.c"
-  "dtgtk/paint.c"
-  "dtgtk/preview_window.c"
-  "dtgtk/resetlabel.c"
-  "dtgtk/sidepanel.c"
-  "dtgtk/thumbnail.c"
-  "dtgtk/thumbtable_info.c"
-  "dtgtk/thumbnail_btn.c"
-  "dtgtk/thumbtable.c"
-  "dtgtk/filemanager.c"
-  "dtgtk/filmstrip.c"
-  "dtgtk/togglebutton.c"
+  "gui/dtgtk/button.c"
+  "gui/dtgtk/drawingarea.c"
+  "gui/dtgtk/expander.c"
+  "gui/dtgtk/gradientslider.c"
+  "gui/dtgtk/icon.c"
+  "gui/dtgtk/icon_cell_renderer.c"
+  "gui/dtgtk/paint.c"
+  "gui/dtgtk/preview_window.c"
+  "gui/dtgtk/resetlabel.c"
+  "gui/dtgtk/sidepanel.c"
+  "gui/dtgtk/thumbnail.c"
+  "gui/dtgtk/thumbtable_info.c"
+  "gui/dtgtk/thumbnail_btn.c"
+  "gui/dtgtk/thumbtable.c"
+  "gui/dtgtk/filemanager.c"
+  "gui/dtgtk/filmstrip.c"
+  "gui/dtgtk/togglebutton.c"
   "gui/accelerators.c"
   "gui/gtkentry.c"
   "gui/guides.c"
@@ -217,7 +212,6 @@ FILE(GLOB SOURCE_FILES
   "gui/presets.c"
   "gui/styles_dialog.c"
   "gui/color_picker_proxy.c"
-  "gui/import_metadata.c"
   "gui/window_manager.c"
   "gui/actions/*.c"
   "libs/lib.c"
@@ -280,7 +274,7 @@ endif(WIN32)
 set(SOURCES ${SOURCE_FILES} ${HEADER_FILES})
 
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "ppc64le")
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/ppc64le)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/system/ppc64le)
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -407,7 +401,7 @@ if(USE_OPENEXR)
     target_link_libraries(ansel_deps INTERFACE OpenEXR::OpenEXR)
     add_definitions(${OpenEXR_DEFINITIONS})
     add_definitions(-DHAVE_OPENEXR=1)
-    list(APPEND SOURCES "common/imageio_exr.cc")
+    list(APPEND SOURCES "imageio/imageio_exr.cc")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} exr CACHE INTERNAL "")
   endif(OpenEXR_FOUND)
 endif(USE_OPENEXR)
@@ -418,7 +412,7 @@ if(USE_WEBP)
     target_link_libraries(ansel_deps INTERFACE WebP::WebP)
     add_definitions(${WebP_DEFINITIONS})
     add_definitions(-DHAVE_WEBP=1)
-    list(APPEND SOURCES "common/imageio_webp.c")
+    list(APPEND SOURCES "imageio/imageio_webp.c")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} webp CACHE INTERNAL "")
   endif(WebP_FOUND)
 endif(USE_WEBP)
@@ -428,7 +422,7 @@ if(USE_AVIF)
   if(libavif_FOUND AND libavif_VERSION VERSION_GREATER_EQUAL 0.8.2 AND TARGET avif)
     target_link_libraries(ansel_deps INTERFACE avif)
     add_definitions(-DHAVE_LIBAVIF=1)
-    list(APPEND SOURCES common/imageio_avif.c)
+    list(APPEND SOURCES imageio/imageio_avif.c)
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
   else()
     # Fallback path (MSYS2 / older distros)
@@ -436,7 +430,7 @@ if(USE_AVIF)
     if(TARGET PkgConfig::AVIF)
       target_link_libraries(ansel_deps INTERFACE PkgConfig::AVIF)
       target_compile_definitions(ansel_deps INTERFACE HAVE_LIBAVIF=1)
-      list(APPEND SOURCES common/imageio_avif.c )
+      list(APPEND SOURCES imageio/imageio_avif.c )
       set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
     endif()
   endif()
@@ -451,7 +445,7 @@ if(USE_HEIF)
   if(libheif_FOUND AND libheif_VERSION VERSION_GREATER_EQUAL 1.13.0 AND TARGET heif)
     target_link_libraries(ansel_deps INTERFACE heif)
     add_definitions(-DHAVE_LIBHEIF=1)
-    list(APPEND SOURCES common/imageio_heif.c )
+    list(APPEND SOURCES imageio/imageio_heif.c )
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} heif heic hif CACHE INTERNAL "")
     # libheif may also support AVIF
     if(NOT libavif_FOUND)
@@ -485,7 +479,7 @@ if(USE_OPENJPEG)
   if(OpenJPEG_FOUND)
     target_link_libraries(ansel_deps INTERFACE OpenJPEG::OpenJPEG)
     add_definitions(-DHAVE_OPENJPEG=1)
-    list(APPEND SOURCES "common/imageio_j2k.c")
+    list(APPEND SOURCES "imageio/imageio_j2k.c")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} j2c j2k jp2 jpc CACHE INTERNAL "")
   endif(OpenJPEG_FOUND)
 endif(USE_OPENJPEG)
@@ -651,7 +645,7 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.cmake.h" "${CMAKE_CURRENT_BIN
 # Actual defination of the target is in `external/CMakeLists.txt`.
 target_include_directories(whereami PUBLIC external/whereami)
 
-add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
+add_library(lib_ansel_imageio_rawspeed STATIC imageio/imageio_rawspeed.cc)
 target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
 target_link_libraries(lib_ansel_imageio_rawspeed PUBLIC ansel_deps)
 
@@ -687,7 +681,7 @@ if(USE_LIBRAW)
   endif()
 
   if(libraw_FOUND)
-    add_library(lib_ansel_imageio_libraw STATIC common/imageio_libraw.c)
+    add_library(lib_ansel_imageio_libraw STATIC imageio/imageio_libraw.c)
     target_link_libraries(lib_ansel_imageio_libraw PRIVATE ansel_libraw)
     target_link_libraries(lib_ansel_imageio_libraw PUBLIC ansel_deps)
     add_definitions(-DHAVE_LIBRAW=1)
@@ -934,18 +928,18 @@ add_subdirectory(imageio)
 
 if(HAVE_OPENCL)
   # have a small test program, to be run as root on some systems to enable the driver to run cl stuff
-  add_subdirectory(cltest)
+  add_subdirectory(apps/ansel-cltest)
 endif(HAVE_OPENCL)
 
 # have a command line interface
-add_subdirectory(cli)
+add_subdirectory(apps/ansel-cli)
 
 # have a command line utility to generate all the thumbnails
-add_subdirectory(generate-cache)
+add_subdirectory(apps/ansel-generate-cache)
 
 # have a small test program that verifies your color management setup
 if(BUILD_CMSTEST)
-  add_subdirectory(cmstest)
+  add_subdirectory(apps/ansel-cmstest)
 endif(BUILD_CMSTEST)
 
 # have some test programs for unit testing, ...
@@ -961,7 +955,7 @@ target_link_libraries(help_menu PRIVATE ansel_deps)
 #
 # build ansel executable
 #
-add_executable(ansel ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} main.c ${RESOURCE_OBJECT})
+add_executable(ansel ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} apps/ansel/main.c ${RESOURCE_OBJECT})
 set_target_properties(ansel PROPERTIES LINKER_LANGUAGE C)
 target_link_libraries(ansel PRIVATE lib_ansel)
 

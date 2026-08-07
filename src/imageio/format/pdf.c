@@ -29,15 +29,18 @@
  */
 
 #include "common/pdf.h"
-#include "bauhaus/bauhaus.h"
+#include "common/conf.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include <glib/gstdio.h>
+#include "common/pixelpipe_cache_alloc.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
 #include "common/variables.h"
 #include "control/control.h"
-#include "dtgtk/button.h"
-#include "gui/gtkentry.h"
 #include "imageio/format/imageio_format_api.h"
 
 #include <strings.h>
@@ -545,7 +548,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // paper size
 
-  d->size = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->size = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_combobox_set_editable(d->size, 1);
   dt_bauhaus_widget_set_label(d->size, N_("paper size"));
   for(int i = 0; dt_pdf_paper_sizes[i].name; i++)
@@ -561,7 +564,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // orientation
 
-  d->orientation = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->orientation = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->orientation, N_("page orientation"));
   dt_bauhaus_combobox_add(d->orientation, _("portrait"));
   dt_bauhaus_combobox_add(d->orientation, _("landscape"));
@@ -601,7 +604,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // rotate images yes|no
 
-  d->rotate = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->rotate = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->rotate, N_("rotate images"));
   dt_bauhaus_combobox_add(d->rotate, _("no"));
   dt_bauhaus_combobox_add(d->rotate, _("yes"));
@@ -613,7 +616,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // pages all|single images|contact sheet
 
-  d->pages = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->pages = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->pages, N_("TODO: pages"));
   dt_bauhaus_combobox_add(d->pages, _("all"));
   dt_bauhaus_combobox_add(d->pages, _("single images"));
@@ -626,7 +629,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // embedded icc profile yes|no
 
-  d->icc = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->icc = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->icc, N_("embed icc profiles"));
   dt_bauhaus_combobox_add(d->icc, _("no"));
   dt_bauhaus_combobox_add(d->icc, _("yes"));
@@ -637,7 +640,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // bpp
 
-  d->bpp = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->bpp = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->bpp, N_("bit depth"));
   int sel = 0;
   int bpp = dt_conf_get_int("plugins/imageio/format/pdf/bpp");
@@ -653,7 +656,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // compression
 
-  d->compression = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->compression = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->compression, N_("compression"));
   dt_bauhaus_combobox_add(d->compression, _("uncompressed"));
   dt_bauhaus_combobox_add(d->compression, _("deflate"));
@@ -666,7 +669,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // image mode normal|draft|debug
 
-  d->mode = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->mode, N_("image mode"));
   dt_bauhaus_combobox_add(d->mode, _("normal"));
   dt_bauhaus_combobox_add(d->mode, _("draft"));

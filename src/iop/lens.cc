@@ -65,25 +65,32 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/global_mutexes.h"
+#include "common/utility.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "common/paths.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "glib.h"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/exif.h"
+#include "pixel/interpolation.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/interpolation.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/button.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -1173,11 +1180,11 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const float orig_h = roi_in->scale * piece->buf_in.height;
   const int used_lf_mask = (raw_monochrome) ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
 
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   int modflags;
   const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
 
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
   const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
 
@@ -1229,12 +1236,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     {
       int tca_modflags = 0;
       lfModifier *tca_modifier = NULL;
-      dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
       tca_modifier = get_modifier(&tca_modflags,
                                   roi_in->scale * piece->buf_in.width,
                                   roi_in->scale * piece->buf_in.height,
                                   d, LF_MODIFY_TCA);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       if(tca_modifier)
       {
         const size_t tca_buf2size = (size_t)roi_in->width * 2 * 3;
@@ -1780,9 +1787,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dev_tmpbuf = (cl_mem)dt_opencl_alloc_device_buffer(devid, tmpbuflen);
   if(IS_NULL_PTR(dev_tmpbuf)) goto error;
 
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
-  modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
+  modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
   if(modflags & LF_MODIFY_VIGNETTING)
   {
@@ -2052,13 +2059,13 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
     return;
   }
 
-  const float orig_w = roi_in->scale * piece->buf_in.width;
-  const float orig_h = roi_in->scale * piece->buf_in.height;
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  const float orig_w_cl = roi_in->scale * piece->buf_in.width;
+  const float orig_h_cl = roi_in->scale * piece->buf_in.height;
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   int modflags;
-  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE);
+  const lfModifier *modifier = get_modifier(&modflags, orig_w_cl, orig_h_cl, d, LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE);
 
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
   if(!(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE)))
   {
@@ -2317,22 +2324,22 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
     if(p->camera[0])
     {
-      dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
       cam = dt_iop_lensfun_db->FindCamerasExt(NULL, p->camera, 0);
       if(cam)
       {
         camera = cam[0];
         d->lensfun.crop = cam[0]->CropFactor;
       }
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     }
 
     if(p->lens[0])
     {
-      dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
       const lfLens **lens
           = dt_iop_lensfun_db->FindLenses(camera, NULL, p->lens, 0);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       if(lens)
       {
         *d->lensfun.lens = *lens[0];
@@ -2519,14 +2526,14 @@ void reload_defaults(dt_iop_module_t *module)
     // just to be sure
     if(IS_NULL_PTR(gd) || IS_NULL_PTR(gd->db)) return;
 
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     const lfCamera **cam = gd->db->FindCamerasExt(img->exif_maker, img->exif_model, 0);
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     if(cam)
     {
-      dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
       const lfLens **lens = gd->db->FindLenses(cam[0], NULL, d->lens, 0);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
       if(!lens && islower(cam[0]->Mount[0]))
       {
@@ -2539,9 +2546,11 @@ void reload_defaults(dt_iop_module_t *module)
          */
         g_strlcpy(d->lens, "", sizeof(d->lens));
 
-        dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  const float orig_w = roi_in->scale * piece->buf_in.width;
+  const float orig_h = roi_in->scale * piece->buf_in.height;
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
         lens = gd->db->FindLenses(cam[0], NULL, d->lens, 0);
-        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       }
 
       if(lens)
@@ -2766,9 +2775,8 @@ static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
   auto *self = (dt_iop_module_t *)user_data;
   camera_set(self, (lfCamera *)g_object_get_data(G_OBJECT(menuitem), "lfCamera"));
   if(dt_gui_widgets_suppressed()) return;
-  auto p = (dt_iop_lensfun_params_t *)self->params;
   p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void camera_menu_fill(dt_iop_module_t *self, const lfCamera *const *camlist)
@@ -2850,9 +2858,9 @@ static void camera_menusearch_clicked(GtkWidget *button, gpointer user_data)
   (void)button;
 
   const lfCamera *const *camlist;
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   camlist = dt_iop_lensfun_db->GetCameras();
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   if(IS_NULL_PTR(camlist)) return;
   camera_menu_fill(self, camlist);
 
@@ -2874,9 +2882,9 @@ static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
   if(txt[0] == '\0')
   {
     const lfCamera *const *camlist;
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     camlist = dt_iop_lensfun_db->GetCameras();
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     if(IS_NULL_PTR(camlist)) return;
     camera_menu_fill(self, camlist);
   }
@@ -2884,9 +2892,9 @@ static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
   {
     make[0] = '\0';
     parse_model(txt, model, sizeof(model));
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     const lfCamera **camlist = dt_iop_lensfun_db->FindCamerasExt(make, model, 0);
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     if(IS_NULL_PTR(camlist)) return;
     camera_menu_fill(self, camlist);
     lf_free(camlist);
@@ -2903,7 +2911,7 @@ static void lens_comboentry_focal_update(GtkWidget *widget, dt_iop_module_t *sel
   const char *text = dt_bauhaus_combobox_get_text(widget);
   if(text) (void)sscanf(text, "%f", &p->focal);
   p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void lens_comboentry_aperture_update(GtkWidget *widget, dt_iop_module_t *self)
@@ -2912,7 +2920,7 @@ static void lens_comboentry_aperture_update(GtkWidget *widget, dt_iop_module_t *
   const char *text = dt_bauhaus_combobox_get_text(widget);
   if(text) (void)sscanf(text, "%f", &p->aperture);
   p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void lens_comboentry_distance_update(GtkWidget *widget, dt_iop_module_t *self)
@@ -2921,7 +2929,7 @@ static void lens_comboentry_distance_update(GtkWidget *widget, dt_iop_module_t *
   const char *text = dt_bauhaus_combobox_get_text(widget);
   if(text) (void)sscanf(text, "%f", &p->distance);
   p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void delete_children(GtkWidget *widget, gpointer data)
@@ -3061,7 +3069,7 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
   char txt[30];
 
   // focal length
-  w = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(w, N_("mm"));
   gtk_widget_set_tooltip_text(w, _("focal length (mm)"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->focal, 10.0), p->focal);
@@ -3087,7 +3095,7 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
     ffi--;
   }
 
-  w = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(w, N_("f"));
   gtk_widget_set_tooltip_text(w, _("f-number (aperture)"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->aperture, 10.0), p->aperture);
@@ -3102,7 +3110,7 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
   dt_bauhaus_combobox_set_editable(w, 1);
   g->lens_selection.cbe[1] = w;
 
-  w = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(w, N_("d"));
   gtk_widget_set_tooltip_text(w, _("distance to subject"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->distance, 10.0), p->distance);
@@ -3134,7 +3142,7 @@ static void lens_menu_select(GtkMenuItem *menuitem, gpointer user_data)
   p->has_been_set = 0;
   const float scale = get_autoscale(self, p, g->lens_selection.camera);
   dt_bauhaus_slider_set(g->lensfun_controls.scale, scale);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void lens_menu_fill(dt_iop_module_t *self, const lfLens *const *lenslist)
@@ -3199,9 +3207,9 @@ static void lens_menusearch_clicked(GtkWidget *button, gpointer user_data)
 
   (void)button;
 
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   lenslist = dt_iop_lensfun_db->FindLenses(g->lens_selection.camera, NULL, NULL, LF_SEARCH_SORT_AND_UNIQUIFY);
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   if(IS_NULL_PTR(lenslist)) return;
   lens_menu_fill(self, lenslist);
   lf_free(lenslist);
@@ -3222,10 +3230,10 @@ static void lens_autosearch_clicked(GtkWidget *button, gpointer user_data)
   (void)button;
 
   parse_model(txt, model, sizeof(model));
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   lenslist = dt_iop_lensfun_db->FindLenses(g->lens_selection.camera, NULL,
                                            model[0] ? model : NULL, LF_SEARCH_SORT_AND_UNIQUIFY);
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   if(IS_NULL_PTR(lenslist)) return;
   lens_menu_fill(self, lenslist);
   lf_free(lenslist);
@@ -3243,7 +3251,7 @@ static void target_geometry_changed(GtkWidget *widget, gpointer user_data)
   int pos = dt_bauhaus_combobox_get(widget);
   p->target_geom = (lfLensType)(pos + LF_UNKNOWN + 1);
   p->has_been_set = 0;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void vignetting_method_changed(GtkWidget *widget, gpointer user_data)
@@ -3313,7 +3321,7 @@ static float get_autoscale(dt_iop_module_t *self, dt_iop_lensfun_params_t *p, co
   float scale = 1.0;
   if(p->lens[0] != '\0')
   {
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     const lfLens **lenslist
         = dt_iop_lensfun_db->FindLenses(camera, NULL, p->lens, 0);
     if(lenslist)
@@ -3363,7 +3371,7 @@ static float get_autoscale(dt_iop_module_t *self, dt_iop_lensfun_params_t *p, co
       delete modifier;
     }
     lf_free(lenslist);
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   }
   return scale;
 }
@@ -3376,7 +3384,7 @@ static void autoscale_pressed(GtkWidget *button, gpointer user_data)
   const float scale = get_autoscale(self, p, g->lens_selection.camera);
   p->has_been_set = 0;
   dt_bauhaus_slider_set(g->lensfun_controls.scale, scale);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_init(struct dt_iop_module_t *self)
@@ -3509,6 +3517,7 @@ void gui_init(struct dt_iop_module_t *self)
     dt_bauhaus_slider_set_digits(g->lensfun_controls.tca_b, 5);
     gtk_widget_set_tooltip_text(g->lensfun_controls.tca_b, _("Transversal Chromatic Aberration blue"));
 
+
 }
 
 void gui_update(struct dt_iop_module_t *self)
@@ -3553,9 +3562,9 @@ void gui_update(struct dt_iop_module_t *self)
   g->lens_selection.camera = nullptr;
   if(p->camera[0])
   {
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     cam = dt_iop_lensfun_db->FindCamerasExt(NULL, p->camera, 0);
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     if(cam)
       camera_set(self, cam[0]);
     else
@@ -3566,7 +3575,7 @@ void gui_update(struct dt_iop_module_t *self)
   {
     char model[200];
     parse_model(p->lens, model, sizeof(model));
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     const lfLens **lenslist = dt_iop_lensfun_db->FindLenses(g->lens_selection.camera, NULL,
                                                             model[0] ? model : NULL, 0);
     if(lenslist)
@@ -3574,13 +3583,13 @@ void gui_update(struct dt_iop_module_t *self)
     else
       lens_set(self, NULL);
     lf_free(lenslist);
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   }
   else
   {
-    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
     lens_set(self, NULL);
-    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   }
 
   if(p->vignetting_method == dt_iop_lens_correction_source_t::OFF)
@@ -3647,12 +3656,12 @@ void gui_update(struct dt_iop_module_t *self)
     {
       const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
       const int used_lf_mask = raw_monochrome ? (LF_MODIFY_ALL & ~LF_MODIFY_TCA) : LF_MODIFY_ALL;
-      dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
       lfModifier *modifier = get_modifier(&modflags, lens_piece->buf_in.width, lens_piece->buf_in.height,
                                           lens_d, used_lf_mask);
       delete modifier;
       modflags &= LENSFUN_MODFLAG_MASK;
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     }
   }
 

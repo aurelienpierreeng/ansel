@@ -35,11 +35,16 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
 // our includes go first:
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "gui/color_picker_proxy.h"
@@ -392,21 +397,21 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        darktable.pixelpipe_cache, mask_hash, mask_size, "useless raster mask",
+        dt_pixelpipe_cache_get_global(), mask_hash, mask_size, "useless raster mask",
         pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
         dt_dev_pixelpipe_cache_wrlock_entry(
-            darktable.pixelpipe_cache, FALSE, mask_entry);
+            dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
         dt_dev_pixelpipe_cache_ref_count_entry(
-            darktable.pixelpipe_cache, FALSE, mask_entry);
+            dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
         if(created)
           dt_dev_pixelpipe_cache_remove(
-              darktable.pixelpipe_cache, TRUE, mask_entry);
+              dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
       }
       dt_pixelpipe_cache_free_align(mask);
       return 1;
@@ -416,7 +421,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
       memcpy(cache_data, mask, mask_size);
       dt_dev_pixelpipe_cache_wrlock_entry(
-          darktable.pixelpipe_cache, FALSE, mask_entry);
+          dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
     }
     dt_dev_pixelpipe_t *mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
     g_array_append_val(mutable_pipe->raster_mask_hashes, mask_hash);
@@ -483,7 +488,7 @@ static void extra_callback(GtkWidget *w, dt_iop_module_t *self)
 
   // If any params updated directly, not via a callback, then
   // let core know of the changes
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 /** optional gui callbacks. */
@@ -521,7 +526,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     p->factor = self->picked_color[1];
   }
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_control_queue_redraw_widget(self->widget);
 }
 
@@ -682,7 +687,7 @@ void gui_init(dt_iop_module_t *self)
 
   // Any widgets that are _not_ directly linked to a field need to have a custom callback
   // function set up to respond to the "value-changed" signal.
-  g->extra = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -0.5, 0.5, 0, 0, 2);
+  g->extra = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -0.5, 0.5, 0, 0, 2);
   dt_bauhaus_widget_set_label(g->extra, N_("extra"));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->extra), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->extra), "value-changed", G_CALLBACK(extra_callback), self);

@@ -36,7 +36,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "system/mem_alloc.h"
+#include "common/conf.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "system/openmp.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
 #include "config.h"
 #endif
 #include <assert.h>
@@ -46,7 +52,6 @@
 
 #include "common/colorspaces_inline_conversions.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 
 #include "gui/gtk.h"

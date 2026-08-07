@@ -13,11 +13,13 @@
     GNU General Public License for more details.
 */
 
-#pragma once
+#ifndef DT_VIEWS_DEV_BACKBUF_H
+#define DT_VIEWS_DEV_BACKBUF_H
 
 #include <cairo.h>
+#include <glib.h>
 
-#include "common/darktable.h"
+#include "system/simd.h"
 // dev_pixelpipe.h uses dt_dev_pixelpipe_t/dt_dev_pixelpipe_change_t (defined in pixelpipe_hb.h)
 // without including it itself - include it first so this header is self-contained regardless
 // of what a caller happened to include before it.
@@ -86,6 +88,7 @@ void dt_dev_get_background_color(const struct dt_develop_t *dev, dt_aligned_pixe
 void dt_dev_draw_iso12646_border(cairo_t *cr, double width, double height, int border);
 
 /** Draw the "soft proof" / "gamut check" text overlay in the bottom-left
- * corner when darktable.color_profiles->mode is not DT_PROFILE_NORMAL; a
+ * corner when dt_colorspaces_get_global()->mode is not DT_PROFILE_NORMAL; a
  * no-op otherwise. */
 void dt_dev_draw_profile_mode_label(cairo_t *cri, int height);
+#endif // DT_VIEWS_DEV_BACKBUF_H

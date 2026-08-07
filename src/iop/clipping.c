@@ -70,17 +70,19 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
-#include "common/math.h"
-#include "common/opencl.h"
-#include "control/conf.h"
+#include "pixel/interpolation.h"
+#include "math/math.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -90,7 +92,6 @@
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/guides.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 
@@ -691,7 +692,7 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return 0;
 
   float wp = piece->buf_out.width, hp = piece->buf_out.height;
@@ -701,9 +702,9 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   const float ch = CLAMPF(fabsf(p->ch), 0.1f, 1.0f);
 
   float points[8] = { 0.0f, 0.0f, wp, hp, cx * wp, cy * hp, cw * wp, ch * hp };
-  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
+  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return 0;
-  dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, points, 4);
+  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, points, 4);
 
   g->clip_max_x = fmaxf(points[0], 0.0f);
   g->clip_max_y = fmaxf(points[1], 0.0f);
@@ -1231,7 +1232,7 @@ static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *
 {
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   g->preview_ready = TRUE;
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_preview_updated_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_event_preview_updated_callback), self);
   // force max size to be recomputed
   g->clip_max_pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 }
@@ -1247,7 +1248,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   {
     if(in)
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                       G_CALLBACK(_event_preview_updated_callback), self);
 
       // got focus, grab stuff to gui:
@@ -1259,7 +1260,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     }
     else
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                       G_CALLBACK(_event_preview_updated_callback), self);
 
       // lost focus, commit current params:
@@ -1307,7 +1308,7 @@ static float _ratio_get_aspect(dt_iop_module_t *self, GtkWidget *combo)
   if(text && !g_strcmp0(text,_("original image")))
   {
     int proc_iwd = 0, proc_iht = 0;
-    dt_dev_get_processed_size(darktable.develop, &proc_iwd, &proc_iht);
+    dt_dev_get_processed_size(self->dev, &proc_iwd, &proc_iht);
 
     if(!(proc_iwd > 0 && proc_iht > 0)) return 0.0f;
 
@@ -1435,7 +1436,7 @@ static void apply_box_aspect(dt_iop_module_t *self, _grab_region_t grab)
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
 
   int iwd, iht;
-  dt_dev_get_processed_size(darktable.develop, &iwd, &iht);
+  dt_dev_get_processed_size(self->dev, &iwd, &iht);
 
   // enforce aspect ratio.
   float aspect = _ratio_get_aspect(self, g->aspect_presets);
@@ -2013,7 +2014,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   self->widget = dt_ui_notebook_page(g->notebook, N_("main"), NULL);
 
-  g->hvflip = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->hvflip = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->hvflip, N_("flip"));
   dt_bauhaus_combobox_add(g->hvflip, _("none"));
   dt_bauhaus_combobox_add(g->hvflip, _("horizontal"));
@@ -2028,7 +2029,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->angle, "\302\260");
   gtk_widget_set_tooltip_text(g->angle, _("right-click and drag a line on the image to drag a straight line"));
 
-  g->keystone_type = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->keystone_type = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->keystone_type, N_("keystone"));
   dt_bauhaus_combobox_add(g->keystone_type, _("none"));
   dt_bauhaus_combobox_add(g->keystone_type, _("vertical"));
@@ -2138,7 +2139,7 @@ void gui_init(struct dt_iop_module_t *self)
     }
   }
 
-  g->aspect_presets = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->aspect_presets = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->aspect_presets, 1);
   dt_bauhaus_widget_set_label(g->aspect_presets, N_("aspect"));
 
@@ -2226,7 +2227,7 @@ static void gui_draw_sym(cairo_t *cr, float x, float y, float scale, gboolean ac
 {
   PangoLayout *layout;
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE * scale);
   layout = pango_cairo_create_layout(cr);
@@ -2294,13 +2295,13 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   // draw cropping window dimensions if first mouse button is pressed
-  if(darktable.control->button_down && darktable.control->button_down_which == 1 && g->k_show != 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && g->k_show != 1)
   {
     char dimensions[16];
     dimensions[0] = '\0';
     PangoLayout *layout;
     PangoRectangle ext;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
     layout = pango_cairo_create_layout(cr);
@@ -2344,7 +2345,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   {
     PangoRectangle ink;
     PangoLayout *layout;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
     layout = pango_cairo_create_layout(cr);
@@ -2419,7 +2420,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     const float wp = piece->buf_out.width, hp = piece->buf_out.height;
     float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,
                      p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
-    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4))
+    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4))
     {
       if(p->k_type == 3)
       {
@@ -2586,7 +2587,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
       // draw the apply "button"
       PangoLayout *layout;
       PangoRectangle ink;
-      PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+      PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
       pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
       pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE);
       layout = pango_cairo_create_layout(cr);
@@ -2667,20 +2668,20 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   _iop_clipping_set_max_clip(self);
   _grab_region_t grab = get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, wd, ht);
 
-  if(darktable.control->button_down && darktable.control->button_down_which == 3 && g->k_show != 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 3 && g->k_show != 1)
   {
     // second mouse button, straighten activated:
     g->straightening = 1;
     dt_control_queue_cursor(GDK_CROSSHAIR);
     dt_control_queue_redraw_center();
   }
-  else if(darktable.control->button_down && darktable.control->button_down_which == 1)
+  else if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
   {
     // case when we drag a point for keystone
     if(g->k_drag == TRUE && g->k_selected >= 0)
     {
       float pts[2] = { pzx * wd, pzy * ht };
-      dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
+      dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
       dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
       const float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
       if(g->k_selected == 0)
@@ -2794,9 +2795,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       if(grab & GRAB_TOP) g->handle_y = bzy - g->clip_y;
       if(grab & GRAB_RIGHT) g->handle_x = bzx - (g->clip_w + g->clip_x);
       if(grab & GRAB_BOTTOM) g->handle_y = bzy - (g->clip_h + g->clip_y);
-      if(!grab && darktable.control->button_down_which == 3) g->straightening = 1;
+      if(!grab && dt_control_get_global()->button_down_which == 3) g->straightening = 1;
     }
-    if(!g->straightening && darktable.control->button_down_which == 1 && g->k_show != 1)
+    if(!g->straightening && dt_control_get_global()->button_down_which == 1 && g->k_show != 1)
     {
       grab = g->cropping;
 
@@ -2885,7 +2886,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       float points[4]
           = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
 
-      if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
+      if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
       {
         dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
         if(!IS_NULL_PTR(piece))
@@ -2935,11 +2936,11 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       dt_control_queue_cursor(GDK_BOTTOM_LEFT_CORNER);
     else if(grab == GRAB_NONE)
     {
-      dt_control_hinter_message(darktable.control, _("<b>commit</b>: double-click, <b>straighten</b>: right-drag"));
+      dt_control_hinter_message(dt_control_get_global(), _("<b>commit</b>: double-click, <b>straighten</b>: right-drag"));
       dt_control_queue_cursor(GDK_LEFT_PTR);
     }
     if(grab != GRAB_NONE)
-      dt_control_hinter_message(darktable.control, _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag\n"
+      dt_control_hinter_message(dt_control_get_global(), _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag\n"
                                                      "<b>straighten</b>: right-drag"));
     dt_control_queue_redraw_center();
   }
@@ -2954,7 +2955,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     if(g->k_show == 1 && g->k_drag == FALSE)
     {
       float pts[2] = { pzx * wd, pzy * ht };
-      dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
+      dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
       dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
       float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
       // are we near a keystone point ?
@@ -2981,24 +2982,24 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       }
       if(g->k_selected >= 0)
       {
-        dt_control_hinter_message(darktable.control, _("<b>move control point</b>: drag"));
+        dt_control_hinter_message(dt_control_get_global(), _("<b>move control point</b>: drag"));
         dt_control_queue_cursor(GDK_CROSS);
       }
       else if(g->k_selected_segment >= 0)
       {
-        dt_control_hinter_message(darktable.control, _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>"));
+        dt_control_hinter_message(dt_control_get_global(), _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>"));
         dt_control_queue_cursor(GDK_CROSS);
       }
       else
       {
-        dt_control_hinter_message(darktable.control, _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>\n"
+        dt_control_hinter_message(dt_control_get_global(), _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>\n"
                                                        "<b>move line/control point</b>: drag"));
         dt_control_queue_cursor(GDK_FLEUR);
       }
     }
     else
     {
-      dt_control_hinter_message(darktable.control, _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag\n"
+      dt_control_hinter_message(dt_control_get_global(), _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag\n"
                                                      "<b>straighten</b>: right-drag, <b>commit</b>: double-click"));
     }
     dt_control_queue_redraw_center();
@@ -3020,13 +3021,13 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
     p->cw = p->ch = 1.0f;
   }
   // we want value in iop space
-  const float wd = darktable.develop->roi.preview_width;
-  const float ht = darktable.develop->roi.preview_height;
+  const float wd = self->dev->roi.preview_width;
+  const float ht = self->dev->roi.preview_height;
   float points[4]
       = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
-  if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
+  if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
-    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
+    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
     if(!IS_NULL_PTR(piece))
     {
       p->cx = CLAMPF(points[0] / (float)piece->buf_out.width, 0.0f, 0.9f);
@@ -3038,7 +3039,7 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
   g->applied = 1;
   const gboolean changed = fabs(p->cx - old[0]) > eps || fabs(p->cy - old[1]) > eps || fabs(p->cw - old[2]) > eps || fabs(p->ch - old[3]) > eps;
   // fprintf(stderr, "[crop commit box] %i:  %e %e %e %e\n", changed, p->cx - old[0], p->cy - old[1], p->cw - old[2], p->ch - old[3]);
-  if(changed) dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  if(changed) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 int button_released(struct dt_iop_module_t *self, double x, double y, int which, uint32_t state)
@@ -3051,7 +3052,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   {
     // adjust the line with possible current angle and flip on this module
     dt_boundingbox_t pts = { x, y, g->button_down_x, g->button_down_y };
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
 
     float dx = pts[0] - pts[2];
     float dy = pts[1] - pts[3];
@@ -3093,7 +3094,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = self->dev;
 
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return 0;
@@ -3108,7 +3109,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(which == 3 || which == 1)
   {
     // switch module on already, other code depends in this:
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
     if(g->k_show == 1)
     {

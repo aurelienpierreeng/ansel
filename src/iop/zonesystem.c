@@ -56,20 +56,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/darktable.h"
-#include "common/gaussian.h"
-#include "common/math.h"
-#include "common/opencl.h"
-#include "control/conf.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
+#include "common/utility.h"
+#include "pixel/gaussian.h"
+#include "math/math.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "dtgtk/drawingarea.h"
-#include "dtgtk/gradientslider.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/drawingarea.h"
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <librsvg/rsvg.h>
@@ -102,14 +103,14 @@ typedef struct dt_iop_zonesystem_data_t
 /*
 void init_presets (dt_iop_module_so_t *self)
 {
-//   DT_DEBUG_SQLITE3_EXEC(darktable.db, "begin", NULL, NULL, NULL);
+//   DT_DEBUG_SQLITE3_EXEC(dt_database_get_global(), "begin", NULL, NULL, NULL);
 
   dt_gui_presets_add_generic(_("Fill-light 0.25EV with 4 zones"), self->op, self->version(),
 &(dt_iop_zonesystem_params_t){0.25,0.25,4.0} , sizeof(dt_iop_zonesystem_params_t), 1);
   dt_gui_presets_add_generic(_("Fill-shadow -0.25EV with 4 zones"), self->op, self->version(),
 &(dt_iop_zonesystem_params_t){-0.25,0.25,4.0} , sizeof(dt_iop_zonesystem_params_t), 1);
 
-//   DT_DEBUG_SQLITE3_EXEC(darktable.db, "commit", NULL, NULL, NULL);
+//   DT_DEBUG_SQLITE3_EXEC(dt_database_get_global(), "commit", NULL, NULL, NULL);
 }
 */
 
@@ -442,14 +443,14 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->zones), "scroll-event", G_CALLBACK(dt_iop_zonesystem_bar_scrolled), self);
   gtk_widget_add_events(GTK_WIDGET(g->zones), GDK_POINTER_MOTION_MASK
                                               | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
-                                              | GDK_LEAVE_NOTIFY_MASK | darktable.gui->scroll_mask);
+                                              | GDK_LEAVE_NOTIFY_MASK | dt_gui_get_global()->scroll_mask);
   gtk_widget_set_size_request(g->zones, -1, DT_PIXEL_APPLY_DPI(40));
 
   gtk_box_pack_start(GTK_BOX(self->widget), g->preview, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), g->zones, TRUE, TRUE, 0);
 
   /* add signal handler for preview pipe finish to redraw the preview */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                             G_CALLBACK(_iop_zonesystem_redraw_preview_callback), self);
 
 
@@ -461,7 +462,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_iop_zonesystem_redraw_preview_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_iop_zonesystem_redraw_preview_callback), self);
 
   dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
   dt_free(g->in_preview_buffer);
@@ -592,7 +593,7 @@ static gboolean dt_iop_zonesystem_bar_button_press(GtkWidget *widget, GdkEventBu
     if(p->zone[k] == -1)
     {
       p->zone[k] = zonemap[k];
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
     g->is_dragging = TRUE;
     g->current_zone = k;
@@ -601,7 +602,7 @@ static gboolean dt_iop_zonesystem_bar_button_press(GtkWidget *widget, GdkEventBu
   {
     /* clear the controlpoint */
     p->zone[k] = -1;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   return TRUE;
@@ -628,7 +629,7 @@ static gboolean dt_iop_zonesystem_bar_scrolled(GtkWidget *widget, GdkEventScroll
   {
     p->size = CLAMP(p->size - delta_y, 4, MAX_ZONE_SYSTEM_SIZE);
     p->zone[cs] = -1;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     gtk_widget_queue_draw(widget);
   }
 
@@ -668,7 +669,7 @@ static gboolean dt_iop_zonesystem_bar_motion_notify(GtkWidget *widget, GdkEventM
        && (g->mouse_x / width) < zonemap[g->current_zone + 1])
     {
       p->zone[g->current_zone] = (g->mouse_x / width);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
   else

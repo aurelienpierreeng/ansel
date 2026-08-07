@@ -17,7 +17,6 @@
 */
 
 #include "gui/actions/supervisor_window.h"
-#include "common/darktable.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
 #include "common/opencl.h"
@@ -545,8 +544,8 @@ static void _rebuild_memory(void)
 
   // Pipeline cache
   size_t cur = 0, max = 0;
-  dt_dev_pixelpipe_cache_get_usage(darktable.pixelpipe_cache, &cur, &max);
-  GArray *pe = dt_dev_pixelpipe_cache_get_entries_stats(darktable.pixelpipe_cache);
+  dt_dev_pixelpipe_cache_get_usage(dt_pixelpipe_cache_get_global(), &cur, &max);
+  GArray *pe = dt_dev_pixelpipe_cache_get_entries_stats(dt_pixelpipe_cache_get_global());
 
   const gboolean gpu = dt_opencl_is_enabled();
   size_t vram_used = 0;
@@ -582,8 +581,8 @@ static void _rebuild_memory(void)
   g_array_free(pe, TRUE);
 
   // Mipmap cache
-  dt_mipmap_cache_get_usage(darktable.mipmap_cache, &cur, &max);
-  GArray *me = dt_mipmap_cache_get_entries_stats(darktable.mipmap_cache);
+  dt_mipmap_cache_get_usage(dt_mipmap_cache_get_global(), &cur, &max);
+  GArray *me = dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_get_global());
   gchar *mtitle = g_strdup_printf(_("Mipmap cache — %u items"), me->len);
   _add_usage_bar(_g.mem_box, mtitle, cur, max);
   g_free(mtitle);
@@ -601,8 +600,8 @@ static void _rebuild_memory(void)
   g_array_free(me, TRUE);
 
   // Image cache
-  dt_image_cache_get_usage(darktable.image_cache, &cur, &max);
-  GArray *ie = dt_image_cache_get_entries_stats(darktable.image_cache);
+  dt_image_cache_get_usage(dt_image_cache_get_global(), &cur, &max);
+  GArray *ie = dt_image_cache_get_entries_stats(dt_image_cache_get_global());
   gchar *ititle = g_strdup_printf(_("Image cache — %u items"), ie->len);
   _add_usage_bar(_g.mem_box, ititle, cur, max);
   g_free(ititle);
@@ -798,7 +797,7 @@ void dt_gui_supervisor_window_show(void)
   _g.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(_g.window), _("Event supervisor"));
   gtk_window_set_default_size(GTK_WINDOW(_g.window), 1000, 640);
-  gtk_window_set_transient_for(GTK_WINDOW(_g.window), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(_g.window), GTK_WINDOW(dt_gui_main_window()));
   g_signal_connect(_g.window, "destroy", G_CALLBACK(_on_destroy), NULL);
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);

@@ -35,7 +35,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/styles.h"
@@ -77,7 +76,7 @@ static int _single_selected_imgid()
 {
   int32_t imgid = UNKNOWN_IMAGE;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1, &stmt,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
                               NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -219,7 +218,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
       /* show prompt dialog when style already exists */
       if(name && (dt_styles_exists(name)) != 0)
       {
-        GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+        GtkWidget *window = dt_gui_main_window();
         GtkWidget *dlg_overwrite = gtk_message_dialog_new(
             GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING, GTK_BUTTONS_YES_NO,
             _("style `%s' already exists.\ndo you want to overwrite?"), name);
@@ -253,7 +252,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
     else
     {
       /* show dialog if name is missing from entry */
-      GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+      GtkWidget *window = dt_gui_main_window();
       GtkWidget *dlg_changename
                     = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING,
                                              GTK_BUTTONS_OK, _("please give style a name"));
@@ -312,7 +311,7 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
     else
     {
       /* show dialog if name is missing from entry */
-      GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+      GtkWidget *window = dt_gui_main_window();
       GtkWidget *dlg_changename
                     = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING,
                                              GTK_BUTTONS_OK, _("please give style a name"));
@@ -431,7 +430,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     g_strlcpy(title, _("create new style"), sizeof(title));
     sd->duplicate = NULL;
   }
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   GtkDialog *dialog = GTK_DIALOG(
       gtk_dialog_new_with_buttons(title, GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT,
                                   _("_cancel"), GTK_RESPONSE_REJECT,
@@ -648,7 +647,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
         /* lookup history item module */
         gboolean enabled = TRUE;
         dt_iop_module_t *module = NULL;
-        GList *modules = darktable.develop->iop;
+        GList *modules = dt_dev_get_global()->iop;
         if(modules)
         {
           GList *result = g_list_find_custom(

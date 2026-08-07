@@ -38,13 +38,17 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include <glib/gstdio.h>
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
+#include "common/conf.h"
 #include "imageio/format/imageio_format_api.h"
 #include "gui/gtk.h"
 
@@ -588,7 +592,7 @@ void gui_init(dt_imageio_module_format_t *self)
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   self->widget = box;
   // quality slider
-  g->quality = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL),
+  g->quality = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL),
                                                 dt_confgen_get_int("plugins/imageio/format/jpeg/quality", DT_MIN),
                                                 dt_confgen_get_int("plugins/imageio/format/jpeg/quality", DT_MAX),
                                                 1,

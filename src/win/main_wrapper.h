@@ -16,7 +16,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_WIN_MAIN_WRAPPER_H
+#define DT_WIN_MAIN_WRAPPER_H
 
 #include <glib.h>
 
@@ -34,6 +35,9 @@ int wmain(int argc, wchar_t *argv[])
   g_strfreev(_argv);
   return res;
 }
+
+#endif // DT_WIN_MAIN_WRAPPER_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

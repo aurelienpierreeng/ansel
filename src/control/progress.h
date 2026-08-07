@@ -18,7 +18,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_PROGRESS_H
+#define DT_CONTROL_PROGRESS_H
 
 #include <glib.h>
 
@@ -69,6 +70,8 @@ gboolean dt_control_progress_has_progress_bar(dt_progress_t *progress);
 
 /** has a job been linked to the progress object? */
 gboolean dt_control_progress_cancellable(dt_progress_t *progress);
+
+#endif // DT_CONTROL_PROGRESS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

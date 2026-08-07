@@ -16,7 +16,8 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_SEGMENTATION_H
+#define DT_IOP_HIGHLIGHTS_SEGMENTATION_H
 
 // Connected-component segmentation of the clipped regions (host, both paths).
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
@@ -28,3 +29,4 @@
 int _segment_clipped_regions(const uint8_t *const restrict maskb, const float *const restrict depth,
                              const int width, const int height, const float pad_factor, const int pad_min,
                              const int pad_max, _hl_region_t **regions_out);
+#endif // DT_IOP_HIGHLIGHTS_SEGMENTATION_H

@@ -19,11 +19,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "common/debug.h"
-#include "control/conf.h"
 #include "control/control.h"
-#include "develop/develop.h"
 #include "gui/gtk.h"
 
 #include "gui/actions/menu.h"
@@ -32,7 +28,7 @@
 gboolean views_active_callback(GtkWidget *menu_item)
 {
   // The insensitive view is the one whose name matches the menu item label
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   const char *current_label = get_custom_data(menu_item);
   return !g_strcmp0(current_label, current_view->module_name);
 }
@@ -40,7 +36,7 @@ gboolean views_active_callback(GtkWidget *menu_item)
 gboolean views_sensitive_callback(GtkWidget *menu_item)
 {
   // The insensitive view is the one whose name matches the menu item label
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   const char *current_label = get_custom_data(menu_item);
   return g_strcmp0(current_label, current_view->module_name);
 }
@@ -64,7 +60,7 @@ MACRO_VIEW(studio_capture);
 
 void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
-  for(GList *view_iter = darktable.view_manager->views; view_iter; view_iter = g_list_next(view_iter))
+  for(GList *view_iter = dt_view_manager_get_global()->views; view_iter; view_iter = g_list_next(view_iter))
   {
     dt_view_t *view = (dt_view_t *)view_iter->data;
     if(view->flags() & VIEW_FLAGS_HIDDEN) continue;
@@ -112,13 +108,13 @@ void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
 * This is inexpensive as long as there are not too many items.
 * The other approach is to connect menu.h:update_entry() to signals, e.g.
 
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                               G_CALLBACK(update_entry), self);
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CANNOT_CHANGE,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CANNOT_CHANGE,
                                     G_CALLBACK(_lib_viewswitcher_view_cannot_change_callback), self);
 
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(update_entry), self);
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_viewswitcher_view_cannot_change_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(update_entry), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_viewswitcher_view_cannot_change_callback), self);
 *
 * So the update happens as soon as the signal is emited, only for the relevant menuitems.
 *

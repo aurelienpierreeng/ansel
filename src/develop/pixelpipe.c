@@ -63,7 +63,7 @@ uint64_t dt_dev_pixelpipe_raster_mask_hash(const dt_dev_pixelpipe_iop_t *piece,
 
 void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
 {
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->rawdetail_mask_hash);
+  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), pipe->rawdetail_mask_hash);
   pipe->rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   memset(&pipe->rawdetail_mask_roi, 0, sizeof(pipe->rawdetail_mask_roi));
 }

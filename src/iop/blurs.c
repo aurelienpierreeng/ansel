@@ -25,15 +25,21 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "system/openmp.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
 #include "config.h"
 #endif
 // our includes go first:
-#include "bauhaus/bauhaus.h"
-#include "common/dwt.h"
+#include "gui/bauhaus.h"
+#include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
+#include "gui/dtgtk/drawingarea.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 

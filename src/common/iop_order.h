@@ -124,12 +124,18 @@
          This is done by using the dt_ioppr_get_iop_order.
  */
 
-#ifndef DT_IOP_ORDER_H
-#define DT_IOP_ORDER_H
+#ifndef DT_COMMON_IOP_ORDER_H
+#define DT_COMMON_IOP_ORDER_H
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+
+/* Self-containment: the declarations below use GList/gboolean (glib) and int32_t.
+ * This header used to compile only because its consumers happened to include
+ * darktable.h first. */
+#include <glib.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -400,7 +406,15 @@ int dt_ioppr_check_so_iop_order(GList *iop_list, GList *iop_order_list);
  *
  * @return List of @ref dt_iop_order_rule_t.
  */
+/** BUILDS AND RETURNS A FRESH LIST of the hard-coded iop ordering rules. This is a
+ * CONSTRUCTOR, not an accessor: it is called once at startup to populate the cached
+ * global, and every call allocates. To READ the cached rules, use
+ * dt_ioppr_get_iop_order_rules_global() below — repointing a read site at this function
+ * leaks a freshly-built list on every iteration. */
 GList *dt_ioppr_get_iop_order_rules();
+
+/** The cached iop ordering rules built once at startup. Read-only; do not free. */
+GList *dt_ioppr_get_iop_order_rules_global(void);
 
 /**
  * @brief Deep-copy an order list.

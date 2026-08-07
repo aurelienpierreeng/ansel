@@ -28,7 +28,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_UNDO_H
+#define DT_COMMON_UNDO_H
 
 #include "common/dtpthread.h"  // for dt_pthread_mutex_t
 #include <glib.h>              // for gpointer, GList, gboolean
@@ -79,6 +80,9 @@ typedef struct dt_undo_t
 dt_undo_t *dt_undo_init(void);
 void dt_undo_cleanup(dt_undo_t *self);
 
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+dt_undo_t *dt_undo_get_global(void);
+
 // create a group of item to be handled together, a group
 void dt_undo_start_group(dt_undo_t *self, dt_undo_type_t type);
 void dt_undo_end_group(dt_undo_t *self);
@@ -111,6 +115,8 @@ void dt_undo_disable_next(dt_undo_t *self);
 // Mostly meant to disable GUI undo/redo controls if they wouldn't have any effect.
 gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter);
 gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter);
+
+#endif // DT_COMMON_UNDO_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

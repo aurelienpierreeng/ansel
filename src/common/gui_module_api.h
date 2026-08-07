@@ -15,7 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_GUI_MODULE_API_H
+#define DT_COMMON_GUI_MODULE_API_H
 
 #include <glib.h>
 
@@ -65,3 +66,4 @@ struct dt_gui_module_t
 
 /* Cast dt_lib_module_t and dt_iop_module_t to dt_gui_module_t */
 #define DT_GUI_MODULE(x) ((dt_gui_module_t *)x)
+#endif // DT_COMMON_GUI_MODULE_API_H

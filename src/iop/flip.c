@@ -41,10 +41,14 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 #include <inttypes.h>
@@ -53,14 +57,12 @@
 #include <string.h>
 
 #include "common/debug.h"
-#include "common/imageio.h"
+#include "imageio/imageio_core.h"
 #include "common/opencl.h"
-#include "control/conf.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/resetlabel.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -445,7 +447,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 void init_presets(dt_iop_module_so_t *self)
 {
   dt_iop_flip_params_t p = (dt_iop_flip_params_t){ ORIENTATION_NONE };
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   p.orientation = ORIENTATION_NULL;
   dt_gui_presets_add_generic(_("autodetect"), self->op,
@@ -476,7 +478,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("rotate by 180 degrees"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 void reload_defaults(dt_iop_module_t *self)
@@ -491,7 +493,7 @@ void reload_defaults(dt_iop_module_t *self)
      && self->dev->image_storage.legacy_flip.user_flip != 0xff)
   {
     sqlite3_stmt *stmt;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT * FROM main.history WHERE imgid = ?1 AND operation = 'flip'", -1, &stmt,
                                 NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, self->dev->image_storage.id);
@@ -530,7 +532,7 @@ static void do_rotate(dt_iop_module_t *self, uint32_t cw)
   orientation ^= ORIENTATION_SWAP_XY;
 
   p->orientation = orientation;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 static void rotate_cw(GtkWidget *widget, dt_iop_module_t *self)
 {
@@ -552,7 +554,7 @@ static void _flip_h(GtkWidget *widget, dt_iop_module_t *self)
   else
     p->orientation = orientation ^ ORIENTATION_FLIP_HORIZONTALLY;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 static void _flip_v(GtkWidget *widget, dt_iop_module_t *self)
 {
@@ -566,7 +568,7 @@ static void _flip_v(GtkWidget *widget, dt_iop_module_t *self)
   else
     p->orientation = orientation ^ ORIENTATION_FLIP_VERTICALLY;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_init(struct dt_iop_module_t *self)

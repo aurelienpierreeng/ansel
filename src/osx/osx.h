@@ -22,7 +22,8 @@
  *   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_OSX_OSX_H
+#define DT_OSX_OSX_H
 
 #include <gtk/gtk.h>
 
@@ -42,6 +43,9 @@ void dt_osx_focus_window();
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_OSX_OSX_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

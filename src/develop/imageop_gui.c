@@ -22,15 +22,17 @@
 */
 
 #include "develop/imageop_gui.h"
+#include "common/conf.h"
 #include "develop/imageop.h"
-#include "bauhaus/bauhaus.h"
-#include "dtgtk/button.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "gui/dtgtk/button.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/utility.h"
 #include "gui/gtk.h"
 
 
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include <assert.h>
@@ -113,7 +115,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
       const float top = fminf(max-min, fmaxf(fabsf(min), fabsf(max)));
       const int digits = MAX(2, -floorf(log10f(top/100)+.1));
 
-      slider = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), min, max, 0, defval, digits, 1);
+      slider = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), min, max, 0, defval, digits, 1);
     }
     else if(f->header.type == DT_INTROSPECTION_TYPE_INT)
     {
@@ -122,7 +124,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
       offset = f->header.offset + param_index * sizeof(int);
       const int defval = *(int*)((uint8_t *)d + offset);
 
-      slider = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), min, max, 1, defval, 0, 1);
+      slider = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), min, max, 1, defval, 0, 1);
     }
     else if(f->header.type == DT_INTROSPECTION_TYPE_USHORT)
     {
@@ -131,7 +133,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
       offset = f->header.offset + param_index * sizeof(unsigned short);
       const unsigned short defval = *(unsigned short*)((uint8_t *)d + offset);
 
-      slider = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), min, max, 1, defval, 0, 1);
+      slider = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), min, max, 1, defval, 0, 1);
     }
     else f = NULL;
   }
@@ -162,7 +164,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
   {
     gchar *str = g_strdup_printf("'%s' is not a float/int/unsigned short/slider parameter", param_name);
 
-    slider = dt_bauhaus_slider_new(darktable.bauhaus, DT_GUI_MODULE(self));
+    slider = dt_bauhaus_slider_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
     dt_bauhaus_widget_set_label(slider, str);
 
     dt_free(str);
@@ -184,7 +186,7 @@ GtkWidget *dt_bauhaus_combobox_from_params(dt_iop_module_t *self, const char *pa
   dt_iop_params_t *p = (dt_iop_params_t *)self->params;
   dt_introspection_field_t *f = self->so->get_f(param);
 
-  GtkWidget *combobox = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  GtkWidget *combobox = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   gchar *str = NULL;
 
   if (!IS_NULL_PTR(f) && (f->header.type == DT_INTROSPECTION_TYPE_ENUM ||

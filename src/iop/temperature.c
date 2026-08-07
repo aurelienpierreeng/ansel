@@ -58,6 +58,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/colorspaces_inline_conversions.h"
 #endif
 #include <assert.h>
 #include <lcms2.h>
@@ -65,17 +66,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
 #include "common/opencl.h"
 #include "control/control.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
-#include "dtgtk/expander.h"
 
 #include "gui/gtk.h"
 #include "gui/color_picker_proxy.h"
@@ -1344,7 +1349,7 @@ static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -1446,7 +1451,7 @@ static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
   color_temptint_sliders(self);
   color_rgb_sliders(self);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -1576,7 +1581,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_end(GTK_BOX(g->buttonbar), g->btn_asshot, TRUE, TRUE, 0);
   gtk_box_pack_start(box_enabled, g->buttonbar, TRUE, TRUE, 0);
 
-  g->presets = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->presets = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->presets, N_("settings")); // relabel to settings to remove confusion between module presets and white balance settings
   gtk_widget_set_tooltip_text(g->presets, _("choose white balance setting"));
   gtk_box_pack_start(box_enabled, g->presets, TRUE, TRUE, 0);
@@ -1596,14 +1601,14 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(box_enabled, temp_label_box, TRUE, TRUE, 0);
 
   //Match UI order: temp first, then tint (like every other app ever)
-  g->scale_k = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), DT_IOP_LOWEST_TEMPERATURE, DT_IOP_HIGHEST_TEMPERATURE,
+  g->scale_k = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), DT_IOP_LOWEST_TEMPERATURE, DT_IOP_HIGHEST_TEMPERATURE,
                                                              0, 5000.0, 0, feedback);
   dt_bauhaus_slider_set_format(g->scale_k, " K");
   dt_bauhaus_widget_set_label(g->scale_k, N_("temperature"));
   gtk_widget_set_tooltip_text(g->scale_k, _("color temperature (in Kelvin)"));
   gtk_box_pack_start(box_enabled, g->scale_k, TRUE, TRUE, 0);
 
-  g->scale_tint = dt_bauhaus_slider_new_with_range_and_feedback(darktable.bauhaus, DT_GUI_MODULE(self), DT_IOP_LOWEST_TINT, DT_IOP_HIGHEST_TINT,
+  g->scale_tint = dt_bauhaus_slider_new_with_range_and_feedback(dt_bauhaus_get_global(), DT_GUI_MODULE(self), DT_IOP_LOWEST_TINT, DT_IOP_HIGHEST_TINT,
                                                                 0, 1.0, 3, feedback);
   dt_bauhaus_widget_set_label(g->scale_tint, N_("tint"));
   gtk_widget_set_tooltip_text(g->scale_tint, _("color tint of the image, from magenta (value < 1) to green (value > 1)"));

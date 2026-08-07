@@ -45,11 +45,14 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#endif
-#include "bauhaus/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/opencl.h"
-#include "control/control.h"
+#endif
+#include "gui/bauhaus.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
@@ -58,7 +61,6 @@
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include <assert.h>
@@ -238,7 +240,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   update_saturation_slider_end_color(g->saturation, p->hue);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_reset(struct dt_iop_module_t *self)

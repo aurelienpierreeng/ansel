@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_PAINT_H
+#define DT_IOP_DRAWLAYER_PAINT_H
 
 #include "iop/drawlayer/brush.h"
 
@@ -238,3 +239,4 @@ gboolean dt_drawlayer_paint_runtime_get_stroke_damage(const dt_drawlayer_damaged
  */
 gboolean dt_drawlayer_paint_merge_runtime_stroke_damage(dt_drawlayer_damaged_rect_t *path_state,
                                                         dt_drawlayer_damaged_rect_t *target_rect);
+#endif // DT_IOP_DRAWLAYER_PAINT_H

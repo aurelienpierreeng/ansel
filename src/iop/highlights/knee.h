@@ -16,14 +16,14 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_KNEE_H
+#define DT_IOP_HIGHLIGHTS_KNEE_H
 
 // R9 sensor-rolloff (knee) estimation and inversion (CPU + OpenCL).
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/gaussian.h"
-#include "common/opencl.h"
+#include "pixel/gaussian.h"
 #include "iop/highlights/blur.h"
 #include "iop/highlights/common.h"
 #include <string.h>
@@ -99,3 +99,4 @@ cl_int _hl_knee_apply_cfa_cl(const int devid, void *gd_void, cl_mem dev_in, cl_m
                              cl_mem dev_xtrans, const int is_xtrans, const dt_aligned_pixel_t clipval_raw,
                              const _hl_knee_curve_t curves[3]);
 #endif
+#endif // DT_IOP_HIGHLIGHTS_KNEE_H

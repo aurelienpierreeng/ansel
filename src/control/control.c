@@ -54,16 +54,10 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/darktable.h"
-#include "common/debug.h"
-#include "common/image_cache.h"
-#include "common/imageio.h"
-#include "control/conf.h"
+#include "gui/bauhaus.h"
+#include "darktable.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "develop/imageop.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -241,9 +235,9 @@ static void _control_set_cursor_on_widget(GtkWidget *widget, GdkCursor *cursor)
 
 static void _control_apply_cursor(GdkCursor *cursor)
 {
-  GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
-  GtkWidget *center_base = dt_ui_center_base(darktable.gui->ui);
-  GtkWidget *center = dt_ui_center(darktable.gui->ui);
+  GtkWidget *main_window = dt_gui_main_window();
+  GtkWidget *center_base = dt_ui_center_base(dt_gui_get_ui());
+  GtkWidget *center = dt_gui_center_widget();
 
   _control_set_cursor_on_widget(main_window, cursor);
 
@@ -306,7 +300,7 @@ void dt_control_change_cursor_by_name(const char *curs_str)
     _control_apply_cursor(cursor_shape);
     _control_store_current_cursor(chosen_shape, hide ? NULL : curs_str);
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_CONTROL, "Changing cursor to `%s`\n", hide ? "GDK_BLANK_CURSOR" : curs_str);
 
     g_object_unref(cursor_shape);
@@ -366,7 +360,7 @@ void dt_control_change_cursor_EXT(dt_cursor_t cursor, const char *file, int line
     g_object_unref(cursor_shape);
     _control_store_current_cursor(chosen_shape, NULL);
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_CONTROL,
                "Changing cursor to `%s`, requested from %s:%d\n",
                hide ? "GDK_BLANK_CURSOR" : _get_cursor_name(requested_shape), file, line);
@@ -381,7 +375,7 @@ void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line)
      && IS_NULL_PTR(darktable.control->cursor.shape_str))
     return;
 
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_CONTROL, "Queue cursor to `%s`, requested from %s:%d\n", _get_cursor_name(requested_shape), file, line);
 
   g_free(darktable.control->cursor.shape_str);
@@ -415,19 +409,19 @@ void dt_control_queue_cursor_by_name(const char *curs_str)
 
 void dt_control_set_cursor_visible_EXT(gboolean visible, const char *file, int line)
 {
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_CONTROL, "%s cursor, requested from %s:%d\n", visible ? "Show" : "Hide", file, line);
   darktable.control->cursor.hide = !visible;
 }
 
 void dt_control_mouse_is_dragging(gboolean state)
 {
-  darktable.gui->mouse.is_dragging = state;
+  dt_gui_get_global()->mouse.is_dragging = state;
 }
 
 void dt_control_mouse_is_painting(gboolean state)
 {
-  darktable.gui->mouse.is_painting = state;
+  dt_gui_get_global()->mouse.is_painting = state;
 }
 
 int dt_control_running()
@@ -484,8 +478,8 @@ void dt_control_shutdown(dt_control_t *s)
 void dt_control_cleanup(dt_control_t *s)
 {
   // vacuum TODO: optional?
-  // DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "PRAGMA incremental_vacuum(0)", NULL, NULL, NULL);
-  // DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "vacuum", NULL, NULL, NULL);
+  // DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "PRAGMA incremental_vacuum(0)", NULL, NULL, NULL);
+  // DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "vacuum", NULL, NULL, NULL);
   dt_control_jobs_cleanup(s);
   g_free(s->cursor.shape_str);
   g_free(s->cursor.current_shape_str);
@@ -522,7 +516,7 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
 {
   PangoRectangle ink;
   PangoLayout *layout;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   const float fontsize = DT_PIXEL_APPLY_DPI(14);
   pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
@@ -550,10 +544,10 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
 void *dt_control_expose(void *voidptr)
 {
   int pointerx, pointery;
-  if(IS_NULL_PTR(darktable.gui->surface)) return NULL;
-  const int width = dt_cairo_image_surface_get_width(darktable.gui->surface);
-  const int height = dt_cairo_image_surface_get_height(darktable.gui->surface);
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  if(IS_NULL_PTR(dt_gui_get_global()->surface)) return NULL;
+  const int width = dt_cairo_image_surface_get_width(dt_gui_get_global()->surface);
+  const int height = dt_cairo_image_surface_get_height(dt_gui_get_global()->surface);
+  GtkWidget *widget = dt_gui_center_widget();
   gdk_window_get_device_position(gtk_widget_get_window(widget),
       gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(widget))),
       &pointerx, &pointery, NULL);
@@ -608,7 +602,7 @@ void *dt_control_expose(void *voidptr)
   }
   cairo_destroy(cr);
 
-  cairo_t *cr_pixmap = cairo_create(darktable.gui->surface);
+  cairo_t *cr_pixmap = cairo_create(dt_gui_get_global()->surface);
   cairo_set_source_surface(cr_pixmap, cst, 0, 0);
   cairo_paint(cr_pixmap);
   cairo_destroy(cr_pixmap);
@@ -649,8 +643,8 @@ static void _dt_ctl_switch_mode_prepare()
 {
   darktable.control->button_down = 0;
   darktable.control->button_down_which = 0;
-  darktable.gui->center_tooltip = 0;
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  dt_gui_get_global()->center_tooltip = 0;
+  GtkWidget *widget = dt_gui_center_widget();
   gtk_widget_set_tooltip_text(widget, "");
 }
 
@@ -871,27 +865,27 @@ void dt_control_toast_busy_leave()
 
 void dt_control_queue_redraw()
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_REDRAW_ALL);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_REDRAW_ALL);
 }
 
 void dt_control_queue_redraw_center()
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_REDRAW_CENTER);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_REDRAW_CENTER);
 }
 
 void dt_control_navigation_redraw()
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_NAVIGATION_REDRAW);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NAVIGATION_REDRAW);
 }
 
 void dt_control_log_redraw()
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_LOG_REDRAW);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_LOG_REDRAW);
 }
 
 void dt_control_toast_redraw()
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_TOAST_REDRAW);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_TOAST_REDRAW);
 }
 
 typedef struct dt_control_redraw_widget_t
@@ -933,7 +927,7 @@ void dt_control_queue_redraw_widget(GtkWidget *widget)
 
 void dt_control_hinter_message(const struct dt_control_t *s, const char *message)
 {
-  dt_hinter_set_message(darktable.gui->ui, message);
+  dt_hinter_set_message(dt_gui_get_ui(), message);
 }
 
 int32_t dt_control_get_mouse_over_id()
@@ -956,7 +950,7 @@ void dt_control_set_mouse_over_id(int32_t value)
     // to keep only the selection for common/act_on.h
     if(value < 0) darktable.control->keyboard_over_id = value;
     dt_pthread_mutex_unlock(&(darktable.control->global_mutex));
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE);
   }
   else
     dt_pthread_mutex_unlock(&(darktable.control->global_mutex));

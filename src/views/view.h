@@ -44,14 +44,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_VIEWS_VIEW_H
+#define DT_VIEWS_VIEW_H
 
-#include "common/act_on.h"
-#include "common/atomic.h"
+#include "system/atomic.h"
 
 #include "common/history.h"
-#include "common/image.h"
-#include "common/dtpthread.h"
 #ifdef HAVE_PRINT
 #include "common/cups_print.h"
 #include "common/printing.h"
@@ -277,6 +275,10 @@ typedef struct dt_view_manager_t
 
 } dt_view_manager_t;
 
+/** The application's single view manager, owned by the orchestrator. Declared here so
+ * consumers do not need darktable.h for it. Implemented in darktable.c. */
+struct dt_view_manager_t *dt_view_manager_get_global(void);
+
 void dt_view_manager_init(dt_view_manager_t *vm);
 void dt_view_manager_gui_init(dt_view_manager_t *vm);
 void dt_view_manager_cleanup(dt_view_manager_t *vm);
@@ -351,6 +353,8 @@ void dt_view_map_redraw(const dt_view_manager_t *vm);
 #ifdef HAVE_PRINT
 void dt_view_print_settings(const dt_view_manager_t *vm, dt_print_info_t *pinfo, dt_images_box *imgs);
 #endif
+
+#endif // DT_VIEWS_VIEW_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

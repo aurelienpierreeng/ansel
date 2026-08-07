@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_WIN_DTWIN_H
+#define DT_WIN_DTWIN_H
 
 #include <gtk/gtk.h>
 #include <windows.h>
@@ -32,6 +33,8 @@
 const wchar_t *dtwin_get_locale();
 void dtwin_set_thread_name(DWORD dwThreadID, const char *threadName);
 boolean dt_win_file_trash(GFile *file, GCancellable *cancellable, GError **error);
+
+#endif // DT_WIN_DTWIN_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

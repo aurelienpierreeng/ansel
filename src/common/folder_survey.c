@@ -14,12 +14,13 @@
 */
 
 #include "common/folder_survey.h"
+#include "control/settings.h"
+#include <glib/gstdio.h>
+#include "common/image_extensions.h"
 
-#include "common/darktable.h"
 #include "common/datetime.h"
 #include "common/file_location.h"
-#include "common/imageio.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/jobs/import_jobs.h"
@@ -27,6 +28,7 @@
 #include "views/view.h"
 
 #include <gio/gio.h>
+#include "common/utility.h"
 
 #define DT_FOLDER_SURVEY_STATE_FILE "folder-survey-state.ini"
 
@@ -277,7 +279,7 @@ static int _folder_survey_collect(const char *folder, GHashTable *observed)
  */
 static GList *_folder_survey_styles_for_import()
 {
-  const dt_view_t *view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   if(IS_NULL_PTR(view)) return NULL;
 
   char *conf = dt_conf_get_string(DT_FOLDER_SURVEY_STYLES_CONF_KEY);
@@ -531,7 +533,7 @@ static gboolean _folder_survey_scan(gpointer user_data)
     return G_SOURCE_CONTINUE;
   }
   dt_control_job_set_params(job, params, _folder_survey_job_cleanup);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_BG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_BG, job);
   return G_SOURCE_CONTINUE;
 }
 
@@ -828,7 +830,7 @@ static void _folder_survey_offer_pending_import()
   const int new_files = dt_folder_survey_count_new_files();
   if(new_files <= 0) return;
 
-  GtkWindow *parent = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *parent = GTK_WINDOW(dt_gui_main_window());
   GtkWidget *dialog = gtk_message_dialog_new(
       parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
       ngettext("%d image in the surveyed folder is not in the library yet.\nImport it now?",
@@ -916,7 +918,7 @@ int dt_folder_survey_start()
   dt_free(canonical_folder);
   dt_free(configured_folder);
   _folder_survey_reschedule();
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FOLDER_SURVEY_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FOLDER_SURVEY_CHANGED);
   return 0;
 }
 
@@ -932,7 +934,7 @@ void dt_folder_survey_halt()
   if(active)
   {
     dt_control_log(_("Folder survey stopped."));
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FOLDER_SURVEY_CHANGED);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FOLDER_SURVEY_CHANGED);
   }
 }
 
@@ -1041,7 +1043,7 @@ gboolean dt_folder_survey_propose_resume()
   _folder_survey.was_active_last_session = FALSE;
 
   char *folder = dt_conf_get_string("studio_capture/folder");
-  GtkWindow *parent = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *parent = GTK_WINDOW(dt_gui_main_window());
 
   GtkWidget *dialog = gtk_message_dialog_new(
       parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
@@ -1061,7 +1063,7 @@ gboolean dt_folder_survey_propose_resume()
     return G_SOURCE_REMOVE;
   }
 
-  dt_view_manager_switch(darktable.view_manager, "studio_capture");
+  dt_view_manager_switch(dt_view_manager_get_global(), "studio_capture");
 
   // dt_folder_survey_start() itself offers to import any images already
   // sitting in the folder, covering files that appeared while Ansel was

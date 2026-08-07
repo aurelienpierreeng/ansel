@@ -26,16 +26,19 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/pixelpipe_cache_alloc.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/module_versioning.h"
+#include "system/target_clones.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
-#include "common/gaussian.h"
-#include "common/fast_guided_filter.h"
+#include "pixel/gaussian.h"
+#include "pixel/fast_guided_filter.h"
 
 #include <gtk/gtk.h>
 #include <stdlib.h>

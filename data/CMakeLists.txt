@@ -86,7 +86,6 @@ endif(NOT WIN32)
 if(VALIDATE_APPDATA_FILE)
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
-    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
     COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.appdata.xml"
     COMMAND ${appstream_util_BIN} validate --nonet ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
@@ -95,7 +94,6 @@ if(VALIDATE_APPDATA_FILE)
 else()
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
-    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
     COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml"
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
     DEPENDS ${PO_FILES}
@@ -123,8 +121,8 @@ install(FILES gdb_commands DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPON
 if(${VALIDATE_JSON})
   add_custom_target(
     validate_noiseprofiles_json ALL
-    COMMAND ${jsonschema_BIN} -i ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.json ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.schema
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.json ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.schema
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/validate_json_schema.py ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.json ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.schema
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.json ${CMAKE_CURRENT_SOURCE_DIR}/noiseprofiles.schema ${CMAKE_SOURCE_DIR}/tools/validate_json_schema.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
     COMMENT "Checking validity of noiseprofiles.json"
   )

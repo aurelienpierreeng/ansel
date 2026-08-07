@@ -36,15 +36,20 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "common/conf.h"
 #include "config.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
-#include "common/imageio_png.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include <glib/gstdio.h>
+#include "imageio/imageio_png.h"
 #include "common/imagebuf.h"
 #include "common/colorspaces.h"
-#include "common/colorspaces_inline_conversions.h"
 #include "common/file_location.h"
 #include "common/iop_profile.h"
 #include "common/lut3d.h"
@@ -52,7 +57,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/develop.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 #include "gui/gtk.h"
 
 #include "iop/iop_api.h"
@@ -1188,7 +1193,7 @@ static void filepath_callback(GtkWidget *widget, dt_iop_module_t *self)
 #else
     g_strlcpy(p->filepath, filepath, sizeof(p->filepath));
 #endif // HAVE_GMIC
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
 
@@ -1214,7 +1219,7 @@ static void lutname_callback(GtkTreeSelection *selection, dt_iop_module_t *self)
     {
       g_strlcpy(p->lutname, lutname, sizeof(p->lutname));
       get_compressed_clut(self, TRUE);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
     dt_free(lutname);
   }
@@ -1334,7 +1339,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
     dt_free(lutfolder);
     return;
   }
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select lut file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_select"), _("_cancel"));
@@ -1388,7 +1393,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
     dt_free(filepath);
     gtk_widget_set_sensitive(g->filepath, p->filepath[0]);
     g_strlcpy(p->filepath, dt_bauhaus_combobox_get_text(g->filepath), sizeof(p->filepath));
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   dt_free(lutfolder);
   g_object_unref(filechooser);
@@ -1471,7 +1476,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(g->hbox), button, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(button_clicked), self);
 
-  g->filepath = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->filepath = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_entries_ellipsis(g->filepath, PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(g->hbox), g->filepath, TRUE, TRUE, 0);
 #ifdef HAVE_GMIC
@@ -1529,13 +1534,13 @@ void gui_init(dt_iop_module_t *self)
   g->interpolation = dt_bauhaus_combobox_from_params(self, N_("interpolation"));
   gtk_widget_set_tooltip_text(g->interpolation, _("select the interpolation method"));
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULE_MOVED,
                             G_CALLBACK(module_moved_callback), self);
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(module_moved_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(module_moved_callback), self);
 
   IOP_GUI_FREE;
 }

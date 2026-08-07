@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_BRUSH_PROFILE_H
+#define DT_IOP_DRAWLAYER_BRUSH_PROFILE_H
 
 #include "iop/drawlayer/brush.h"
 
@@ -143,3 +144,4 @@ static inline float dt_drawlayer_brush_mass_primitive_eval(const dt_drawlayer_br
   const float base = 0.5f * inner * inner;
   return dt_drawlayer_brush_transition_mass_primitive_eval(dab->shape, u, inner, w, base);
 }
+#endif // DT_IOP_DRAWLAYER_BRUSH_PROFILE_H

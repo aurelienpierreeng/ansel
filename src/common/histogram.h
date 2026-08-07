@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_HISTOGRAM_H
+#define DT_COMMON_HISTOGRAM_H
 
 #include <stdint.h>
 
@@ -64,6 +65,8 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
 void dt_histogram_max_helper(const dt_dev_histogram_stats_t *const histogram_stats,
                              const dt_iop_colorspace_type_t cst, const dt_iop_colorspace_type_t cst_to,
                              uint32_t **histogram, uint32_t *histogram_max);
+
+#endif // DT_COMMON_HISTOGRAM_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

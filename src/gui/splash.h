@@ -22,7 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_SPLASH_H
+#define DT_GUI_SPLASH_H
 
 #include <stdarg.h>
 
@@ -33,3 +34,4 @@ void dt_gui_splash_update(const char *message);
 void dt_gui_splash_updatef(const char *format, ...) __attribute__((format(printf, 1, 2)));
 void dt_gui_splash_close(void);
 void dt_gui_splash_set_transient_for(GtkWidget *parent);
+#endif // DT_GUI_SPLASH_H

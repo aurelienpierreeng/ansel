@@ -173,6 +173,6 @@ PostHog project (EU): create insights under **Product analytics**. Useful breakd
 | `src/CMakeLists.txt` | adds the source, defines `HAVE_TELEMETRY` / `POSTHOG_HOST` |
 | `src/common/telemetry.c` / `.h` | init/shutdown, async POST worker, events, per-session aggregates |
 | `src/common/privacy_consent.c` / `.h` | shared first-launch consent dialog (crash + analytics) |
-| `src/common/darktable.c` | calls `dt_telemetry_init()` / `dt_telemetry_shutdown()` |
+| `src/darktable.c` | calls `dt_telemetry_init()` / `dt_telemetry_shutdown()` |
 | `src/views/view.c`, `src/libs/lib.c`, `src/develop/imageop.c`, `src/develop/pixelpipe_hb.c` | the recording call sites |
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `telemetry/enabled` preference |

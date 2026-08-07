@@ -48,23 +48,28 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/math.h"
+#include "gui/bauhaus.h"
+#include "math/math.h"
 #include "common/opencl.h"
-#include "common/tea.h"
+#include "pixel/tea.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -528,13 +533,13 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
   }
 
-  if(grab == 0 || !(darktable.control->button_down && darktable.control->button_down_which == 1))
+  if(grab == 0 || !(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1))
   {
     grab = get_grab(self, pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
                     -vignette_fy, zoom_scale);
   }
 
-  if(darktable.control->button_down && darktable.control->button_down_which == 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
   {
     if(grab == 0) // pan the image
     {
@@ -733,7 +738,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       dither = 0.0f;
   }
 
-  unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
+  unsigned int *const tea_states = alloc_tea_states(dt_get_num_openmp_threads());
   __OMP_PARALLEL_FOR__()
   for(int j = 0; j < roi_out->height; j++)
   {
@@ -966,7 +971,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
   dt_iop_vignette_params_t p;
   p.scale = 40.0f;
   p.falloff_scale = 100.0f;
@@ -981,7 +986,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.unbound = TRUE;
   dt_gui_presets_add_generic(_("lomo"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

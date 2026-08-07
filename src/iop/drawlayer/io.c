@@ -16,13 +16,15 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
 #include "iop/drawlayer/io.h"
 
 #include "common/colorspaces.h"
 #include "common/image.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
 #include "control/jobs.h"
 #include "iop/drawlayer/cache.h"
 

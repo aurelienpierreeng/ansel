@@ -17,6 +17,9 @@
 */
 
 #include "develop/supervisor.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "common/dtpthread.h"
 #include "common/image.h"            // dt_image_t
 #include "common/introspection.h"    // dt_introspection_field_t
 #include "develop/imageop.h"         // dt_iop_module_t (introspection accessors)
@@ -574,7 +577,7 @@ static void _emit_line(JsonObject *root)
   gsize len = 0;
   gchar *str = json_generator_to_data(gen, &len);
 
-  if(darktable.unmuted & DT_DEBUG_SUPERVISOR)
+  if(dt_get_debug_flags() & DT_DEBUG_SUPERVISOR)
   {
     fprintf(stderr, "%s\n", str);
     fflush(stderr);
@@ -788,7 +791,7 @@ static JsonObject *_envelope(const dt_sv_op_t op, const char *domain, const uint
                              const gboolean resurrected)
 {
   JsonObject *o = json_object_new();
-  json_object_set_double_member(o, "ts", dt_get_wtime() - darktable.start_wtime);
+  json_object_set_double_member(o, "ts", dt_get_wtime() - dt_get_start_wtime());
   json_object_set_string_member(o, "thread", _thread_tag());
   json_object_set_string_member(o, "op", _op_str(op));
   json_object_set_string_member(o, "domain", domain);

@@ -24,24 +24,27 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "system/openmp.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "common/gaussian.h"
+#include "gui/bauhaus.h"
+#include "pixel/gaussian.h"
 #include "common/opencl.h"
 #include "common/imagebuf.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 #include <assert.h>
 #include <gtk/gtk.h>

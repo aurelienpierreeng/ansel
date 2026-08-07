@@ -48,21 +48,21 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
+#include "gui/bauhaus.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "control/conf.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/button.h"
-#include "dtgtk/resetlabel.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/resetlabel.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
@@ -784,7 +784,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g->colorpick), &c);
   }
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
@@ -806,7 +806,7 @@ static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
     dt_gui_freeze_end();
   }
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
@@ -828,7 +828,7 @@ static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
     dt_gui_freeze_end();
   }
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
@@ -850,7 +850,7 @@ static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
     dt_gui_freeze_end();
   }
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -885,7 +885,7 @@ static void colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *self)
   p->color[1] = c.green;
   p->color[2] = c.blue;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 
@@ -903,7 +903,7 @@ static void frame_colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *s
   p->frame_color[1] = c.green;
   p->frame_color[2] = c.blue;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_update(struct dt_iop_module_t *self)
@@ -1040,7 +1040,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->size, "%");
   gtk_widget_set_tooltip_text(g->size, _("size of the border in percent of the full image"));
 
-  g->aspect = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->aspect = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->aspect, 1);
   dt_bauhaus_widget_set_label(g->aspect, N_("aspect"));
   gtk_box_pack_start(GTK_BOX(self->widget), g->aspect, TRUE, TRUE, 0);
@@ -1056,7 +1056,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->aspect_orient, _("landscape"));
   gtk_widget_set_tooltip_text(g->aspect_orient, _("aspect ratio orientation of the image with border"));
 
-  g->pos_h = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->pos_h = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_h, 1);
   dt_bauhaus_widget_set_label(g->pos_h, N_("horizontal position"));
   gtk_box_pack_start(GTK_BOX(self->widget), g->pos_h, TRUE, TRUE, 0);
@@ -1066,7 +1066,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->pos_h_slider = dt_bauhaus_slider_from_params(self, "pos_h");
   gtk_widget_set_tooltip_text(g->pos_h_slider, _("custom horizontal position"));
 
-  g->pos_v = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->pos_v = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_v, 1);
   dt_bauhaus_widget_set_label(g->pos_v, N_("vertical position"));
   gtk_box_pack_start(GTK_BOX(self->widget), g->pos_v, TRUE, TRUE, 0);

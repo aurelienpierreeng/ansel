@@ -50,23 +50,24 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "system/openmp.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/box_filters.h"
-#include "common/bspline.h"
-#include "common/fast_guided_filter.h"
-#include "common/gaussian.h"
+#include "gui/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "common/solvers/choleski.h" // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
+#include "math/choleski.h" // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
-#include "develop/noise_generator.h"
 #include "develop/tiling.h"
 #include <assert.h>
 #include <math.h>
@@ -804,6 +805,18 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_hl_dome_blend = dt_opencl_create_kernel(harmonic_program, "hl_dome_blend");
   gd->kernel_hl_core_floor = dt_opencl_create_kernel(harmonic_program, "hl_core_floor");
   gd->kernel_hl_cmean_reduce = dt_opencl_create_kernel(harmonic_program, "hl_cmean_reduce");
+  gd->kernel_hl_ratio_cmean_blend = dt_opencl_create_kernel(harmonic_program, "hl_ratio_cmean_blend");
+  gd->kernel_hl_clip0_rehue = dt_opencl_create_kernel(harmonic_program, "hl_clip0_rehue");
+  gd->kernel_hl_ring_vote = dt_opencl_create_kernel(harmonic_program, "hl_ring_vote");
+  gd->kernel_hl_cgrad_plateau = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_plateau");
+  gd->kernel_hl_cgrad_guard = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_guard");
+  gd->kernel_hl_cgrad_anchor = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_anchor");
+  gd->kernel_hl_cgrad_share = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_share");
+  gd->kernel_hl_cgrad_store = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_store");
+  gd->kernel_hl_cgrad_gate = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_gate");
+  gd->kernel_hl_cgrad_reproject = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_reproject");
+  gd->kernel_hl_cgrad_hole1c = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_hole1c");
+  gd->kernel_hl_cgrad_write1c = dt_opencl_create_kernel(harmonic_program, "hl_cgrad_write1c");
   gd->kernel_hl_pde_init = dt_opencl_create_kernel(harmonic_program, "hl_pde_init");
   gd->kernel_hl_mask_to_img1 = dt_opencl_create_kernel(harmonic_program, "hl_mask_to_img1");
   gd->kernel_hl_core_blend = dt_opencl_create_kernel(harmonic_program, "hl_core_blend");
@@ -922,6 +935,18 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_hl_dome_blend);
   dt_opencl_free_kernel(gd->kernel_hl_core_floor);
   dt_opencl_free_kernel(gd->kernel_hl_cmean_reduce);
+  dt_opencl_free_kernel(gd->kernel_hl_ratio_cmean_blend);
+  dt_opencl_free_kernel(gd->kernel_hl_clip0_rehue);
+  dt_opencl_free_kernel(gd->kernel_hl_ring_vote);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_plateau);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_guard);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_anchor);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_share);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_store);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_gate);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_reproject);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_hole1c);
+  dt_opencl_free_kernel(gd->kernel_hl_cgrad_write1c);
   dt_opencl_free_kernel(gd->kernel_hl_pde_init);
   dt_opencl_free_kernel(gd->kernel_hl_mask_to_img1);
   dt_opencl_free_kernel(gd->kernel_hl_core_blend);

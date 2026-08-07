@@ -20,26 +20,22 @@
 
 #include "common/act_on.h"
 #include "common/collection.h"
-#include "common/darktable.h"
-#include "common/debug.h"
 #include "common/exif.h"
 #include "common/history.h"
 #include "common/history_snapshot.h"
 #include "common/image.h"
 #include "common/image_cache.h"
-#include "common/mipmap_cache.h"
 #include "common/styles.h"
-#include "common/tags.h"
 #include "common/undo.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "dtgtk/thumbtable.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "gui/hist_dialog.h"
+#include "views/view.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -49,8 +45,8 @@ static void _history_action_finalize_list(const GList *list, const gboolean chan
 {
   if(!changed) return;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_copy((GList *)list));
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_copy((GList *)list));
 }
 
 typedef gboolean (*dt_history_action_fn)(const int32_t imgid, void *user_data);
@@ -60,14 +56,14 @@ static gboolean _history_action_on_list_with_undo(const GList *list, dt_history_
 {
   if(IS_NULL_PTR(list)) return FALSE;
 
-  if(use_undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
+  if(use_undo) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_LT_HISTORY);
   gboolean changed = FALSE;
   for(const GList *l = list; l; l = g_list_next(l))
   {
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     changed |= action(imgid, user_data);
   }
-  if(use_undo) dt_undo_end_group(darktable.undo);
+  if(use_undo) dt_undo_end_group(dt_undo_get_global());
 
   _history_action_finalize_list(list, changed);
   return changed;
@@ -215,7 +211,7 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
                                                        batch);
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+  dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
   return ret_val;
@@ -228,7 +224,7 @@ gboolean dt_history_copy(int32_t imgid)
 
   if(imgid <= 0) return FALSE;
 
-  darktable.view_manager->copy_paste.copied_imageid = imgid;
+  dt_view_manager_get_global()->copy_paste.copied_imageid = imgid;
 
   return TRUE;
 }
@@ -239,7 +235,7 @@ gboolean dt_history_copy_parts(int32_t imgid)
   {
     // run dialog, it will insert into selops the selected moduel
 
-    if(dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste), imgid, TRUE) == GTK_RESPONSE_CANCEL)
+    if(dt_gui_hist_dialog_new(&(dt_view_manager_get_global()->copy_paste), imgid, TRUE) == GTK_RESPONSE_CANCEL)
       return FALSE;
     return TRUE;
   }
@@ -255,12 +251,13 @@ typedef struct _paste_action_ctx_t
 static gboolean _history_paste_apply(const int32_t imgid, void *user_data)
 {
   _paste_action_ctx_t *ctx = (_paste_action_ctx_t *)user_data;
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
+  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
   if(imgid <= 0) return FALSE;
 
-  const gboolean pasted = dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
+  const gboolean pasted = dt_history_copy_and_paste_on_image(copy_paste->copied_imageid,
                                                              imgid,
-                                                             darktable.view_manager->copy_paste.selops,
+                                                             copy_paste->selops,
                                                              FALSE,
                                                              dt_conf_get_int("history/paste/mode"),
                                                              dt_conf_get_bool("history/paste/copy_iop_order"),
@@ -275,7 +272,7 @@ gboolean dt_history_paste_on_image(const int32_t imgid)
 
 gboolean dt_history_paste_on_list(const GList *list)
 {
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
+  if(dt_view_manager_get_global()->copy_paste.copied_imageid <= 0) return FALSE;
   _paste_action_ctx_t ctx = { 0 };
   const gboolean changed = _history_action_on_list(list, _history_paste_apply, &ctx);
   dt_hm_batch_state_cleanup(&ctx.batch);
@@ -284,11 +281,11 @@ gboolean dt_history_paste_on_list(const GList *list)
 
 gboolean dt_history_paste_parts_prepare(void)
 {
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
+  dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
 
   // we launch the dialog
-  const int res = dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste),
-                                         darktable.view_manager->copy_paste.copied_imageid, FALSE);
+  const int res = dt_gui_hist_dialog_new(copy_paste, copy_paste->copied_imageid, FALSE);
 
   if(res != GTK_RESPONSE_OK)
   {
@@ -301,13 +298,14 @@ gboolean dt_history_paste_parts_prepare(void)
 static gboolean _history_paste_parts_apply(const int32_t imgid, void *user_data)
 {
   _paste_action_ctx_t *ctx = (_paste_action_ctx_t *)user_data;
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
-  if(IS_NULL_PTR(darktable.view_manager->copy_paste.selops)) return FALSE;
+  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
+  if(IS_NULL_PTR(copy_paste->selops)) return FALSE;
   if(imgid <= 0) return FALSE;
 
-  const gboolean pasted = dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
+  const gboolean pasted = dt_history_copy_and_paste_on_image(copy_paste->copied_imageid,
                                                              imgid,
-                                                             darktable.view_manager->copy_paste.selops,
+                                                             copy_paste->selops,
                                                              FALSE,
                                                              dt_conf_get_int("history/paste/mode"),
                                                              dt_conf_get_bool("history/paste/copy_iop_order"),
@@ -322,8 +320,9 @@ gboolean dt_history_paste_parts_on_image(const int32_t imgid)
 
 gboolean dt_history_paste_parts_on_list(const GList *list)
 {
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
-  if(IS_NULL_PTR(darktable.view_manager->copy_paste.selops))
+  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  if(copy_paste->copied_imageid <= 0) return FALSE;
+  if(IS_NULL_PTR(copy_paste->selops))
     return FALSE;
   _paste_action_ctx_t ctx = { 0 };
   const gboolean changed = _history_action_on_list(list, _history_paste_parts_apply, &ctx);
@@ -366,7 +365,7 @@ typedef struct dt_history_load_params_t
 static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_data)
 {
   dt_history_load_params_t *params = (dt_history_load_params_t *)user_data;
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
   if(IS_NULL_PTR(img)) return FALSE;
 
   dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
@@ -375,17 +374,17 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
 
   if(dt_exif_xmp_read(img, params->filename, params->history_only))
   {
-    dt_image_cache_write_release(darktable.image_cache, img,
+    dt_image_cache_write_release(dt_image_cache_get_global(), img,
                                  // ugly but if not history_only => called from crawler - do not write the xmp
                                  params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
     return FALSE;
   }
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+  dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
-  dt_image_cache_write_release(darktable.image_cache, img,
+  dt_image_cache_write_release(dt_image_cache_get_global(), img,
                                // ugly but if not history_only => called from crawler - do not write the xmp
                                params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
 
@@ -443,7 +442,7 @@ static gboolean _history_delete_apply(const int32_t imgid, void *user_data)
   if(undo)
   {
     dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist, dt_history_snapshot_undo_pop,
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist, dt_history_snapshot_undo_pop,
                    dt_history_snapshot_undo_lt_history_data_free);
   }
 
@@ -466,7 +465,7 @@ gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, g
   if(dt_conf_get_bool("ask_before_discard"))
   {
     const int img_count = g_list_length(imgs);
-    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    const GtkWidget *win = dt_gui_main_window();
     GtkWidget *dialog = gtk_message_dialog_new(
         GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
         ngettext("Do you really want to clear history of %d image?",
@@ -499,17 +498,19 @@ gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, g
 
   gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
 
+  dt_develop_t *dev = dt_dev_get_global();
+
   if(is_darkroom_image_in_list)
   {
-    dt_dev_undo_start_record(darktable.develop);
+    dt_dev_undo_start_record(dev);
   }
 
   dt_history_delete_on_list(imgs, TRUE);
 
   if(is_darkroom_image_in_list)
   {
-    dt_dev_undo_end_record(darktable.develop);
-    dt_apply_dev_history_update(darktable.develop);
+    dt_dev_undo_end_record(dev);
+    dt_apply_dev_history_update(dev);
   }
 
   dt_control_queue_redraw_center();
@@ -546,7 +547,7 @@ static gboolean _history_style_apply(const int32_t imgid, void *user_data)
                                                                dt_conf_get_bool("history/style/copy_iop_order"),
                                                                NULL) == 0;
 
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 
     return pasted;
   }
@@ -559,7 +560,7 @@ static gboolean _history_style_apply(const int32_t imgid, void *user_data)
                                                      &params->batch);
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+  dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
   const gboolean changed = (ret_val == 0);

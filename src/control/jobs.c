@@ -24,9 +24,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "system/sys_resources.h"
 #include "control/jobs.h"
 #include "control/control.h"
+#include "common/times.h"
 
 #define DT_CONTROL_FG_PRIORITY 4
 
@@ -91,7 +92,7 @@ static void dt_control_job_set_state(_dt_job_t *job, dt_job_state_t state)
   dt_pthread_mutex_lock(&job->state_mutex);
   if(state >= DT_JOB_STATE_FINISHED  && job->state != DT_JOB_STATE_RUNNING && job->progress)
   {
-    dt_control_progress_destroy(darktable.control, job->progress);
+    dt_control_progress_destroy(dt_control_get_global(), job->progress);
     job->progress = NULL;
   }
   job->state = state;
@@ -153,7 +154,7 @@ dt_job_t *dt_control_job_create(dt_job_execute_callback execute, const char *msg
 void dt_control_job_dispose(_dt_job_t *job)
 {
   if(IS_NULL_PTR(job)) return;
-  if(job->progress) dt_control_progress_destroy(darktable.control, job->progress);
+  if(job->progress) dt_control_progress_destroy(dt_control_get_global(), job->progress);
   job->progress = NULL;
   dt_control_job_set_state(job, DT_JOB_STATE_DISPOSED);
   if(job->params_destroy) job->params_destroy(job->params);
@@ -526,7 +527,7 @@ static __thread int threadid = -1;
 int32_t dt_control_get_threadid()
 {
   if(threadid > -1) return threadid;
-  return darktable.control->num_threads;
+  return dt_control_get_global()->num_threads;
 }
 
 static int32_t dt_control_get_threadid_res()
@@ -538,7 +539,7 @@ static int32_t dt_control_get_threadid_res()
 static void *dt_control_work_res(void *ptr)
 {
 #ifdef _OPENMP // need to do this in every thread
-  omp_set_num_threads(darktable.num_openmp_threads);
+  omp_set_num_threads(dt_get_num_openmp_threads());
 #endif
   worker_thread_parameters_t *params = (worker_thread_parameters_t *)ptr;
   dt_control_t *s = params->self;
@@ -583,7 +584,7 @@ static void *dt_control_worker_kicker(void *ptr)
 static void *dt_control_work(void *ptr)
 {
 #ifdef _OPENMP // need to do this in every thread
-  omp_set_num_threads(darktable.num_openmp_threads);
+  omp_set_num_threads(dt_get_num_openmp_threads());
 #endif
   worker_thread_parameters_t *params = (worker_thread_parameters_t *)ptr;
   dt_control_t *control = params->self;
@@ -612,21 +613,21 @@ static void *dt_control_work(void *ptr)
 void dt_control_job_add_progress(dt_job_t *job, const char *message, gboolean cancellable)
 {
   if(IS_NULL_PTR(job)) return;
-  job->progress = dt_control_progress_create(darktable.control, TRUE, message);
+  job->progress = dt_control_progress_create(dt_control_get_global(), TRUE, message);
   if(cancellable)
-    dt_control_progress_attach_job(darktable.control, job->progress, job);
+    dt_control_progress_attach_job(dt_control_get_global(), job->progress, job);
 }
 
 void dt_control_job_set_progress_message(dt_job_t *job, const char *message)
 {
   if(IS_NULL_PTR(job) || !job->progress) return;
-  dt_control_progress_set_message(darktable.control, job->progress, message);
+  dt_control_progress_set_message(dt_control_get_global(), job->progress, message);
 }
 
 void dt_control_job_set_progress(dt_job_t *job, double value)
 {
   if(IS_NULL_PTR(job) || !job->progress) return;
-  dt_control_progress_set_progress(darktable.control, job->progress, value);
+  dt_control_progress_set_progress(dt_control_get_global(), job->progress, value);
 }
 
 double dt_control_job_get_progress(dt_job_t *job)

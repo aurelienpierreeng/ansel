@@ -23,7 +23,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "gui/gtk.h"
 #include "common/dbus.h"
 #include "control/progress.h"
 #include "control/control.h"
@@ -67,10 +69,10 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
 #ifndef _WIN32
   // this should work for unity as well as kde
   // https://wiki.ubuntu.com/Unity/LauncherAPI#Low_level_DBus_API:_com.canonical.Unity.LauncherEntry
-  if(darktable.dbus && darktable.dbus->dbus_connection)
+  if(dt_dbus_get_global() && dt_dbus_get_global()->dbus_connection)
   {
     GError *error = NULL;
-    g_object_ref(G_OBJECT(darktable.dbus->dbus_connection));
+    g_object_ref(G_OBJECT(dt_dbus_get_global()->dbus_connection));
 
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
@@ -78,7 +80,7 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
     g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(TRUE));
     GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
-    g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
+    g_dbus_connection_emit_signal(dt_dbus_get_global()->dbus_connection,
                                   "com.canonical.Unity",
                                   "/darktable",
                                   "com.canonical.Unity.LauncherEntry",
@@ -105,7 +107,7 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
 
   if(control->progress_system.taskbarlist)
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)));
+    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(ITaskbarList3_SetProgressState(control->progress_system.taskbarlist, hwnd, TBPF_NORMAL) != S_OK)
       fprintf(stderr, "[progress_create] SetProgressState failed\n");
     if(ITaskbarList3_SetProgressValue(control->progress_system.taskbarlist, hwnd, control->progress_system.global_progress * 100, 100) != S_OK)
@@ -121,7 +123,7 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
 
 #ifndef _WIN32
 
-  if(darktable.dbus && darktable.dbus->dbus_connection)
+  if(dt_dbus_get_global() && dt_dbus_get_global()->dbus_connection)
   {
     GError *error = NULL;
 
@@ -130,7 +132,7 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
     GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
-    g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
+    g_dbus_connection_emit_signal(dt_dbus_get_global()->dbus_connection,
                                   "com.canonical.Unity",
                                   "/darktable",
                                   "com.canonical.Unity.LauncherEntry",
@@ -148,7 +150,7 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
 
   if(control->progress_system.taskbarlist)
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)));
+    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(ITaskbarList3_SetProgressValue(control->progress_system.taskbarlist, hwnd, control->progress_system.global_progress * 100, 100) != S_OK)
       fprintf(stderr, "[progress_create] SetProgressValue failed\n");
   }
@@ -172,7 +174,7 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
 
 #ifndef _WIN32
 
-  if(darktable.dbus && darktable.dbus->dbus_connection)
+  if(dt_dbus_get_global() && dt_dbus_get_global()->dbus_connection)
   {
     GError *error = NULL;
 
@@ -183,7 +185,7 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
     GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
-    g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
+    g_dbus_connection_emit_signal(dt_dbus_get_global()->dbus_connection,
                                   "com.canonical.Unity",
                                   "/darktable",
                                   "com.canonical.Unity.LauncherEntry",
@@ -196,15 +198,15 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
       g_error_free(error);
     }
 
-    g_object_unref(G_OBJECT(darktable.dbus->dbus_connection));
-    darktable.dbus->dbus_connection = NULL;
+    g_object_unref(G_OBJECT(dt_dbus_get_global()->dbus_connection));
+    dt_dbus_get_global()->dbus_connection = NULL;
   }
 
 #else // _WIN32
 
   if(control->progress_system.taskbarlist)
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui)));
+    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(control->progress_system.n_progress_bar == 0)
     {
       if(ITaskbarList3_SetProgressState(control->progress_system.taskbarlist, hwnd, TBPF_NOPROGRESS) != S_OK)
@@ -225,7 +227,7 @@ void dt_control_progress_init(struct dt_control_t *control)
 {
 #ifndef _WIN32
 
-  if(darktable.dbus && darktable.dbus->dbus_connection)
+  if(dt_dbus_get_global() && dt_dbus_get_global()->dbus_connection)
   {
     GError *error = NULL;
 
@@ -234,7 +236,7 @@ void dt_control_progress_init(struct dt_control_t *control)
     g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(FALSE));
     GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
-    g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
+    g_dbus_connection_emit_signal(dt_dbus_get_global()->dbus_connection,
                                   "com.canonical.Unity",
                                   "/darktable",
                                   "com.canonical.Unity.LauncherEntry",
@@ -247,8 +249,8 @@ void dt_control_progress_init(struct dt_control_t *control)
       g_error_free(error);
     }
 
-    g_object_unref(G_OBJECT(darktable.dbus->dbus_connection));
-    darktable.dbus->dbus_connection = NULL;
+    g_object_unref(G_OBJECT(dt_dbus_get_global()->dbus_connection));
+    dt_dbus_get_global()->dbus_connection = NULL;
   }
 
 #else // _WIN32

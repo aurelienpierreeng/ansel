@@ -59,22 +59,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/opencl.h"
+#include "gui/bauhaus.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/openmp_maths.h"
-#include "dtgtk/drawingarea.h"
+#include "math/openmp_maths.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 
 #include "gui/presets.h"
 #include "iop/iop_api.h"
-#include "libs/colorpicker.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 #define DT_GUI_CURVE_INFL .3f
@@ -355,7 +357,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
        || previous_color[1] != p->levels[1]
        || previous_color[2] != p->levels[2])
     {
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
 }
@@ -628,7 +630,7 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK
                                              | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
-                                             | GDK_LEAVE_NOTIFY_MASK | darktable.gui->scroll_mask);
+                                             | GDK_LEAVE_NOTIFY_MASK | dt_gui_get_global()->scroll_mask);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(dt_iop_levels_area_draw), self);
   g_signal_connect(G_OBJECT(c->area), "button-press-event", G_CALLBACK(dt_iop_levels_button_press), self);
   g_signal_connect(G_OBJECT(c->area), "button-release-event", G_CALLBACK(dt_iop_levels_button_release), self);
@@ -887,7 +889,7 @@ static gboolean dt_iop_levels_motion_notify(GtkWidget *widget, GdkEventMotion *e
 
       dt_iop_levels_move_handle(self, c->handle_move, mx, p->levels, c->drag_start_percentage);
     }
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else
   {
@@ -927,7 +929,7 @@ static gboolean dt_iop_levels_button_press(GtkWidget *widget, GdkEventButton *ev
       // Needed in case the user scrolls or drags immediately after a reset,
       // as drag_start_percentage is only updated when the mouse is moved.
       c->drag_start_percentage = 0.5;
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       gtk_widget_queue_draw(self->widget);
     }
     else
@@ -974,7 +976,7 @@ static gboolean dt_iop_levels_scroll(GtkWidget *widget, GdkEventScroll *event, g
   {
     float new_position = p->levels[c->handle_move] - interval * delta_y;
     dt_iop_levels_move_handle(self, c->handle_move, new_position, p->levels, c->drag_start_percentage);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     return TRUE;
   }
 
@@ -994,7 +996,7 @@ static void dt_iop_levels_autoadjust_callback(GtkRange *range, dt_iop_module_t *
   if(!IS_NULL_PTR(c->activeToggleButton)) gtk_toggle_button_set_active(c->activeToggleButton, FALSE);
   c->last_picked_color = -1;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 // clang-format off

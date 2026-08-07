@@ -35,16 +35,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/collection.h"
-#include "common/darktable.h"
-#include "common/debug.h"
+#include "common/glib_utils.h"
 #include "common/image_cache.h"
 #include "common/ratings.h"
 #include "common/undo.h"
 #include "common/grouping.h"
 #include "views/view.h"
-#include "control/conf.h"
 #include "control/control.h"
-#include "gui/gtk.h"
 
 
 #define DT_RATINGS_UPGRADE -1
@@ -85,14 +82,14 @@ char *dt_ratings_get_name(const int rating)
 int dt_ratings_get(const int32_t imgid)
 {
   int stars = 0;
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(image)
   {
     if(image->flags & DT_IMAGE_REJECTED)
       stars = DT_VIEW_REJECT;
     else
       stars = DT_VIEW_RATINGS_MASK & image->flags;
-    dt_image_cache_read_release(darktable.image_cache, image);
+    dt_image_cache_read_release(dt_image_cache_get_global(), image);
   }
   return stars;
 }
@@ -100,7 +97,7 @@ int dt_ratings_get(const int32_t imgid)
 static void _ratings_apply_to_image(const int32_t imgid, const int rating)
 {
   int new_rating = rating;
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
 
   if(image)
   {
@@ -115,11 +112,11 @@ static void _ratings_apply_to_image(const int32_t imgid, const int rating)
         | (DT_VIEW_RATINGS_MASK & new_rating);
     }
     // synch through:
-    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+    dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
   }
   else
   {
-    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
+    dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_RELAXED);
   }
 }
 
@@ -133,7 +130,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
       _ratings_apply_to_image(ratings->imgid, (action == DT_ACTION_UNDO) ? ratings->before : ratings->after);
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(ratings->imgid));
     }
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
   }
 }
 
@@ -202,16 +199,16 @@ void dt_ratings_apply_on_list(GList *img, const int rating, const gboolean undo_
   if(img)
   {
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_RATINGS);
+    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_RATINGS);
 
     _ratings_apply(img, rating, &undo, undo_on);
 
     if(undo_on)
     {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
-      dt_undo_end_group(darktable.undo);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
     }
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
     dt_toast_log(_("Rating set to %s for %i image(s)"), dt_ratings_get_name(rating), g_list_length(img));
   }
 }
@@ -227,7 +224,7 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
   if(imgs)
   {
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_RATINGS);
+    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_RATINGS);
     if(group_on) dt_grouping_add_grouped_images(&imgs);
 
     if(!g_list_shorter_than(imgs, 2)) // pop up a toast if rating multiple images at once
@@ -244,8 +241,8 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
 
     if(undo_on)
     {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
-      dt_undo_end_group(darktable.undo);
+      dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_RATINGS, undo, _pop_undo, _ratings_undo_data_free);
+      dt_undo_end_group(dt_undo_get_global());
     }
     g_list_free(imgs);
     imgs = NULL;

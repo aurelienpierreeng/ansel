@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_CACHE_H
+#define DT_IOP_DRAWLAYER_CACHE_H
 
 #include "develop/imageop.h"
 #include "develop/pixelpipe_cache.h"
@@ -141,3 +142,4 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
                                                         gboolean *cache_dirty, gboolean *process_patch_dirty,
                                                         dt_drawlayer_damaged_rect_t *process_dirty_rect,
                                                         const char *update_buffer_name);
+#endif // DT_IOP_DRAWLAYER_CACHE_H

@@ -45,17 +45,19 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/imagebuf.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/develop.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "iop/iop_api.h"

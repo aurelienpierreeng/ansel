@@ -19,9 +19,8 @@
 // Gaussian blur helpers + per-region blur, and the OpenCL blur / device-timing runtime prelude. (implementation;
 // see blur.h for the public API.)
 
-#include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "iop/highlights/blur.h"
+#include "iop/highlights/common.h"
 #include <string.h>
 
 static __thread _hl_gauss_slot_t _hl_gauss_cache[HL_GAUSS_SLOTS] = { { 0 } };

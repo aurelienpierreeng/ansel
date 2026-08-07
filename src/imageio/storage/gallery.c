@@ -49,25 +49,25 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "common/debug.h"
-#include "common/file_location.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
+#include <glib/gstdio.h>
 #include "common/image.h"
-#include "common/image_cache.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
 #include "common/metadata.h"
 #include "common/utility.h"
 #include "common/variables.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
-#include "dtgtk/button.h"
-#include "dtgtk/paint.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/paint.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
 #include "imageio/storage/imageio_storage_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,7 +136,7 @@ void *legacy_params(dt_imageio_module_storage_t *self, const void *const old_par
 static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
 {
   gallery_t *d = (gallery_t *)self->gui_data;
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
          _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
          _("_select as output destination"), _("_cancel"));

@@ -29,27 +29,28 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
-#include "common/math.h"
+#include "pixel/interpolation.h"
+#include "math/math.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/expander.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/guides.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <assert.h>
@@ -206,7 +207,7 @@ static void _params_to_gui(dt_iop_crop_params_t *p, dt_iop_crop_gui_data_t *g)
 
 static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop_crop_params_t *p)
 {
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return;
   // we want value in iop space
   const float wd = (float)piece->buf_out.width; //self->dev->roi.preview_width;
@@ -219,7 +220,7 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
 
   dt_boundingbox_t points = { bbox_left, bbox_top, bbox_right, bbox_bottom };
 
-  if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+  if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                        DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
     //dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
@@ -462,7 +463,7 @@ static float _aspect_ratio_get(dt_iop_module_t *self, GtkWidget *combo)
   if(text && !g_strcmp0(text, _("original image")))
   {
     int proc_iwd = 0, proc_iht = 0;
-    dt_dev_get_processed_size(darktable.develop, &proc_iwd, &proc_iht);
+    dt_dev_get_processed_size(self->dev, &proc_iwd, &proc_iht);
 
     if(!(proc_iwd > 0 && proc_iht > 0)) return 0.0f;
 
@@ -596,7 +597,7 @@ static void _aspect_apply(dt_iop_module_t *self, _grab_region_t grab)
   if(aspect <= 0) return;
 
   int iwd, iht;
-  dt_dev_get_processed_size(darktable.develop, &iwd, &iht);
+  dt_dev_get_processed_size(self->dev, &iwd, &iht);
 
   // since one rarely changes between portrait and landscape by cropping,
   // long side of the crop box should match the long side of the image.
@@ -1093,7 +1094,7 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   dt_iop_set_cache_bypass(self, FALSE);
 
   // Commit history and refresh view
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_dev_get_thumbnail_size(self->dev);
 
   // The following will de-activate the edit button and trigger the callback.
@@ -1258,7 +1259,7 @@ void gui_init(struct dt_iop_module_t *self)
     }
   }
 
-  g->aspect_presets = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->aspect_presets = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->aspect_presets, 1);
   dt_bauhaus_widget_set_label(g->aspect_presets, N_("aspect"));
 
@@ -1413,7 +1414,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   float pzy = pzxpy[1];
   cairo_set_line_width(cr, border_width);
 
-  if(_set_max_clip(darktable.develop->virtual_pipe, self))
+  if(_set_max_clip(self->dev->virtual_pipe, self))
   {
     cairo_set_source_rgba(cr, .1, .1, .1, .8);
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
@@ -1442,13 +1443,13 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   // draw cropping window dimensions if first mouse button is pressed
-  if(darktable.control->button_down && darktable.control->button_down_which == 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
   {
     char dimensions[16];
     dimensions[0] = '\0';
     PangoLayout *layout;
     PangoRectangle ext;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
     layout = pango_cairo_create_layout(cr);
@@ -1525,7 +1526,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, border, g->wd, g->ht);
 
-  _set_max_clip(darktable.develop->virtual_pipe, self);
+  _set_max_clip(self->dev->virtual_pipe, self);
 
   if(g->dragging)
   {
@@ -1645,18 +1646,18 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       dt_control_queue_cursor(GDK_BOTTOM_LEFT_CORNER);
     else if(grab == GRAB_NONE)
     {
-      dt_control_hinter_message(darktable.control, "");
+      dt_control_hinter_message(dt_control_get_global(), "");
       dt_control_queue_cursor(GDK_LEFT_PTR);
     }
     if(grab != GRAB_NONE)
-      dt_control_hinter_message(darktable.control, _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag"));
+      dt_control_hinter_message(dt_control_get_global(), _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag"));
     dt_control_queue_redraw_center();
   }
   else
   {
     dt_control_queue_cursor(GDK_FLEUR);
     g->cropping = GRAB_CENTER;
-    dt_control_hinter_message(darktable.control, _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag"));
+    dt_control_hinter_message(dt_control_get_global(), _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag"));
     dt_control_queue_redraw_center();
   }
   return 0;

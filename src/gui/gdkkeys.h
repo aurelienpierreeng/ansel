@@ -15,6 +15,9 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+#ifndef DT_GUI_GDKKEYS_H
+#define DT_GUI_GDKKEYS_H
 #include <gdk/gdkkeysyms.h>
 #include <glib.h>
 
@@ -187,3 +190,5 @@ static inline guint dt_keys_mainpad_alternatives(const guint key_val)
 
   return alt_char;
 }
+
+#endif // DT_GUI_GDKKEYS_H

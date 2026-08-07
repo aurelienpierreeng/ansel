@@ -24,12 +24,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "control/signal.h"
-#include "dtgtk/button.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "views/view.h"
 
 DT_MODULE(1)
 
@@ -96,8 +96,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_style_context_add_class(gtk_widget_get_style_context(d->container), "dt-module-toolbox");
 
   /* setup proxy */
-  darktable.view_manager->proxy.module_toolbox.module = self;
-  darktable.view_manager->proxy.module_toolbox.add = _lib_module_toolbox_add;
+  dt_view_manager_get_global()->proxy.module_toolbox.module = self;
+  dt_view_manager_get_global()->proxy.module_toolbox.add = _lib_module_toolbox_add;
 }
 
 void gui_cleanup(dt_lib_module_t *self)

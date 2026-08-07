@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_MODULE_H
+#define DT_IOP_DRAWLAYER_MODULE_H
 
 #include "iop/drawlayer/runtime.h"
 
@@ -94,3 +95,4 @@ static inline float _mapping_profile_value(const drawlayer_mapping_profile_t pro
       return 1.f + v;
   }
 }
+#endif // DT_IOP_DRAWLAYER_MODULE_H

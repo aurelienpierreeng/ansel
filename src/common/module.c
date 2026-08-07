@@ -21,7 +21,9 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/paths.h"
 #include <stdlib.h>
 #include <string.h>
 #include <gmodule.h>
@@ -30,8 +32,7 @@
 #include "config.h"
 #include "common/file_location.h"
 #include "common/module.h"
-#include "control/conf.h"
-#include "gui/splash.h"
+#include "common/conf.h"
 
 GList *dt_module_load_modules(const char *subdir, size_t module_size,
                               int (*load_module_so)(void *module, const char *libname, const char *plugin_name),

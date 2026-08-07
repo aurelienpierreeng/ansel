@@ -17,11 +17,12 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
 
 #include "iop/drawlayer/widgets.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
 
 #include "iop/drawlayer/paint.h"
 #include "gui/gtk.h"
@@ -330,7 +331,7 @@ static void _color_picker_geometry(const GtkWidget *widget, float *uv_x, float *
 /** @brief Hit-margin in device-independent pixels for drag continuity. */
 static float _color_picker_hit_margin(void)
 {
-  const float ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0f;
+  const float ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0f;
   return DT_PIXEL_APPLY_DPI(12.0f) * ppd;
 }
 

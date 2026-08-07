@@ -13,7 +13,8 @@
     GNU General Public License for more details.
 */
 
-#pragma once
+#ifndef DT_VIEWS_DEV_TOOLBOX_H
+#define DT_VIEWS_DEV_TOOLBOX_H
 
 #include <stddef.h>
 
@@ -64,9 +65,9 @@ void dt_dev_toolbox_create(struct dt_develop_t *dev, dt_view_type_flags_t views,
  * indication", "Focus softproof options"...) are the same regardless of
  * which view/accel group they're bound to, since the buttons themselves are
  * shared — only the accelerator group and category differ per caller (e.g.
- * darkroom passes darktable.gui->accels->darkroom_accels and
+ * darkroom passes dt_gui_get_accels()->darkroom_accels and
  * N_("Darkroom/Toolbox"); Studio Capture passes
- * darktable.gui->accels->lighttable_accels, the group it actually connects,
+ * dt_gui_get_accels()->lighttable_accels, the group it actually connects,
  * and its own category). Call after dt_dev_toolbox_create() so the buttons
  * (and popovers) already exist. */
 void dt_dev_toolbox_add_accels(struct dt_develop_t *dev, GtkAccelGroup *accel_group, const char *category,
@@ -112,3 +113,4 @@ void dt_dev_toolbox_popover_set_preshow(GtkWidget *popover, void (*preshow)(gpoi
  * it to look a button's popover back up (e.g. a "focus this popover"
  * accelerator). */
 #define DT_DEV_TOOLBOX_POPOVER_KEY "dt-dev-toolbox-popover"
+#endif // DT_VIEWS_DEV_TOOLBOX_H

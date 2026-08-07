@@ -15,10 +15,10 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_CONTROL_JOBS_IMPORT_JOBS_H
+#define DT_CONTROL_JOBS_IMPORT_JOBS_H
 
 #include "common/image.h"
-#include "control/control.h"
 #include "common/variables.h"
 
 #ifdef __cplusplus
@@ -119,3 +119,4 @@ int dt_control_import(dt_control_import_t data);
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_CONTROL_JOBS_IMPORT_JOBS_H

@@ -53,16 +53,19 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/debug.h"
-#include "common/math.h"
-#include "common/opencl.h"
-#include "control/control.h"
+#include "math/math.h"
 #include "develop/develop.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -406,7 +409,7 @@ static void red_callback(GtkWidget *slider, gpointer user_data)
   if(output_channel_index >= 0 && value != p->red[output_channel_index])
   {
     p->red[output_channel_index] = value;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
 
@@ -421,7 +424,7 @@ static void green_callback(GtkWidget *slider, gpointer user_data)
   if(output_channel_index >= 0 && value != p->green[output_channel_index])
   {
     p->green[output_channel_index] = value;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
 
@@ -436,7 +439,7 @@ static void blue_callback(GtkWidget *slider, gpointer user_data)
   if(output_channel_index >= 0 && value != p->blue[output_channel_index])
   {
     p->blue[output_channel_index] = value;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
 
@@ -568,7 +571,7 @@ void gui_init(struct dt_iop_module_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   /* output */
-  g->output_channel = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->output_channel = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->output_channel, N_("destination"));
   dt_bauhaus_combobox_add(g->output_channel, _("hue"));
   dt_bauhaus_combobox_add(g->output_channel, _("saturation"));
@@ -581,19 +584,19 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->output_channel), "value-changed", G_CALLBACK(output_callback), self);
 
   /* red */
-  g->scale_red = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.0, 2.0, 0, p->red[CHANNEL_RED], 3);
+  g->scale_red = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.0, 2.0, 0, p->red[CHANNEL_RED], 3);
   gtk_widget_set_tooltip_text(g->scale_red, _("amount of red channel in the output channel"));
   dt_bauhaus_widget_set_label(g->scale_red, N_("red"));
   g_signal_connect(G_OBJECT(g->scale_red), "value-changed", G_CALLBACK(red_callback), self);
 
   /* green */
-  g->scale_green = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.0, 2.0, 0, p->green[CHANNEL_RED], 3);
+  g->scale_green = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.0, 2.0, 0, p->green[CHANNEL_RED], 3);
   gtk_widget_set_tooltip_text(g->scale_green, _("amount of green channel in the output channel"));
   dt_bauhaus_widget_set_label(g->scale_green, N_("green"));
   g_signal_connect(G_OBJECT(g->scale_green), "value-changed", G_CALLBACK(green_callback), self);
 
   /* blue */
-  g->scale_blue = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.0, 2.0, 0, p->blue[CHANNEL_RED], 3);
+  g->scale_blue = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.0, 2.0, 0, p->blue[CHANNEL_RED], 3);
   gtk_widget_set_tooltip_text(g->scale_blue, _("amount of blue channel in the output channel"));
   dt_bauhaus_widget_set_label(g->scale_blue, N_("blue"));
   g_signal_connect(G_OBJECT(g->scale_blue), "value-changed", G_CALLBACK(blue_callback), self);
@@ -608,7 +611,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_gui_presets_add_generic(_("swap R and B"), self->op, self->version(),
                              &(dt_iop_channelmixer_params_t){ { 0, 0, 0, 0, 0, 1, 0 },
@@ -722,7 +725,7 @@ void init_presets(dt_iop_module_so_t *self)
                              sizeof(dt_iop_channelmixer_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 // clang-format off

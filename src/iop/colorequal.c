@@ -24,17 +24,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/colorequal_shared.h"
-#include "common/chromatic_adaptation.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "pixel/colorequal_shared.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "common/module_versioning.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/lut3d.h"
-#include "common/lut_viewer.h"
+#include "gui/lut_viewer.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/develop.h"
@@ -43,7 +48,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe_cache.h"
-#include "dtgtk/drawingarea.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -546,7 +550,7 @@ _sample_ring_anchor(const float ring_surface[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP
 static void _build_clut(dt_iop_colorequal_data_t *d, const dt_iop_colorequal_params_t *p,
                         const dt_iop_order_iccprofile_info_t *lut_profile)
 {
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
   const float white = dt_colorrings_graph_white();
   const size_t clut_size
@@ -950,7 +954,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   if(!self->enabled) return;
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   const dt_iop_colorequal_params_t *p = g ? &g->gui_params : (const dt_iop_colorequal_params_t *)self->params;
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
 
   if(IS_NULL_PTR(g->viewer)) return;
@@ -1005,7 +1009,7 @@ static void _update_gui_lut_cache_throttled(gpointer data)
 
 static void _update_curve_cache(dt_iop_colorequal_gui_data_t *g, const dt_iop_colorequal_params_t *p)
 {
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
   for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
     for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
@@ -1168,10 +1172,10 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     cairo_clip(background_cr);
 
     cairo_set_line_width(background_cr, DT_PIXEL_APPLY_DPI(0.5f));
-    set_color(background_cr, darktable.bauhaus->graph_border);
+    set_color(background_cr, dt_bauhaus_get_global()->graph_border);
     dt_draw_grid(background_cr, 8, 0, 0, graph_width, graph_height);
 
-    set_color(background_cr, darktable.bauhaus->graph_fg);
+    set_color(background_cr, dt_bauhaus_get_global()->graph_fg);
     cairo_set_line_width(background_cr, DT_PIXEL_APPLY_DPI(1.f));
     cairo_move_to(background_cr, 0.f, 0.5f * graph_height);
     cairo_line_to(background_cr, graph_width, 0.5f * graph_height);
@@ -1214,7 +1218,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   {
     const float picker_x = dt_colorrings_hue_to_curve_x(g->picker_hue) * graph_width;
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5f));
-    set_color(cr, darktable.bauhaus->graph_fg);
+    set_color(cr, dt_bauhaus_get_global()->graph_fg);
     cairo_move_to(cr, picker_x, 0.f);
     cairo_line_to(cr, picker_x, graph_height + DT_IOP_COLOREQUAL_AXIS_HEIGHT);
     cairo_stroke(cr);
@@ -1243,7 +1247,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   cairo_clip(cr);
 
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.f));
-  set_color(cr, darktable.bauhaus->graph_fg);
+  set_color(cr, dt_bauhaus_get_global()->graph_fg);
 
   for(int k = 0; k < DT_IOP_COLOREQUAL_GRAPH_RES; k++)
   {
@@ -1267,9 +1271,9 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     const float y = (1.f - curve[k].y) * graph_height;
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.f));
     cairo_arc(cr, x, y, DT_PIXEL_APPLY_DPI(k == g->selected[ring][channel] ? 5.f : 4.f), 0.f, 2.f * M_PI_F);
-    set_color(cr, darktable.bauhaus->graph_fg);
+    set_color(cr, dt_bauhaus_get_global()->graph_fg);
     cairo_stroke_preserve(cr);
-    set_color(cr, darktable.bauhaus->graph_bg);
+    set_color(cr, dt_bauhaus_get_global()->graph_bg);
     cairo_fill(cr);
   }
 
@@ -1947,7 +1951,7 @@ static void _pipe_rgb_to_dt_ucs_hsb(dt_iop_module_t *self, dt_dev_pixelpipe_t *p
 static void _switch_preview_cursor(dt_iop_module_t *self)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *widget = dt_gui_main_window();
 
   if(!widget || !gtk_widget_get_window(widget)) return;
 
@@ -1968,7 +1972,7 @@ static void _switch_preview_cursor(dt_iop_module_t *self)
   if(g->cursor_valid && self->enabled)
   {
     dt_control_set_cursor_visible(FALSE);
-    dt_control_hinter_message(darktable.control,
+    dt_control_hinter_message(dt_control_get_global(),
                               _("scroll over image to adjust the selected color graph\n"
                                 "right-click to add a node at the sampled hue"));
     return;
@@ -2013,8 +2017,8 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
     return FALSE;
   }
 
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
 
   const float point_preview[2] = { (float)g->cursor_pos_x, (float)g->cursor_pos_y };
   float point_image[2] = { point_preview[0], point_preview[1] };
@@ -2041,8 +2045,8 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   input_rgb[2] = input_rgbf[2];
   input_rgb[3] = 0.f;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
 
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, dev->preview_pipe);
   const dt_iop_order_iccprofile_info_t *const lut_profile = g->viewer_lut.lut_profile;
@@ -2124,7 +2128,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     dt_bauhaus_slider_set(g->white_level, p->white_level);
     dt_gui_freeze_end();
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else if(picker == g->module_picker)
   {
@@ -2241,7 +2245,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   {
     if(!g->preview_signal_connected)
     {
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
                                       G_CALLBACK(_cacheline_ready_callback), self);
       g->preview_signal_connected = TRUE;
     }
@@ -2251,7 +2255,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
   else if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
     g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-focus-leave");
@@ -2282,7 +2286,7 @@ void gui_cleanup(dt_iop_module_t *self)
   dt_lut_viewer_destroy(&g->viewer);
   if(g->preview_signal_connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_cacheline_ready_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_cacheline_ready_callback), self);
     g->preview_signal_connected = FALSE;
   }
   dt_dev_pixelpipe_cache_wait_cleanup(&g->preview_wait, "colorequal-gui-cleanup");

@@ -40,24 +40,29 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
-#include "bauhaus/bauhaus.h"
+#include "common/macros.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/math.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "gui/bauhaus.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "common/exif.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include "develop/tiling.h"
-#include "dtgtk/drawingarea.h"
+#include "gui/dtgtk/drawingarea.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
-#include "common/solvers/gaussian_elimination.h"
+#include "math/gaussian_elimination.h"
 
 #include <assert.h>
 #include <math.h>
@@ -956,7 +961,7 @@ static void target_L_callback(GtkWidget *slider, gpointer user_data)
     p->target_L[g->patch] = dt_bauhaus_slider_get(slider);
   else
     p->target_L[g->patch] = p->source_L[g->patch] + dt_bauhaus_slider_get(slider);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_a_callback(GtkWidget *slider, gpointer user_data)
@@ -988,7 +993,7 @@ static void target_a_callback(GtkWidget *slider, gpointer user_data)
     dt_bauhaus_slider_set(g->scale_C, Cout-Cin);
     dt_gui_freeze_end();
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_b_callback(GtkWidget *slider, gpointer user_data)
@@ -1020,7 +1025,7 @@ static void target_b_callback(GtkWidget *slider, gpointer user_data)
     dt_bauhaus_slider_set(g->scale_C, Cout-Cin);
     dt_gui_freeze_end();
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_C_callback(GtkWidget *slider, gpointer user_data)
@@ -1056,7 +1061,7 @@ static void target_C_callback(GtkWidget *slider, gpointer user_data)
     dt_bauhaus_slider_set(g->scale_b, p->target_b[g->patch] - p->source_b[g->patch]);
     dt_gui_freeze_end();
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void target_callback(GtkWidget *combo, gpointer user_data)
@@ -1225,7 +1230,7 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
     p->target_L[patch] = p->source_L[patch];
     p->target_a[patch] = p->source_a[patch];
     p->target_b[patch] = p->source_b[patch];
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_gui_freeze_begin();
     _colorchecker_update_sliders(self);
     dt_gui_freeze_end();
@@ -1243,7 +1248,7 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
     memmove(p->source_a+patch, p->source_a+patch+1, sizeof(float)*(p->num_patches-1-patch));
     memmove(p->source_b+patch, p->source_b+patch+1, sizeof(float)*(p->num_patches-1-patch));
     p->num_patches--;
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_gui_freeze_begin();
     _colorchecker_rebuild_patch_list(self);
     _colorchecker_update_sliders(self);
@@ -1280,7 +1285,7 @@ static gboolean checker_button_press(GtkWidget *widget, GdkEventButton *event,
       p->target_L[patch] = p->source_L[patch] = self->picked_color[0];
       p->target_a[patch] = p->source_a[patch] = self->picked_color[1];
       p->target_b[patch] = p->source_b[patch] = self->picked_color[2];
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
       dt_gui_freeze_begin();
       _colorchecker_rebuild_patch_list(self);
@@ -1324,7 +1329,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->patch = 0;
   g->drawn_patch = -1;
-  g->combobox_patch = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->combobox_patch = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->combobox_patch, N_("patch"));
   gtk_widget_set_tooltip_text(g->combobox_patch, _("color checker patch"));
   char cboxentry[1024];
@@ -1336,30 +1341,30 @@ void gui_init(struct dt_iop_module_t *self)
 
   dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, g->combobox_patch);
 
-  g->scale_L = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -100.0, 200.0, 0, 0.0f, 2);
+  g->scale_L = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -100.0, 200.0, 0, 0.0f, 2);
   gtk_widget_set_tooltip_text(g->scale_L, _("adjust target color Lab 'L' channel\nlower values darken target color while higher brighten it"));
   dt_bauhaus_widget_set_label(g->scale_L, N_("lightness"));
 
-  g->scale_a = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -256.0, 256.0, 0, 0.0f, 2);
+  g->scale_a = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -256.0, 256.0, 0, 0.0f, 2);
   gtk_widget_set_tooltip_text(g->scale_a, _("adjust target color Lab 'a' channel\nlower values shift target color towards greens while higher shift towards magentas"));
   dt_bauhaus_widget_set_label(g->scale_a, N_("green-magenta offset"));
   dt_bauhaus_slider_set_stop(g->scale_a, 0.0, 0.0, 1.0, 0.2);
   dt_bauhaus_slider_set_stop(g->scale_a, 0.5, 1.0, 1.0, 1.0);
   dt_bauhaus_slider_set_stop(g->scale_a, 1.0, 1.0, 0.0, 0.2);
 
-  g->scale_b = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -256.0, 256.0, 0, 0.0f, 2);
+  g->scale_b = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -256.0, 256.0, 0, 0.0f, 2);
   gtk_widget_set_tooltip_text(g->scale_b, _("adjust target color Lab 'b' channel\nlower values shift target color towards blues while higher shift towards yellows"));
   dt_bauhaus_widget_set_label(g->scale_b, N_("blue-yellow offset"));
   dt_bauhaus_slider_set_stop(g->scale_b, 0.0, 0.0, 0.0, 1.0);
   dt_bauhaus_slider_set_stop(g->scale_b, 0.5, 1.0, 1.0, 1.0);
   dt_bauhaus_slider_set_stop(g->scale_b, 1.0, 1.0, 1.0, 0.0);
 
-  g->scale_C = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -128.0, 128.0, 0, 0.0f, 2);
+  g->scale_C = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -128.0, 128.0, 0, 0.0f, 2);
   gtk_widget_set_tooltip_text(g->scale_C, _("adjust target color saturation\nadjusts 'a' and 'b' channels of target color in Lab space simultaneously\nlower values scale towards lower saturation while higher scale towards higher saturation"));
   dt_bauhaus_widget_set_label(g->scale_C, N_("saturation"));
 
   g->absolute_target = 0;
-  g->combobox_target = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->combobox_target = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->combobox_target, N_("target color"));
   gtk_widget_set_tooltip_text(g->combobox_target, _("control target color of the patches\nrelative - target color is relative from the patch original color\nabsolute - target color is absolute Lab value"));
   dt_bauhaus_combobox_add(g->combobox_target, _("relative"));

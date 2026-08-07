@@ -39,12 +39,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_CONTROL_H
+#define DT_CONTROL_CONTROL_H
 
-#include "common/darktable.h"
-#include "common/dtpthread.h"
 
-#include "control/settings.h"
 
 #include <gtk/gtk.h>
 #include <inttypes.h>
@@ -91,6 +89,13 @@ typedef struct dt_control_pointer_input_t
 // called from gui
 void *dt_control_expose(void *voidptr);
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state);
+
+/** Message painted over the main preview while the pipeline is working. Written by the
+ * pipeline (develop/pixelpipe_hb.c), rendered by control/control.c; the storage belongs
+ * to the orchestrator. dt_set_main_message() TAKES OWNERSHIP of `message` and frees the
+ * previous one; pass NULL to clear. */
+const char *dt_get_main_message(void);
+void dt_set_main_message(char *message);
 void dt_control_button_released(double x, double y, int which, uint32_t state);
 void dt_control_mouse_moved(double x, double y, double pressure, int which);
 void dt_control_set_pointer_input(const dt_control_pointer_input_t *input);
@@ -130,14 +135,14 @@ void dt_control_change_cursor_by_name(const char *curs_str);
  */
 void dt_control_change_cursor_by_name_and_flush(const char *curs_str);
 
-// set darktable.control->cursor.shape to the desired cursor shape
+// set dt_control_get_global()->cursor.shape to the desired cursor shape
 void dt_control_queue_cursor_EXT(dt_cursor_t cursor, const char *file, int line);
 #define  dt_control_queue_cursor(cursor) \
   dt_control_queue_cursor_EXT((cursor), __FILE__, __LINE__)
 
 void dt_control_queue_cursor_by_name(const char *curs_str);
 
-// commit the currently set cursor shape from darktable.control->cursor.shape
+// commit the currently set cursor shape from dt_control_get_global()->cursor.shape
 void dt_control_commit_cursor();
 /** \brief Set whether the cursor should be visible or not.
  *
@@ -299,7 +304,7 @@ typedef struct dt_control_t
   } progress_system;
 
   /* proxy */
-  // TODO: this is unused now, but deleting it makes g_free(darktable.control)
+  // TODO: this is unused now, but deleting it makes g_free(dt_control_get_global())
   // segfault on double free or corruption. Find out why.
   struct
   {
@@ -315,6 +320,13 @@ typedef struct dt_control_t
 } dt_control_t;
 
 void dt_control_init(dt_control_t *s);
+
+/* The application-wide control singleton. Process-wide by nature (one job system, one
+ * log/toast queue, one pointer state) with no per-call context to ride on, so this
+ * accessor is the end state for the handle; finer encapsulation of its three
+ * sub-services (log/toast, progress, pointer state) is a separate concern.
+ * Implemented by the orchestrator (darktable.c). */
+struct dt_control_t *dt_control_get_global(void);
 
 // join all worker threads.
 void dt_control_shutdown(dt_control_t *s);
@@ -337,6 +349,8 @@ void dt_control_set_keyboard_over_id(int32_t value);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_CONTROL_CONTROL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

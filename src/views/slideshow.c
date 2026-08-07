@@ -32,17 +32,18 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/database.h"
+#include "common/image.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
 #include "common/collection.h"
 #include "common/selection.h"
-#include "common/colorspaces.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/gtk.h"
 #include "views/view.h"
@@ -156,12 +157,12 @@ static int32_t _slideshow_get_imgid_from_rank(const dt_slideshow_t *d, const int
     return link ? GPOINTER_TO_INT(link->data) : UNKNOWN_IMAGE;
   }
 
-  const gchar *query = dt_collection_get_query(darktable.collection);
+  const gchar *query = dt_collection_get_query(dt_collection_get_global());
   if(IS_NULL_PTR(query)) return UNKNOWN_IMAGE;
 
   int32_t id = 0;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rank);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, 1);
   if(sqlite3_step(stmt) == SQLITE_ROW) id = sqlite3_column_int(stmt, 0);
@@ -194,7 +195,7 @@ static dt_view_surface_value_t _slideshow_request_slot(dt_slideshow_t *d, const 
   const int height = MAX(2, (int)d->height);
   const dt_view_surface_value_t res =
       dt_view_image_get_surface_async(&buffer->cache->fetcher, imgid, width, height, &buffer->cache->surface,
-                                      dt_ui_center(darktable.gui->ui), DT_THUMBTABLE_ZOOM_FIT);
+                                      dt_gui_center_widget(), DT_THUMBTABLE_ZOOM_FIT);
   buffer->invalidated = (res != DT_VIEW_SURFACE_OK);
   return res;
 }
@@ -338,11 +339,11 @@ int try_enter(dt_view_t *self)
 {
   dt_slideshow_t *d = (dt_slideshow_t *)self->data;
   g_list_free(d->incoming_selection);
-  d->incoming_selection = dt_selection_get_list(darktable.selection);
+  d->incoming_selection = dt_selection_get_list(dt_selection_get_global());
   if(!d->incoming_selection && dt_view_active_images_get_all())
     d->incoming_selection = g_list_copy((GList *)dt_view_active_images_get_all());
 
-  if(d->incoming_selection || dt_collection_get_count(darktable.collection) != 0) return 0;
+  if(d->incoming_selection || dt_collection_get_count(dt_collection_get_global()) != 0) return 0;
 
   dt_control_log(_("there are no images in this collection"));
   return 1;
@@ -356,18 +357,18 @@ void enter(dt_view_t *self)
   d->mouse_timeout = 0;
   d->auto_advance_timeout = 0;
 
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "slideshow");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "slideshow");
 
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_LEFT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_TOP, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM, FALSE, TRUE);
 
   // also hide arrows
   dt_control_queue_redraw();
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   GdkRectangle rect;
 
   GdkDisplay *display = gtk_widget_get_display(window);
@@ -391,7 +392,7 @@ void enter(dt_view_t *self)
     d->playlist = g_list_copy(dt_view_active_images_get_all());
   }
 
-  d->col_count = d->playlist ? g_list_length(d->playlist) : dt_collection_get_count(darktable.collection);
+  d->col_count = d->playlist ? g_list_length(d->playlist) : dt_collection_get_count(dt_collection_get_global());
 
   for(int k = S_LEFT; k < S_SLOT_LAST; k++)
   {
@@ -423,7 +424,7 @@ void enter(dt_view_t *self)
   d->delay = dt_conf_get_int("slideshow_delay");
   dt_pthread_mutex_unlock(&d->lock);
 
-  dt_selection_clear(darktable.selection);
+  dt_selection_clear(dt_selection_get_global());
 
   dt_gui_refocus_center();
   _refresh_display(d);
@@ -440,11 +441,11 @@ void leave(dt_view_t *self)
   d->auto_advance_timeout = 0;
   dt_control_change_cursor(GDK_LEFT_PTR);
   d->auto_advance = FALSE;
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
 
-  dt_selection_clear(darktable.selection);
+  dt_selection_clear(dt_selection_get_global());
   if(dt_view_active_images_get_all())
-    dt_selection_select_list(darktable.selection, dt_view_active_images_get_all());
+    dt_selection_select_list(dt_selection_get_global(), dt_view_active_images_get_all());
   dt_view_active_images_reset(FALSE);
   g_list_free(d->incoming_selection);
   d->incoming_selection = NULL;
@@ -489,7 +490,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     cairo_save(cr);
     cairo_translate(cr, tr_width, tr_height);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), darktable.gui->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);
@@ -503,7 +504,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
   
   switch(event->keyval)
   {

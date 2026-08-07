@@ -16,13 +16,14 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/history.h"
 #include "common/history_merge.h"
 
 #include <glib.h>
 
-#pragma once
+#ifndef DT_DEVELOP_DEV_HISTORY_H
+#define DT_DEVELOP_DEV_HISTORY_H
 
 /**
  * @file develop/dev_history.h
@@ -632,3 +633,4 @@ gboolean dt_dev_transient_params_active(struct dt_develop_t *dev, const struct d
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_DEVELOP_DEV_HISTORY_H

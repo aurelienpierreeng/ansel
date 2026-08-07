@@ -20,11 +20,14 @@
  * separate preview-pipe substitution tier) uses dt_dev_paint_main_backbuf(). */
 
 #include "views/dev_backbuf.h"
+#include "common/colorspaces_inline_conversions.h"   // dt_Lab_to_XYZ(), dt_XYZ_to_sRGB()
+#include "common/conf.h"
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/simd.h"
+#include "gui/gtk.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe_cache.h"
@@ -38,7 +41,7 @@ static void _colormanage_ui_color(const float L, const float a, const float b, d
   dt_aligned_pixel_t Lab = { L, a, b, 1.f };
   dt_aligned_pixel_t XYZ = { 0.f, 0.f, 0.f, 1.f };
   dt_Lab_to_XYZ(Lab, XYZ);
-  cmsDoTransform(darktable.color_profiles->transform_xyz_to_display, XYZ, RGB, 1);
+  cmsDoTransform(dt_colorspaces_get_global()->transform_xyz_to_display, XYZ, RGB, 1);
 }
 
 void dt_dev_get_background_color(const dt_develop_t *dev, dt_aligned_pixel_t bg_color)
@@ -60,13 +63,13 @@ void dt_dev_draw_iso12646_border(cairo_t *cr, double width, double height, int b
 
 void dt_dev_draw_profile_mode_label(cairo_t *cri, int height)
 {
-  if(darktable.color_profiles->mode == DT_PROFILE_NORMAL) return;
+  if(dt_colorspaces_get_global()->mode == DT_PROFILE_NORMAL) return;
 
-  gchar *label = darktable.color_profiles->mode == DT_PROFILE_GAMUTCHECK ? _("gamut check") : _("soft proof");
+  gchar *label = dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK ? _("gamut check") : _("soft proof");
   cairo_set_source_rgba(cri, 0.5, 0.5, 0.5, 0.5);
   PangoLayout *layout;
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   layout = pango_cairo_create_layout(cri);
   pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(20) * PANGO_SCALE);
@@ -213,18 +216,18 @@ gboolean dt_dev_render_locked_surface(cairo_t *cr, const dt_develop_t *dev, dt_d
   int ht = locked->height;
   if(wd <= 0 || ht <= 0) return FALSE;
 
-  wd /= darktable.gui->ppd;
-  ht /= darktable.gui->ppd;
+  wd /= dt_gui_get_global()->ppd;
+  ht /= dt_gui_get_global()->ppd;
   cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
 
   if(dev->iso_12646.enabled) dt_dev_draw_iso12646_border(cr, wd, ht, border);
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, locked->entry);
-  cairo_surface_set_device_scale(locked->surface, darktable.gui->ppd, darktable.gui->ppd);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, locked->entry);
+  cairo_surface_set_device_scale(locked->surface, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, locked->surface, 0, 0);
   cairo_fill(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, locked->entry);
 
   return TRUE;
 }

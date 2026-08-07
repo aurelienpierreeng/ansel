@@ -29,13 +29,18 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_PIXELPIPE_HB_H
+#define DT_DEVELOP_PIXELPIPE_HB_H
 
-#include "common/atomic.h"
-#include "common/image.h"
-#include "common/imageio.h"
+#include "system/atomic.h"
+#include "imageio/imageio_core.h"
 #include "common/iop_order.h"
-#include "develop/imageop.h"
+/* develop/imageop.h is deliberately NOT included: it includes this header back.
+ * dt_iop_module_t is only ever used through a pointer here (tag-declared below);
+ * the concrete types needed by value (dt_iop_roi_t, dt_iop_buffer_dsc_t) live in
+ * develop/format.h. */
+#include "pixel/format.h"
+#include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
 
 
@@ -570,6 +575,8 @@ void dt_dev_pixelpipe_reset_reentry(dt_dev_pixelpipe_t *pipe);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_PIXELPIPE_HB_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -32,7 +32,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_DNG_OPCODE_H
+#define DT_COMMON_DNG_OPCODE_H
 
 #include <stdint.h>
 #include "image.h"
@@ -73,3 +74,4 @@ void dt_dng_opcode_process_opcode_list_3(uint8_t *buf, uint32_t buf_size, dt_ima
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_COMMON_DNG_OPCODE_H

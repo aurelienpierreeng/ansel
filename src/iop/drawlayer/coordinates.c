@@ -66,15 +66,15 @@ gboolean dt_drawlayer_widget_points_to_layer_coords(dt_iop_module_t *self, float
 gboolean dt_drawlayer_layer_points_to_widget_coords(dt_iop_module_t *self, float *pts, const int count)
 {
   if(IS_NULL_PTR(pts) || count <= 0) return FALSE;
-  dt_dev_coordinates_image_abs_to_image_norm(darktable.develop, pts, count);
-  dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, pts, count);
+  dt_dev_coordinates_image_abs_to_image_norm(self->dev, pts, count);
+  dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
 
-  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count))
     return FALSE;
 
-  dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, pts, count);
-  dt_dev_coordinates_image_norm_to_widget(darktable.develop, pts, count);
+  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, pts, count);
+  dt_dev_coordinates_image_norm_to_widget(self->dev, pts, count);
   return TRUE;
 }
 

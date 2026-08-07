@@ -58,20 +58,27 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "gui/gdkkeys.h"
+#include "common/conf.h"
 #include "config.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "common/iop_profile.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/imagebuf.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
@@ -631,7 +638,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.mode = DT_IOP_COLORZONES_MODE_SMOOTH;
   p.splines_version = DT_IOP_COLORZONES_SPLINES_V2;
 
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   // red black white
   p.channel = DT_IOP_COLORZONES_h;
@@ -775,7 +782,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("HSL base setting"), self->op,
                              version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 static void _reset_display_selection(dt_iop_module_t *self)
@@ -863,7 +870,7 @@ static void _draw_color_picker(dt_iop_module_t *self, cairo_t *cr, dt_iop_colorz
        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(c->colorpicker_set_values)) ))
   {
     // the global live samples ...
-    GSList *samples = darktable.develop->color_picker.samples;
+    GSList *samples = self->dev->color_picker.samples;
     if(samples)
     {
       const dt_iop_order_iccprofile_info_t *const display_profile
@@ -1658,7 +1665,7 @@ static void _delete_node(dt_iop_module_t *self, dt_iop_colorzones_node_t *curve,
 
   dt_iop_color_picker_reset(self, TRUE);
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static inline int _add_node(dt_iop_colorzones_node_t *curve, int *nodes, float x, float y)
@@ -1790,7 +1797,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
       {
         dt_iop_colorzones_get_params(p, c, c->channel, c->mouse_x, c->mouse_y, c->mouse_radius);
         dt_iop_color_picker_reset(self, TRUE);
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       }
     }
     else if(event->y > height)
@@ -1827,7 +1834,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
         c->selected = _add_node(curve, &p->curve_num_nodes[ch], linx, liny);
 
         dt_iop_color_picker_reset(self, TRUE);
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       }
     }
     else
@@ -1927,7 +1934,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
         }
 
         dt_iop_color_picker_reset(self, TRUE);
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
         gtk_widget_queue_draw(self->widget);
       }
 
@@ -1945,7 +1952,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       dt_bauhaus_combobox_set(c->interpolator, p->curve_type[ch]);
 
       dt_iop_color_picker_reset(self, TRUE);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       gtk_widget_queue_draw(self->widget);
 
       return TRUE;
@@ -1971,7 +1978,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
       dt_iop_color_picker_reset(self, TRUE);
       gtk_widget_queue_draw(self->widget);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       return TRUE;
     }
 
@@ -2112,7 +2119,7 @@ static void _interpolator_callback(GtkWidget *widget, dt_iop_module_t *self)
     p->curve_type[g->channel] = MONOTONE_HERMITE;
 
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
@@ -2227,7 +2234,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     x += feather;
     if(x > 0.f && x < 1.f) _add_node(curve, &p->curve_num_nodes[ch_curve], x, .5f);
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   dt_control_queue_redraw_widget(self->widget);
@@ -2368,7 +2375,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
-                                           | darktable.gui->scroll_mask);
+                                           | dt_gui_get_global()->scroll_mask);
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
   gtk_widget_set_can_focus(GTK_WIDGET(c->area), TRUE);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(_area_draw_callback), self);
@@ -2391,7 +2398,7 @@ void gui_init(struct dt_iop_module_t *self)
     #define CATMULL_ROM 1
     #define MONOTONE_HERMITE 2
   */
-  c->interpolator = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  c->interpolator = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(c->interpolator, N_("interpolation method"));
   dt_bauhaus_combobox_add(c->interpolator, _("cubic spline"));
   dt_bauhaus_combobox_add(c->interpolator, _("centripetal spline"));

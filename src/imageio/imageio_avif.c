@@ -1,0 +1,281 @@
+/*
+ * This file is part of darktable,
+ * Copyright (C) 2019-2020 Andreas Schneider.
+ * Copyright (C) 2020, 2025 Aurélien PIERRE.
+ * Copyright (C) 2020 Benoit Brummer.
+ * Copyright (C) 2020 Hubert Kowalski.
+ * Copyright (C) 2020-2021 Pascal Obry.
+ * Copyright (C) 2021 Daniel Vogelbacher.
+ * Copyright (C) 2021 Miloš Komarčević.
+ * Copyright (C) 2022 Martin Bařinka.
+ * Copyright (C) 2022 Philipp Lutz.
+ * Copyright (C) 2023 Alynx Zhou.
+ * Copyright (C) 2025 Peter Kovář.
+ * 
+ * darktable is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * darktable is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "common/image.h"
+#include <avif/avif.h>
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include <inttypes.h>
+#include <memory.h>
+#include <stdio.h>
+#include <strings.h>
+
+#include "common/exif.h"
+#include "develop/develop.h"
+#include "imageio_avif.h"
+
+dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
+                                         const char *filename,
+                                         dt_mipmap_buffer_t *mbuf)
+{
+  dt_imageio_retval_t ret;
+  avifImage avif_image = {0};
+  avifImage *avif = NULL;
+  avifRGBImage rgb = {
+      .format = AVIF_RGB_FORMAT_RGB,
+  };
+  avifDecoder *decoder = NULL;
+  avifResult result;
+
+  decoder = avifDecoderCreate();
+  if(IS_NULL_PTR(decoder))
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to create decoder for `%s'\n", filename);
+    ret = DT_IMAGEIO_FILE_CORRUPTED;
+    goto out;
+  }
+
+  result = avifDecoderReadFile(decoder, &avif_image, filename);
+  if(result != AVIF_RESULT_OK)
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to parse `%s': %s\n", filename, avifResultToString(result));
+    ret = DT_IMAGEIO_FILE_CORRUPTED;
+    goto out;
+  }
+  avif = &avif_image;
+
+  /* This will set the depth from the avif */
+  avifRGBImageSetDefaults(&rgb, avif);
+
+  rgb.format = AVIF_RGB_FORMAT_RGB;
+
+  (void)avifRGBImageAllocatePixels(&rgb);
+
+  result = avifImageYUVToRGB(avif, &rgb);
+  if(result != AVIF_RESULT_OK)
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to convert `%s' from YUV to RGB: %s\n", filename,
+             avifResultToString(result));
+    ret = DT_IMAGEIO_FILE_CORRUPTED;
+    goto out;
+  }
+
+  const size_t width = rgb.width;
+  const size_t height = rgb.height;
+  /* If `> 8', all plane ptrs are 'uint16_t *' */
+  const size_t bit_depth = rgb.depth;
+
+  /* Initialize cached image buffer */
+  img->width = width;
+  img->height = height;
+
+  img->dsc.channels = 4;
+  img->dsc.datatype = TYPE_FLOAT;
+  img->dsc.bpp = 4 * sizeof(float);
+  img->dsc.cst = IOP_CS_RGB;
+  img->dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_S_RAW;
+
+  switch(bit_depth) {
+  case 12:
+  case 10:
+    img->flags |= DT_IMAGE_HDR;
+    img->flags &= ~DT_IMAGE_LDR;
+    break;
+  case 8:
+    img->flags |= DT_IMAGE_LDR;
+    img->flags &= ~DT_IMAGE_HDR;
+    break;
+  default:
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] invalid bit depth for `%s'\n", filename);
+    ret = DT_IMAGEIO_CACHE_FULL;
+    goto out;
+  }
+
+  img->loader = LOADER_AVIF;
+
+  if(IS_NULL_PTR(mbuf))
+  {
+    ret = DT_IMAGEIO_OK;
+    goto out;
+  }
+
+  float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
+  if(IS_NULL_PTR(mipbuf))
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to allocate mipmap buffer for `%s'\n", filename);
+    ret = DT_IMAGEIO_CACHE_FULL;
+    goto out;
+  }
+
+  const float max_channel_f = (float)((1 << bit_depth) - 1);
+
+  const size_t rowbytes = rgb.rowBytes;
+
+  const uint8_t *const restrict in = (const uint8_t *)rgb.pixels;
+
+  switch (bit_depth) {
+  case 12:
+  case 10: {
+    __OMP_PARALLEL_FOR_SIMD__(collapse(2))
+    for (size_t y = 0; y < height; y++)
+    {
+      for (size_t x = 0; x < width; x++)
+      {
+          uint16_t *in_pixel = (uint16_t *)&in[(y * rowbytes) + (3 * sizeof(uint16_t) * x)];
+          float *out_pixel = &mipbuf[(size_t)4 * ((y * width) + x)];
+
+          /* max_channel_f is 255.0f for 8bit */
+          out_pixel[0] = ((float)in_pixel[0]) * (1.0f / max_channel_f);
+          out_pixel[1] = ((float)in_pixel[1]) * (1.0f / max_channel_f);
+          out_pixel[2] = ((float)in_pixel[2]) * (1.0f / max_channel_f);
+          out_pixel[3] = 0.0f; /* alpha */
+      }
+    }
+    break;
+  }
+  case 8: {
+    __OMP_PARALLEL_FOR_SIMD__(collapse(2))
+    for (size_t y = 0; y < height; y++)
+    {
+      for (size_t x = 0; x < width; x++)
+      {
+          uint8_t *in_pixel = (uint8_t *)&in[(y * rowbytes) + (3 * sizeof(uint8_t) * x)];
+          float *out_pixel = &mipbuf[(size_t)4 * ((y * width) + x)];
+
+          /* max_channel_f is 255.0f for 8bit */
+          out_pixel[0] = (float)(in_pixel[0]) * (1.0f / max_channel_f);
+          out_pixel[1] = (float)(in_pixel[1]) * (1.0f / max_channel_f);
+          out_pixel[2] = (float)(in_pixel[2]) * (1.0f / max_channel_f);
+          out_pixel[3] = 0.0f; /* alpha */
+      }
+    }
+    break;
+  }
+  default:
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] invalid bit depth for `%s'\n", filename);
+    ret = DT_IMAGEIO_CACHE_FULL;
+    goto out;
+  }
+
+  /* Get the ICC profile if available */
+  avifRWData *icc = &(avif->icc);
+  if(icc->size && icc->data)
+  {
+    img->profile = (uint8_t *)g_malloc0(icc->size);
+    memcpy(img->profile, icc->data, icc->size);
+    img->profile_size = icc->size;
+  }
+  ret = DT_IMAGEIO_OK;
+out:
+  avifRGBImageFreePixels(&rgb);
+  avifDecoderDestroy(decoder);
+
+  return ret;
+}
+
+int dt_imageio_avif_read_profile(const char *filename, uint8_t **out, dt_colorspaces_cicp_t *cicp)
+{
+  /* set default return values */
+  int size = 0;
+  *out = NULL;
+  cicp->color_primaries = AVIF_COLOR_PRIMARIES_UNSPECIFIED;
+  cicp->transfer_characteristics = AVIF_TRANSFER_CHARACTERISTICS_UNSPECIFIED;
+  cicp->matrix_coefficients = AVIF_MATRIX_COEFFICIENTS_UNSPECIFIED;
+
+  avifDecoder *decoder = NULL;
+  avifImage avif_image = {0};
+  avifResult result;
+
+  decoder = avifDecoderCreate();
+  if(IS_NULL_PTR(decoder))
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to create decoder for `%s'\n", filename);
+    goto out;
+  }
+
+  result = avifDecoderReadFile(decoder, &avif_image, filename);
+  if(result != AVIF_RESULT_OK)
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[avif_open] failed to parse `%s': %s\n", filename, avifResultToString(result));
+    goto out;
+  }
+
+  if(avif_image.icc.size > 0)
+  {
+    avifRWData *icc = &avif_image.icc;
+
+    if(IS_NULL_PTR(icc->data)) goto out;
+
+    *out = (uint8_t *)g_malloc0(icc->size);
+    memcpy(*out, icc->data, icc->size);
+    size = icc->size;
+  }
+  else
+  {
+    cicp->color_primaries = avif_image.colorPrimaries;
+    cicp->transfer_characteristics = avif_image.transferCharacteristics;
+    cicp->matrix_coefficients = avif_image.matrixCoefficients;
+
+    /* fix up mistagged legacy AVIFs */
+    if(avif_image.colorPrimaries == AVIF_COLOR_PRIMARIES_BT709)
+    {
+      gboolean over = FALSE;
+
+      /* mistagged Rec. 709 AVIFs exported before dt 3.6 */
+      if(avif_image.transferCharacteristics == AVIF_TRANSFER_CHARACTERISTICS_BT470M
+         && avif_image.matrixCoefficients == AVIF_MATRIX_COEFFICIENTS_BT709)
+      {
+        /* must be actual Rec. 709 instead of 2.2 gamma*/
+        cicp->transfer_characteristics = AVIF_TRANSFER_CHARACTERISTICS_BT709;
+        over = TRUE;
+      }
+
+      if(over)
+      {
+        dt_print(DT_DEBUG_IMAGEIO, "[avif_open] overriding nclx color profile for `%s': 1/%d/%d to 1/%d/%d\n",
+                 filename, avif_image.transferCharacteristics, avif_image.matrixCoefficients,
+                 cicp->transfer_characteristics, cicp->matrix_coefficients);
+      }
+    }
+  }
+
+out:
+  avifDecoderDestroy(decoder);
+
+  return size;
+}
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on

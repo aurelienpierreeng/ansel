@@ -45,13 +45,20 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/pixelpipe_cache_alloc.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "gui/gtk.h"
 #include "control/control.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/math.h"
-#include "common/rgb_norms.h"
+#include "math/math.h"
+#include "pixel/rgb_norms.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
@@ -220,7 +227,7 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
   if(self->off)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   _turn_selregion_picker_off(self);
@@ -246,7 +253,7 @@ static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_io
   if(self->off)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -281,7 +288,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 
     memcpy(p, &g->params, sizeof(dt_iop_basicadj_params_t));
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
     dt_iop_gui_enter_critical_section(self);
     g->call_auto_exposure = 0;
@@ -337,7 +344,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(!IS_NULL_PTR(g) && g->draw_selected_region && g->button_down && self->enabled)
   {
     float point[2] = { (float)x, (float)y };
-    dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
+    dt_dev_coordinates_widget_to_image_norm(self->dev, point, 1);
     dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
 
     g->posx_to = point[0];
@@ -395,7 +402,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     else if(which == 1)
     {
       float point[2] = { (float)x, (float)y };
-      dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
+      dt_dev_coordinates_widget_to_image_norm(self->dev, point, 1);
       dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
 
       g->posx_from = g->posx_to = point[0];
@@ -418,7 +425,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(!g->draw_selected_region || !g->button_down) return;
   if(g->posx_from == g->posx_to && g->posy_from == g->posy_to) return;
 
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = self->dev;
   //const float wd = dev->roi.preview_width;
   //const float ht = dev->roi.preview_height;
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
@@ -471,7 +478,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_bauhaus_slider_set(g->sl_middle_grey, p->middle_grey);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static inline float get_gamma(const float x, const float gamma)
@@ -645,17 +652,17 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->sl_clip, _("adjusts clipping value for auto exposure calculation"));
 
   // add signal handler for preview pipe finish
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                             G_CALLBACK(_develop_ui_pipe_finished_callback), self);
   // and profile change
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                             G_CALLBACK(_signal_profile_user_changed), self);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_signal_profile_user_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_ui_pipe_finished_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_signal_profile_user_changed), self);
 
   IOP_GUI_FREE;
 }

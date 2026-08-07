@@ -24,12 +24,14 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_HIST_DIALOG_H
+#define DT_GUI_HIST_DIALOG_H
 
 /** shows a dialog for creating a new style, w if not null is a widget to
     change the sensitive state depending on the dialog response.  */
 int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean iscopy);
 
+#endif // DT_GUI_HIST_DIALOG_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

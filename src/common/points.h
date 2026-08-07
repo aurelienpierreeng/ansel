@@ -29,7 +29,17 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_POINTS_H
+#define DT_COMMON_POINTS_H
+
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "system/openmp.h"   // dt_get_thread_num()
+
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
+struct dt_points_t *dt_points_get_global(void);
 
 #ifndef __SSE2__
 
@@ -50,12 +60,23 @@ typedef struct dt_points_state_t
 typedef struct dt_points_t
 {
   dt_points_state_t *s;
+  unsigned int num;                 // 0 when initialisation failed; see dt_points_init()
 } dt_points_t;
 
 static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads)
 {
   p->s = (dt_points_state_t *)malloc(sizeof(dt_points_state_t) * num_threads);
-  for(int k = 0; k < num_threads; k++)
+  p->num = num_threads;
+
+  if(IS_NULL_PTR(p->s))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[points] out of memory allocating the RNG state for %u thread(s)\n", num_threads);
+    p->num = 0;
+    return;
+  }
+
+  for(int k = 0; k < (int)num_threads; k++)
   {
     p->s[k].state0 = 1 + k;
     p->s[k].state1 = 2 + k;
@@ -65,10 +86,19 @@ static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads
 static inline void dt_points_cleanup(dt_points_t *p)
 {
   dt_free(p->s);
+  p->s = NULL;
+  p->num = 0;
 }
 
 static inline float dt_points_get_for(dt_points_t *p, const unsigned int thread_num)
 {
+  /* dt_points_init() logs and leaves p->s NULL when it cannot allocate the state, which
+   * only happens if the system is genuinely out of memory. Degrade to a fixed value
+   * rather than dereferencing NULL: callers use this for dithering and noise, where
+   * losing randomness costs a little image quality, whereas crashing costs the session.
+   * The failure is already reported once, at init, instead of per pixel. */
+  if(IS_NULL_PTR(p) || IS_NULL_PTR(p->s) || thread_num >= p->num) return 0.5f;
+
   uint64_t s1 = p->s[thread_num].state0;
   uint64_t s0 = p->s[thread_num].state1;
   p->s[thread_num].state0 = s0;
@@ -89,7 +119,7 @@ static inline float dt_points_get_for(dt_points_t *p, const unsigned int thread_
 
 static inline float dt_points_get()
 {
-  return dt_points_get_for(darktable.points, dt_get_thread_num());
+  return dt_points_get_for(dt_points_get_global(), dt_get_thread_num());
 }
 
 #else
@@ -962,10 +992,31 @@ void init_by_array(sfmt_state_t *s, uint32_t *init_key, int key_length)
 
 static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads)
 {
-  sfmt_state_t *states = (sfmt_state_t *)dt_pixelpipe_cache_alloc_align_cache(
-      sizeof(sfmt_state_t) * num_threads, 0);
+  /* NOT the pixelpipe cache arena. This is a small (~20 kB), permanent, process-wide
+   * allocation made once during dt_init(), long before any pipeline exists. The cache
+   * arena is LRU-managed and refuses allocations when the system is under memory
+   * pressure -- by design -- so asking it for the RNG state made startup fail on a
+   * machine that was merely low on free RAM:
+   *
+   *   [pixelpipe_cache] refusing to allocate 0 MiB: the system has only 1638 MiB
+   *                     of available RAM left (pressure floor: 5175 MiB)
+   *
+   * and the unchecked result then segfaulted in the loop below. A permanent startup
+   * buffer belongs to the ordinary allocator. */
+  sfmt_state_t *states = (sfmt_state_t *)dt_alloc_align(sizeof(sfmt_state_t) * num_threads);
   p->s = (sfmt_state_t **)calloc(num_threads, sizeof(sfmt_state_t *));
   p->num = num_threads;
+
+  if(IS_NULL_PTR(states) || IS_NULL_PTR(p->s))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[points] out of memory allocating the RNG state for %u thread(s)\n", num_threads);
+    dt_free_align(states);
+    dt_free(p->s);
+    p->s = NULL;
+    p->num = 0;
+    return;
+  }
 
   int seed = 0xD71337;
   for(int i = 0; i < (int)num_threads; i++)
@@ -987,21 +1038,34 @@ static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads
 
 static inline void dt_points_cleanup(dt_points_t *p)
 {
-  dt_pixelpipe_cache_free_align(p->s[0]);
+  if(IS_NULL_PTR(p->s)) return;      // init failed, or already cleaned up
+  dt_free_align(p->s[0]);
   dt_free(p->s);
+  p->s = NULL;
+  p->num = 0;
 }
 
 static inline float dt_points_get_for(dt_points_t *p, const unsigned int thread_num)
 {
+  /* dt_points_init() logs and leaves p->s NULL when it cannot allocate the state, which
+   * only happens if the system is genuinely out of memory. Degrade to a fixed value
+   * rather than dereferencing NULL: callers use this for dithering and noise, where
+   * losing randomness costs a little image quality, whereas crashing costs the session.
+   * The failure is already reported once, at init, instead of per pixel. */
+  if(IS_NULL_PTR(p) || IS_NULL_PTR(p->s) || thread_num >= p->num) return 0.5f;
+
   return genrand_real2f(p->s[thread_num]);
 }
 
 static inline float dt_points_get()
 {
-  return dt_points_get_for(darktable.points, dt_get_thread_num());
+  return dt_points_get_for(dt_points_get_global(), dt_get_thread_num());
 }
 
 #endif
+
+#endif // DT_COMMON_POINTS_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

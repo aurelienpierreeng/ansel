@@ -18,13 +18,23 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/conf.h"
+#include "control/jobs/control_jobs.h"
+#include "system/mem_alloc.h"
+#include "common/paths.h"
+#include "common/usermanual_url.h"
+#include "control/signal.h"
+#include "gui/gtk.h"
 #include "gui/actions/menu.h"
+#ifdef __APPLE__
+#include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
+#endif
 #include "common/collection.h"
 #include "common/image.h"
 #include "common/selection.h"
 #include "libs/collect.h"
-#include "common/import.h"
+#include "gui/import.h"
 #include "libs/lib.h"
 #include "control/control.h"
 
@@ -139,18 +149,18 @@ void _close_export_popup(GtkWidget *dialog, gint response_id, gpointer data)
   // We need to increase the reference count of the module,
   // then remove it from the popup before closing it,
   // otherwise it gets destroyed along with it.
-  darktable.gui->export_popup.module = (GtkWidget *)g_object_ref(darktable.gui->export_popup.module);
-  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(darktable.gui->export_popup.window));
-  gtk_container_remove(GTK_CONTAINER(content), darktable.gui->export_popup.module);
-  darktable.gui->export_popup.window = NULL;
+  dt_gui_get_global()->export_popup.module = (GtkWidget *)g_object_ref(dt_gui_get_global()->export_popup.module);
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dt_gui_get_global()->export_popup.window));
+  gtk_container_remove(GTK_CONTAINER(content), dt_gui_get_global()->export_popup.module);
+  dt_gui_get_global()->export_popup.window = NULL;
 }
 
 static gboolean export_files_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  if(darktable.gui->export_popup.window)
+  if(dt_gui_get_global()->export_popup.window)
   {
     // if not NULL, we already have a popup open and can't re-instanciate a live GtkWidget
-    gtk_window_present_with_time(GTK_WINDOW(darktable.gui->export_popup.window), GDK_CURRENT_TIME);
+    gtk_window_present_with_time(GTK_WINDOW(dt_gui_get_global()->export_popup.window), GDK_CURRENT_TIME);
     return TRUE;
   }
 
@@ -159,13 +169,13 @@ static gboolean export_files_callback(GtkAccelGroup *group, GObject *acceleratab
 
   // get_expander actually builds the expander, it's not a getter despite what the name suggests.
   // On first run we need to build, an the following runs, just fetch it
-  GtkWidget *w = darktable.gui->export_popup.module
-                  ? darktable.gui->export_popup.module
+  GtkWidget *w = dt_gui_get_global()->export_popup.module
+                  ? dt_gui_get_global()->export_popup.module
                   : dt_lib_gui_get_expander(module);
   if(IS_NULL_PTR(w)) return TRUE;
 
   // Save the module
-  darktable.gui->export_popup.module = w;
+  dt_gui_get_global()->export_popup.module = w;
 
   // Prepare the popup
   GtkWidget *dialog = gtk_dialog_new();
@@ -180,7 +190,7 @@ static gboolean export_files_callback(GtkAccelGroup *group, GObject *acceleratab
 #endif
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_title(GTK_WINDOW(dialog), _("Ansel - Export images"));
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_export_popup), NULL);
 
@@ -196,7 +206,7 @@ static gboolean export_files_callback(GtkAccelGroup *group, GObject *acceleratab
   gtk_widget_show_all(dialog);
 
   // Save the ref to the window. We don't reuse its content, we just need to know if it exists.
-  darktable.gui->export_popup.window = dialog;
+  dt_gui_get_global()->export_popup.window = dialog;
 
   return TRUE;
 }
@@ -312,11 +322,11 @@ static gboolean export_image_list_callback(GtkAccelGroup *group, GObject *accele
   // Rebuild from scratch on each call so the content always reflects the current selection
   if(dialog) gtk_widget_destroy(dialog);
 
-  GList *imgids = dt_selection_get_list(darktable.selection);
+  GList *imgids = dt_selection_get_list(dt_selection_get_global());
   if(IS_NULL_PTR(imgids)) return TRUE;
 
   dialog = gtk_dialog_new_with_buttons(_("Ansel - Export image list"),
-                                       GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+                                       GTK_WINDOW(dt_gui_main_window()),
                                        GTK_DIALOG_DESTROY_WITH_PARENT,
                                        _("Copy to clipboard"), GTK_RESPONSE_APPLY,
                                        _("Save as file..."), GTK_RESPONSE_OK,
@@ -404,7 +414,7 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
     init_collection_line(NULL, DT_COLLECTION_CHANGE_NONE, DT_COLLECTION_PROP_UNDEF, NULL, 0, this);
 
     // Connect init to collection_changed signal for future updates
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                               G_CALLBACK(init_collection_line), (gpointer)this);
   }
 

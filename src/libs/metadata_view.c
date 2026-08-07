@@ -53,14 +53,22 @@
 */
 
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/act_on.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
+#include "common/image.h"
+#include "control/signal.h"
+#include "common/database.h"
+#include "common/utility.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/metadata.h"
 #include "common/tags.h"
 #include "common/datetime.h"
 #include "common/selection.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 
@@ -504,11 +512,11 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
 
 static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *info)
 {
-  if(imgid <= 0 || IS_NULL_PTR(info) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return FALSE;
+  if(imgid <= 0 || IS_NULL_PTR(info) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return FALSE;
 
-  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_lighttable, imgid, info))
+  if(dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_lighttable, imgid, info))
     return TRUE;
-  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_filmstrip, imgid, info))
+  if(dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_filmstrip, imgid, info))
     return TRUE;
 
   return FALSE;
@@ -516,7 +524,7 @@ static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *i
 
 static void _concatenate_multiple_images(gboolean skip[md_size], int count)
 {
-  gchar *images = dt_selection_ids_to_string(darktable.selection);
+  gchar *images = dt_selection_ids_to_string(dt_selection_get_global());
   sqlite3_stmt *stmt = NULL;
   // clang-format off
   gchar *query = g_strdup_printf("SELECT COUNT(DISTINCT film_id), "
@@ -562,7 +570,7 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
                                   images, images, images, images, images, images, images, images, images);
   // clang-format on
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
 
   sqlite3_stmt *stmt_tags = NULL;
   // clang-format off
@@ -572,7 +580,7 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
                                       "ON data.tags.id = main.tagged_images.tagid AND name NOT LIKE 'darktable|%%' "
                                       "WHERE imgid in (%s) GROUP BY tagid", images);
   // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), tag_query, -1, &stmt_tags, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), tag_query, -1, &stmt_tags, NULL);
   dt_free(tag_query);
   dt_free(query);
 
@@ -618,10 +626,10 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
   {
     count = 1;
   }
-  else if(dt_selection_get_length(darktable.selection) > 1)
+  else if(dt_selection_get_length(dt_selection_get_global()) > 1)
   {
-    count = dt_selection_get_length(darktable.selection);
-    img_id = dt_selection_get_first_id(darktable.selection);
+    count = dt_selection_get_length(dt_selection_get_global());
+    img_id = dt_selection_get_first_id(dt_selection_get_global());
   }
   else if(dt_act_on_get_first_image() > -1)
   {
@@ -997,7 +1005,7 @@ static void _jump_to()
   {
     sqlite3_stmt *stmt;
 
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1, &stmt,
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
                                 NULL);
 
     if(sqlite3_step(stmt) == SQLITE_ROW) imgid = sqlite3_column_int(stmt, 0);
@@ -1006,9 +1014,9 @@ static void _jump_to()
   if(imgid != UNKNOWN_IMAGE)
   {
     char path[512];
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     dt_image_film_roll_directory(img, path, sizeof(path));
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
     char collect[1024];
     snprintf(collect, sizeof(collect), "1:0:0:%s$", path);
     dt_collection_deserialize(collect);
@@ -1182,7 +1190,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
 {
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("metadata settings"), GTK_WINDOW(win),
                                        GTK_DIALOG_DESTROY_WITH_PARENT, _("default"), GTK_RESPONSE_YES,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);
@@ -1360,10 +1368,10 @@ void gui_init(dt_lib_module_t *self)
   _apply_preferences(pref, self);
 
   /* lets signup for mouse over image change signals */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                                   G_CALLBACK(_mouse_over_image_callback), self);
 }
 
@@ -1382,7 +1390,7 @@ static void _free_metadata_queue(dt_lib_metadata_info_t *m)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_mouse_over_image_callback), self);
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
   g_list_free_full(d->metadata, (GDestroyNotify)_free_metadata_queue);

@@ -16,9 +16,9 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_WIDGETS_H
+#define DT_IOP_DRAWLAYER_WIDGETS_H
 
-#include "iop/drawlayer/brush.h"
 
 #include <gtk/gtk.h>
 
@@ -93,3 +93,4 @@ gboolean dt_drawlayer_widgets_draw_brush_profiles(dt_drawlayer_widgets_t *widget
 /** @brief Hit-test and select one brush profile from the preview row. */
 gboolean dt_drawlayer_widgets_pick_brush_profile(dt_drawlayer_widgets_t *widgets, GtkWidget *widget,
                                                  float x, float y, int *shape);
+#endif // DT_IOP_DRAWLAYER_WIDGETS_H

@@ -39,9 +39,11 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_SIGNAL_H
+#define DT_CONTROL_SIGNAL_H
 
 #include <glib-object.h>
+#include <stdint.h>
 
 G_BEGIN_DECLS
 
@@ -342,8 +344,21 @@ typedef enum dt_debug_signal_action_t
   DT_DEBUG_SIGNAL_ACT_PRINT_TRACE = 1 << 3,
 } dt_debug_signal_action_t;
 
+/* read-only accessors for the signal-debugging options, parsed once from the
+ * command line at startup and never mutated afterwards (implemented in
+ * darktable.c, next to dt_get_debug_flags()). */
+int32_t dt_get_signal_debug_acts(void);
+gboolean dt_get_signal_debug(const int signal);
+
 /* inititialize the signal framework */
 struct dt_control_signal_t *dt_control_signal_init();
+
+/* The application-wide signal bus. Unlike the other service handles, this is
+ * global by nature (a process-wide broadcast bus with no per-call context to
+ * ride on), so this accessor is the intended end state, not an interim step —
+ * same shape as the fully-encapsulated dt_conf_* API. Implemented by the
+ * orchestrator (darktable.c). */
+struct dt_control_signal_t *dt_control_signal_get_global(void);
 /* cleanup the signal framework */
 void dt_control_signal_cleanup(struct dt_control_signal_t *ctlsig);
 /* raises a signal */
@@ -366,7 +381,7 @@ void dt_control_signal_unblock_by_func(const struct dt_control_signal_t *ctlsig,
 #define DT_DEBUG_CONTROL_SIGNAL_RAISE(ctlsig, signal, ...)                                                                       \
   do                                                                                                                             \
   {                                                                                                                              \
-    if((darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_RAISE) && darktable.unmuted_signal_dbg[signal])                 \
+    if((dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_RAISE) && dt_get_signal_debug(signal))                 \
     {                                                                                                                            \
       dt_print(DT_DEBUG_SIGNAL, "[signal] %s:%d, function %s(): raise signal %s\n", __FILE__, __LINE__, __FUNCTION__, #signal);  \
     }                                                                                                                            \
@@ -376,7 +391,7 @@ void dt_control_signal_unblock_by_func(const struct dt_control_signal_t *ctlsig,
 #define DT_DEBUG_CONTROL_SIGNAL_CONNECT(ctlsig, signal, cb, user_data)                                                           \
   do                                                                                                                             \
   {                                                                                                                              \
-    if((darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_CONNECT) && darktable.unmuted_signal_dbg[signal])                \
+    if((dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_CONNECT) && dt_get_signal_debug(signal))                \
     {                                                                                                                            \
       dt_print(DT_DEBUG_SIGNAL, "[signal] %s:%d, function: %s() connect handler %s to signal %s\n", __FILE__, __LINE__,          \
                __FUNCTION__, #cb, #signal);                                                                                      \
@@ -387,7 +402,7 @@ void dt_control_signal_unblock_by_func(const struct dt_control_signal_t *ctlsig,
 #define DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(ctlsig, cb, user_data)                                                                \
   do                                                                                                                             \
   {                                                                                                                              \
-    if(darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_DISCONNECT)                                                       \
+    if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_DISCONNECT)                                                       \
     {                                                                                                                            \
       dt_print(DT_DEBUG_SIGNAL, "[signal] %s:%d, function: %s() disconnect handler %s\n", __FILE__, __LINE__, __FUNCTION__, #cb);\
     }                                                                                                                            \
@@ -397,7 +412,7 @@ void dt_control_signal_unblock_by_func(const struct dt_control_signal_t *ctlsig,
 #define DT_DEBUG_CONTROL_SIGNAL_DISCONNECT_ALL(ctlsig, user_data)                                                                \
   do                                                                                                                             \
   {                                                                                                                              \
-    if(darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_DISCONNECT)                                                       \
+    if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_DISCONNECT)                                                       \
     {                                                                                                                            \
       dt_print(DT_DEBUG_SIGNAL, "[signal] %s:%d, function: %s() disconnect all handlers for %p\n", __FILE__, __LINE__,          \
                __FUNCTION__, (void *)(user_data));                                                                               \
@@ -406,6 +421,8 @@ void dt_control_signal_unblock_by_func(const struct dt_control_signal_t *ctlsig,
   } while (0)
 
 G_END_DECLS
+
+#endif // DT_CONTROL_SIGNAL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

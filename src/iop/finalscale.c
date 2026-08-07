@@ -27,17 +27,18 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "system/mem_alloc.h"
+#include "common/conf.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/interpolation.h"
-#include "common/opencl.h"
+#include "gui/bauhaus.h"
+#include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
 #include "iop/iop_api.h"
-#include "gui/gtk.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_finalscale_params_t)
 

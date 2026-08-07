@@ -25,7 +25,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_DATETIME_H
+#define DT_COMMON_DATETIME_H
 
 #include <glib.h>
 #include "common/image.h"
@@ -55,6 +56,12 @@ typedef struct dt_datetime_t
 
 // initialize datetime
 void dt_datetime_init(void);
+
+/** read-only getters for the app-lifetime datetime constants, written once by
+ * dt_datetime_init() and never mutated afterwards. Do not unref. */
+GTimeZone *dt_datetime_utc_tz(void);
+// the datetime origin (0001:01:01 00:00:00) GTimeSpans in db are offsets from
+GDateTime *dt_datetime_origin(void);
 
 GDateTime *dt_string_to_datetime(const char *string);
 
@@ -134,6 +141,8 @@ gboolean dt_datetime_exif_add_numbers(const gchar *exif, const dt_datetime_t num
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_DATETIME_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -33,9 +33,10 @@
 // You should have received a copy of the GNU General Public License
 // along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 
-#pragma once
+#ifndef DT_COMMON_PWSTORAGE_PWSTORAGE_H
+#define DT_COMMON_PWSTORAGE_PWSTORAGE_H
 
-#include "common/darktable.h"
+#include <glib.h>
 
 typedef enum pw_storage_backend_t
 {
@@ -55,10 +56,16 @@ typedef struct dt_pwstorage_t
 const dt_pwstorage_t *dt_pwstorage_new();
 /** Cleanup and destroy pwstorage context. \remarks After this point pointer at pwstorage is invalid. */
 void dt_pwstorage_destroy(const dt_pwstorage_t *pwstorage);
+
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
+const struct dt_pwstorage_t *dt_pwstorage_get_global(void);
 /** Store (key,value) pairs. */
 gboolean dt_pwstorage_set(const gchar *slot, GHashTable *table);
 /** Load (key,value) pairs. */
 GHashTable *dt_pwstorage_get(const gchar *slot);
+
+#endif // DT_COMMON_PWSTORAGE_PWSTORAGE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

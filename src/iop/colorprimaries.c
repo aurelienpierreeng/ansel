@@ -24,12 +24,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/colorequal_shared.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "pixel/colorequal_shared.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "common/module_versioning.h"
 #include "common/imagebuf.h"
-#include "common/lut_viewer.h"
-#include "control/control.h"
+#include "gui/lut_viewer.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
@@ -700,7 +706,7 @@ static void _node_target_hsb(const dt_iop_colorprimaries_params_t *const p, cons
 static void _build_clut(dt_iop_colorprimaries_data_t *d, const dt_iop_colorprimaries_params_t *p,
                         const dt_iop_order_iccprofile_info_t *lut_profile)
 {
-  const gboolean log_perf = (darktable.unmuted & DT_DEBUG_PERF) != 0;
+  const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
   const size_t clut_size = (size_t)DT_COLORRINGS_CLUT_LEVEL * DT_COLORRINGS_CLUT_LEVEL * DT_COLORRINGS_CLUT_LEVEL * 3u;
   const float inv_sigma_L = 1.f / fmaxf(p->sigma_L * 0.01f, 1e-6f);
@@ -1186,7 +1192,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_bauhaus_slider_set(g->white_level, p->white_level);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,

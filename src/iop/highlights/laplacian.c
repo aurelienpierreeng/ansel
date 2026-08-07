@@ -53,14 +53,21 @@
 // Guided-laplacian (2021 a-trous) highlight reconstruction, CPU + OpenCL. (implementation; see laplacian.h for the
 // public API.)
 
-#include "common/box_filters.h"
-#include "common/bspline.h"
-#include "common/darktable.h"
-#include "common/dwt.h"
-#include "common/fast_guided_filter.h"
+#include "pixel/box_filters.h"
+#include "iop/highlights/common.h"
+#include "pixel/bspline.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "pixel/dwt.h"
+#include "pixel/fast_guided_filter.h"
 #include "common/opencl.h"
 #include "develop/imageop_math.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 #include "iop/highlights/gather.h"
 #include "iop/highlights/laplacian.h"
 #include <math.h>

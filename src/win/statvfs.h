@@ -37,7 +37,8 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef DT_WIN_STATVFS_H
+#define DT_WIN_STATVFS_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,6 +67,8 @@ int statvfs(const char *path, struct statvfs *buf);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_WIN_STATVFS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

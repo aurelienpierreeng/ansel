@@ -57,17 +57,26 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_IMAGE_H
+#define DT_COMMON_IMAGE_H
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include "common/colorspaces.h"
-#include "common/dtpthread.h"
-#include "develop/format.h"
+#include "common/paths.h"
+#include "pixel/format.h"
 #include <glib.h>
+#include <glib/gi18n.h>
 #include <inttypes.h>
+
+// Default code for imgid meaning the picture is unknown or invalid
+#define UNKNOWN_IMAGE -1
+
+// Number of database blocks per image
+#define DT_IMAGE_DBLOCKS 64
+
+typedef float dt_boundingbox_t[4];  //(x,y) of upperleft, then (x,y) of lowerright
 
 #ifdef __cplusplus
 extern "C" {
@@ -777,6 +786,8 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_IMAGE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

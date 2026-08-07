@@ -22,6 +22,13 @@
     You should have received a copy of the GNU Lesser General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+/* NO #include may be added to this file, and it deliberately has NO include guard:
+ * it is an X-macro header, re-included several times with different macros defined
+ * (INCLUDE_API_FROM_MODULE_LOAD, ...) and expanded INSIDE struct bodies to generate
+ * members. An include at the top of it lands inside those structs.
+ * dt_version()/dt_print()/IS_NULL_PTR used below must therefore be provided by each
+ * consuming .c (common/module_versioning.h, common/logging.h, common/macros.h). */
+
 #include <glib.h>
 
 #undef OPTIONAL

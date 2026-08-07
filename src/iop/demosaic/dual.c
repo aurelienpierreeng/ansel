@@ -60,7 +60,7 @@ static int dual_demosaic(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_
     dt_control_log(_("[dual demosaic] can't allocate internal buffers"));
     return 1;
   }
-  const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
+  const gboolean info = ((dt_get_debug_flags() & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))
                          && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   if(vng_interpolate(vng_image, raw_data, roi_out, roi_in, filters, xtrans, FALSE))
@@ -129,7 +129,7 @@ gboolean dual_demosaic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
     const dt_aligned_pixel_t wb = { piece->dsc_in.temperature.coeffs[0], piece->dsc_in.temperature.coeffs[1],
                                     piece->dsc_in.temperature.coeffs[2] };
-    const int kernel = darktable.opencl->blendop->kernel_calc_Y0_mask;
+    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_Y0_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &detail);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &high_image);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &width);
@@ -143,7 +143,7 @@ gboolean dual_demosaic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
 
   {
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    const int kernel = darktable.opencl->blendop->kernel_calc_scharr_mask;
+    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_scharr_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &detail);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &blend);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &width);
@@ -155,7 +155,7 @@ gboolean dual_demosaic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
   {
     const int flag = 1;
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-    const int kernel = darktable.opencl->blendop->kernel_calc_blend;
+    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_blend;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &blend);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &detail);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &width);
@@ -174,7 +174,7 @@ gboolean dual_demosaic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t
     if(!IS_NULL_PTR(dev_blurmat))
     {
       size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-      const int clkernel = darktable.opencl->blendop->kernel_mask_blur;
+      const int clkernel = dt_opencl_get_global()->blendop->kernel_mask_blur;
       dt_opencl_set_kernel_arg(devid, clkernel, 0, sizeof(cl_mem), &detail);
       dt_opencl_set_kernel_arg(devid, clkernel, 1, sizeof(cl_mem), &blend);
       dt_opencl_set_kernel_arg(devid, clkernel, 2, sizeof(int), &width);

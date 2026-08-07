@@ -52,7 +52,8 @@ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED O
 DAMAGE.
 */
 
-#pragma once
+#ifndef DT_IOP_PERMUTOHEDRAL_H
+#define DT_IOP_PERMUTOHEDRAL_H
 
 /*******************************************************************
  * Permutohedral Lattice implementation from:                      *
@@ -664,6 +665,8 @@ private:
 
   HashTable *hashTables;
 };
+
+#endif // DT_IOP_PERMUTOHEDRAL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

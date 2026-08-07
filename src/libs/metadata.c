@@ -45,17 +45,19 @@
 */
 
 #include "common/metadata.h"
+#include "common/act_on.h"
 #include "common/collection.h"
 #include "common/selection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "gui/gdkkeys.h"
 #include "common/debug.h"
-#include "control/conf.h"
-#include "control/control.h"
+#include "common/conf.h"
 
 static sqlite3_stmt *_metadata_update_stmt = NULL;
 #include "control/signal.h"
-#include "dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "libs/lib.h"
@@ -219,7 +221,7 @@ static void _update(dt_lib_module_t *self)
     if(!_metadata_update_stmt)
     {
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "SELECT m.key, m.value, COUNT(m.id) AS ct"
                                   " FROM main.meta_data AS m"
                                   " JOIN main.selected_images AS s ON s.imgid = m.id"
@@ -303,7 +305,7 @@ static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
       _metadata_set_list(i, &key_value, d);
   }
 
-  GList *imgs = dt_selection_get_list(darktable.selection);
+  GList *imgs = dt_selection_get_list(dt_selection_get_global());
 
   dt_metadata_set_list(imgs, key_value, TRUE);
 
@@ -315,7 +317,7 @@ static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
   g_list_free(key_value);
   key_value = NULL;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_CHANGED, DT_METADATA_SIGNAL_NEW_VALUE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_METADATA_CHANGED, DT_METADATA_SIGNAL_NEW_VALUE);
 
   dt_image_synch_xmps(imgs);
   g_list_free(imgs);
@@ -366,7 +368,7 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
         if(dt_modifier_is(event->state, 0))
         {
           _update(self);
-          gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+          gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
           d->editing = FALSE;
           return TRUE;
         }
@@ -512,7 +514,7 @@ static void _private_toggled_callback(GtkCellRendererToggle *cell_renderer, gcha
 
 void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
 {
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("metadata settings"), GTK_WINDOW(win),
                                        GTK_DIALOG_DESTROY_WITH_PARENT, _("default"), GTK_RESPONSE_YES,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);
@@ -642,7 +644,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
       valid = gtk_tree_model_iter_next(model, &iter);
     }
     if(meta_signal)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_CHANGED,
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_METADATA_CHANGED,
                               meta_remove ? DT_METADATA_SIGNAL_HIDDEN : DT_METADATA_SIGNAL_SHOWN);
   }
   _update_layout(self);
@@ -764,7 +766,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_grid_attach(GTK_GRID(self->widget), GTK_WIDGET(d->apply_button), 0, DT_METADATA_NUMBER, 2, 1);
 
   // and 2 other interesting signals:
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_image_selection_changed_callback), self);
 
   gtk_widget_show_all(self->widget);
@@ -779,7 +781,7 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_cancel_postponed_update(self);
   dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_selection_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_image_selection_changed_callback), self);
 
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
   {

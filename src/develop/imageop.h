@@ -50,7 +50,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_IMAGEOP_H
+#define DT_DEVELOP_IMAGEOP_H
 
 #include <gmodule.h>
 #include <gtk/gtk.h>
@@ -58,34 +59,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "common/dtpthread.h"
+#include "common/logging.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 
-/**
- * @brief Region of interest passed through the pixelpipe.
- *
- * @details `scale` must stay consistent with `x`, `y`, `width` and `height`,
- * which all describe the same raster ROI seen by the current pipeline stage.
- */
-typedef struct dt_iop_roi_t
-{
-  int x, y, width, height;
-  double scale;
-} dt_iop_roi_t;
-
-#ifdef __cplusplus
-}
-#endif
-
-#include "common/darktable.h"
 #include "common/introspection.h"
 #include "common/gui_module_api.h"
 #include "common/opencl.h"
 
 #include "control/settings.h"
-#include "develop/pixelpipe.h"
-#include "dtgtk/togglebutton.h"
+#include "pixel/format.h"
+#include "develop/pixelpipe_hb.h"
+#include "gui/dtgtk/togglebutton.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 
@@ -718,38 +704,18 @@ void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state);
  * pipeline hash even while bypass_cache itself stays TRUE. */
 void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant);
 
-// after writing data using copy_pixel_nontemporal, it is necessary to
-// ensure that the writes have completed before attempting reads from
-// a different core.  This function produces the required memory
-// fence to ensure proper visibility
-static inline void dt_sfence()
-{
-#if defined(__x86_64__) || defined(__i386__)
-  _mm_sfence();
-#else
-  // the following generates an MFENCE instruction on x86/x64.  We
-  // only really need SFENCE, which is less expensive, but none of the
-  // other memory orders generate *any* fence instructions on x64.
-  __atomic_thread_fence(__ATOMIC_SEQ_CST);
-#endif
-}
+/** The list of loaded iop module shared objects (dt_iop_module_so_t*), built once at
+ * startup by dt_iop_load_modules_so() in develop/imageop.c, which owns it. Readers use
+ * this accessor instead of reaching into the application struct, so they need neither
+ * darktable.h nor knowledge of where the list is stored. */
+GList *dt_iop_get_modules_so(void);
 
-// if the copy_pixel_nontemporal() writes were inside an OpenMP
-// parallel loop, the OpenMP parallelization will have performed a
-// memory fence before resuming single-threaded operation, so a
-// dt_sfence would be superfluous.  But if compiled without OpenMP
-// parallelization, we should play it safe and emit a memory fence.
-// This function should be used right after a parallelized for loop,
-// where it will produce a barrier only if needed.
-#ifdef _OPENMP
-#define dt_omploop_sfence()
-#else
-#define dt_omploop_sfence() dt_sfence()
-#endif
 
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_IMAGEOP_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -21,9 +21,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
 #include "common/printprof.h"
-#include "common/colorspaces.h"
 #include "lcms2.h"
 #include <glib.h>
 #include <unistd.h>

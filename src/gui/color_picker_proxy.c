@@ -30,7 +30,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/color_picker_proxy.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/color_picker.h"
 #include "control/signal.h"
 #include "control/control.h"
@@ -112,7 +112,7 @@ gboolean dt_iop_color_picker_is_active_module(const dt_iop_module_t *module)
  */
 static gboolean _record_point_area(dt_iop_color_picker_t *self)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   gboolean changed = FALSE;
   if(self && sample)
@@ -270,7 +270,7 @@ static void _picker_initialize_geometry_raw(dt_iop_color_picker_t *picker, dt_de
 static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t *roi,
                               const dt_pixelpipe_picker_source_t picker_source, int *box)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(roi) || IS_NULL_PTR(sample)) return 1;
 
@@ -363,7 +363,7 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
                                        dt_dev_pixelpipe_t **pipe,
                                        const dt_dev_pixelpipe_iop_t **piece)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || dev->color_picker.pending_module != module || IS_NULL_PTR(dev->color_picker.pending_pipe))
     return 1;
 
@@ -509,12 +509,12 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
    * They reopen the current module input/output cachelines by immutable `global_hash`, then take a temporary
    * ref plus read lock only for the duration of the sampling pass so concurrent cache recycling cannot free
    * the payload mid-read. */
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
   if(have_output)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, output_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, output_entry);
   }
 
   const gboolean sampled_input
@@ -544,11 +544,11 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   if(have_output)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, output_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
   }
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
 
   if(!sampled_input)
   {
@@ -574,7 +574,7 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
   dev->color_picker.picker->update_pending = FALSE;
   dev->color_picker.update_pending = FALSE;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PICKERDATA_READY);
   dev->color_picker.pending_module = NULL;
   dev->color_picker.pending_pipe = NULL;
   dev->color_picker.piece_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -670,7 +670,7 @@ static void _color_picker_reset(dt_iop_color_picker_t *picker)
 static void _color_picker_widget_destroy(GtkWidget *widget, dt_iop_color_picker_t *picker)
 {
   (void)widget;
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   if(IS_NULL_PTR(dev) || dev->color_picker.picker != picker) return;
 
   // Mirror dt_iop_color_picker_reset()'s cleanup: the picker's own button widget is the one being
@@ -696,7 +696,7 @@ static void _color_picker_widget_destroy(GtkWidget *widget, dt_iop_color_picker_
 
 void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_iop_color_picker_t *picker = dev ? dev->color_picker.picker : NULL;
   if(picker && picker->module == module)
   {
@@ -744,7 +744,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
 {
   // module is NULL if primary colorpicker
   dt_iop_module_t *module = self->module;
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
 
   if(dt_gui_widgets_suppressed())
   {
@@ -789,13 +789,13 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     {
       dt_boundingbox_t image_box = { 0.0f };
       _picker_raw_box_to_image_norm(dev, self->pick_box, image_box);
-      dt_lib_colorpicker_set_box_area(darktable.lib, image_box);
+      dt_lib_colorpicker_set_box_area(dt_lib_get_global(), image_box);
     }
     else if(kind == DT_COLOR_PICKER_POINT)
     {
       float image_point[2] = { 0.0f };
       _picker_raw_point_to_image_norm(dev, self->pick_pos, image_point);
-      dt_lib_colorpicker_set_point(darktable.lib, image_point);
+      dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
     }
     else
       dt_unreachable_codepath();
@@ -856,7 +856,7 @@ static void _color_picker_callback(GtkWidget *button, dt_iop_color_picker_t *sel
 
 void dt_iop_color_picker_set_cst(dt_iop_module_t *module, const dt_iop_colorspace_type_t picker_cst)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_iop_color_picker_t *const picker = dev ? dev->color_picker.picker : NULL;
   if(picker && picker->module == module && picker->picker_cst != picker_cst)
   {
@@ -867,7 +867,7 @@ void dt_iop_color_picker_set_cst(dt_iop_module_t *module, const dt_iop_colorspac
 
 dt_iop_colorspace_type_t dt_iop_color_picker_get_active_cst(dt_iop_module_t *module)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_iop_color_picker_t *picker = dev ? dev->color_picker.picker : NULL;
   if(picker && picker->module == module)
     return picker->picker_cst;
@@ -877,7 +877,7 @@ dt_iop_colorspace_type_t dt_iop_color_picker_get_active_cst(dt_iop_module_t *mod
 
 void dt_iop_color_picker_request_update(void)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_iop_color_picker_t *picker = dev ? dev->color_picker.picker : NULL;
   if(picker) picker->update_pending = TRUE;
   if(dev)
@@ -926,7 +926,7 @@ static void _iop_color_picker_history_resync_callback(gpointer instance, gpointe
 {
   (void)instance;
   (void)user_data;
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   _track_active_picker_hashes(dev);
   _queue_refresh_active_picker(dev);
 }
@@ -939,7 +939,7 @@ static void _iop_color_picker_cacheline_ready_callback(gpointer instance, const 
                            // waits by producer node; this direct path stays exact-hash only.
   (void)user_data;
 
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   if(IS_NULL_PTR(dev)) return;
 
   gboolean matched = FALSE;
@@ -980,7 +980,7 @@ static void _iop_color_picker_pipe_finished_callback(gpointer instance, gpointer
 {
   (void)instance;
   (void)user_data;
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   if(IS_NULL_PTR(dev)) return;
   _queue_refresh_active_picker(dev);
 }
@@ -1003,25 +1003,25 @@ static void _iop_color_picker_notebook_tab_changed_callback(gpointer instance, g
 
 void dt_iop_color_picker_init(void)
 {
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC,
                                   G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
                                   G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_iop_color_picker_pipe_finished_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED,
                                   G_CALLBACK(_iop_color_picker_notebook_tab_changed_callback), NULL);
 }
 
 void dt_iop_color_picker_cleanup(void)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_history_resync_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_cacheline_ready_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_pipe_finished_callback), NULL);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                      G_CALLBACK(_iop_color_picker_notebook_tab_changed_callback), NULL);
 }
 
@@ -1041,7 +1041,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
     g_signal_connect(G_OBJECT(button), "destroy", G_CALLBACK(_color_picker_widget_destroy), color_picker);
     if(w) gtk_box_pack_start(GTK_BOX(w), button, FALSE, FALSE, 0);
 
-    dt_develop_t *const dev = darktable.develop;
+    dt_develop_t *const dev = dt_dev_get_global();
     if(dev && dev->color_picker.enabled && dev->color_picker.module == module
        && IS_NULL_PTR(dev->color_picker.widget)
        && dev->color_picker.kind == kind
@@ -1068,7 +1068,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
                           G_CALLBACK(_color_picker_callback), color_picker, (GClosureNotify)g_free, 0);
     g_signal_connect(G_OBJECT(w), "destroy", G_CALLBACK(_color_picker_widget_destroy), color_picker);
 
-    dt_develop_t *const dev = darktable.develop;
+    dt_develop_t *const dev = dt_dev_get_global();
     if(dev && dev->color_picker.enabled && dev->color_picker.module == module
        && IS_NULL_PTR(dev->color_picker.widget)
        && dev->color_picker.kind == kind

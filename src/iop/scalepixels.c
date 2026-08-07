@@ -33,8 +33,10 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/interpolation.h"
+#include "gui/bauhaus.h"
+#include "common/module_versioning.h"
+#include "system/target_clones.h"
+#include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/tiling.h"
 

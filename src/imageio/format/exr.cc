@@ -41,18 +41,20 @@
 
 #include "glib.h"
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
 #include "common/exif.h"
-#include "common/imageio.h"
-#include "common/imageio_exr.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "imageio/format/imageio_format_api.h"
 
-#include "common/imageio_exr.hh"
+#include "imageio/imageio_exr.hh"
 
 #include <OpenEXR/ImfChannelList.h>
 #include <OpenEXR/ImfFrameBuffer.h>
@@ -122,7 +124,7 @@ int write_image(dt_imageio_module_data_t *tmp, const char *filename, const void 
 {
   const dt_imageio_exr_t *exr = (dt_imageio_exr_t *)tmp;
 
-  Imf::setGlobalThreadCount(darktable.num_openmp_threads);
+  Imf::setGlobalThreadCount(dt_get_num_openmp_threads());
 
   Imf::Header header(exr->global.width, exr->global.height, 1, Imath::V2f(0, 0), 1, Imf::INCREASING_Y,
                      (Imf::Compression)exr->compression);
@@ -456,7 +458,7 @@ void gui_init(dt_imageio_module_format_t *self)
   // Bit depth combo box
   const int bpp_last = dt_conf_get_int("plugins/imageio/format/exr/bpp");
 
-  gui->bpp = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->bpp = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->bpp, N_("bit depth"));
 
   dt_bauhaus_combobox_add(gui->bpp, _("16 bit"));
@@ -468,7 +470,7 @@ void gui_init(dt_imageio_module_format_t *self)
   // Compression combo box
   const int compression_last = dt_conf_get_int("plugins/imageio/format/exr/compression");
 
-  gui->compression = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->compression = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->compression, N_("compression"));
 
   dt_bauhaus_combobox_add(gui->compression, _("uncompressed"));

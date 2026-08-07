@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_IO_H
+#define DT_IOP_DRAWLAYER_IO_H
 
 #include <glib.h>
 #include <limits.h>
@@ -121,3 +122,4 @@ gboolean dt_drawlayer_io_list_layer_names(const char *path, char ***names, int *
 void dt_drawlayer_io_free_layer_names(char ***names, int *count);
 /** @brief Worker entrypoint for async "create background from input" sidecar jobs. */
 int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job);
+#endif // DT_IOP_DRAWLAYER_IO_H

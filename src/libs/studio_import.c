@@ -23,13 +23,14 @@
     source folder and the scan frequency are locked during a session to
     protect the engine's baseline. */
 
-#include "common/darktable.h"
-#include "bauhaus/bauhaus.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "control/signal.h"
+#include "gui/bauhaus.h"
 #include "common/datetime.h"
-#include "common/debug.h"
 #include "common/folder_survey.h"
-#include "control/conf.h"
-#include "control/control.h"
+#include "common/conf.h"
 #include "control/jobs/import_jobs.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
@@ -126,7 +127,7 @@ static void _studio_import_update_state(dt_lib_studio_import_t *d)
   }
   else
   {
-    const GdkRGBA *warning = &darktable.gui->colors[DT_GUI_COLOR_WARNING];
+    const GdkRGBA *warning = &dt_gui_get_global()->colors[DT_GUI_COLOR_WARNING];
     dt_gui_set_symbolic_icon(d->status_icon, "emblem-important-symbolic", GTK_ICON_SIZE_BUTTON, warning);
     gchar *color = g_strdup_printf("#%02x%02x%02x", (int)(warning->red * 255), (int)(warning->green * 255),
                                    (int)(warning->blue * 255));
@@ -431,7 +432,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(source_page), d->delete_source, FALSE, FALSE, 0);
 
   /* Destination tab */
-  d->copy = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  d->copy = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add_full(d->copy, _("Add to library"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
                                 GINT_TO_POINTER(0), NULL, TRUE);
   dt_bauhaus_combobox_add_full(d->copy, _("Copy to disk"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
@@ -445,7 +446,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_no_show_all(d->copy_options, TRUE);
   gtk_box_pack_start(GTK_BOX(destination_page), d->copy_options, FALSE, FALSE, 0);
 
-  d->on_conflict = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  d->on_conflict = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   {
     dt_bauhaus_widget_set_label(d->on_conflict, N_("On conflict"));
     dt_bauhaus_combobox_add_full(d->on_conflict, _("Skip"), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
@@ -507,7 +508,7 @@ void gui_init(dt_lib_module_t *self)
   _studio_import_update_preview(d);
   _studio_import_update_state(d);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FOLDER_SURVEY_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_FOLDER_SURVEY_CHANGED,
                                   G_CALLBACK(_studio_import_survey_changed_callback), d);
 }
 
@@ -519,7 +520,7 @@ void view_enter(struct dt_lib_module_t *self, struct dt_view_t *old_view, struct
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_studio_import_survey_changed_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_studio_import_survey_changed_callback),
                                      self->data);
   g_free(self->data);
   self->data = NULL;

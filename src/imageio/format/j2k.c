@@ -64,12 +64,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
 #include "common/exif.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
+#include "common/conf.h"
 #include "imageio/format/imageio_format_api.h"
 #include "gui/gtk.h"
 
@@ -656,7 +658,7 @@ void gui_init(dt_imageio_module_format_t *self)
   const int preset_last = dt_conf_get_int("plugins/imageio/format/j2k/preset");
   const int quality_last = dt_conf_get_int("plugins/imageio/format/j2k/quality");
 
-  gui->format = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->format = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->format, N_("format"));
   dt_bauhaus_combobox_add(gui->format, _("J2K"));
   dt_bauhaus_combobox_add(gui->format, _("jp2"));
@@ -664,7 +666,7 @@ void gui_init(dt_imageio_module_format_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), gui->format, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(gui->format), "value-changed", G_CALLBACK(format_changed), NULL);
 
-  gui->quality = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL),
+  gui->quality = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL),
                                                   dt_confgen_get_int("plugins/imageio/format/j2k/quality", DT_MIN),
                                                   dt_confgen_get_int("plugins/imageio/format/j2k/quality", DT_MAX),
                                                   1,
@@ -676,7 +678,7 @@ void gui_init(dt_imageio_module_format_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(gui->quality), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(gui->quality), "value-changed", G_CALLBACK(quality_changed), NULL);
 
-  gui->preset = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->preset = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->preset, N_("DCP mode"));
   dt_bauhaus_combobox_add(gui->preset, _("off"));
   dt_bauhaus_combobox_add(gui->preset, _("Cinema2K, 24FPS"));

@@ -55,6 +55,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/conf.h"
 #endif
 
 #include <assert.h>
@@ -63,8 +64,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
 #include "common/histogram.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
@@ -75,8 +82,7 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe.h"
-#include "dtgtk/paint.h"
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/paint.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -332,19 +338,19 @@ void init_presets (dt_iop_module_so_t *self)
 static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histogram,
                                          dt_dev_histogram_stats_t *histogram_stats)
 {
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, self->dev->image_storage.id, 'r');
+  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'r');
   dt_image_t image = *img;
-  dt_image_cache_read_release(darktable.image_cache, img);
+  dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
   if(image.dsc.channels != 1 || image.dsc.datatype != TYPE_UINT16) return;
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, self->dev->image_storage.id, DT_MIPMAP_FULL,
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, self->dev->image_storage.id, DT_MIPMAP_FULL,
                       DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image.filename);
-    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
     return;
   }
 
@@ -366,7 +372,7 @@ static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histo
                       dt_histogram_helper_cs_RAW_uint16, NULL);
   histogram_stats->ch = 1u;
 
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 }
 
 /* input: 0 - 65535 (valid range: from black level to white level) */
@@ -733,7 +739,7 @@ static void _exposure_set_white(struct dt_iop_module_t *self, const float white)
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->exposure, p->exposure);
   dt_gui_freeze_end();
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
@@ -752,7 +758,7 @@ static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->black, p->black);
   dt_gui_freeze_end();
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
@@ -1158,7 +1164,7 @@ void gui_init(struct dt_iop_module_t *self)
      _("spot exposure mapping"),
      GTK_BOX(self->widget), GTK_PACK_END);
 
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->spot_mode, DT_GUI_MODULE(self), N_("spot mode"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), g->spot_mode, DT_GUI_MODULE(self), N_("spot mode"),
                                 _("\"correction\" automatically adjust exposure\n"
                                   "such that the input lightness is mapped to the target.\n"
                                   "\"measure\" simply shows how an input color is mapped by the exposure compensation\n"
@@ -1175,8 +1181,8 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(vvbox), dt_ui_section_label_new(_("input")), FALSE, FALSE, 0);
 
   g->origin_spot = GTK_WIDGET(gtk_drawing_area_new());
-  gtk_widget_set_size_request(g->origin_spot, 2 * DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width),
-                                              DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width));
+  gtk_widget_set_size_request(g->origin_spot, 2 * DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width),
+                                              DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->origin_spot),
                               _("the input color that should be mapped to the target"));
 
@@ -1195,15 +1201,15 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(vvbox), dt_ui_section_label_new(_("target")), FALSE, TRUE, 0);
 
   g->target_spot = GTK_WIDGET(gtk_drawing_area_new());
-  gtk_widget_set_size_request(g->target_spot, 2 * DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width),
-                                              DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width));
+  gtk_widget_set_size_request(g->target_spot, 2 * DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width),
+                                              DT_PIXEL_APPLY_DPI(dt_bauhaus_get_global()->quad_width));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->target_spot),
                               _("the desired target exposure after mapping"));
 
   g_signal_connect(G_OBJECT(g->target_spot), "draw", G_CALLBACK(_target_color_draw), self);
   gtk_box_pack_start(GTK_BOX(vvbox), g->target_spot, TRUE, TRUE, 0);
 
-  g->lightness_spot = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0., 100., 0, 0, 1);
+  g->lightness_spot = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0., 100., 0, 0, 1);
   dt_bauhaus_widget_set_label(g->lightness_spot, N_("lightness"));
   dt_bauhaus_slider_set_format(g->lightness_spot, "%");
   dt_bauhaus_slider_set_default(g->lightness_spot, 50.f);

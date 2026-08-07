@@ -46,32 +46,35 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/conf.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/chromatic_adaptation.h"
-#include "common/darktable.h"
-#include "common/bspline.h"
-#include "common/dwt.h"
+#include "pixel/chromatic_adaptation.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "pixel/bspline.h"
+#include "pixel/dwt.h"
 #include "common/image.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
-#include "develop/noise_generator.h"
-#include "develop/openmp_maths.h"
+#include "iop/noise_generator.h"
+#include "math/openmp_maths.h"
 #include "develop/tiling.h"
-#include "dtgtk/button.h"
-#include "dtgtk/drawingarea.h"
-#include "dtgtk/expander.h"
-#include "dtgtk/paint.h"
+#include "gui/dtgtk/paint.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
-#include "gui/presets.h"
-#include "common/solvers/gaussian_elimination.h"
+#include "math/gaussian_elimination.h"
 #include "iop/iop_api.h"
 
 
@@ -1417,7 +1420,7 @@ static inline int reconstruct_highlights(const dt_dev_pixelpipe_t *const pipe,
   float *const restrict HF_grey = dt_pixelpipe_cache_alloc_align_float_cache(ch * roi_out->width * roi_out->height, 0); // high-frequencies RGB backup
 
   // alloc a permanent reusable buffer for intermediate computations - avoid multiple alloc/free
-  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(darktable.num_openmp_threads * ch * roi_out->width, 0);
+  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(dt_get_num_openmp_threads() * ch * roi_out->width, 0);
 
   if(IS_NULL_PTR(LF_even) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(HF_RGB) || IS_NULL_PTR(HF_grey) || IS_NULL_PTR(temp))
   {
@@ -2609,11 +2612,11 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
 
 static const dt_iop_order_iccprofile_info_t *_filmic_get_output_profile(const dt_dev_pixelpipe_t *pipe)
 {
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL && darktable.color_profiles->mode != DT_PROFILE_NORMAL)
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL && dt_colorspaces_get_global()->mode != DT_PROFILE_NORMAL)
   {
     const dt_iop_order_iccprofile_info_t *const softproof_profile = dt_ioppr_add_profile_info_to_list(
-        pipe->dev, darktable.color_profiles->softproof_type, darktable.color_profiles->softproof_filename,
-        darktable.color_profiles->softproof_intent);
+        pipe->dev, dt_colorspaces_get_global()->softproof_type, dt_colorspaces_get_global()->softproof_filename,
+        dt_colorspaces_get_global()->softproof_intent);
     // LUT-only (non matrix-shaper) profiles - typical of printer/inkjet ICC profiles - are
     // flagged by NAN matrices. The gamut-mapping code below only knows how to use 3x3
     // matrices, so using a NAN one silently poisons the whole image with NaN pixels. Fall
@@ -3397,7 +3400,7 @@ static void apply_auto_grey(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_auto_black(dt_iop_module_t *self,
@@ -3423,7 +3426,7 @@ static void apply_auto_black(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 
@@ -3450,7 +3453,7 @@ static void apply_auto_white_point_source(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_autotune(dt_iop_module_t *self,
@@ -3489,7 +3492,7 @@ static void apply_autotune(dt_iop_module_t *self,
   dt_gui_freeze_end();
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
@@ -3977,13 +3980,13 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   // See _filmic_get_output_profile(): soft-proofing only applies to the interactive
   // full pipe. Zero the profile identity when inactive so toggling other pipe types
   // or preferences unrelated to soft-proofing never perturbs the hash.
-  d->softproof_mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? darktable.color_profiles->mode : DT_PROFILE_NORMAL;
+  d->softproof_mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? dt_colorspaces_get_global()->mode : DT_PROFILE_NORMAL;
 
   memset(d->softproof_filename, 0, sizeof(d->softproof_filename));
   if(d->softproof_mode != DT_PROFILE_NORMAL)
   {
-    d->softproof_type = darktable.color_profiles->softproof_type;
-    g_strlcpy(d->softproof_filename, darktable.color_profiles->softproof_filename,
+    d->softproof_type = dt_colorspaces_get_global()->softproof_type;
+    g_strlcpy(d->softproof_filename, dt_colorspaces_get_global()->softproof_filename,
              sizeof(d->softproof_filename));
   }
   else
@@ -4088,7 +4091,7 @@ static void toe_shoulder_callback(GtkWidget *slider, gpointer user_data)
   filmic_v3_direct_to_legacy(p, dt_bauhaus_slider_get(g->toe), dt_bauhaus_slider_get(g->shoulder),
                              &p->latitude, &p->balance);
   gui_changed(self, slider, NULL);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -4238,10 +4241,10 @@ void filmic_gui_draw_icon(cairo_t *cr, struct dt_iop_filmicrgb_gui_button_data_t
   GdkRGBA color;
 
   // copy color
-  color.red = darktable.bauhaus->graph_fg.red;
-  color.green = darktable.bauhaus->graph_fg.green;
-  color.blue = darktable.bauhaus->graph_fg.blue;
-  color.alpha = darktable.bauhaus->graph_fg.alpha;
+  color.red = dt_bauhaus_get_global()->graph_fg.red;
+  color.green = dt_bauhaus_get_global()->graph_fg.green;
+  color.blue = dt_bauhaus_get_global()->graph_fg.blue;
+  color.alpha = dt_bauhaus_get_global()->graph_fg.alpha;
 
   if(button->mouse_hover)
   {
@@ -4281,7 +4284,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   cairo_surface_t *cst =
     dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, g->allocation.width, g->allocation.height);
   PangoFontDescription *desc =
-    pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   cairo_t *cr = cairo_create(cst);
   PangoLayout *layout = pango_cairo_create_layout(cr);
 
@@ -4332,7 +4335,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   }
 
   const float margin_top = 2. * g->line_height + g->inset;
-  const float margin_right = darktable.bauhaus->quad_width + 2. * g->inset;
+  const float margin_right = dt_bauhaus_get_global()->quad_width + 2. * g->inset;
 
   g->graph_width = g->allocation.width - margin_right - margin_left;   // align the right border on sliders
   g->graph_height = g->allocation.height - margin_bottom - margin_top; // give room to nodes
@@ -4344,9 +4347,9 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   {
     // put the buttons in the right margin and increment vertical position
     g->buttons[i].right = g->allocation.width;
-    g->buttons[i].left = g->buttons[i].right - darktable.bauhaus->quad_width;
-    g->buttons[i].top = margin_top + i * (g->inset + darktable.bauhaus->quad_width);
-    g->buttons[i].bottom = g->buttons[i].top + darktable.bauhaus->quad_width;
+    g->buttons[i].left = g->buttons[i].right - dt_bauhaus_get_global()->quad_width;
+    g->buttons[i].top = margin_top + i * (g->inset + dt_bauhaus_get_global()->quad_width);
+    g->buttons[i].bottom = g->buttons[i].top + dt_bauhaus_get_global()->quad_width;
     g->buttons[i].w = g->buttons[i].right - g->buttons[i].left;
     g->buttons[i].h = g->buttons[i].bottom - g->buttons[i].top;
     g->buttons[i].state = GTK_STATE_FLAG_NORMAL;
@@ -4386,14 +4389,14 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   pango_layout_get_pixel_extents(layout, &g->ink, NULL);
 
   // legend background
-  set_color(cr, darktable.bauhaus->graph_bg);
+  set_color(cr, dt_bauhaus_get_global()->graph_bg);
   cairo_rectangle(cr, g->allocation.width - margin_left - g->ink.width - g->ink.x - 2. * g->inset,
                   -g->line_height - g->inset - 0.5 * g->ink.height - g->ink.y - g->inset,
                   g->ink.width + 3. * g->inset, g->ink.height + 2. * g->inset);
   cairo_fill(cr);
 
   // legend text
-  set_color(cr, darktable.bauhaus->graph_fg);
+  set_color(cr, dt_bauhaus_get_global()->graph_fg);
   cairo_move_to(cr, g->allocation.width - margin_left - g->ink.width - g->ink.x - g->inset,
                 -g->line_height - g->inset - 0.5 * g->ink.height - g->ink.y);
   pango_cairo_show_layout(cr, layout);
@@ -4408,14 +4411,14 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     // Draw graph background then border
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(0.5));
     cairo_rectangle(cr, 0, 0, g->graph_width, g->graph_height);
-    set_color(cr, darktable.bauhaus->graph_bg);
+    set_color(cr, dt_bauhaus_get_global()->graph_bg);
     cairo_fill_preserve(cr);
-    set_color(cr, darktable.bauhaus->graph_border);
+    set_color(cr, dt_bauhaus_get_global()->graph_border);
     cairo_stroke(cr);
 
     // draw grid
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(0.5));
-    set_color(cr, darktable.bauhaus->graph_border);
+    set_color(cr, dt_bauhaus_get_global()->graph_border);
 
     // we need to tweak the coordinates system to match dt_draw_grid expectations
     cairo_save(cr);
@@ -4537,7 +4540,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       }
       else
       {
-        set_color(cr, darktable.bauhaus->graph_fg);
+        set_color(cr, dt_bauhaus_get_global()->graph_fg);
       }
 
       if(g->gui_mode == DT_FILMIC_GUI_BASECURVE)
@@ -4588,7 +4591,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
     const float central_slope = (g->spline.y[3] - g->spline.y[1]) * g->graph_width / ((g->spline.x[3] - g->spline.x[1]) * g->graph_height);
     const float central_slope_angle = atanf(central_slope) + M_PI / 2.0f;
-    set_color(cr, darktable.bauhaus->graph_fg);
+    set_color(cr, dt_bauhaus_get_global()->graph_fg);
     for(int k = 0; k < 5; k++)
     {
       if(k != 2) // k == 2 : grey point, already processed above
@@ -4650,7 +4653,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
         cairo_stroke(cr);
 
         // reset color for next points
-        if(red) set_color(cr, darktable.bauhaus->graph_fg);
+        if(red) set_color(cr, dt_bauhaus_get_global()->graph_fg);
       }
     }
     cairo_restore(cr);
@@ -4661,7 +4664,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       const float x_legend_top = g->graph_height + 0.5 * g->line_height;
 
       // mark the y axis graduation at grey spot
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       snprintf(text, sizeof(text), "%.0f", p->grey_point_target);
       pango_layout_set_text(layout, text, -1);
       pango_layout_get_pixel_extents(layout, &g->ink, NULL);
@@ -4671,7 +4674,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_stroke(cr);
 
       // mark the x axis graduation at grey spot
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       if(g->gui_mode == DT_FILMIC_GUI_LOOK)
         snprintf(text, sizeof(text), "%+.1f", 0.f);
       else if(g->gui_mode == DT_FILMIC_GUI_BASECURVE || g->gui_mode == DT_FILMIC_GUI_BASECURVE_LOG)
@@ -4684,7 +4687,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_stroke(cr);
 
       // mark the y axis graduation at black spot
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       snprintf(text, sizeof(text), "%.0f", p->black_point_target);
       pango_layout_set_text(layout, text, -1);
       pango_layout_get_pixel_extents(layout, &g->ink, NULL);
@@ -4694,7 +4697,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_stroke(cr);
 
       // mark the y axis graduation at black spot
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       snprintf(text, sizeof(text), "%.0f", p->white_point_target);
       pango_layout_set_text(layout, text, -1);
       pango_layout_get_pixel_extents(layout, &g->ink, NULL);
@@ -4704,7 +4707,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_stroke(cr);
 
       // mark the x axis graduation at black spot
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       if(g->gui_mode == DT_FILMIC_GUI_LOOK)
         snprintf(text, sizeof(text), "%+.1f", p->black_point_source);
       else if(g->gui_mode == DT_FILMIC_GUI_BASECURVE || g->gui_mode == DT_FILMIC_GUI_BASECURVE_LOG)
@@ -4717,7 +4720,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_stroke(cr);
 
       // mark the x axis graduation at white spot
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       if(g->gui_mode == DT_FILMIC_GUI_LOOK)
         snprintf(text, sizeof(text), "%+.1f", p->white_point_source);
       else if(g->gui_mode == DT_FILMIC_GUI_BASECURVE || g->gui_mode == DT_FILMIC_GUI_BASECURVE_LOG)
@@ -4739,7 +4742,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
       // handle the case where white > 100 %, so the node is out of the graph.
       // we still want to display the value to get a hint.
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       if((g->gui_mode == DT_FILMIC_GUI_BASECURVE || g->gui_mode == DT_FILMIC_GUI_BASECURVE_LOG) && (x_white > 1.f))
       {
         // set to italic font
@@ -4761,7 +4764,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       }
 
       // mark the y axis legend
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       /* xgettext:no-c-format */
       g_strlcpy(text, _("% display"), sizeof(text));
       pango_layout_set_text(layout, text, -1);
@@ -4773,7 +4776,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
 
       // mark the x axis legend
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       if(g->gui_mode == DT_FILMIC_GUI_LOOK)
         g_strlcpy(text, _("EV scene"), sizeof(text));
       else if(g->gui_mode == DT_FILMIC_GUI_BASECURVE || g->gui_mode == DT_FILMIC_GUI_BASECURVE_LOG)
@@ -4814,7 +4817,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     if(g->gui_show_labels)
     {
       // labels
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       g_strlcpy(text, _("display"), sizeof(text));
       pango_layout_set_text(layout, text, -1);
       pango_layout_get_pixel_extents(layout, &g->ink, NULL);
@@ -4832,7 +4835,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       pango_cairo_show_layout(cr, layout);
       cairo_stroke(cr);
 
-      set_color(cr, darktable.bauhaus->graph_fg);
+      set_color(cr, dt_bauhaus_get_global()->graph_fg);
       g_strlcpy(text, _("scene"), sizeof(text));
       pango_layout_set_text(layout, text, -1);
       pango_layout_get_pixel_extents(layout, &g->ink, NULL);
@@ -4859,9 +4862,9 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       column_left = fmaxf(display_label_width, scene_label_width) + g->inset;
     }
     else
-      column_left = darktable.bauhaus->quad_width;
+      column_left = dt_bauhaus_get_global()->quad_width;
 
-    const float column_right = g->allocation.width - column_left - darktable.bauhaus->quad_width;
+    const float column_right = g->allocation.width - column_left - dt_bauhaus_get_global()->quad_width;
 
     // compute dynamic ranges left and right to middle grey
     const float display_HL_EV = -log2f(p->grey_point_target / p->white_point_target); // compared to white EV
@@ -4879,7 +4882,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     // all greys are aligned vertically in GUI since they are the fulcrum of the transform
     // so, get their coordinates
     const float grey_EV = fmaxf(ceilf(display_HL_EV), ceilf(scene_HL_EV));
-    const float grey_x = g->allocation.width - (grey_EV)*EV - darktable.bauhaus->quad_width;
+    const float grey_x = g->allocation.width - (grey_EV)*EV - dt_bauhaus_get_global()->quad_width;
 
     // similarly, get black/white coordinates from grey point
     const float display_black_x = grey_x - display_real_black_EV * EV;
@@ -4935,7 +4938,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     cairo_line_to(cr, display_lat_top, display_bottom);
     cairo_line_to(cr, display_lat_bottom, display_bottom);
     cairo_line_to(cr, scene_lat_bottom, scene_top);
-    set_color(cr, darktable.bauhaus->graph_bg);
+    set_color(cr, dt_bauhaus_get_global()->graph_bg);
     cairo_fill(cr);
 
     for(int i = 0; i < (int)ceilf(display_DR); i++)
@@ -5046,7 +5049,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     cairo_stroke(cr);
 
     // legends
-    set_color(cr, darktable.bauhaus->graph_fg);
+    set_color(cr, dt_bauhaus_get_global()->graph_fg);
 
     // black scene legend
     snprintf(text, sizeof(text), "%+.1f", p->black_point_source);
@@ -5325,7 +5328,7 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_BUTTON_PRESS_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
-                                                 | GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask);
+                                                 | GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask);
   g_signal_connect(G_OBJECT(g->area), "draw", G_CALLBACK(dt_iop_tonecurve_draw), self);
   g_signal_connect(G_OBJECT(g->area), "button-press-event", G_CALLBACK(area_button_press), self);
   g_signal_connect(G_OBJECT(g->area), "leave-notify-event", G_CALLBACK(area_leave_notify), self);
@@ -5517,7 +5520,7 @@ void gui_init(dt_iop_module_t *self)
   // fraction — see filmic_v3_legacy_to_direct), so double-click reset stays consistent
   // with the params defaults (which keep latitude/balance for compatibility)
 
-  g->shoulder = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
+  g->shoulder = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
   gtk_box_pack_start(GTK_BOX(self->widget), g->shoulder, FALSE, FALSE, 0);
   dt_bauhaus_widget_set_label(g->shoulder, N_("highlights"));
   dt_bauhaus_slider_set_soft_range(g->shoulder, 0.1f, 90.0f);
@@ -5528,7 +5531,7 @@ void gui_init(dt_iop_module_t *self)
                                 "current slope would hit the output white level."));
   g_signal_connect(G_OBJECT(g->shoulder), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
-  g->toe = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
+  g->toe = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
   gtk_box_pack_start(GTK_BOX(self->widget), g->toe, FALSE, FALSE, 0);
   dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
   dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);

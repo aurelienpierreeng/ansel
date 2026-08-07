@@ -17,15 +17,16 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/utility.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "views/view.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "gui/window_manager.h"
 #include "gui/actions/menu.h"
-#include "dtgtk/sidepanel.h"
+#include "gui/dtgtk/sidepanel.h"
 #include "libs/lib.h"
 
 #define WINDOW_DEBUG 0
@@ -57,15 +58,16 @@ const char *_ui_panel_config_names[]
 gchar * panels_get_view_path(char *suffix)
 {
 
-  if(IS_NULL_PTR(darktable.view_manager)) return NULL;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm)) return NULL;
+  const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return NULL;
   char lay[32] = "";
 
   if(!strcmp(cv->module_name, "lighttable"))
     g_snprintf(lay, sizeof(lay), "%d/", 0);
   else if(!strcmp(cv->module_name, "darkroom"))
-    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(darktable.view_manager));
+    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(vm));
 
   return g_strdup_printf("%s/ui/%s%s", cv->module_name, lay, suffix);
 }
@@ -240,7 +242,7 @@ static int _panel_handle_resize(int requested_size, gboolean finished, gpointer 
 {
   GtkWidget *widget = GTK_WIDGET(user_data);
   const char *name = gtk_widget_get_name(widget);
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   int win_w = 0, win_h = 0;
   gtk_window_get_size(GTK_WINDOW(window), &win_w, &win_h);
 
@@ -296,20 +298,21 @@ static gboolean _ui_scroll_target_is_live_widget(const GtkWidget *target, const 
   if(IS_NULL_PTR(target)) return FALSE;
   if(side != LEFT_PANNEL && side != RIGHT_PANNEL) return FALSE;
 
-  if(!IS_NULL_PTR(darktable.lib))
+  if(!IS_NULL_PTR(dt_lib_get_global()))
   {
     // Walk all lib modules and look for the exact expander address queued for scrolling.
-    for(const GList *libs = darktable.lib->plugins; libs; libs = g_list_next(libs))
+    for(const GList *libs = dt_lib_get_global()->plugins; libs; libs = g_list_next(libs))
     {
       const dt_lib_module_t *module = (const dt_lib_module_t *)libs->data;
       if(!IS_NULL_PTR(module) && module->expander == target) return TRUE;
     }
   }
 
-  if(side == RIGHT_PANNEL && !IS_NULL_PTR(darktable.develop))
+  const dt_develop_t *const dev = dt_dev_get_global();
+  if(side == RIGHT_PANNEL && !IS_NULL_PTR(dev))
   {
     // Walk darkroom iop modules and accept either header or expander scroll anchors.
-    for(const GList *iops = darktable.develop->iop; iops; iops = g_list_next(iops))
+    for(const GList *iops = dev->iop; iops; iops = g_list_next(iops))
     {
       const dt_iop_module_t *module = (const dt_iop_module_t *)iops->data;
       if(IS_NULL_PTR(module)) continue;
@@ -335,20 +338,20 @@ static void _ui_panel_size_changed(GtkAdjustment *adjustment, GParamSpec *pspec,
   if(height == last_height[side]) return;
   last_height[side] = height;
 
-  if(IS_NULL_PTR(darktable.gui->scroll_to[side])) return;
-  if(!_ui_scroll_target_is_live_widget(darktable.gui->scroll_to[side], side))
+  if(IS_NULL_PTR(dt_gui_get_global()->scroll_to[side])) return;
+  if(!_ui_scroll_target_is_live_widget(dt_gui_get_global()->scroll_to[side], side))
   {
-    darktable.gui->scroll_to[side] = NULL;
+    dt_gui_get_global()->scroll_to[side] = NULL;
     return;
   }
 
-  if(GTK_IS_WIDGET(darktable.gui->scroll_to[side]))
+  if(GTK_IS_WIDGET(dt_gui_get_global()->scroll_to[side]))
   {
-    gtk_widget_get_allocation(darktable.gui->scroll_to[side], &allocation);
+    gtk_widget_get_allocation(dt_gui_get_global()->scroll_to[side], &allocation);
     gtk_adjustment_set_value(adjustment, allocation.y);
   }
 
-  darktable.gui->scroll_to[side] = NULL;
+  dt_gui_get_global()->scroll_to[side] = NULL;
 }
 
 /* initialize the center container of panel */
@@ -555,7 +558,7 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   gtk_widget_set_app_paintable(cda, TRUE);
   gtk_widget_set_events(cda, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK
                              | GDK_BUTTON_RELEASE_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK
-                             | darktable.gui->scroll_mask);
+                             | dt_gui_get_global()->scroll_mask);
   // The center canvas is the MAIN child of the overlay (gtk_container_add), NOT an overlay child.
   // GtkOverlay renders overlay children through their own offscreen GdkWindow; on Wayland that
   // path goes stale until a pointer event invalidates it, and because the canvas is the heavily,
@@ -577,7 +580,7 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   ui->center_base = ocda;
 
   /* center should redraw when signal redraw center is raised*/
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_REDRAW_CENTER,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_REDRAW_CENTER,
                             G_CALLBACK(_ui_widget_redraw_callback), ui->center);
 
   gtk_widget_show_all(container);
@@ -660,7 +663,7 @@ void _iconify_callback(GtkWidget *w, gpointer data)
 
 void _open_accel_search_callback(GtkWidget *w, gpointer data)
 {
-  dt_accels_search(darktable.gui->accels, GTK_WINDOW(darktable.gui->ui->main_window), w);
+  dt_accels_search(dt_gui_get_accels(), GTK_WINDOW(dt_gui_get_ui()->main_window), w);
 }
 
 void dt_ui_init_global_menu(dt_ui_t *ui)

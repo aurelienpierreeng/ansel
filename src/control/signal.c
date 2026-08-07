@@ -36,7 +36,9 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
 #include "control/signal.h"
 #include "control/control.h"
 #include <glib.h>
@@ -346,7 +348,7 @@ gboolean _async_com_callback(gpointer data)
 static void _print_trace (const char* op)
 {
 #ifdef DT_HAVE_SIGNAL_TRACE
-  if(darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_PRINT_TRACE)
+  if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_PRINT_TRACE)
   {
     void *array[10];
     size_t size;
@@ -381,7 +383,7 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
     return;
   }
 
-  if(darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_RAISE && darktable.unmuted_signal_dbg[signal])
+  if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_RAISE && dt_get_signal_debug(signal))
   {
     dt_print(DT_DEBUG_SIGNAL, "[signal] raised: %s\n", signal_description->name);
     _print_trace("raise");
@@ -439,7 +441,7 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
   }
   else
   {
-    if(pthread_equal(darktable.control->gui_thread, pthread_self()))
+    if(pthread_equal(dt_control_get_global()->gui_thread, pthread_self()))
     {
       _signal_emit(params);
       _signal_param_cleanup(params);
@@ -462,7 +464,7 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
 void dt_control_signal_connect(const dt_control_signal_t *ctlsig, dt_signal_t signal, GCallback cb,
                                gpointer user_data)
 {
-  if(darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_CONNECT && darktable.unmuted_signal_dbg[signal])
+  if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_CONNECT && dt_get_signal_debug(signal))
   {
     dt_print(DT_DEBUG_SIGNAL, "[signal] connected: %s\n", _signal_description[signal].name);
     _print_trace("connect");
@@ -472,7 +474,7 @@ void dt_control_signal_connect(const dt_control_signal_t *ctlsig, dt_signal_t si
 
 void dt_control_signal_disconnect(const struct dt_control_signal_t *ctlsig, GCallback cb, gpointer user_data)
 {
-  if(darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_DISCONNECT)
+  if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_DISCONNECT)
   {
     dt_print(DT_DEBUG_SIGNAL, "[signal] disconnected\n");
     _print_trace("disconnect");
@@ -484,7 +486,7 @@ void dt_control_signal_disconnect(const struct dt_control_signal_t *ctlsig, GCal
 void dt_control_signal_disconnect_all(const struct dt_control_signal_t *ctlsig, gpointer user_data)
 {
   if(IS_NULL_PTR(ctlsig) || IS_NULL_PTR(user_data)) return;
-  if(darktable.unmuted_signal_dbg_acts & DT_DEBUG_SIGNAL_ACT_DISCONNECT)
+  if(dt_get_signal_debug_acts() & DT_DEBUG_SIGNAL_ACT_DISCONNECT)
   {
     dt_print(DT_DEBUG_SIGNAL, "[signal] disconnected all\n");
     _print_trace("disconnect_all");

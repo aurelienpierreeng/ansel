@@ -1,7 +1,6 @@
-#pragma once
+#ifndef DT_IOP_DRAWLAYER_COORDINATES_H
+#define DT_IOP_DRAWLAYER_COORDINATES_H
 
-#include "iop/drawlayer/common.h"
-#include "iop/drawlayer/cache.h"
 
 /** @file
  *  @brief Shared coordinate transforms and geometry computations for drawlayer.
@@ -35,3 +34,4 @@ gboolean dt_drawlayer_layer_bounds_to_widget_bounds(dt_iop_module_t *self, float
 float dt_drawlayer_widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab, float fallback);
 float dt_drawlayer_current_live_padding(dt_iop_module_t *self);
 gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, float padding, drawlayer_view_patch_info_t *view);
+#endif // DT_IOP_DRAWLAYER_COORDINATES_H

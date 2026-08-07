@@ -46,30 +46,34 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
-#endif
-#include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/debug.h"
+#include "common/conf.h"
+#endif
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/hash.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "pixel/bilateral.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
-#include "common/math.h"
+#include "pixel/interpolation.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/button.h"
-#include "dtgtk/expander.h"
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/button.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include "gui/guides.h"
@@ -141,7 +145,7 @@
 
 // For parameter optimization we are using the Nelder-Mead simplex method
 // implemented by Michael F. Hutt.
-#include "common/solvers/nelder_mead_simplex.h"
+#include "math/nelder_mead_simplex.h"
 
 
 DT_MODULE_INTROSPECTION(5, dt_iop_ashift_params_t)
@@ -406,7 +410,7 @@ typedef struct dt_iop_ashift_points_idx_t
 {
   size_t offset;
   int length;
-  int near;
+  int is_near;
   int bounded;
   dt_iop_ashift_linetype_t type;
   dt_iop_ashift_linecolor_t color;
@@ -2643,7 +2647,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   }
 
   // NMS_CROP_EPSILON (100 px^2) is a fixed absolute tolerance, but crop_fitness's magnitude scales
-  // with the image's area (tens of millions of px^2) — near identity params, the optimum is already
+  // with the image's area (tens of millions of px^2) — is_near identity params, the optimum is already
   // ~the initial guess, the landscape goes near-flat, and floating-point noise alone keeps the
   // simplex spread above this tiny absolute value forever, burning all NMS_CROP_ITERATIONS. Scale
   // the tolerance with image area (floored at the original constant) instead.
@@ -2827,7 +2831,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
                      p->last_quad_lines[2], p->last_quad_lines[3],
                      p->last_quad_lines[4], p->last_quad_lines[5],
                      p->last_quad_lines[6], p->last_quad_lines[7] };
-    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       if(g->lines)
@@ -2866,7 +2870,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
     for(int i = 0; i < p->last_drawn_lines_count * 4; i++)
       pts[i] = p->last_drawn_lines[i];
 
-    if(dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, p->last_drawn_lines_count * 2))
     {
       if(g->lines)
@@ -3040,7 +3044,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
     const float wd = self->dev->roi.processed_width;
     const float ht = self->dev->roi.processed_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
-    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
     {
       g->current_structure_method = ASHIFT_METHOD_QUAD;
@@ -3184,7 +3188,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3324,7 +3328,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     const float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3442,7 +3446,7 @@ error:
 }
 #endif
 
-// gather information about "near"-ness in g->points_idx
+// gather information about "is_near"-ness in g->points_idx
 static void _get_near(const float *points, dt_iop_ashift_points_idx_t *points_idx, const int lines_count, float pzx,
                       float pzy, float delta, gboolean multiple)
 {
@@ -3450,7 +3454,7 @@ static void _get_near(const float *points, dt_iop_ashift_points_idx_t *points_id
 
   for(int n = 0; n < lines_count; n++)
   {
-    points_idx[n].near = 0;
+    points_idx[n].is_near = 0;
 
     // skip irrelevant lines
     if(points_idx[n].type == ASHIFT_LINE_IRRELEVANT)
@@ -3478,12 +3482,12 @@ static void _get_near(const float *points, dt_iop_ashift_points_idx_t *points_id
 
       if(dx * dx + dy * dy < delta2)
       {
-        points_idx[n].near = 1;
+        points_idx[n].is_near = 1;
         break;
       }
     }
     // if we don't want multiple selection, stop here
-    if(!multiple && points_idx[n].near) break;
+    if(!multiple && points_idx[n].is_near) break;
   }
 }
 
@@ -3514,8 +3518,8 @@ static void _get_bounded_inside(const float *points, dt_iop_ashift_points_idx_t 
 
   for(int n = 0; n < points_lines_count; n++)
   {
-    // mark line as "not near" and "not bounded"
-    points_idx[n].near = 0;
+    // mark line as "not is_near" and "not bounded"
+    points_idx[n].is_near = 0;
     points_idx[n].bounded = 0;
 
     // skip irrelevant lines
@@ -3528,8 +3532,8 @@ static void _get_bounded_inside(const float *points, dt_iop_ashift_points_idx_t 
        && points_idx[n].bbY >= ay && points_idx[n].bbY <= by)
     {
       points_idx[n].bounded = 1;
-      // only mark "near"-ness of those lines we are interested in
-      points_idx[n].near = ((points_idx[n].type & mask) != state) ? 0 : 1;
+      // only mark "is_near"-ness of those lines we are interested in
+      points_idx[n].is_near = ((points_idx[n].type & mask) != state) ? 0 : 1;
     }
   }
 }
@@ -3609,7 +3613,7 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
     total_points += length;
 
     my_points_idx[n].length = length;
-    my_points_idx[n].near = 0;
+    my_points_idx[n].is_near = 0;
     my_points_idx[n].bounded = 0;
 
     const dt_iop_ashift_linetype_t type = lines[n].type;
@@ -3692,7 +3696,7 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
       my_extremas[i] *= gui_scale;
   }
 
-  // fourth step: get bounding box in final coordinates (used later for checking "near"-ness to mouse pointer)
+  // fourth step: get bounding box in final coordinates (used later for checking "is_near"-ness to mouse pointer)
   for(int n = 0; n < lines_count; n++)
   {
     float xmin = FLT_MAX, xmax = FLT_MIN, ymin = FLT_MAX, ymax = FLT_MIN;
@@ -3800,7 +3804,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     PangoRectangle ink;
     PangoLayout *layout;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     const float fontsize = DT_PIXEL_APPLY_DPI(16);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE / zoom_scale);
@@ -3865,7 +3869,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we draw the cropping area; use the input ROI from the virtual pipe piece
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(darktable.develop->virtual_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece))
   {
     cairo_restore(cr);
@@ -3883,7 +3887,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { ixo + iwd,  iyo       } };
 
   // convert coordinates of corners to coordinates of this module's output
-  if(!call_distort_transform(darktable.develop->virtual_pipe, self, (float *)V, 4))
+  if(!call_distort_transform(self->dev->virtual_pipe, self, (float *)V, 4))
     return;
 
   // get x/y-offset as well as width and height of output buffer
@@ -3934,10 +3938,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { xmin + p->cr * owd, ymin + p->ct * oht } };
 
   // convert clipping corners to final output image
-  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)C, 4))
     return;
-  if(!dt_dev_distort_transform_plus(darktable.develop->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
     return;
 
@@ -3945,7 +3949,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_set_dash(cr, &dashes, 0, 0);
   
   // Resize the coordinates of the rectangles V and C according to the current zoom.
-  const float scale_factor = dt_dev_get_natural_scale(darktable.develop);
+  const float scale_factor = dt_dev_get_natural_scale(self->dev);
   for(size_t i = 0; i < 4; i++)
   {
     V[i][0] *= scale_factor;
@@ -4067,8 +4071,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
        && g->points_idx[n].type != ASHIFT_LINE_HORIZONTAL_SELECTED
        && g->points_idx[n].type != ASHIFT_LINE_VERTICAL_SELECTED)
       continue;
-    // is the near flag set? -> draw line a bit thicker
-    if(g->points_idx[n].near)
+    // is the is_near flag set? -> draw line a bit thicker
+    if(g->points_idx[n].is_near)
       cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
     else
       cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5) / zoom_scale);
@@ -4143,7 +4147,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     cairo_stroke(cr);
   }
 
-  // indicate which area is used for "near"-ness detection when selecting/deselecting lines
+  // indicate which area is used for "is_near"-ness detection when selecting/deselecting lines
   if(g->near_delta > 0)
   {
     float pzxpy[2] = { (float)pointerx, (float)pointery };
@@ -4189,10 +4193,10 @@ static void _update_lines_count(const dt_iop_ashift_line_t *lines, const int lin
   *horizontal_count = hlines;
 }
 
-// determine if we are near a drawn line extrema
-static int _draw_near_point(const float x, const float y, const float *points, const int limit)
+// determine if we are is_near a drawn line extrema
+static int _draw_near_point(dt_develop_t *dev, const float x, const float y, const float *points, const int limit)
 {
-  const float zoom_scale = dt_dev_get_overlay_scale(darktable.develop);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
   const float delta = DT_PIXEL_APPLY_DPI(6) / (zoom_scale > 0.f ? zoom_scale : 1.f);
 
   for(int i = 0; i < limit; i++)
@@ -4223,12 +4227,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   gboolean handled = FALSE;
 
-  const float wd = darktable.develop->roi.preview_width;
-  const float ht = darktable.develop->roi.preview_height;
+  const float wd = self->dev->roi.preview_width;
+  const float ht = self->dev->roi.preview_height;
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzxpy[2] = { (float)x, (float)y };
-  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
   float pzx = pzxpy[0];
   float pzy = pzxpy[1];
 
@@ -4254,10 +4258,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       return FALSE;
     }
 
-    const float pd_w = darktable.develop->roi.processed_width;
-    const float pd_h = darktable.develop->roi.processed_height;
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       // first we move the point
@@ -4323,7 +4327,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       const float dx = (pts[0] - g->draw_pointmove_x);
@@ -4392,16 +4396,16 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
     return TRUE;
   }
-  // if we are in draw mode, we check if we are near a corner
+  // if we are in draw mode, we check if we are is_near a corner
   if(g->draw_points
      && ((g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines_count >= 4)
          || g->current_structure_method == ASHIFT_METHOD_LINES))
   {
     const int limit = (g->current_structure_method == ASHIFT_METHOD_LINES) ? g->lines_count * 2 : 4;
-    g->draw_near_point = _draw_near_point(pzx * wd, pzy * ht, g->draw_points, limit);
+    g->draw_near_point = _draw_near_point(self->dev, pzx * wd, pzy * ht, g->draw_points, limit);
   }
 
-  // if in rectangle selecting mode adjust "near"-ness of lines according to
+  // if in rectangle selecting mode adjust "is_near"-ness of lines according to
   // the rectangular selection
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
@@ -4416,7 +4420,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     return FALSE;
   }
 
-  // gather information about "near"-ness in g->points_idx
+  // gather information about "is_near"-ness in g->points_idx
   if(selectable_lines_count > 0)
     _get_near(
         g->points, g->points_idx, selectable_lines_count, pzx * wd, pzy * ht, g->near_delta,
@@ -4428,7 +4432,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     // Loop over displayed lines close to the pointer and update the matching live line flags.
     for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near == 0)
+      if(g->points_idx[n].is_near == 0)
         continue;
 
       if(g->isdeselecting)
@@ -4544,7 +4548,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   else
     g->near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta");
 
-  // gather information about "near"-ness in g->points_idx
+  // gather information about "is_near"-ness in g->points_idx
   if(selectable_lines_count > 0)
     _get_near(g->points, g->points_idx, selectable_lines_count,
               pzx * wd, pzy * ht, g->near_delta,
@@ -4557,12 +4561,12 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     // we search the selected line and mark it as the moved line
     for(int n = 0; n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near)
+      if(g->points_idx[n].is_near)
       {
-        const float pd_w = darktable.develop->roi.processed_width;
-        const float pd_h = darktable.develop->roi.processed_height;
+        const float pd_w = self->dev->roi.processed_width;
+        const float pd_h = self->dev->roi.processed_height;
         float pts[2] = { pzx * pd_w, pzy * pd_h };
-        dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+        dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                           DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
         g->draw_line_move = n;
         g->draw_pointmove_x = pts[0];
@@ -4580,7 +4584,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     // left-click selects and right-click deselects the line
     for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near == 0) continue;
+      if(g->points_idx[n].is_near == 0) continue;
 
       if(which == 3)
       {
@@ -4662,7 +4666,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
@@ -4727,13 +4731,13 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     g->straightening = FALSE;
     // adjust the line with possible current angle and flip on this module
     float pzxpy[2] = { (float)x, (float)y };
-    dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
+    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
     const float pzx = pzxpy[0];
     const float pzy = pzxpy[1];
-    const float pd_w = darktable.develop->roi.processed_width;
-    const float pd_h = darktable.develop->roi.processed_height;
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
     float pts[4] = { pzx * pd_w, pzy * pd_h, g->lastx * pd_w, g->lasty * pd_h };
-    dt_dev_distort_backtransform_plus(darktable.develop->virtual_pipe,
+    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe,
                                       self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
 
@@ -4931,7 +4935,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     if(g->current_structure_method == ASHIFT_METHOD_QUAD || g->current_structure_method == ASHIFT_METHOD_LINES)
       return TRUE;
 
-    // gather information about "near"-ness in g->points_idx
+    // gather information about "is_near"-ness in g->points_idx
     const int selectable_lines_count = (!IS_NULL_PTR(g->points) && !IS_NULL_PTR(g->points_idx))
                                        ? MIN(g->points_lines_count, g->lines_count)
                                        : 0;
@@ -4941,7 +4945,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     // iterate over all lines close to the pointer and change "selected" state.
     for(int n = 0; g->selecting_lines_version == g->lines_version && n < selectable_lines_count; n++)
     {
-      if(g->points_idx[n].near == 0)
+      if(g->points_idx[n].is_near == 0)
         continue;
 
       if(g->isdeselecting)
@@ -5409,7 +5413,7 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   memcpy(p, &g->new_params, sizeof(dt_iop_ashift_params_t));
 
   // Commit history and refresh view
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_dev_get_thumbnail_size(self->dev);
   dt_dev_pixelpipe_update_zoom_main(self->dev);
   dt_dev_pixelpipe_update_zoom_preview(self->dev);
@@ -5897,13 +5901,13 @@ void gui_init(struct dt_iop_module_t *self)
                                    _("rotation only"),
                                    _("lens shift only"), NULL };
   g->fitting_option
-      = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(self), _("Fit for"), NULL, ASHIFT_FITTING_ALL,
+      = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(self), _("Fit for"), NULL, ASHIFT_FITTING_ALL,
                                      (GtkCallback)fitting_option_changed, self, option_labels);
   gtk_box_pack_start(GTK_BOX(self->widget), g->fitting_option, TRUE, TRUE, 0);
 
   const gchar *crop_labels[] = { _("off"), _("largest area"), _("original format"), NULL };
   g->cropmode
-      = dt_bauhaus_combobox_new_full(darktable.bauhaus, DT_GUI_MODULE(self), _("automatic cropping"), NULL,
+      = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(self), _("automatic cropping"), NULL,
                                      ((dt_iop_ashift_params_t *)self->params)->cropmode,
                                      (GtkCallback)cropmode_callback, self, crop_labels);
   dt_bauhaus_combobox_set_default(g->cropmode,
@@ -5962,16 +5966,16 @@ void gui_init(struct dt_iop_module_t *self)
 
   /* Pending GUI jobs run once the preview pipe published a fresh render: by then process() has
      captured g->buf. The UI-pipe-finished hook only refreshes the overlay geometry. */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_event_process_after_preview_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                                   G_CALLBACK(_event_process_after_ui_callback), self);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_ui_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_event_process_after_preview_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_event_process_after_ui_callback), self);
   dt_iop_set_cache_bypass(self, FALSE);
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;

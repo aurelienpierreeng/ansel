@@ -16,16 +16,16 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_BLUR_H
+#define DT_IOP_HIGHLIGHTS_BLUR_H
 
 // Gaussian blur helpers + per-region blur, and the OpenCL blur / device-timing runtime prelude.
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/darktable.h"
-#include "common/gaussian.h"
-#include "common/opencl.h"
-#include "iop/highlights/common.h"
+#include "pixel/gaussian.h"
+
+#include <string.h>
 
 dt_gaussian_t *_hl_gauss_get(const int width, const int height, const int channels, const float sigma);
 
@@ -56,3 +56,4 @@ dt_gaussian_cl_t *_region_blur_handle(const int devid, const int region_w, const
 cl_int _region_blur_cl(const int devid, cl_mem in, cl_mem out, const int region_w, const int region_h,
                        const float sigma);
 #endif
+#endif // DT_IOP_HIGHLIGHTS_BLUR_H

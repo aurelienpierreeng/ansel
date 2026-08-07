@@ -17,6 +17,11 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "common/act_on.h"
+#include "control/jobs/control_jobs.h"
+#include "common/database.h"
+#include "common/image.h"
+#include "common/macros.h"
 #include "common/grouping.h"
 #include "common/colorlabels.h"
 #include "common/ratings.h"
@@ -48,7 +53,7 @@ static gboolean group_images_callback(GtkAccelGroup *group, GObject *acceleratab
   GList *imgs = NULL;
   sqlite3_stmt *stmt;
   int32_t new_group_id = UNKNOWN_IMAGE;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1, &stmt,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
                               NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -62,7 +67,7 @@ static gboolean group_images_callback(GtkAccelGroup *group, GObject *acceleratab
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
   }
   sqlite3_finalize(stmt);
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, imgs);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, imgs);
   return TRUE;
 }
 
@@ -71,7 +76,7 @@ static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *accelerat
 {
   GList *imgs = NULL;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1,
                               &stmt, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -86,7 +91,7 @@ static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *accelerat
   sqlite3_finalize(stmt);
   if(!IS_NULL_PTR(imgs))
   {
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING,
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING,
                                g_list_reverse(imgs));
     dt_control_queue_redraw_center();
   }

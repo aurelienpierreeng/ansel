@@ -55,14 +55,16 @@
 #include <gdk/gdkkeysyms.h>
 #include <strings.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/conf.h"
 #include "gui/gdkkeys.h"
+#include "system/capabilities.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/l10n.h"
 #include "common/opencl.h"
 #include "common/presets.h"
+#include "common/utility.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 
@@ -159,7 +161,7 @@ static GtkWidget *_preferences_dialog;
 
 ///////////// gui theme selection
 
-static void load_themes_dir(const char *basedir)
+static GList *load_themes_dir(GList *themes, const char *basedir)
 {
   char *themes_dir = g_build_filename(basedir, "themes", NULL);
   GDir *dir = g_dir_open(themes_dir, 0, NULL);
@@ -169,17 +171,17 @@ static void load_themes_dir(const char *basedir)
 
     const gchar *d_name;
     while((d_name = g_dir_read_name(dir)))
-      darktable.themes = g_list_append(darktable.themes, g_strdup(d_name));
+      themes = g_list_append(themes, g_strdup(d_name));
     g_dir_close(dir);
   }
   dt_free(themes_dir);
+  return themes;
 }
 
 static void load_themes(void)
 {
   // Clear theme list...
-  g_list_free_full(darktable.themes, dt_free_gpointer);
-  darktable.themes = NULL;
+  dt_gui_set_themes(NULL);
 
   // check themes dirs
   gchar configdir[PATH_MAX] = { 0 };
@@ -187,25 +189,27 @@ static void load_themes(void)
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
-  load_themes_dir(datadir);
-  load_themes_dir(configdir);
+  GList *themes = NULL;
+  themes = load_themes_dir(themes, datadir);
+  themes = load_themes_dir(themes, configdir);
+  dt_gui_set_themes(themes);
 }
 
 static void reload_ui_last_theme(void)
 {
   const char *theme = dt_conf_get_string_const("ui_last/theme");
   dt_gui_load_theme(theme);
-  dt_bauhaus_load_theme(darktable.bauhaus);
+  dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
 static void theme_callback(GtkWidget *widget, gpointer user_data)
 {
   const int selected = gtk_combo_box_get_active(GTK_COMBO_BOX(widget));
-  gchar *theme = g_list_nth(darktable.themes, selected)->data;
+  gchar *theme = g_list_nth(dt_gui_get_themes(), selected)->data;
   gchar *i = g_strrstr(theme, ".");
   if(i) *i = '\0';
   dt_gui_load_theme(theme);
-  dt_bauhaus_load_theme(darktable.bauhaus);
+  dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
 static void usercss_callback(GtkWidget *widget, gpointer user_data)
@@ -226,8 +230,8 @@ static void dpi_scaling_changed_callback(GtkWidget *widget, gpointer user_data)
   if(dpi > 0.0) dpi = fmax(64, dpi); // else <= 0 -> use system default
   dt_conf_set_float("screen_dpi_overwrite", dpi);
   restart_required = TRUE;
-  dt_configure_ppd_dpi(darktable.gui);
-  dt_bauhaus_load_theme(darktable.bauhaus);
+  dt_configure_ppd_dpi(dt_gui_get_global());
+  dt_bauhaus_load_theme(dt_bauhaus_get_global());
 }
 
 static void use_sys_font_callback(GtkWidget *widget, gpointer user_data)
@@ -296,16 +300,16 @@ static void usercss_dialog_callback(GtkDialog *dialog, gint response_id, gpointe
 static void language_callback(GtkWidget *widget, gpointer user_data)
 {
   int selected = gtk_combo_box_get_active(GTK_COMBO_BOX(widget));
-  dt_l10n_language_t *language = (dt_l10n_language_t *)g_list_nth_data(darktable.l10n->languages, selected);
-  if(darktable.l10n->sys_default == selected)
+  dt_l10n_language_t *language = (dt_l10n_language_t *)g_list_nth_data(dt_l10n_get_global()->languages, selected);
+  if(dt_l10n_get_global()->sys_default == selected)
   {
     dt_conf_set_string("ui_last/gui_language", "");
-    darktable.l10n->selected = darktable.l10n->sys_default;
+    dt_l10n_get_global()->selected = dt_l10n_get_global()->sys_default;
   }
   else
   {
     dt_conf_set_string("ui_last/gui_language", language->code);
-    darktable.l10n->selected = selected;
+    dt_l10n_get_global()->selected = selected;
   }
   restart_required = TRUE;
 }
@@ -314,7 +318,7 @@ static gboolean reset_language_widget(GtkWidget *label, GdkEventButton *event, G
 {
   if(event->type == GDK_2BUTTON_PRESS)
   {
-    gtk_combo_box_set_active(GTK_COMBO_BOX(widget), darktable.l10n->sys_default);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(widget), dt_l10n_get_global()->sys_default);
     return TRUE;
   }
   return FALSE;
@@ -343,13 +347,13 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_container_add(GTK_CONTAINER(labelev), label);
   GtkWidget *widget = gtk_combo_box_text_new();
 
-  for(GList *iter = darktable.l10n->languages; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_l10n_get_global()->languages; iter; iter = g_list_next(iter))
   {
     const char *name = dt_l10n_get_name(iter->data);
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), name);
   }
 
-  gtk_combo_box_set_active(GTK_COMBO_BOX(widget), darktable.l10n->selected);
+  gtk_combo_box_set_active(GTK_COMBO_BOX(widget), dt_l10n_get_global()->selected);
   g_signal_connect(G_OBJECT(widget), "changed", G_CALLBACK(language_callback), 0);
   gtk_widget_set_tooltip_text(labelev,  _("double-click to reset to the system language"));
   gtk_event_box_set_visible_window(GTK_EVENT_BOX(labelev), FALSE);
@@ -375,7 +379,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   char *theme_name = dt_conf_get_string("ui_last/theme");
   int selected = 0;
   int k = 0;
-  for(GList *iter = darktable.themes; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_gui_get_themes(); iter; iter = g_list_next(iter))
   {
     gchar *name = g_strdup((gchar*)(iter->data));
     // remove extension
@@ -526,11 +530,11 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
 gboolean preferences_window_deleted(GtkWidget *widget, GdkEvent *event, gpointer data)
 {
   // redraw the whole UI in case sizes have changed
-  gtk_widget_queue_resize(dt_ui_center(darktable.gui->ui));
-  gtk_widget_queue_resize(dt_ui_main_window(darktable.gui->ui));
+  gtk_widget_queue_resize(dt_gui_center_widget());
+  gtk_widget_queue_resize(dt_gui_main_window());
 
-  gtk_widget_queue_draw(dt_ui_main_window(darktable.gui->ui));
-  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
+  gtk_widget_queue_draw(dt_gui_main_window());
+  gtk_widget_queue_draw(dt_gui_center_widget());
 
   gtk_widget_hide(widget);
   return TRUE;
@@ -547,7 +551,7 @@ static void _resize_dialog(GtkWidget *widget)
 
 void dt_gui_preferences_show()
 {
-  GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *win = GTK_WINDOW(dt_gui_main_window());
   _preferences_dialog = gtk_dialog_new_with_buttons(_("Ansel preferences"), win,
                                                     GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                                     NULL, NULL);
@@ -779,7 +783,7 @@ void dt_gui_preferences_show()
   if(restart_required)
     dt_control_log(_("Ansel needs to be restarted for settings to take effect"));
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE);
 }
 
 static void cairo_destroy_from_pixbuf(guchar *pixels, gpointer data)
@@ -822,7 +826,7 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
                                                      cairo_image_surface_get_stride(check_cst),
                                                      cairo_destroy_from_pixbuf, check_cr);
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT rowid, name, operation, autoapply, model, maker, lens, iso_min, "
                               "iso_max, exposure_min, exposure_max, aperture_min, aperture_max, "
                               "focal_length_min, focal_length_max, writeprotect FROM data.presets ORDER BY "
@@ -1168,7 +1172,7 @@ static gboolean tree_key_press_presets(GtkWidget *widget, GdkEventKey *event, gp
       sqlite3_stmt *stmt;
       gchar* operation = NULL;
 
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT name, operation FROM data.presets WHERE rowid = ?1",
                               -1, &stmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rowid);
@@ -1267,9 +1271,9 @@ static void export_preset(GtkButton *button, gpointer data)
     sqlite3_stmt *stmt;
 
     // we have n+1 selects for saving presets, using single transaction for whole process saves us microlocks
-    dt_database_start_transaction(darktable.db);
+    dt_database_start_transaction(dt_database_get_global());
 
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT rowid, name, operation FROM data.presets WHERE writeprotect = 0",
                                 -1, &stmt, NULL);
 
@@ -1287,7 +1291,7 @@ static void export_preset(GtkButton *button, gpointer data)
 
     sqlite3_finalize(stmt);
 
-    dt_database_release_transaction(darktable.db);
+    dt_database_release_transaction(dt_database_get_global());
 
     dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
 

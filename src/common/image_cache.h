@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_IMAGE_CACHE_H
+#define DT_COMMON_IMAGE_CACHE_H
 
 #include "common/cache.h"
 #include "common/image.h"
@@ -58,6 +59,9 @@ dt_image_cache_write_mode_t;
 void dt_image_cache_init(dt_image_cache_t *cache);
 void dt_image_cache_cleanup(dt_image_cache_t *cache);
 void dt_image_cache_print(dt_image_cache_t *cache);
+
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+struct dt_image_cache_t *dt_image_cache_get_global(void);
 
 // One cached image (dt_image_t), for the GUI memory view.
 typedef struct dt_image_cache_stats_entry_t
@@ -133,6 +137,8 @@ int dt_image_invalid(const dt_image_t *img);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_IMAGE_CACHE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

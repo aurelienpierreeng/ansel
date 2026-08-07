@@ -43,11 +43,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
-#include "common/debug.h"
-#include "common/image_cache.h"
-#include "control/conf.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "common/times.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
@@ -152,7 +151,7 @@ static void _lib_navigation_history_resync_callback(gpointer instance, gpointer 
 
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   if(IS_NULL_PTR(d) || IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe)) return;
 
   dt_dev_pixelpipe_cache_wait_set_owner(&d->preview_wait, "navigation-preview", self);
@@ -193,12 +192,12 @@ void gui_init(dt_lib_module_t *self)
   self->widget = dt_ui_resizable_drawing_area(d->area, "plugins/darkroom/navigation/height", 175, 100);
 
   /* connect redraw callbacks to targeted preview cache publication and explicit redraw requests */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC,
                             G_CALLBACK(_lib_navigation_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_NAVIGATION_REDRAW,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NAVIGATION_REDRAW,
                             G_CALLBACK(_lib_navigation_control_redraw_callback), self);
 
-  darktable.lib->proxy.navigation.module = self;
+  dt_lib_get_global()->proxy.navigation.module = self;
 }
 
 void gui_cleanup(dt_lib_module_t *self)
@@ -207,8 +206,8 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
   /* disconnect from signal */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_navigation_control_redraw_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_navigation_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_navigation_control_redraw_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_navigation_history_resync_callback), self);
   dt_dev_pixelpipe_cache_wait_cleanup(&d->preview_wait, "navigation-gui-cleanup");
 
   if(!IS_NULL_PTR(d->image_surface)) cairo_surface_destroy(d->image_surface);
@@ -229,7 +228,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   dt_times_t start;
   dt_get_times(&start);
 
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
@@ -270,7 +269,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
                                         _lib_navigation_restart_cache_wait, self))
       return TRUE;
 
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, cache_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, cache_entry);
 
     wd = dev->preview_pipe->backbuf.width;
     ht = dev->preview_pipe->backbuf.height;
@@ -290,7 +289,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     cairo_surface_destroy(tmp_surface);
     cairo_destroy(cri);
 
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, cache_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, cache_entry);
 
     imgid = dev->image_storage.id;
   }
@@ -366,7 +365,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   /* Zoom % */
   PangoLayout *layout;
   PangoRectangle logic;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   layout = pango_cairo_create_layout(cr);
   const float fontsize = DT_PIXEL_APPLY_DPI(14);
@@ -441,7 +440,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
 static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double y, int alloc_wd, int alloc_ht)
 {
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   const dt_lib_navigation_t *d = (const dt_lib_navigation_t *)self->data;
   if(!(dev && d->dragging && dev->roi.scaling > 1.f)) return;
 
@@ -469,7 +468,7 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
   gtk_widget_queue_draw(d->area);
 
   /* redraw pipe */
-  dt_dev_pixelpipe_change_zoom_main(darktable.develop);
+  dt_dev_pixelpipe_change_zoom_main(dt_dev_get_global());
 }
 
 static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event,
@@ -484,7 +483,7 @@ static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEve
 
 static void _zoom_preset_change(dt_lib_zoom_t zoom)
 {
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   if(IS_NULL_PTR(dev)) return;
 
   switch(zoom)

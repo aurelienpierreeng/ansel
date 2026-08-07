@@ -36,22 +36,28 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "common/imagebuf.h"
-#include "common/imageio.h"
-#include "common/math.h"
+#include "imageio/imageio_core.h"
+#include "math/math.h"
 #include "common/opencl.h"
-#include "common/tea.h"
-#include "control/control.h"
+#include "pixel/tea.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/gradientslider.h"
+#include "gui/dtgtk/gradientslider.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -146,7 +152,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_iop_dither_params_t tmp
       = (dt_iop_dither_params_t){ DITHER_FSAUTO, 0, { 0.0f, { 0.0f, 0.0f, 1.0f, 1.0f }, -200.0f } };
@@ -157,7 +163,7 @@ void init_presets(dt_iop_module_so_t *self)
   // make it auto-apply for all images:
   // dt_gui_presets_update_autoapply(_("dither"), self->op, self->version(), 1);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 
@@ -461,7 +467,7 @@ static void process_random(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
   const int height = roi_in->height;
   const float dither = powf(2.0f, data->random.damping / 10.0f);
 
-  unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
+  unsigned int *const tea_states = alloc_tea_states(dt_get_num_openmp_threads());
   __OMP_PARALLEL__()
   {
     // get a pointer to each thread's private buffer *outside* the for loop, to avoid a function call per iteration
@@ -563,7 +569,7 @@ radius_callback (GtkWidget *slider, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_dither_params_t *p = (dt_iop_dither_params_t *)self->params;
   p->random.radius = dt_bauhaus_slider_get(slider);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 #endif
 
@@ -578,7 +584,7 @@ range_callback (GtkWidget *slider, gpointer user_data)
   p->random.range[1] = dtgtk_gradient_slider_multivalue_get_value(DTGTK_GRADIENT_SLIDER(slider), 1);
   p->random.range[2] = dtgtk_gradient_slider_multivalue_get_value(DTGTK_GRADIENT_SLIDER(slider), 2);
   p->random.range[3] = dtgtk_gradient_slider_multivalue_get_value(DTGTK_GRADIENT_SLIDER(slider), 3);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 #endif
 
@@ -662,7 +668,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->random = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
 #if 0
-  g->radius = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0, 200.0, 0.1, p->random.radius, 2);
+  g->radius = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0, 200.0, 0.1, p->random.radius, 2);
   gtk_widget_set_tooltip_text(g->radius, _("radius for blurring step"));
   dt_bauhaus_widget_set_label(g->radius, N_("radius"));
 

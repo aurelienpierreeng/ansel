@@ -61,23 +61,25 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "gui/gdkkeys.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/debug.h"
-#include "common/math.h"
-#include "common/opencl.h"
-#include "common/rgb_norms.h"
-#include "control/control.h"
+#include "math/math.h"
+#include "pixel/rgb_norms.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/drawingarea.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -423,13 +425,13 @@ static void set_presets(dt_iop_module_so_t *self, const basecurve_preset_t *pres
 void init_presets(dt_iop_module_so_t *self)
 {
   // sql begin
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   set_presets(self, basecurve_presets, basecurve_presets_cnt, FALSE);
   set_presets(self, basecurve_camera_presets, basecurve_camera_presets_cnt, TRUE);
 
   // sql commit
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 static inline __attribute__((always_inline)) float exposure_increment(float stops, int e, float fusion, float bias)
@@ -1088,7 +1090,7 @@ static gboolean dt_iop_basecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     // draw information about current selected node
     PangoLayout *layout;
     PangoRectangle ink;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, PANGO_SCALE);
     layout = pango_cairo_create_layout(cr);
@@ -1279,7 +1281,7 @@ static gboolean dt_iop_basecurve_motion_notify(GtkWidget *widget, GdkEventMotion
     {
       // no vertex was close, create a new one!
       c->selected = _add_node(basecurve, &p->basecurve_nodes[ch], linx, liny);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
   else
@@ -1372,7 +1374,7 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget, GdkEventButton 
             if(dist < min) c->selected = selected;
           }
 
-          dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+          dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
           gtk_widget_queue_draw(self->widget);
         }
       }
@@ -1389,7 +1391,7 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget, GdkEventButton 
         p->basecurve[ch][k].y = d->basecurve[ch][k].y;
       }
       c->selected = -2; // avoid motion notify re-inserting immediately.
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       gtk_widget_queue_draw(self->widget);
       return TRUE;
     }
@@ -1401,7 +1403,7 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget, GdkEventButton 
       float reset_value = c->selected == 0 ? 0 : 1;
       basecurve[c->selected].y = basecurve[c->selected].x = reset_value;
       gtk_widget_queue_draw(self->widget);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       return TRUE;
     }
 
@@ -1414,7 +1416,7 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget, GdkEventButton 
     c->selected = -2; // avoid re-insertion of that point immediately after this
     p->basecurve_nodes[ch]--;
     gtk_widget_queue_draw(self->widget);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     return TRUE;
   }
   return FALSE;
@@ -1586,11 +1588,11 @@ void gui_init(struct dt_iop_module_t *self)
                                                   "(-1: reduce highlight, +1: reduce shadows)"));
   gtk_widget_set_no_show_all(c->exposure_bias, TRUE);
   gtk_widget_set_visible(c->exposure_bias, p->exposure_fusion != 0 ? TRUE : FALSE);
-  c->logbase = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 40.0f, 0, 0.0f, 2);
+  c->logbase = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 40.0f, 0, 0.0f, 2);
   dt_bauhaus_widget_set_label(c->logbase, N_("scale for graph"));
   gtk_box_pack_start(GTK_BOX(self->widget), c->logbase , TRUE, TRUE, 0);  g_signal_connect(G_OBJECT(c->logbase), "value-changed", G_CALLBACK(logbase_callback), self);
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   gtk_widget_set_can_focus(GTK_WIDGET(c->area), TRUE);

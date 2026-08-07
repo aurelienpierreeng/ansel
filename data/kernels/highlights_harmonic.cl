@@ -1058,38 +1058,86 @@ hl_hf_damp(global float *estimate, global const float *valid, global const float
 // no hard crease appears where estimates cross the floor. Valid channels are untouched.
 // MATHS BRIDGE -- article step 5: out = c0 + 1/2 ( (e-c0) + sqrt((e-c0)^2 + (0.02 c0)^2) ), a smooth
 // max(e, c0) softened over width 0.02*c0 so the hard max()'s floor-binding contour never prints as an edge.
+// JOINT (hue-preserving) form -- mirror of the CPU Step-5 floor in coefficient_field.c: a per-channel
+// independent floor imprints the floors' own chroma (the WB coefficients = magenta) on multi-clip
+// pixels; instead ONE scalar lift of the whole clipped subset meets the most-demanding floor while
+// the reconstruction's hue survives. Identical to the per-channel soft floor for 1-clip pixels. The
+// lift is capped at 8x and the per-channel soft floor runs after as the degenerate-pixel safety net.
+// JOINT (chromaticity-preserving) variant blended by the clip-asymmetry floor gate (see the CPU
+// Step-5 floor in coefficient_field.c): per-channel at gate 0 (approved unit-WB behavior), one
+// scalar lift of the clipped subset at gate 1 (real-camera WB'd clips, where the per-channel
+// imprint is the inverse-WB magenta).
 kernel void
 hl_soft_floor(global float *estimate, global const float *valid, global const float *clip0,
-              const int width, const int height)
+              const int width, const int height, const float floor_gate)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
+  float lift = 1.f;
+  if(floor_gate > 1e-6f)
+    for(int c = 0; c < 3; c++)
+      if(valid[i * 4 + c] < 0.5f)
+      {
+        const float e = fmax(estimate[i * 4 + c], 1e-6f);
+        const float clip_level = clip0[i * 4 + c];
+        const float diff = e - clip_level;
+        const float soft_width = 0.02f * fmax(clip_level, 1e-6f);
+        const float target = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
+        lift = fmax(lift, fmin(target / e, 8.f));
+      }
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
     {
       const float clip_level = clip0[i * 4 + c];               // c0, the saturated reading
-      const float diff = estimate[i * 4 + c] - clip_level;     // e - c0
       const float soft_width = 0.02f * fmax(clip_level, 1e-6f); // transition width = 2% of c0
-      estimate[i * 4 + c] = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
+      const float diff = estimate[i * 4 + c] - clip_level;     // e - c0
+      const float per_chan = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
+      if(floor_gate <= 1e-6f)
+      {
+        estimate[i * 4 + c] = per_chan; // bit-exact approved path
+        continue;
+      }
+      const float lifted = fmax(estimate[i * 4 + c], 1e-6f) * lift;
+      const float diff_joint = lifted - clip_level;
+      const float joint
+          = clip_level + 0.5f * (diff_joint + sqrt(diff_joint * diff_joint + soft_width * soft_width));
+      estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
     }
 }
 
 // Hard saturation floor: clamp every clipped channel of est to at least its clip level
 // clip0. Re-asserted after the self dome, whose blend may have pulled values below the
-// floor.
+// floor. JOINT form (see hl_soft_floor / the CPU Step-5 floor for the rationale).
 kernel void
 hl_hard_floor(global float *estimate, global const float *valid, global const float *clip0,
-              const int width, const int height)
+              const int width, const int height, const float floor_gate)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
+  float lift = 1.f;
+  if(floor_gate > 1e-6f)
+    for(int c = 0; c < 3; c++)
+      if(valid[i * 4 + c] < 0.5f)
+      {
+        const float e = fmax(estimate[i * 4 + c], 1e-6f);
+        lift = fmax(lift, fmin(fmax(e, clip0[i * 4 + c]) / e, 8.f));
+      }
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
-      estimate[i * 4 + c] = fmax(estimate[i * 4 + c], clip0[i * 4 + c]);
+    {
+      const float per_chan = fmax(estimate[i * 4 + c], clip0[i * 4 + c]);
+      if(floor_gate <= 1e-6f)
+      {
+        estimate[i * 4 + c] = per_chan; // bit-exact approved path
+        continue;
+      }
+      const float joint = fmax(fmax(estimate[i * 4 + c], 1e-6f) * lift, clip0[i * 4 + c]);
+      estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
+    }
 }
 
 // Build the luminance-proxy plane (lsb = red + green + blue of est, a cheap brightness
@@ -1137,6 +1185,22 @@ hl_ratio_plane(global const float *estimate, global const float *luminance, glob
 // solve on the coarse grid. The downsample keeps the coarse hole small enough for the direct
 // SPD Cholesky (O(N^3)); the dome is low-frequency, so solving Delta^2 u = 0 coarse then bilinearly
 // upsampling loses nothing. Boundary cells keep real rim data (majority-hole flag, non-hole mean).
+// Pull the harmonically-filled chroma ratio toward the mean valid chromaticity inside the hole
+// (mirrors the CPU _selfdome cmean pull, beta = 0.5 * floor_gate): the rim-harmonic value is
+// biased toward the fence band's chromaticity; the flat mean lifts it toward the true surround.
+// Only enqueued when the clip-asymmetry gate is open (beta > 0).
+kernel void
+hl_ratio_cmean_blend(global float *ratio, global const uchar *hole,
+                     const int width, const int height, const float cmeanc, const float beta)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  if(!hole[i]) return;
+  ratio[i] = (1.f - beta) * fmax(ratio[i], 0.f) + beta * cmeanc;
+}
+
 kernel void
 hl_dome_down(global const float *value, global const uchar *hole,
              global float *coarse_value, global uchar *coarse_hole,
@@ -1173,12 +1237,18 @@ hl_dome_down(global const float *value, global const uchar *hole,
 //   dome_fraction = (1 - S_{0.4}^{0.85}(R^2)) * exp(-(delta/1.5 sigma)^2),
 // R^2 (bsc) asking "is the colour-line real" via smoothstep S, delta (dep) asking "is the dome
 // trustworthy" via a gaussian of depth; dome_c = L_dome * (r_c / sum r) recombines hue-coupled.
+
+
+// CHROMA-DECOUPLED variant blended by the clip-asymmetry floor gate (mirrors the CPU _selfdome
+// recombine): the per-channel blend lets the colour-line fit's biased chromaticity survive on
+// multi-clip pixels; decoupling keeps the blend's summed LUMINANCE but reprojects the clipped
+// subset onto the dome's chromaticity. At gate 0 the per-channel blend runs verbatim.
 kernel void
 hl_dome_blend(global float *estimate, global const float *valid, global const float *model_quality,
               global const float *clip_depth, global const float *dome_lum,
               global const float *ratio0, global const float *ratio1, global const float *ratio2,
               global const uchar *hole, const int width, const int height,
-              const float cf_sigma, const float epsilon)
+              const float cf_sigma, const float epsilon, const float floor_gate)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1189,6 +1259,12 @@ hl_dome_blend(global float *estimate, global const float *valid, global const fl
   const float ratio_sum = fmax(ratios[0] + ratios[1] + ratios[2], epsilon);
   const int anyvalid = (valid[i * 4 + 0] >= 0.5f) || (valid[i * 4 + 1] >= 0.5f)
                        || (valid[i * 4 + 2] >= 0.5f);
+  // the approved per-channel depth-gated blend, kept verbatim as the gate-0 path and as one leg
+  // of the gated chroma-decoupled blend below (mirror of the CPU _selfdome recombine)
+  float per_channel_blend[3];
+  float domes[3];
+  float blended_sub = 0.f;
+  float dome_sub = 0.f;
   for(int c = 0; c < 3; c++)
     if(valid[i * 4 + c] < 0.5f)
     {
@@ -1200,7 +1276,21 @@ hl_dome_blend(global float *estimate, global const float *valid, global const fl
       const float keep_weight = keep_root * keep_root;                                           // keep = 1 - dome_fraction
       const float dome_value = dome_lum[i] * (ratios[c] / ratio_sum);                            // dome_c = L_dome * chroma share
       // est = keep*est + (1-keep)*dome; no surviving guide -> take the dome outright
-      estimate[i * 4 + c] = anyvalid ? (keep_weight * estimate[i * 4 + c] + (1.f - keep_weight) * dome_value) : dome_value;
+      per_channel_blend[c] = anyvalid ? (keep_weight * estimate[i * 4 + c] + (1.f - keep_weight) * dome_value) : dome_value;
+      domes[c] = dome_value;
+      blended_sub += per_channel_blend[c];
+      dome_sub += dome_value;
+    }
+  for(int c = 0; c < 3; c++)
+    if(valid[i * 4 + c] < 0.5f)
+    {
+      if(floor_gate <= 1e-6f || !anyvalid || dome_sub <= epsilon)
+      {
+        estimate[i * 4 + c] = per_channel_blend[c]; // bit-exact approved path
+        continue;
+      }
+      const float decoupled = blended_sub * (domes[c] / dome_sub);
+      estimate[i * 4 + c] = floor_gate * decoupled + (1.f - floor_gate) * per_channel_blend[c];
     }
 }
 
@@ -1241,9 +1331,14 @@ hl_core_floor(global float *dome_lum, global const uchar *hole, global const flo
 // screened solve pulls toward.
 // MATHS BRIDGE -- step 7 flat-colour target r_target = <RGB/L_sum> over fully-valid pixels
 // (article's bar-c_c): the screened-Poisson reaction damps the core chroma toward this mean.
+// lum_min gates the accumulation to BRIGHT valid pixels (>= 0.35 x blown-zone plateau) for the
+// refinements' surround reference -- the all-valid mean is contaminated by dark foreground (the
+// cgrad anchors learned the same lesson). Pass 0.f to keep every valid pixel (the approved
+// flat-colour solver target).
 kernel void
 hl_cmean_reduce(global const float *estimate, global const float *valid, global const float *luminance,
-                global float4 *partial, const int n_pixels, const float epsilon, local float4 *scratch)
+                global float4 *partial, const int n_pixels, const float epsilon, const float lum_min,
+                local float4 *scratch)
 {
   const int global_id = get_global_id(0);
   const int global_size = get_global_size(0);
@@ -1252,7 +1347,8 @@ hl_cmean_reduce(global const float *estimate, global const float *valid, global 
 
   float4 accum = (float4)(0.f);
   for(int i = global_id; i < n_pixels; i += global_size)
-    if(valid[i * 4 + 0] >= 0.5f && valid[i * 4 + 1] >= 0.5f && valid[i * 4 + 2] >= 0.5f)
+    if(valid[i * 4 + 0] >= 0.5f && valid[i * 4 + 1] >= 0.5f && valid[i * 4 + 2] >= 0.5f
+       && luminance[i] >= lum_min)
     {
       const float inv_lum = 1.f / fmax(luminance[i], epsilon);
       accum += (float4)(estimate[i * 4 + 0] * inv_lum, estimate[i * 4 + 1] * inv_lum, estimate[i * 4 + 2] * inv_lum, 1.f);
@@ -1265,6 +1361,76 @@ hl_cmean_reduce(global const float *estimate, global const float *valid, global 
     barrier(CLK_LOCAL_MEM_FENCE);
   }
   if(local_id == 0) partial[get_group_id(0)] = scratch[0];
+}
+
+
+
+// Trusted-ring validation of the flat-mean colour prior (mirror of the CPU
+// _hl_ring_flat_mean_vote): per-workgroup partial sums of the ring pixels' chromaticity shares
+// {s0, s1, s2, count} and squares {s0^2, s1^2, s2^2, 0} over 1-clip pixels. The host computes
+// the ring mean/dispersion and the vote t-statistic from them (see the CPU helper for the
+// bias-over-dispersion rationale).
+kernel void
+hl_ring_vote(global const float *estimate, global const float *valid, global float4 *partial,
+             const int n_pixels, local float4 *scratch)
+{
+  const int global_id = get_global_id(0);
+  const int global_size = get_global_size(0);
+  const int local_id = get_local_id(0);
+  const int local_size = get_local_size(0);
+
+  float4 accum_sum = (float4)(0.f);
+  float4 accum_sq = (float4)(0.f);
+  for(int i = global_id; i < n_pixels; i += global_size)
+  {
+    const int n_clipped = (valid[i * 4 + 0] < 0.5f) + (valid[i * 4 + 1] < 0.5f) + (valid[i * 4 + 2] < 0.5f);
+    if(n_clipped != 1) continue;
+    const float sum = fmax(estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2], 1e-9f);
+    const float s0 = estimate[i * 4 + 0] / sum;
+    const float s1 = estimate[i * 4 + 1] / sum;
+    const float s2 = estimate[i * 4 + 2] / sum;
+    accum_sum += (float4)(s0, s1, s2, 1.f);
+    accum_sq += (float4)(s0 * s0, s1 * s1, s2 * s2, 0.f);
+  }
+  scratch[local_id * 2 + 0] = accum_sum;
+  scratch[local_id * 2 + 1] = accum_sq;
+  barrier(CLK_LOCAL_MEM_FENCE);
+  for(int offset = local_size / 2; offset > 0; offset /= 2)
+  {
+    if(local_id < offset)
+    {
+      scratch[local_id * 2 + 0] += scratch[(local_id + offset) * 2 + 0];
+      scratch[local_id * 2 + 1] += scratch[(local_id + offset) * 2 + 1];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+  if(local_id == 0)
+  {
+    partial[get_group_id(0) * 2 + 0] = scratch[0];
+    partial[get_group_id(0) * 2 + 1] = scratch[1];
+  }
+}
+
+// Re-hue the all-clip core's saturation floor toward the mean valid chromaticity, blended by the
+// clip-asymmetry floor gate (mirrors the CPU _joint_core rehue): with WB'd clips, clip0's own
+// chromaticity is the inverse-WB magenta -- a magnitude floor, not a colour -- yet the aniso stage
+// uses it as its ratio-space obstacle and reassembly floor, pinning the core to neutral raw.
+// Redistributing clip0 to cmean preserves the magnitude sum_c clip0_c (cmean sums to 1 by
+// construction) while the obstacle/floor now enforces the surround chromaticity. Only enqueued
+// when the gate is open (untouched clip0 = approved behavior on equal clips).
+kernel void
+hl_clip0_rehue(global float *clip0, global const uchar *hole, const int width, const int height,
+               const float cmean0, const float cmean1, const float cmean2, const float gate)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  if(!hole[i]) return;
+  const float lsat = clip0[i * 4 + 0] + clip0[i * 4 + 1] + clip0[i * 4 + 2];
+  const float cmean[3] = { cmean0, cmean1, cmean2 };
+  for(int c = 0; c < 3; c++)
+    clip0[i * 4 + c] = gate * (lsat * cmean[c]) + (1.f - gate) * clip0[i * 4 + c];
 }
 
 // Prepare the three planes of the core chroma solve for channel c. t1 = the known boundary
@@ -1522,7 +1688,7 @@ hl_aniso_weights(global const float *tensor_xx, global const float *tensor_xy, g
 kernel void
 hl_aniso_reassemble(global float *estimate, global const float *valid_anchor, global const float *luminance,
                     global const float *chroma, global const float *clip0,
-                    const int width, const int height, const float epsilon)
+                    const int width, const int height, const float epsilon, const float floor_gate)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1532,6 +1698,23 @@ hl_aniso_reassemble(global float *estimate, global const float *valid_anchor, gl
   // >= 0.6): magnitude = dome luminance split by the diffused ratios. Mirrors the CPU
   // reassembly (a ladder-era magnitude-transfer branch was removed from both).
   const float ratio_sum = fmax(chroma[i * 4 + 0] + chroma[i * 4 + 1] + chroma[i * 4 + 2], epsilon); // sum_j r_j
+
+  // JOINT variant blended by the clip-asymmetry floor gate (see hl_soft_floor): one scalar lift of
+  // the clipped subset preserves the diffused chromaticity; per-channel at gate 0.
+  float lift = 1.f;
+  if(floor_gate > 1e-6f)
+    for(int c = 0; c < 3; c++)
+      if(valid_anchor[i * 4 + c] < 0.5f)
+      {
+        const float ratio_c = fmax(chroma[i * 4 + c], 0.f);
+        const float value = fmax(luminance[i] * ratio_c / ratio_sum, 1e-6f);
+        const float clip_level = clip0[i * 4 + c];
+        const float delta = value - clip_level;
+        const float soft_width = 0.02f * fmax(clip_level, 1e-6f);
+        const float target = clip_level + 0.5f * (delta + sqrt(delta * delta + soft_width * soft_width));
+        lift = fmax(lift, fmin(target / value, 8.f));
+      }
+
   for(int c = 0; c < 3; c++)
     if(valid_anchor[i * 4 + c] < 0.5f)
     {
@@ -1544,10 +1727,259 @@ hl_aniso_reassemble(global float *estimate, global const float *valid_anchor, gl
       const float clip_level = clip0[i * 4 + c];
       const float diff = magnitude - clip_level;
       const float soft_width = 0.02f * fmax(clip_level, 1e-6f);
-      estimate[i * 4 + c] = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
+      const float per_chan = clip_level + 0.5f * (diff + sqrt(diff * diff + soft_width * soft_width));
+      if(floor_gate <= 1e-6f)
+      {
+        estimate[i * 4 + c] = per_chan; // bit-exact approved path
+        continue;
+      }
+      const float lifted = fmax(magnitude, 1e-6f) * lift;
+      const float diff_joint = lifted - clip_level;
+      const float joint
+          = clip_level + 0.5f * (diff_joint + sqrt(diff_joint * diff_joint + soft_width * soft_width));
+      estimate[i * 4 + c] = floor_gate * joint + (1.f - floor_gate) * per_chan;
     }
 }
 
+
+// ===== chromaticity-gradient continuation (article addendum) ================================
+// Extend the BRIGHT valid surround's chroma shares into the blown zone biharmonically (value +
+// gradient continuation, the same operator as the luminance dome), then re-hue every multi-clip
+// pixel's clipped subset to the extended field. Every value-continuing estimator inherits the
+// unrepresentative fence-band hue at the clip contour; the C1 continuation restores the scene's
+// hue trend and is smooth across occluders by construction. Mirrors the CPU _chromaticity_gradient
+// (core.c) -- any change here must be mirrored there and re-validated with HL_CGRADCL_TEST.
+
+// Reduction: per-workgroup partial sums of {luminance, count} over any-clip pixels -- the host
+// turns them into the plateau luminance that gates the anchors.
+kernel void
+hl_cgrad_plateau(global const float *estimate, global const float *valid, global float *partial,
+               const int n_pixels, local float *scratch)
+{
+  const int gid = get_global_id(0), gsz = get_global_size(0);
+  const int lid = get_local_id(0), lsz = get_local_size(0);
+  float lum_sum = 0.f, count = 0.f;
+  for(int i = gid; i < n_pixels; i += gsz)
+    if(valid[i * 4 + 0] < 0.5f || valid[i * 4 + 1] < 0.5f || valid[i * 4 + 2] < 0.5f)
+    {
+      lum_sum += estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2];
+      count += 1.f;
+    }
+  scratch[lid * 2 + 0] = lum_sum;
+  scratch[lid * 2 + 1] = count;
+  barrier(CLK_LOCAL_MEM_FENCE);
+  for(int off = lsz / 2; off > 0; off /= 2)
+  {
+    if(lid < off)
+    {
+      scratch[lid * 2 + 0] += scratch[(lid + off) * 2 + 0];
+      scratch[lid * 2 + 1] += scratch[(lid + off) * 2 + 1];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+  if(lid == 0)
+  {
+    partial[get_group_id(0) * 2 + 0] = scratch[0];
+    partial[get_group_id(0) * 2 + 1] = scratch[1];
+  }
+}
+
+// Guard source: 1 inside the any-clip zone, 0 outside, written to a float IMAGE (the device
+// gaussian works on images); the host blurs it into the proximity field so anchors can stand
+// clear of the thin unrepresentative fence band at the clip contour.
+kernel void
+hl_cgrad_guard(global const float *valid, write_only image2d_t guard_src, const int width, const int height)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const float any_clip
+      = (valid[i * 4 + 0] < 0.5f || valid[i * 4 + 1] < 0.5f || valid[i * 4 + 2] < 0.5f) ? 1.f : 0.f;
+  write_imagef(guard_src, (int2)(x, y), (float4)(any_clip));
+}
+
+// Anchor mask (as the dome's hole convention: hole = NOT anchor): anchors are fully-valid, bright
+// (>= the host-computed plateau fraction) and clear of the blurred clip proximity.
+kernel void
+hl_cgrad_anchor(global const float *estimate, global const float *valid, read_only image2d_t guard_blur,
+              global uchar *hole, const int width, const int height, const float lum_min)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const int fully_valid
+      = (valid[i * 4 + 0] >= 0.5f) && (valid[i * 4 + 1] >= 0.5f) && (valid[i * 4 + 2] >= 0.5f);
+  const float lum = estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2];
+  const float proximity = read_imagef(guard_blur, sampleri, (int2)(x, y)).x;
+  hole[i] = !(fully_valid && (lum >= lum_min) && (proximity < 0.05f));
+}
+
+// Chroma share plane for channel c (share everywhere; hole values only serve as the dome's guess).
+kernel void
+hl_cgrad_share(global const float *estimate, global float *field, const int width, const int height,
+             const int c, const float epsilon)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const float lum = estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2];
+  field[i] = estimate[i * 4 + c] / fmax(lum, epsilon);
+}
+
+// Store the extended share plane (clamped: shares are bounded, the dome may overshoot).
+kernel void
+hl_cgrad_store(global const float *field, global float *shares, const int width, const int height, const int c)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  shares[i * 4 + c] = clamp(field[i], 0.f, 1.f);
+}
+
+// Content gate source: at 1-clip pixels (the method's trusted zone -- reconstructed from TWO
+// measured guides), compare the extended field's chromaticity to the solver's; write the
+// gaussian-of-error agreement weight and its mask into float IMAGES for the device blur. The
+// diffused weight decides per-pixel whether the chromaticity-continuation prior applies (gradient
+// skies) or the blown object is self-coloured and keeps the solver (coloured emitters).
+kernel void
+hl_cgrad_gate(global const float *estimate, global const float *valid, global const float *shares,
+              global const float *clip0, write_only image2d_t gate_src, write_only image2d_t gate_msk,
+              const int width, const int height, const float epsilon, const float gate_tau,
+              const float floor_gate)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const int n_clip = (valid[i * 4 + 0] < 0.5f) + (valid[i * 4 + 1] < 0.5f) + (valid[i * 4 + 2] < 0.5f);
+  float weight_src = 0.f, mask_src = 0.f;
+  // floor-authored 1-clip pixels are not evidence (see the CPU stage): ring votes only where the
+  // fit genuinely spoke
+  int floor_authored = 0;
+  if(n_clip == 1 && floor_gate > 1e-6f) // WB'd clips only (see the CPU stage)
+  {
+    const int cc = (valid[i * 4 + 0] < 0.5f) ? 0 : ((valid[i * 4 + 1] < 0.5f) ? 1 : 2);
+    floor_authored = estimate[i * 4 + cc] <= 1.03f * fmax(clip0[i * 4 + cc], 1e-9f);
+  }
+  if(n_clip == 1 && !floor_authored)
+  {
+    const float lum = fmax(estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2], epsilon);
+    const float share_sum = fmax(shares[i * 4 + 0] + shares[i * 4 + 1] + shares[i * 4 + 2], epsilon);
+    float err = 0.f;
+    for(int c = 0; c < 3; c++)
+      err += fabs(shares[i * 4 + c] / share_sum - estimate[i * 4 + c] / lum);
+    const float t = err / gate_tau;
+    weight_src = exp(-t * t);
+    mask_src = 1.f;
+  }
+  write_imagef(gate_src, (int2)(x, y), (float4)(weight_src));
+  write_imagef(gate_msk, (int2)(x, y), (float4)(mask_src));
+}
+
+// Reproject every multi-clip pixel's clipped subset onto the extended field, BLENDED by the
+// diffused 1-clip-annulus agreement weight (the content gate), then re-assert the joint
+// saturation floor. Partial pixels: the surviving channels anchor the brightness against the
+// field and the clipped channels take the field's shares; all-clip pixels keep the dome-luminance
+// magnitude and redistribute it by the field. 1-clip pixels are left untouched. Mirror of the CPU
+// _chromaticity_gradient reprojection.
+kernel void
+hl_cgrad_reproject(global float *estimate, global const float *valid, global const float *clip0,
+             global const float *shares, read_only image2d_t gate_wgt, read_only image2d_t gate_nrm,
+             const int width, const int height, const float epsilon, const float gate_vote)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const int clip_r = valid[i * 4 + 0] < 0.5f;
+  const int clip_g = valid[i * 4 + 1] < 0.5f;
+  const int clip_b = valid[i * 4 + 2] < 0.5f;
+  const int n_clip = clip_r + clip_g + clip_b;
+  if(n_clip < 2) return; // 1-clip: measured-correct where the fit spoke; floor-authored ones are
+                         // handled by the pass-2 kernels (hl_cgrad_hole1c/hl_cgrad_write1c)
+
+  // diffused agreement weight, shrunk toward the region-level ring vote as local evidence thins
+  const float gate_lambda = 0.05f;
+  const float gate_w = clamp((read_imagef(gate_wgt, sampleri, (int2)(x, y)).x + gate_lambda * gate_vote)
+                                 / (read_imagef(gate_nrm, sampleri, (int2)(x, y)).x + gate_lambda),
+                             0.f, 1.f);
+  if(gate_w <= 1e-4f) return;
+
+  const float share_sum = fmax(shares[i * 4 + 0] + shares[i * 4 + 1] + shares[i * 4 + 2], epsilon);
+  const int anyvalid = !(clip_r && clip_g && clip_b);
+
+  if(anyvalid)
+  {
+    float sv_est = 0.f, sv_share = 0.f;
+    for(int c = 0; c < 3; c++)
+      if(valid[i * 4 + c] >= 0.5f)
+      {
+        sv_est += estimate[i * 4 + c];
+        sv_share += shares[i * 4 + c] / share_sum;
+      }
+    if(sv_share <= epsilon || sv_est <= epsilon) return;
+    // survivor-anchored scale, bounded (mirror of the CPU stability cap)
+    const float scale
+        = fmin(sv_est / sv_share, 4.f * (estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2]));
+    for(int c = 0; c < 3; c++)
+      if(valid[i * 4 + c] < 0.5f)
+        estimate[i * 4 + c]
+            = gate_w * (scale * (shares[i * 4 + c] / share_sum)) + (1.f - gate_w) * estimate[i * 4 + c];
+  }
+  else
+  {
+    // all-clip pixels are not reprojected (see the CPU stage: no measured anchor -> the dome keeps
+    // magnitude authority; redistribution of a poor core total is unstable)
+    return;
+  }
+
+  // joint saturation floor (scalar-subset lift + per-channel safety, hue preserved)
+  float lift = 1.f;
+  for(int c = 0; c < 3; c++)
+    if(valid[i * 4 + c] < 0.5f)
+    {
+      const float e = fmax(estimate[i * 4 + c], 1e-6f);
+      lift = fmax(lift, fmin(fmax(e, clip0[i * 4 + c]) / e, 8.f));
+    }
+  for(int c = 0; c < 3; c++)
+    if(valid[i * 4 + c] < 0.5f)
+    {
+      if(lift > 1.f) estimate[i * 4 + c] = fmax(estimate[i * 4 + c], 1e-6f) * lift;
+      estimate[i * 4 + c] = fmax(estimate[i * 4 + c], clip0[i * 4 + c]);
+    }
+}
+
+// PASS 2 = a3 (see the CPU stage): build one clipped channel's floor-authored hole (1-clip,
+// this channel clipped, estimate at/below its own saturation floor) and seed the fill plane
+// with the channel's current values everywhere -- the biharmonic dome then extends the value
+// across the hole from BOTH sides (multi-clip reconstruction inside, measured data outside).
+kernel void
+hl_cgrad_hole1c(global const float *estimate, global const float *valid, global const float *clip0,
+                global uchar *hole, global float *field, const int width, const int height, const int c)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const int clip_r = valid[i * 4 + 0] < 0.5f;
+  const int clip_g = valid[i * 4 + 1] < 0.5f;
+  const int clip_b = valid[i * 4 + 2] < 0.5f;
+  const int cc = clip_r ? 0 : (clip_g ? 1 : 2);
+  const int is_hole = (clip_r + clip_g + clip_b == 1) && (cc == c)
+                      && (estimate[i * 4 + c] <= 1.03f * fmax(clip0[i * 4 + c], 1e-9f));
+  hole[i] = is_hole;
+  field[i] = estimate[i * 4 + c];
+}
+
+// PASS 2 = a3 write-back: the filled value replaces the floor-authored pixel's clipped channel,
+// floored at saturation (the fill approaches clip0 at the outer contour by construction).
+kernel void
+hl_cgrad_write1c(global float *estimate, global const uchar *hole, global const float *field,
+                 global const float *clip0, const int width, const int height, const int c)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  if(!hole[i]) return;
+  estimate[i * 4 + c] = fmax(field[i], clip0[i * 4 + c]);
+}
 
 // ===== knee (rolloff pre-correction) estimation ============================================
 // Cameras roll off smoothly just below saturation instead of clipping abruptly; the knee
@@ -2300,7 +2732,8 @@ hl_aniso_iter(global const float *source, global float *dest, global const uchar
               global const float *tensor_xx, global const float *tensor_xy, global const float *tensor_yy,
               global const float *coarse_obstacle,
               const int width, const int height, const int c,
-              const int box_x0, const int box_y0, const int box_x1, const int box_y1)
+              const int box_x0, const int box_y0, const int box_x1, const int box_y1,
+              const float react, const float react_target)
 {
   const int x = box_x0 + get_global_id(0);
   const int y = box_y0 + get_global_id(1);
@@ -2324,7 +2757,11 @@ hl_aniso_iter(global const float *source, global float *dest, global const uchar
   // r <- max( r + 0.18*(D_xx d_xx r + 2 D_xy d_xy r + D_yy d_yy r), c0/L ): explicit trace-form
   // step tr(D Hess r), then obstacle projection each step (monotone obstacle-problem relaxation,
   // mirrors the CPU _aniso_iterate_obs)
-  dest[i] = fmax(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy), coarse_obstacle[i * 3 + c]);
+  // the -0.18*react*(r - target) term is the screened reaction of the "inpaint a flat color"
+  // parameter (0 on the pyramid levels; active in the full-resolution polish -- see the CPU twin)
+  dest[i] = fmax(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy)
+                     - 0.18f * react * (center - react_target),
+                 coarse_obstacle[i * 3 + c]);
 }
 
 // Single-workgroup variant of hl_aniso_iter: for a SMALL bounding box, run all `iters`
@@ -2336,7 +2773,8 @@ hl_aniso_iter_block(global float *buffer_a, global float *buffer_b, global const
                     global const float *tensor_xx, global const float *tensor_xy, global const float *tensor_yy,
                     global const float *coarse_obstacle,
                     const int width, const int height, const int c,
-                    const int box_x0, const int box_y0, const int box_x1, const int box_y1, const int iters)
+                    const int box_x0, const int box_y0, const int box_x1, const int box_y1, const int iters,
+                    const float react, const float react_target)
 {
   const int local_id = get_local_id(0);
   const int local_size = get_local_size(0);
@@ -2364,8 +2802,9 @@ hl_aniso_iter_block(global float *buffer_a, global float *buffer_b, global const
                                  - source[y_north * width + x_east] + source[y_north * width + x_west]);
       // r <- max(r + 0.18*tr(D Hess r), c0/L): trace-form step + obstacle projection each step
       // (mirrors _aniso_iterate_obs)
-      dest[i] = fmax(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy),
-                    coarse_obstacle[i * 3 + c]);
+      dest[i] = fmax(center + 0.18f * (tensor_xx[i] * d2_xx + 2.f * tensor_xy[i] * d2_xy + tensor_yy[i] * d2_yy)
+                             - 0.18f * react * (center - react_target),
+                         coarse_obstacle[i * 3 + c]);
     }
     barrier(CLK_GLOBAL_MEM_FENCE);
     global float *tmp = source; source = dest; dest = tmp;

@@ -40,16 +40,25 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "common/conf.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
-#include "common/bilateralcl.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "gui/gtk.h"
+#include "pixel/bilateral.h"
+#include "pixel/bilateralcl.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/dwt.h"
-#include "common/gaussian.h"
-#include "common/heal.h"
+#include "pixel/dwt.h"
+#include "pixel/gaussian.h"
+#include "pixel/heal.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "develop/blend.h"
@@ -59,7 +68,6 @@
 #include "develop/tiling.h"
 #include "gui/actions/menu.h"
 #include "iop/iop_api.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/color_picker_proxy.h"
 #include <stdlib.h>
@@ -487,11 +495,11 @@ static void rt_show_hide_controls(const dt_iop_module_t *self)
     gtk_widget_hide(GTK_WIDGET(g->sl_mask_opacity));
 }
 
-static void rt_display_selected_shapes_lbl(dt_iop_retouch_gui_data_t *g)
+static void rt_display_selected_shapes_lbl(dt_develop_t *dev, dt_iop_retouch_gui_data_t *g)
 {
-  const int selected_formid = rt_get_selected_shape_id(darktable.develop->gui_module);
+  const int selected_formid = rt_get_selected_shape_id(dev->gui_module);
   const dt_masks_form_t *form = selected_formid > 0
-                                ? dt_masks_get_from_id(darktable.develop, selected_formid)
+                                ? dt_masks_get_from_id(dev, selected_formid)
                                 : NULL;
   if(!IS_NULL_PTR(form))
     gtk_label_set_text(g->label_form_selected, form->name);
@@ -499,9 +507,9 @@ static void rt_display_selected_shapes_lbl(dt_iop_retouch_gui_data_t *g)
     gtk_label_set_text(g->label_form_selected, _("none"));
 }
 
-static int rt_get_selected_shape_index(dt_iop_retouch_params_t *p)
+static int rt_get_selected_shape_index(dt_develop_t *dev, dt_iop_retouch_params_t *p)
 {
-  const int selected_formid = rt_get_selected_shape_id(darktable.develop->gui_module);
+  const int selected_formid = rt_get_selected_shape_id(dev->gui_module);
   return rt_get_index_from_formid(p, selected_formid);
 }
 
@@ -560,7 +568,7 @@ static void rt_load_shape_algo_in_gui(dt_iop_module_t *self, const int form_sele
 
   if(selection_changed) rt_show_hide_controls(self);
 
-  rt_display_selected_shapes_lbl(g);
+  rt_display_selected_shapes_lbl(self->dev, g);
 
   if(index >= 0)
     gtk_widget_show(GTK_WIDGET(g->sl_mask_opacity));
@@ -582,7 +590,7 @@ static void rt_masks_form_change_opacity(dt_iop_module_t *self, int formid, floa
     grpt->opacity = CLAMP(opacity, 0.05f, 1.0f);
     dt_conf_set_float("plugins/darkroom/masks/opacity", grpt->opacity);
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
 
@@ -643,7 +651,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   // if no shapes on this scale, we hide all
   if(bd->masks_shown == DT_MASKS_EDIT_OFF || count == 0)
   {
-    dt_masks_change_form_gui(NULL);
+    dt_masks_change_form_gui(self->dev, NULL);
 
     if(g)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
@@ -655,7 +663,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   }
 
   // else, we create a new from group with the shapes and display it
-  dt_masks_form_t *grp = dt_masks_create_ext(DT_MASKS_GROUP);
+  dt_masks_form_t *grp = dt_masks_create_ext(self->dev, DT_MASKS_GROUP);
   const int grid = self->blend_params->mask_id;
 
   for(int i = 0; i < RETOUCH_NO_FORMS; i++)
@@ -663,7 +671,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     if(p->rt_forms[i].scale == scale)
     {
       const int formid = p->rt_forms[i].formid;
-      dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
+      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
       if(IS_NULL_PTR(form)) continue;
       
       dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
@@ -675,10 +683,10 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     }
   }
 
-  dt_masks_form_t *grp2 = dt_masks_create_ext(DT_MASKS_GROUP);
-  grp2->formid = 0;
-  dt_masks_group_ungroup(grp2, grp);
-  dt_masks_change_form_gui(grp2);
+  dt_masks_form_t *grp_dest = dt_masks_create_ext(self->dev, DT_MASKS_GROUP);
+  grp_dest->formid = 0;
+  dt_masks_group_ungroup(self->dev, grp_dest, grp);
+  dt_masks_change_form_gui(self->dev, grp_dest);
   self->dev->form_gui->edit_mode = bd->masks_shown;
 
   if(g)
@@ -971,7 +979,7 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type)
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       if(IS_NULL_PTR(grpt)) goto end;
       
-      const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
+      const dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
       if(!IS_NULL_PTR(form)) being_added = (form->type & shape_type);
     }
     else
@@ -1036,7 +1044,7 @@ static void rt_colorpick_color_set_callback(GtkColorButton *widget, dt_iop_modul
   p->fill_color[1] = c.green;
   p->fill_color[2] = c.blue;
 
-  const int index = rt_get_selected_shape_index(p);
+  const int index = rt_get_selected_shape_index(self->dev, p);
   if(index >= 0)
   {
     if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_FILL)
@@ -1047,7 +1055,7 @@ static void rt_colorpick_color_set_callback(GtkColorButton *widget, dt_iop_modul
     }
   }
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 // wavelet decompose bar
@@ -1084,7 +1092,7 @@ static void rt_num_scales_update(const int _num_scales, dt_iop_module_t *self)
 
   rt_update_wd_bar_labels(p, g);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void rt_curr_scale_update(const int _curr_scale, dt_iop_module_t *self)
@@ -1116,7 +1124,7 @@ static void rt_curr_scale_update(const int _curr_scale, dt_iop_module_t *self)
 
   rt_update_wd_bar_labels(p, g);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void rt_merge_from_scale_update(const int _merge_from_scale, dt_iop_module_t *self)
@@ -1133,7 +1141,7 @@ static void rt_merge_from_scale_update(const int _merge_from_scale, dt_iop_modul
 
   rt_update_wd_bar_labels(p, g);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static gboolean rt_wdbar_leave_notify(GtkWidget *widget, GdkEventCrossing *event, dt_iop_module_t *self)
@@ -1450,7 +1458,7 @@ static void rt_gslider_changed(GtkDarktableGradientSlider *gslider, dt_iop_modul
 
   for (int i = 0; i < 3; i++) p->preview_levels[i] = dlevels[i];
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
 }
 
@@ -1472,7 +1480,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   p->fill_color[1] = self->picked_output_color[1];
   p->fill_color[2] = self->picked_output_color[2];
 
-  const int index = rt_get_selected_shape_index(p);
+  const int index = rt_get_selected_shape_index(self->dev, p);
   if(index >= 0)
   {
     if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_FILL)
@@ -1485,7 +1493,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   rt_display_selected_fill_color(g, p);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static gboolean rt_copypaste_scale_callback(GtkToggleButton *togglebutton, GdkEventButton *event, dt_iop_module_t *self)
@@ -1518,7 +1526,7 @@ static gboolean rt_copypaste_scale_callback(GtkToggleButton *togglebutton, GdkEv
 
   dt_gui_freeze_end();
 
-  if(scale_copied) dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  if(scale_copied) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   return TRUE;
 }
@@ -1636,7 +1644,7 @@ static void rt_develop_ui_pipe_finished_callback(gpointer instance, gpointer use
 
     for(int i = 0; i < 3; i++) p->preview_levels[i] = g->preview_levels[i];
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
     dt_iop_gui_enter_critical_section(self);
 
@@ -1689,7 +1697,7 @@ static void rt_mask_opacity_callback(GtkWidget *slider, dt_iop_module_t *self)
     rt_masks_form_change_opacity(self, shape_id, opacity);
   }
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_post_expose (struct dt_iop_module_t *self,
@@ -1728,7 +1736,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
 
   //hide all shapes and free if some are in creation
   if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
-    dt_masks_change_form_gui(NULL);
+    dt_masks_change_form_gui(self->dev, NULL);
 
   dt_masks_shape_buttons_deactivate_all(NULL);
 
@@ -1738,7 +1746,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
 
     dt_iop_color_picker_reset(self, TRUE);
 
-    dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, self->blend_params->mask_id);
+    dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
     if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
     {
       const gboolean control_button_pressed = dt_modifier_is(event->state, GDK_CONTROL_MASK);
@@ -1808,7 +1816,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
   // check if we have to do something
   gboolean accept = TRUE;
 
-  const int index = rt_get_selected_shape_index(p);
+  const int index = rt_get_selected_shape_index(self->dev, p);
   if(index >= 0 && dt_modifier_is(e->state, GDK_CONTROL_MASK))
   {
     const dt_iop_retouch_algo_type_t current_algo = p->rt_forms[index].algorithm;
@@ -1858,14 +1866,14 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     else
       masks_type = (type | DT_MASKS_NON_CLONE);
 
-    dt_masks_creation_mode_enter(self, masks_type);
+    dt_masks_creation_mode_enter(self->dev, self, masks_type);
 
     dt_control_queue_redraw_center();
   }
 
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   // if we have the shift key pressed, we set it as default
   if(dt_modifier_is(e->state, GDK_SHIFT_MASK))
@@ -1946,7 +1954,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   }
   else
   {
-    const int index = rt_get_selected_shape_index(p);
+    const int index = rt_get_selected_shape_index(self->dev, p);
     if(index >= 0)
     {
       if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_BLUR)
@@ -2036,7 +2044,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     {
       dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
       //only show shapes if shapes exist
-      dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, self->blend_params->mask_id);
+      dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
       if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
       {
         // got focus, show all shapes
@@ -2054,7 +2062,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     {
       // lost focus, hide all shapes and free if some are in creation
       if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
-        dt_masks_change_form_gui(NULL);
+        dt_masks_change_form_gui(self->dev, NULL);
 
       dt_masks_shape_buttons_deactivate_all(NULL);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks), FALSE);
@@ -2140,7 +2148,7 @@ void gui_update(dt_iop_module_t *self)
   rt_update_wd_bar_labels(p, g);
 
   // update selected shape label
-  rt_display_selected_shapes_lbl(g);
+  rt_display_selected_shapes_lbl(self->dev, g);
 
   // show the shapes for the current scale
   rt_show_forms_for_current_scale(self);
@@ -2244,6 +2252,7 @@ void gui_init(dt_iop_module_t *self)
 
   GtkWidget *shape_buttons[DEVELOP_MASKS_NB_SHAPES] = { 0 };
   const dt_masks_shape_buttons_config_t shape_buttons_config = {
+    .dev = self->dev,
     .owner_module = self,
     .creation_module = self,
     .buttons = shape_buttons,
@@ -2338,7 +2347,7 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->wd_bar), "scroll-event", G_CALLBACK(rt_wdbar_scrolled), self);
   gtk_widget_add_events(GTK_WIDGET(g->wd_bar), GDK_POINTER_MOTION_MASK
                                                    | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
-                                                   | GDK_LEAVE_NOTIFY_MASK | darktable.gui->scroll_mask);
+                                                   | GDK_LEAVE_NOTIFY_MASK | dt_gui_get_global()->scroll_mask);
   gtk_widget_set_size_request(g->wd_bar, -1, DT_PIXEL_APPLY_DPI(40));
 
   // toolbar display current scale / cut&paste / suppress&display masks
@@ -2462,7 +2471,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->sl_blur_radius, _("radius of the selected blur type"));
 
   // mask opacity
-  g->sl_mask_opacity = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0, 1.0, 0, 1., 3);
+  g->sl_mask_opacity = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0, 1.0, 0, 1., 3);
   dt_bauhaus_widget_set_label(g->sl_mask_opacity, N_("mask opacity"));
   dt_bauhaus_slider_set_format(g->sl_mask_opacity, "%");
   gtk_widget_set_tooltip_text(g->sl_mask_opacity, _("set the opacity on the selected shape"));
@@ -2507,14 +2516,14 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), g->sl_mask_opacity, TRUE, TRUE, 0);
 
   /* add signal handler for preview pipe finish to redraw the preview */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                             G_CALLBACK(rt_develop_ui_pipe_finished_callback), self);
 }
 
 void gui_reset(struct dt_iop_module_t *self)
 {
   // hide the previous masks
-  dt_masks_reset_form_gui();
+  dt_masks_reset_form_gui(self->dev);
   // set the algo to the default one
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
   p->algorithm = dt_conf_get_int("plugins/darkroom/retouch/default_algo");
@@ -2529,7 +2538,7 @@ void reload_defaults(dt_iop_module_t *self)
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(rt_develop_ui_pipe_finished_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(rt_develop_ui_pipe_finished_callback), self);
 
   IOP_GUI_FREE;
 }
@@ -4493,7 +4502,7 @@ static void rt_menu_select_algorithm_callback(GtkWidget *widget, gpointer user_d
   // Update GUI
   rt_load_shape_algo_in_gui(self, formid);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, const int formid,const float pzx, const float pzy)

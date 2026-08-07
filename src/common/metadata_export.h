@@ -23,6 +23,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_COMMON_METADATA_EXPORT_H
+#define DT_COMMON_METADATA_EXPORT_H
+
 typedef enum dt_metadata_id
 {
   DT_META_NONE = 0,
@@ -48,6 +51,8 @@ uint32_t dt_lib_export_metadata_default_flags(void);
 uint32_t dt_lib_export_metadata_get_conf_flags(void);
 char *dt_lib_export_metadata_get_conf(void);
 void dt_lib_export_metadata_set_conf(const char *metadata_presets);
+
+#endif // DT_COMMON_METADATA_EXPORT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

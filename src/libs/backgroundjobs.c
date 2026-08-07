@@ -32,15 +32,15 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/atomic.h"
-#include "common/darktable.h"
-#include "common/debug.h"
-#include "common/image_cache.h"
-#include "control/conf.h"
+#include "system/atomic.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/dtpthread.h"
 #include "control/control.h"
 #include "control/progress.h"
 #include "develop/develop.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
@@ -125,18 +125,19 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_no_show_all(self->widget, TRUE);
 
   /* setup proxy */
-  dt_pthread_mutex_lock(&darktable.control->progress_system.mutex);
+  dt_control_t *const control = dt_control_get_global();
+  dt_pthread_mutex_lock(&control->progress_system.mutex);
 
-  darktable.control->progress_system.proxy.module = self;
-  darktable.control->progress_system.proxy.added = _lib_backgroundjobs_added;
-  darktable.control->progress_system.proxy.destroyed = _lib_backgroundjobs_destroyed;
-  darktable.control->progress_system.proxy.cancellable = _lib_backgroundjobs_cancellable;
-  darktable.control->progress_system.proxy.updated = _lib_backgroundjobs_updated;
-  darktable.control->progress_system.proxy.message_updated = _lib_backgroundjobs_message_updated;
+  dt_control_get_global()->progress_system.proxy.module = self;
+  dt_control_get_global()->progress_system.proxy.added = _lib_backgroundjobs_added;
+  dt_control_get_global()->progress_system.proxy.destroyed = _lib_backgroundjobs_destroyed;
+  dt_control_get_global()->progress_system.proxy.cancellable = _lib_backgroundjobs_cancellable;
+  dt_control_get_global()->progress_system.proxy.updated = _lib_backgroundjobs_updated;
+  dt_control_get_global()->progress_system.proxy.message_updated = _lib_backgroundjobs_message_updated;
 
-  // iterate over darktable.control->progress_system.list and add everything that is already there and update
+  // iterate over dt_control_get_global()->progress_system.list and add everything that is already there and update
   // its gui_data!
-  for(const GList *iter = darktable.control->progress_system.list; iter; iter = g_list_next(iter))
+  for(const GList *iter = dt_control_get_global()->progress_system.list; iter; iter = g_list_next(iter))
   {
     dt_progress_t *progress = (dt_progress_t *)iter->data;
     void *gui_data = dt_control_progress_get_gui_data(progress);
@@ -148,19 +149,20 @@ void gui_init(dt_lib_module_t *self)
     _lib_backgroundjobs_updated(self, gui_data, dt_control_progress_get_progress(progress));
   }
 
-  dt_pthread_mutex_unlock(&darktable.control->progress_system.mutex);
+  dt_pthread_mutex_unlock(&control->progress_system.mutex);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
   /* lets kill proxy */
-  dt_pthread_mutex_lock(&darktable.control->progress_system.mutex);
-  darktable.control->progress_system.proxy.module = NULL;
-  darktable.control->progress_system.proxy.added = NULL;
-  darktable.control->progress_system.proxy.destroyed = NULL;
-  darktable.control->progress_system.proxy.cancellable = NULL;
-  darktable.control->progress_system.proxy.updated = NULL;
-  dt_pthread_mutex_unlock(&darktable.control->progress_system.mutex);
+  dt_control_t *const control = dt_control_get_global();
+  dt_pthread_mutex_lock(&control->progress_system.mutex);
+  dt_control_get_global()->progress_system.proxy.module = NULL;
+  dt_control_get_global()->progress_system.proxy.added = NULL;
+  dt_control_get_global()->progress_system.proxy.destroyed = NULL;
+  dt_control_get_global()->progress_system.proxy.cancellable = NULL;
+  dt_control_get_global()->progress_system.proxy.updated = NULL;
+  dt_pthread_mutex_unlock(&control->progress_system.mutex);
 }
 
 /** the proxy functions */
@@ -300,7 +302,7 @@ static void _lib_backgroundjobs_destroyed(dt_lib_module_t *self, dt_lib_backgrou
 static void _lib_backgroundjobs_cancel_callback_new(GtkWidget *w, gpointer user_data)
 {
   dt_progress_t *progress = (dt_progress_t *)user_data;
-  dt_control_progress_cancel(darktable.control, progress);
+  dt_control_progress_cancel(dt_control_get_global(), progress);
 }
 
 typedef struct _cancellable_gui_thread_t
@@ -330,9 +332,9 @@ static gboolean _cancellable_gui_thread(gpointer user_data)
 static void _lib_backgroundjobs_cancellable(dt_lib_module_t *self, dt_lib_backgroundjob_element_t *instance,
                                             dt_progress_t *progress)
 {
-  // add a cancel button to the gui. when clicked we want dt_control_progress_cancel(darktable.control,
+  // add a cancel button to the gui. when clicked we want dt_control_progress_cancel(dt_control_get_global(),
   // progress); to be called
-  if(!darktable.control->running || IS_NULL_PTR(instance)) return;
+  if(!dt_control_get_global()->running || IS_NULL_PTR(instance)) return;
 
   _cancellable_gui_thread_t *params = (_cancellable_gui_thread_t *)malloc(sizeof(_cancellable_gui_thread_t));
   if(IS_NULL_PTR(params)) return;
@@ -363,7 +365,7 @@ static void _lib_backgroundjobs_updated(dt_lib_module_t *self, dt_lib_background
                                         double value)
 {
   // update the progress bar
-  if(!darktable.control->running || IS_NULL_PTR(instance)) return;
+  if(!dt_control_get_global()->running || IS_NULL_PTR(instance)) return;
 
   _update_gui_thread_t *params = (_update_gui_thread_t *)malloc(sizeof(_update_gui_thread_t));
   if(IS_NULL_PTR(params)) return;
@@ -395,7 +397,7 @@ static void _lib_backgroundjobs_message_updated(dt_lib_module_t *self, dt_lib_ba
                                                 const char *message)
 {
   // update the progress bar
-  if(!darktable.control->running || IS_NULL_PTR(instance)) return;
+  if(!dt_control_get_global()->running || IS_NULL_PTR(instance)) return;
 
   _update_label_gui_thread_t *params = (_update_label_gui_thread_t *)malloc(sizeof(_update_label_gui_thread_t));
   if(IS_NULL_PTR(params)) return;

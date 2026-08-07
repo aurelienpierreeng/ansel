@@ -35,11 +35,17 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/imageio_rawspeed.h" // for dt_rawspeed_crop_dcraw_filters
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
+#include "imageio/imageio_rawspeed.h" // for dt_rawspeed_crop_dcraw_filters
 #include "common/opencl.h"
 #include "common/imagebuf.h"
 #include "common/image.h"
@@ -179,7 +185,7 @@ const char **description(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_gui_presets_add_generic(_("passthrough"), self->op, self->version(),
                              &(dt_iop_rawprepare_params_t){.x = 0,
@@ -193,7 +199,7 @@ void init_presets(dt_iop_module_so_t *self)
                                                            .raw_white_point = UINT16_MAX },
                              sizeof(dt_iop_rawprepare_params_t), 1, DEVELOP_BLEND_CS_NONE);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 static inline __attribute__((always_inline)) int compute_proper_crop(const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)
@@ -739,19 +745,19 @@ static gboolean image_set_rawcrops(const int32_t imgid, int dx, int dy)
   if(imgid <= 0) return FALSE;
 
   dt_image_t *img = NULL;
-  img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
   const gboolean test = (img->p_width == img->width - dx)
                      && (img->p_height == img->height - dy);
 
-  dt_image_cache_read_release(darktable.image_cache, img);
+  dt_image_cache_read_release(dt_image_cache_get_global(), img);
   if(test) return FALSE;
 
-  img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
   if(IS_NULL_PTR(img)) return FALSE;
   img->p_width = img->width - dx;
   img->p_height = img->height - dy;
-  dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
   return TRUE;
 }
 
@@ -900,7 +906,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   d->apply_gainmaps = (p->flat_field == FLAT_FIELD_EMBEDDED) && _own_gainmaps(self, d);
 
   if(image_set_rawcrops(pipe->dev->image_storage.id, d->x + d->width, d->y + d->height))
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_UPDATE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_METADATA_UPDATE);
 
   // Image-type gating (needs_rawprepare && !normalized) is handled at history level by
   // enable()/force_enable()/reload_defaults(); it is no longer duplicated here.

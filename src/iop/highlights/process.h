@@ -16,15 +16,14 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_PROCESS_H
+#define DT_IOP_HIGHLIGHTS_PROCESS_H
 
 // Top-level CFA-agnostic CPU driver and the hybrid OpenCL driver.
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/opencl.h"
 #include "develop/imageop.h"
-#include "iop/highlights/common.h"
 
 // Single CPU driver for the harmonic-transposition reconstruction, for Bayer, X-Trans and
 // already-demosaiced (non-raw / sRAW) input alike. The reconstruction middle is CFA-agnostic (it works
@@ -65,3 +64,4 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
                            const dt_aligned_pixel_t clips);
 
 #endif
+#endif // DT_IOP_HIGHLIGHTS_PROCESS_H

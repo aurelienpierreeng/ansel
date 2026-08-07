@@ -52,16 +52,20 @@
 #include "config.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
-#include "common/box_filters.h"
-#include "common/darktable.h"
-#include "common/guided_filter.h"
-#include "control/control.h"
+#include "gui/bauhaus.h"
+#include "pixel/box_filters.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "pixel/guided_filter.h"
 #include "control/signal.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "gui/gtk.h"
 
 #include "develop/tiling.h"
 #include "iop/iop_api.h"
@@ -258,14 +262,14 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->distance, 3);
   gtk_widget_set_tooltip_text(g->distance, _("limit haze removal up to a specific spatial depth"));
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC,
                                   G_CALLBACK(_history_resync_callback), self);
 }
 
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_history_resync_callback), self);
   IOP_GUI_FREE;
 }
 

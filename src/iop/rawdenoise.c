@@ -46,17 +46,21 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/conf.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
-#include "common/dwt.h"
-#include "control/control.h"
+#include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/openmp_maths.h"
-#include "dtgtk/drawingarea.h"
+#include "math/openmp_maths.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -365,7 +369,7 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
       fimg[col] = 0.5f;
       fimg[(size_t)(height-1)*width + col] = 0.5f;
     }
-    const size_t nthreads = darktable.num_openmp_threads; // go direct, darktable.num_openmp_threads always returns numprocs
+    const size_t nthreads = dt_get_num_openmp_threads(); // go direct, dt_get_num_openmp_threads() always returns numprocs
     const size_t chunksize = (height + nthreads - 1) / nthreads;
     __OMP_PARALLEL_FOR__(num_threads(nthreads) )
     for(size_t chunk = 0; chunk < nthreads; chunk++)
@@ -785,7 +789,7 @@ static gboolean rawdenoise_draw(GtkWidget *widget, cairo_t *crf, gpointer user_d
   // draw labels:
   PangoLayout *layout;
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   pango_font_description_set_absolute_size(desc, (.08 * height) * PANGO_SCALE);
   layout = pango_cairo_create_layout(cr);
@@ -872,7 +876,7 @@ static gboolean rawdenoise_button_press(GtkWidget *widget, GdkEventButton *event
       p->x[ch][k] = d->x[ch][k];
       p->y[ch][k] = d->y[ch][k];
     }
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     gtk_widget_queue_draw(self->widget);
   }
   else if(event->button == 1)
@@ -979,7 +983,7 @@ void gui_init(dt_iop_module_t *self)
                                                   "plugins/darkroom/rawdenoise/graphheight", 280, 100),
                      FALSE, FALSE, 0);
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(rawdenoise_draw), self);

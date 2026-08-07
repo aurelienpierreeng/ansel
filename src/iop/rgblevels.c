@@ -36,19 +36,21 @@
 #include "config.h"
 #endif
 
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "common/iop_profile.h"
-#include "bauhaus/bauhaus.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/rgb_norms.h"
-#include "control/control.h"
+#include "gui/bauhaus.h"
+#include "pixel/rgb_norms.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "libs/colorpicker.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 
@@ -174,7 +176,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, dt_iop_module_
 
     memcpy(p, &g->params, sizeof(dt_iop_rgblevels_params_t));
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
     dt_iop_gui_enter_critical_section(self);
     g->call_auto_levels = 0;
@@ -364,13 +366,13 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
         cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
         for(int k=DT_IOP_RGBLEVELS_R; k<DT_IOP_RGBLEVELS_MAX_CHANNELS; k++)
         {
-          set_color(cr, darktable.bauhaus->graph_colors[k]);
+          set_color(cr, dt_bauhaus_get_global()->graph_colors[k]);
           dt_draw_histogram_8(cr, hist, 4, k, is_linear);
         }
       }
       else if(p->autoscale == DT_IOP_RGBLEVELS_INDEPENDENT_CHANNELS)
       {
-        set_color(cr, darktable.bauhaus->graph_colors[ch]);
+        set_color(cr, dt_bauhaus_get_global()->graph_colors[ch]);
         dt_draw_histogram_8(cr, hist, 4, ch, is_linear);
       }
 
@@ -423,7 +425,7 @@ static void _rgblevels_move_handle(dt_iop_module_t *self, const int handle_move,
 
   c->last_picked_color = -1;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   gtk_widget_queue_draw(GTK_WIDGET(c->area));
 }
@@ -495,7 +497,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       // Needed in case the user scrolls or drags immediately after a reset,
       // as drag_start_percentage is only updated when the mouse is moved.
       c->drag_start_percentage = 0.5;
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       gtk_widget_queue_draw(self->widget);
     }
     else
@@ -558,7 +560,7 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
   if(self->off)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   _turn_selregion_picker_off(self);
@@ -584,7 +586,7 @@ static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_io
   if(self->off)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -695,7 +697,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
        || previous_color[1] != p->levels[channel][1]
        || previous_color[2] != p->levels[channel][2])
     {
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
 
@@ -835,7 +837,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK
                                              | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                              | GDK_LEAVE_NOTIFY_MASK | GDK_ENTER_NOTIFY_MASK
-                                             | darktable.gui->scroll_mask);
+                                             | dt_gui_get_global()->scroll_mask);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(_area_draw_callback), self);
   g_signal_connect(G_OBJECT(c->area), "button-press-event", G_CALLBACK(_area_button_press_callback), self);
   g_signal_connect(G_OBJECT(c->area), "button-release-event", G_CALLBACK(_area_button_release_callback), self);
@@ -888,13 +890,13 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(c->cmb_preserve_colors, _("method to preserve colors when applying contrast"));
 
   // add signal handler for preview pipe finish
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                             G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   IOP_GUI_FREE;
 }

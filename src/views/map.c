@@ -40,17 +40,17 @@
 */
 
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/act_on.h"
 #include "common/debug.h"
 #include "common/gpx.h"
 #include "common/geo.h"
-#include "common/image_cache.h"
-#include "common/mipmap_cache.h"
+#include "common/module_versioning.h"
 #include "common/selection.h"
-#include "common/undo.h"
-#include "control/conf.h"
+#include "common/times.h"
+#include "common/utility.h"
+#include "common/conf.h"
 #include "control/control.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
 #include "gui/draw.h"
@@ -228,7 +228,7 @@ static void _free_map_image(gpointer data)
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
 
   switch(event->keyval)
   {
@@ -326,7 +326,7 @@ static GdkPixbuf *_view_map_images_count(const int nb_images, const gboolean sam
 
   dt_gui_gtk_set_source_rgb(cr, same_loc ? DT_GUI_COLOR_MAP_COUNT_SAME_LOC
                                          : DT_GUI_COLOR_MAP_COUNT_DIFF_LOC);
-  cairo_set_font_size(cr, 12 * (1 + (darktable.gui->dpi_factor - 1) / 2));
+  cairo_set_font_size(cr, 12 * (1 + (dt_gui_get_global()->dpi_factor - 1) / 2));
   cairo_text_extents_t te;
   cairo_text_extents(cr, text, &te);
   *count_width = te.width + 4 * te.x_bearing;
@@ -579,7 +579,7 @@ void init(dt_view_t *self)
 
   dt_map_t *lib = (dt_map_t *)self->data;
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     lib->image_pin = _init_image_pin();
     lib->place_pin = _init_place_pin();
@@ -651,19 +651,19 @@ void init(dt_view_t *self)
   _view_map_build_main_query(lib);
 
   /* connect collection changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_view_map_collection_changed), (gpointer)self);
   /* connect selection changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_view_map_selection_changed), (gpointer)self);
   /* connect preference changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE,
                             G_CALLBACK(_view_map_check_preference_changed), (gpointer)self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                             G_CALLBACK(_view_changed), (gpointer)self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED,
                             G_CALLBACK(_view_map_geotag_changed), (gpointer)self);
 }
 
@@ -671,13 +671,13 @@ void cleanup(dt_view_t *self)
 {
   dt_map_t *lib = (dt_map_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_selection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_check_preference_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_selection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_check_preference_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     g_object_unref(G_OBJECT(lib->image_pin));
     g_object_unref(G_OBJECT(lib->place_pin));
@@ -727,18 +727,18 @@ int try_enter(dt_view_t *self)
 {
   dt_map_t *lib = (dt_map_t *)self->data;
   g_list_free(lib->incoming_selection);
-  lib->incoming_selection = dt_selection_get_list(darktable.selection);
+  lib->incoming_selection = dt_selection_get_list(dt_selection_get_global());
   return 0;
 }
 
 static void _view_map_signal_change_raise(gpointer user_data)
 {
   dt_view_t *self = (dt_view_t *)user_data;
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, 0);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, 0);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
 }
 
 // updating collection when mouse scrolls to resize the location is too demanding
@@ -1038,7 +1038,7 @@ static void _view_map_update_location_geotag(dt_view_t *self)
     // update coordinates
     dt_map_location_set_data(lib->loc.main.id, &lib->loc.main.data);
     if(dt_map_location_update_images(&lib->loc.main))
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
   }
 }
 
@@ -1917,11 +1917,11 @@ static gboolean _view_map_button_press_callback(GtkWidget *w, GdkEventButton *e,
         dt_location_draw_t *d = (dt_location_draw_t *)other->data;
         if(dt_map_location_included(lon, lat, &d->data))
         {
-          dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-          dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, d->id);
-          dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-          dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+          dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+          dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, (GList *)NULL, d->id);
+          dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+          dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
           return TRUE;
         }
       }
@@ -1933,10 +1933,10 @@ static gboolean _view_map_button_press_callback(GtkWidget *w, GdkEventButton *e,
     if(lib->selected_images)
     {
       const int32_t imgid = GPOINTER_TO_INT(lib->selected_images->data);
-      dt_selection_select_single(darktable.selection, imgid);
+      dt_selection_select_single(dt_selection_get_global(), imgid);
       dt_control_set_mouse_over_id(imgid);
       dt_control_set_keyboard_over_id(imgid);
-      g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+      g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
     }
     if(e->type == GDK_BUTTON_PRESS)
     {
@@ -2064,11 +2064,11 @@ void enter(dt_view_t *self)
   lib->loc.drag = FALSE;
   lib->entering = TRUE;
 
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "map");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "map");
 
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
 
   dt_view_active_images_reset(FALSE);
   if(lib->incoming_selection)
@@ -2084,51 +2084,52 @@ void enter(dt_view_t *self)
    * every entry before it can receive allocations and paint over the center. */
   if(!gtk_widget_get_parent(GTK_WIDGET(lib->map)))
   {
-    gtk_overlay_add_overlay(GTK_OVERLAY(dt_ui_center_base(darktable.gui->ui)), GTK_WIDGET(lib->map));
+    gtk_overlay_add_overlay(GTK_OVERLAY(dt_ui_center_base(dt_gui_get_ui())), GTK_WIDGET(lib->map));
   }
   gtk_widget_show_all(GTK_WIDGET(lib->map));
 
   /* setup proxy functions */
-  darktable.view_manager->proxy.map.center_on_location = _view_map_center_on_location;
-  darktable.view_manager->proxy.map.center_on_bbox = _view_map_center_on_bbox;
-  darktable.view_manager->proxy.map.show_osd = _view_map_show_osd;
-  darktable.view_manager->proxy.map.set_map_source = _view_map_set_map_source;
-  darktable.view_manager->proxy.map.add_marker = _view_map_add_marker;
-  darktable.view_manager->proxy.map.remove_marker = _view_map_remove_marker;
-  darktable.view_manager->proxy.map.add_location = _view_map_add_location;
-  darktable.view_manager->proxy.map.location_action = _view_map_location_action;
-  darktable.view_manager->proxy.map.redraw = _view_map_redraw;
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  vm->proxy.map.center_on_location = _view_map_center_on_location;
+  vm->proxy.map.center_on_bbox = _view_map_center_on_bbox;
+  vm->proxy.map.show_osd = _view_map_show_osd;
+  vm->proxy.map.set_map_source = _view_map_set_map_source;
+  vm->proxy.map.add_marker = _view_map_add_marker;
+  vm->proxy.map.remove_marker = _view_map_remove_marker;
+  vm->proxy.map.add_location = _view_map_add_location;
+  vm->proxy.map.location_action = _view_map_location_action;
+  vm->proxy.map.redraw = _view_map_redraw;
 
-  darktable.view_manager->proxy.map.view = self;
+  vm->proxy.map.view = self;
 
   /* Map opts into single-click filmstrip commits explicitly so generic
    * thumbtable activation can keep its double-click semantics. */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_view_map_filmstrip_activate_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
                             G_CALLBACK(_view_map_filmstrip_drag_begin_callback), self);
 
   const int32_t active_imgid = dt_view_active_images_get_first();
   dt_control_set_mouse_over_id(active_imgid);
   dt_control_set_keyboard_over_id(active_imgid);
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   g_timeout_add(250, _view_map_display_selected, self);
 }
 
 void leave(dt_view_t *self)
 {
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
   dt_view_active_images_reset(FALSE);
 
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
 
   /* disable the map source again. no need to risk network traffic while we are not in map mode. */
   _view_map_set_map_source_g_object(self, OSM_GPS_MAP_SOURCE_NULL);
 
   /* disconnect from filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_filmstrip_activate_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_filmstrip_activate_callback),
                                (gpointer)self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_filmstrip_drag_begin_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_map_filmstrip_drag_begin_callback),
                                (gpointer)self);
   dt_map_t *lib = (dt_map_t *)self->data;
   lib->drop_filmstrip_activated = FALSE;
@@ -2139,11 +2140,11 @@ void leave(dt_view_t *self)
     lib->selected_images = NULL;
   }
   gtk_widget_hide(GTK_WIDGET(lib->map));
-  if(gtk_widget_get_parent(GTK_WIDGET(lib->map)) == dt_ui_center_base(darktable.gui->ui))
-    gtk_container_remove(GTK_CONTAINER(dt_ui_center_base(darktable.gui->ui)), GTK_WIDGET(lib->map));
+  if(gtk_widget_get_parent(GTK_WIDGET(lib->map)) == dt_ui_center_base(dt_gui_get_ui()))
+    gtk_container_remove(GTK_CONTAINER(dt_ui_center_base(dt_gui_get_ui())), GTK_WIDGET(lib->map));
 
   /* reset proxy */
-  darktable.view_manager->proxy.map.view = NULL;
+  dt_view_manager_get_global()->proxy.map.view = NULL;
 }
 
 /* Merged in gui/actions/edit.h without the callback blocks
@@ -2157,11 +2158,11 @@ static void _view_map_undo_callback(dt_action_t *action)
   dt_map_t *lib = (dt_map_t *)self->data;
 
   // let current map view unchanged (avoid to center the map on collection)
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_undo_do_undo(darktable.undo, DT_UNDO_MAP);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_MAP);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
   g_signal_emit_by_name(lib->map, "changed");
 }
 
@@ -2171,11 +2172,11 @@ static void _view_map_redo_callback(dt_action_t *action)
   dt_map_t *lib = (dt_map_t *)self->data;
 
   // let current map view unchanged (avoid to center the map on collection)
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_undo_do_redo(darktable.undo, DT_UNDO_MAP);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_MAP);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_geotag_changed), self);
   g_signal_emit_by_name(lib->map, "changed");
 }
 */
@@ -2561,7 +2562,7 @@ static void _view_map_collection_changed(gpointer instance, dt_collection_change
   dt_view_t *self = (dt_view_t *)user_data;
   dt_map_t *lib = (dt_map_t *)self->data;
   // avoid to centre the map on collection while a location is active
-  if(darktable.view_manager->proxy.map.view && !lib->loc.main.id)
+  if(dt_view_manager_get_global()->proxy.map.view && !lib->loc.main.id)
   {
     _view_map_center_on_image_list(self, "memory.collected_images");
   }
@@ -2569,7 +2570,7 @@ static void _view_map_collection_changed(gpointer instance, dt_collection_change
   if(dt_conf_get_bool("plugins/map/filter_images_drawn"))
   {
     // only redraw when map mode is currently active, otherwise enter() does the magic
-    if(darktable.view_manager->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
+    if(dt_view_manager_get_global()->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
   }
 }
 
@@ -2585,16 +2586,16 @@ static void _view_map_selection_changed(gpointer instance, gpointer user_data)
      filmstrip's highlight the instant any other view calls dt_selection_select_single(), since
      its internal clear+select briefly raises this signal with an empty selection.
      Only touch it when map is actually the active view, exactly like the redraw below. */
-  if(darktable.view_manager->proxy.map.view)
+  if(dt_view_manager_get_global()->proxy.map.view)
   {
     dt_view_active_images_reset(FALSE);
-    GList *selection = dt_selection_get_list(darktable.selection);
+    GList *selection = dt_selection_get_list(dt_selection_get_global());
     if(selection) dt_view_active_images_set(selection, FALSE);
 
-    const int32_t imgid = dt_selection_get_first_id(darktable.selection);
+    const int32_t imgid = dt_selection_get_first_id(dt_selection_get_global());
     dt_control_set_mouse_over_id(imgid);
     dt_control_set_keyboard_over_id(imgid);
-    g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+    g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
     g_signal_emit_by_name(lib->map, "changed");
   }
 }
@@ -2606,7 +2607,7 @@ static void _view_map_geotag_changed(gpointer instance, GList *imgs, const int l
   {
     dt_view_t *self = (dt_view_t *)user_data;
     dt_map_t *lib = (dt_map_t *)self->data;
-    if(darktable.view_manager->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
+    if(dt_view_manager_get_global()->proxy.map.view) g_signal_emit_by_name(lib->map, "changed");
   }
 }
 
@@ -2645,7 +2646,7 @@ static gboolean _view_map_center_on_image_list(dt_view_t *self, const char* tabl
                                 table);
   // clang-format on
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
     min_latitude = sqlite3_column_double(stmt, 0);
@@ -2683,14 +2684,14 @@ static gboolean _view_map_center_on_image_list(dt_view_t *self, const char* tabl
 static void _view_map_filmstrip_activate_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
   dt_view_t *self = (dt_view_t *)user_data;
-  dt_selection_select_single(darktable.selection, imgid);
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   _view_map_center_on_image(self, imgid);
 }
 
 static void _view_map_filmstrip_drag_begin_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
-  dt_selection_select_single(darktable.selection, imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
 }
@@ -2742,10 +2743,10 @@ static void _drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, 
         // TODO redraw the image group
         // it seems that at this time osm_gps_map doesn't answer before dt_image_set_locations(). Locked in some way ?
         const dt_image_geoloc_t geoloc = { longitude, latitude, NAN };
-        dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
+        dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
         dt_image_set_locations(imgs, &geoloc, TRUE);
-        dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
+        dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_view_map_collection_changed), self);
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
         g_signal_emit_by_name(lib->map, "changed");
         success = TRUE;
       }
@@ -2854,7 +2855,7 @@ static void _view_map_build_main_query(dt_map_t *lib)
   // clang-format on
 
   /* prepare the main query statement */
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), geo_query, -1, &lib->main_query, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), geo_query, -1, &lib->main_query, NULL);
 
   dt_free(geo_query);
 }

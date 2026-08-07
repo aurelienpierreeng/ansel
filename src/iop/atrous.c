@@ -56,19 +56,24 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "common/eaw.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "gui/bauhaus.h"
+#include "pixel/eaw.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "control/conf.h"
-#include "control/control.h"
+#include "common/conf.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -303,10 +308,22 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
   dt_aligned_pixel_t boost[MAX_NUM_SCALES];
   float sharp[MAX_NUM_SCALES];
   const int max_scale = get_scales(thrs, boost, sharp, d, roi_in, piece);
-  const int max_mult = 1u << (max_scale - 1);
 
   const int width = roi_out->width;
   const int height = roi_out->height;
+
+  // get_scales() returns MIN(floor(log2(min(w,h))) - 2, i), which is <= 0 once the ROI's
+  // smaller side is 4 px or under, and negative below that. `1u << (max_scale - 1)` is
+  // then a shift by a negative count: undefined behaviour. Such a ROI is below the
+  // wavelet's minimum size anyway, which is exactly what the guard further down bails
+  // on, so treat it as the same corner case instead of computing the shift at all.
+  if(max_scale <= 0)
+  {
+    dt_iop_image_copy_by_size(o, i, width, height, 4);
+    return 0;
+  }
+
+  const int max_mult = 1u << (max_scale - 1);
 
   if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
@@ -784,7 +801,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
   dt_iop_atrous_params_t p;
   p.octaves = 7;
   p.mix = 1.0f;
@@ -1051,7 +1068,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("deblur: fine blur, strength 1"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 static void reset_mix(dt_iop_module_t *self)
@@ -1366,7 +1383,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
     // draw labels:
     PangoLayout *layout;
     PangoRectangle ink;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, (.06 * height) * PANGO_SCALE);
     layout = pango_cairo_create_layout(cr);
@@ -1511,7 +1528,7 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
       p->y[c->channel2][k] = d->y[c->channel2][k];
     }
     gtk_widget_queue_draw(self->widget);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else if(event->button == 1)
   {
@@ -1575,7 +1592,7 @@ static void mix_callback(GtkWidget *slider, gpointer user_data)
   dt_iop_atrous_params_t *p = (dt_iop_atrous_params_t *)self->params;
   p->mix = dt_bauhaus_slider_get(slider);
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_init(struct dt_iop_module_t *self)
@@ -1620,7 +1637,7 @@ void gui_init(struct dt_iop_module_t *self)
                         GDK_POINTER_MOTION_MASK
                         | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                         | GDK_LEAVE_NOTIFY_MASK | GDK_ENTER_NOTIFY_MASK
-                        | darktable.gui->scroll_mask);
+                        | dt_gui_get_global()->scroll_mask);
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(area_draw), self);
   g_signal_connect(G_OBJECT(c->area), "button-press-event", G_CALLBACK(area_button_press), self);

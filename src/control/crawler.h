@@ -18,7 +18,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_CRAWLER_H
+#define DT_CONTROL_CRAWLER_H
 
 #include <glib.h>
 
@@ -37,6 +38,8 @@ GList *dt_control_crawler_run();
 
 // show a popup with the images, let the user decide what to do and free the list afterwards
 void dt_control_crawler_show_image_list(GList *images);
+
+#endif // DT_CONTROL_CRAWLER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

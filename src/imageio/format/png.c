@@ -48,12 +48,16 @@
 #include <stdlib.h>
 #include <zlib.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include <glib/gstdio.h>
+#include "common/pixelpipe_cache_alloc.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
+#include "common/conf.h"
 #include "gui/gtk.h"
 #include "imageio/format/imageio_format_api.h"
 
@@ -550,7 +554,7 @@ void gui_init(dt_imageio_module_format_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Bit depth combo box
-  gui->bit_depth = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->bit_depth = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->bit_depth, N_("bit depth"));
   dt_bauhaus_combobox_add(gui->bit_depth, _("8 bit"));
   dt_bauhaus_combobox_add(gui->bit_depth, _("16 bit"));
@@ -564,7 +568,7 @@ void gui_init(dt_imageio_module_format_t *self)
   g_signal_connect(G_OBJECT(gui->bit_depth), "value-changed", G_CALLBACK(bit_depth_changed), NULL);
 
   // Compression level slider
-  gui->compression = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL),
+  gui->compression = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL),
                                                       dt_confgen_get_int("plugins/imageio/format/png/compression", DT_MIN),
                                                       dt_confgen_get_int("plugins/imageio/format/png/compression", DT_MAX),
                                                       1,

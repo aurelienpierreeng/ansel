@@ -48,10 +48,15 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
-#include "common/gaussian.h"
+#include "pixel/gaussian.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"

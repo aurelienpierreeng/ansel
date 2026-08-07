@@ -30,12 +30,12 @@
 
 #include "colorchecker.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "darktable.h"
 #include "file_location.h"
 
 #include <glib.h>
 #include <inttypes.h>
 #include <lcms2.h>
+#include "common/logging.h"
 
 // In some environments ERROR is already defined, ie: WIN32
 #if defined(ERROR)

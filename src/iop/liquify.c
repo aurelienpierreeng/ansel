@@ -44,16 +44,22 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "gui/gdkkeys.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/interpolation.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "pixel/interpolation.h"
 #include "common/opencl.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/collection.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
@@ -2873,7 +2879,7 @@ void gui_focus(struct dt_iop_module_t *module, gboolean in)
 {
   if(!in)
   {
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
     btn_make_radio_callback(NULL, NULL, module);
   }
 }
@@ -2886,7 +2892,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
     // something definitive has happened like button release ... so
     // redraw pipe
     memcpy(module->params, &g->params, sizeof(dt_iop_liquify_params_t));
-    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+    dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   }
   else
   {
@@ -2910,7 +2916,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
   float pts[2] = { (float)x, (float)y };
-  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pts, 1);
+  dt_dev_coordinates_widget_to_image_norm(module->dev, pts, 1);
   dt_dev_coordinates_image_norm_to_image_abs(module->dev, pts, 1);
   dt_dev_distort_backtransform_plus(module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
@@ -2974,7 +2980,7 @@ int mouse_moved(struct dt_iop_module_t *module,
       if(!IS_NULL_PTR(last_hovered))
         last_hovered->header.hovered = 0;
       // change in hover display
-      dt_control_hinter_message(darktable.control, dt_liquify_layers[hit.layer].hint);
+      dt_control_hinter_message(dt_control_get_global(), dt_liquify_layers[hit.layer].hint);
       handled = TRUE;
       goto done;
     }
@@ -3164,7 +3170,7 @@ static float dt_conf_get_sanitize_float(const char *name, float min, float max, 
 
 static void get_stamp_params(dt_iop_module_t *module, float *radius, float *r_strength, float *phi)
 {
-  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *widget = dt_gui_main_window();
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
   const int last_win_min = MIN(allocation.width, allocation.height);
@@ -3467,7 +3473,7 @@ int button_released(struct dt_iop_module_t *module,
   // right click == cancel or delete
   if(which == 3)
   {
-    dt_control_hinter_message(darktable.control, "");
+    dt_control_hinter_message(dt_control_get_global(), "");
     end_drag(g);
 
     // cancel line or curve creation
@@ -3790,7 +3796,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
 
     dt_iop_gui_enter_critical_section(self);
 
-    dt_control_hinter_message(darktable.control, "");
+    dt_control_hinter_message(dt_control_get_global(), "");
     end_drag(g);
 
     if(g->temp)
@@ -3809,7 +3815,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
     gtk_toggle_button_set_active(g->btn_curve_tool, FALSE);
     gtk_toggle_button_set_active(g->btn_node_tool, TRUE);
 
-    dt_control_hinter_message(darktable.control, _("click to edit nodes"));
+    dt_control_hinter_message(dt_control_get_global(), _("click to edit nodes"));
     dt_iop_request_focus(self);
     update_warp_count(g);
     sync_pipe(self, TRUE);
@@ -3832,7 +3838,7 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
     return TRUE;
   }
 
-  dt_control_hinter_message(darktable.control, "");
+  dt_control_hinter_message(dt_control_get_global(), "");
 
   // if we are on a preview, it means that a form (point, line, curve) has been started, but no node has yet been placed.
   // in this case we abort the current preview and let the new tool activated.
@@ -3853,18 +3859,18 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
 
     if(btn == g->btn_point_tool)
       dt_control_hinter_message
-        (darktable.control, _("click and drag to add point\nscroll to change size - "
+        (dt_control_get_global(), _("click and drag to add point\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_line_tool)
       dt_control_hinter_message
-        (darktable.control, _("click to add line\nscroll to change size - "
+        (dt_control_get_global(), _("click to add line\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_curve_tool)
       dt_control_hinter_message
-        (darktable.control, _("click to add curve\nscroll to change size - "
+        (dt_control_get_global(), _("click to add curve\nscroll to change size - "
                               "shift+scroll to change strength - ctrl+scroll to change direction"));
     else if(btn == g->btn_node_tool)
-      dt_control_hinter_message(darktable.control, _("click to edit nodes"));
+      dt_control_hinter_message(dt_control_get_global(), _("click to edit nodes"));
 
     //  start the preview mode to show the shape that will be created
 

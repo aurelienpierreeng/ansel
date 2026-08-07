@@ -2,7 +2,9 @@
     Private OpenCL pixelpipe backend.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/logging.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/iop_order.h"
 #include "common/opencl.h"
 #include "develop/blend.h"
@@ -21,7 +23,7 @@ void dt_dev_pixelpipe_gpu_flush_host_pinned_images(dt_dev_pixelpipe_t *pipe, voi
   {
     /* Non-realtime host writes invalidate reusable pinned images bound to the previous ROI/hash.
      * Realtime keeps its pinned reuse untouched to avoid stalling the live draw path. */
-    if(dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, host_ptr, cache_entry,
+    if(dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_pixelpipe_cache_get_global(), host_ptr, cache_entry,
                                                       pipe->devid))
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] flushed pinned OpenCL images after %s\n",
                reason ? reason : "host write");
@@ -50,9 +52,9 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
 
   if(IS_NULL_PTR(*input))
   {
-    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-    *input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
-    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+    *input = dt_pixel_cache_alloc(dt_pixelpipe_cache_get_global(), input_entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
   }
 
   if(IS_NULL_PTR(*input))
@@ -63,11 +65,11 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
     return 1;
   }
 
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, *input, *cl_mem_input, &piece->roi_in, CL_MAP_READ,
                                           piece->dsc_in.bpp, module,
                                           "cpu fallback input copy to cache");
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
 
   if(fail)
   {
@@ -116,9 +118,9 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, floa
   {
     if(input && IS_NULL_PTR(*input))
     {
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
-      *input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+      *input = dt_pixel_cache_alloc(dt_pixelpipe_cache_get_global(), input_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
     }
 
     if(IS_NULL_PTR(input) || IS_NULL_PTR(*input))
@@ -261,7 +263,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s pre-check didn't fit on device, flushing cached pinned buffers and retrying\n",
              module->name());
-    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid);
+    dt_dev_pixelpipe_cache_flush_clmem(dt_pixelpipe_cache_get_global(), pipe->devid);
     fit_reason = dt_opencl_image_fits_device_reason(pipe->devid, precheck_width, precheck_height,
                                                     MAX(piece->dsc_in.bpp, piece->dsc_out.bpp),
                                                     required_factor_cl, tiling->overhead, &fit_needed, &fit_limit);
@@ -275,7 +277,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   if(!possible_cl || !fits_on_device) *cache_output = TRUE;
   if(*cache_output && IS_NULL_PTR(output))
   {
-    output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
+    output = dt_pixel_cache_alloc(dt_pixelpipe_cache_get_global(), output_entry);
     if(IS_NULL_PTR(output)) goto error;
   }
 
@@ -486,24 +488,24 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       if(IS_NULL_PTR(module_input_temp))
         goto error;
 
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
       input_locked = TRUE;
       dt_ioppr_transform_image_colorspace(module, input, module_input_temp, piece->roi_in.width,
                                           piece->roi_in.height, process_input_dsc.cst, piece->dsc_in.cst,
                                           &process_input_dsc.cst, work_profile);
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
       input_locked = FALSE;
       module_input = module_input_temp;
     }
     else if(process_input_dsc.cst != piece->dsc_in.cst)
     {
       process_input_dsc.cst = piece->dsc_in.cst;
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
       input_locked = TRUE;
     }
     else
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
       input_locked = TRUE;
     }
 
@@ -513,7 +515,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     if(fail)
     {
       if(input_locked)
-        dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+        dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
       dt_pixelpipe_cache_free_align(module_input_temp);
       goto error;
     }
@@ -543,7 +545,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         if(IS_NULL_PTR(blend_input_temp))
         {
           if(input_locked)
-            dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+            dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
           dt_pixelpipe_cache_free_align(module_input_temp);
           goto error;
         }
@@ -554,7 +556,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         blend_input = blend_input_temp;
         if(input_locked)
         {
-          dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+          dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
           input_locked = FALSE;
         }
       }
@@ -566,7 +568,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         if(IS_NULL_PTR(blend_output_temp))
         {
           if(input_locked)
-            dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+            dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
           dt_pixelpipe_cache_free_align(blend_input_temp);
           dt_pixelpipe_cache_free_align(module_input_temp);
           goto error;
@@ -599,7 +601,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     }
 
     if(input_locked)
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
     if(blend_output != output)
       dt_pixelpipe_cache_free_align(blend_output);
     dt_pixelpipe_cache_free_align(blend_input_temp);
@@ -615,7 +617,7 @@ int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   dt_opencl_finish(pipe->devid);
 
   if(locked_input_entry)
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked_input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, locked_input_entry);
 
   /* Borrowed vRAM inputs must stay protected until the current queue completed, otherwise
    * another pipe can flush or recycle the shared device buffer while the queued kernels
@@ -652,7 +654,7 @@ error:
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_process_input_temp, NULL, NULL, FALSE);
 
   if(locked_input_entry)
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, locked_input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, locked_input_entry);
 
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, NULL, FALSE);
 

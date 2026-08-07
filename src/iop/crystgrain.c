@@ -17,18 +17,23 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/pixelpipe_cache_alloc.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "common/iop_profile.h"
-#include "common/math.h"
+#include "math/math.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 #include "gui/presets.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <float.h>

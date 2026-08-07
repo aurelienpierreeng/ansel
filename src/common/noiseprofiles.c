@@ -24,7 +24,11 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/darktable.h"
+#include <json-glib/json-glib.h>
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/paths.h"
 #include "common/noiseprofiles.h"
 #include "common/file_location.h"
 #include "control/control.h"
@@ -232,7 +236,7 @@ end:
 
 GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 {
-  JsonParser *parser = darktable.noiseprofile_parser;
+  JsonParser *parser = dt_noiseprofile_get_parser_global();
   JsonReader *reader = NULL;
   GList *result = NULL;
   gboolean parser_locked = FALSE;

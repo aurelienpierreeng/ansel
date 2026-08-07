@@ -19,9 +19,6 @@
 // Connected-component segmentation of the clipped regions (host, both paths). (implementation; see segmentation.h
 // for the public API.)
 
-#include "common/darktable.h"
-#include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "iop/highlights/segmentation.h"
 #include <stdlib.h>
 #include <string.h>

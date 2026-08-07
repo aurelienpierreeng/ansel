@@ -57,7 +57,6 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include <assert.h>
 #include <stddef.h>
 #include <glib/gprintf.h>
@@ -69,16 +68,12 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include "common/atomic.h"
-#include "common/datetime.h"
-#include "common/debug.h"
+#include "system/atomic.h"
 #include "common/history.h"
 #include "common/image_cache.h"
-#include "common/imageio.h"
 #include "common/mipmap_cache.h"
-#include "common/opencl.h"
 #include "common/tags.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "control/jobs.h"
@@ -90,17 +85,16 @@
 #include "develop/pixelpipe_cache.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
-#include "gui/presets.h"
 #include "libs/colorpicker.h"
 
-#define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+#define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
 GList *dt_dev_load_modules(dt_develop_t *dev)
 {
   GList *res = NULL;
   dt_iop_module_t *module;
   dt_iop_module_so_t *module_so;
-  GList *iop = g_list_first(darktable.iop);
+  GList *iop = g_list_first(dt_iop_get_modules_so());
   while(iop)
   {
     module_so = (dt_iop_module_so_t *)iop->data;
@@ -496,7 +490,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
-            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
+            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, dt_gui_get_global()->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
 */
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
@@ -520,7 +514,7 @@ gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev)
 
 static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 {
-  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
+  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   const int32_t imgid = pipe->dev->image_storage.id;
 
   // Get the mip size that is at most as big as our pipeline backbuf
@@ -532,17 +526,17 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
   // so preferred_devid = -1 returns it directly; anything else is simply skipped.
   uint8_t *data = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
-  if(dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry)
+  if(dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_pixelpipe_cache_get_global(), dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry)
      && data)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, entry);
-    dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height, darktable.color_profiles->display_type);
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+    dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height, dt_colorspaces_get_global()->display_type);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
   }
   else if(entry)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
   }
 }
 
@@ -651,7 +645,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     // GUI widgets that need an image buffer will connect to this signal to grab
     // the global_hash of the module they are waiting for, even though it's still not ready.
     if(history_resynced)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_HISTORY_RESYNC);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC);
 
     // Second, compute pipelines.
     // Always service preview first, then the main pipe, so the main pipe can reuse the cache state
@@ -806,12 +800,12 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       {
         if(pipe->type == DT_DEV_PIXELPIPE_FULL)
         {
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
           dt_control_queue_redraw_center();
         }
         if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW || has_preview_size)
         {
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
           dt_control_queue_redraw();
         }
 
@@ -864,14 +858,14 @@ dt_job_t *dt_dev_process_job_create(dt_develop_t *dev)
 void dt_dev_start_all_pipelines(dt_develop_t *dev)
 {
   if(dev->pipelines_started) return;
-  dt_control_add_job_res(darktable.control, dt_dev_process_job_create(dev), DT_CTL_WORKER_DARKROOM);
+  dt_control_add_job_res(dt_control_get_global(), dt_dev_process_job_create(dev), DT_CTL_WORKER_DARKROOM);
   dev->pipelines_started = TRUE;
 }
 
 static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   const gboolean ok = (!IS_NULL_PTR(buf.buf)) && buf.width != 0 && buf.height != 0;
 
@@ -882,24 +876,24 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
     dev->roi.raw_inited = TRUE;
   }
 
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   return ok;
 }
 
 static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(IS_NULL_PTR(image)) return FALSE;
   dev->image_storage = *image;
-  dt_image_cache_read_release(darktable.image_cache, image);
+  dt_image_cache_read_release(dt_image_cache_get_global(), image);
   dt_iop_buffer_dsc_update_bpp(&dev->image_storage.dsc);
   return TRUE;
 }
 
 dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  if(IS_NULL_PTR(dev) || imgid <= 0 || IS_NULL_PTR(darktable.image_cache))
+  if(IS_NULL_PTR(dev) || imgid <= 0 || IS_NULL_PTR(dt_image_cache_get_global()))
     return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
 
   if(!_dt_dev_mipmap_prefetch_full(dev, imgid))
@@ -947,15 +941,15 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 
   const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
 
-  if(first_run && dev == darktable.develop)
+  if(first_run && dev == dt_dev_get_global())
   {
     // Resync our private copy of image image with DB,
     // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag.
-    dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
     if(!IS_NULL_PTR(image))
     {
       *image = dev->image_storage;
-      dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+      dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
     }
 
     dt_dev_write_history_ext(dev, imgid);
@@ -963,7 +957,7 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  if(first_run && dev == darktable.develop)
+  if(first_run && dev == dt_dev_get_global())
   {
     dt_dev_append_changed_tag(imgid);
     dt_dev_history_notify_change(dev, imgid);
@@ -1040,7 +1034,7 @@ void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *po
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
 
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   if(scale == 0.0f) return;
 
   // Widget deltas are measured in Gtk logical pixels. Convert them to processed-image
@@ -1063,7 +1057,7 @@ void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, s
   // Widget events are expressed in GUI logical coordinates, while the pipeline
   // zoom lives in raster pixels. Convert back to the same GUI-space zoom used
   // by dt_dev_rescale_roi() so event hit-testing and overlay drawing stay aligned.
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   const float roi_x = (float)dev->roi.x;
   const float roi_y = (float)dev->roi.y;
   const float center_x = 0.5f * (float)dev->roi.orig_width;
@@ -1090,7 +1084,7 @@ void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, s
 
   // GUI overlays are drawn in logical widget coordinates, so use the same
   // GUI-space zoom that the Cairo darkroom transform applies.
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   const float roi_x = (float)dev->roi.x;
   const float roi_y = (float)dev->roi.y;
   const float scaled_width = processed_width * scale;
@@ -1234,7 +1228,7 @@ int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
 void dt_dev_modulegroups_switch_tab(dt_develop_t *dev, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return;
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
 }
 
 void dt_dev_masks_list_change(dt_develop_t *dev)
@@ -1672,12 +1666,12 @@ dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(struct dt_dev_pixelpipe_t *p
 void dt_dev_signal_modules_moved(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
 
 void dt_dev_undo_start_record(dt_develop_t *dev)
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
 
   /* record current history state : before change (needed for undo) */
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
@@ -1688,13 +1682,13 @@ void dt_dev_undo_start_record(dt_develop_t *dev)
 
 void dt_dev_undo_end_record(dt_develop_t *dev)
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
 
   /* record current history state : after change (needed for undo) */
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
   {
     dt_dev_history_undo_end_record(dev);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
 }
 
@@ -1702,9 +1696,9 @@ gboolean dt_masks_get_lock_mode(dt_develop_t *dev)
 {
   if(dev->gui_attached)
   {
-    dt_pthread_mutex_lock(&darktable.gui->mutex);
+    dt_pthread_mutex_lock(&dt_gui_get_global()->mutex);
     const gboolean state = dev->mask_lock;
-    dt_pthread_mutex_unlock(&darktable.gui->mutex);
+    dt_pthread_mutex_unlock(&dt_gui_get_global()->mutex);
     return state;
   }
   return FALSE;
@@ -1714,9 +1708,9 @@ void dt_masks_set_lock_mode(dt_develop_t *dev, gboolean mode)
 {
   if(dev->gui_attached)
   {
-    dt_pthread_mutex_lock(&darktable.gui->mutex);
+    dt_pthread_mutex_lock(&dt_gui_get_global()->mutex);
     dev->mask_lock = mode;
-    dt_pthread_mutex_unlock(&darktable.gui->mutex);
+    dt_pthread_mutex_unlock(&dt_gui_get_global()->mutex);
   }
 }
 
@@ -1739,7 +1733,7 @@ void dt_dev_append_changed_tag(const int32_t imgid)
   guint tagid = 0;
   dt_tag_new("darktable|changed", &tagid);
   const gboolean tag_change = dt_tag_attach(tagid, imgid, FALSE, FALSE);
-  if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 }
 
 void dt_dev_masks_update_hash(dt_develop_t *dev)
@@ -1753,7 +1747,7 @@ void dt_dev_masks_update_hash(dt_develop_t *dev)
   for(GList *form = g_list_first(dev->forms); form; form = g_list_next(form))
   {
     dt_masks_form_t *shape = (dt_masks_form_t *)form->data;
-    hash = dt_masks_form_get_own_hash(hash, shape);
+    hash = dt_masks_form_get_own_hash(hash, dev->forms, shape);
   }
 
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
@@ -1777,7 +1771,7 @@ float dt_dev_get_natural_scale(dt_develop_t *dev)
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return 1.0f;
-  return dev->roi.scaling / darktable.gui->ppd;
+  return dev->roi.scaling / dt_gui_get_global()->ppd;
 }
 
 float dt_dev_get_overlay_scale(dt_develop_t *dev)
@@ -1788,7 +1782,7 @@ float dt_dev_get_overlay_scale(dt_develop_t *dev)
 float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, const float scaling)
 {
   if(IS_NULL_PTR(dev)) return 1.0f;
-  return scaling * dev->roi.natural_scale / darktable.gui->ppd;
+  return scaling * dev->roi.natural_scale / dt_gui_get_global()->ppd;
 }
 
 void dt_dev_get_widget_center(const dt_develop_t *dev, float *point)
@@ -1802,7 +1796,7 @@ void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(box)) return;
 
-  const float scale = dev->roi.scaling / darktable.gui->ppd;
+  const float scale = dev->roi.scaling / dt_gui_get_global()->ppd;
   const float roi_width = fminf(width, dev->roi.preview_width * scale);
   const float roi_height = fminf(height, dev->roi.preview_height * scale);
   const float border = dev->roi.border_size;
@@ -1836,8 +1830,8 @@ void dt_dev_convert_roi(const dt_develop_t *dev, const dt_iop_roi_t *roi_in, dt_
   if(from == to) return;
 
   const float factor = (from == DT_DEV_ROI_GUI_LOGICAL && to == DT_DEV_ROI_PIPELINE)
-                           ? darktable.gui->ppd
-                           : 1.0f / darktable.gui->ppd;
+                           ? dt_gui_get_global()->ppd
+                           : 1.0f / dt_gui_get_global()->ppd;
 
   // x/y/width/height belong to the GUI/pipeline geometry boundary and therefore
   // follow the ppd factor. roi->scale stays unchanged because it expresses the
@@ -1883,7 +1877,7 @@ static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width
   if(proc_wd == 0.f || proc_ht == 0.f) return TRUE;
 
   // Get image's origin position and scale
-  const float zoom_scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float zoom_scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   const float tx = 0.5f * width - dev->roi.x * proc_wd * zoom_scale;
   const float ty = 0.5f * height - dev->roi.y * proc_ht * zoom_scale;
 
@@ -1906,7 +1900,7 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 {
   if(_dev_translate_roi(dev, cr, width, height))
     return TRUE;
-  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
   cairo_scale(cr, scale, scale);
   
   return FALSE;
@@ -1944,14 +1938,14 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
 
   // Keep mouse hit-tests usable across zoom levels by bounding the selection
   // radius once it is expressed in image-space pixels.
-  darktable.gui->mouse.effect_radius_clamped = CLAMP(darktable.gui->mouse.effect_radius, 
+  dt_gui_get_global()->mouse.effect_radius_clamped = CLAMP(dt_gui_get_global()->mouse.effect_radius, 
                                                     DT_PIXEL_APPLY_DPI(4.0f) / zoom_level,
                                                     DT_PIXEL_APPLY_DPI(15.0f) / zoom_level);
 
   dt_print(DT_DEBUG_MASKS,
            "[mouse] effect_radius=%0.3f effect_radius_clamped=%0.3f zoom_level=%0.4f ppd=%0.4f\n",
-           darktable.gui->mouse.effect_radius, darktable.gui->mouse.effect_radius_clamped,
-           zoom_level, darktable.gui->ppd);
+           dt_gui_get_global()->mouse.effect_radius, dt_gui_get_global()->mouse.effect_radius_clamped,
+           zoom_level, dt_gui_get_global()->ppd);
 }
 
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 

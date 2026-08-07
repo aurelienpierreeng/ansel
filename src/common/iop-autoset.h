@@ -16,6 +16,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_COMMON_IOP_AUTOSET_H
+#define DT_COMMON_IOP_AUTOSET_H
+
 #include <glib.h>
 
 typedef struct dt_autoset_manager_t 
@@ -38,3 +41,5 @@ gchar *dt_iop_autoset_get_conf_key(const dt_iop_module_t *module);
 gboolean dt_iop_autoset_module_is_enabled(const dt_iop_module_t *module);
 
 void dt_iop_autoset_module_set_enabled(const dt_iop_module_t *module, const gboolean enabled);
+
+#endif // DT_COMMON_IOP_AUTOSET_H

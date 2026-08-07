@@ -42,17 +42,21 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
-#include "common/bilateralcl.h"
-#include "common/debug.h"
-#include "common/gaussian.h"
-#include "common/math.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
+#include "pixel/bilateral.h"
+#include "pixel/bilateralcl.h"
+#include "pixel/gaussian.h"
+#include "math/math.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
@@ -468,7 +472,7 @@ order_changed (GtkComboBox *combo, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_lowpass_params_t *p = (dt_iop_lowpass_params_t *)self->params;
   p->order = gtk_combo_box_get_active(combo);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 #endif
 
@@ -563,13 +567,13 @@ void init_global(dt_iop_module_so_t *module)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_gui_presets_add_generic(_("local contrast mask"), self->op, self->version(),
                              &(dt_iop_lowpass_params_t){ 0, 50.0f, -1.0f, 0.0f, 0.0f, LOWPASS_ALGO_GAUSSIAN, 1 },
                              sizeof(dt_iop_lowpass_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 void cleanup_global(dt_iop_module_so_t *module)

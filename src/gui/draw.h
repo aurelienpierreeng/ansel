@@ -36,7 +36,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_DRAW_H
+#define DT_GUI_DRAW_H
 
 /** some common drawing routines. */
 
@@ -45,9 +46,8 @@
 #endif
 
 #include "common/curve_tools.h"
-#include "common/darktable.h"
+#include "common/logging.h"
 #include "common/splines.h"
-#include "control/conf.h"
 #include "develop/develop.h"
 #include <cairo.h>
 #include <glib.h>
@@ -106,13 +106,14 @@ typedef struct dt_draw_curve_t
 static inline void dt_draw_set_color_overlay(cairo_t *cr, gboolean bright, double alpha)
 {
   double amt;
+  const struct dt_gui_gtk_t *gui = dt_gui_get_global();
 
   if(bright)
-    amt = 0.5 + darktable.gui->overlay_contrast * 0.5;
+    amt = 0.5 + gui->overlay_contrast * 0.5;
   else
-    amt = (1.0 - darktable.gui->overlay_contrast) * 0.5;
+    amt = (1.0 - gui->overlay_contrast) * 0.5;
 
-  cairo_set_source_rgba(cr, darktable.gui->overlay_red * amt, darktable.gui->overlay_green * amt, darktable.gui->overlay_blue * amt, alpha);
+  cairo_set_source_rgba(cr, gui->overlay_red * amt, gui->overlay_green * amt, gui->overlay_blue * amt, alpha);
 }
 
 /** draws a rating star
@@ -623,7 +624,7 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
   cairo_stroke(cr);
 
-  if(darktable.unmuted & DT_DEBUG_MASKS)
+  if(dt_get_debug_flags() & DT_DEBUG_MASKS)
   {
     const float debug_radius = DT_GUI_MOUSE_EFFECT_RADIUS;
     cairo_arc(cr, x, y, debug_radius, 0.0, 2.0 * M_PI);
@@ -716,7 +717,10 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt[2], const float zo
   cairo_restore(cr);
 }
 
-typedef void (*shape_draw_function_t)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+// dev is the develop instance owning the shape being drawn. It is threaded explicitly so shape
+// drawing code never has to reach for the darktable.develop global (which would couple every
+// shape file to the whole application and hide which instance is read).
+typedef void (*shape_draw_function_t)(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
 
 /**
  * @brief Draw the lines of a mask shape.
@@ -731,18 +735,18 @@ typedef void (*shape_draw_function_t)(cairo_t *cr, const float *points, const in
  * @param points_count the number of points in the shape
  * @param functions the functions table of the shape
  */
-static inline void dt_draw_shape_lines(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
+static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
                 const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func, const cairo_line_cap_t line_cap)
 {
   cairo_save(cr);
-  
+
   cairo_set_line_cap(cr, line_cap);
   // Are we drawing a border ?
-  const gboolean border = (dash_type != DT_MASKS_NO_DASH);  
+  const gboolean border = (dash_type != DT_MASKS_NO_DASH);
 
   // Draw the shape from the integrated function if any
   if(points && points_count >= 2 && draw_shape_func)
-    (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
+    (*draw_shape_func)(dev, cr, points, points_count, nb, border, FALSE);
 
   const dt_draw_dash_type_t dash = (dash_type && !source)
                                   ? dash_type : DT_MASKS_NO_DASH;
@@ -784,7 +788,7 @@ static inline void dt_draw_shape_lines(const dt_draw_dash_type_t dash_type, cons
 static inline void dt_draw_stroke_line(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr,
                           const gboolean selected, const float zoom_scale, const cairo_line_cap_t line_cap)
 {
-  dt_draw_shape_lines(dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap);
+  dt_draw_shape_lines(NULL, dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap);
 }
 
 static void _draw_arrow_head(cairo_t *cr, const float arrow[2], const float arrow_x_a, const float arrow_y_a,
@@ -914,16 +918,16 @@ static inline void dt_draw_cross(cairo_t *cr, const float zoom_scale, const floa
   cairo_restore(cr);
 }
 
-static inline void dt_draw_source_shape(cairo_t *cr, const float zoom_scale, const gboolean selected, 
+static inline void dt_draw_source_shape(struct dt_develop_t *dev, cairo_t *cr, const float zoom_scale, const gboolean selected,
   const float *source_pts, const int source_pts_count, const int nodes_nb, const shape_draw_function_t *draw_shape_func)
 {
   cairo_save(cr);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
   dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
-  
+
   if(draw_shape_func)
-    (*draw_shape_func)(cr, source_pts, source_pts_count, nodes_nb, FALSE, TRUE);
+    (*draw_shape_func)(dev, cr, source_pts, source_pts_count, nodes_nb, FALSE, TRUE);
 
   //dark line
   if(selected)
@@ -967,6 +971,8 @@ static inline GdkPixbuf *dt_draw_get_pixbuf_from_cairo(DTGTKCairoPaintIconFunc p
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_GUI_DRAW_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

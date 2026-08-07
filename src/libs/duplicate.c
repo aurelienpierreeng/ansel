@@ -18,6 +18,8 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2026 Guillaume STUTIN.
+
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -34,21 +36,23 @@
 */
 
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "gui/dtgtk/button.h"
+#include "control/jobs/control_jobs.h"
+#include "common/database.h"
 #include "common/debug.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "common/history.h"
 #include "common/metadata.h"
-#include "common/selection.h"
-#include "common/styles.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_snapshot.h"
-#include "dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbnail.h"
 
 #include "gui/gtk.h"
-#include "gui/styles.h"
 #include "libs/lib.h"
+
+#include <sqlite3.h>
 
 DT_MODULE(1)
 
@@ -58,7 +62,7 @@ typedef struct dt_lib_duplicate_t
 {
   GtkWidget *duplicate_box;
   int32_t imgid;                 // duplicate currently held under mouse press, UNKNOWN_IMAGE if none
-  dt_dev_snapshot_t preview;     // hold-to-preview render + pan/zoom-synced crop cache, see develop/dev_snapshot.h
+  dt_dev_snapshot_t preview;     // hold-to-preview render, ROI-scoped and recomputed on pan/zoom, see develop/dev_snapshot.h
   int32_t preview_cached_imgid;  // which imgid `preview` currently holds, UNKNOWN_IMAGE if none
 
   GList *thumbs;
@@ -103,7 +107,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
   const int32_t imgid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "imgid"));
 
-  if(imgid == darktable.develop->image_storage.id)
+  if(imgid == dt_dev_get_global()->image_storage.id)
   {
     // we find the duplicate image to show now
     for(GList *l = d->thumbs; l; l = g_list_next(l))
@@ -116,7 +120,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
         if(l2)
         {
           dt_thumbnail_t *th2 = (dt_thumbnail_t *)l2->data;
-          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                                         th2->info.id);
           break;
         }
@@ -126,7 +130,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
 
   // and we remove the image
   dt_control_delete_image(imgid);
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_prepend(NULL, GINT_TO_POINTER(imgid)));
 }
 
@@ -134,7 +138,7 @@ static gboolean _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventB
 {
   if(event->button == 1 && event->type == GDK_BUTTON_PRESS)
   {
-    dt_develop_t *dev = darktable.develop;
+    dt_develop_t *dev = dt_dev_get_global();
     if(IS_NULL_PTR(dev)) return FALSE;
 
     dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
@@ -148,7 +152,7 @@ static gboolean _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventB
     if(d->preview_cached_imgid != imgid)
     {
       dt_control_change_cursor_by_name_and_flush("progress");
-      const gboolean ok = dt_dev_snapshot_capture(&d->preview, imgid, 1.0f, NULL, NULL, -1);
+      const gboolean ok = dt_dev_snapshot_capture(&d->preview, dev, imgid, NULL, NULL, -1);
       dt_control_commit_cursor();
       d->preview_cached_imgid = ok ? imgid : UNKNOWN_IMAGE;
     }
@@ -188,7 +192,7 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
   if(IS_NULL_PTR(d) || d->imgid <= 0 || d->preview_cached_imgid != d->imgid) return;
 
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
   float image_box[4] = { 0.0f };
   dt_dev_get_image_box_in_widget(dev, width, height, image_box);
   if(image_box[2] <= 0.0f || image_box[3] <= 0.0f) return;
@@ -221,7 +225,7 @@ static void _thumb_remove(gpointer user_data)
 static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *self)
 {
   //block signals to avoid concurrent calls
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_lib_duplicate_init_callback), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_duplicate_init_callback), self);
 
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
 
@@ -238,7 +242,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   dt_gui_container_destroy_children(GTK_CONTAINER(d->duplicate_box));
   // retrieve all the versions of the image
   sqlite3_stmt *stmt;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
 
   int count = 0;
 
@@ -246,7 +250,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   // clang-format off
   if(IS_NULL_PTR(_duplicate_versions_stmt))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT i.version, i.id, m.value"
                                 " FROM images AS i"
                                 " LEFT JOIN meta_data AS m ON m.id = i.id AND m.key = ?3"
@@ -337,7 +341,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
     gtk_widget_set_visible(bt, FALSE);
   }
 
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_lib_duplicate_init_callback), self); //unblock signals
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_duplicate_init_callback), self); //unblock signals
 }
 
 static void _lib_duplicate_collection_changed(gpointer instance, dt_collection_change_t query_change,
@@ -379,11 +383,11 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_widget_show_all(self->widget);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED, G_CALLBACK(_lib_duplicate_init_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE, G_CALLBACK(_lib_duplicate_init_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED, G_CALLBACK(_lib_duplicate_init_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_INITIALIZE, G_CALLBACK(_lib_duplicate_init_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_lib_duplicate_collection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                             G_CALLBACK(_lib_duplicate_preview_updated_callback), self);
 }
 
@@ -392,9 +396,9 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_duplicate_t *d = (dt_lib_duplicate_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_init_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_collection_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_preview_updated_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_duplicate_init_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_duplicate_collection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_duplicate_preview_updated_callback), self);
 
   if(!IS_NULL_PTR(d))
   {

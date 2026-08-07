@@ -41,16 +41,21 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/colorspaces_inline_conversions.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/iop_profile.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/rgb_norms.h"
+#include "pixel/rgb_norms.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gdkkeys.h"
@@ -429,7 +434,7 @@ static void interpolator_callback(GtkWidget *widget, dt_iop_module_t *self)
     p->curve_type[DT_IOP_RGBCURVE_R] = p->curve_type[DT_IOP_RGBCURVE_G] = p->curve_type[DT_IOP_RGBCURVE_B]
         = MONOTONE_HERMITE;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
@@ -558,7 +563,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
                 p->curve_nodes[ch][1].x - increment + (p->curve_nodes[ch][3].x - p->curve_nodes[ch][1].x) / 2.f,
                 p->curve_nodes[ch][1].y + increment + (p->curve_nodes[ch][3].y - p->curve_nodes[ch][1].y) / 2.f);
 
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
   dt_control_queue_redraw_widget(self->widget);
@@ -692,7 +697,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
 {
   dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = self->dev;
 
   const int ch = g->channel;
   const int nodes = p->curve_num_nodes[ch];
@@ -828,14 +833,14 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
         cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
         for(int k=DT_IOP_RGBCURVE_R; k<DT_IOP_RGBCURVE_MAX_CHANNELS; k++)
         {
-          set_color(cr, darktable.bauhaus->graph_colors[k]);
+          set_color(cr, dt_bauhaus_get_global()->graph_colors[k]);
           dt_draw_histogram_8_zoomed(cr, hist, 4, k, g->zoom_factor, g->offset_x * 255.0, g->offset_y * hist_max,
                                      is_linear);
         }
       }
       else if(autoscale == DT_S_SCALE_MANUAL_RGB)
       {
-        set_color(cr, darktable.bauhaus->graph_colors[ch]);
+        set_color(cr, dt_bauhaus_get_global()->graph_colors[ch]);
         dt_draw_histogram_8_zoomed(cr, hist, 4, ch, g->zoom_factor, g->offset_x * 255.0, g->offset_y * hist_max,
                                    is_linear);
       }
@@ -852,7 +857,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
       dt_aligned_pixel_t picker_mean, picker_min, picker_max;
 
       // the global live samples ...
-      GSList *samples = darktable.develop->color_picker.samples;
+      GSList *samples = self->dev->color_picker.samples;
       if(samples)
       {
         const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(dev->pipe);
@@ -904,7 +909,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
       {
         PangoLayout *layout;
         PangoRectangle ink;
-        PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+        PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
         pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
         pango_font_description_set_absolute_size(desc, PANGO_SCALE);
         layout = pango_cairo_create_layout(cr);
@@ -957,7 +962,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
     // draw information about current selected node
     PangoLayout *layout;
     PangoRectangle ink;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
     pango_font_description_set_absolute_size(desc, PANGO_SCALE);
     layout = pango_cairo_create_layout(cr);
@@ -1085,7 +1090,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
       dt_iop_color_picker_reset(self, TRUE);
       // no vertex was close, create a new one!
       g->selected = _add_node(curve_nodes, &p->curve_num_nodes[ch], linx, liny);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
   else
@@ -1177,7 +1182,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
           }
 
           dt_iop_color_picker_reset(self, TRUE);
-          dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+          dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
           gtk_widget_queue_draw(self->widget);
         }
 
@@ -1199,7 +1204,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
         g->selected = -2; // avoid motion notify re-inserting immediately.
         dt_bauhaus_combobox_set(g->interpolator, p->curve_type[DT_IOP_RGBCURVE_R]);
         dt_iop_color_picker_reset(self, TRUE);
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
         gtk_widget_queue_draw(self->widget);
       }
       else
@@ -1210,7 +1215,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
           g->selected = -2; // avoid motion notify re-inserting immediately.
           dt_bauhaus_combobox_set(g->autoscale, 1);
           dt_iop_color_picker_reset(self, TRUE);
-          dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+          dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
           gtk_widget_queue_draw(self->widget);
         }
       }
@@ -1224,7 +1229,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       const float reset_value = g->selected == 0 ? 0.f : 1.f;
       curve_nodes[g->selected].y = curve_nodes[g->selected].x = reset_value;
       dt_iop_color_picker_reset(self, TRUE);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       gtk_widget_queue_draw(self->widget);
       return TRUE;
     }
@@ -1238,7 +1243,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     g->selected = -2; // avoid re-insertion of that point immediately after this
     p->curve_num_nodes[ch]--;
     dt_iop_color_picker_reset(self, TRUE);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     gtk_widget_queue_draw(self->widget);
     return TRUE;
   }
@@ -1334,7 +1339,7 @@ void gui_init(struct dt_iop_module_t *self)
   // FIXME: that tooltip goes in the way of the numbers when you hover a node to get a reading
   // gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("double click to reset curve"));
 
-  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
@@ -1352,7 +1357,7 @@ void gui_init(struct dt_iop_module_t *self)
     #define CATMULL_ROM 1
     #define MONOTONE_HERMITE 2
   */
-  g->interpolator = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->interpolator = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->interpolator, N_("interpolation method"));
   dt_bauhaus_combobox_add(g->interpolator, _("cubic spline"));
   dt_bauhaus_combobox_add(g->interpolator, _("centripetal spline"));

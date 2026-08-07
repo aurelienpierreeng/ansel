@@ -36,13 +36,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include <glib/gstdio.h>
 #include "common/exif.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "imageio/format/imageio_format_api.h"
 
@@ -491,7 +496,7 @@ int write_image(struct dt_imageio_module_data_t *data,
        */
       max_threads = (1 << encoder->tileRowsLog2) * (1 << encoder->tileColsLog2);
 
-      encoder->maxThreads = MIN(max_threads, darktable.num_openmp_threads);
+      encoder->maxThreads = MIN(max_threads, dt_get_num_openmp_threads());
     }
     case AVIF_TILING_OFF:
       break;
@@ -727,7 +732,7 @@ void gui_init(dt_imageio_module_format_t *self)
   /*
    * Bit depth combo box
    */
-  gui->bit_depth = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->bit_depth = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
   dt_bauhaus_widget_set_label(gui->bit_depth, N_("bit depth"));
   size_t idx = 0;
@@ -749,7 +754,7 @@ void gui_init(dt_imageio_module_format_t *self)
   /*
    * Color mode combo box
    */
-  gui->color_mode = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->color_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->color_mode, _("color mode"));
   dt_bauhaus_combobox_add(gui->color_mode,
                           _("rgb colors"));
@@ -768,7 +773,7 @@ void gui_init(dt_imageio_module_format_t *self)
   /*
    * Tiling combo box
    */
-  gui->tiling = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->tiling = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->tiling, N_("tiling"));
   dt_bauhaus_combobox_add(gui->tiling,
                           _("on"));
@@ -791,7 +796,7 @@ void gui_init(dt_imageio_module_format_t *self)
   /*
    * Compression type combo box
    */
-  gui->compression_type = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  gui->compression_type = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(gui->compression_type, N_("compression type"));
   dt_bauhaus_combobox_add(gui->compression_type,
                           _(avif_get_compression_string(AVIF_COMP_LOSSLESS)));
@@ -811,7 +816,7 @@ void gui_init(dt_imageio_module_format_t *self)
   /*
    * Quality combo box
    */
-  gui->quality = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL),
+  gui->quality = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL),
                                                   dt_confgen_get_int("plugins/imageio/format/avif/quality", DT_MIN), /* min */
                                                   dt_confgen_get_int("plugins/imageio/format/avif/quality", DT_MAX), /* max */
                                                   1, /* step */

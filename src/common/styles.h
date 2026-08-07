@@ -33,9 +33,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_STYLES_H
+#define DT_COMMON_STYLES_H
 
-#include "common/darktable.h"
 #include "common/history_merge.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
@@ -149,6 +149,8 @@ void dt_styles_import_from_file(const char *style_path);
 
 /** cleanup cached statements */
 void dt_styles_cleanup(void);
+
+#endif // DT_COMMON_STYLES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -1,0 +1,231 @@
+/*
+    This file is part of darktable,
+    Copyright (C) 2020 Ralf Brown.
+    Copyright (C) 2021 luzpaz.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2025 Alynx Zhou.
+    
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef DT_SYSTEM_ATOMIC_H
+#define DT_SYSTEM_ATOMIC_H
+
+#include <stdint.h>
+
+// implement an atomic variable for inter-thread signalling purposes
+// the manner in which we implement depends on the capabilities of the compiler:
+//   1. standard-compliant C++ compiler: use C++11 atomics in <atomic>
+//   2. standard-compliant C compiler: use C11 atomics in <stdatomic.h>
+//   3. GCC 4.8+: use intrinsics
+//   4. otherwise: fall back to using Posix mutex to serialize access
+
+#if defined(__cplusplus) && __cplusplus > 201100
+// Shared structs cross C and C++ translation units. Keep atomic storage layout identical to the C side
+// and use compiler builtins for synchronization, otherwise std::atomic can change ABI-visible layout.
+typedef int dt_atomic_int;
+typedef uint64_t dt_atomic_uint64;
+typedef void *dt_atomic_ptr;
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store_n(var, value, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_get_int(dt_atomic_int *var) { return __atomic_load_n(var, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
+{
+  __atomic_store_n(var, value, __ATOMIC_SEQ_CST);
+}
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
+{
+  return __atomic_load_n(var, __ATOMIC_SEQ_CST);
+}
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { __atomic_store_n(var, value, __ATOMIC_SEQ_CST); }
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return __atomic_load_n(var, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var, incr, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var, decr, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return __atomic_exchange_n(var, value, __ATOMIC_SEQ_CST); }
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+{
+  return __atomic_compare_exchange_n(var, expected, value, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+}
+
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
+
+#elif !defined(__STDC_NO_ATOMICS__)
+
+#include <stdatomic.h>
+
+typedef atomic_int dt_atomic_int;
+typedef _Atomic(uint64_t) dt_atomic_uint64;
+typedef _Atomic(void *) dt_atomic_ptr;
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value) { atomic_store(var,value); }
+static inline int dt_atomic_get_int(dt_atomic_int *var) { return atomic_load(var); }
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { atomic_store(var,value); }
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var) { return atomic_load(var); }
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { atomic_store(var,value); }
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var) { return atomic_load(var); }
+static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return atomic_fetch_add(var,incr); }
+static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return atomic_fetch_sub(var,decr); }
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return atomic_exchange(var,value); }
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+{ return atomic_compare_exchange_strong(var,expected,value); }
+
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { atomic_fetch_or(var, flags); }
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { atomic_fetch_and(var, flags); }
+
+#elif defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNU_MINOR__ >= 8))
+// we don't have or aren't supposed to use C11 atomics, but the compiler is a recent-enough version of GCC
+// that we can use GNU intrinsics corresponding to the C11 atomics
+
+typedef volatile int dt_atomic_int;
+typedef volatile uint64_t dt_atomic_uint64;
+typedef void *volatile dt_atomic_ptr;
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
+static inline int dt_atomic_get_int(dt_atomic_int *var)
+{ int value ; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
+{ uint64_t value; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *var)
+{ void *value; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
+
+static inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var,incr,__ATOMIC_SEQ_CST); }
+static inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var,decr,__ATOMIC_SEQ_CST); }
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
+{ int orig;  __atomic_exchange(var,&value,&orig,__ATOMIC_SEQ_CST); return orig; }
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+{ return __atomic_compare_exchange(var,expected,&value,0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST); }
+
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags) { __atomic_fetch_or(var, flags, __ATOMIC_SEQ_CST); }
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags) { __atomic_fetch_and(var, flags, __ATOMIC_SEQ_CST); }
+
+#else
+// we don't have or aren't supposed to use C11 atomics, and don't have GNU intrinsics, so
+// fall back to using a mutex for synchronization
+#include <pthread.h>
+
+extern pthread_mutex_t dt_atom_mutex;
+
+typedef int dt_atomic_int;
+typedef uint64_t dt_atomic_uint64;
+typedef void *dt_atomic_ptr;
+static inline void dt_atomic_set_int(dt_atomic_int *var, int value)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var = value;
+  pthread_mutex_unlock(&dt_atom_mutex);
+}
+
+static inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var = value;
+  pthread_mutex_unlock(&dt_atom_mutex);
+}
+
+static inline void dt_atomic_set_ptr(dt_atomic_ptr *var, void *value)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var = value;
+  pthread_mutex_unlock(&dt_atom_mutex);
+}
+
+static inline int dt_atomic_get_int(const dt_atomic_int *const var)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  int value = *var;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return value;
+}
+
+static inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *const var)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  const uint64_t value = *var;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return value;
+}
+
+static inline void *dt_atomic_get_ptr(const dt_atomic_ptr *const var)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  void *value = *var;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return value;
+}
+
+static inline int dt_atomic_add_int(const dt_atomic_int *const var, int incr)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  int value = *var;
+  *var += incr;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return value;
+}
+
+static inline int dt_atomic_sub_int(const dt_atomic_int *const var, int decr)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  int value = *var;
+  *var -= decr;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return value;
+}
+
+static inline int dt_atomic_exch_int(dt_atomic_int *var, int value)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  int origvalue = *var;
+  *var = value;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return origvalue;
+}
+
+static inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  int origvalue = *var;
+  int success = FALSE;
+  if (origvalue == *expected)
+  {
+    *var = value;
+    success = TRUE;
+  }
+  *expected = origvalue;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return success;
+}
+
+static inline void dt_atomic_or_int(dt_atomic_int *var, int flags)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var |= flags;
+  pthread_mutex_unlock(&dt_atom_mutex);
+}
+
+static inline void dt_atomic_and_int(dt_atomic_int *var, int flags)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var &= flags;
+  pthread_mutex_unlock(&dt_atom_mutex);
+}
+
+#endif // __STDC_NO_ATOMICS__
+
+#endif // DT_SYSTEM_ATOMIC_H
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on

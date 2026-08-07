@@ -41,14 +41,15 @@
 #include <string.h>
 
 #include "control/control.h"
+#include "system/sys_resources.h"
+#include "develop/imageop.h"
+#include "develop/pixelpipe_hb.h"
 #include "control/signal.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe.h"
 #include "develop/supervisor.h"
-#include "common/darktable.h"
-#include "common/debug.h"
 #include "common/opencl.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 
 static __thread const char *dt_pixelpipe_cache_current_module = NULL;
 
@@ -63,8 +64,8 @@ static inline const char *_cache_debug_module_name(void)
 static void _trace_exact_hit(const char *phase, const uint64_t hash, dt_pixel_cache_entry_t *cache_entry,
                              void *data, void *cl_mem_output, const int preferred_devid, const gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
-  if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
+  if(verbose && !(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] exact-hit %s req=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
@@ -119,6 +120,7 @@ static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, c
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid,
                                                           gboolean prefer_device_payload);
 static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
+static int _memory_pressure_shedder(dt_dev_pixelpipe_cache_t *cache);
 
 #ifdef HAVE_OPENCL
 static gboolean _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
@@ -198,8 +200,8 @@ static size_t _pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
 
 static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *message, gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
-  if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
+  if(verbose && !(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %" G_GSIZE_FORMAT " MiB - age %" PRId64
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
@@ -494,7 +496,7 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
   // cl_mem objects at application exit, when nothing else is running.
   if(devid < 0) return;
 
-  // NOTE: the caller must hold darktable.opencl->dev[devid].lock -- either
+  // NOTE: the caller must hold dt_opencl_get_global()->dev[devid].lock -- either
   // because it IS the pixelpipe currently running on that device (the lock
   // dt_opencl_lock_device() handed it for the duration of its run), or because
   // it explicitly took that lock to safely flush this device's cache entries
@@ -523,14 +525,14 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
     if(!locked) dt_pthread_rwlock_unlock(&entry->lock);
     if(used || locked)
     {
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] entry %" PRIu64 " is in use (refcount=%i locked=%i), "
           "keeping its vRAM\n", entry->hash, dt_atomic_get_int(&entry->refcount), locked);
       continue;
     }
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_OPENCL,
         "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 " on device %d...\n",
         entry->hash, devid);
@@ -550,15 +552,15 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
 void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
 {
   // Like dt_dev_pixelpipe_cache_flush_clmem(), but for callers that do NOT
-  // currently hold darktable.opencl->dev[devid].lock -- typically a pipe's own
+  // currently hold dt_opencl_get_global()->dev[devid].lock -- typically a pipe's own
   // cleanup, running after dt_dev_pixelpipe_process() already released that
   // lock. Taking it here ensures we can't race the eventlist/cl_mem bookkeeping
   // of whichever OTHER pixelpipe is now running on that device.
-  if(devid < 0 || IS_NULL_PTR(darktable.opencl) || !darktable.opencl->inited) return;
+  if(devid < 0 || IS_NULL_PTR(dt_opencl_get_global()) || !dt_opencl_is_inited()) return;
 
-  dt_pthread_mutex_lock(&darktable.opencl->dev[devid].lock);
+  dt_pthread_mutex_lock(&dt_opencl_get_global()->dev[devid].lock);
   dt_dev_pixelpipe_cache_flush_clmem(cache, devid);
-  dt_pthread_mutex_unlock(&darktable.opencl->dev[devid].lock);
+  dt_pthread_mutex_unlock(&dt_opencl_get_global()->dev[devid].lock);
 }
 #else
 void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
@@ -663,7 +665,7 @@ static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_pt
 {
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
 
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
   dt_print(DT_DEBUG_OPENCL, 
     "[_pixel_cache_clmem_get] %u output entries in %" PRIu64 "\n", 
     g_list_length(entry->cl_mem_list), entry->hash);
@@ -933,7 +935,7 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
   dt_pixel_cache_entry_t *entry = entry_hint;
   if(IS_NULL_PTR(entry)) 
   {
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] no cache entry to put the vRAM buffer\n");
     return;
   }
@@ -941,7 +943,7 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
   // FIXME: is it safe to cache non-pinned vRAM buffers (aka no CL_MEM_USE_HOST_PTR in flags) ?
   const int state = _pixel_cache_clmem_put(entry, host_ptr, (cl_mem)*mem);
   *mem = NULL;
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] cache entry put the vRAM buffer (state=%i) in %p\n", state, entry);
 }
 
@@ -1048,7 +1050,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
     {
       cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp,
                                                              host_ptr, flags);
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a pinned GPU buffer for %s %s\n", module->name(), message);
     }
   }
@@ -1068,7 +1070,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
     {
       cl_mem_input = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(devid, roi, bpp, module, message, keep);
 
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a device-only GPU buffer for %s %s\n", module->name(), message);
     }
   }
@@ -1081,7 +1083,7 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
   {
     const int hits = dt_atomic_add_int(&clmem_reuse_hits, 1) + 1;
     const int misses = dt_atomic_get_int(&clmem_reuse_misses);
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_OPENCL,
               "[dev_pixelpipe] reused GPU buffer from cache (hits=%d, misses=%d) for module %s %s\n",
               hits, misses, module->name(), message);
@@ -1230,11 +1232,11 @@ float *dt_dev_pixelpipe_cache_restore_cl_buffer(dt_dev_pixelpipe_t *pipe, float 
                                                 const char *message)
 {
   if(IS_NULL_PTR(cl_mem_input)) return input;
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
 
   const int fail = dt_dev_pixelpipe_cache_sync_cl_buffer(pipe->devid, input, cl_mem_input, roi_in,
                                                          CL_MAP_READ, in_bpp, module, message);
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
   return fail ? NULL : input;
 }
 
@@ -1284,7 +1286,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
     const cl_mem mem = (cl_mem)*cl_mem_input;
     if(dt_opencl_is_pinned_memory(mem))
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
       *locked_input_entry = input_entry;
     }
     return 0;
@@ -1296,7 +1298,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
     return 1;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
 
   // Try to reuse a cached pinned buffer; otherwise allocate a new pinned image backed by `input`.
   gboolean input_reused_from_cache = FALSE;
@@ -1343,7 +1345,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
   if(keep_lock)
     *locked_input_entry = input_entry;
   else
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
 
   return fail ? 1 : 0;
 }
@@ -1452,11 +1454,160 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pix
   return entry;
 }
 
+/* Allocations at or below this size bypass the system-pressure valve: they cannot
+ * change the pressure meaningfully, and refusing them breaks functionality for no
+ * benefit. Deliberately small -- this is an escape hatch for scratch and bookkeeping
+ * buffers, not a hole large enough for pipeline tiles. */
+#define DT_PIXELPIPE_CACHE_PRESSURE_EXEMPT_SIZE ((size_t)1024 * 1024)
+
+/* System memory-pressure valve (issue #1083).
+ *
+ * The internal budget (max_memory) is only a plan made at startup: it says nothing
+ * about what the system can actually back RIGHT NOW, with other applications competing
+ * for the same physical RAM. Before growing our committed footprint by `request_size`,
+ * make sure the system-wide available memory keeps the configured floor
+ * (dt_get_memory_pressure_floor()); when it doesn't, evict LRU entries to cover the
+ * deficit, hand their pages back to the OS for real, and re-read what that actually
+ * bought — so the system OOM-killer never has a reason to look at us.
+ *
+ * The probe is rate-limited and the cached value is decremented by our own
+ * allocations in between, so the hot path pays one probe per PROBE_PERIOD at most.
+ * That running estimate legitimately reaches 0 under sustained pressure, which is why
+ * "the platform answers at all" is tracked separately (`sys_probe_valid`) instead of
+ * being read off a 0 estimate: conflating the two would disable the valve at exactly
+ * the moment it matters.
+ *
+ * Returns TRUE when the allocation may proceed. Returns FALSE when, even after
+ * shedding everything evictable, the system could not take `request_size` more bytes
+ * without dropping under HALF the floor: the caller must fail the allocation cleanly —
+ * a failed pipeline with a message beats a silent SIGKILL from the OOM-killer.
+ */
+static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, size_t request_size)
+{
+  const size_t pressure_floor = dt_get_memory_pressure_floor();
+  if(pressure_floor == 0) return TRUE;
+
+  dt_pthread_mutex_lock(&cache->lock);
+
+  const gint64 now = g_get_monotonic_time();
+  const gint64 PROBE_PERIOD_US = 100000; // 100 ms
+  if(cache->sys_probe_time_us == 0 || now - cache->sys_probe_time_us > PROBE_PERIOD_US)
+  {
+    const size_t probed = dt_get_system_available_mem();
+    cache->sys_probe_valid = (probed > 0);
+    cache->sys_available_est = probed;
+    cache->sys_probe_time_us = now;
+  }
+
+  // The platform gives us no way to know: pressure handling disabled, never refuse.
+  if(!cache->sys_probe_valid)
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    return TRUE;
+  }
+
+  if(cache->sys_available_est < request_size + pressure_floor)
+  {
+    const size_t deficit = request_size + pressure_floor - cache->sys_available_est;
+    size_t freed = 0;
+    while(freed < deficit && g_hash_table_size(cache->entries) > 0)
+    {
+      const size_t before = cache->current_memory;
+      if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+      freed += before - cache->current_memory;
+    }
+
+    if(freed)
+    {
+      /* Evicting only returns the pages to the ARENA. How much of that reaches the OS
+       * is not ours to guess: the per-free lazy release is a no-op on Windows until a
+       * decommit runs, and even where MADV_FREE applies, the kernel decides when those
+       * pages stop counting against us. So hand them over for real, then take the new
+       * number from the OS instead of crediting what we think we released — an
+       * over-credit here would let the allocation through on a system that is still
+       * just as full, which is precisely the OOM this valve exists to prevent.
+       * Ordering note: cache->lock is held and dt_cache_arena_trim() takes arena.lock,
+       * matching the cache->lock → arena.lock order the rest of this file already uses
+       * (see the defrag path below). */
+      dt_cache_arena_trim(&cache->arena);
+      dt_invalidate_system_available_mem();
+      const size_t probed = dt_get_system_available_mem();
+      cache->sys_probe_valid = (probed > 0);
+      cache->sys_available_est = probed;
+      cache->sys_probe_time_us = g_get_monotonic_time();
+
+      dt_print(DT_DEBUG_MEMORY | DT_DEBUG_PIPECACHE,
+               "[pixelpipe_cache] system memory pressure: shed %" G_GSIZE_FORMAT " MiB of cache "
+               "(%" G_GSIZE_FORMAT " MiB available after trim, floor %" G_GSIZE_FORMAT " MiB)\n",
+               freed / (1024 * 1024), cache->sys_available_est / (1024 * 1024),
+               pressure_floor / (1024 * 1024));
+    }
+  }
+
+  // The post-trim re-probe can itself come back unanswered; absence of information is
+  // never a reason to refuse (see the dt_get_system_available_mem() header contract).
+  /* A request too small to move the needle must never be refused. The valve exists to
+   * stop the cache COMMITTING LARGE BUFFERS into the memory the OS and other
+   * applications need -- not to make Ansel fail. Because the floor term dominates the
+   * comparison below, a system already under the floor refused EVERY allocation
+   * regardless of size, printing the giveaway line
+   *
+   *   [pixelpipe_cache] refusing to allocate 0 MiB: the system has only 1638 MiB ...
+   *
+   * and turning a transient shortage into a hard failure (it segfaulted startup through
+   * an unchecked allocation in common/points.h). Anything at or below this size cannot
+   * meaningfully change system pressure, and refusing it buys nothing. Larger requests
+   * remain fully gated.
+   *
+   * The comparison below uses the WHOLE floor, not half of it. The floor used to be a
+   * large derived number where a half-way hard limit made sense as hysteresis; it is now
+   * an absolute reserve (DT_MEMORY_PRESSURE_FLOOR_DEFAULT, 200 MiB), and "always leave
+   * 200 MiB to the OS" has to mean 200, not 100. The shed/trim step above already ran at
+   * this same threshold, so reaching here means trimming did not recover enough. */
+  const gboolean negligible = request_size <= DT_PIXELPIPE_CACHE_PRESSURE_EXEMPT_SIZE;
+
+  const gboolean allowed = negligible
+                           || !cache->sys_probe_valid
+                           || (cache->sys_available_est >= request_size + pressure_floor);
+
+  if(allowed)
+  {
+    // Optimistically debit the estimate now that the caller will commit these pages;
+    // self-corrects at the next probe if the arena allocation fails afterwards.
+    cache->sys_available_est
+        = (cache->sys_available_est > request_size) ? cache->sys_available_est - request_size : 0;
+  }
+  else
+  {
+    // Warn the user at most every 10 s: this fires per failed allocation, on a
+    // system that is already drowning.
+    static gint64 last_warning_us = 0;
+    if(now - last_warning_us > 10000000)
+    {
+      last_warning_us = now;
+      dt_control_log(_("Your system is running out of memory. "
+                       "Close other applications or add more RAM to your system."));
+    }
+    fprintf(stdout,
+            "[pixelpipe_cache] refusing to allocate %" G_GSIZE_FORMAT " MiB: the system has only "
+            "%" G_GSIZE_FORMAT " MiB of available RAM left (pressure floor: %" G_GSIZE_FORMAT " MiB)\n",
+            request_size / (1024 * 1024), cache->sys_available_est / (1024 * 1024),
+            pressure_floor / (1024 * 1024));
+  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
+  return allowed;
+}
+
 // Attempt to allocate from the arena; if fragmentation prevents it, evict LRU cache lines
 // until a sufficiently large contiguous run is available (or nothing remains to evict).
 static inline void *_arena_alloc_with_defrag(dt_dev_pixelpipe_cache_t *cache, size_t request_size,
                                              size_t *actual_size)
 {
+  // Never grow the committed footprint past what the system can actually take,
+  // whatever our internal budget still allows.
+  if(!_system_memory_pressure_valve(cache, request_size)) return NULL;
+
   void *buf = dt_cache_arena_alloc(&cache->arena, request_size, actual_size);
   if(!IS_NULL_PTR(buf)) return buf;
 
@@ -1485,6 +1636,22 @@ static inline void _arena_stats_bytes(dt_dev_pixelpipe_cache_t *cache, uint32_t 
   const size_t page_size = cache->arena.page_size ? cache->arena.page_size : 1;
   if(total_bytes) *total_bytes = (size_t)(*total_pages) * page_size;
   if(largest_bytes) *largest_bytes = (size_t)(*largest_pages) * page_size;
+}
+
+/* Largest contiguous free run in the arena, in bytes. The arena serves every
+ * allocation from ONE contiguous run, and pinned entries partition its
+ * address space — so at tiling-planning time this, not the byte headroom, is
+ * the number a module's working set must actually fit (see the available-
+ * memory cap in develop/tiling.c). Locked because the arena bitmap mutates
+ * under concurrent pipes. */
+size_t dt_pixelpipe_cache_get_largest_free_run(dt_dev_pixelpipe_cache_t *cache)
+{
+  uint32_t total_pages = 0, largest_pages = 0;
+  size_t total_bytes = 0, largest_bytes = 0;
+  dt_pthread_mutex_lock(&cache->lock);
+  _arena_stats_bytes(cache, &total_pages, &largest_pages, &total_bytes, &largest_bytes);
+  dt_pthread_mutex_unlock(&cache->lock);
+  return largest_bytes;
 }
 
 static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache, size_t request_size,
@@ -1558,7 +1725,7 @@ static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, c
     {
       // Don't flush cachelines that don't belong to the current OpenCL device,
       // or are still borrowed by an in-flight GPU module (per-payload refs > 0).
-      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
         dt_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] for entry %" PRIu64 ": couldn't flush %p "
           "(referenced=%i not ours=%i)\n",
@@ -1805,11 +1972,11 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
    * teardown into a SIGSEGV. Skip the arena free and the accounting in that case -- the arena is
    * unmapped wholesale right after, so nothing actually leaks. */
   dt_dev_pixelpipe_cache_t *cache = cache_entry->cache;
-  if(cache != darktable.pixelpipe_cache)
+  if(cache != dt_pixelpipe_cache_get_global())
   {
     fprintf(stderr, "[pixelpipe] cache entry %p has a corrupted back-reference (%p, expected %p); "
                     "skipping arena free to avoid a crash\n",
-            (void *)cache_entry, (void *)cache, (void *)darktable.pixelpipe_cache);
+            (void *)cache_entry, (void *)cache, (void *)dt_pixelpipe_cache_get_global());
     cache = NULL;
   }
 
@@ -1828,7 +1995,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
         * is still reading the previous pixels.
         *
         * dt_opencl_finish() flushes that device's event list, which is only thread-safe while we hold
-        * darktable.opencl->dev[devid].lock. Touching it without that lock races the eventlist/cl_mem
+        * dt_opencl_get_global()->dev[devid].lock. Touching it without that lock races the eventlist/cl_mem
         * bookkeeping of whichever pixelpipe is currently running on that device and crashes inside
         * clWaitForEvents (issues #859, #864, #131742439 -- the 3-min GUI garbage collection timeout
         * dt_dev_pixelpipe_cache_flush_old() owns no device lock). _free_cache_entry() also runs from LRU
@@ -1837,11 +2004,11 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
         * the owner is draining it itself at the end of its run and this refcount==0 entry is not one of its
         * live borrows, so skipping the finish is safe. */
       const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
-      if(mem_devid >= 0 && !IS_NULL_PTR(darktable.opencl) && darktable.opencl->inited
-         && !dt_pthread_mutex_BAD_trylock(&darktable.opencl->dev[mem_devid].lock))
+      if(mem_devid >= 0 && !IS_NULL_PTR(dt_opencl_get_global()) && dt_opencl_is_inited()
+         && !dt_pthread_mutex_BAD_trylock(&dt_opencl_get_global()->dev[mem_devid].lock))
       {
         dt_opencl_finish(mem_devid);
-        dt_pthread_mutex_BAD_unlock(&darktable.opencl->dev[mem_devid].lock);
+        dt_pthread_mutex_BAD_unlock(&dt_opencl_get_global()->dev[mem_devid].lock);
       }
     }
     dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
@@ -1864,6 +2031,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 }
 
 static int garbage_collection = 0;
+static int pressure_shedding = 0;
 
 dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
 {
@@ -1875,6 +2043,9 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
   cache->current_memory = 0;
   cache->next_serial = 1;
   cache->queries = cache->hits = 0;
+  cache->sys_probe_time_us = 0;
+  cache->sys_available_est = 0;
+  cache->sys_probe_valid = FALSE;
 
   if(IS_NULL_PTR(cache->entries) || IS_NULL_PTR(cache->external_entries))
   {
@@ -1896,6 +2067,11 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
 
   // Run every 3 minutes
   garbage_collection = g_timeout_add(3 * 60 * 1000, (GSourceFunc)dt_dev_pixelpipe_cache_flush_old, cache);
+
+  // React within seconds when ANOTHER application's allocations push the system
+  // toward memory starvation while we sit idle (the alloc-time pressure valve only
+  // runs when we allocate). No-ops when the system has RAM to spare.
+  pressure_shedding = g_timeout_add_seconds(5, (GSourceFunc)_memory_pressure_shedder, cache);
   return cache;
 }
 
@@ -1913,6 +2089,12 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache)
   {
     g_source_remove(garbage_collection);
     garbage_collection = 0;
+  }
+
+  if(pressure_shedding != 0)
+  {
+    g_source_remove(pressure_shedding);
+    pressure_shedding = 0;
   }
 }
 
@@ -2388,6 +2570,63 @@ static int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache)
   if(dt_pthread_mutex_trylock(&cache->lock)) return G_SOURCE_CONTINUE;
   g_hash_table_foreach_remove(cache->entries, _for_each_remove_old, NULL);
   dt_pthread_mutex_unlock(&cache->lock);
+
+  // Hand free pages back to the OS while we're at it, but only when the system
+  // actually runs lowish: the per-free MADV_FREE already makes them reclaimable
+  // (they count as available), and a hard trim of a large resident free set is
+  // O(resident pages) under the arena lock — a needless stall of this (GUI)
+  // thread when RAM is plentiful.
+  const size_t available = dt_get_system_available_mem();
+  const size_t pressure_floor = dt_get_memory_pressure_floor();
+  if(available > 0 && pressure_floor > 0 && available < 2 * pressure_floor)
+    dt_cache_arena_trim(&cache->arena);
+  return G_SOURCE_CONTINUE;
+}
+
+/* Periodic system memory-pressure shedder (issue #1083), the idle-time counterpart of
+ * the alloc-time _system_memory_pressure_valve(): when OTHER applications push the
+ * system toward starvation while we are not allocating anything, nobody runs the valve,
+ * so watch the system-wide available RAM here and shed cache below the floor. The
+ * hard trim matters: the per-free lazy release (MADV_FREE) technically keeps the pages
+ * ours until the kernel scavenges them, while decommitting hands them over NOW. */
+static int _memory_pressure_shedder(dt_dev_pixelpipe_cache_t *cache)
+{
+  const size_t pressure_floor = dt_get_memory_pressure_floor();
+  if(pressure_floor == 0) return G_SOURCE_CONTINUE;
+
+  const size_t available = dt_get_system_available_mem();
+  if(available == 0 || available >= pressure_floor) return G_SOURCE_CONTINUE;
+
+  // Don't hang the GUI thread if the cache is locked by a pipeline.
+  // The valve covers pressure handling while pipelines are allocating anyway.
+  if(dt_pthread_mutex_trylock(&cache->lock)) return G_SOURCE_CONTINUE;
+
+  const size_t deficit = pressure_floor - available;
+  size_t freed = 0;
+  while(freed < deficit && g_hash_table_size(cache->entries) > 0)
+  {
+    const size_t before = cache->current_memory;
+    if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+    freed += before - cache->current_memory;
+  }
+
+  // Same reasoning as in the valve: hand the freed pages over for real, then let the
+  // OS — not our own bookkeeping — say what that bought, and seed the valve's probe
+  // cache with that ground truth.
+  const size_t trimmed = dt_cache_arena_trim(&cache->arena);
+  dt_invalidate_system_available_mem();
+  const size_t available_after = dt_get_system_available_mem();
+  cache->sys_probe_valid = (available_after > 0);
+  cache->sys_available_est = available_after;
+  cache->sys_probe_time_us = g_get_monotonic_time();
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_PIPECACHE,
+           "[pixelpipe_cache] system memory pressure while idle: %" G_GSIZE_FORMAT " MiB available "
+           "under the %" G_GSIZE_FORMAT " MiB floor — shed %" G_GSIZE_FORMAT " MiB of cache, "
+           "returned %" G_GSIZE_FORMAT " MiB to the OS, now %" G_GSIZE_FORMAT " MiB available\n",
+           available / (1024 * 1024), pressure_floor / (1024 * 1024), freed / (1024 * 1024),
+           trimmed / (1024 * 1024), available_after / (1024 * 1024));
   return G_SOURCE_CONTINUE;
 }
 
@@ -2443,7 +2682,7 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, gboole
     // never-served case, doc/pipeline-cache.md §8). INVALID for non-module outputs
     // (raster masks, republished inputs): waiters simply fall back to hash match.
     if(cache_entry && cache_entry->hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CACHELINE_READY, cache_entry->hash,
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY, cache_entry->hash,
                                     cache_entry->producer_node_key);
   }
 }
@@ -2627,7 +2866,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
 
 void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPECACHE)) return;
+  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
 
   dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %" G_GSIZE_FORMAT " MiB over %" G_GSIZE_FORMAT " MiB - %i items\n", 
     100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), 
@@ -2691,10 +2930,10 @@ GArray *dt_dev_pixelpipe_cache_get_entries_stats(dt_dev_pixelpipe_cache_t *cache
 size_t dt_dev_pixelpipe_cache_get_vram_total(void)
 {
 #ifdef HAVE_OPENCL
-  if(!dt_opencl_is_enabled() || IS_NULL_PTR(darktable.opencl)) return 0;
+  if(!dt_opencl_is_enabled() || IS_NULL_PTR(dt_opencl_get_global())) return 0;
   size_t total = 0;
-  for(int i = 0; i < darktable.opencl->num_devs; i++)
-    total += (size_t)darktable.opencl->dev[i].max_global_mem;
+  for(int i = 0; i < dt_opencl_get_global()->num_devs; i++)
+    total += (size_t)dt_opencl_get_global()->dev[i].max_global_mem;
   return total;
 #else
   return 0;

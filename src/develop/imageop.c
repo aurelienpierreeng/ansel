@@ -63,18 +63,19 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "darktable.h"
+#include "common/conf.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "develop/imageop.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/collection.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/history.h"
 #include "common/imagebuf.h"
-#include "common/imageio_rawspeed.h"
-#include "common/interpolation.h"
+#include "imageio/imageio_rawspeed.h"
+#include "pixel/interpolation.h"
 #include "common/module.h"
 #include "common/opencl.h"
 #include "common/usermanual_url.h"
@@ -82,23 +83,23 @@
 #include "control/signal.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include "develop/masks.h"
 #include "develop/tiling.h"
 #include "gui/gdkkeys.h"
 #include "gui/presets.h"
-#include "dtgtk/button.h"
-#include "dtgtk/expander.h"
-#include "dtgtk/gradientslider.h"
-#include "dtgtk/icon.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/expander.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 #include "gui/presets.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
+
+#include "common/hash.h"
+#include "common/module_versioning.h"
 
 #include <assert.h>
 #include <gmodule.h>
@@ -408,14 +409,14 @@ int default_iop_focus(dt_gui_module_t *m, gboolean toggle)
   dt_iop_module_t *module = (dt_iop_module_t *) m;
 
   // Expand and scroll
-  if(darktable.develop->gui_module != module)
+  if(module->dev->gui_module != module)
   {
     dt_iop_request_focus(module);
     dt_iop_gui_set_expanded(module, TRUE, TRUE);
   }
   else if(toggle)
   {
-    darktable.develop->gui_module = NULL;
+    module->dev->gui_module = NULL;
     dt_iop_gui_set_expanded(module, FALSE, TRUE);
     dt_gui_refocus_center();
   }
@@ -436,8 +437,8 @@ int dt_iop_load_module_so(void *m, const char *libname, const char *module_name)
   if(IS_NULL_PTR(module->modify_roi_out)) module->modify_roi_out = _iop_modify_roi_out;
 
   #ifdef HAVE_OPENCL
-  if(IS_NULL_PTR(module->process_tiling_cl)) module->process_tiling_cl = darktable.opencl->inited ? default_process_tiling_cl : NULL;
-  if(!darktable.opencl->inited) module->process_cl = NULL;
+  if(IS_NULL_PTR(module->process_tiling_cl)) module->process_tiling_cl = dt_opencl_is_inited() ? default_process_tiling_cl : NULL;
+  if(!dt_opencl_is_inited()) module->process_cl = NULL;
   #endif // HAVE_OPENCL
 
   module->process_plain = module->process;
@@ -819,7 +820,7 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
     /* add module to right panel */
     dt_iop_gui_set_expander(module);
-    darktable.gui->scroll_to_header_once = module->expander;
+    dt_gui_get_global()->scroll_to_header_once = module->expander;
 
     dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
 
@@ -1159,7 +1160,7 @@ static void _iop_panel_label(dt_iop_module_t *module)
   if(mod->instance_name)
   {
     char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(darktable.gui->accels, instance_path);
+    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
     dt_free(instance_path);
     dt_free(mod->instance_name);
   }
@@ -1170,8 +1171,8 @@ static void _iop_panel_label(dt_iop_module_t *module)
   mod->instance_name
       = g_strdup_printf("%s/%s", clean_name, (module->multi_name[0] != '\0') ? module->multi_name : "0");
 
-  dt_accels_new_virtual_instance_shortcut(darktable.gui->accels, _iop_plugin_focus_accel, module,
-                                          darktable.gui->accels->darkroom_accels, _("Darkroom/Modules/Instances"),
+  dt_accels_new_virtual_instance_shortcut(dt_gui_get_accels(), _iop_plugin_focus_accel, module,
+                                          dt_gui_get_accels()->darkroom_accels, _("Darkroom/Modules/Instances"),
                                           mod->instance_name);
 
   dt_free(clean_name);
@@ -1269,7 +1270,7 @@ void dt_iop_gui_init(dt_iop_module_t *module)
   if(module->gui_init) module->gui_init(module);
   if(module->color_picker_apply)
   {
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY,
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PICKERDATA_READY,
                                     G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
   // the freeze ends here as the scope guard goes out of scope
@@ -1321,7 +1322,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
   if(IS_NULL_PTR(_iop_presets_select_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "SELECT name, op_version, op_params, blendop_version, blendop_params FROM data.presets WHERE operation = ?1",
         -1, &_iop_presets_select_stmt, NULL);
   }
@@ -1347,7 +1348,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       // the module version from that.
 
       sqlite3_stmt *stmt2;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "SELECT module FROM main.history WHERE operation = ?1 AND op_params = ?2", -1,
                                   &stmt2, NULL);
       DT_DEBUG_SQLITE3_BIND_TEXT(stmt2, 1, module_so->op, -1, SQLITE_TRANSIENT);
@@ -1374,7 +1375,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       fprintf(stderr, "[imageop_init_presets] Found version %d for '%s' preset '%s'\n", old_params_version,
               module_so->op, name);
 
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "UPDATE data.presets SET op_version=?1 WHERE operation=?2 AND name=?3", -1,
                                   &stmt2, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, old_params_version);
@@ -1426,7 +1427,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       // and write the new params back to the database
       sqlite3_stmt *stmt2;
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "UPDATE data.presets "
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "UPDATE data.presets "
                                                                  "SET op_version=?1, op_params=?2 "
                                                                  "WHERE operation=?3 AND name=?4",
                                   -1, &stmt2, NULL);
@@ -1490,7 +1491,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       // and write the new blend params back to the database
       sqlite3_stmt *stmt2;
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "UPDATE data.presets "
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "UPDATE data.presets "
                                                                  "SET blendop_version=?1, blendop_params=?2 "
                                                                  "WHERE operation=?3 AND name=?4",
                                   -1, &stmt2, NULL);
@@ -1520,7 +1521,7 @@ static void _init_module_so(void *m)
   _init_presets(module);
 
   // do not init accelerators if there is no gui
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     // create a gui and have the widgets register their accelerators
     dt_iop_module_t *module_instance = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
@@ -1558,10 +1559,10 @@ static void _init_module_so(void *m)
 void dt_iop_load_modules_so(void)
 {
   // Batch presets initialization in a single transaction to avoid per-module BEGIN/COMMIT overhead.
-  dt_database_begin_transaction_batch(darktable.db);
+  dt_database_begin_transaction_batch(dt_database_get_global());
   darktable.iop = dt_module_load_modules("/plugins", sizeof(dt_iop_module_so_t), dt_iop_load_module_so,
                                          _init_module_so, NULL);
-  dt_database_end_transaction_batch(darktable.db);
+  dt_database_end_transaction_batch(dt_database_get_global());
 }
 
 int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, dt_develop_t *dev)
@@ -1583,11 +1584,11 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
   // gui_init on its modules), and dt_iop_gui_cleanup_module() itself only invokes the module's own
   // gui_cleanup() -- which does the DT_DEBUG_CONTROL_SIGNAL_DISCONNECT() calls -- when gui_data is
   // non-NULL. Any signal a module connected in gui_init() (module_moved_callback in lut3d.c,
-  // _develop_ui_pipe_started_callback in toneequal.c...) is broadcast globally on darktable.signals,
+  // _develop_ui_pipe_started_callback in toneequal.c...) is broadcast globally on the signal bus,
   // so a single missed disconnect leaves a dangling self pointer that a later, unrelated dev's signal
   // raise will invoke -- SIGSEGV on the freed instance. Disconnecting everything keyed on this module's
   // address here, unconditionally, guarantees no module can be invoked again once freed.
-  dt_control_signal_disconnect_all(darktable.signals, module);
+  dt_control_signal_disconnect_all(dt_control_signal_get_global(), module);
 
   module->cleanup(module);
 
@@ -1606,15 +1607,16 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
   dt_free(module->default_blendop_params);
 
   // don't have a picker pointing to a disappeared module
-  if(darktable.develop
-     && darktable.develop->color_picker.picker
-     && darktable.develop->color_picker.picker->module == module)
+  dt_develop_t *const dev = dt_dev_get_global();
+  if(dev
+     && dev->color_picker.picker
+     && dev->color_picker.picker->module == module)
   {
-    darktable.develop->color_picker.picker = NULL;
-    darktable.develop->color_picker.widget = NULL;
-    darktable.develop->color_picker.module = NULL;
-    darktable.develop->color_picker.enabled = FALSE;
-    darktable.develop->color_picker.update_pending = FALSE;
+    dev->color_picker.picker = NULL;
+    dev->color_picker.widget = NULL;
+    dev->color_picker.module = NULL;
+    dev->color_picker.enabled = FALSE;
+    dev->color_picker.update_pending = FALSE;
   }
 
   dt_free(module->histogram);
@@ -1884,11 +1886,17 @@ void dt_iop_compute_blendop_hash(dt_iop_module_t *module, uint64_t hash, GList *
 
   if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
   {
-    // Drawn masks from dev for this module
+    // The caller owns the choice of forms list: the commit path passes the live dev->forms
+    // (dt_dev_history_item_update_from_params falls back to it when no snapshot was taken, so
+    // the hash of a module whose blend params reference a mask group can never come out blind
+    // to that group's content — issue #1060 family), while history replay passes the snapshot
+    // accumulated at the item's own position. NO ambient fallback here: this function cannot
+    // know whether live forms describe the state being hashed (they don't during replay,
+    // where dev->forms still holds the state being left).
     if(!IS_NULL_PTR(masks))
     {
       dt_masks_form_t *grp = dt_masks_get_from_id_ext(masks, module->blend_params->mask_id);
-      hash = dt_masks_group_get_hash(hash, grp);
+      hash = dt_masks_group_get_hash_ext(hash, masks, grp);
     }
 
     // else : no module->dev when running from init_default_params()
@@ -1913,7 +1921,7 @@ void dt_iop_compute_blendop_hash(dt_iop_module_t *module, uint64_t hash, GList *
       if(!IS_NULL_PTR(masks))
       {
         dt_masks_form_t *raster_grp = dt_masks_get_from_id_ext(masks, raster_source->blend_params->mask_id);
-        hash = dt_masks_group_get_hash(hash, raster_grp);
+        hash = dt_masks_group_get_hash_ext(hash, masks, raster_grp);
       }
 
       // Blending
@@ -1969,7 +1977,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   if(module->flags() & IOP_FLAGS_ALLOW_TILING)
     piece->process_tiling_ready = 1;
 
-  if(darktable.unmuted & DT_DEBUG_PARAMS && module->so->get_introspection())
+  if(dt_get_debug_flags() & DT_DEBUG_PARAMS && module->so->get_introspection())
     _iop_validate_params(module->so->get_introspection()->field, params, TRUE);
 
   module->commit_params(module, params, pipe, piece);
@@ -2026,11 +2034,11 @@ static void _iop_gui_widget_gone(gpointer user_data, GObject *where_the_object_w
   if(module->header == (GtkWidget *)where_the_object_was) module->header = NULL;
   if(module->expander == (GtkWidget *)where_the_object_was) module->expander = NULL;
 
-  if(IS_NULL_PTR(darktable.gui)) return;
+  if(IS_NULL_PTR(dt_gui_get_global())) return;
 
-  if(darktable.gui->scroll_to[0] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[0] = NULL;
-  if(darktable.gui->scroll_to[1] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[1] = NULL;
-  if(darktable.gui->scroll_to_header_once == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to_header_once = NULL;
+  if(dt_gui_get_global()->scroll_to[0] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[0] = NULL;
+  if(dt_gui_get_global()->scroll_to[1] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[1] = NULL;
+  if(dt_gui_get_global()->scroll_to_header_once == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to_header_once = NULL;
 }
 
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
@@ -2050,14 +2058,14 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   // a GLib-CRITICAL for each one.
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED) && !IS_NULL_PTR(mod->accel_path))
   {
-    dt_accels_remove_accel(darktable.gui->accels, mod->accel_path, module);
+    dt_accels_remove_accel(dt_gui_get_accels(), mod->accel_path, module);
     dt_free(mod->accel_path);
   }
 
   if(mod->instance_name)
   {
     char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(darktable.gui->accels, instance_path);
+    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
     dt_free(instance_path);
   }
 
@@ -2076,7 +2084,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
 
   if(module->color_picker_apply)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_iop_color_picker_data_ready_callback), module);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
   // History refresh can delete pipeline-only modules created for ordering/history
   // resolution. They have a module GUI cleanup callback but no module GUI data.
@@ -2085,14 +2093,14 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   dt_iop_gui_cleanup_blending(module);
 
   // size-allocate callbacks can still read scroll targets while GTK tears down widgets
-  if(!IS_NULL_PTR(darktable.gui))
+  if(!IS_NULL_PTR(dt_gui_get_global()))
   {
-    if(darktable.gui->scroll_to[0] == module->header || darktable.gui->scroll_to[0] == module->expander)
-      darktable.gui->scroll_to[0] = NULL;
-    if(darktable.gui->scroll_to[1] == module->header || darktable.gui->scroll_to[1] == module->expander)
-      darktable.gui->scroll_to[1] = NULL;
-    if(darktable.gui->scroll_to_header_once == module->expander)
-      darktable.gui->scroll_to_header_once = NULL;
+    if(dt_gui_get_global()->scroll_to[0] == module->header || dt_gui_get_global()->scroll_to[0] == module->expander)
+      dt_gui_get_global()->scroll_to[0] = NULL;
+    if(dt_gui_get_global()->scroll_to[1] == module->header || dt_gui_get_global()->scroll_to[1] == module->expander)
+      dt_gui_get_global()->scroll_to[1] = NULL;
+    if(dt_gui_get_global()->scroll_to_header_once == module->expander)
+      dt_gui_get_global()->scroll_to_header_once = NULL;
   }
 
   /* Release the transient widget tree explicitly. In normal GUI lifetime, these
@@ -2181,10 +2189,10 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
     // if a drawn mask is set, remove it from the list
     if(module->blend_params->mask_id > 0)
     {
-      dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+      dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
       // FIXME: ask the user if he wants to delete the mask, or just unlink them.
-      if(grp) dt_masks_form_delete(module, NULL, grp);
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, -1, -1, DT_MASKS_EVENT_RESET);
+      if(grp) dt_masks_form_delete(module->dev, module, NULL, grp);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, -1, -1, DT_MASKS_EVENT_RESET);
     }
     /* reset to default params */
     dt_iop_reload_defaults(module);
@@ -2207,40 +2215,41 @@ static void _presets_popup_callback(GtkButton *button, dt_iop_module_t *module)
 
   dt_gui_presets_popup_menu_show_for_module(module);
 
-  if(!IS_NULL_PTR(module->expander) && !IS_NULL_PTR(darktable.gui->presets_popup_menu))
+  if(!IS_NULL_PTR(module->expander) && !IS_NULL_PTR(dt_gui_get_global()->presets_popup_menu))
   {
     g_object_set_data(G_OBJECT(module->expander), DT_IOP_HEADER_MENU_OPEN, GINT_TO_POINTER(TRUE));
-    g_signal_connect_data(G_OBJECT(darktable.gui->presets_popup_menu), "deactivate",
+    g_signal_connect_data(G_OBJECT(dt_gui_get_global()->presets_popup_menu), "deactivate",
                           G_CALLBACK(_iop_plugin_header_menu_deactivate),
                           g_object_ref(module->expander), (GClosureNotify)g_object_unref, 0);
   }
 
-  dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
+  dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 }
 
 void dt_iop_request_focus(dt_iop_module_t *module)
 {
-  dt_iop_module_t *out_focus_module = darktable.develop->gui_module;
+  dt_develop_t *const dev = dt_dev_get_global();
+  dt_iop_module_t *out_focus_module = dev->gui_module;
 
   if(dt_gui_widgets_suppressed() || (out_focus_module == module)) return;
 
-  darktable.develop->gui_module = module;
+  dev->gui_module = module;
   if(!IS_NULL_PTR(module))
   {
     const gboolean scroll_new_instance_to_header
-      = (darktable.gui->scroll_to_header_once == module->expander
+      = (dt_gui_get_global()->scroll_to_header_once == module->expander
          && !IS_NULL_PTR(module->header) && GTK_IS_WIDGET(module->header));
-    darktable.gui->scroll_to[1] = scroll_new_instance_to_header ? module->header : module->expander;
+    dt_gui_get_global()->scroll_to[1] = scroll_new_instance_to_header ? module->header : module->expander;
   }
 
   /* lets lose the focus of previous focus module*/
   if(out_focus_module)
   {
     GtkWidget *out_focus_widget = dt_iop_gui_get_pluginui(out_focus_module);
-    GtkWidget *scroll_focus = darktable.gui->has_scroll_focus;
+    GtkWidget *scroll_focus = dt_gui_get_global()->has_scroll_focus;
     if(scroll_focus && out_focus_widget && gtk_widget_is_ancestor(scroll_focus, out_focus_widget))
     {
-      darktable.gui->has_scroll_focus = NULL;
+      dt_gui_get_global()->has_scroll_focus = NULL;
       gtk_widget_queue_draw(scroll_focus);
     }
 
@@ -2261,7 +2270,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     gtk_widget_set_state_flags(dt_iop_gui_get_pluginui(out_focus_module), GTK_STATE_FLAG_NORMAL, TRUE);
 
     /* reset mask view */
-    dt_masks_reset_form_gui();
+    dt_masks_reset_form_gui(out_focus_module->dev);
 
     /* do stuff needed in the blending gui */
     dt_iop_gui_blending_lose_focus(out_focus_module);
@@ -2270,7 +2279,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     gtk_widget_queue_draw(out_focus_module->expander);
 
     /* and finally collection restore hinter messages */
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
 
     // we also remove the focus css class
     GtkWidget *iop_w = gtk_widget_get_parent(dt_iop_gui_get_pluginui(out_focus_module));
@@ -2304,11 +2313,11 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     }
 
     // we also add the focus css class
-    GtkWidget *iop_w = gtk_widget_get_parent(dt_iop_gui_get_pluginui(darktable.develop->gui_module));
+    GtkWidget *iop_w = gtk_widget_get_parent(dt_iop_gui_get_pluginui(dev->gui_module));
     dt_gui_add_class(iop_w, "dt_module_focus");
   }
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
   dt_control_queue_cursor(GDK_LEFT_PTR);
   dt_control_queue_redraw_center();
 }
@@ -2337,7 +2346,7 @@ static void _gui_set_single_expanded(dt_iop_module_t *module, gboolean expanded)
 
     /* focus the current module */
     for(int k = 0; k < DT_UI_CONTAINER_SIZE; k++)
-      dt_ui_container_focus_widget(darktable.gui->ui, k, module->expander);
+      dt_ui_container_focus_widget(dt_gui_get_ui(), k, module->expander);
 
     /* redraw center, iop might have post expose */
     dt_control_queue_redraw_center();
@@ -2364,7 +2373,7 @@ static void _gui_set_single_expanded(dt_iop_module_t *module, gboolean expanded)
 /** Dim all modules except the one referenced, if any reference, or undim all */
 void _iop_dim_all_but(dt_iop_module_t *module, gboolean dim)
 {
-  for(GList *iop = g_list_first(darktable.develop->iop); iop; iop = g_list_next(iop))
+  for(GList *iop = g_list_first(dt_dev_get_global()->iop); iop; iop = g_list_next(iop))
   {
     dt_iop_module_t *m = (dt_iop_module_t *)iop->data;
 
@@ -2383,7 +2392,7 @@ void dt_iop_gui_set_expanded(dt_iop_module_t *module, gboolean expanded, gboolea
   if(IS_NULL_PTR(module) || !module->expander) return;
   if(collapse_others)
   {
-    for(GList *iop = g_list_first(darktable.develop->iop); iop; iop = g_list_next(iop))
+    for(GList *iop = g_list_first(module->dev->iop); iop; iop = g_list_next(iop))
     {
       dt_iop_module_t *m = (dt_iop_module_t *)iop->data;
       if(m != module) _gui_set_single_expanded(m, FALSE);
@@ -2410,7 +2419,7 @@ static gboolean _iop_plugin_body_button_press(GtkWidget *w, GdkEventButton *e, g
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   gboolean handled = FALSE;
 
@@ -2502,7 +2511,7 @@ static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   if(e->button == 1)
   {
@@ -2956,7 +2965,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   gtk_widget_set_hexpand(module->widget, FALSE);
   gtk_widget_set_vexpand(module->widget, FALSE);
 
-  dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+  dt_ui_container_add_widget(dt_gui_get_ui(), DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
 }
 
 GtkWidget *dt_iop_gui_get_widget(dt_iop_module_t *module)
@@ -3011,7 +3020,7 @@ void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant)
 
 dt_iop_module_t *dt_iop_get_colorout_module(void)
 {
-  return dt_iop_get_module_from_list(darktable.develop->iop, "colorout");
+  return dt_iop_get_module_from_list(dt_dev_get_global()->iop, "colorout");
 }
 
 dt_iop_module_t *dt_iop_get_module_from_list(GList *iop_list, const char *op)
@@ -3033,7 +3042,7 @@ dt_iop_module_t *dt_iop_get_module_from_list(GList *iop_list, const char *op)
 
 dt_iop_module_t *dt_iop_get_module(const char *op)
 {
-  return dt_iop_get_module_from_list(darktable.develop->iop, op);
+  return dt_iop_get_module_from_list(dt_dev_get_global()->iop, op);
 }
 
 int dt_iop_get_module_flags(const char *op)
@@ -3056,12 +3065,12 @@ void dt_iop_set_darktable_iop_table()
   // Faster than building a huge VALUES string: reuse a prepared statement and bind per module.
   sqlite3_stmt *stmt = NULL;
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "INSERT INTO memory.darktable_iop_names (operation, name) VALUES (?1, ?2)",
       -1, &stmt, NULL);
   if(IS_NULL_PTR(stmt)) return;
 
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
   for(GList *iop = darktable.iop; iop; iop = g_list_next(iop))
   {
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)iop->data;
@@ -3071,7 +3080,7 @@ void dt_iop_set_darktable_iop_table()
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, module->name(), -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
   }
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
   sqlite3_finalize(stmt);
 }
 
@@ -3214,7 +3223,7 @@ gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
 void dt_iop_throttled_history_update(gpointer data)
 {
   dt_iop_module_t *self = (dt_iop_module_t*)data;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_text, const char *purpose, const char *input, const char *process,
@@ -3240,7 +3249,7 @@ void dt_iop_gui_changed(dt_iop_module_t *action, GtkWidget *widget, gpointer dat
 
   dt_iop_color_picker_reset(module, TRUE);
 
-  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 
   if(!IS_NULL_PTR(widget) && g_object_get_data(G_OBJECT(widget), "dt-blendop-header-update"))
     dt_iop_gui_update_header(module);

@@ -106,16 +106,23 @@
 #include <string.h>
 #include <time.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/hash.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "develop/masks.h"
-#include "common/fast_guided_filter.h"
-#include "common/eigf.h"
-#include "common/interpolation.h"
-#include "common/luminance_mask.h"
-#include "common/opencl.h"
+#include "pixel/fast_guided_filter.h"
+#include "pixel/eigf.h"
+#include "pixel/interpolation.h"
+#include "pixel/luminance_mask.h"
 #include "common/collection.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
@@ -123,8 +130,6 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe_cache.h"
-#include "dtgtk/drawingarea.h"
-#include "dtgtk/expander.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
@@ -132,7 +137,7 @@
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
-#include "common/solvers/choleski.h"
+#include "math/choleski.h"
 #include "libs/colorpicker.h"
 
 #ifdef _OPENMP
@@ -601,7 +606,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   dt_iop_gui_leave_critical_section(self);
 
   if(!IS_NULL_PTR(preview_entry))
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 }
 
 
@@ -619,7 +624,7 @@ static inline __attribute__((always_inline)) int sanity_check(dt_iop_module_t *s
     dt_control_log(_("tone equalizer needs to be after distortion modules in the pipeline - disabled"));
     fprintf(stdout, "tone equalizer needs to be after distortion modules in the pipeline - disabled\n");
     self->enabled = 0;
-    dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+    dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
 
     if(self->dev->gui_attached)
     {
@@ -980,7 +985,7 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
       dt_iop_gui_leave_critical_section(self);
 
       if(preview_entry)
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
     }
   }
 
@@ -1003,7 +1008,7 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
     static const char cache_tag[] = "toneequal:luminance";
     luminance_hash = dt_hash(piece->global_hash, cache_tag, sizeof(cache_tag));
 
-    created_luminance_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, luminance_hash,
+    created_luminance_entry = dt_dev_pixelpipe_cache_get(dt_pixelpipe_cache_get_global(), luminance_hash,
                                                          num_elem * sizeof(float), "toneequal luminance",
                                                          pipe->type, TRUE, &cache_data,
                                                          &luminance_entry);
@@ -1013,8 +1018,8 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
       if(luminance_entry)
       {
         if(created_luminance_entry)
-          dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
+          dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, luminance_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, luminance_entry);
       }
       return 1;
     }
@@ -1023,13 +1028,13 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
     {
       if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
       {
-        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
-        dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, luminance_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, luminance_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, luminance_entry);
+        dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, luminance_entry);
         return 1;
       }
 
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, luminance_entry);
     }
   }
   else
@@ -1087,14 +1092,14 @@ static inline __attribute__((always_inline)) int toneeq_process(struct dt_iop_mo
     dt_iop_gui_leave_critical_section(self);
 
     if(old_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, old_entry);
 
     if(!keep_process_ref)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, luminance_entry);
   }
   else if(luminance_entry)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, luminance_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, luminance_entry);
   }
   else
   {
@@ -1441,7 +1446,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
     width = g->thumb_preview_buf_width;
     height = g->thumb_preview_buf_height;
     preview_hash = g->thumb_preview_hash;
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
     needs_histogram = TRUE;
   }
   dt_iop_gui_leave_critical_section(self);
@@ -1449,7 +1454,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
   if(!needs_histogram || width == 0 || height == 0)
   {
     if(!IS_NULL_PTR(preview_entry))
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
     return;
   }
 
@@ -1458,16 +1463,16 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
   float first_decile = 0.0f;
   float last_decile = 0.0f;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
   const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
   if(preview_buf)
     compute_log_histogram_and_stats(preview_buf, histogram, width * height, &max_histogram, &first_decile,
                                     &last_decile);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
   if(IS_NULL_PTR(preview_buf))
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
     return;
   }
 
@@ -1483,7 +1488,7 @@ static inline void update_histogram(struct dt_iop_module_t *const self)
   }
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 }
 
 
@@ -1761,7 +1766,7 @@ static void smoothing_callback(GtkWidget *slider, gpointer user_data)
   // Redraw graph before launching computation
   update_curve_lut(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   // Unlock the colour picker so we can display our own custom cursor
   dt_iop_color_picker_reset(self, TRUE);
@@ -1837,7 +1842,7 @@ static void _switch_cursors(struct dt_iop_module_t *self)
     // if pipe is clean and idle and cursor is on preview,
     // hide GTK cursor because we display our custom one
     dt_control_set_cursor_visible(FALSE);
-    dt_control_hinter_message(darktable.control,
+    dt_control_hinter_message(dt_control_get_global(),
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
                                 "ctrl+scroll for small steps"));
@@ -1926,19 +1931,19 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       preview_entry = g->thumb_preview_entry;
       preview_width = g->thumb_preview_buf_width;
       preview_height = g->thumb_preview_buf_height;
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
     }
     dt_iop_gui_leave_critical_section(self);
 
     if(!IS_NULL_PTR(preview_entry) && preview_width > 0 && preview_height > 0)
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
       const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
       const float cursor_exposure
           = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
                                                           (size_t)x_pointer, (size_t)y_pointer))
                         : NAN;
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
       if(!isnan(cursor_exposure))
       {
@@ -1948,7 +1953,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
 
     if(preview_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
   }
 
   _switch_cursors(self);
@@ -2064,26 +2069,26 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     preview_height = g->thumb_preview_buf_height;
     cursor_x = g->cursor_pos_x;
     cursor_y = g->cursor_pos_y;
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
   }
   dt_iop_gui_leave_critical_section(self);
 
   if(IS_NULL_PTR(preview_entry) || preview_width == 0 || preview_height == 0)
   {
     if(!IS_NULL_PTR(preview_entry))
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
     return 1;
   }
 
   if(!IS_NULL_PTR(preview_entry) && preview_width > 0 && preview_height > 0)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
     const float cursor_exposure
         = preview_buf ? log2f(get_luminance_from_buffer(preview_buf, preview_width, preview_height,
                                                         (size_t)cursor_x, (size_t)cursor_y))
                       : NAN;
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
     if(!isnan(cursor_exposure))
     {
@@ -2092,7 +2097,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   }
 
   if(!IS_NULL_PTR(preview_entry))
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
   // Set the correction from mouse scroll input
   const float increment = (up) ? +1.0f : -1.0f;
@@ -2117,7 +2122,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     // Update GUI with new params
     update_exposure_sliders(g, p);
 
-    dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+    dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
   }
 
   return 1;
@@ -2245,7 +2250,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
       preview_entry = g->thumb_preview_entry;
       preview_width = g->thumb_preview_buf_width;
       preview_height = g->thumb_preview_buf_height;
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
       dt_simd_memcpy(g->factors, factors, PIXEL_CHAN);
       sigma = g->sigma;
     }
@@ -2254,7 +2259,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   if(!IS_NULL_PTR(preview_entry) && preview_width > 0 && preview_height > 0)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
     const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
     if(!IS_NULL_PTR(preview_buf))
     {
@@ -2270,7 +2275,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
       exposure_in = NAN;
       correction = NAN;
     }
-    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
     if(!isnan(exposure_in))
     {
@@ -2279,7 +2284,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   if(preview_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
   if(isnan(correction) || isnan(exposure_in)) return; // something went wrong
 
@@ -2329,7 +2334,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   char text[256];
   PangoLayout *layout;
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
 
   // Avoid text resizing based on zoom level
   const int old_size = pango_font_description_get_size(desc);
@@ -2397,7 +2402,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     dt_iop_gui_leave_critical_section(self);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
     if(was_mask) dt_dev_pixelpipe_update_history_main(self->dev);
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
   }
   else
   {
@@ -2418,12 +2423,12 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
         void *preview_buf = NULL;
         dt_pixel_cache_entry_t *preview_entry = NULL;
 
-        gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, preview_hash,
+        gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_pixelpipe_cache_get_global(), preview_hash,
                                                                           &preview_buf, &preview_entry);
         if(preview_ready && (IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry)))
         {
           if(!IS_NULL_PTR(preview_entry))
-            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+            dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
           preview_ready = FALSE;
         }
 
@@ -2449,9 +2454,9 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
           dt_iop_gui_leave_critical_section(self);
 
           if(old_entry)
-            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
+            dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, old_entry);
           if(!keep_new_entry)
-            dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+            dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
         }
         else
         {
@@ -2468,7 +2473,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     if(needs_preview_update)
       dt_dev_pixelpipe_update_history_preview(self->dev);
 
-    dt_control_hinter_message(darktable.control,
+    dt_control_hinter_message(dt_control_get_global(),
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
                                 "ctrl+scroll for small steps"));
@@ -2492,7 +2497,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
   g->layout = pango_cairo_create_layout(g->cr);
 
   if(g->desc) pango_font_description_free(g->desc);
-  g->desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  g->desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
 
   pango_layout_set_font_description(g->layout, g->desc);
   dt_gui_set_pango_resolution(g->layout);
@@ -2514,7 +2519,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
 
   // Set the sizes, margins and paddings
   g->inner_padding = INNER_PADDING;
-  g->inset = g->inner_padding + darktable.bauhaus->quad_width;
+  g->inset = g->inner_padding + dt_bauhaus_get_global()->quad_width;
   g->graph_left_space = g->line_height + g->inner_padding;
   g->graph_width = g->allocation.width - g->inset - 2.0 * g->line_height; // align the right border on sliders
   g->graph_height = g->allocation.height - g->inset - 2.0 * g->line_height; // give room to nodes
@@ -2531,7 +2536,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
   cairo_translate(g->cr, g->line_height + 2 * g->inner_padding, g->line_height + 3 * g->inner_padding);
 
   // display x-axis and y-axis legends (EV)
-  set_color(g->cr, darktable.bauhaus->graph_fg);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
 
   float value = -8.0f;
 
@@ -2589,7 +2594,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
 
   // Draw frame borders
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(0.5));
-  set_color(g->cr, darktable.bauhaus->graph_border);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_border);
   cairo_rectangle(g->cr, 0, 0, g->graph_width, g->graph_height);
   cairo_stroke_preserve(g->cr);
 
@@ -2652,16 +2657,16 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   // Draw graph background
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(0.5));
   cairo_rectangle(g->cr, 0, 0, g->graph_width, g->graph_height);
-  set_color(g->cr, darktable.bauhaus->graph_bg);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_bg);
   cairo_fill(g->cr);
 
   // draw grid
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(0.5));
-  set_color(g->cr, darktable.bauhaus->graph_border);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_border);
   dt_draw_grid(g->cr, 8, 0, 0, g->graph_width, g->graph_height);
 
   // draw ground level
-  set_color(g->cr, darktable.bauhaus->graph_fg);
+  set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
   cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(1));
   cairo_move_to(g->cr, 0, 0.5 * g->graph_height);
   cairo_line_to(g->cr, g->graph_width, 0.5 * g->graph_height);
@@ -2670,7 +2675,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   if(g->histogram_valid && self->enabled)
   {
     // draw the inset histogram
-    set_color(g->cr, darktable.bauhaus->inset_histogram);
+    set_color(g->cr, dt_bauhaus_get_global()->inset_histogram);
     cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(4.0));
     cairo_move_to(g->cr, 0, g->graph_height);
 
@@ -2710,7 +2715,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   if(g->lut_valid)
   {
     // draw the interpolation curve
-    set_color(g->cr, darktable.bauhaus->graph_fg);
+    set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
     cairo_move_to(g->cr, 0, g->gui_lut[0] * g->graph_height);
     cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(3));
 
@@ -2739,7 +2744,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
       // fill bars
       cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(6));
-      set_color(g->cr, darktable.bauhaus->color_fill);
+      set_color(g->cr, dt_bauhaus_get_global()->color_fill);
       cairo_move_to(g->cr, xn, 0.5 * g->graph_height);
       cairo_line_to(g->cr, xn, yn);
       cairo_stroke(g->cr);
@@ -2747,13 +2752,13 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
       // bullets
       cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(3));
       cairo_arc(g->cr, xn, yn, DT_PIXEL_APPLY_DPI(4), 0, 2. * M_PI);
-      set_color(g->cr, darktable.bauhaus->graph_fg);
+      set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
       cairo_stroke_preserve(g->cr);
 
       if(g->area_active_node == k)
-        set_color(g->cr, darktable.bauhaus->graph_fg);
+        set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
       else
-        set_color(g->cr, darktable.bauhaus->graph_bg);
+        set_color(g->cr, dt_bauhaus_get_global()->graph_bg);
 
       cairo_fill(g->cr);
     }
@@ -2767,7 +2772,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
       cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(1.5));
       const float y =g->gui_lut[(int)CLAMP(((UI_SAMPLES - 1) * g->area_x / g->graph_width), 0, UI_SAMPLES - 1)];
       cairo_arc(g->cr, g->area_x, y * g->graph_height, radius, 0, 2. * M_PI);
-      set_color(g->cr, darktable.bauhaus->graph_fg);
+      set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
       cairo_stroke(g->cr);
     }
 
@@ -2786,7 +2791,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
       }
       else
       {
-        set_color(g->cr, darktable.bauhaus->graph_fg);
+        set_color(g->cr, dt_bauhaus_get_global()->graph_fg);
         cairo_set_line_width(g->cr, DT_PIXEL_APPLY_DPI(1.5));
       }
 
@@ -2835,7 +2840,7 @@ static gboolean area_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gp
     // cursor left area : force commit to avoid glitches
     update_exposure_sliders(g, p);
 
-    dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+    dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
   }
   g->area_x = (event->x - g->inset);
   g->area_y = (event->y - g->inset);
@@ -2878,7 +2883,7 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
 
     // Redraw graph
     gtk_widget_queue_draw(self->widget);
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     return TRUE;
   }
   else if(event->button == 1)
@@ -2890,7 +2895,7 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
     }
     else
     {
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
     return TRUE;
   }
@@ -2965,7 +2970,7 @@ static gboolean area_button_release(GtkWidget *widget, GdkEventButton *event, gp
     {
       // Update GUI with new params
       update_exposure_sliders(g, p);
-      dt_dev_add_history_item(darktable.develop, self, FALSE, TRUE);
+      dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
       g->area_dragging= 0;
       return TRUE;
     }
@@ -3043,12 +3048,12 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
   {
     void *preview_buf = NULL;
     dt_pixel_cache_entry_t *preview_entry = NULL;
-    gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, preview_hash,
+    gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_pixelpipe_cache_get_global(), preview_hash,
                                                                       &preview_buf, &preview_entry);
     if(preview_ready && (IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry)))
     {
       if(!IS_NULL_PTR(preview_entry))
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
       preview_ready = FALSE;
     }
 
@@ -3080,9 +3085,9 @@ static void _develop_history_resync_callback(gpointer instance, gpointer user_da
       dt_iop_gui_leave_critical_section(self);
 
       if(old_entry)
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, old_entry);
       if(!keep_new_entry)
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
     }
     else
     {
@@ -3117,12 +3122,12 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
 
   void *preview_buf = NULL;
   dt_pixel_cache_entry_t *preview_entry = NULL;
-  const gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(darktable.pixelpipe_cache, preview_hash,
+  const gboolean preview_ready = dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_pixelpipe_cache_get_global(), preview_hash,
                                                                           &preview_buf, &preview_entry);
   if(!preview_ready || IS_NULL_PTR(preview_buf) || IS_NULL_PTR(preview_entry))
   {
     if(!IS_NULL_PTR(preview_entry))
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
     return;
   }
 
@@ -3146,9 +3151,9 @@ static void _develop_cacheline_ready_callback(gpointer instance, const guint64 h
   dt_iop_gui_leave_critical_section(self);
 
   if(old_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, old_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, old_entry);
   if(!keep_new_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
   _switch_cursors(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
@@ -3171,16 +3176,16 @@ void gui_reset(struct dt_iop_module_t *self)
   dt_iop_request_focus(self);
   dt_bauhaus_widget_set_quad_active(g->exposure_boost, FALSE);
   dt_bauhaus_widget_set_quad_active(g->contrast_boost, FALSE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   // Redraw graph
   gtk_widget_queue_draw(self->widget);
 }
 
-static gboolean _sample_picker_luminance_mask(const float *const buffer, const size_t width, const size_t height,
+static gboolean _sample_picker_luminance_mask(const dt_develop_t *const dev, const float *const buffer,
+                                              const size_t width, const size_t height,
                                               float *const picked, float *const picked_min, float *const picked_max)
 {
-  const dt_develop_t *const dev = darktable.develop;
   const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(buffer) || IS_NULL_PTR(sample) || width < 1 || height < 1 || IS_NULL_PTR(picked) || IS_NULL_PTR(picked_min) || IS_NULL_PTR(picked_max)) return FALSE;
 
@@ -3279,28 +3284,28 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   preview_width = g->thumb_preview_buf_width;
   preview_height = g->thumb_preview_buf_height;
   if(!IS_NULL_PTR(preview_entry))
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
   dt_iop_gui_leave_critical_section(self);
 
   if(IS_NULL_PTR(preview_entry) || preview_width < 1 || preview_height < 1)
   {
     if(!IS_NULL_PTR(preview_entry))
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
     dt_print(DT_DEBUG_DEV, "[picker/toneequal] no preview mask picker=%p pipe=%p hash=%" PRIu64 "\n",
              (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
     _switch_cursors(self);
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, TRUE, preview_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, preview_entry);
   const float *const preview_buf = (const float *const)dt_pixel_cache_entry_get_data(preview_entry);
   float picked = NAN;
   float picked_min = NAN;
   float picked_max = NAN;
-  const gboolean sampled = _sample_picker_luminance_mask(preview_buf, preview_width, preview_height,
+  const gboolean sampled = _sample_picker_luminance_mask(self->dev, preview_buf, preview_width, preview_height,
                                                          &picked, &picked_min, &picked_max);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
 
   if(!sampled)
   {
@@ -3322,7 +3327,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       dt_bauhaus_slider_set(g->exposure_boost, p->exposure_boost);
       dt_gui_freeze_end();
       invalidate_luminance_cache(self);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,
                "[picker/toneequal] exposure picker=%p luminance=%g set=%g pipe=%p hash=%" PRIu64 "\n",
                (void *)picker, picked, p->exposure_boost, (void *)pipe, piece ? piece->global_hash : 0);
@@ -3367,7 +3372,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       dt_bauhaus_slider_set(g->contrast_boost, p->contrast_boost);
       dt_gui_freeze_end();
       invalidate_luminance_cache(self);
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       dt_print(DT_DEBUG_DEV,
                "[picker/toneequal] contrast picker=%p min=%g max=%g set=%g pipe=%p hash=%" PRIu64 "\n",
                (void *)picker, fd_old, ld_old, p->contrast_boost, (void *)pipe,
@@ -3441,7 +3446,7 @@ void gui_init(struct dt_iop_module_t *self)
                      dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
                                                   "plugins/darkroom/toneequal/graphheight", 280, 120),
                      FALSE, FALSE, 0);
-  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
@@ -3453,7 +3458,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->area), "motion-notify-event", G_CALLBACK(area_motion_notify), self);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("double-click to reset the curve"));
 
-  g->smoothing = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), -2.33f, +1.67f, 0, 0.0f, 2);
+  g->smoothing = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.33f, +1.67f, 0, 0.0f, 2);
   dt_bauhaus_slider_set_soft_range(g->smoothing, -1.0f, 1.0f);
   dt_bauhaus_widget_set_label(g->smoothing, N_("curve smoothing"));
   gtk_widget_set_tooltip_text(g->smoothing, _("positive values will produce more progressive tone transitions\n"
@@ -3585,14 +3590,14 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
 
   // Force UI redraws when pipe starts/finishes computing and switch cursors
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_HISTORY_RESYNC,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_HISTORY_RESYNC,
                             G_CALLBACK(_develop_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
                             G_CALLBACK(_develop_cacheline_ready_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                             G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                             G_CALLBACK(_develop_ui_pipe_started_callback), self);
 }
 
@@ -3604,10 +3609,10 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   dt_conf_set_int("plugins/darkroom/toneequal/gui_page", gtk_notebook_get_current_page (g->notebook));
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_started_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_history_resync_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_cacheline_ready_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_ui_pipe_finished_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_ui_pipe_started_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_history_resync_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_cacheline_ready_callback), self);
 
   dt_pixel_cache_entry_t *preview_entry = NULL;
   dt_iop_gui_enter_critical_section(self);
@@ -3620,7 +3625,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
   g->luminance_valid = FALSE;
   dt_iop_gui_leave_critical_section(self);
   if(!IS_NULL_PTR(preview_entry))
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, preview_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, preview_entry);
   if(g->desc) pango_font_description_free(g->desc);
   if(g->layout) g_object_unref(g->layout);
   if(g->cr) cairo_destroy(g->cr);

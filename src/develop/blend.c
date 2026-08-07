@@ -39,12 +39,16 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "blend.h"
-#include "common/gaussian.h"
-#include "common/guided_filter.h"
+#include "pixel/gaussian.h"
+#include "pixel/guided_filter.h"
 #include "common/imagebuf.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/imageop.h"
@@ -349,7 +353,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(level == 0.0f) return;
-  const gboolean info = ((darktable.unmuted & DT_DEBUG_MASKS) && (pipe->type == DT_DEV_PIXELPIPE_FULL));
+  const gboolean info = ((dt_get_debug_flags() & DT_DEBUG_MASKS) && (pipe->type == DT_DEV_PIXELPIPE_FULL));
 
   const gboolean detail = (level > 0.0f);
   const float threshold = _detail_mask_threshold(level, detail);
@@ -890,18 +894,18 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        darktable.pixelpipe_cache, mask_hash, sizeof(float) * buffsize,
+        dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * buffsize,
         "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
         if(created)
-          dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, mask_entry);
+          dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
       }
       dt_pixelpipe_cache_free_align(_mask);
       return 1;
@@ -912,7 +916,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
     if(created)
     {
       memcpy(cache_data, _mask, sizeof(float) * buffsize);
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
     }
     // Transfer cache_get()'s reference to the pipe. It keeps this side-band
     // output alive until the next graph state is prepared or the pipe closes.
@@ -955,7 +959,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   if(level == 0.0f) return;
-  const gboolean info = (darktable.unmuted & DT_DEBUG_MASKS);
+  const gboolean info = (dt_get_debug_flags() & DT_DEBUG_MASKS);
 
   const int detail = (level > 0.0f);
   const float threshold = _detail_mask_threshold(level, detail);
@@ -991,7 +995,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = darktable.opencl->blendop->kernel_read_mask;
+    const int kernel = dt_opencl_get_global()->blendop->kernel_read_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &tmp);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1002,7 +1006,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = darktable.opencl->blendop->kernel_calc_blend;
+    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_blend;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &blur);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1021,7 +1025,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
     if(!IS_NULL_PTR(dev_blurmat))
     {
       size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-      const int clkernel = darktable.opencl->blendop->kernel_mask_blur;
+      const int clkernel = dt_opencl_get_global()->blendop->kernel_mask_blur;
       dt_opencl_set_kernel_arg(devid, clkernel, 0, sizeof(cl_mem), &blur);
       dt_opencl_set_kernel_arg(devid, clkernel, 1, sizeof(cl_mem), &out);
       dt_opencl_set_kernel_arg(devid, clkernel, 2, sizeof(int), &iwidth);
@@ -1040,7 +1044,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = darktable.opencl->blendop->kernel_write_mask;
+    const int kernel = dt_opencl_get_global()->blendop->kernel_write_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &tmp);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1181,29 +1185,29 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   switch(blend_csp)
   {
     case DEVELOP_BLEND_CS_RAW:
-      kernel = darktable.opencl->blendop->kernel_blendop_RAW;
-      kernel_mask = darktable.opencl->blendop->kernel_blendop_mask_RAW;
+      kernel = dt_opencl_get_global()->blendop->kernel_blendop_RAW;
+      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_RAW;
       break;
 
     case DEVELOP_BLEND_CS_RGB_DISPLAY:
-      kernel = darktable.opencl->blendop->kernel_blendop_rgb_hsl;
-      kernel_mask = darktable.opencl->blendop->kernel_blendop_mask_rgb_hsl;
+      kernel = dt_opencl_get_global()->blendop->kernel_blendop_rgb_hsl;
+      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_rgb_hsl;
       break;
 
     case DEVELOP_BLEND_CS_RGB_SCENE:
-      kernel = darktable.opencl->blendop->kernel_blendop_rgb_jzczhz;
-      kernel_mask = darktable.opencl->blendop->kernel_blendop_mask_rgb_jzczhz;
+      kernel = dt_opencl_get_global()->blendop->kernel_blendop_rgb_jzczhz;
+      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_rgb_jzczhz;
       break;
 
     case DEVELOP_BLEND_CS_LAB:
     default:
-      kernel = darktable.opencl->blendop->kernel_blendop_Lab;
-      kernel_mask = darktable.opencl->blendop->kernel_blendop_mask_Lab;
+      kernel = dt_opencl_get_global()->blendop->kernel_blendop_Lab;
+      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_Lab;
       break;
   }
-  int kernel_mask_tone_curve = darktable.opencl->blendop->kernel_blendop_mask_tone_curve;
-  int kernel_set_mask = darktable.opencl->blendop->kernel_blendop_set_mask;
-  int kernel_display_channel = darktable.opencl->blendop->kernel_blendop_display_channel;
+  int kernel_mask_tone_curve = dt_opencl_get_global()->blendop->kernel_blendop_mask_tone_curve;
+  int kernel_set_mask = dt_opencl_get_global()->blendop->kernel_blendop_set_mask;
+  int kernel_display_channel = dt_opencl_get_global()->blendop->kernel_blendop_display_channel;
 
   const int devid = pipe->devid;
   const int offs[2] = { xoffs, yoffs };
@@ -1507,18 +1511,18 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        darktable.pixelpipe_cache, mask_hash, sizeof(float) * buffsize,
+        dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * buffsize,
         "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
         if(created)
-          dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, TRUE, mask_entry);
+          dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
       }
       goto error;
     }
@@ -1528,7 +1532,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     if(created)
     {
       memcpy(cache_data, _mask, sizeof(float) * buffsize);
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, FALSE, mask_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
     }
     // Transfer cache_get()'s reference to the pipe. It keeps this side-band
     // output alive until the next graph state is prepared or the pipe closes.

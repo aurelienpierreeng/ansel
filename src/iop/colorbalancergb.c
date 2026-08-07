@@ -33,23 +33,26 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "config.h"
+#include "common/conf.h"
 #endif
 // our includes go first:
-#include "bauhaus/bauhaus.h"
-#include "common/exif.h"
-#include "common/chromatic_adaptation.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include "pixel/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
-#include "dtgtk/gradientslider.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -1444,7 +1447,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_gui_freeze_end();
 
   gui_changed(self, picker, NULL);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
@@ -1549,7 +1552,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   cairo_surface_t *cst =
     dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
   PangoFontDescription *desc =
-    pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   cairo_t *cr = cairo_create(cst);
   PangoLayout *layout = pango_cairo_create_layout(cr);
 
@@ -1626,7 +1629,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   cairo_translate(cr, margin_left, margin_top);
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-  set_color(cr, darktable.bauhaus->graph_bg);
+  set_color(cr, dt_bauhaus_get_global()->graph_bg);
   cairo_rectangle(cr, 0, 0, graph_width, graph_height);
   cairo_fill_preserve(cr);
   cairo_clip(cr);
@@ -1647,7 +1650,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     for(size_t c = 0; c < 3; c++) LUT[c][k] = output[c];
   }
 
-  GdkRGBA fg_color = darktable.bauhaus->graph_fg;
+  GdkRGBA fg_color = dt_bauhaus_get_global()->graph_fg;
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.));
 
   for(size_t c = 0; c < 3; c++)
@@ -1975,7 +1978,7 @@ void gui_init(dt_iop_module_t *self)
                      dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
                                                   "plugins/darkroom/colorbalancergb/graphheight", 200, 100),
                      FALSE, FALSE, 0);
-  gtk_widget_add_events(GTK_WIDGET(g->area), darktable.gui->scroll_mask | GDK_ENTER_NOTIFY_MASK);
+  gtk_widget_add_events(GTK_WIDGET(g->area), dt_gui_get_global()->scroll_mask | GDK_ENTER_NOTIFY_MASK);
   g_signal_connect(G_OBJECT(g->area), "scroll-event", G_CALLBACK(area_scroll_callback), self);
 
   g->shadows_weight = dt_bauhaus_slider_from_params(self, "shadows_weight");

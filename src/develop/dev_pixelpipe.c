@@ -17,8 +17,14 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/debug.h"
-#include "common/darktable.h"
+#include "common/conf.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/hash.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "common/paths.h"
+#include "gui/gtk.h"
 #include "common/dtpthread.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
@@ -72,7 +78,7 @@ static dt_dev_pixelpipe_cache_wait_manager_t _cache_wait_manager
 
 static gboolean _cache_wait_cursor_progress(gpointer user_data)
 {
-  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui))
+  if(IS_NULL_PTR(dt_control_get_global()) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()))
     return G_SOURCE_REMOVE;
 
   dt_control_change_cursor_by_name_and_flush("progress");
@@ -81,7 +87,7 @@ static gboolean _cache_wait_cursor_progress(gpointer user_data)
 
 static gboolean _cache_wait_cursor_restore(gpointer user_data)
 {
-  if(IS_NULL_PTR(darktable.control) || IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui))
+  if(IS_NULL_PTR(dt_control_get_global()) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()))
     return G_SOURCE_REMOVE;
 
   dt_control_commit_cursor();
@@ -468,7 +474,7 @@ void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
 
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
-  dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, -1);
+  dt_dev_pixelpipe_cache_flush(dt_pixelpipe_cache_get_global(), -1);
   if(dt_gui_widgets_suppressed() || IS_NULL_PTR(dev) || !dev->gui_attached) return;
   dt_dev_pixelpipe_rebuild_all(dev);
 }
@@ -488,7 +494,7 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
   // for the same contract.
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_control_navigation_redraw();
-  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
+  gtk_widget_queue_draw(dt_gui_center_widget());
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_update_mouse_effect_radius(dev);
 }
@@ -514,7 +520,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out = roi_in;
   gchar *pipe_name = NULL;
-  if(darktable.unmuted & DT_DEBUG_PIPE)
+  if(dt_get_debug_flags() & DT_DEBUG_PIPE)
     pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
@@ -538,7 +544,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
     // Forward ROI planning answers "what output rectangle does this module
     // produce from the previous one ?". Logging the tuple here makes each
     // module-local geometry change visible on `-d pipe`.
-    if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
+    if(piece->enabled && (dt_get_debug_flags() & DT_DEBUG_PIPE))
       dt_print(DT_DEBUG_PIPE,
                "[roi-out] pipe=%-15s module=%-18s enabled=%d in =(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)"
                " out=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)\n",
@@ -571,7 +577,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
   gchar *pipe_name = NULL;
-  if(darktable.unmuted & DT_DEBUG_PIPE)
+  if(dt_get_debug_flags() & DT_DEBUG_PIPE)
     pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
   for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
   {
@@ -595,7 +601,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
     // module need from upstream to deliver the requested downstream output ?".
     // Logging that request before and after modify_roi_in() makes ROI growth
     // and padding traceable module-by-module on `-d pipe`.
-    if(piece->enabled && (darktable.unmuted & DT_DEBUG_PIPE))
+    if(piece->enabled && (dt_get_debug_flags() & DT_DEBUG_PIPE))
       dt_print(DT_DEBUG_PIPE,
                "[roi-in ] pipe=%-15s module=%-18s enabled=%d out=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)"
                " in=(x=%5d y=%5d w=%5d h=%5d scale=%2.2f)\n",
@@ -737,7 +743,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
   // entry is reported as a miss, so the request below waits for the pipeline to publish a host copy
   // (modules whose output the GUI samples, e.g. initialscale, already cache to RAM).
   if(display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, display_hash, &buffer, &entry, -1, NULL)
+     && dt_dev_pixelpipe_cache_peek(dt_pixelpipe_cache_get_global(), display_hash, &buffer, &entry, -1, NULL)
      &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
     // These counters are only diagnostic; cache consumers should not wait for
@@ -802,7 +808,7 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
       _cache_wait_manager.pending = g_list_prepend(_cache_wait_manager.pending, record);
       if(!_cache_wait_manager.connected)
       {
-        DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CACHELINE_READY,
+        DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
                                         G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
         _cache_wait_manager.connected = TRUE;
       }
@@ -920,7 +926,7 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
 
   if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
     _cache_wait_manager.connected = FALSE;
   }
@@ -995,7 +1001,7 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
   _cache_wait_manager.cancelled_requests++;
   if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
   {
-    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
     _cache_wait_manager.connected = FALSE;
   }
@@ -1154,7 +1160,7 @@ void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
   if(IS_NULL_PTR(pipe)) return;
 
   dt_iop_buffer_dsc_t upstream_dsc = pipe->dev->image_storage.dsc;
-  gchar *pipe_name = (darktable.unmuted & DT_DEBUG_PIPE) ? _get_debug_pipe_name(pipe, NULL) : NULL;
+  gchar *pipe_name = (dt_get_debug_flags() & DT_DEBUG_PIPE) ? _get_debug_pipe_name(pipe, NULL) : NULL;
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
@@ -1502,7 +1508,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
     // Update global hash for this stage
     hash = dt_hash(hash, (const char *)&local_hash, sizeof(uint64_t));
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     {
       gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
       dt_print(DT_DEBUG_PIPE,

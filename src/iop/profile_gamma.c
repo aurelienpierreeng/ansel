@@ -48,16 +48,15 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/darktable.h"
-#include "common/math.h"
-#include "common/opencl.h"
-#include "control/control.h"
+#include "gui/bauhaus.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "math/math.h"
 #include "develop/develop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -293,7 +292,7 @@ static void apply_auto_grey(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->grey_point, p->grey_point);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_auto_black(dt_iop_module_t *self)
@@ -315,7 +314,7 @@ static void apply_auto_black(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->shadows_range, p->shadows_range);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_auto_dynamic_range(dt_iop_module_t *self)
@@ -340,7 +339,7 @@ static void apply_auto_dynamic_range(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->dynamic_range, p->dynamic_range);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_autotune(dt_iop_module_t *self)
@@ -373,7 +372,7 @@ static void apply_autotune(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->dynamic_range, p->dynamic_range);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 
@@ -583,7 +582,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->security_factor, "%");
   gtk_widget_set_tooltip_text(g->security_factor, _("enlarge or shrink the computed dynamic range\nthis is useful when noise perturbates the measurements"));
 
-  g->auto_button = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self)));
+  g->auto_button = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self)));
   dt_bauhaus_widget_set_label(g->auto_button, N_("auto tune levels"));
   gtk_widget_set_tooltip_text(g->auto_button, _("make an optimization with some guessing"));
   gtk_box_pack_start(GTK_BOX(vbox_log), g->auto_button, TRUE, TRUE, 0);

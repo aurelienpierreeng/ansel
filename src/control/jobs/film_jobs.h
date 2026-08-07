@@ -24,14 +24,17 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_JOBS_FILM_JOBS_H
+#define DT_CONTROL_JOBS_FILM_JOBS_H
 
 #include "common/film.h"
-#include "control/control.h"
+#include "control/jobs.h"
 #include <inttypes.h>
 
 dt_job_t *dt_film_import1_create(dt_film_t *film);
 dt_job_t *dt_pathlist_import_create(int argc, char *argv[]);
+
+#endif // DT_CONTROL_JOBS_FILM_JOBS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

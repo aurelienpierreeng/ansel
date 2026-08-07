@@ -29,8 +29,10 @@
 */
 #include "common/gpx.h"
 #include "common/geo.h"
-#include "common/darktable.h"
-#include "common/math.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/glib_utils.h"
+#include "math/math.h"
 #include <glib.h>
 #include <inttypes.h>
 

@@ -27,13 +27,15 @@
     You should have received a copy of the GNU Lesser General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_IOP_PROFILE_H
-#define DT_IOP_PROFILE_H
+#ifndef DT_COMMON_IOP_PROFILE_H
+#define DT_COMMON_IOP_PROFILE_H
 
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorspaces.h"
-#include "common/matrices.h"
-#include "develop/imageop.h"
+/* develop/imageop.h is deliberately NOT included: every iop/pixelpipe type used
+ * below is used as a POINTER and already tag-declared a few lines down. Including
+ * it made common/ depend on develop/ (a layering inversion) and closed a 6-node
+ * include cycle with common/opencl.h. */
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"

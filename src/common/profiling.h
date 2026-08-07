@@ -21,9 +21,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_PROFILING_H
+#define DT_COMMON_PROFILING_H
 
-#include "gui/gtk.h"
 
 
 #ifdef USE_DARKTABLE_PROFILING
@@ -55,6 +55,8 @@ typedef struct dt_timer_t
 dt_timer_t *dt_timer_start_with_name(const char *file, const char *function, const char *description);
 void dt_timer_stop_with_name(dt_timer_t *);
 #endif
+
+#endif // DT_COMMON_PROFILING_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

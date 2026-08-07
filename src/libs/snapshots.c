@@ -22,6 +22,8 @@
     Copyright (C) 2021 Philippe Weyland.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2026 Guillaume STUTIN.
+
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,24 +39,26 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "common/file_location.h"
+#include "gui/bauhaus.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "common/history.h"
 #include "common/iop_order.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"
 #include "develop/dev_snapshot.h"
-#include "dtgtk/paint.h"
+#include "gui/dtgtk/paint.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/draw.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "views/view.h"
+
+#include <math.h>
 
 DT_MODULE(1)
 
@@ -68,7 +72,7 @@ typedef struct dt_lib_snapshot_t
   GtkWidget *row;           // container for button + delete_button; shown/hidden as a unit
   GtkWidget *button;
   GtkWidget *delete_button;
-  dt_dev_snapshot_t snap;   // rendered still + pan/zoom-synced crop cache, see develop/dev_snapshot.h
+  dt_dev_snapshot_t snap;   // ROI-scoped render, recomputed on pan/zoom, see develop/dev_snapshot.h
   int32_t imgid;
   int32_t history_end;
 } dt_lib_snapshot_t;
@@ -95,6 +99,7 @@ typedef struct dt_lib_snapshots_t
   double vp_x, vp_y, vp_width, vp_height, vp_xpointer, vp_ypointer, vp_xrotate, vp_yrotate;
   gboolean on_going;
   gboolean hover_rotation;
+  gboolean hover_line; // cursor is within DT_GUI_MOUSE_EFFECT_RADIUS of the split line itself
 
   GtkWidget *take_button;
 } dt_lib_snapshots_t;
@@ -104,16 +109,15 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
 static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer user_data);
 static void _lib_snapshots_delete_button_clicked_callback(GtkWidget *widget, gpointer user_data);
 
-// Reset the value fields to "empty" without destroying any cairo surface or touching GTK
-// widgets. Used when a snapshot's surfaces are being handed off to another slot (compacting
-// the list after a delete) rather than dropped -- the caller is responsible for the surfaces.
+// Reset the value fields to "empty" without releasing the snapshot engine or touching GTK
+// widgets. Used when a snapshot's engine is being handed off to another slot (compacting the
+// list after a delete) rather than dropped -- the caller is responsible for the engine.
+// dt_dev_snapshot_t is just a refcounted-engine pointer (develop/dev_snapshot.h), so the move
+// itself already happened via the plain struct assignment at the call site; this only needs to
+// forget this now-empty slot's copy of that pointer, never release it.
 static void _lib_snapshot_reset_fields(dt_lib_snapshot_t *snap)
 {
-  snap->snap.image = NULL;
-  snap->snap.display_image = NULL;
-  snap->snap.display_scale = 0.0f;
-  snap->snap.crop_x = snap->snap.crop_y = snap->snap.crop_w = snap->snap.crop_h = 0;
-  snap->snap.sample_scale = 1.0f;
+  snap->snap.engine = NULL;
   snap->imgid = UNKNOWN_IMAGE;
   snap->history_end = 0;
 }
@@ -126,8 +130,9 @@ static void _lib_snapshot_clear_state(dt_lib_snapshot_t *snap)
   snap->history_end = 0;
 }
 
-// Freeze the current darkroom develop state and render a full-resolution snapshot image.
-// The frozen context is used only during capture and freed immediately after.
+// Freeze the current darkroom develop state and render it at `source`'s current viewport (ROI),
+// recomputed as pan/zoom change afterward -- see develop/dev_snapshot.h. The frozen context and
+// its pipe are kept alive for the snapshot's whole lifetime, released by _lib_snapshot_clear_state().
 // Returns 0 on success, 1 on failure.
 static int _lib_snapshot_capture_state(dt_lib_snapshot_t *snapshot, dt_develop_t *source)
 {
@@ -163,7 +168,7 @@ static int _lib_snapshot_capture_state(dt_lib_snapshot_t *snapshot, dt_develop_t
   snapshot->history_end = history_end;
 
   dt_control_change_cursor_by_name_and_flush("progress");
-  const gboolean ok = dt_dev_snapshot_capture(&snapshot->snap, source->image_storage.id, 1.0f,
+  const gboolean ok = dt_dev_snapshot_capture(&snapshot->snap, source, source->image_storage.id,
                                               history_copy, iop_order_copy, history_end);
   dt_control_commit_cursor();
 
@@ -200,7 +205,7 @@ static void _draw_sym(cairo_t *cr, float x, float y, gboolean vertical, gboolean
   const double inv = inverted ? -0.1 : 1.0;
 
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(12) * PANGO_SCALE);
   PangoLayout *layout = pango_cairo_create_layout(cr);
@@ -225,12 +230,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
   if(IS_NULL_PTR(d)) return;
-  dt_develop_t *dev = darktable.develop;
+  dt_develop_t *dev = dt_dev_get_global();
 
   if(d->selected >= 1 && d->selected <= d->size)
   {
     dt_lib_snapshot_t *snap = d->snapshot + (d->selected - 1);
-    if(!IS_NULL_PTR(snap->snap.image))
+    if(dt_dev_snapshot_is_valid(&snap->snap))
     {
       float image_box[4] = { 0.0f };
       dt_dev_get_image_box_in_widget(dev, width, height, image_box);
@@ -276,15 +281,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
         cairo_line_to(cri, lx, d->vp_y + d->vp_height);
         cairo_stroke(cri);
 
-        if(!d->dragging)
-        {
-          cairo_move_to(cri, lx, center - size);
-          cairo_line_to(cri, lx - (size * 1.2), center);
-          cairo_line_to(cri, lx, center + size);
-          cairo_close_path(cri);
-          cairo_fill(cri);
-          _draw_sym(cri, lx, center, TRUE, d->inverted);
-        }
+        cairo_move_to(cri, lx, center - size);
+        cairo_line_to(cri, lx - (size * 1.2), center);
+        cairo_line_to(cri, lx, center + size);
+        cairo_close_path(cri);
+        cairo_fill(cri);
+        _draw_sym(cri, lx, center, TRUE, d->inverted);
       }
       else
       {
@@ -295,15 +297,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
         cairo_line_to(cri, d->vp_x + d->vp_width, ly);
         cairo_stroke(cri);
 
-        if(!d->dragging)
-        {
-          cairo_move_to(cri, center - size, ly);
-          cairo_line_to(cri, center, ly - (size * 1.2));
-          cairo_line_to(cri, center + size, ly);
-          cairo_close_path(cri);
-          cairo_fill(cri);
-          _draw_sym(cri, center, ly, FALSE, d->inverted);
-        }
+        cairo_move_to(cri, center - size, ly);
+        cairo_line_to(cri, center, ly - (size * 1.2));
+        cairo_line_to(cri, center + size, ly);
+        cairo_close_path(cri);
+        cairo_fill(cri);
+        _draw_sym(cri, center, ly, FALSE, d->inverted);
       }
 
       /* if mouse over control, draw center rotate handle (hidden while dragging) */
@@ -324,11 +323,12 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 
       if(d->hover_rotation) dt_control_queue_cursor_by_name("exchange");
       else if(d->dragging) dt_control_queue_cursor_by_name("grabbing");
+      else if(d->hover_line) dt_control_queue_cursor_by_name(d->vertical ? "col-resize" : "row-resize");
       else
       {
-        dt_view_t *view = darktable.view_manager->proxy.darkroom.view;
-        if(!IS_NULL_PTR(view) && !IS_NULL_PTR(darktable.view_manager->proxy.darkroom.set_default_cursor))
-          darktable.view_manager->proxy.darkroom.set_default_cursor(view, pointerx, pointery);
+        dt_view_t *view = dt_view_manager_get_global()->proxy.darkroom.view;
+        if(!IS_NULL_PTR(view) && !IS_NULL_PTR(dt_view_manager_get_global()->proxy.darkroom.set_default_cursor))
+          dt_view_manager_get_global()->proxy.darkroom.set_default_cursor(view, pointerx, pointery);
         else
           dt_control_queue_cursor_by_name("left_ptr");
       }
@@ -339,7 +339,7 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 int button_released(struct dt_lib_module_t *self, double x, double y, int which, uint32_t state)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
-  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(dt_dev_get_global());
 
   if(!visible_picker && d->selected > 0 && which == 1)
   {
@@ -364,7 +364,7 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
 
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(dt_dev_get_global());
   
   if(!visible_picker && d->selected > 0)
   {
@@ -390,9 +390,18 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
       d->on_going = TRUE;
       dt_control_queue_redraw_center();
     }
-    /* do the dragging !? */
+    /* do the dragging !? -- only grab the split line if the click lands within the mouse
+       action radius of its current position, same hit-test radius (DT_GUI_MOUSE_EFFECT_RADIUS)
+       used to grab a mask node, rather than anywhere in the image */
     else
     {
+      const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
+      const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
+      const double lx = d->vp_x + d->vp_width * split_x;
+      const double ly = d->vp_y + d->vp_height * split_y;
+      const double dist_to_line = d->vertical ? fabs(x - lx) : fabs(y - ly);
+      if(dist_to_line > DT_GUI_MOUSE_EFFECT_RADIUS) return 0;
+
       d->dragging = TRUE;
       d->vp_ypointer = yp;
       d->vp_xpointer = xp;
@@ -409,32 +418,44 @@ int mouse_moved(dt_lib_module_t *self, double x, double y, double pressure, int 
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  const gboolean visible_picker = dt_iop_color_picker_is_visible(darktable.develop);
+  const gboolean visible_picker = dt_iop_color_picker_is_visible(dt_dev_get_global());
 
   if(!visible_picker && d->selected > 0)
   {
     if(d->vp_width <= 0.0 || d->vp_height <= 0.0) return 0;
     const double xp = CLAMP((x - d->vp_x) / d->vp_width, 0.0, 1.0);
     const double yp = CLAMP((y - d->vp_y) / d->vp_height, 0.0, 1.0);
-    d->hover_rotation = FALSE;
 
-    if(!d->dragging)
-    {
-      const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
-      const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
-      const double handle_mouse = (DT_GUI_MOUSE_EFFECT_RADIUS + HANDLE_SIZE) * 0.5;
-      const double rxc = d->vertical ? d->vp_x + d->vp_width * split_x : d->vp_x + d->vp_width * 0.5;
-      const double ryc = d->vertical ? d->vp_y + d->vp_height * 0.5 : d->vp_y + d->vp_height * split_y;
-      const double dx = x - rxc;
-      const double dy = y - ryc;
-      d->hover_rotation = (dx * dx + dy * dy) < (handle_mouse * handle_mouse);
-    }
-    else
+    if(d->dragging)
     {
       /* update pointer pos */
       d->vp_xpointer = xp;
       d->vp_ypointer = yp;
+      dt_control_queue_redraw_center();
+      return 1;
     }
+
+    const gboolean was_hovering = d->hover_rotation || d->hover_line;
+    const double split_x = CLAMP(d->vp_xpointer, 0.0, 1.0);
+    const double split_y = CLAMP(d->vp_ypointer, 0.0, 1.0);
+    const double handle_mouse = (DT_GUI_MOUSE_EFFECT_RADIUS + HANDLE_SIZE) * 0.5;
+    const double rxc = d->vertical ? d->vp_x + d->vp_width * split_x : d->vp_x + d->vp_width * 0.5;
+    const double ryc = d->vertical ? d->vp_y + d->vp_height * 0.5 : d->vp_y + d->vp_height * split_y;
+    const double dx = x - rxc;
+    const double dy = y - ryc;
+    d->hover_rotation = (dx * dx + dy * dy) < (handle_mouse * handle_mouse);
+
+    const double lx = d->vp_x + d->vp_width * split_x;
+    const double ly = d->vp_y + d->vp_height * split_y;
+    const double dist_to_line = d->vertical ? fabs(x - lx) : fabs(y - ly);
+    d->hover_line = !d->hover_rotation && dist_to_line <= DT_GUI_MOUSE_EFFECT_RADIUS;
+
+    if(!d->hover_rotation && !d->hover_line)
+    {
+      if(was_hovering) dt_control_queue_redraw_center(); // clear the stale handle/line highlight
+      return 0;
+    }
+
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -448,6 +469,7 @@ void gui_reset(dt_lib_module_t *self)
   d->num_snapshots = 0;
   d->selected = 0;
   d->hover_rotation = FALSE;
+  d->hover_line = FALSE;
 
   for(uint32_t k = 0; k < d->size; k++)
   {
@@ -479,6 +501,7 @@ void gui_init(dt_lib_module_t *self)
   d->vertical = TRUE;
   d->on_going = FALSE;
   d->hover_rotation = FALSE;
+  d->hover_line = FALSE;
   /* initialize ui containers */
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   d->snapshots_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
@@ -545,9 +568,21 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
   if(IS_NULL_PTR(d)) return;
+  if(d->size <= 0) return;
+
+  // Capture into a scratch slot first, off to the side of the visible array -- only once it has
+  // actually succeeded do we touch the slot rotation and GTK labels below. This guarantees a
+  // failed capture (e.g. out of memory) leaves the panel in exactly the state it was in before
+  // this click, instead of a rotated slot 0 stuck showing a label for a snapshot that was never
+  // created.
+  dt_lib_snapshot_t scratch = { 0 };
+  if(_lib_snapshot_capture_state(&scratch, dt_dev_get_global()))
+  {
+    _lib_snapshot_clear_state(&scratch);
+    return;
+  }
 
   /* backup last snapshot slot */
-  if(d->size <= 0) return;
   dt_lib_snapshot_t last = d->snapshot[d->size - 1];
 
   /* rotate slots down to make room for new one on top */
@@ -564,8 +599,7 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
       gtk_label_get_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[k - 1].button)))));
   }
 
-  /* update top slot with new snapshot */
-  char label[64];
+  /* update top slot with the already-captured scratch snapshot */
   GtkWidget *r = d->snapshot[0].row;
   GtkWidget *b = d->snapshot[0].button;
   GtkWidget *db = d->snapshot[0].delete_button;
@@ -573,12 +607,21 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   d->snapshot[0].row = r;
   d->snapshot[0].button = b;
   d->snapshot[0].delete_button = db;
+  // `last` may itself have held a valid engine (all `d->size` slots were already full) --
+  // release it before overwriting with the scratch capture, or it would leak (nothing else
+  // references it: `last` was never shown/toggled, so no other slot's `.snap` points to it).
+  dt_dev_snapshot_clear(&d->snapshot[0].snap);
+  d->snapshot[0].snap = scratch.snap;
+  d->snapshot[0].imgid = scratch.imgid;
+  d->snapshot[0].history_end = scratch.history_end;
+
+  char label[64];
   const gchar *name = _("original");
   gchar *dynamic_name = NULL;
-  if(dt_dev_get_history_end_ext(darktable.develop) > 0)
+  if(dt_dev_get_history_end_ext(dt_dev_get_global()) > 0)
   {
-    dt_dev_history_item_t *history_item = g_list_nth_data(darktable.develop->history,
-                                                          dt_dev_get_history_end_ext(darktable.develop) - 1);
+    dt_dev_history_item_t *history_item = g_list_nth_data(dt_dev_get_global()->history,
+                                                          dt_dev_get_history_end_ext(dt_dev_get_global()) - 1);
     if(!IS_NULL_PTR(history_item) && !IS_NULL_PTR(history_item->module))
     {
       dynamic_name = dt_history_item_get_name(history_item->module);
@@ -587,16 +630,9 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
     else
       name = _("unknown");
   }
-  g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end_ext(darktable.develop));
+  g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end_ext(dt_dev_get_global()));
   if(!IS_NULL_PTR(dynamic_name)) dt_free(dynamic_name);
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[0].button))), label);
-
-  dt_lib_snapshot_t *s = d->snapshot + 0;
-  if(_lib_snapshot_capture_state(s, darktable.develop))
-  {
-    _lib_snapshot_clear_state(s);
-    return;
-  }
 
   /* update slots used */
   if(d->num_snapshots != d->size) d->num_snapshots++;
@@ -633,10 +669,9 @@ static void _lib_snapshots_delete_button_clicked_callback(GtkWidget *widget, gpo
 
   /* shift every older slot up by one to fill the gap, keeping row/button/delete_button
    * pinned to their screen position (same pattern as the "take snapshot" rotation). Each
-   * `d->snapshot[k] = d->snapshot[k + 1]` *moves* ownership of the cairo surfaces (struct
-   * assignment, no refcounting) rather than copying it, so nothing here may destroy them:
-   * the slot being overwritten already handed its own surfaces to k-1 in the previous
-   * iteration (or, for k == p, they were just freed above). */
+   * `d->snapshot[k] = d->snapshot[k + 1]` *moves* the slot's engine pointer, so nothing here
+   * may release it: the slot being overwritten already handed its own reference to k-1 in the
+   * previous iteration (or, for k == p, it was just cleared above). */
   for(uint32_t k = p; k < d->num_snapshots - 1; k++)
   {
     GtkWidget *r = d->snapshot[k].row;
@@ -679,7 +714,7 @@ static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer us
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->snapshot[k].button), FALSE);
 
     const dt_lib_snapshot_t *s = d->snapshot + (which - 1);
-    d->selected = (!IS_NULL_PTR(s->snap.image)) ? which : 0;
+    d->selected = dt_dev_snapshot_is_valid(&s->snap) ? which : 0;
   }
   else if(d->selected == (uint32_t)which)
   {

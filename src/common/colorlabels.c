@@ -34,19 +34,17 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/database.h"
 #include "common/colorlabels.h"
 #include "common/collection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/undo.h"
-#include "common/grouping.h"
-#include "control/conf.h"
 #include "control/control.h"
-#include "gui/gtk.h"
 
 #include <gdk/gdkkeysyms.h>
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 
 const char *dt_colorlabels_name[] = {
   "red", "yellow", "green", "blue", "purple",
@@ -91,7 +89,7 @@ int dt_colorlabels_get_labels(const int32_t imgid)
   if(IS_NULL_PTR(_colorlabels_get_labels_stmt))
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT color FROM main.color_labels WHERE imgid = ?1",
                                 -1, &_colorlabels_get_labels_stmt, NULL);
     // clang-format on
@@ -121,7 +119,7 @@ void dt_colorlabels_set_labels(const int32_t imgid, const int colors)
 
 static void _pop_undo_execute(const int32_t imgid, const int before, const int after)
 {
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
   if(IS_NULL_PTR(image)) return;
 
   // Write to image
@@ -138,7 +136,7 @@ static void _pop_undo_execute(const int32_t imgid, const int before, const int a
 
   // Update image cache object and write to DB in _write_release
   image->color_labels = dt_colorlabels_get_labels(imgid);
-  dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
 }
 
 static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)
@@ -154,7 +152,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
       _pop_undo_execute(undocolorlabels->imgid, before, after);
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undocolorlabels->imgid));
     }
-    dt_collection_hint_message(darktable.collection);
+    dt_collection_hint_message(dt_collection_get_global());
   }
 }
 
@@ -169,7 +167,7 @@ void dt_colorlabels_remove_labels(const int32_t imgid)
 {
   if(IS_NULL_PTR(_colorlabels_remove_labels_stmt))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "DELETE FROM main.color_labels WHERE imgid=?1",
                                 -1, &_colorlabels_remove_labels_stmt, NULL);
   }
@@ -185,7 +183,7 @@ void dt_colorlabels_set_label(const int32_t imgid, const int color)
   if(IS_NULL_PTR(_colorlabels_set_label_stmt))
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "INSERT OR IGNORE INTO main.color_labels (imgid, color) VALUES (?1, ?2)",
                                 -1, &_colorlabels_set_label_stmt, NULL);
     // clang-format on
@@ -203,7 +201,7 @@ void dt_colorlabels_remove_label(const int32_t imgid, const int color)
   if(IS_NULL_PTR(_colorlabels_remove_label_stmt))
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "DELETE FROM main.color_labels WHERE imgid=?1 AND color=?2",
                                 -1, &_colorlabels_remove_label_stmt, NULL);
     // clang-format on
@@ -257,11 +255,11 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
     {
       const int32_t image_id = GPOINTER_TO_INT(image->data);
 
-      dt_image_t *img = dt_image_cache_get(darktable.image_cache, image_id, 'r');
+      dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), image_id, 'r');
       if(IS_NULL_PTR(img)) continue;
 
       const int before = img->color_labels;
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
       // as long as a single image does not have the label we do not toggle the label for all images
       // but add the label to all unlabeled images first
@@ -277,7 +275,7 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
   {
     const int32_t image_id = GPOINTER_TO_INT(image->data);
 
-    dt_image_t *img = dt_image_cache_get(darktable.image_cache, image_id, 'w');
+    dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), image_id, 'w');
     if(IS_NULL_PTR(img)) continue;
 
     const int before = img->color_labels;
@@ -299,7 +297,7 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
     }
 
     img->color_labels = after;
-    dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_SAFE);
+    dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_SAFE);
 
     if(undo_on)
     {
@@ -316,7 +314,7 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
 {
   const int label = 1<<color;
   GList *undo = NULL;
-  if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_COLORLABELS);
+  if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_COLORLABELS);
 
   if(color == 5)
   {
@@ -329,10 +327,10 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
 
   if(undo_on)
   {
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_COLORLABELS, undo, _pop_undo, _colorlabels_undo_data_free);
-    dt_undo_end_group(darktable.undo);
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_COLORLABELS, undo, _pop_undo, _colorlabels_undo_data_free);
+    dt_undo_end_group(dt_undo_get_global());
   }
-  dt_collection_hint_message(darktable.collection);
+  dt_collection_hint_message(dt_collection_get_global());
   dt_toast_log(_("Color label set to %s for %i image(s)"), dt_colorlabels_get_name(color), g_list_length(list));
 }
 
@@ -341,7 +339,7 @@ int dt_colorlabels_check_label(const int32_t imgid, const int color)
   if(imgid <= 0) return 0;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT * FROM main.color_labels WHERE imgid=?1 AND color=?2 LIMIT 1",
                               -1, &stmt, NULL);
   // clang-format on

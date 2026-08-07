@@ -32,7 +32,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_VARIABLES_H
+#define DT_COMMON_VARIABLES_H
 
 #include <glib.h>
 #include <stdint.h>
@@ -96,6 +97,8 @@ gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t pi
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_VARIABLES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

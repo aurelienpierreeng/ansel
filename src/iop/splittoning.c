@@ -61,18 +61,18 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/debug.h"
-#include "common/math.h"
-#include "common/opencl.h"
-#include "control/control.h"
+#include "math/math.h"
 #include "develop/develop.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/button.h"
-#include "dtgtk/gradientslider.h"
-#include "dtgtk/resetlabel.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -146,7 +146,7 @@ const char **description(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   // shadows: #ED7212
   // highlights: #ECA413
@@ -184,7 +184,7 @@ void init_presets(dt_iop_module_so_t *self)
       &(dt_iop_splittoning_params_t){ 28.0 / 360.0, 39.0 / 100.0, 28.0 / 360.0, 8.0 / 100.0, 0.60, 0.0 },
       sizeof(dt_iop_splittoning_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 __DT_CLONE_TARGETS__
@@ -334,7 +334,7 @@ static void colorpick_callback(GtkColorButton *widget, dt_iop_module_t *self)
 
   gtk_widget_queue_draw(GTK_WIDGET(g->balance_scale));
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -386,7 +386,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   gtk_widget_queue_draw(GTK_WIDGET(g->balance_scale));
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

@@ -28,11 +28,17 @@
 */
 
 #include "common/color_picker.h"
-#include "common/bspline.h"
-#include "common/darktable.h"
 #include "common/colorspaces_inline_conversions.h"
+#include "pixel/bspline.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/iop_profile.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 
@@ -445,7 +451,7 @@ static void color_picker_helper_4ch_converted_parallel(const float *const pixel,
   const size_t off_mul = 4 * width;
   const size_t off_add = 4 * box[0];
   const float w = 1.0f / (float)size;
-  const size_t numthreads = darktable.num_openmp_threads;
+  const size_t numthreads = dt_get_num_openmp_threads();
 
   size_t allocsize;
   float *const restrict mean = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
@@ -557,7 +563,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
 
   uint32_t weights[4] = { 0u, 0u, 0u, 0u };
 
-  const size_t numthreads = darktable.num_openmp_threads;
+  const size_t numthreads = dt_get_num_openmp_threads();
 
   //TODO: convert to use dt_pixelpipe_cache_alloc_perthread
   float *const msum = malloc(sizeof(float) * numthreads * 4);
@@ -774,7 +780,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
                             const dt_iop_order_iccprofile_info_t *const profile)
 {
   dt_times_t start_time = { 0 }, end_time = { 0 };
-  if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
   if(dsc->channels == 4u)
   {
@@ -822,7 +828,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
   else
     dt_unreachable_codepath();
 
-  if(darktable.unmuted & DT_DEBUG_PERF)
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
     dt_get_times(&end_time);
     fprintf(stderr, "colorpicker stats reading took %.3f secs (%.3f CPU)\n",

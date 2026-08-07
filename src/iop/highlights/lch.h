@@ -50,13 +50,13 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_LCH_H
+#define DT_IOP_HIGHLIGHTS_LCH_H
 
 // LCh highlight reconstruction (Bayer + X-Trans), with its colour interpolation helpers.
 // Public API of this highlights mode (a compiled TU); internals are static in the .c.
 
 #include "develop/imageop.h"
-#include "iop/highlights/common.h"
 
 void interpolate_color_xtrans(const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                               const dt_iop_roi_t *const roi_out, int dim, int dir, int other,
@@ -72,3 +72,4 @@ void process_lch_bayer(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piec
 void process_lch_xtrans(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                         void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                         const float clip);
+#endif // DT_IOP_HIGHLIGHTS_LCH_H

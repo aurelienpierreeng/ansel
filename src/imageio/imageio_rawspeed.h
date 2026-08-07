@@ -1,0 +1,56 @@
+/*
+    This file is part of darktable,
+    Copyright (C) 2009-2011, 2014 johannes hanika.
+    Copyright (C) 2012 Richard Wonka.
+    Copyright (C) 2014-2016 Pedro Côrte-Real.
+    Copyright (C) 2014, 2016 Tobias Ellinghaus.
+    Copyright (C) 2020, 2022 Pascal Obry.
+    Copyright (C) 2021 Daniel Vogelbacher.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2023 Aurélien PIERRE.
+    Copyright (C) 2025 Alynx Zhou.
+    
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef DT_IMAGEIO_IMAGEIO_RAWSPEED_H
+#define DT_IMAGEIO_IMAGEIO_RAWSPEED_H
+
+#include "common/image.h"
+#include "common/mipmap_cache.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+gboolean dt_rawspeed_lookup_makermodel(const char *maker, const char *model,
+                                       char *mk, int mk_len, char *md, int md_len,
+                                       char *al, int al_len);
+
+uint32_t dt_rawspeed_crop_dcraw_filters(uint32_t filters, uint32_t crop_x, uint32_t crop_y);
+
+dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filename,
+                                             dt_mipmap_buffer_t *buf);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // DT_IMAGEIO_IMAGEIO_RAWSPEED_H
+
+// clang-format off
+// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
+// vim: shiftwidth=2 expandtab tabstop=2 cindent
+// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
+// clang-format on

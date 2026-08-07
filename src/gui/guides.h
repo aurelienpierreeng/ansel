@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_GUIDES_H
+#define DT_GUI_GUIDES_H
 
 #include "develop/imageop.h"
 #include "views/view.h"
@@ -44,6 +45,12 @@ typedef struct dt_guides_t
   gboolean support_flip;
 } dt_guides_t;
 
+/** The registered guide overlays. dt_guides_get_list() is read-only; the `_ref` form
+ * returns the address of the list head and exists because registration appends to it —
+ * only darktable.c's owner and gui/guides.c's registration path may use it. */
+GList *dt_guides_get_list(void);
+GList **dt_guides_get_list_ref(void);
+
 GList *dt_guides_init();
 void dt_guides_cleanup(GList *guides);
 
@@ -62,6 +69,8 @@ void dt_guides_update_button_state();
 void dt_guides_button_toggled(gboolean active);
 
 void dt_guides_set_overlay_colors();
+
+#endif // DT_GUI_GUIDES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

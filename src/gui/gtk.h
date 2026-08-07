@@ -51,23 +51,139 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_GTK_H
+#define DT_GUI_GTK_H
 
-#include "common/darktable.h"
-#include "common/dtpthread.h"
-#include "dtgtk/thumbtable.h"
+#include "common/glib_utils.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/paths.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "gui/window_manager.h"
 #include "gui/accelerators.h"
 
 #include <gtk/gtk.h>
 #include <stdint.h>
 
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* --- Moved from darktable.h: GUI-flavored helpers belong to the GUI layer, and
+ * the orchestrator header must not export GTK/Pango API to the whole application. --- */
+
+/* ------------------------------------------------------------------------------------------
+ * Widget-callback suppression (replaces the legacy raw `dt_gui_get_global()->reset` counter).
+ *
+ * Programmatic widget updates must not re-trigger their own "value-changed" handlers. Bracket
+ * such updates with dt_gui_freeze_begin()/dt_gui_freeze_end() (or the dt_gui_widget_freeze()
+ * scope guard), and open every widget callback with `if(dt_gui_widgets_suppressed()) return;`.
+ *
+ * The depth is managed centrally: it is mutated only on the GUI thread (off-thread begin/end
+ * are no-ops, so worker threads -- e.g. thumbnail/export reload_defaults -- can never race or
+ * drift it), clamped at >= 0, and any unbalanced end is logged with its file:line rather than
+ * silently drifting negative and disabling suppression for the rest of the session.
+ * ------------------------------------------------------------------------------------------ */
+gboolean dt_gui_widgets_suppressed(void);
+void dt_gui_freeze_begin_(const char *file, int line);
+void dt_gui_freeze_end_(const char *file, int line);
+void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)
+#define dt_gui_freeze_begin() dt_gui_freeze_begin_(__FILE__, __LINE__)
+#define dt_gui_freeze_end()   dt_gui_freeze_end_(__FILE__, __LINE__)
+
+typedef struct { const char *file; int line; } dt_gui_freeze_token_t;
+static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
+{
+  dt_gui_freeze_end_(t->file, t->line);
+}
+// Scope guard: begins a freeze that is automatically ended when the enclosing block exits,
+// including via early return/goto/break. Use it for spans that contain an early exit (the
+// raw begin/end pair would leak the depth on such paths).
+#define DT_FREEZE_CAT_(a, b) a##b
+#define DT_FREEZE_CAT(a, b) DT_FREEZE_CAT_(a, b)
+#define dt_gui_widget_freeze()                                                       \
+  dt_gui_freeze_token_t DT_FREEZE_CAT(_dt_freeze_guard_, __LINE__)                    \
+      __attribute__((cleanup(dt_gui_freeze_release_))) = { __FILE__, __LINE__ };      \
+  dt_gui_freeze_begin_(__FILE__, __LINE__)
+
+// check whether the specified mask of modifier keys exactly matches, among the set Shift+Control+(Alt/Meta).
+// ignores the state of any other shifting keys
+static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+{
+  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
+//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
+  return (state & modifiers) == desired_modifier_mask;
+}
+
+// check whether the given modifier state includes AT LEAST the specified mask of modifier keys
+static inline gboolean dt_modifiers_include(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+{
+//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
+  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
+  // check whether all modifier bits of interest are turned on
+  return (state & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
+}
+
+/**
+ * @brief Remove underscore from GUI labels containing mnemonics
+ */
+// Remove underscore from GUI labels containing mnemonics
+static inline gchar *delete_underscore(const char *s)
+{
+  return dt_string_replace(s, "_");
+}
+
+/**
+ * @brief Remove Pango/Gtk markup and accels mnemonics from text labels.
+ * If the markup parsing fails, fallback to returning a copy of the original string.
+ *
+ * @param s Original string to clean
+ * @return gchar* Newly-allocated string. The caller is responsible for freeing it.
+ */
+static inline gchar *strip_markup(const char *s)
+{
+  if(IS_NULL_PTR(s)) return g_strdup("");
+
+  PangoAttrList *attrs = NULL;
+  gchar *plain = NULL;
+
+  const gchar *underscore = "_";
+  gunichar mnemonic = underscore[0];
+  if(!pango_parse_markup(s, -1, mnemonic, &attrs, &plain, NULL, NULL))
+    plain = delete_underscore(s);
+
+  pango_attr_list_unref(attrs);
+  return plain;
+}
+
+/* Application-wide GUI singleton accessor: declared here by the owning lib, implemented by
+ * the orchestrator (darktable.c, next to dt_pixelpipe_cache_get_global()). It binds
+ * this header's macros and inline helpers to the `dt_gui_get_global()` instance without importing
+ * darktable.h into every GUI translation unit. */
+struct dt_gui_gtk_t;
+struct dt_gui_gtk_t *dt_gui_get_global(void);
+
+/* Sub-handles of the GUI singleton, and the two window lookups that dominate its use.
+ * The census behind doc/globals-migration.md showed dt_gui_get_global() is not one dependency
+ * but three -- the dt_ui_t handle, the write-once accelerator registry, and gtk.c's own
+ * scroll/DPI state -- so expose the first two directly instead of making every caller
+ * walk the application struct. dt_ui_main_window()/dt_ui_center() were called with the
+ * very same argument at 178 sites; these give them a name. */
+struct dt_ui_t *dt_gui_get_ui(void);
+struct dt_accels_t *dt_gui_get_accels(void);
+GtkWidget *dt_gui_main_window(void);
+
+/** The list of available GTK theme names (gchar*), rebuilt by the preferences dialog,
+ * read by gtk.c for padding decisions. dt_gui_set_themes() TAKES OWNERSHIP and frees
+ * the previous list. */
+GList *dt_gui_get_themes(void);
+void dt_gui_set_themes(GList *themes);
+GtkWidget *dt_gui_center_widget(void);
+
 // Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.
-#define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius_clamped
+#define DT_GUI_MOUSE_EFFECT_RADIUS dt_gui_get_global()->mouse.effect_radius_clamped
 
 /* Pixel scaling - two intents, chosen by the *destination sink* (not by platform).
  * See doc/gui.md "Pixel scaling" for the full rationale.
@@ -82,8 +198,8 @@ extern "C" {
  *   UI zoom (dpi_factor) and the integer scale-factor (ppd) ourselves.
  *
  * Input values are device-independent pixels at the 96 DPI baseline. */
-#define DT_UI_SCALE_UI(value) ((value) * darktable.gui->dpi_factor)
-#define DT_UI_SCALE_DEVICE(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
+#define DT_UI_SCALE_UI(value) ((value) * dt_gui_get_global()->dpi_factor)
+#define DT_UI_SCALE_DEVICE(value) ((value) * dt_gui_get_global()->dpi_factor * dt_gui_get_global()->ppd)
 
 /* Deprecated spellings kept so the existing call sites keep compiling. Prefer the
  * intent-named macros above in new code. */
@@ -96,7 +212,7 @@ extern "C" {
  * from code - so it is centralized here, in ONE place, for the whole app.
  *
  * It is expressed as a fraction of 1em (the resolved root font size, cached in
- * darktable.gui->em by dt_gui_update_em()), so the inner gutters scale with the user's
+ * dt_gui_get_global()->em by dt_gui_update_em()), so the inner gutters scale with the user's
  * font size exactly like the em-based margins/paddings in ansel.css. 0.625em == 10px at
  * the 16px reference font. Because the font's point->px conversion already folds in the
  * screen DPI, this needs NO DT_PIXEL_APPLY_DPI on top.
@@ -104,7 +220,7 @@ extern "C" {
  * Falls back to the 10px reference before the GUI exists or before gui->em has
  * been resolved. Standalone dialogs may run after gtk_init() but before the
  * main Ansel GUI allocation when startup needs user input. */
-#define DT_GUI_EM_SIZE ((gint)((!IS_NULL_PTR(darktable.gui) && darktable.gui->em > 0.0) ? darktable.gui->em : 16.0))
+#define DT_GUI_EM_SIZE ((gint)((!IS_NULL_PTR(dt_gui_get_global()) && dt_gui_get_global()->em > 0.0) ? dt_gui_get_global()->em : 16.0))
 #define DT_GUI_BOX_SPACING_EM 0.625
 #define DT_GUI_BOX_SPACING                                                                                     \
   ((gint)(DT_GUI_EM_SIZE * DT_GUI_BOX_SPACING_EM + 0.5))
@@ -172,7 +288,7 @@ typedef struct dt_gui_gtk_t
 
   // Widget-callback suppression depth. PRIVATE: never touch directly -- go through
   // dt_gui_freeze_begin()/end() / dt_gui_widget_freeze() / dt_gui_widgets_suppressed()
-  // (declared in common/darktable.h). Those manage it centrally: GUI-thread-only, clamped
+  // (declared at the top of this header). Those manage it centrally: GUI-thread-only, clamped
   // at >= 0, and unbalanced ends are logged instead of silently drifting the counter.
   int32_t _widget_suppress_depth;
   GdkRGBA colors[DT_GUI_COLOR_LAST];
@@ -320,39 +436,39 @@ void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const c
 
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
-  cairo_surface_t *cst = cairo_image_surface_create(format, width * darktable.gui->ppd, height * darktable.gui->ppd);
-  cairo_surface_set_device_scale(cst, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_surface_t *cst = cairo_image_surface_create(format, width * dt_gui_get_global()->ppd, height * dt_gui_get_global()->ppd);
+  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   return cst;
 }
 
 static inline cairo_surface_t *dt_cairo_image_surface_create_for_data(unsigned char *data, cairo_format_t format, int width, int height, int stride) {
   cairo_surface_t *cst = cairo_image_surface_create_for_data(data, format, width, height, stride);
-  cairo_surface_set_device_scale(cst, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   return cst;
 }
 
 static inline cairo_surface_t *dt_cairo_image_surface_create_from_png(const char *filename) {
   cairo_surface_t *cst = cairo_image_surface_create_from_png(filename);
-  cairo_surface_set_device_scale(cst, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   return cst;
 }
 
 static inline int dt_cairo_image_surface_get_width(cairo_surface_t *surface) {
-  return cairo_image_surface_get_width(surface) / darktable.gui->ppd;
+  return cairo_image_surface_get_width(surface) / dt_gui_get_global()->ppd;
 }
 
 static inline int dt_cairo_image_surface_get_height(cairo_surface_t *surface) {
-  return cairo_image_surface_get_height(surface) / darktable.gui->ppd;
+  return cairo_image_surface_get_height(surface) / dt_gui_get_global()->ppd;
 }
 
 static inline cairo_surface_t *dt_gdk_cairo_surface_create_from_pixbuf(const GdkPixbuf *pixbuf, int scale, GdkWindow *for_window) {
   cairo_surface_t *cst = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, for_window);
-  cairo_surface_set_device_scale(cst, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   return cst;
 }
 
 static inline GdkPixbuf *dt_gdk_pixbuf_new_from_file_at_size(const char *filename, int width, int height, GError **error) {
-  return gdk_pixbuf_new_from_file_at_size(filename, width * darktable.gui->ppd, height * darktable.gui->ppd, error);
+  return gdk_pixbuf_new_from_file_at_size(filename, width * dt_gui_get_global()->ppd, height * dt_gui_get_global()->ppd, error);
 }
 
 // call class function to add or remove CSS classes (need to be set on top of this file as first function is used in this file)
@@ -443,19 +559,19 @@ void dt_ellipsize_combo(GtkComboBox *cbox);
 // and typography says it makes it easier to extract the structure of the text.
 void dt_capitalize_label(gchar *text);
 
-#define dt_accels_new_global_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->global_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_global_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->global_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_darkroom_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->darkroom_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_darkroom_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->darkroom_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_lighttable_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->lighttable_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_lighttable_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->lighttable_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_map_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->map_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_map_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->map_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_print_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->print_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_print_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->print_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_slideshow_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->slideshow_accels, c, d, e, f, FALSE, g)
+#define dt_accels_new_slideshow_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->slideshow_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_darkroom_locked_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(darktable.gui->accels, a, b, darktable.gui->accels->darkroom_accels, c, d, e, f, TRUE, g)
+#define dt_accels_new_darkroom_locked_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->darkroom_accels, c, d, e, f, TRUE, g)
 
 
 static inline void dt_ui_section_label_set(GtkWidget *label)
@@ -530,13 +646,13 @@ void dt_gui_load_theme(const char *theme);
 // reload GUI scalings
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
 
-// Recompute the cached 1em size (darktable.gui->em) from the main window's resolved
+// Recompute the cached 1em size (dt_gui_get_global()->em) from the main window's resolved
 // font. Call after the theme/font or the screen DPI changes. Also re-applies the standard
 // inter-child spacing (DT_GUI_BOX_SPACING) to existing containers so the change is live.
 void dt_gui_update_em(void);
 
 // Set a PangoLayout's resolution to the screen DPI for crisp cairo-drawn text. Use this
-// instead of hand-writing pango_cairo_context_set_resolution(..., darktable.gui->dpi).
+// instead of hand-writing pango_cairo_context_set_resolution(..., dt_gui_get_global()->dpi).
 void dt_gui_set_pango_resolution(PangoLayout *layout);
 
 // Apply the system's text-rendering options (anti-aliasing, hinting, subpixel order,
@@ -710,6 +826,8 @@ void dt_gui_refocus_center();
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_GUI_GTK_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

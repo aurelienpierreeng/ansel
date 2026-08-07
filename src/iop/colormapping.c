@@ -37,15 +37,20 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
-#include "common/bilateralcl.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
+#include <glib/gstdio.h>
+#include "pixel/bilateral.h"
 #include "common/colorspaces.h"
 #include "common/imagebuf.h"
-#include "common/opencl.h"
 #include "common/points.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -53,8 +58,7 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/drawingarea.h"
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/drawingarea.h"
 
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
@@ -659,7 +663,7 @@ static void acquire_source_button_pressed(GtkButton *button, dt_iop_module_t *se
   p->flag |= GET_SOURCE;
   p->flag &= ~HAS_SOURCE;
   dt_iop_request_focus(self);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void acquire_target_button_pressed(GtkButton *button, dt_iop_module_t *self)
@@ -670,7 +674,7 @@ static void acquire_target_button_pressed(GtkButton *button, dt_iop_module_t *se
   p->flag |= GET_TARGET;
   p->flag &= ~HAS_TARGET;
   dt_iop_request_focus(self);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -849,7 +853,7 @@ static void process_clusters(gpointer instance, gpointer user_data)
     p->flag &= ~(GET_TARGET | GET_SOURCE | ACQUIRE);
   }
 
-  if(p->flag & HAS_SOURCE) dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  if(p->flag & HAS_SOURCE) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   dt_control_queue_redraw();
 }
@@ -908,7 +912,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->equalization, "%");
 
   /* add signal handler for preview pipe finished: process clusters if requested */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                             G_CALLBACK(process_clusters), self);
 
   FILE *f = g_fopen("/tmp/dt_colormapping_loaded", "rb");
@@ -923,7 +927,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 {
   dt_iop_colormapping_gui_data_t *g = (dt_iop_colormapping_gui_data_t *)self->gui_data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(process_clusters), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(process_clusters), self);
 
   cmsDeleteTransform(g->xform);
   dt_free_align(g->buffer);

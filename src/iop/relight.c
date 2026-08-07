@@ -53,16 +53,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "common/math.h"
-#include "common/opencl.h"
-#include "control/control.h"
+#include "gui/bauhaus.h"
+#include "math/math.h"
 #include "develop/develop.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/gradientslider.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/gradientslider.h"
 #include "gui/color_picker_proxy.h"
 
 #include "gui/gtk.h"
@@ -80,7 +81,7 @@ typedef struct dt_iop_relight_params_t
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   dt_gui_presets_add_generic(_("fill-light 0.25EV with 4 zones"), self->op, self->version(),
                              &(dt_iop_relight_params_t){ 0.25, 0.25, 4.0 }, sizeof(dt_iop_relight_params_t),
@@ -90,7 +91,7 @@ void init_presets(dt_iop_module_so_t *self)
                              &(dt_iop_relight_params_t){ -0.25, 0.25, 4.0 }, sizeof(dt_iop_relight_params_t),
                              1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 typedef struct dt_iop_relight_gui_data_t
@@ -179,7 +180,7 @@ static void center_callback(GtkDarktableGradientSlider *slider, gpointer user_da
   dt_iop_relight_params_t *p = (dt_iop_relight_params_t *)self->params;
   dt_iop_color_picker_reset(self, TRUE);
   p->center = dtgtk_gradient_slider_get_value(slider);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

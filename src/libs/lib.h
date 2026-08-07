@@ -36,10 +36,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_LIBS_LIB_H
+#define DT_LIBS_LIB_H
 
-#include "common/darktable.h"
-#include "common/iop_profile.h"
 #include "common/gui_module_api.h"
 #include "views/view.h"
 #include <gmodule.h>
@@ -96,6 +95,9 @@ typedef struct dt_lib_module_t
 } dt_lib_module_t;
 
 void dt_lib_init(dt_lib_t *lib);
+
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+struct dt_lib_t *dt_lib_get_global(void);
 void dt_lib_cleanup(dt_lib_t *lib);
 
 /** creates a label widget for the expander, with callback to enable/disable this module. */
@@ -162,6 +164,8 @@ gboolean dt_handle_dialog_enter(GtkWidget *widget, GdkEventKey *event, gpointer 
 /** TODO: figure out where to handle that */
 GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpointer callback, gpointer data,
                                 const gchar *tooltip, guint accel_key, GdkModifierType mods);
+
+#endif // DT_LIBS_LIB_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -21,9 +21,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_SYSTEM_SIGNAL_HANDLING_H
+#define DT_COMMON_SYSTEM_SIGNAL_HANDLING_H
 
 void dt_set_signal_handlers();
+
+#endif // DT_COMMON_SYSTEM_SIGNAL_HANDLING_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

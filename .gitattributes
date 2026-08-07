@@ -1,5 +1,13 @@
 /CMakeLists.txt export-subst
 
+# This project is developed and built cross-platform, but its line-ending convention is LF
+# (Linux/macOS-native) everywhere, regardless of the checking-out OS or that OS's/user's
+# core.autocrlf. Without this, a Windows checkout with the (common, often system-wide default)
+# core.autocrlf=true converts every text file to CRLF on checkout, which then shows as fully
+# modified against the LF-committed blobs on every `git status`/`git diff` -- not a real content
+# change, just noise, but it affects the whole tree since nothing here pinned a policy before.
+* text=auto eol=lf
+
 # Shebang scripts must keep LF line endings, or Windows checkouts (core.autocrlf=true)
 # turn "#!/bin/bash" into "#!/bin/bash\r", which the loader reads as a literal
 # interpreter path ending in \r and rejects with "bad interpreter: No such file or

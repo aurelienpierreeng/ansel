@@ -38,8 +38,11 @@
 #include "common/colorlabels.h"
 #include "common/colorspaces.h"
 #include "common/curve_tools.h"
-#include "common/darktable.h"
-#include "common/debug.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/paths.h"
+#include "control/signal.h"
+#include "common/utility.h"
 #include "common/history.h"
 #include "common/iop_order.h"
 #include "common/ratings.h"
@@ -849,7 +852,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
       }
       tagNode = tagNode->next;
     }
-    if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+    if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
   }
   else if(!IS_NULL_PTR(dev) && !xmlStrcmp(name, (const xmlChar *)"RetouchInfo"))
   {
@@ -1515,7 +1518,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     dt_image_set_location(imgid, &geoloc, FALSE, FALSE);
     GList *imgs = NULL;
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
 
     if(imported[0]) g_strlcat(imported, ", ", sizeof(imported));
     g_strlcat(imported, _("geotagging"), sizeof(imported));
@@ -1545,7 +1548,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
       dt_dev_history_notify_change(dev, imgid);
       /* update xmp file */
       dt_image_synch_xmp(imgid);
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
     }
   }
   return TRUE;

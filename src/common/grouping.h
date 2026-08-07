@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_GROUPING_H
+#define DT_COMMON_GROUPING_H
 
 #include <glib.h>
 #include <stdint.h>
@@ -45,6 +46,8 @@ GList *dt_grouping_get_group_images(const int32_t imgid);
 
 /** add grouped images to images list */
 void dt_grouping_add_grouped_images(GList **images);
+
+#endif // DT_COMMON_GROUPING_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

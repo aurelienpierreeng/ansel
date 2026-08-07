@@ -51,21 +51,21 @@
 #ifdef HAVE_OPENCL
 
 #include "common/opencl.h"
-#include "common/bilateralcl.h"
-#include "common/darktable.h"
+#include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
+#include "system/capabilities.h"
+#include "pixel/bilateralcl.h"
+#include "darktable.h"
 #include "common/dlopencl.h"
-#include "common/dwt.h"
+#include "pixel/dwt.h"
 #include "common/file_location.h"
-#include "common/gaussian.h"
-#include "common/guided_filter.h"
-#include "common/heal.h"
-#include "common/interpolation.h"
-#include "common/locallaplaciancl.h"
-#include "common/nvidia_gpus.h"
-#include "common/opencl_drivers_blacklist.h"
-#include "common/tea.h"
-#include "control/conf.h"
-#include "control/control.h"
+#include "pixel/gaussian.h"
+#include "pixel/guided_filter.h"
+#include "pixel/heal.h"
+#include "pixel/interpolation.h"
+#include "pixel/locallaplaciancl.h"
+#include "system/nvidia_gpus.h"
+#include "system/opencl_drivers_blacklist.h"
+#include "common/conf.h"
 #include "gui/splash.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"
@@ -88,7 +88,7 @@ static gboolean _opencl_splash_active = FALSE;
 static inline void _opencl_splash_update_compile(const char *programname)
 {
   if(IS_NULL_PTR(programname)) return;
-  if(IS_NULL_PTR(darktable.gui)) return;
+  if(IS_NULL_PTR(dt_gui_get_global())) return;
 
   if(!_opencl_splash_active)
   {
@@ -778,7 +778,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   }
   // create a command queue for first device the context reported
   cl->dev[dev].cmd_queue = (cl->dlocl->symbols->dt_clCreateCommandQueue)(
-      cl->dev[dev].context, devid, (darktable.unmuted & DT_DEBUG_PERF) ? CL_QUEUE_PROFILING_ENABLE : 0, &err);
+      cl->dev[dev].context, devid, (dt_get_debug_flags() & DT_DEBUG_PERF) ? CL_QUEUE_PROFILING_ENABLE : 0, &err);
   if(err != CL_SUCCESS)
   {
     dt_print_nts(DT_DEBUG_OPENCL, "   *** could not create command queue *** %i\n", err);
@@ -1270,7 +1270,7 @@ void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
   if(!IS_NULL_PTR(cl->dev[i].context))
     (cl->dlocl->symbols->dt_clReleaseContext)(cl->dev[i].context);
 
-  if(cl->print_statistics && (darktable.unmuted & DT_DEBUG_MEMORY))
+  if(cl->print_statistics && (dt_get_debug_flags() & DT_DEBUG_MEMORY))
   {
     dt_print_nts(DT_DEBUG_OPENCL, " [opencl_summary_statistics] device '%s' (%d): peak memory usage %" G_GSIZE_FORMAT " bytes (%.1f MB)\n",
                 cl->dev[i].name, i, cl->dev[i].peak_memory, (float)cl->dev[i].peak_memory/(1024*1024));
@@ -2176,7 +2176,7 @@ int dt_opencl_enqueue_kernel_2d_with_local(const int dev, const int kernel, cons
 
   char buf[256];
   buf[0] = '\0';
-  if(darktable.unmuted & DT_DEBUG_OPENCL)
+  if(dt_get_debug_flags() & DT_DEBUG_OPENCL)
     (cl->dlocl->symbols->dt_clGetKernelInfo)(cl->dev[dev].kernel[kernel], CL_KERNEL_FUNCTION_NAME, 256, buf, NULL);
   cl_event *eventp = dt_opencl_events_get_slot(dev, buf);
   cl_int err = (cl->dlocl->symbols->dt_clEnqueueNDRangeKernel)(cl->dev[dev].cmd_queue, cl->dev[dev].kernel[kernel],
@@ -2488,7 +2488,7 @@ static inline void *_dt_opencl_alloc_image2d(const int devid, const int width, c
       dt_print(DT_DEBUG_OPENCL,
                "[opencl %s] out of memory on device %d, flushing cached pinned buffers and retrying\n",
                context, devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      dt_dev_pixelpipe_cache_flush_clmem(dt_pixelpipe_cache_get_global(), devid);
       continue;
     }
     break;
@@ -2562,7 +2562,7 @@ void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t siz
       dt_print(DT_DEBUG_OPENCL,
                "[opencl alloc_device_buffer] out of memory on device %d, flushing cached pinned buffers and retrying\n",
                devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      dt_dev_pixelpipe_cache_flush_clmem(dt_pixelpipe_cache_get_global(), devid);
       continue;
     }
     break;
@@ -2714,7 +2714,7 @@ void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_m
   darktable.opencl->dev[devid].peak_memory = MAX(darktable.opencl->dev[devid].peak_memory,
                                                  darktable.opencl->dev[devid].memory_in_use);
 
-  if((darktable.unmuted & DT_DEBUG_MEMORY) && (darktable.unmuted & DT_DEBUG_OPENCL))
+  if((dt_get_debug_flags() & DT_DEBUG_MEMORY) && (dt_get_debug_flags() & DT_DEBUG_OPENCL))
     dt_print(DT_DEBUG_OPENCL,
               "[opencl memory] device %d: %" G_GSIZE_FORMAT " bytes (%.1f MB) in use\n", devid, darktable.opencl->dev[devid].memory_in_use,
                                       (float)darktable.opencl->dev[devid].memory_in_use/(1024*1024));
@@ -3139,7 +3139,7 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
     else
       (*totalsuccess)++;
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       // get profiling info of event (only if darktable was called with '-d perf')
       cl_ulong start;
@@ -3172,7 +3172,7 @@ cl_int dt_opencl_events_flush(const int devid, const int reset)
   if(reset)
   {
     // output profiling info if wanted
-    if(darktable.unmuted & DT_DEBUG_PERF) dt_opencl_events_profiling(devid, 1);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_opencl_events_profiling(devid, 1);
 
     // reset eventlist structures to empty state
     dt_opencl_events_reset(devid);

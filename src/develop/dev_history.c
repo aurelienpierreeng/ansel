@@ -58,11 +58,10 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/conf.h"
 #include "common/history.h"
 
 #include "common/undo.h"
-#include "common/history_snapshot.h"
 #include "common/image_cache.h"
 #include "common/history_merge.h"
 #include "common/iop_order.h"
@@ -78,6 +77,7 @@
 #include <inttypes.h>
 
 #include <glib.h>
+#include "common/hash.h"
 
 static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
                                       const int modversion, const char *operation, const void *module_params,
@@ -211,7 +211,12 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
     memcpy(module->params, hist->params, module->params_size);
   dt_iop_commit_blend_params(module, hist->blend_params);
 
-  dt_iop_compute_module_hash(module, hist->forms);
+  // Committing a new/updated item: when no forms snapshot was taken (include_masks declined),
+  // the live dev->forms IS the state being persisted, so hash against it — a module whose
+  // blend params link a mask group must never hash blind to that group's content (#1060).
+  // History REPLAY must not use this helper's fallback: it hashes via _history_to_module()
+  // against the snapshot accumulated at the item's position instead.
+  dt_iop_compute_module_hash(module, !IS_NULL_PTR(hist->forms) ? hist->forms : dev->forms);
   hist->hash = module->hash;
 
   return TRUE;
@@ -377,11 +382,11 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
      * after a history deletion: the first-run defaults, auto-presets, image
      * flags and resulting module order must exist before paste/style merging.
      */
-    dt_image_t *image = dt_image_cache_get(darktable.image_cache, dest_imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), dest_imgid, 'w');
     if(!IS_NULL_PTR(image))
     {
       *image = dev_dest.image_storage;
-      dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+      dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
     }
 
     dt_dev_write_history_ext(&dev_dest, dest_imgid);
@@ -585,7 +590,7 @@ static void _history_invalidate_cb(gpointer user_data, dt_undo_type_t type, dt_u
 void dt_dev_history_undo_invalidate_module(dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
-  dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, module, &_history_invalidate_cb);
+  dt_undo_iterate_internal(dt_undo_get_global(), DT_UNDO_HISTORY, module, &_history_invalidate_cb);
 }
 
 /**
@@ -663,8 +668,8 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
 
   // Ensure all UI pieces (history treeview, iop order, etc.) resync after undo/redo.
   // Undo callbacks bypass dt_dev_undo_end_record(), so we need to raise the change signal here.
-  if(darktable.gui && dev->gui_attached && dev == darktable.develop)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  if(dt_gui_get_global() && dev->gui_attached && dev == dt_dev_get_global())
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }
 
 void dt_dev_history_undo_start_record(dt_develop_t *dev)
@@ -735,7 +740,7 @@ void dt_dev_history_undo_end_record_locked(dt_develop_t *dev)
     hist->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   }
 
-  dt_undo_record(darktable.undo, dev, DT_UNDO_HISTORY, (dt_undo_data_t)hist, _pop_undo, _history_undo_data_free);
+  dt_undo_record(dt_undo_get_global(), dev, DT_UNDO_HISTORY, (dt_undo_data_t)hist, _pop_undo, _history_undo_data_free);
 }
 
 
@@ -887,7 +892,20 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   if(enable) module->enabled = TRUE;
 
   // Include masks if module supports blending and masks are in use, or if it's the mask manager.
-  const gboolean include_masks = dt_iop_module_needs_mask_history(module);
+  gboolean include_masks = dt_iop_module_needs_mask_history(module);
+
+  // That predicate requires the matching mask_mode bit (e.g. DEVELOP_MASK_SHAPE) to be set,
+  // which is a *masking policy* decision — but whether the forms must be recorded is a *state
+  // integrity* decision: as soon as blend params reference an existing, non-empty group, the
+  // forms are part of this module's state. Skipping the snapshot here makes the history item
+  // hash blind to mask edits (stale pipe cache, issue #1060 family) and loses the mask on
+  // undo/redo (dt_dev_pop_history_items_ext() rebuilds dev->forms from the last item that
+  // carries one).
+  if(!include_masks && !IS_NULL_PTR(module->blend_params) && module->blend_params->mask_id != 0)
+  {
+    dt_masks_form_t *linked_group = dt_masks_get_from_id(dev, module->blend_params->mask_id);
+    include_masks = !IS_NULL_PTR(linked_group) && !IS_NULL_PTR(linked_group->points);
+  }
 
   GList *forms_snapshot = NULL;
   if(include_masks)
@@ -1006,11 +1024,11 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
   if(dev->image_storage.id > 0)
   {
-    dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, dev->image_storage.id, 'w');
+    dt_image_t *cache_img = dt_image_cache_get(dt_image_cache_get_global(), dev->image_storage.id, 'w');
     if(cache_img)
     {
       cache_img->history_hash = dt_dev_get_history_hash(dev);
-      dt_image_cache_write_release(darktable.image_cache, cache_img, DT_IMAGE_CACHE_RELAXED);
+      dt_image_cache_write_release(dt_image_cache_get_global(), cache_img, DT_IMAGE_CACHE_RELAXED);
     }
   }
 
@@ -1041,7 +1059,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   dt_dev_masks_list_update(dev);
 
-  if(!IS_NULL_PTR(darktable.gui) && dev->gui_attached && !IS_NULL_PTR(module))
+  if(!IS_NULL_PTR(dt_gui_get_global()) && dev->gui_attached && !IS_NULL_PTR(module))
   {
     // If module params change the geometry of the ROI,
     // update immediately so we avoid drawing glitches.
@@ -1193,12 +1211,12 @@ gboolean dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
 {
   // Recreate the whole history from scratch.
   // Backend only: GUI updates and pixelpipe rebuilds need to be triggered by callers.
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
   return first_run;
 }
 
@@ -1260,7 +1278,8 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
  * @param hist History item.
  * @param module Module instance.
  */
-static inline void _history_to_module(const dt_dev_history_item_t *const hist, dt_iop_module_t *module)
+static inline void _history_to_module(const dt_dev_history_item_t *const hist, dt_iop_module_t *module,
+                                      GList *current_forms)
 {
   module->enabled = (hist->enabled != 0);
 
@@ -1275,8 +1294,12 @@ static inline void _history_to_module(const dt_dev_history_item_t *const hist, d
   memcpy(module->params, hist->params, module->params_size);
   dt_iop_commit_blend_params(module, hist->blend_params);
 
-  // Get the module hash
-  dt_iop_compute_module_hash(module, hist->forms);
+  // Get the module hash. An item without its own forms snapshot must be hashed against the
+  // snapshot accumulated up to its position in the replay (current_forms) — NOT against the
+  // live dev->forms of the state being left: dt_iop_compute_blendop_hash()'s NULL fallback
+  // reads the live list, and during replay that list is only replaced with the target
+  // snapshot after this loop, so the restored hash would be tied to the wrong mask content.
+  dt_iop_compute_module_hash(module, !IS_NULL_PTR(hist->forms) ? hist->forms : current_forms);
 }
 
 
@@ -1303,11 +1326,13 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     dt_iop_module_t *module = hist->module;
-    if(module) _history_to_module(hist, module);
 
     // Update the reference to the form snapshot that doesn't belong
-    // conceptually to history items
+    // conceptually to history items. Advance it before applying the item so the
+    // item's hash is computed against the masks state at its own position.
     if(hist->forms) forms = hist->forms;
+
+    if(module) _history_to_module(hist, module, forms);
 
     history = g_list_next(history);
   }
@@ -1337,13 +1362,13 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
 {
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   // Update darkroom sizes after releasing the history lock to avoid deadlocks.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
 }
 
 void dt_dev_history_gui_update(dt_develop_t *dev)
@@ -1395,8 +1420,8 @@ void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
 
 gboolean dt_dev_history_is_image_in_dev(GList *imgs)
 {
-  return !IS_NULL_PTR(darktable.develop)
-    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+  dt_develop_t *const dev = dt_dev_get_global();
+  return !IS_NULL_PTR(dev) && g_list_find(imgs, GINT_TO_POINTER(dev->image_storage.id));
 }
 
 void dt_apply_dev_history_update(dt_develop_t *dev)
@@ -1411,7 +1436,7 @@ void dt_apply_dev_history_update(dt_develop_t *dev)
   // stale ROI -- same fix as _history_apply_history_end() in libs/history.c.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
   dt_dev_history_pixelpipe_update(dev, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }
 
 /**
@@ -1442,7 +1467,7 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 {
   if(IS_NULL_PTR(dev) || imgid <= 0) return;
 
-  if(darktable.gui && dev->gui_attached)
+  if(dt_gui_get_global() && dev->gui_attached)
   {
     const guint states = dt_dev_mask_history_overload(dev->history, 250);
     if(states > 250)
@@ -1501,7 +1526,7 @@ void dt_dev_history_cleanup(void)
 
 void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
-  dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *cache_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
   if(IS_NULL_PTR(cache_img)) return;
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
@@ -1526,7 +1551,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   cache_img->history_hash = dt_dev_get_history_hash(dev);
 
-  dt_image_cache_write_release(darktable.image_cache, cache_img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(dt_image_cache_get_global(), cache_img, DT_IMAGE_CACHE_SAFE);
 }
 
 // Schedule history write as a background job to avoid blocking the GUI.
@@ -1575,7 +1600,7 @@ void dt_dev_write_history(dt_develop_t *dev, gboolean async)
                                         dev->image_storage.id);
   dt_control_job_set_params(job, dev, NULL);
 
-  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job) != 0)
+  if(dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job) != 0)
   {
     // scheduling failed: dispose job, clear the flag we just set, and run synchronously
     dt_control_job_dispose(job);
@@ -2158,7 +2183,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   // Protect history DB reads with a cache read lock.
   // Release it before applying history to modules to avoid deadlocks.
-  dt_image_t *read_lock_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  dt_image_t *read_lock_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(IS_NULL_PTR(read_lock_img)) return FALSE;
 
   // Load DB history into dev->history
@@ -2201,11 +2226,12 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
   // but should live in its own branch. See `dt_dev_pop_history_items_ext()`
   dt_masks_read_masks_history(dev, imgid);
 
-  dt_image_cache_read_release(darktable.image_cache, read_lock_img);
+  dt_image_cache_read_release(dt_image_cache_get_global(), read_lock_img);
   read_lock_img = NULL;
 
   // Now we have fully-populated history items:
   // Commit params to modules and publish the masks on the raster stack for other modules to find
+  GList *accumulated_forms = NULL;
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
@@ -2221,8 +2247,12 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
       continue;
     }
 
+    // Same accumulation rule as dt_dev_pop_history_items_ext(): an item without its own forms
+    // snapshot is hashed against the last snapshot recorded at or before its position.
+    if(hist->forms) accumulated_forms = hist->forms;
+
     dt_iop_module_t *module = hist->module;
-    _history_to_module(hist, module);
+    _history_to_module(hist, module, accumulated_forms);
     hist->hash = hist->module->hash;
 
     // Register the freshly-read history item now (its hash is final), so the
@@ -2419,12 +2449,12 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
   if(write_history)
   {
     dt_pthread_rwlock_rdlock(&dev->history_mutex);
@@ -2468,12 +2498,12 @@ void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   // Re-apply history and resync iop order from the truncated stack.
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_begin();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_begin();
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-  if(darktable.gui && dev->gui_attached) dt_gui_freeze_end();
+  if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, imgid);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -2570,7 +2600,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
     {
       deleted_module_found = 1;
 
-      if(darktable.develop->gui_module == mod) dt_iop_request_focus(NULL);
+      if(dev->gui_module == mod) dt_iop_request_focus(NULL);
 
       dt_gui_freeze_begin();
 
@@ -2588,7 +2618,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
       iop_list = g_list_delete_link(iop_list, modules);
 
       // remove the module reference from all snapshots
-      dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, mod, &_history_invalidate_cb);
+      dt_undo_iterate_internal(dt_undo_get_global(), DT_UNDO_HISTORY, mod, &_history_invalidate_cb);
 
       // don't delete the module, a pipe may still need it
       dev->alliop = g_list_append(dev->alliop, mod);
@@ -2726,7 +2756,7 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
 
         // and do that also in the undo/redo lists
         struct _cb_data udata = { module, hitem->multi_priority };
-        dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, &udata, &_undo_items_cb);
+        dt_undo_iterate_internal(dt_undo_get_global(), DT_UNDO_HISTORY, &udata, &_undo_items_cb);
         done = TRUE;
       }
 

@@ -19,10 +19,10 @@
 // Sparse-SPD PDE assembly/solve on the region grid (screened Poisson / diffusion), CPU + OpenCL. (implementation;
 // see pde.h for the public API.)
 
-#include "common/darktable.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
-#include "iop/highlights/blur.h"
 #include "iop/highlights/pde.h"
 #include <math.h>
 #include <stdlib.h>
@@ -83,7 +83,7 @@ static inline void _apply_op(const float *const restrict field, float *const res
   }
 }
 
-#include "common/solvers/sparse_cholesky.h"
+#include "math/sparse_cholesky.h"
 
 // ---- operator rows for the sparse assembly --------------------------------------------------
 // row of the 9-point isotropic Laplacian at (y, x), replicate-clamped like _lap5; duplicates
@@ -316,7 +316,7 @@ _sp_chol_t *_sp_pde_factor(const uint8_t *const restrict hole, const float *cons
                        &matrix_values, &perm_grid, &n_unknowns, pipe))
     return NULL;
 
-  _sp_chol_t *factor = _sp_chol_factor(n_unknowns, matrix_col_ptr, matrix_row_index, matrix_values, pipe);
+  _sp_chol_t *factor = _sp_chol_factor(n_unknowns, matrix_col_ptr, matrix_row_index, matrix_values, pipe->type);
   dt_pixelpipe_cache_free_align(matrix_col_ptr);
   dt_pixelpipe_cache_free_align(matrix_row_index);
   dt_pixelpipe_cache_free_align(matrix_values);
@@ -456,7 +456,6 @@ void _region_pde_solve(float *const restrict field, const uint8_t *const restric
 
 // ============================ OpenCL ============================
 
-#include "common/solvers/sparse_cholesky_cl.h"
 #ifdef HAVE_OPENCL
 #endif // HAVE_OPENCL
 

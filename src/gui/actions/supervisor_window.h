@@ -16,10 +16,12 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_ACTIONS_SUPERVISOR_WINDOW_H
+#define DT_GUI_ACTIONS_SUPERVISOR_WINDOW_H
 
 // Show (or raise) the event supervisor window: a browsable view of the
 // in-memory supervisor event log. Toggling "Record" captures live events; rows
 // expand to show per-event detail, and every hash is a clickable link that
 // jumps to the declaration of the linked object. See develop/supervisor.h.
 void dt_gui_supervisor_window_show(void);
+#endif // DT_GUI_ACTIONS_SUPERVISOR_WINDOW_H

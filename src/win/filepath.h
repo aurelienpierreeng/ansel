@@ -23,11 +23,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_WIN_FILEPATH_H
+#define DT_WIN_FILEPATH_H
 
 
 GList* win_image_find_duplicates(const char *filename);
 
+#endif // DT_WIN_FILEPATH_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

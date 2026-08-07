@@ -16,10 +16,16 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/act_on.h"
+#include "common/colorspaces.h"   // dt_colorspaces_get_global(), and lcms2 for cmsHTRANSFORM
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
 #include "gui/gdkkeys.h"
 #include "common/datetime.h"
-#include "common/debug.h"
+#include "common/file_location.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/variables.h"
@@ -590,13 +596,14 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   if(IS_NULL_PTR(pixbuf)) return;
 
   cmsHTRANSFORM transform = NULL;
-  pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
-  if(darktable.color_profiles->transform_srgb_to_display)
-    transform = darktable.color_profiles->transform_srgb_to_display;
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+  pthread_rwlock_rdlock(&profiles->xprofile_lock);
+  if(dt_colorspaces_get_global()->transform_srgb_to_display)
+    transform = dt_colorspaces_get_global()->transform_srgb_to_display;
 
   if(IS_NULL_PTR(transform))
   {
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
@@ -606,14 +613,14 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   const int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
   if(width <= 0 || height <= 0 || n_channels < 3)
   {
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
   guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
   if(IS_NULL_PTR(pixels))
   {
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
@@ -638,7 +645,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
       _free_row_buffers(rows_in[i], rows_out[i]);
     dt_free(rows_in);
     dt_free(rows_out);
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
 
@@ -665,7 +672,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   guchar *row_out = NULL;
   if(!_alloc_row_buffers(width, &row_in, &row_out))
   {
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
     return;
   }
   for(int y = 0; y < height; y++)
@@ -676,7 +683,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   _free_row_buffers(row_in, row_out);
 #endif
 
-  pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+  pthread_rwlock_unlock(&profiles->xprofile_lock);
 }
 
 static void _toggle_mode(GtkToggleButton *button, dt_lib_module_t *self);
@@ -688,8 +695,8 @@ static void _open_uri(const char *uri)
   if(IS_NULL_PTR(uri) || !*uri) return;
 
   GtkWindow *win = NULL;
-  if(darktable.gui && darktable.gui->ui)
-    win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  if(dt_gui_get_global() && dt_gui_get_ui())
+    win = GTK_WINDOW(dt_gui_main_window());
 
   GError *error = NULL;
   const gboolean ok = gtk_show_uri_on_window(win, uri, GDK_CURRENT_TIME, &error);
@@ -1082,7 +1089,7 @@ static void _queue_remote_download(dt_lib_module_t *self, dt_lib_textnotes_t *d,
     d->download_inflight = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(g_hash_table_contains(d->download_inflight, url)) return;
 
-  gchar *cache_dir = g_build_filename(darktable.cachedir, "downloads", NULL);
+  gchar *cache_dir = g_build_filename(dt_loc_cachedir(), "downloads", NULL);
   g_mkdir_with_parents(cache_dir, 0700);
   dt_free(cache_dir);
 
@@ -1849,23 +1856,23 @@ static void _ensure_has_txt_flag(const int32_t imgid)
 {
   if(imgid <= 0) return;
 
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
   if(IS_NULL_PTR(img)) return;
 
   if(!(img->flags & DT_IMAGE_HAS_TXT))
     img->flags |= DT_IMAGE_HAS_TXT;
 
-  dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_SAFE);
 }
 
 static gboolean _image_has_txt_flag(const int32_t imgid)
 {
   if(imgid <= 0) return FALSE;
 
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
   const gboolean has_txt = (img->flags & DT_IMAGE_HAS_TXT);
-  dt_image_cache_read_release(darktable.image_cache, img);
+  dt_image_cache_read_release(dt_image_cache_get_global(), img);
   return has_txt;
 }
 
@@ -2128,7 +2135,7 @@ static void _load_for_image(dt_lib_module_t *self, const int32_t imgid)
   params->path = g_strdup(d->path);
   dt_control_job_set_params(job, params, _textnotes_load_job_cleanup);
   dt_control_job_set_state_callback(job, _textnotes_load_job_state);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
 }
 
 static void _image_changed_callback(gpointer instance, gpointer user_data)
@@ -2246,11 +2253,11 @@ void gui_init(dt_lib_module_t *self)
   gtk_stack_set_visible_child_name(GTK_STACK(d->stack), "preview");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->mode_toggle), TRUE);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
                                   G_CALLBACK(_image_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_INITIALIZE,
                                   G_CALLBACK(_image_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                                   G_CALLBACK(_mouse_over_image_callback), self);
 
   gtk_widget_show_all(self->widget);
@@ -2264,8 +2271,8 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_image_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_mouse_over_image_callback), self);
 
   if(d->save_timeout_id)
   {

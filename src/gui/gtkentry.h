@@ -23,7 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_GTKENTRY_H
+#define DT_GUI_GTKENTRY_H
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -49,6 +50,8 @@ const dt_gtkentry_completion_spec *dt_gtkentry_get_default_path_compl_list();
 
 gchar *dt_gtkentry_build_completion_tooltip_text(const gchar *header,
                                                  const dt_gtkentry_completion_spec *compl_list);
+
+#endif // DT_GUI_GTKENTRY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

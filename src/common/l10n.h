@@ -20,7 +20,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_COMMON_L10N_H
+#define DT_COMMON_L10N_H
 
 #include <glib.h>
 
@@ -41,9 +42,16 @@ typedef struct dt_l10n_t
 dt_l10n_t *dt_l10n_init(gboolean init_list);
 void dt_l10n_disable_setlocale_early(void);
 
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
+struct dt_l10n_t *dt_l10n_get_global(void);
+
 const char *dt_l10n_get_current_lang(dt_l10n_t *l10n);
 
 const char *dt_l10n_get_name(const dt_l10n_language_t *language);
+
+#endif // DT_COMMON_L10N_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

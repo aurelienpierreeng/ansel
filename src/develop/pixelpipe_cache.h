@@ -26,14 +26,23 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_PIXELPIPE_CACHE_H
+#define DT_DEVELOP_PIXELPIPE_CACHE_H
 
-#include "common/memory_arena.h"
-#include "common/atomic.h"
-#include "develop/format.h"
+#include "system/memory_arena.h"
+#include "system/atomic.h"
+#include "pixel/format.h"
 #include <inttypes.h>
 #include <glib.h>
 #include <stddef.h>
+
+/* Consumed by C++ translation units (iop/lens.cc, iop/bilateral.cc, ...) through
+ * develop/pixelpipe_cache_alloc.h. Without this guard those TUs mangle the declarations
+ * as C++ and fail to link against the C definitions -- invisible on ELF, which permits
+ * undefined symbols in shared objects, but fatal on Mach-O. */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct dt_dev_pixelpipe_t;
 struct dt_iop_module_t;
@@ -62,6 +71,14 @@ typedef struct dt_dev_pixelpipe_cache_t
   uint64_t hits;
   size_t max_memory;
   size_t current_memory;
+  // System memory-pressure probe cache, guarded by `lock` (see the pressure valve
+  // in pixelpipe_cache.c): last probed system-wide available RAM, decremented by
+  // our own allocations between two rate-limited probes. The estimate legitimately
+  // reaches 0 under pressure, so whether the platform answers at all is a separate
+  // flag rather than an `est == 0` sentinel.
+  gint64 sys_probe_time_us;
+  size_t sys_available_est;
+  gboolean sys_probe_valid;
   dt_pthread_mutex_t lock; // mutex to protect the cache entries
   dt_cache_arena_t arena;
 } dt_dev_pixelpipe_cache_t;
@@ -78,6 +95,11 @@ typedef enum dt_dev_pixelpipe_cache_writable_status_t
   \param[out] returns 0 if fail to allocate mem cache.
 */
 dt_dev_pixelpipe_cache_t *dt_dev_pixelpipe_cache_init(size_t max_memory);
+
+/** The application-wide pixelpipe cache singleton. DECLARED here because it is this
+ * module's object; BOUND by the orchestrator (darktable.c), so this header
+ * never needs to see the application struct. */
+dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void);
 void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);
 
 // One pipeline-cache entry, for the GUI memory view.
@@ -94,6 +116,11 @@ typedef struct dt_pixel_cache_stats_entry_t
 
 // Current/max bytes used by the pipeline cache (host RAM).
 void dt_dev_pixelpipe_cache_get_usage(dt_dev_pixelpipe_cache_t *cache, size_t *current, size_t *max);
+
+/* Largest contiguous free run in the arena (bytes): the real upper bound on
+ * what an allocation — and, transitively, a tiled module's working set — can
+ * get, as opposed to the byte headroom max - current. */
+size_t dt_pixelpipe_cache_get_largest_free_run(dt_dev_pixelpipe_cache_t *cache);
 
 // Total device memory across enabled OpenCL devices (0 if OpenCL is off/absent),
 // for the vRAM usage bar's denominator.
@@ -570,6 +597,8 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
  */
 void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void **mem, const char *message);
 
+
+
 /**
  * @brief Non-owning lookup of an existing cache line.
  *
@@ -626,7 +655,7 @@ int dt_dev_pixelpipe_cache_invalidate_hashes(dt_dev_pixelpipe_cache_t *cache,
  *
  * @param devid Device to flush, or a negative value for a no-op (e.g. a pipe that
  *              never used OpenCL). The caller must already hold
- *              `darktable.opencl->dev[devid].lock` -- this is the case for the
+ *              `dt_opencl_get_global()->dev[devid].lock` -- this is the case for the
  *              pixelpipe currently running on that device. Callers that don't hold
  *              it (e.g. cleaning up a pipe after it finished) must use
  *              dt_dev_pixelpipe_cache_flush_clmem_for_pipe() instead.
@@ -635,7 +664,7 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
 
 /**
  * @brief Like dt_dev_pixelpipe_cache_flush_clmem(), for callers that do not hold
- * `darktable.opencl->dev[devid].lock` (e.g. a pipe's own cleanup after
+ * `dt_opencl_get_global()->dev[devid].lock` (e.g. a pipe's own cleanup after
  * dt_dev_pixelpipe_process() already released it). Takes the lock itself, then
  * delegates. No-op if devid < 0 or OpenCL isn't available.
  */
@@ -751,6 +780,12 @@ void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const ui
  */
 int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t old_hash,
                                  const uint64_t new_hash, struct dt_pixel_cache_entry_t *entry);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // DT_DEVELOP_PIXELPIPE_CACHE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

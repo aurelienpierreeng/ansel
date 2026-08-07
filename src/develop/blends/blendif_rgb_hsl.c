@@ -22,12 +22,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/imagebuf.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
-#include "develop/openmp_maths.h"
+#include "math/openmp_maths.h"
 #include <math.h>
 
 #define DT_BLENDIF_RGB_CH 4

@@ -24,13 +24,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_PRINTING_H
+#define DT_COMMON_PRINTING_H
 
 #include <glib.h>
 #include <inttypes.h>
-#include "common/pdf.h"
 #include "common/cups_print.h"
-#include "common/image.h"
 
 
 #define MAX_IMAGE_PER_PAGE 20
@@ -109,6 +108,8 @@ void dt_printing_get_screen_pos(const dt_images_box *imgs, const dt_image_box *i
 void dt_printing_get_screen_rel_pos(const dt_images_box *imgs, const dt_image_box *img, dt_image_pos *pos);
 void dt_printing_get_image_pos_mm(const dt_images_box *imgs, const dt_image_box *img, dt_image_pos *pos);
 void dt_printing_get_image_pos(const dt_images_box *imgs, const dt_image_box *img, dt_image_pos *pos);
+
+#endif // DT_COMMON_PRINTING_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

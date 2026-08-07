@@ -41,10 +41,9 @@
 #endif
 
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/iop_profile.h"
-#include "common/debug.h"
-#include "common/matrices.h"
+#include "math/matrices.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe.h"
@@ -54,6 +53,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "system/target_clones.h"
+#include "common/times.h"
 
 static inline __attribute__((always_inline)) void _mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *const profile_info)
 {
@@ -81,8 +82,9 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   cmsHPROFILE *rgb_profile = NULL;
   cmsHPROFILE *lab_profile = NULL;
 
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
 
   if(type != DT_COLORSPACE_NONE)
   {
@@ -135,7 +137,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
   if(xform)
   {
@@ -157,8 +159,9 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
   cmsHPROFILE *from_rgb_profile = NULL;
   cmsHPROFILE *to_rgb_profile = NULL;
 
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
   if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
 
   if(type_from != DT_COLORSPACE_NONE)
   {
@@ -219,7 +222,7 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
     xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
   if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
   if(xform)
   {
@@ -627,15 +630,16 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
   g_strlcpy(profile_info->filename, filename, sizeof(profile_info->filename));
   profile_info->intent = intent;
 
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
 
   const dt_colorspaces_color_profile_t *profile
       = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
   if(profile) rgb_profile = profile->profile;
 
   if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
   // we only allow rgb profiles
   if(rgb_profile)
@@ -912,7 +916,7 @@ void dt_ioppr_get_work_profile_type(struct dt_develop_t *dev,
   // use introspection to get the params values
   dt_iop_module_so_t *colorin_so = NULL;
   dt_iop_module_t *colorin = NULL;
-  for(const GList *modules = darktable.iop; modules; modules = g_list_next(modules))
+  for(const GList *modules = dt_iop_get_modules_so(); modules; modules = g_list_next(modules))
   {
     dt_iop_module_so_t *module_so = (dt_iop_module_so_t *)(modules->data);
     if(!strcmp(module_so->op, "colorin"))
@@ -959,7 +963,7 @@ void dt_ioppr_get_export_profile_type(struct dt_develop_t *dev,
   // use introspection to get the params values
   dt_iop_module_so_t *colorout_so = NULL;
   dt_iop_module_t *colorout = NULL;
-  for(const GList *modules = g_list_last(darktable.iop); modules; modules = g_list_previous(modules))
+  for(const GList *modules = g_list_last(dt_iop_get_modules_so()); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_so_t *module_so = (dt_iop_module_so_t *)(modules->data);
     if(!strcmp(module_so->op, "colorout"))
@@ -1023,14 +1027,14 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
   }
 
   dt_times_t start_time = { 0 }, end_time = { 0 };
-  if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
   // matrix should be never NAN, this is only to test it against lcms2!
   if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
   {
     _transform_matrix(self, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f CPU) [%s %s]\n",
@@ -1043,7 +1047,7 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
   {
     _transform_lcms2(self, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f lcms2) [%s %s]\n",
@@ -1078,14 +1082,14 @@ void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_i
   }
 
   dt_times_t start_time = { 0 }, end_time = { 0 };
-  if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
   if(!isnan(profile_info_from->matrix_in[0][0]) && !isnan(profile_info_from->matrix_out[0][0])
      && !isnan(profile_info_to->matrix_in[0][0]) && !isnan(profile_info_to->matrix_out[0][0]))
   {
     _transform_matrix_rgb(image_in, image_out, width, height, profile_info_from, profile_info_to);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform RGB-->RGB took %.3f secs (%.3f CPU) [%s]\n",
@@ -1096,7 +1100,7 @@ void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_i
   {
     _transform_lcms2_rgb(image_in, image_out, width, height, profile_info_from, profile_info_to);
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform RGB-->RGB took %.3f secs (%.3f lcms2) [%s]\n",
@@ -1291,15 +1295,15 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
   {
     dt_times_t start_time = { 0 }, end_time = { 0 };
-    if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
     if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
     {
-      kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_lab;
+      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_lab;
     }
     else if(cst_from == IOP_CS_LAB && dt_iop_colorspace_is_rgb(cst_to))
     {
-      kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_lab_to_rgb_matrix;
+      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_lab_to_rgb_matrix;
     }
     else
     {
@@ -1344,7 +1348,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
 
     *converted_cst = cst_to;
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f GPU) [%s %s]\n",
@@ -1449,12 +1453,12 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
      && !isnan(profile_info_to->matrix_in[0][0]) && !isnan(profile_info_to->matrix_out[0][0]))
   {
     dt_times_t start_time = { 0 }, end_time = { 0 };
-    if(darktable.unmuted & DT_DEBUG_PERF) dt_get_times(&start_time);
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
     size_t origin[] = { 0, 0, 0 };
     size_t region[] = { width, height, 1 };
 
-    kernel_transform = darktable.opencl->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_rgb;
+    kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_rgb;
 
     dt_ioppr_get_profile_info_cl(profile_info_from, &profile_info_from_cl);
     lut_from_cl = dt_ioppr_get_trc_cl(profile_info_from);
@@ -1556,7 +1560,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
       goto cleanup;
     }
 
-    if(darktable.unmuted & DT_DEBUG_PERF)
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
     {
       dt_get_times(&end_time);
       fprintf(stderr, "image colorspace transform RGB-->RGB took %.3f secs (%.3f GPU) [%s]\n",

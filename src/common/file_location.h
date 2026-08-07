@@ -30,7 +30,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_FILE_LOCATION_H
+#define DT_COMMON_FILE_LOCATION_H
 
 #include <gtk/gtk.h>
 #include <string.h>
@@ -63,6 +64,18 @@ void dt_loc_init_kerneldir(const char *application_directory, const char *kernel
 
 /** init specific dir. Value is appended if application_directory is not NULL (relative path resolution). */
 gchar *dt_loc_init_generic(const char *absolute_value, const char *application_directory, const char *default_value);
+
+/** interned read-only getters for the app-lifetime path constants.
+ * Written once at startup by the dt_loc_init_*() family, never mutated afterwards:
+ * the returned pointer is valid for the whole application lifetime. Do not free. */
+const char *dt_loc_datadir(void);
+const char *dt_loc_sharedir(void);
+const char *dt_loc_moduledir(void);
+const char *dt_loc_localedir(void);
+const char *dt_loc_tmpdir(void);
+const char *dt_loc_configdir(void);
+const char *dt_loc_cachedir(void);
+const char *dt_loc_kerneldir(void);
 /** check if directory open worked. Exit with error message in case it does not.*/
 void dt_check_opendir(const char* text, const char* directory);
 
@@ -80,6 +93,8 @@ void dt_loc_get_user_cache_dir(char *cachedir, size_t bufsize);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_FILE_LOCATION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

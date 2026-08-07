@@ -24,12 +24,15 @@
  */
 
 #include "iop/drawlayer/paint.h"
+#include "system/simd.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/brush_profile.h"
 
-#include "common/darktable.h"
-#include "common/math.h"
-#include "develop/noise_generator.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/times.h"
+#include "math/math.h"
 
 #include <math.h>
 #include <string.h>
@@ -764,7 +767,7 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
   if(rasterized && !IS_NULL_PTR(runtime_state) && !IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     dt_drawlayer_paint_runtime_note_dab_damage(runtime_state, &runtime_private->bounds);
 
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
   {
     if(!IS_NULL_PTR(runtime_private) && runtime_private->bounds.valid)
     {

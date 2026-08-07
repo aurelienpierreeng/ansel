@@ -581,3 +581,77 @@ the source.
   `dt_dev_pixelpipe_cache_get_writable()` has a single call site today (`pixelpipe_hb.c`), so this
   is not yet a reusable pattern — a second caller needing the same policy-aware-hit behavior should
   factor it into the cache layer instead of duplicating it.
+
+## 10. System memory pressure handling (issue #1083)
+
+The startup budgets (`dt_configure_runtime_performance()`: headroom / mipmap / pixelpipe split of
+the detected RAM, or of `host_memory_limit`) are only *plans*. They say nothing about what the
+system can actually back at any given moment, with other applications competing for the same
+physical pages. Historically three compounding problems turned that gap into OOM kills that users
+see as "Ansel crashed without message": the budgets were trusted blindly (a `host_memory_limit`
+above physical RAM was even honored as-is), freed arena runs never returned their physical pages
+to the OS (RSS was a permanent high-water mark), and nothing at runtime ever looked at the
+system-wide available memory.
+
+The defense has four layers, from planning to last resort:
+
+1. **Envelope-aware startup budgets** (`darktable.c`). The detected total RAM is clamped
+   by the physical RAM (so a misconfigured `host_memory_limit` can only shrink, never grow it) and
+   by the tightest cgroup-v2 `memory.max` on our own path (containers, Flatpak, systemd slices —
+   the kernel OOM-enforces that envelope no matter how much RAM the machine has). A **pressure
+   floor** is derived (conf key `memory_pressure_floor`, `0 = auto` = half the OS headroom,
+   bounded to the envelope): the system-wide available RAM under which we start shedding caches.
+
+2. **Lazy page release on every arena free** (`common/memory_arena.c`). `dt_cache_arena_free()`
+   marks the freed run `MADV_FREE`: the pages stay mapped and re-dirtying them before reclaim
+   costs nothing (the per-frame temp-buffer churn is unaffected), but the kernel may take them
+   back *at will* under pressure. Measured on a 24 Mpx export: ~44 % of the process RSS is
+   LazyFree at steady state — memory the kernel can have instantly, which starves the OOM killer
+   of a reason to pick us. `dt_cache_arena_trim()` is the hard variant (`MADV_DONTNEED` /
+   `VirtualFree(MEM_DECOMMIT)`) that hands all free runs back NOW; the 3-minute GC and the idle
+   shedder below call it so an idle Ansel doesn't sit on its high-water mark.
+
+3. **Allocation-time pressure valve** (`_system_memory_pressure_valve()`,
+   `develop/pixelpipe_cache.c`). Every arena allocation funnels through
+   `_arena_alloc_with_defrag()`, which first checks a rate-limited probe of the system-wide
+   available RAM (`dt_get_system_available_mem()`: MemAvailable on Linux — min'd with the cgroup
+   slack including its reclaimable `inactive_file`, where our own MADV_FREE'd pages land —
+   `ullAvailPhys` on Windows, free+inactive on macOS; `0` means "no information", which disables
+   the valve, not the allocation). If the allocation would push available RAM under the floor,
+   LRU entries are evicted until the deficit is covered, the arena is hard-trimmed, and the probe
+   is then **re-read from the OS** rather than credited with the bytes we think we released: how
+   much of an eviction actually reaches the system is not ours to guess (the per-free `MADV_FREE`
+   is a no-op on Windows, and elsewhere the kernel decides when those pages stop counting against
+   us), and an over-credit would wave the allocation through on a system that is still just as
+   full. If even shedding everything cannot keep
+   HALF the floor, the allocation is refused: the pipeline fails with a clear message, which
+   beats a silent SIGKILL. A 5-second GUI timer (`_memory_pressure_shedder()`) covers the case
+   where *another* application creates the pressure while we sit idle and never allocate.
+
+   Two traps live in this valve. The probe costs ~61 µs (16 µs `/proc/meminfo` + 45 µs walking
+   the cgroup tree) — enough that the tiling planners alone would spend ~1.8 ms of a 16 ms
+   realtime frame on it — so `dt_get_system_available_mem()` caches its answer for 50 ms, and any
+   caller that just changed the situation itself must call `dt_invalidate_system_available_mem()`
+   first or it reads back its own pre-change snapshot. And the valve's running estimate (last
+   probe, minus our own allocations since) legitimately reaches 0 under sustained pressure, so
+   "does this platform answer at all" is a separate `sys_probe_valid` flag: deriving it from an
+   `est == 0` sentinel would silently disable the valve at exactly the moment it matters most.
+
+4. **Pressure-aware tiling** (`dt_get_available_mem()`, `darktable.c`). The planning value
+   tiled modules size their working set from is capped by the live system availability (plus half
+   our own cache, which is LRU-evictable on demand — our own hoard must never force tiling), so
+   under pressure modules split into smaller tiles instead of planning allocations the valve
+   would refuse mid-pipe.
+
+Verified by running the same export with and without these layers inside
+`systemd-run --user --scope -p MemoryMax=1536M -p MemorySwapMax=0`: before, SIGKILL by the
+kernel OOM killer mid-export (journal: `Failed with result 'oom-kill'`), no output, no message;
+after, the envelope is detected at startup, budgets and floor scale to it, the cache sheds under
+pressure and the export completes — bit-identical pixels to the unconstrained run — down to a
+1280 MB envelope for a 24 Mpx image. Below that (1 GB) the *live working set* of a single
+pipeline pass (2–3 full-resolution float buffers that must coexist) simply doesn't fit, and no
+amount of eviction can compress it: that residual floor can only move with more aggressive
+tiling of the always-untiled modules, not with cache policy.
+
+Testing lever: the cgroup probe honors whatever limit `systemd-run -p MemoryMax=` sets, so
+pressure behavior is reproducible without actually starving the machine.

@@ -16,15 +16,14 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
 #include "develop/masks.h"
-#include "bauhaus/bauhaus.h"
-#include "common/debug.h"
-#include "control/conf.h"
+#include "gui/bauhaus.h"
+#include "common/conf.h"
 #include "control/signal.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/button.h"
-#include "dtgtk/paint.h"
+#include "gui/dtgtk/paint.h"
 #include "gui/actions/menu.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -86,7 +85,7 @@ static void _masks_shape_buttons_deactivate_signal(gpointer instance, GtkWidget 
 
 void dt_masks_shape_buttons_deactivate_all(GtkWidget *active_button)
 {
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE, active_button);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE, active_button);
 }
 
 static int _masks_shape_button_index(const dt_masks_shape_buttons_data_t *data, GtkWidget *button)
@@ -100,11 +99,12 @@ static int _masks_shape_button_index(const dt_masks_shape_buttons_data_t *data, 
   return -1;
 }
 
-static gboolean _masks_shape_button_is_current_creation(const dt_masks_shape_buttons_data_t *data,
+static gboolean _masks_shape_button_is_current_creation(dt_develop_t *dev,
+                                                        const dt_masks_shape_buttons_data_t *data,
                                                         const int button_index)
 {
-  dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
-  dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+  dt_masks_form_gui_t *mask_gui = dev->form_gui;
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(dev);
 
   return !IS_NULL_PTR(mask_gui) && mask_gui->creation
          && mask_gui->creation_module == data->config.creation_module
@@ -123,9 +123,11 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
 
   dt_masks_type_t type = data->types[button_index];
   dt_iop_module_t *module = data->config.creation_module;
-  dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
+  dt_develop_t *dev = !IS_NULL_PTR(module) ? module->dev : data->config.dev;
+  if(IS_NULL_PTR(dev)) return FALSE;
+  dt_masks_form_gui_t *mask_gui = dev->form_gui;
 
-  if(_masks_shape_button_is_current_creation(data, button_index))
+  if(_masks_shape_button_is_current_creation(dev, data, button_index))
   {
     dt_masks_shape_buttons_deactivate_all(NULL);
     dt_masks_form_exit_creation(module, mask_gui);
@@ -146,13 +148,13 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
   dt_masks_shape_buttons_deactivate_all(button);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
 
-  if(dt_masks_creation_mode_enter(module, type))
+  if(dt_masks_creation_mode_enter(dev, module, type))
   {
     if(data->config.started)
     {
       data->config.started(button, module, type, data->config.user_data);
       // Force focus back to the drawing area after creation mode enabling
-      gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+      gtk_widget_grab_focus(dt_gui_center_widget());
     }
   }
   else
@@ -166,7 +168,7 @@ static gboolean _masks_shape_button_pressed(GtkWidget *button, GdkEventButton *e
 
 static void _masks_shape_buttons_destroy(GtkWidget *widget, dt_masks_shape_buttons_data_t *data)
 {
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
   dt_free(data);
 }
 
@@ -234,7 +236,7 @@ GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *
     if(config->types) config->types[def->index] = def->type;
   }
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MASK_SHAPE_BUTTONS_DEACTIVATE,
                                   G_CALLBACK(_masks_shape_buttons_deactivate_signal), data);
   g_signal_connect(G_OBJECT(data->box), "destroy", G_CALLBACK(_masks_shape_buttons_destroy), data);
 
@@ -261,10 +263,10 @@ typedef struct dt_masks_gui_interaction_slider_t
 // renders, yet the image updates without waiting for the context menu to be closed.
 static void _masks_gui_interaction_commit(dt_masks_gui_interaction_slider_t *data)
 {
-  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group)) return;
+  if(IS_NULL_PTR(data) || IS_NULL_PTR(data->form_group) || IS_NULL_PTR(data->gui)) return;
 
-  dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED,
+  dt_dev_add_history_item(data->gui->dev, data->module, TRUE, TRUE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED,
                                 data->form_group->formid, data->form_group->parentid,
                                 DT_MASKS_EVENT_UPDATE);
 }
@@ -396,7 +398,7 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
   gtk_widget_add_events(menu_item, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                    | GDK_POINTER_MOTION_MASK | GDK_SCROLL_MASK);
 
-  GtkWidget *slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, module ? DT_GUI_MODULE(module) : NULL,
+  GtkWidget *slider = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), module ? DT_GUI_MODULE(module) : NULL,
                                                        min, max, step, value, digits);
   dt_bauhaus_widget_set_label(slider, label);
   dt_bauhaus_slider_set_digits(slider, digits);
@@ -439,10 +441,10 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
 
 int dt_masks_gui_confirm_delete_form_dialog(const char *form_name)
 {
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return GTK_RESPONSE_NO;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return GTK_RESPONSE_NO;
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_WINDOW(dt_gui_main_window()),
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, _("Delete the shape '%s' ?"), form_name);
   gtk_message_dialog_format_secondary_text(
@@ -464,10 +466,10 @@ int dt_masks_gui_confirm_delete_form_dialog(const char *form_name)
 gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name)
 {
   if(!dt_conf_get_bool("ask_before_delete_mask_shape")) return TRUE;
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui)) return TRUE;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return TRUE;
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_WINDOW(dt_gui_main_window()),
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
       _("Permanently delete the shape '%s' ?"), form_name);
@@ -497,14 +499,14 @@ static gboolean _masks_gui_resolve_selected_shape(dt_masks_form_gui_t *gui, dt_i
                                                    dt_masks_form_t **sel, int *parentid, int *formid)
 {
   if(IS_NULL_PTR(gui) || gui->group_selected < 0) return FALSE;
-  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
+  dt_masks_form_t *forms = dt_masks_get_visible_form(gui->dev);
   if(IS_NULL_PTR(forms)) return FALSE;
 
   dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
   if(IS_NULL_PTR(fpt)) return FALSE;
-  dt_iop_module_t *mod = darktable.develop->gui_module;
+  dt_iop_module_t *mod = gui->dev->gui_module;
   if(IS_NULL_PTR(mod)) return FALSE;
-  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  dt_masks_form_t *form = dt_masks_get_from_id(gui->dev, fpt->formid);
   if(IS_NULL_PTR(form)) return FALSE;
 
   *module = mod;
@@ -542,10 +544,10 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(IS_NULL_PTR(gui)) return;
-  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
+  dt_masks_form_t *forms = dt_masks_get_visible_form(gui->dev);
   if(IS_NULL_PTR(forms)) return;
 
-  dt_iop_module_t *module = darktable.develop->gui_module;
+  dt_iop_module_t *module = gui->dev->gui_module;
   if(IS_NULL_PTR(module)) return;
 
   if(gui->creation)
@@ -556,7 +558,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
       dt_masks_form_exit_creation(module, gui);
       return;
     }
-    dt_masks_form_t *sel = dt_masks_get_visible_form(darktable.develop);
+    dt_masks_form_t *sel = dt_masks_get_visible_form(gui->dev);
     if(sel)
       dt_masks_remove_node(module, sel, 0, gui, 0, gui->node_dragging);
     gui->node_dragging -= 1;
@@ -567,18 +569,19 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
 
     dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
     if(IS_NULL_PTR(fpt)) return;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    dt_masks_form_t *sel = dt_masks_get_from_id(gui->dev, fpt->formid);
     if(sel)
       dt_masks_remove_node(module, sel, fpt->parentid, gui, gui->group_selected, gui->node_hovered);
 
-    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+    dt_dev_add_history_item(gui->dev, module, TRUE, TRUE);
   }
 }
 
 static void _masks_gui_exit_creation_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
-  dt_iop_module_t *module = darktable.develop->gui_module;
+  if(IS_NULL_PTR(gui)) return;
+  dt_iop_module_t *module = gui->dev->gui_module;
   dt_masks_form_exit_creation(module, gui);
 }
 
@@ -588,20 +591,20 @@ static void _masks_move_up_down_callback(gpointer user_data, const int up)
   if(IS_NULL_PTR(gui)) return;
   if(gui->group_selected < 0) return;
 
-  dt_iop_module_t *module = darktable.develop->gui_module;
+  dt_iop_module_t *module = gui->dev->gui_module;
   if(IS_NULL_PTR(module)) return;
 
-  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
+  dt_masks_form_t *forms = dt_masks_get_visible_form(gui->dev);
   if(IS_NULL_PTR(forms)) return;
   dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
   if(IS_NULL_PTR(fpt)) return;
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, fpt->parentid);
+  dt_masks_form_t *grp = dt_masks_get_from_id(gui->dev, fpt->parentid);
   if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return;
-  grp = dt_masks_cow_touch(darktable.develop, grp);
+  grp = dt_masks_cow_touch(gui->dev, grp);
 
   dt_masks_form_move(grp, fpt->formid, up);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, fpt->formid, fpt->parentid, DT_MASKS_EVENT_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, fpt->formid, fpt->parentid, DT_MASKS_EVENT_CHANGE);
 }
 
 static void _masks_moveup_callback(GtkWidget *menu, gpointer user_data)
@@ -635,7 +638,7 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 
   apply_operation(form_op, state_op);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_op->formid, form_op->parentid, DT_MASKS_EVENT_UPDATE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, form_op->formid, form_op->parentid, DT_MASKS_EVENT_UPDATE);
 }
 
 #define masks_gtk_menu_item_new_bold(label, selected, state, icon)                                        \
@@ -675,9 +678,9 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
   // Get the current group to apply operations on it if needed
   dt_masks_form_group_t *op_form = NULL;
-  dt_masks_form_t *grp = formgroup ? dt_masks_get_from_id(darktable.develop, formgroup->parentid) : NULL;
+  dt_masks_form_t *grp = formgroup ? dt_masks_get_from_id(gui->dev, formgroup->parentid) : NULL;
   if(grp && (grp->type & DT_MASKS_GROUP))
-    op_form = dt_masks_form_group_from_parentid(grp->formid, form->formid);
+    op_form = dt_masks_form_group_from_parentid(gui->dev, grp->formid, form->formid);
   if(IS_NULL_PTR(op_form) && !gui->creation)
   {
     for(size_t k = 0; k < G_N_ELEMENTS(op_icon); k++)
@@ -794,60 +797,60 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     // Common menu items
   if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
   {
-    const float opacity = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_OPACITY);
+    const float opacity = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_OPACITY);
 
     if(form->type & DT_MASKS_GRADIENT)
     {
       // For gradients, DT_MASKS_INTERACTION_HARDNESS is the shape curvature and
       // DT_MASKS_INTERACTION_SIZE is the fade extent -- expose them under their actual names.
-      const float curvature = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_HARDNESS);
-      const float fade = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_SIZE);
-      float rotation = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_ROTATION);
+      const float curvature = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
+      const float fade = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_SIZE);
+      float rotation = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_ROTATION);
       if(!isfinite(rotation)) rotation = 0.0f;
       if(rotation > 180.0f) rotation -= 360.0f;
 
       _masks_gui_add_interaction_slider(menu, _("Curvature"), op_form, DT_MASKS_INTERACTION_HARDNESS,
                                         DT_MASKS_INCREMENT_ABSOLUTE, -2.0f, 2.0f, 0.01f,
                                         isfinite(curvature) ? curvature : 0.0f, 3, "%", 50.0f,
-                                        gui, darktable.develop->gui_module);
+                                        gui, gui->dev->gui_module);
       _masks_gui_add_interaction_slider(menu, _("Fade"), op_form, DT_MASKS_INTERACTION_SIZE,
                                         DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.001f,
                                         isfinite(fade) ? fade : 1.0f, 3, "%", 100.0f,
-                                        gui, darktable.develop->gui_module);
+                                        gui, gui->dev->gui_module);
       _masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
                                         DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
                                         rotation, 1, "\302\260", 1.0f,
-                                        gui, darktable.develop->gui_module);
+                                        gui, gui->dev->gui_module);
     }
     else
     {
-      const float hardness = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_HARDNESS);
+      const float hardness = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
 
       _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
                                         DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
-                                        gui, darktable.develop->gui_module);
+                                        gui, gui->dev->gui_module);
       _masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
                                         DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
                                         isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
-                                        gui, darktable.develop->gui_module);
+                                        gui, gui->dev->gui_module);
 
       if(form->type & DT_MASKS_ELLIPSE)
       {
-        float rotation = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_ROTATION);
+        float rotation = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_ROTATION);
         if(!isfinite(rotation)) rotation = 0.0f;
         if(rotation > 180.0f) rotation -= 360.0f;
 
         _masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
                                           DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
                                           rotation, 1, "\302\260", 1.0f,
-                                          gui, darktable.develop->gui_module);
+                                          gui, gui->dev->gui_module);
       }
     }
 
     _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
                                       DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
                                       isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
-                                      gui, darktable.develop->gui_module);
+                                      gui, gui->dev->gui_module);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
   }
@@ -862,7 +865,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
   /* Module specific */
   {
-    dt_iop_module_t *module = darktable.develop->gui_module;
+    dt_iop_module_t *module = gui->dev->gui_module;
     if(!IS_NULL_PTR(module) && module->populate_masks_context_menu)
       if(module->populate_masks_context_menu(module, menu, form->formid, pzx, pzy))
       {

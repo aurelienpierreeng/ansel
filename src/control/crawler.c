@@ -37,13 +37,16 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "common/darktable.h"
+#include "common/logging.h"
+#include "common/history_actions.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/paths.h"
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/image.h"
-#include "control/conf.h"
-#include "control/control.h"
+#include "common/utility.h"
 #include "crawler.h"
 #include "gui/gtk.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -124,7 +127,7 @@ GList *dt_control_crawler_run(void)
   GList *result = NULL;
 
   // clang-format off
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
                      "SELECT i.id, write_timestamp, version,"
                      "       folder || '" G_DIR_SEPARATOR_S "' || filename, flags"
                      " FROM main.images i, main.film_rolls f"
@@ -132,12 +135,12 @@ GList *dt_control_crawler_run(void)
                      " ORDER BY f.id, filename",
                      -1, &stmt, NULL);
   // clang-format on
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
                      "UPDATE main.images SET flags = ?1 WHERE id = ?2", -1,
                      &inner_stmt, NULL);
 
   // let's wrap this into a transaction, it might make it a little faster.
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -254,7 +257,7 @@ GList *dt_control_crawler_run(void)
     dt_free(extra_path);
   }
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 
   sqlite3_finalize(stmt);
   sqlite3_finalize(inner_stmt);
@@ -352,7 +355,7 @@ static void _db_update_timestamp(const int id, const time_t timestamp)
   // Update DB writing timestamp with XMP file timestamp
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2
-    (dt_database_get(darktable.db),
+    (dt_database_get_sqlite3_global(),
      "UPDATE main.images"
      " SET write_timestamp = ?2"
      " WHERE id = ?1", -1, &stmt, NULL);
@@ -780,7 +783,7 @@ void dt_control_crawler_show_image_list(GList *images)
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 
   // build a dialog window that contains the list of images
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons
     (_("updated XMP sidecar files found"), GTK_WINDOW(win),
      GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("_close"),

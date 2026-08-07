@@ -16,7 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 #include "common/lut3d.h"
 
 #include <math.h>

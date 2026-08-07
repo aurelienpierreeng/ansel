@@ -252,7 +252,8 @@ hl_pde_scatter(global const double *rhs, global const int *pgrid, global float *
 kernel void
 hl_aniso_rhs(global const float *edge_weights, global const float *valid_anchor, global const float *chroma,
              global const int *pgrid, global double *rhs,
-             const int n_unknowns, const int width, const int height, const int c)
+             const int n_unknowns, const int width, const int height, const int c,
+             const float react, const float react_target)
 {
   const int unknown = get_global_id(0);
   if(unknown >= n_unknowns) return;
@@ -271,7 +272,9 @@ hl_aniso_rhs(global const float *edge_weights, global const float *valid_anchor,
     if(valid_anchor[j * 4 + 0] < 0.5f) continue;   // hole neighbour: lives in the matrix (LHS), not the RHS
     accum += (double)weight_value * (double)chroma[j * 4 + c]; // += w_k * p_k for anchor neighbours
   }
-  rhs[unknown] = accum; // b = sum_{k in anchors} w_k p_k
+  // b = sum_{k in anchors} w_k p_k, plus the screened reaction of the "inpaint a flat color"
+  // parameter: lambda_solid * target (the matching lambda_solid sits on the diagonal, host-side)
+  rhs[unknown] = accum + (double)react * (double)react_target;
 }
 
 // Scatter the solved ratio values back into channel c of the packed 4-float-per-pixel plane

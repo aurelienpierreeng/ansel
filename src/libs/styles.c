@@ -42,15 +42,22 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/act_on.h"
+#include "common/history_actions.h"
 #include "common/collection.h"
 #include "common/history.h"
 #include "common/styles.h"
-#include "common/darktable.h"
-#include "control/conf.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/glib_utils.h"
+#include "common/module_versioning.h"
+#include "control/signal.h"
+#include "common/database.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "gui/styles.h"
@@ -332,7 +339,7 @@ gboolean _ask_before_delete_style(const gint style_cnt)
 
   if(dt_conf_get_bool("plugins/lighttable/style/ask_before_delete_style"))
   {
-    const GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    const GtkWidget *win = dt_gui_main_window();
     GtkWidget *dialog = gtk_message_dialog_new
       (GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
        ngettext("do you really want to remove %d style?", "do you really want to remove %d styles?", style_cnt),
@@ -372,7 +379,7 @@ static void delete_clicked(GtkWidget *w, gpointer user_data)
 
   if(can_delete)
   {
-    dt_database_start_transaction(darktable.db);
+    dt_database_start_transaction(dt_database_get_global());
 
     for (const GList *style = style_names; style; style = g_list_next(style))
     {
@@ -382,9 +389,9 @@ static void delete_clicked(GtkWidget *w, gpointer user_data)
     if(!single_raise) {
       // raise signal at the end of processing all styles if we have more than 1 to delete
       // this also calls _gui_styles_update_view
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
     }
-    dt_database_release_transaction(darktable.db);
+    dt_database_release_transaction(dt_database_get_global());
   }
   g_list_free_full(style_names, dt_free_gpointer);
   style_names = NULL;
@@ -410,7 +417,7 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
   gint overwrite_check_button = 0;
   gint overwrite = 0;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_save"), _("_cancel"));
@@ -546,7 +553,7 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
   gint overwrite_check_button = 0;
   gint overwrite = 0;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select style"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_open"), _("_cancel"));
@@ -898,13 +905,13 @@ void gui_init(dt_lib_module_t *self)
   /* update filtered list */
   _gui_styles_update_view(d);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_STYLE_CHANGED, G_CALLBACK(_styles_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED, G_CALLBACK(_styles_changed_callback), self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_image_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_mouse_over_image_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_collection_updated_callback), self);
 
   _update(self);
@@ -915,23 +922,23 @@ void gui_cleanup(dt_lib_module_t *self)
   if(IS_NULL_PTR(self->data)) return;
   dt_lib_cancel_postponed_update(self);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_styles_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_styles_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_image_selection_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_mouse_over_image_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
 
   dt_free(self->data);
 }
 
 void gui_reset(dt_lib_module_t *self)
 {
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   GList *all_styles = dt_styles_get_list("");
 
   if(IS_NULL_PTR(all_styles))
   {
-    dt_database_release_transaction(darktable.db);
+    dt_database_release_transaction(dt_database_get_global());
     return;
   }
 
@@ -945,11 +952,11 @@ void gui_reset(dt_lib_module_t *self)
       dt_style_t *style = (dt_style_t *)result->data;
       dt_styles_delete_by_name_adv((char*)style->name, FALSE);
     }
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
   }
   g_list_free_full(all_styles, dt_style_free);
   all_styles = NULL;
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
   _update(self);
 }
 

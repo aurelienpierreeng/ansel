@@ -30,7 +30,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_LIBS_COLLECT_H
+#define DT_LIBS_COLLECT_H
 
 typedef enum dt_lib_collect_mode_t
 {
@@ -38,6 +39,8 @@ typedef enum dt_lib_collect_mode_t
   DT_LIB_COLLECT_MODE_OR,
   DT_LIB_COLLECT_MODE_AND_NOT
 } dt_lib_collect_mode_t;
+
+#endif // DT_LIBS_COLLECT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

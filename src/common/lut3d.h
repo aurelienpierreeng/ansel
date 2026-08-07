@@ -16,7 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_LUT3D_H
+#define DT_COMMON_LUT3D_H
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -50,3 +51,4 @@ void dt_lut3d_trilinear_interp(const float *in, float *out, size_t pixel_nb, con
                                uint16_t level, float normalization);
 void dt_lut3d_pyramid_interp(const float *in, float *out, size_t pixel_nb, const float *clut,
                              uint16_t level, float normalization);
+#endif // DT_COMMON_LUT3D_H

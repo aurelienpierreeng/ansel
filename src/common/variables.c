@@ -48,11 +48,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/debug.h"
-#include "common/darktable.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/variables.h"
 #include "common/colorlabels.h"
-#include "common/darktable.h"
 #include "common/file_location.h"
 #include "common/image.h"
 #include "common/image_cache.h"
@@ -61,7 +59,7 @@
 #include "common/utility.h"
 #include "common/tags.h"
 #include "common/datetime.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/exif.h"
 
 #include <stdio.h>
@@ -210,13 +208,13 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   }
   else if(params->imgid > UNKNOWN_IMAGE)
   {
-    img = dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
+    img = dt_image_cache_get(dt_image_cache_get_global(), params->imgid, 'r');
     release = IMGID;
   }
 
   if(img)
   {
-    params->data->datetime = dt_datetime_img_to_gdatetime(img, darktable.utc_tz);
+    params->data->datetime = dt_datetime_img_to_gdatetime(img, dt_datetime_utc_tz());
     if(params->data->datetime)
       params->data->have_exif_dt = TRUE;
     params->data->exif_iso = img->exif_iso;
@@ -262,7 +260,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
     }
     case IMGID:
     {
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
       break;
     }
   }
@@ -325,7 +323,7 @@ static char *_variables_get_iso_timestamp(const GTimeSpan gts)
 {
   if(gts <= 0) return NULL;
 
-  GDateTime *gdt = g_date_time_add(darktable.origin_gdt, gts);
+  GDateTime *gdt = g_date_time_add(dt_datetime_origin(), gts);
   if(IS_NULL_PTR(gdt)) return NULL;
 
   char *result = g_date_time_format(gdt, "%Y-%m-%d %H:%M:%S");
@@ -476,9 +474,9 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   {
     gchar buffer[1024];
     const dt_image_t *img = params->img ? (dt_image_t *)params->img
-                                        : dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
+                                        : dt_image_cache_get(dt_image_cache_get_global(), params->imgid, 'r');
     dt_image_print_exif(img, buffer, sizeof(buffer));
-    if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(darktable.image_cache, img);
+    if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(dt_image_cache_get_global(), img);
     result = g_strdup(buffer);
   }
   else if(_has_prefix(variable, "VERSION.NAME") || _has_prefix(variable, "VERSION_NAME"))
@@ -497,7 +495,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
 
     // count duplicates
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT COUNT(1)"
                                 " FROM images AS i1"
                                 " WHERE EXISTS (SELECT 'y' FROM images AS i2"
@@ -647,7 +645,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     for(GList *res_iter = res; res_iter; res_iter = g_list_next(res_iter))
     {
       const int dot_index = GPOINTER_TO_INT(res_iter->data);
-      const GdkRGBA c = darktable.bauhaus->colorlabels[dot_index];
+      const GdkRGBA c = dt_bauhaus_get_global()->colorlabels[dot_index];
       result = dt_util_dstrcat(result,
                                "<span foreground='#%02x%02x%02x'>\342\254\244 </span>",
                                (guint)(c.red*255), (guint)(c.green*255), (guint)(c.blue*255));

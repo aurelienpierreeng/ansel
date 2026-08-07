@@ -27,9 +27,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_METADATA_H
+#define DT_COMMON_METADATA_H
 
-#include "common/darktable.h"
 #include "gui/gtk.h"
 
 #ifdef __cplusplus
@@ -148,6 +148,8 @@ void dt_metadata_cleanup(void);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_METADATA_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

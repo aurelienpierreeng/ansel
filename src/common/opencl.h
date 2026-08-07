@@ -35,7 +35,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_OPENCL_H
+#define DT_COMMON_OPENCL_H
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -57,14 +58,15 @@
 #define DT_OPENCL_DEFAULT_ERROR -999
 #define DT_OPENCL_SYSMEM_ALLOCATION -998
 
-#include "common/darktable.h"
+#include "common/logging.h"
+
+#include <stdint.h>
 
 #ifdef HAVE_OPENCL
 
 #include "common/dlopencl.h"
-#include "common/dtpthread.h"
 #include "common/iop_profile.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 // #pragma GCC diagnostic push
 // #pragma GCC diagnostic ignored "-Wcomment"
@@ -250,7 +252,7 @@ struct dt_colorspaces_cl_global_t; // colorspaces transform
 struct dt_guided_filter_cl_global_t;
 
 /**
- * main struct, stored in darktable.opencl.
+ * main struct, stored in dt_opencl_get_global().
  * holds pointers to all
  */
 typedef struct dt_opencl_t
@@ -391,6 +393,7 @@ int dt_opencl_enqueue_kernel_2d_with_local(const int dev, const int kernel, cons
 
 /** check if opencl is inited */
 int dt_opencl_is_inited(void);
+
 
 /** check if opencl is enabled */
 int dt_opencl_is_enabled(void);
@@ -588,7 +591,7 @@ gboolean dt_opencl_is_pinned_memory(cl_mem mem);
 
 #else
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include <stdlib.h>
 
 #ifdef __cplusplus
@@ -778,6 +781,25 @@ static inline void dt_opencl_events_profiling(const int devid, const int aggrega
 #endif
 
 #endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Process-wide singleton with no per-call context to ride on: this accessor is the intended
+ * end state (same category as dt_conf_*), implemented by the orchestrator. Declared OUTSIDE the
+ * HAVE_OPENCL split on purpose: dt_opencl_t exists in both configurations and darktable.c
+ * defines the accessor unconditionally, so callers that merely pass the handle around keep
+ * compiling in no-OpenCL builds exactly as they did when they read the global directly.
+ * NOTE: common/opencl.c keeps direct access for now; relocating ownership into the subsystem
+ * itself (a file-static set at init) is the follow-up, not an accessor. */
+struct dt_opencl_t *dt_opencl_get_global(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // DT_COMMON_OPENCL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

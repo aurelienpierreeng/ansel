@@ -17,20 +17,25 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "common/paths.h"
+#include "common/hash.h"
 #include "config.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/dtpthread.h"
-#include "common/image.h"
 #include "common/imagebuf.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "imageio/imageio_module.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/blend.h"
@@ -39,9 +44,8 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
-#include "develop/noise_generator.h"
 #include "develop/pixelpipe_cache.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
@@ -283,7 +287,7 @@ static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_r
     input->have_layer_coords = TRUE;
   }
 
-  if(darktable.unmuted & DT_DEBUG_INPUT)
+  if(dt_get_debug_flags() & DT_DEBUG_INPUT)
     dt_print(DT_DEBUG_INPUT,
              "[drawlayer] raw-input batch=%u event=%u pos=%u widget=(%.3f,%.3f) raster=(%.3f,%.3f) ok=%d\n",
              input->stroke_batch, input->event_index, input->stroke_pos, input->wx, input->wy, input->lx, input->ly,
@@ -428,7 +432,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry) || IS_NULL_PTR(params)) return FALSE;
   const uint64_t new_hash = _drawlayer_params_cache_hash(imgid, params, patch->width, patch->height);
   if(new_hash == patch->cache_hash) return TRUE;
-  if(dt_dev_pixelpipe_cache_rekey(darktable.pixelpipe_cache, patch->cache_hash, new_hash, patch->cache_entry) == 0)
+  if(dt_dev_pixelpipe_cache_rekey(dt_pixelpipe_cache_get_global(), patch->cache_hash, new_hash, patch->cache_entry) == 0)
   {
     patch->cache_hash = new_hash;
     return TRUE;
@@ -455,11 +459,11 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   memcpy(published.pixels, patch->pixels, (size_t)patch->width * patch->height * 4 * sizeof(float));
   dt_drawlayer_cache_patch_rdunlock(patch);
 #ifdef HAVE_OPENCL
-  dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, published.pixels,
+  dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_pixelpipe_cache_get_global(), published.pixels,
                                                  published.cache_entry, -1);
 #endif
   dt_drawlayer_cache_patch_clear(&published, "drawlayer patch");
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF,
              "[drawlayer] cache rekey conflict old=%" PRIu64 " new=%" PRIu64 " -> published snapshot instead\n",
              patch->cache_hash, new_hash);
@@ -469,14 +473,14 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
 static void _retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry) || g->process.base_patch_loaded_ref) return;
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, g->process.base_patch.cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_loaded_ref = TRUE;
 }
 
 static void _retain_base_patch_stroke_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry)) return;
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, TRUE, g->process.base_patch.cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_stroke_refs++;
 }
 
@@ -495,13 +499,13 @@ void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t 
 
   if(g->process.base_patch_loaded_ref)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, g->process.base_patch.cache_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, g->process.base_patch.cache_entry);
     g->process.base_patch_loaded_ref = FALSE;
   }
 
   while(g->process.base_patch_stroke_refs > 0)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, g->process.base_patch.cache_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, g->process.base_patch.cache_entry);
     g->process.base_patch_stroke_refs--;
   }
 }
@@ -765,7 +769,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
   }
 
   source->mem = dt_dev_pixelpipe_cache_get_pinned_image(
-      darktable.pixelpipe_cache, (void *)layer_pixels, resolved_entry, devid, source_w, source_h,
+      dt_pixelpipe_cache_get_global(), (void *)layer_pixels, resolved_entry, devid, source_w, source_h,
       4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
   if(source->mem)
   {
@@ -950,7 +954,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   if(realtime_reuse && !resolved_entry)
   {
     resolved_entry
-        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(darktable.pixelpipe_cache, (void *)layer_pixels);
+        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_pixelpipe_cache_get_global(), (void *)layer_pixels);
     resolved_entry_ref = (!IS_NULL_PTR(resolved_entry));
   }
 
@@ -1027,7 +1031,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     err = dt_opencl_enqueue_copy_image(devid, dev_out_partial, dev_out, zero_origin, win_origin, win_region);
     if(err != CL_SUCCESS) goto cleanup;
 
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] partial composite window=%dx%d at (%d,%d) of %dx%d\n", dw, dh,
                target_damage.nw[0], target_damage.nw[1], target_roi->width, target_roi->height);
 
@@ -1064,7 +1068,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
       pixel[3] = 1.0f;
     }
     dev_background = dt_dev_pixelpipe_cache_get_pinned_image(
-        darktable.pixelpipe_cache, background, NULL, devid, target_roi->width, target_roi->height,
+        dt_pixelpipe_cache_get_global(), background, NULL, devid, target_roi->width, target_roi->height,
         4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
     if(IS_NULL_PTR(dev_background)) goto cleanup;
   }
@@ -1095,7 +1099,7 @@ cleanup:
   if(dev_bg_partial) dt_opencl_release_mem_object(dev_bg_partial);
   if(dev_out_partial) dt_opencl_release_mem_object(dev_out_partial);
   if(use_preview_bg)
-    dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, scratch->cl_background_rgba, NULL,
+    dt_dev_pixelpipe_cache_put_pinned_image(dt_pixelpipe_cache_get_global(), scratch->cl_background_rgba, NULL,
                                             (void **)&dev_background);
   if(layer.mem && layer.mem != source.mem)
   {
@@ -1105,14 +1109,14 @@ cleanup:
       dt_opencl_release_mem_object(layer.mem);
   }
   if(!source_mem_override && source.is_pinned)
-    dt_dev_pixelpipe_cache_put_pinned_image(darktable.pixelpipe_cache, (void *)layer_pixels, resolved_entry,
+    dt_dev_pixelpipe_cache_put_pinned_image(dt_pixelpipe_cache_get_global(), (void *)layer_pixels, resolved_entry,
                                             (void **)&source.mem);
   else if(!source_mem_override && source.is_cached_device && resolved_entry)
     dt_dev_pixelpipe_cache_release_cl_buffer((void **)&source.mem, resolved_entry, NULL, TRUE);
   else if(!source_mem_override && source.mem)
     dt_opencl_release_mem_object(source.mem);
   if(resolved_entry_ref)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, FALSE, resolved_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, resolved_entry);
 
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[drawlayer] process_cl blend path failed: %d\n\n", err);
 
@@ -1151,7 +1155,7 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(IS_NULL_PTR(g) || widget_radius <= 0.0f) return;
 
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   float display_rgb[3] = { 0.0f };
   _conf_display_color(display_rgb);
   const int shape = _conf_brush_shape();
@@ -1204,10 +1208,10 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
 static drawlayer_wait_dialog_t _show_drawlayer_wait_dialog(const char *title, const char *message)
 {
   drawlayer_wait_dialog_t wait = { 0 };
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(title) || !title[0] || IS_NULL_PTR(message) || !message[0]) return wait;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()) || IS_NULL_PTR(title) || !title[0] || IS_NULL_PTR(message) || !message[0]) return wait;
 
   GtkWidget *dialog = gtk_dialog_new();
-  GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *main = dt_gui_main_window();
   if(main) gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main));
   gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
@@ -1287,9 +1291,9 @@ void dt_drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t
 
 static void _show_drawlayer_modal_message(const GtkMessageType type, const char *primary, const char *secondary)
 {
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(primary) || primary[0] == '\0') return;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()) || IS_NULL_PTR(primary) || primary[0] == '\0') return;
 
-  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_gui_main_window()),
                                              GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                              type, GTK_BUTTONS_OK, "%s", primary);
   if(secondary && secondary[0] != '\0')
@@ -1301,10 +1305,10 @@ static void _show_drawlayer_modal_message(const GtkMessageType type, const char 
 static gboolean _prompt_layer_name_dialog(const char *title, const char *message, const char *initial_name,
                                           char *name, const size_t name_size)
 {
-  if(IS_NULL_PTR(darktable.gui) || IS_NULL_PTR(darktable.gui->ui) || IS_NULL_PTR(title) || title[0] == '\0' || IS_NULL_PTR(name) || name_size == 0) return FALSE;
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui()) || IS_NULL_PTR(title) || title[0] == '\0' || IS_NULL_PTR(name) || name_size == 0) return FALSE;
 
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
-      title, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      title, GTK_WINDOW(dt_gui_main_window()),
       GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, _("Cancel"), GTK_RESPONSE_CANCEL,
       _("Confirm"), GTK_RESPONSE_ACCEPT, NULL);
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -1352,7 +1356,7 @@ static gboolean _color_picker_draw(GtkWidget *widget, cairo_t *cr, gpointer user
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   return dt_drawlayer_widgets_draw_picker(g->ui.widgets, widget, cr, ppd);
 }
 
@@ -1392,7 +1396,7 @@ static gboolean _brush_profile_draw(GtkWidget *widget, cairo_t *cr, gpointer use
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
-  const double ppd = (darktable.gui && darktable.gui->ppd > 0.0) ? darktable.gui->ppd : 1.0;
+  const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   return dt_drawlayer_widgets_draw_brush_profiles(g->ui.widgets, widget, cr, ppd);
 }
 
@@ -1949,7 +1953,7 @@ static gboolean _confirm_delete_layer(dt_iop_module_t *self, const gboolean remo
   if(!_layer_name_non_empty(params->layer_name)) return removing_module;
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+      GTK_WINDOW(dt_gui_main_window()), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s",
       removing_module
           ? _("Delete the linked drawing layer from the sidecar TIFF before removing this module instance?")
@@ -2148,10 +2152,12 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
 
   dt_control_log("%s", result->message[0] ? result->message : _("background layer job finished"));
 
+  dt_develop_t *dev = dt_dev_get_global();
+
   gboolean cleared_initiator = FALSE;
-  if(darktable.develop && darktable.develop->image_storage.id == result->imgid)
+  if(dev && dev->image_storage.id == result->imgid)
   {
-    for(GList *modules = darktable.develop->iop; modules; modules = g_list_next(modules))
+    for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
       if(!module || g_strcmp0(module->op, "drawlayer")) continue;
@@ -2174,9 +2180,9 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
     }
   }
 
-  if(!cleared_initiator && darktable.develop)
+  if(!cleared_initiator && dev)
   {
-    for(GList *modules = darktable.develop->iop; modules; modules = g_list_next(modules))
+    for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
       if(!module || g_strcmp0(module->op, "drawlayer")) continue;
@@ -2249,7 +2255,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   dt_control_job_add_progress(job, _("creating background layer"), TRUE);
   g->session.background_job_running = TRUE;
   if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, FALSE);
-  if(dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job) != 0)
+  if(dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job) != 0)
   {
     g->session.background_job_running = FALSE;
     if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, TRUE);
@@ -2262,7 +2268,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  if(IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed())) return;
+  if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
   _sync_params_from_gui(self, FALSE);
 
@@ -2320,7 +2326,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed())) return;
+  if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
   const int active = dt_bauhaus_combobox_get(widget);
   if(active < 0) return;
@@ -2498,7 +2504,7 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
   }
 
   GtkWidget *dialog = gtk_message_dialog_new(
-      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+      GTK_WINDOW(dt_gui_main_window()), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
       GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s", _("Save the drawing sidecar now?"));
   gtk_message_dialog_format_secondary_text(
       GTK_MESSAGE_DIALOG(dialog), "%s",
@@ -2574,7 +2580,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || (darktable.gui && dt_gui_widgets_suppressed()) || !gtk_toggle_button_get_active(button))
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed()) || !gtk_toggle_button_get_active(button))
     return;
 
   if(GTK_WIDGET(button) == g->controls.preview_bg_white)
@@ -2956,7 +2962,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(layer_tab), preview_title, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_tab), preview_box, FALSE, FALSE, 0);
 
-  g->controls.brush_mode = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->controls.brush_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("paint"));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("erase"));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("blur"));
@@ -2980,7 +2986,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.color_row, TRUE, TRUE, 0);
   GtkWidget *picker_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.image_colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA, NULL, IOP_CS_NONE);
-  g->controls.image_colorpicker_source = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->controls.image_colorpicker_source = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("input"));
   dt_bauhaus_combobox_add(g->controls.image_colorpicker_source, _("output"));
   dt_bauhaus_widget_set_label(g->controls.image_colorpicker_source, _("Pick from"));
@@ -2989,7 +2995,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(brush_tab), picker_controls, TRUE, TRUE, 0);
 
   g->controls.hdr_exposure
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 4.0f, 0.1f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 4.0f, 0.1f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.hdr_exposure, _("HDR exposure"));
   dt_bauhaus_slider_set_format(g->controls.hdr_exposure, _(" EV"));
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.hdr_exposure, TRUE, TRUE, 0);
@@ -3007,22 +3013,22 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.brush_shape, TRUE, TRUE, 0);
 
   g->controls.size
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 1.0f, 2048.0f, 1.0f, 64.0f, 0);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 1.0f, 2048.0f, 1.0f, 64.0f, 0);
   dt_bauhaus_widget_set_label(g->controls.size, _("Size"));
   dt_bauhaus_slider_set_format(g->controls.size, _(" px"));
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.size, TRUE, TRUE, 0);
   g->controls.distance
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.distance, _("Sampling distance"));
   dt_bauhaus_slider_set_format(g->controls.distance, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.distance, TRUE, TRUE, 0);
   g->controls.smoothing
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.smoothing, _("Smoothing"));
   dt_bauhaus_slider_set_format(g->controls.smoothing, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.smoothing, TRUE, TRUE, 0);
   g->controls.softness
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 1.0f, 0.01f, 0.5f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 1.0f, 0.01f, 0.5f, 2);
   dt_bauhaus_widget_set_label(g->controls.softness, _("Hardness"));
   dt_bauhaus_slider_set_factor(g->controls.softness, 100.0f);
   dt_bauhaus_slider_set_format(g->controls.softness, "%");
@@ -3033,12 +3039,12 @@ void gui_init(dt_iop_module_t *self)
   dt_gui_add_class(thickness_title, "dt_section_label");
   gtk_box_pack_start(GTK_BOX(brush_tab), thickness_title, TRUE, TRUE, 0);
   g->controls.opacity
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.opacity, _("Opacity"));
   dt_bauhaus_slider_set_format(g->controls.opacity, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.opacity, TRUE, TRUE, 0);
   g->controls.flow
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 100.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.flow, _("Flow"));
   dt_bauhaus_slider_set_format(g->controls.flow, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.flow, TRUE, TRUE, 0);
@@ -3048,17 +3054,17 @@ void gui_init(dt_iop_module_t *self)
   dt_gui_add_class(texture_title, "dt_section_label");
   gtk_box_pack_start(GTK_BOX(brush_tab), texture_title, TRUE, TRUE, 0);
   g->controls.sprinkles
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.sprinkles, _("Sprinkles"));
   dt_bauhaus_slider_set_format(g->controls.sprinkles, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkles, TRUE, TRUE, 0);
   g->controls.sprinkle_size
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 1.0f, 256.0f, 1.0f, 3.0f, 0);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 1.0f, 256.0f, 1.0f, 3.0f, 0);
   dt_bauhaus_widget_set_label(g->controls.sprinkle_size, _("Sprinkle size"));
   dt_bauhaus_slider_set_format(g->controls.sprinkle_size, _(" px"));
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_size, TRUE, TRUE, 0);
   g->controls.sprinkle_coarseness
-      = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 50.0f, 2);
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 1.0f, 50.0f, 2);
   dt_bauhaus_widget_set_label(g->controls.sprinkle_coarseness, _("Coarseness"));
   dt_bauhaus_slider_set_format(g->controls.sprinkle_coarseness, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
@@ -3076,7 +3082,7 @@ void gui_init(dt_iop_module_t *self)
   g->controls.layer_action_row = layer_action_row;
   GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->controls.layer_fill_row = layer_fill_row;
-  g->controls.layer_select = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->controls.layer_select = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
   g->controls.delete_layer = gtk_button_new_with_label(_("delete layer"));
   g->controls.create_layer = gtk_button_new_with_label(_("create new layer"));
@@ -3132,7 +3138,7 @@ void gui_init(dt_iop_module_t *self)
       *targets[r][c] = gtk_check_button_new();
       gtk_grid_attach(GTK_GRID(grid), *targets[r][c], c + 1, r + 1, 1, 1);
     }
-    *profiles[r] = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+    *profiles[r] = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
     dt_bauhaus_combobox_add(*profiles[r], _("linear"));
     dt_bauhaus_combobox_add(*profiles[r], _("quadratic"));
     dt_bauhaus_combobox_add(*profiles[r], _("square root"));
@@ -3186,7 +3192,7 @@ void gui_init(dt_iop_module_t *self)
     g_signal_connect(G_OBJECT(*profiles[r]), "value-changed", G_CALLBACK(_widget_changed), self);
   }
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                                   G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   if(self->dev)
@@ -3439,7 +3445,7 @@ void gui_cleanup(dt_iop_module_t *self)
   dt_control_set_cursor_visible(TRUE);
   _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS, FALSE);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   _release_all_base_patch_extra_refs(g);
   dt_drawlayer_process_state_cleanup(&g->process);
@@ -3793,7 +3799,7 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
   }
 
-  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
+  gtk_widget_queue_draw(dt_gui_center_widget());
   return g->manager.painting_active ? 1 : 0;
 }
 
@@ -4053,7 +4059,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const gboolean g_hash = pstate && layer_hash != 0 && pstate->last_composite_layer_hash == layer_hash;
     const gboolean g_roi = pstate && !memcmp(&pstate->last_composite_target_roi, &target_roi, sizeof(dt_iop_roi_t));
     const gboolean allow_partial = realtime && g_valid && g_devout && g_hash && g_roi;
-    if(realtime && pstate && !allow_partial && (darktable.unmuted & DT_DEBUG_VERBOSE))
+    if(realtime && pstate && !allow_partial && (dt_get_debug_flags() & DT_DEBUG_VERBOSE))
       dt_print(DT_DEBUG_PERF,
                "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d\n",
                g_valid, g_devout, g_hash, g_roi);
@@ -4086,7 +4092,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       .process = runtime_request.process_state,
       .source = &source,
     };
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=blend-base total=%.3f ok=%d\n",
                (g_get_monotonic_time() - process_t0) / 1000.0, ok ? 1 : 0);
     dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
@@ -4094,7 +4100,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
 process_cl_fallback:
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=no-cache-pass-through total=%.3f\n",
              (g_get_monotonic_time() - process_t0) / 1000.0);
   const gboolean ok = dt_iop_clip_and_zoom_roi_cl(pipe->devid, dev_out, dev_in, roi_out, roi_in)
@@ -4202,7 +4208,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     }
 
     _blend_layer_over_input(output, input, layer_pixels, pixels, preview_bg.enabled, preview_bg.value);
-    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] process step=blend-base total=%.3f\n",
                (g_get_monotonic_time() - process_t0) / 1000.0);
 
@@ -4220,7 +4226,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
    * the correct backend behavior is therefore a no-op pass-through rather than
    * reopening/scanning/loading the TIFF in the hot process path. */
 fallback_pass_through:
-  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
     dt_print(DT_DEBUG_PERF, "[drawlayer] process step=no-cache-pass-through total=%.3f\n",
              (g_get_monotonic_time() - process_t0) / 1000.0);
   dt_iop_image_copy_by_size(output, input, roi_out->width, roi_out->height, 4);

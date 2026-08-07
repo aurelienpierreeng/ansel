@@ -18,17 +18,21 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/anonymous_ids.h"
+#include "system/sys_resources.h"
 #endif
 
 #include "common/sentry.h"
-#include "common/darktable.h"
+#include "common/times.h"
+
+#include <glib/gstdio.h> // for g_unlink
 
 #ifdef HAVE_SENTRY
 
 #include "common/file_location.h"
 #include "common/image.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "gui/gtk.h"
 
 #include <sentry.h>
@@ -84,11 +88,11 @@ static char _processed_pipeline[32] = { 0 };
 // the website can report "images processed before a crash".
 static volatile int _processed_image_count = 0;
 
-// Length of the running session, in seconds. darktable.start_wtime is stamped at
+// Length of the running session, in seconds. The start wtime is stamped at
 // the very start of dt_init().
 static double _sentry_session_seconds(void)
 {
-  const double dur = dt_get_wtime() - darktable.start_wtime;
+  const double dur = dt_get_wtime() - dt_get_start_wtime();
   return (dur > 0.0) ? dur : 0.0;
 }
 
@@ -383,11 +387,11 @@ static void _sentry_set_context(void)
   // Hardware / device context
   sentry_value_t device = sentry_value_new_object();
   sentry_value_set_by_key(device, "cpu_logical_cores", sentry_value_new_int32(g_get_num_processors()));
-  sentry_value_set_by_key(device, "openmp_threads", sentry_value_new_int32(darktable.num_openmp_threads));
+  sentry_value_set_by_key(device, "openmp_threads", sentry_value_new_int32(dt_get_num_openmp_threads()));
 
-  if(darktable.dtresources.total_memory > 0)
+  if(dt_get_total_mem() > 0)
   {
-    const double mem_gb = (double)darktable.dtresources.total_memory / (1024.0 * 1024.0 * 1024.0);
+    const double mem_gb = (double)dt_get_total_mem() / (1024.0 * 1024.0 * 1024.0);
     sentry_value_set_by_key(device, "memory_gb", sentry_value_new_double(mem_gb));
   }
 
@@ -396,18 +400,18 @@ static void _sentry_set_context(void)
 
 #ifdef HAVE_OPENCL
   // Device enumeration fields (num_devs/dev) only exist in HAVE_OPENCL builds.
-  if(darktable.opencl && darktable.opencl->inited && darktable.opencl->num_devs > 0 && darktable.opencl->dev)
+  if(dt_opencl_get_global() && dt_opencl_is_inited() && dt_opencl_get_global()->num_devs > 0 && dt_opencl_get_global()->dev)
   {
     sentry_value_t gpus = sentry_value_new_list();
-    for(int i = 0; i < darktable.opencl->num_devs; i++)
+    for(int i = 0; i < dt_opencl_get_global()->num_devs; i++)
     {
-      const char *name = darktable.opencl->dev[i].name;
+      const char *name = dt_opencl_get_global()->dev[i].name;
       if(name) sentry_value_append(gpus, sentry_value_new_string(name));
     }
     sentry_value_set_by_key(device, "opencl_devices", gpus);
 
     // Tag with the first device so events are filterable by GPU.
-    if(darktable.opencl->dev[0].name) sentry_set_tag("opencl_device", darktable.opencl->dev[0].name);
+    if(dt_opencl_get_global()->dev[0].name) sentry_set_tag("opencl_device", dt_opencl_get_global()->dev[0].name);
   }
 #endif
   sentry_set_context("device", device);
@@ -441,12 +445,12 @@ static void _sentry_set_context(void)
   // from the GUI, already computed during dt_gui_gtk_init(). The window size is
   // read from conf, which holds the restored/last geometry and is kept up to date
   // live on every resize - more reliable than the not-yet-mapped window here.
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     sentry_value_t scr = sentry_value_new_object();
-    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(darktable.gui->dpi));
-    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(darktable.gui->dpi_factor));
-    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(darktable.gui->ppd));
+    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(dt_gui_get_global()->dpi));
+    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(dt_gui_get_global()->dpi_factor));
+    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(dt_gui_get_global()->ppd));
 
     const int win_w = dt_conf_get_int("ui_last/window_width");
     const int win_h = dt_conf_get_int("ui_last/window_height");
@@ -564,7 +568,7 @@ void dt_sentry_init(const gboolean have_gui)
   // dashboard and release-health metrics. The compiler/optimization build type is
   // kept separately as the "build_type" extra.
   sentry_options_set_environment(options, DT_BUILD_CHANNEL);
-  sentry_options_set_debug(options, (darktable.unmuted & DT_DEBUG_CONTROL) ? 1 : 0);
+  sentry_options_set_debug(options, (dt_get_debug_flags() & DT_DEBUG_CONTROL) ? 1 : 0);
 
   // Stamp non-crash events with the session length...
   sentry_options_set_before_send(options, _sentry_before_send, NULL);

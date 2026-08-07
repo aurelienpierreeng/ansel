@@ -43,7 +43,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_DEVELOP_DEVELOP_H
+#define DT_DEVELOP_DEVELOP_H
 
 #include <cairo.h>
 #include <glib.h>
@@ -51,12 +52,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "system/atomic.h"
 #include "common/debug.h"
-#include "common/darktable.h"
+#include "common/logging.h"
 #include "common/dtpthread.h"
 #include "common/image.h"
-#include "control/settings.h"
 #include "develop/imageop.h"
+#include "develop/pixelpipe_hb.h"
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 
@@ -354,7 +356,7 @@ typedef struct dt_develop_t
    * @brief Authoritative darkroom color-picker state.
    *
    * @details
-   * Picker ownership used to be split between `darktable.lib->proxy.colorpicker`, the preview pipe,
+   * Picker ownership used to be split between `dt_lib_get_global()->proxy.colorpicker`, the preview pipe,
    * and the module widgets. That made it difficult to tell whether a picker move should:
    * - dirtify the preview pipe,
    * - resample a cached buffer directly,
@@ -870,9 +872,23 @@ gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev);
 // Update the mouse bounding box size according to current zoom level, dpp and DPI.
 void dt_dev_update_mouse_effect_radius(dt_develop_t *dev);
 
+/** The darkroom's current dt_develop_t, owned by the application orchestrator.
+ * Declared here rather than reached through `darktable.develop` so that modules and
+ * libraries do not have to include darktable.h -- and therefore the whole
+ * application -- just to find the image being edited. Implemented in
+ * darktable.c. Returns NULL outside darkroom. */
+struct dt_develop_t *dt_dev_get_global(void);
+
+/** Publish `dev` as the live darkroom develop. Only the views that own that lifetime
+ * call this: darkroom's enter(), and studio_capture's enter()/leave() swap. Pass NULL
+ * to clear. Does NOT take ownership. */
+void dt_dev_set_global(struct dt_develop_t *dev);
+
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_DEVELOP_DEVELOP_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

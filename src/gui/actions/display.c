@@ -17,10 +17,12 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/conf.h"
+#include "common/mipmap_cache.h"
 #include "common/collection.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
+#include "develop/develop.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "views/view.h"
@@ -33,13 +35,13 @@
 /** FULL SCREEN MODE **/
 gboolean full_screen_checked_callback(GtkWidget *w)
 {
-  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *widget = dt_gui_main_window();
   return gdk_window_get_state(gtk_widget_get_window(widget)) & GDK_WINDOW_STATE_FULLSCREEN;
 }
 
 static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
 
   if(full_screen_checked_callback(window))
   {
@@ -51,7 +53,7 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
 #endif
 
     // Hide window controls
-    dt_ui_set_window_buttons_visible(darktable.gui->ui, FALSE);
+    dt_ui_set_window_buttons_visible(dt_gui_get_ui(), FALSE);
   }
   else
   {
@@ -63,7 +65,7 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
 #endif
 
     // Show window controls
-    dt_ui_set_window_buttons_visible(darktable.gui->ui, TRUE);
+    dt_ui_set_window_buttons_visible(dt_gui_get_ui(), TRUE);
   }
 
 #ifdef GDK_WINDOWING_QUARTZ
@@ -79,7 +81,7 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
   gtk_window_move(GTK_WINDOW(window), geometry.x + geometry.width - w, geometry.y + geometry.height - h);
 #endif
 
-  dt_dev_pixelpipe_change_zoom_main(darktable.develop);
+  dt_dev_pixelpipe_change_zoom_main(dt_dev_get_global());
 
   return TRUE;
 }
@@ -102,10 +104,10 @@ static gboolean _panel_is_visible(dt_ui_panel_t panel)
 static gboolean _toggle_side_borders_accel_callback(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                                 GdkModifierType modifier, gpointer data)
 {
-  dt_ui_toggle_panels_visibility(darktable.gui->ui);
+  dt_ui_toggle_panels_visibility(dt_gui_get_ui());
 
   /* trigger invalidation of centerview to reprocess pipe */
-  dt_dev_pixelpipe_change_zoom_main(darktable.develop);
+  dt_dev_pixelpipe_change_zoom_main(dt_dev_get_global());
   return TRUE;
 }
 
@@ -217,30 +219,30 @@ gboolean dt_ui_panel_visible(dt_ui_t *ui, const dt_ui_panel_t p)
 
 static gboolean panel_left_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, !_panel_is_visible(DT_UI_PANEL_LEFT), TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_LEFT, !_panel_is_visible(DT_UI_PANEL_LEFT), TRUE);
   return TRUE;
 }
 
 static gboolean panel_left_checked_callback(GtkWidget *widget)
 {
-  return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_LEFT);
+  return dt_ui_panel_visible(dt_gui_get_ui(), DT_UI_PANEL_LEFT);
 }
 
 static gboolean panel_top_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, !_panel_is_visible(DT_UI_PANEL_TOP), TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_TOP, !_panel_is_visible(DT_UI_PANEL_TOP), TRUE);
   return TRUE;
 }
 
 static gboolean panel_top_checked_callback(GtkWidget *widget)
 {
-  return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_TOP);
+  return dt_ui_panel_visible(dt_gui_get_ui(), DT_UI_PANEL_TOP);
 }
 
 static gboolean available_in_lighttable_callback()
 {
   // Filmstrip is not visible in lighttable
-  const dt_view_t *view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   return (view && strcmp(view->module_name, "lighttable"));
 }
 
@@ -248,35 +250,35 @@ static gboolean available_in_lighttable_callback()
 static gboolean panel_right_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(available_in_lighttable_callback())
-    dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, !_panel_is_visible(DT_UI_PANEL_RIGHT), TRUE);
+    dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, !_panel_is_visible(DT_UI_PANEL_RIGHT), TRUE);
 
   return TRUE;
 }
 
 static gboolean panel_right_checked_callback(GtkWidget *widget)
 {
-  return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_RIGHT);
+  return dt_ui_panel_visible(dt_gui_get_ui(), DT_UI_PANEL_RIGHT);
 }
 
 static gboolean filmstrip_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(available_in_lighttable_callback())
-    dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, !_panel_is_visible(DT_UI_PANEL_BOTTOM), TRUE);
+    dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM, !_panel_is_visible(DT_UI_PANEL_BOTTOM), TRUE);
 
   return TRUE;
 }
 
 static gboolean filmstrip_checked_callback(GtkWidget *widget)
 {
-  return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_BOTTOM);
+  return dt_ui_panel_visible(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM);
 }
 
 static gboolean profile_checked_callback(GtkWidget *widget)
 {
   dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)get_custom_data(widget);
-  return (prof->type == darktable.color_profiles->display_type
+  return (prof->type == dt_colorspaces_get_global()->display_type
           && (prof->type != DT_COLORSPACE_FILE
-              || !strcmp(prof->filename, darktable.color_profiles->display_filename)));
+              || !strcmp(prof->filename, dt_colorspaces_get_global()->display_filename)));
 }
 
 static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
@@ -284,13 +286,13 @@ static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, g
   dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)get_custom_data(GTK_WIDGET(user_data));
 
   gboolean profile_changed = FALSE;
-  if(darktable.color_profiles->display_type != pp->type
-      || (darktable.color_profiles->display_type == DT_COLORSPACE_FILE
-           && strcmp(darktable.color_profiles->display_filename, pp->filename)))
+  if(dt_colorspaces_get_global()->display_type != pp->type
+      || (dt_colorspaces_get_global()->display_type == DT_COLORSPACE_FILE
+           && strcmp(dt_colorspaces_get_global()->display_filename, pp->filename)))
   {
-    darktable.color_profiles->display_type = pp->type;
-    g_strlcpy(darktable.color_profiles->display_filename, pp->filename,
-              sizeof(darktable.color_profiles->display_filename));
+    dt_colorspaces_get_global()->display_type = pp->type;
+    g_strlcpy(dt_colorspaces_get_global()->display_filename, pp->filename,
+              sizeof(dt_colorspaces_get_global()->display_filename));
     profile_changed = TRUE;
   }
 
@@ -298,17 +300,18 @@ static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, g
   {
     // profile not found, fall back to system display profile. shouldn't happen
     fprintf(stderr, "can't find display profile `%s', using system display profile instead\n", pp->filename);
-    profile_changed = darktable.color_profiles->display_type != DT_COLORSPACE_DISPLAY;
-    darktable.color_profiles->display_type = DT_COLORSPACE_DISPLAY;
-    darktable.color_profiles->display_filename[0] = '\0';
+    profile_changed = dt_colorspaces_get_global()->display_type != DT_COLORSPACE_DISPLAY;
+    dt_colorspaces_get_global()->display_type = DT_COLORSPACE_DISPLAY;
+    dt_colorspaces_get_global()->display_filename[0] = '\0';
   }
 
   if(profile_changed)
   {
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
   return TRUE;
 }
@@ -336,28 +339,29 @@ dt_iop_color_intent_t string_to_color_intent(const char *string)
 
 static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_iop_color_intent_t old_intent = darktable.color_profiles->display_intent;
+  dt_iop_color_intent_t old_intent = dt_colorspaces_get_global()->display_intent;
   dt_iop_color_intent_t new_intent = string_to_color_intent(get_custom_data(GTK_WIDGET(user_data)));
   if(new_intent != old_intent)
   {
-    darktable.color_profiles->display_intent = new_intent;
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    dt_colorspaces_get_global()->display_intent = new_intent;
+    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
   return TRUE;
 }
 
 static gboolean intent_checked_callback(GtkWidget *widget)
 {
-  return darktable.color_profiles->display_intent == string_to_color_intent(get_custom_data(widget));
+  return dt_colorspaces_get_global()->display_intent == string_to_color_intent(get_custom_data(widget));
 }
 
 static gboolean always_hide_overlays_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_NONE);
-  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_NONE);
+  dt_thumbtable_set_overlays_mode(dt_gui_get_ui()->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_NONE);
+  dt_thumbtable_set_overlays_mode(dt_gui_get_ui()->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_NONE);
   return TRUE;
 }
 
@@ -368,8 +372,8 @@ static gboolean always_hide_overlays_checked_callback(GtkWidget *widget)
 
 static gboolean hover_overlays_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL);
-  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL);
+  dt_thumbtable_set_overlays_mode(dt_gui_get_ui()->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL);
+  dt_thumbtable_set_overlays_mode(dt_gui_get_ui()->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL);
   return TRUE;
 }
 
@@ -380,8 +384,8 @@ static gboolean hover_overlays_checked_callback(GtkWidget *widget)
 
 static gboolean always_show_overlays_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL);
-  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL);
+  dt_thumbtable_set_overlays_mode(dt_gui_get_ui()->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL);
+  dt_thumbtable_set_overlays_mode(dt_gui_get_ui()->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL);
   return TRUE;
 }
 
@@ -394,8 +398,8 @@ static gboolean group_borders_callback(GtkAccelGroup *group, GObject *accelerata
 {
   gboolean borders = !dt_conf_get_bool("plugins/lighttable/group_borders");
   dt_conf_set_bool("plugins/lighttable/group_borders", borders);
-  dt_thumbtable_set_draw_group_borders(darktable.gui->ui->thumbtable_lighttable, borders);
-  dt_thumbtable_set_draw_group_borders(darktable.gui->ui->thumbtable_filmstrip, borders);
+  dt_thumbtable_set_draw_group_borders(dt_gui_get_ui()->thumbtable_lighttable, borders);
+  dt_thumbtable_set_draw_group_borders(dt_gui_get_ui()->thumbtable_filmstrip, borders);
   return TRUE;
 }
 
@@ -407,7 +411,7 @@ static gboolean group_borders_checked_callback()
 static gboolean collapse_grouped_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   dt_conf_set_bool("ui_last/grouping", !dt_conf_get_bool("ui_last/grouping"));
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, NULL);
   return TRUE;
 }
 
@@ -427,14 +431,14 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
   const int mode = GPOINTER_TO_INT(get_custom_data(GTK_WIDGET(user_data)));
   if(mode != dt_conf_get_int("lighttable/embedded_jpg"))
   {
-    GList *imgs = dt_collection_get_all(darktable.collection, -1);
+    GList *imgs = dt_collection_get_all(dt_collection_get_global(), -1);
 
     // Empty the mipmap cache for the current collection, but only on RAM
     // Don't delete disk cache, but RAM cache may be flushed to disk if user param sets it.
     for(GList *img = g_list_first(imgs); img; img = g_list_next(img))
     {
       const int32_t imgid = GPOINTER_TO_INT(img->data);
-      dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+      dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
     }
     g_list_free(imgs);
     imgs = NULL;
@@ -443,7 +447,7 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
     dt_conf_set_int("lighttable/embedded_jpg", mode);
 
     // Redraw thumbnails
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);
+    dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);
   }
   return TRUE;
 }
@@ -455,7 +459,7 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   GtkWidget *parent = get_last_widget(lists);
 
   // Add available color profiles to the sub-menu
-  for(const GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     if(prof->display_pos > -1)

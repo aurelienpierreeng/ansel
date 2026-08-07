@@ -16,12 +16,15 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "control/control.h"
+#include "control/jobs/control_jobs.h"
 #include "control/crawler.h"
-#include "common/collection.h"
 #include "common/mipmap_cache.h"
 #include "common/selection.h"
+#include "common/utility.h"
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
+#include "develop/develop.h"
 
 /// Job parameters for preloading image cache with a maximum mipmap size.
 typedef struct _preload_cache_params_t
@@ -31,20 +34,21 @@ typedef struct _preload_cache_params_t
 
 static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_dev_pixelpipe_reset_all(darktable.develop);
-  dt_dev_pixelpipe_resync_history_all(darktable.develop);
+  dt_develop_t *const dev = dt_dev_get_global();
+  dt_dev_pixelpipe_reset_all(dev);
+  dt_dev_pixelpipe_resync_history_all(dev);
   return TRUE;
 }
 
 static gboolean optimize_database_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_database_perform_maintenance(darktable.db);
+  dt_database_perform_maintenance(dt_database_get_global());
   return TRUE;
 }
 
 static gboolean backup_database_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_database_snapshot(darktable.db);
+  dt_database_snapshot(dt_database_get_global());
   return TRUE;
 }
 
@@ -62,9 +66,9 @@ static int32_t preload_image_cache(dt_job_t *job)
   const dt_mipmap_size_t max_mipmap_size = (params) ? params->max_mipmap_size : DT_MIPMAP_2;
 
   // Load the mipmap cache sizes 0 to max_mipmap_size of the current selection
-  GList *selection = dt_selection_get_list(darktable.selection);
+  GList *selection = dt_selection_get_list(dt_selection_get_global());
   int i = 0;
-  float imgs = (float)dt_selection_get_length(darktable.selection) * (max_mipmap_size + 1);
+  float imgs = (float)dt_selection_get_length(dt_selection_get_global()) * (max_mipmap_size + 1);
   GList *img = g_list_first(selection);
 
   while(img && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED)
@@ -78,7 +82,7 @@ static int32_t preload_image_cache(dt_job_t *job)
     for(int k = max_mipmap_size; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
       char filename[PATH_MAX] = { 0 };
-      dt_mipmap_get_cache_filename(filename, darktable.mipmap_cache, k, imgid);
+      dt_mipmap_get_cache_filename(filename, dt_mipmap_cache_get_global(), k, imgid);
 
       // if a valid thumbnail file is already on disc - do nothing
       if(dt_util_test_image_file(filename))
@@ -89,15 +93,15 @@ static int32_t preload_image_cache(dt_job_t *job)
 
       // else, generate thumbnail and store in mipmap cache.
       dt_mipmap_buffer_t buf;
-      dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
-      dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+      dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
+      dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
       i++;
       dt_control_job_set_progress(job, (float)i / imgs);
     }
 
     // and immediately write thumbs to disc and remove from mipmap cache.
-    dt_mimap_cache_evict(darktable.mipmap_cache, imgid);
+    dt_mimap_cache_evict(dt_mipmap_cache_get_global(), imgid);
 
     img = g_list_next(img);
   }
@@ -116,7 +120,7 @@ static gboolean _preload_image_cache_with_max_size(dt_mipmap_size_t max_size, co
   dt_job_t *job = dt_control_job_create(&preload_image_cache, "preload");
   dt_control_job_set_params(job, params, g_free);
   dt_control_job_add_progress(job, description, TRUE);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
   return TRUE;
 }
 
@@ -168,10 +172,10 @@ static gboolean preload_to_mipmap_8_callback(GtkAccelGroup *group, GObject *acce
 
 static gboolean preload_auto_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
-  const int width = ceilf(table->thumb_width * darktable.gui->ppd);
-  const int height = ceilf(table->thumb_height * darktable.gui->ppd);
-  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
+  const int width = ceilf(table->thumb_width * dt_gui_get_global()->ppd);
+  const int height = ceilf(table->thumb_height * dt_gui_get_global()->ppd);
+  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   dt_mipmap_size_t mip = dt_mipmap_cache_get_matching_size(cache, width, height, UNKNOWN_IMAGE);
   fprintf(stdout, "mipmap %i\n", mip);
   return _preload_image_cache_with_max_size(mip, _("Preloading cache for current collection"));
@@ -179,19 +183,19 @@ static gboolean preload_auto_callback(GtkAccelGroup *group, GObject *acceleratab
 
 static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  GList *selection = dt_selection_get_list(darktable.selection);
+  GList *selection = dt_selection_get_list(dt_selection_get_global());
 
   for(GList *img = g_list_first(selection); img; img = g_list_next(img))
   {
     const int32_t imgid = GPOINTER_TO_INT(img->data);
-    dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+    dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
   }
 
   g_list_free(selection);
   selection = NULL;
 
   // Redraw thumbnails
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);
+  dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);
   return TRUE;
 }
 

@@ -18,19 +18,14 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "common/act_on.h"
-#include "common/debug.h"
-#include "common/collection.h"
 #include "common/selection.h"
-#include "control/conf.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 #include "math.h"
 #include "menu.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 typedef struct dt_masks_form_gui_t dt_masks_form_gui_t;
@@ -38,7 +33,7 @@ typedef struct dt_masks_form_gui_t dt_masks_form_gui_t;
 /** How to use:
  *  1. write callback functions returning a gboolean that will check the context to decide if
  *  the menu item should be insensitive, checked, active. These should only use the content of
- *  globally accessible structures like `darktable.gui` since they take no arguments.
+ *  globally accessible structures like `dt_gui_get_global()` since they take no arguments.
  *
  *  2. re-use the action callback functions already used for global keyboard shortcuts (actions/accels).
  *  Again, all inputs and internal functions should be globally accessible, for example using proxies.
@@ -386,7 +381,7 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
       const gchar *parent_path = gtk_menu_get_accel_path(parent);
 
       dt_accels_new_action_shortcut(
-          darktable.gui->accels, action_callback, entry->widget, accel_group,
+          dt_gui_get_accels(), action_callback, entry->widget, accel_group,
           parent_path, clean_label,
           key_val, mods, FALSE, _("Triggers the action"));
 
@@ -485,7 +480,7 @@ void add_generic_top_menu_entry(GtkWidget *menu_bar, GtkWidget **menus, GList **
 void add_top_menu_entry(GtkWidget *menu_bar, GtkWidget **menus, GList **lists, const dt_menus_t index, gchar *label)
 {
   // Top menus belong to menu bar : file, edit, display, etc.
-  add_generic_top_menu_entry(menu_bar, menus, lists, index, label, darktable.gui->accels->global_accels, "Global/Menu");
+  add_generic_top_menu_entry(menu_bar, menus, lists, index, label, dt_gui_get_accels()->global_accels, "Global/Menu");
 }
 
 // Special submenus entries that only open a sub-submenu
@@ -513,7 +508,7 @@ void add_generic_top_submenu_entry(GtkWidget **menus, GList **lists, const gchar
 // Global menu only
 void add_top_submenu_entry(GtkWidget **menus, GList **lists, const gchar *label, const dt_menus_t index)
 {
-  add_generic_top_submenu_entry(menus, lists, label, index, darktable.gui->accels->global_accels);
+  add_generic_top_submenu_entry(menus, lists, label, index, dt_gui_get_accels()->global_accels);
 }
 
 
@@ -546,7 +541,7 @@ void add_sub_menu_entry(GtkWidget **menus, GList **lists, const gchar *label, co
                         gboolean (*sensitive_callback)(GtkWidget *widget), guint key_val, GdkModifierType mods)
 {
   add_generic_sub_menu_entry(menus, lists, label, index, data, action_callback, checked_callback, active_callback,
-                             sensitive_callback, key_val, mods, darktable.gui->accels->global_accels);
+                             sensitive_callback, key_val, mods, dt_gui_get_accels()->global_accels);
 }
 
 void add_no_accel_sub_menu_entry(GtkWidget **menus, GList **lists, const gchar *label, const dt_menus_t index,
@@ -589,7 +584,7 @@ void add_sub_sub_menu_entry(GtkWidget **menus, GtkWidget *parent, GList **lists,
                             gboolean (*sensitive_callback)(GtkWidget *widget), guint key_val, GdkModifierType mods)
 {
   add_generic_sub_sub_menu_entry(menus, parent, lists, label, index, data, action_callback, checked_callback,
-                                 active_callback, sensitive_callback, key_val, mods, darktable.gui->accels->global_accels);
+                                 active_callback, sensitive_callback, key_val, mods, dt_gui_get_accels()->global_accels);
 }
 
 // We don't go further than 3 levels of menus. This is not a Dassault Systems software.
@@ -629,7 +624,7 @@ GtkWidget * get_last_widget(GList **list)
 gboolean has_selection()
 {
   // Can be used to set menu items sensitivity when image(s) is/are selected
-  return dt_selection_get_length(darktable.selection) > 0;
+  return dt_selection_get_length(dt_selection_get_global()) > 0;
 }
 
 gboolean has_active_images()
@@ -639,13 +634,13 @@ gboolean has_active_images()
 
 gboolean _is_lighttable()
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
   return cv && !g_strcmp0(cv->module_name, "lighttable");
 }
 
 gboolean _is_darkroom()
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
   return cv && !g_strcmp0(cv->module_name, "darkroom");
 }
 

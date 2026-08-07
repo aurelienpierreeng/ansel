@@ -27,7 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_LIBS_COLORPICKER_H
+#define DT_LIBS_COLORPICKER_H
 
 #include <gtk/gtk.h>
 #include <inttypes.h>
@@ -97,6 +98,7 @@ typedef struct dt_colorpicker_sample_t
   GtkWidget *output_label;
 } dt_colorpicker_sample_t;
 
+#endif // DT_LIBS_COLORPICKER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

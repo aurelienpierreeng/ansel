@@ -24,7 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_PRINTPROF_H
+#define DT_COMMON_PRINTPROF_H
 
 #include <glib.h>
 #include <inttypes.h>
@@ -35,6 +36,8 @@ int dt_apply_printer_profile(void **in, uint32_t width, uint32_t height, int bpp
                              cmsHPROFILE hOutProfile, int intent, gboolean black_point_compensation);
 // this routines takes as input an image of 8 or 16 bpp but always return a 8 bpp result. It is indeed better to
 // apply the profile to a 16bit input but we do not need this for printing.
+
+#endif // DT_COMMON_PRINTPROF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

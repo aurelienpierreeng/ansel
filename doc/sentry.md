@@ -354,7 +354,7 @@ independently of this script.
 | `src/common/sentry.c` / `.h` | init/shutdown, context, sessions, `on_crash` gdb attach |
 | `src/common/privacy_consent.c` / `.h` | the shared first-launch consent dialog (crash + analytics) |
 | `src/common/system_signal_handling.c` | local gdb fallback; defers to Sentry when it captured |
-| `src/common/darktable.c` | calls `dt_sentry_init()` / `dt_sentry_shutdown()` |
+| `src/darktable.c` | calls `dt_sentry_init()` / `dt_sentry_shutdown()` |
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `sentry/enabled` preference |
 | `tools/sentry-upload-symbols.sh` | debug-file (symbol) upload |
 | `tools/sentry-fetch-issue.sh` | pull an issue's backtrace + attachments locally to fix it |

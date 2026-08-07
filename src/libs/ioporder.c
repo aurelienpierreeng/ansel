@@ -24,20 +24,22 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
+#include "common/database.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/iop_order.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
 #include "control/signal.h"
 #include "develop/develop.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
-#include "dtgtk/button.h"
-#include "dtgtk/paint.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/paint.h"
+#include "gui/dtgtk/togglebutton.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
@@ -45,6 +47,7 @@
 #include <gtk/gtk.h>
 #include <limits.h>
 #include <math.h>
+#include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -140,10 +143,10 @@ static void _ioporder_popup_destroy(GtkWidget *widget, gpointer user_data);
  */
 static gboolean _ioporder_module_in_history(const dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(darktable.develop) || !module) return FALSE;
+  if(IS_NULL_PTR(dt_dev_get_global()) || !module) return FALSE;
 
   /* Walk the whole history stack and look for the exact module instance. */
-  for(GList *history = g_list_last(darktable.develop->history); history; history = g_list_previous(history))
+  for(GList *history = g_list_last(dt_dev_get_global()->history); history; history = g_list_previous(history))
   {
     const dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)history->data;
     if(hitem && hitem->module == module) return TRUE;
@@ -179,10 +182,10 @@ static gboolean _ioporder_module_is_graph_visible(const dt_iop_module_t *module)
  */
 static dt_dev_pixelpipe_iop_t *_ioporder_get_preview_piece(dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(darktable.develop) || IS_NULL_PTR(darktable.develop->preview_pipe) || !module) return NULL;
+  if(IS_NULL_PTR(dt_dev_get_global()) || IS_NULL_PTR(dt_dev_get_global()->preview_pipe) || !module) return NULL;
 
   /* Search the preview pipe nodes for the piece instantiated from this module. */
-  for(GList *nodes = darktable.develop->preview_pipe->nodes; nodes; nodes = g_list_next(nodes))
+  for(GList *nodes = dt_dev_get_global()->preview_pipe->nodes; nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
     if(piece && piece->module == module) return piece;
@@ -439,18 +442,18 @@ static const dt_iop_order_iccprofile_info_t *_ioporder_runtime_band_profile_info
                                                                                  const dt_iop_buffer_dsc_t *dsc,
                                                                                  const gboolean after_module)
 {
-  if(IS_NULL_PTR(darktable.develop) || IS_NULL_PTR(darktable.develop->preview_pipe) || !module || IS_NULL_PTR(dsc)) return NULL;
+  if(IS_NULL_PTR(dt_dev_get_global()) || IS_NULL_PTR(dt_dev_get_global()->preview_pipe) || !module || IS_NULL_PTR(dsc)) return NULL;
   if(!dt_iop_colorspace_is_rgb(dsc->cst)) return NULL;
 
   if(dsc->cst == IOP_CS_RGB_DISPLAY)
-    return dt_ioppr_get_pipe_output_profile_info(darktable.develop->preview_pipe);
+    return dt_ioppr_get_pipe_output_profile_info(dt_dev_get_global()->preview_pipe);
 
   const gboolean in_pipeline_rgb = colorin_crossed || (after_module && !strcmp(module->op, "colorin"));
   if(!in_pipeline_rgb)
-    return dt_ioppr_get_pipe_input_profile_info(darktable.develop->preview_pipe);
+    return dt_ioppr_get_pipe_input_profile_info(dt_dev_get_global()->preview_pipe);
 
   (void)raw_input;
-  return dt_ioppr_get_pipe_work_profile_info(darktable.develop->preview_pipe);
+  return dt_ioppr_get_pipe_work_profile_info(dt_dev_get_global()->preview_pipe);
 }
 
 /**
@@ -489,13 +492,13 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
 {
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
 
-  if(IS_NULL_PTR(darktable.develop) || !darktable.develop->iop_order_list)
+  if(IS_NULL_PTR(dt_dev_get_global()) || !dt_dev_get_global()->iop_order_list)
   {
     d->current_mode = DT_IOP_ORDER_ANSEL_RAW;
     return g_strdup(_(dt_iop_order_string(DT_IOP_ORDER_ANSEL_RAW)));
   }
 
-  const dt_iop_order_t kind = dt_ioppr_get_iop_order_list_kind(darktable.develop->iop_order_list);
+  const dt_iop_order_t kind = dt_ioppr_get_iop_order_list_kind(dt_dev_get_global()->iop_order_list);
 
   if(kind != DT_IOP_ORDER_CUSTOM)
   {
@@ -503,13 +506,13 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
     return g_strdup(_(dt_iop_order_string(kind)));
   }
 
-  gchar *iop_order_list = dt_ioppr_serialize_text_iop_order_list(darktable.develop->iop_order_list);
+  gchar *iop_order_list = dt_ioppr_serialize_text_iop_order_list(dt_dev_get_global()->iop_order_list);
   gchar *name = NULL;
   int index = 0;
   sqlite3_stmt *stmt;
 
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT op_params, name"
                               " FROM data.presets"
                               " WHERE operation='ioporder'"
@@ -574,7 +577,7 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
   gchar *active_id = g_strdup("__custom__");
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT name"
                               " FROM data.presets"
                               " WHERE operation='ioporder' AND op_version=?1"
@@ -742,7 +745,7 @@ static void _ioporder_node_show_presets(GtkButton *button, gpointer user_data)
   if(!node || !node->module) return;
 
   dt_gui_presets_popup_menu_show_for_module(node->module);
-  dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button),
+  dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button),
                     GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
   if(DTGTK_IS_BUTTON(button)) dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
@@ -939,7 +942,7 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
 
   int x = DT_IOPORDER_GRAPH_LEFT_MARGIN;
   int visible_count = 0;
-  const gboolean raw_input = darktable.develop && darktable.develop->image_storage.dsc.cst == IOP_CS_RAW;
+  const gboolean raw_input = dt_dev_get_global() && dt_dev_get_global()->image_storage.dsc.cst == IOP_CS_RAW;
   gboolean colorin_crossed = FALSE;
   const int endpoint_height = DT_PIXEL_APPLY_DPI(64);
   const int base_x = x;
@@ -950,7 +953,7 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
   x += DT_IOPORDER_GRAPH_NODE_STEP;
 
   /* Walk the sorted module list and instantiate one graph node per visible module. */
-  for(GList *modules = darktable.develop->iop; modules; modules = g_list_next(modules))
+  for(GList *modules = dt_dev_get_global()->iop; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     if(!_ioporder_module_is_graph_visible(module)) continue;
@@ -1021,7 +1024,7 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
     GdkDisplay *display = gtk_widget_get_display(d->window);
     GdkWindow *window = gtk_widget_get_window(d->window);
     if(IS_NULL_PTR(window))
-      window = gtk_widget_get_window(dt_ui_main_window(darktable.gui->ui));
+      window = gtk_widget_get_window(dt_gui_main_window());
 
     GdkMonitor *monitor = (display && window) ? gdk_display_get_monitor_at_window(display, window) : NULL;
     if(IS_NULL_PTR(monitor) && display)
@@ -1195,7 +1198,7 @@ static gboolean _ioporder_graph_draw(GtkWidget *widget, cairo_t *cr, gpointer us
     return FALSE;
   }
 
-  const gboolean raw_input = darktable.develop && darktable.develop->image_storage.dsc.cst == IOP_CS_RAW;
+  const gboolean raw_input = dt_dev_get_global() && dt_dev_get_global()->image_storage.dsc.cst == IOP_CS_RAW;
 
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2));
 
@@ -1437,9 +1440,9 @@ static gboolean _ioporder_drag_motion(GtkWidget *widget, GdkDragContext *dc, gin
   if(module_src && module_dest && module_src != module_dest)
   {
     if(module_src->iop_order < module_dest->iop_order)
-      can_move = dt_ioppr_check_can_move_after_iop(darktable.develop->iop, module_src, module_dest);
+      can_move = dt_ioppr_check_can_move_after_iop(dt_dev_get_global()->iop, module_src, module_dest);
     else
-      can_move = dt_ioppr_check_can_move_before_iop(darktable.develop->iop, module_src, module_dest);
+      can_move = dt_ioppr_check_can_move_before_iop(dt_dev_get_global()->iop, module_src, module_dest);
   }
 
   d->drag_dest = can_move ? module_dest : NULL;
@@ -1532,7 +1535,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
-  GtkWindow *parent = GTK_WINDOW(d->window ? d->window : dt_ui_main_window(darktable.gui->ui));
+  GtkWindow *parent = GTK_WINDOW(d->window ? d->window : dt_gui_main_window());
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("save module order preset"), parent,
                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
                                                   _("_cancel"), GTK_RESPONSE_CANCEL,
@@ -1558,7 +1561,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
       void *params = self->get_params(self, &size);
       dt_lib_presets_add(preset_name, self->plugin_name, self->version(), params, size, FALSE);
       dt_free(params);
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_PRESETS_CHANGED, g_strdup(self->plugin_name));
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PRESETS_CHANGED, g_strdup(self->plugin_name));
     }
   }
 
@@ -1596,7 +1599,7 @@ static void _ioporder_apply_preset(GtkComboBox *combo, gpointer user_data)
     return;
 
   dt_lib_presets_apply(preset_name, self->plugin_name, self->version());
-  dt_iop_gui_commit_iop_order_change(darktable.develop, NULL, FALSE, TRUE, "_ioporder_apply_preset");
+  dt_iop_gui_commit_iop_order_change(dt_dev_get_global(), NULL, FALSE, TRUE, "_ioporder_apply_preset");
   _ioporder_rebuild_graph(self);
 }
 
@@ -1627,7 +1630,7 @@ static void _ioporder_init_popup(dt_lib_module_t *self)
 
   gtk_window_set_title(GTK_WINDOW(window), _("module order"));
   gtk_window_set_default_size(GTK_WINDOW(window), DT_PIXEL_APPLY_DPI(1120), DT_PIXEL_APPLY_DPI(440));
-  gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_destroy_with_parent(GTK_WINDOW(window), TRUE);
   gtk_container_set_border_width(GTK_CONTAINER(root), DT_PIXEL_APPLY_DPI(8));
 
@@ -1759,17 +1762,17 @@ void gui_init(dt_lib_module_t *self)
 
   d->current_mode = -1;
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
                                   G_CALLBACK(_ioporder_refresh_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_INITIALIZE,
                                   G_CALLBACK(_ioporder_refresh_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
                                   G_CALLBACK(_ioporder_refresh_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MODULE_MOVED,
                                   G_CALLBACK(_ioporder_refresh_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_ioporder_refresh_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PRESETS_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_PRESETS_CHANGED,
                                   G_CALLBACK(_ioporder_presets_changed_callback), self);
 }
 
@@ -1779,8 +1782,8 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
   if(IS_NULL_PTR(d)) return;
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_ioporder_refresh_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_ioporder_presets_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_ioporder_refresh_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_ioporder_presets_changed_callback), self);
 
   _ioporder_clear_graph(d);
   if(d->window) gtk_widget_destroy(d->window);
@@ -1794,9 +1797,9 @@ void gui_reset(dt_lib_module_t *self)
   GList *iop_order_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_ANSEL_RAW);
   if(IS_NULL_PTR(iop_order_list)) return;
 
-  const int32_t imgid = darktable.develop->image_storage.id;
-  dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
-  dt_iop_gui_commit_iop_order_change(darktable.develop, NULL, FALSE, FALSE, "dt_lib_ioporder_gui_reset");
+  const int32_t imgid = dt_dev_get_global()->image_storage.id;
+  dt_ioppr_change_iop_order(dt_dev_get_global(), imgid, iop_order_list);
+  dt_iop_gui_commit_iop_order_change(dt_dev_get_global(), NULL, FALSE, FALSE, "dt_lib_ioporder_gui_reset");
 
   d->current_mode = DT_IOP_ORDER_ANSEL_RAW;
   g_list_free_full(iop_order_list, dt_free_gpointer);
@@ -1850,9 +1853,9 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   GList *iop_order_list = dt_ioppr_deserialize_iop_order_list(params, (size_t)size);
   if(IS_NULL_PTR(iop_order_list)) return 1;
 
-  const int32_t imgid = darktable.develop->image_storage.id;
-  dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
-  dt_iop_gui_commit_iop_order_change(darktable.develop, NULL, FALSE, FALSE, "dt_lib_ioporder_set_params");
+  const int32_t imgid = dt_dev_get_global()->image_storage.id;
+  dt_ioppr_change_iop_order(dt_dev_get_global(), imgid, iop_order_list);
+  dt_iop_gui_commit_iop_order_change(dt_dev_get_global(), NULL, FALSE, FALSE, "dt_lib_ioporder_set_params");
   g_list_free_full(iop_order_list, dt_free_gpointer);
   return 0;
 }
@@ -1860,7 +1863,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
 void *get_params(dt_lib_module_t *self, int *size)
 {
   size_t p_size = 0;
-  void *params = dt_ioppr_serialize_iop_order_list(darktable.develop->iop_order_list, &p_size);
+  void *params = dt_ioppr_serialize_iop_order_list(dt_dev_get_global()->iop_order_list, &p_size);
   *size = (int)p_size;
   return params;
 }

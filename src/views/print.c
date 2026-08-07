@@ -29,21 +29,17 @@
 */
 
 /** this is the view for the print module.  */
-#include "common/collection.h"
 #include "common/cups_print.h"
 #include "common/printing.h"
-#include "common/darktable.h"
-#include "common/debug.h"
 #include "common/image_cache.h"
+#include "common/module_versioning.h"
 #include "common/selection.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "views/view.h"
 #include "views/view_api.h"
 
@@ -84,10 +80,10 @@ static void _film_strip_activated(const int32_t imgid, void *data)
   dt_print_t *prt = (dt_print_t *)self->data;
 
   prt->last_selected = imgid;
-  dt_selection_select_single(darktable.selection, imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   dt_control_queue_redraw_center();
 }
 
@@ -99,7 +95,7 @@ static void _view_print_filmstrip_activate_callback(gpointer instance, int32_t i
 static void _view_print_filmstrip_drag_begin_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
   if(imgid <= 0) return;
-  dt_selection_select_single(darktable.selection, imgid);
+  dt_selection_select_single(dt_selection_get_global(), imgid);
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
 }
@@ -163,8 +159,8 @@ init(dt_view_t *self)
     dt_view_image_surface_fetcher_init(&prt->screen_fetchers[k]);
 
   /* initialize CB to get the print settings from corresponding lib module */
-  darktable.view_manager->proxy.print.view = self;
-  darktable.view_manager->proxy.print.print_settings = _view_print_settings;
+  dt_view_manager_get_global()->proxy.print.view = self;
+  dt_view_manager_get_global()->proxy.print.print_settings = _view_print_settings;
 }
 
 void cleanup(dt_view_t *self)
@@ -283,7 +279,7 @@ static void _print_setup_initial_image(dt_print_t *prt)
 
   int32_t imgid = prt->pending_imgid;
   if(imgid <= UNKNOWN_IMAGE) imgid = prt->imgs->imgid_to_load;
-  if(imgid <= UNKNOWN_IMAGE) imgid = dt_selection_get_first_id(darktable.selection);
+  if(imgid <= UNKNOWN_IMAGE) imgid = dt_selection_get_first_id(dt_selection_get_global());
   if(imgid <= UNKNOWN_IMAGE) imgid = dt_view_active_images_get_first();
 
   if(imgid <= UNKNOWN_IMAGE) return;
@@ -358,7 +354,7 @@ void expose(dt_view_t *self, cairo_t *cri, int32_t width_i, int32_t height_i, in
 
     const dt_view_surface_value_t res =
       dt_view_image_get_surface_async(&prt->screen_fetchers[k], img->imgid, screen_width, screen_height,
-                                      &prt->screen_surfaces[k], dt_ui_center(darktable.gui->ui),
+                                      &prt->screen_surfaces[k], dt_gui_center_widget(),
                                       DT_THUMBTABLE_ZOOM_FIT);
 
     if(res != DT_VIEW_SURFACE_OK)
@@ -420,7 +416,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
 
   switch(event->keyval)
   {
@@ -438,12 +434,12 @@ int try_enter(dt_view_t *self)
 {
   dt_print_t *prt = (dt_print_t*)self->data;
   g_list_free(prt->incoming_selection);
-  prt->incoming_selection = dt_selection_get_list(darktable.selection);
+  prt->incoming_selection = dt_selection_get_list(dt_selection_get_global());
 
   //  now check that there is at least one selected image
 
   const int32_t imgid = prt->incoming_selection ? GPOINTER_TO_INT(prt->incoming_selection->data)
-                                                : dt_selection_get_first_id(darktable.selection);
+                                                : dt_selection_get_first_id(dt_selection_get_global());
 
   if(imgid < 0)
   {
@@ -453,7 +449,7 @@ int try_enter(dt_view_t *self)
   }
 
   // this loads the image from db if needed:
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   // get image and check if it has been deleted from disk first!
 
   char imgfilename[PATH_MAX] = { 0 };
@@ -462,11 +458,11 @@ int try_enter(dt_view_t *self)
   if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))
   {
     dt_control_log(_("image `%s' is currently unavailable"), img->filename);
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
     return 1;
   }
   // and drop the lock again.
-  dt_image_cache_read_release(darktable.image_cache, img);
+  dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
   // we need to setup the selected image
   prt->pending_imgid = imgid;
@@ -479,24 +475,24 @@ void enter(dt_view_t *self)
 {
   dt_print_t *prt=(dt_print_t*)self->data;
 
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "print");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "print");
 
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_filmstrip);
 
   /* scroll filmstrip to the first selected image */
   int32_t startup_imgid = prt->pending_imgid;
   if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = prt->imgs->imgid_to_load;
-  if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = dt_selection_get_first_id(darktable.selection);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
+  if(startup_imgid <= UNKNOWN_IMAGE) startup_imgid = dt_selection_get_first_id(dt_selection_get_global());
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_ACTIVATE,
                             G_CALLBACK(_view_print_filmstrip_activate_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_FILMSTRIP_DRAG_BEGIN,
                             G_CALLBACK(_view_print_filmstrip_drag_begin_callback), self);
 
   dt_gui_refocus_center();
 
-  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  GtkWidget *widget = dt_gui_center_widget();
 
   gtk_drag_dest_set(widget, GTK_DEST_DEFAULT_ALL,
                     target_list_all, n_targets_all, GDK_ACTION_MOVE);
@@ -506,7 +502,7 @@ void enter(dt_view_t *self)
   dt_control_set_mouse_over_id(startup_imgid);
   dt_control_set_keyboard_over_id(startup_imgid);
   prt->last_selected = startup_imgid;
-  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, darktable.gui->ui->thumbtable_filmstrip);
+  g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
   g_list_free(prt->incoming_selection);
   prt->incoming_selection = NULL;
 }
@@ -514,17 +510,17 @@ void enter(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   dt_print_t *prt=(dt_print_t*)self->data;
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
   if(prt->busy) dt_control_log_busy_leave();
   prt->busy = FALSE;
 
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_filmstrip);
 
   /* disconnect from filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                G_CALLBACK(_view_print_filmstrip_activate_callback),
                                (gpointer)self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                G_CALLBACK(_view_print_filmstrip_drag_begin_callback),
                                (gpointer)self);
 

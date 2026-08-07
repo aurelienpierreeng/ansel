@@ -15,19 +15,18 @@
 
 #include "views/dev_toolbox.h"
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/darktable.h"
 #include "common/file_location.h"
 #include "common/usermanual_url.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/dev_pixelpipe.h"
-#include "dtgtk/button.h"
-#include "dtgtk/paint.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/paint.h"
+#include "gui/dtgtk/togglebutton.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
 
@@ -216,10 +215,10 @@ void dt_dev_toolbox_add_accels(dt_develop_t *dev, GtkAccelGroup *accel_group, co
     }
 
     if(activate_label)
-      dt_accels_new_action_shortcut(darktable.gui->accels, dt_dev_toolbox_activate_accel, button, accel_group,
+      dt_accels_new_action_shortcut(dt_gui_get_accels(), dt_dev_toolbox_activate_accel, button, accel_group,
                                     category, activate_label, 0, 0, FALSE, _("Triggers the action"));
     if(focus_label)
-      dt_accels_new_action_shortcut(darktable.gui->accels, dt_dev_toolbox_focus_accel, button, accel_group,
+      dt_accels_new_action_shortcut(dt_gui_get_accels(), dt_dev_toolbox_focus_accel, button, accel_group,
                                     category, focus_label, 0, 0, FALSE, _("Shows the options popover"));
   }
 }
@@ -231,7 +230,7 @@ void dt_dev_toolbox_add_accels(dt_develop_t *dev, GtkAccelGroup *accel_group, co
 
 static void _button_clicked(GtkWidget *w, gpointer user_data);
 
-/* Keep both buttons' active state in sync with darktable.color_profiles->mode,
+/* Keep both buttons' active state in sync with dt_colorspaces_get_global()->mode,
    since enabling one implicitly disables the other. */
 static void _update_softproof_gamut_checking(dt_develop_t *dev)
 {
@@ -239,9 +238,9 @@ static void _update_softproof_gamut_checking(dt_develop_t *dev)
   g_signal_handlers_block_by_func(dev->profile.gamut_button, _button_clicked, dev);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dev->profile.softproof_button),
-                               darktable.color_profiles->mode == DT_PROFILE_SOFTPROOF);
+                               dt_colorspaces_get_global()->mode == DT_PROFILE_SOFTPROOF);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dev->profile.gamut_button),
-                               darktable.color_profiles->mode == DT_PROFILE_GAMUTCHECK);
+                               dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK);
 
   g_signal_handlers_unblock_by_func(dev->profile.softproof_button, _button_clicked, dev);
   g_signal_handlers_unblock_by_func(dev->profile.gamut_button, _button_clicked, dev);
@@ -274,15 +273,15 @@ static void _button_clicked(GtkWidget *w, gpointer user_data)
       break;
 
     case DT_DEV_TOOLBOX_SOFTPROOF:
-      darktable.color_profiles->mode
-          = (darktable.color_profiles->mode == DT_PROFILE_SOFTPROOF) ? DT_PROFILE_NORMAL : DT_PROFILE_SOFTPROOF;
+      dt_colorspaces_get_global()->mode
+          = (dt_colorspaces_get_global()->mode == DT_PROFILE_SOFTPROOF) ? DT_PROFILE_NORMAL : DT_PROFILE_SOFTPROOF;
       _update_softproof_gamut_checking(dev);
       dt_dev_pixelpipe_resync_history_main(dev);
       break;
 
     case DT_DEV_TOOLBOX_GAMUT:
-      darktable.color_profiles->mode
-          = (darktable.color_profiles->mode == DT_PROFILE_GAMUTCHECK) ? DT_PROFILE_NORMAL : DT_PROFILE_GAMUTCHECK;
+      dt_colorspaces_get_global()->mode
+          = (dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK) ? DT_PROFILE_NORMAL : DT_PROFILE_GAMUTCHECK;
       _update_softproof_gamut_checking(dev);
       dt_dev_pixelpipe_resync_history_main(dev);
       break;
@@ -343,20 +342,20 @@ static void _build_overexposed_popover(dt_develop_t *dev)
   gtk_container_add(GTK_CONTAINER(dev->overexposed.floating_window), vbox);
 
   GtkWidget *mode;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, mode, NULL, N_("clipping preview mode"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("clipping preview mode"),
                                _("select the metric you want to preview\nfull gamut is the combination of all other modes"),
                                dev->overexposed.mode, _overexposed_mode_callback, dev,
                                N_("full gamut"), N_("any RGB channel"), N_("luminance only"), N_("saturation only"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mode), TRUE, TRUE, 0);
 
   GtkWidget *colorscheme;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, colorscheme, NULL, N_("color scheme"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), colorscheme, NULL, N_("color scheme"),
                                _("select colors to indicate clipping"), dev->overexposed.colorscheme,
                                _overexposed_colorscheme_callback, dev, N_("black & white"), N_("red & blue"),
                                N_("purple & green"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(colorscheme), TRUE, TRUE, 0);
 
-  GtkWidget *lower = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), -32., -4., 1., -12.69, 2);
+  GtkWidget *lower = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), -32., -4., 1., -12.69, 2);
   dt_bauhaus_slider_set(lower, dev->overexposed.lower);
   dt_bauhaus_slider_set_format(lower, _(" EV"));
   dt_bauhaus_widget_set_label(lower, N_("lower threshold"));
@@ -371,7 +370,7 @@ static void _build_overexposed_popover(dt_develop_t *dev)
   g_signal_connect(G_OBJECT(lower), "value-changed", G_CALLBACK(_overexposed_lower_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(lower), TRUE, TRUE, 0);
 
-  GtkWidget *upper = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0.0, 100.0, 0.1, 99.99, 2);
+  GtkWidget *upper = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0.0, 100.0, 0.1, 99.99, 2);
   dt_bauhaus_slider_set(upper, dev->overexposed.upper);
   dt_bauhaus_slider_set_format(upper, "%");
   dt_bauhaus_widget_set_label(upper, N_("upper threshold"));
@@ -420,13 +419,13 @@ static void _build_rawoverexposed_popover(dt_develop_t *dev)
   gtk_container_add(GTK_CONTAINER(dev->rawoverexposed.floating_window), vbox);
 
   GtkWidget *mode;
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, mode, NULL, N_("mode"), _("select how to mark the clipped pixels"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mode, NULL, N_("mode"), _("select how to mark the clipped pixels"),
                                dev->rawoverexposed.mode, _rawoverexposed_mode_callback, dev,
                                N_("mark with CFA color"), N_("mark with solid color"), N_("false color"));
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mode), TRUE, TRUE, 0);
 
   // FIXME can't use DT_BAUHAUS_COMBOBOX_NEW_FULL because of (unnecessary?) translation context
-  GtkWidget *colorscheme = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  GtkWidget *colorscheme = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(colorscheme, N_("color scheme"));
   dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "red"));
   dt_bauhaus_combobox_add(colorscheme, C_("solidcolor", "green"));
@@ -438,7 +437,7 @@ static void _build_rawoverexposed_popover(dt_develop_t *dev)
   g_signal_connect(G_OBJECT(colorscheme), "value-changed", G_CALLBACK(_rawoverexposed_colorscheme_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(colorscheme), TRUE, TRUE, 0);
 
-  GtkWidget *threshold = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0.0, 2.0, 0.01, 1.0, 3);
+  GtkWidget *threshold = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0.0, 2.0, 0.01, 1.0, 3);
   dt_bauhaus_slider_set(threshold, dev->rawoverexposed.threshold);
   dt_bauhaus_widget_set_label(threshold, N_("clipping threshold"));
   gtk_widget_set_tooltip_text(threshold,
@@ -454,18 +453,18 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
   dt_develop_t *dev = (dt_develop_t *)user_data;
   gboolean profile_changed = FALSE;
   const int pos = dt_bauhaus_combobox_get(combo);
-  for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
+  for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
   {
     dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
     if(pp->out_pos == pos)
     {
-      if(darktable.color_profiles->softproof_type != pp->type
-        || (darktable.color_profiles->softproof_type == DT_COLORSPACE_FILE
-            && strcmp(darktable.color_profiles->softproof_filename, pp->filename)))
+      if(dt_colorspaces_get_global()->softproof_type != pp->type
+        || (dt_colorspaces_get_global()->softproof_type == DT_COLORSPACE_FILE
+            && strcmp(dt_colorspaces_get_global()->softproof_filename, pp->filename)))
       {
-        darktable.color_profiles->softproof_type = pp->type;
-        g_strlcpy(darktable.color_profiles->softproof_filename, pp->filename,
-                 sizeof(darktable.color_profiles->softproof_filename));
+        dt_colorspaces_get_global()->softproof_type = pp->type;
+        g_strlcpy(dt_colorspaces_get_global()->softproof_filename, pp->filename,
+                 sizeof(dt_colorspaces_get_global()->softproof_filename));
         profile_changed = TRUE;
       }
       goto end;
@@ -474,14 +473,14 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
 
   // profile not found, fall back to sRGB. shouldn't happen
   fprintf(stderr, "can't find softproof profile `%s', using sRGB instead\n", dt_bauhaus_combobox_get_text(combo));
-  profile_changed = darktable.color_profiles->softproof_type != DT_COLORSPACE_SRGB;
-  darktable.color_profiles->softproof_type = DT_COLORSPACE_SRGB;
-  darktable.color_profiles->softproof_filename[0] = '\0';
+  profile_changed = dt_colorspaces_get_global()->softproof_type != DT_COLORSPACE_SRGB;
+  dt_colorspaces_get_global()->softproof_type = DT_COLORSPACE_SRGB;
+  dt_colorspaces_get_global()->softproof_filename[0] = '\0';
 
 end:
   if(profile_changed)
   {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                                   DT_COLORSPACES_PROFILE_TYPE_SOFTPROOF);
     dt_dev_pixelpipe_resync_history_main(dev);
   }
@@ -507,20 +506,20 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
   dt_loc_get_datadir(datadir, sizeof(datadir));
 
-  GtkWidget *softproof_profile = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  GtkWidget *softproof_profile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(softproof_profile, N_("softproof profile"));
   dt_bauhaus_combobox_set_entries_ellipsis(softproof_profile, PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(vbox), softproof_profile, TRUE, TRUE, 0);
 
-  for(const GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
+  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
     // the system display profile is only suitable for display purposes
     if(prof->out_pos > -1)
     {
       dt_bauhaus_combobox_add(softproof_profile, prof->name);
-      if(prof->type == darktable.color_profiles->softproof_type
-        && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, darktable.color_profiles->softproof_filename)))
+      if(prof->type == dt_colorspaces_get_global()->softproof_type
+        && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, dt_colorspaces_get_global()->softproof_filename)))
         dt_bauhaus_combobox_set(softproof_profile, prof->out_pos);
     }
   }
@@ -542,7 +541,7 @@ static void _display_brightness_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_conf_set_int("display/brightness", (int)(dt_bauhaus_slider_get(slider)));
   dt_control_queue_redraw_center();
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DARKROOM_UI_CHANGED);
 }
 
 static void _display_borders_callback(GtkWidget *slider, gpointer user_data)
@@ -551,7 +550,7 @@ static void _display_borders_callback(GtkWidget *slider, gpointer user_data)
   dt_conf_set_int("plugins/darkroom/ui/border_size", (int)dt_bauhaus_slider_get(slider));
   dt_dev_toolbox_apply_iso_12646_size(dev);
   dt_dev_pixelpipe_change_zoom_main(dev);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DARKROOM_UI_CHANGED);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DARKROOM_UI_CHANGED);
 }
 
 static void _build_display_popover(dt_develop_t *dev)
@@ -564,14 +563,14 @@ static void _build_display_popover(dt_develop_t *dev)
   gtk_widget_set_margin_bottom(vbox, DT_PIXEL_APPLY_DPI(DT_GUI_BOX_SPACING));
   gtk_container_add(GTK_CONTAINER(dev->display.floating_window), vbox);
 
-  GtkWidget *brightness = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0, 100, 5, 50, 0);
+  GtkWidget *brightness = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0, 100, 5, 50, 0);
   dt_bauhaus_slider_set(brightness, (int)dt_conf_get_int("display/brightness"));
   dt_bauhaus_widget_set_label(brightness, N_("Background brightness"));
   dt_bauhaus_slider_set_format(brightness, "%");
   g_signal_connect(G_OBJECT(brightness), "value-changed", G_CALLBACK(_display_brightness_callback), dev);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(brightness), TRUE, TRUE, 0);
 
-  GtkWidget *borders = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0, 250, 5, 10, 0);
+  GtkWidget *borders = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0, 250, 5, 10, 0);
   dt_bauhaus_slider_set(borders, dt_conf_get_int("plugins/darkroom/ui/border_size"));
   dt_bauhaus_widget_set_label(borders, N_("Picture margins"));
   dt_bauhaus_slider_set_format(borders, "px");
@@ -634,7 +633,7 @@ static GtkWidget *_create_one_button(dt_develop_t *dev, dt_view_type_flags_t vie
   g_object_set_data(G_OBJECT(button), DT_DEV_TOOLBOX_BUTTON_TYPE_KEY, GINT_TO_POINTER(type));
   gtk_widget_set_tooltip_text(button, tooltip);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(_button_clicked), dev);
-  dt_view_manager_module_toolbox_add(darktable.view_manager, button, views);
+  dt_view_manager_module_toolbox_add(dt_view_manager_get_global(), button, views);
   return button;
 }
 

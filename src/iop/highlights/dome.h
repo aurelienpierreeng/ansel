@@ -16,13 +16,13 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_DOME_H
+#define DT_IOP_HIGHLIGHTS_DOME_H
 
 // Biharmonic luminance dome solve (CPU + OpenCL).
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/opencl.h"
 #include "iop/highlights/common.h"
 #include <stdint.h>
 
@@ -48,3 +48,4 @@ void _biharmonic_dome(float *const restrict field, const uint8_t *const restrict
 cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, cl_mem hole, const int region_w,
                            const int region_h, const int downsample, const dt_dev_pixelpipe_t *pipe);
 #endif
+#endif // DT_IOP_HIGHLIGHTS_DOME_H

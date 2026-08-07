@@ -19,8 +19,11 @@
 // R9 sensor-rolloff (knee) estimation and inversion (CPU + OpenCL). (implementation; see knee.h for the public
 // API.)
 
-#include "common/darktable.h"
-#include "common/solvers/sparse_cholesky_cl.h"
+#include "common/macros.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "math/sparse_cholesky_cl.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/knee.h"

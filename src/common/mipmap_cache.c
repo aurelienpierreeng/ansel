@@ -47,21 +47,21 @@
 */
 
 #include "common/mipmap_cache.h"
-#include "common/darktable.h"
-#include "common/debug.h"
+#include "system/sys_resources.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"
 #include "common/image_cache.h"
+#include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 #include "common/history.h"
-#include "common/imageio.h"
-#include "common/imageio_jpeg.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_jpeg.h"
+#include "imageio/imageio_module.h"
+#include "common/conf.h"
 #include "control/jobs.h"
 #include "develop/imageop_math.h"
-#include "gui/gtk.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -201,7 +201,7 @@ static int dt_mipmap_cache_get_filename(gchar *mipmapfilename, size_t size)
   dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
 
   // Build the mipmap filename fram hashing the path of the library DB
-  const gchar *dbfilename = dt_database_get_path(darktable.db);
+  const gchar *dbfilename = dt_database_get_path(dt_database_get_global());
 
   if(!strcmp(dbfilename, ":memory:"))
   {
@@ -250,7 +250,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
 {
   // Get file name
   char _filename[PATH_MAX] = { 0 };
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   if(filename || ext || input_exists || is_jpg_input)
   {
     const dt_image_path_source_t source = dt_image_choose_input_path(img, _filename, sizeof(_filename), FALSE);
@@ -292,7 +292,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   }
 
   if(img)
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
 }
 
 
@@ -505,10 +505,10 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
   // first sighting to a `create` so the link resolves.
   if(dt_supervisor_active())
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(img) dt_supervisor_image(DT_SV_UPDATE, imgid, img);
     dt_supervisor_mipmap(DT_SV_CREATE, imgid, mip);
-    if(img) dt_image_cache_read_release(darktable.image_cache, img);
+    if(img) dt_image_cache_read_release(dt_image_cache_get_global(), img);
   }
 
   gboolean write_to_disk;
@@ -863,7 +863,7 @@ void dt_mipmap_cache_get_usage(dt_mipmap_cache_t *cache, size_t *current, size_t
   g_array_free(entries, TRUE);
 
   if(current) *current = used;
-  if(max) *max = darktable.dtresources.mipmap_memory; // user-specified mipmap RAM budget
+  if(max) *max = dt_get_mipmap_mem(); // user-specified mipmap RAM budget
 }
 
 GArray *dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_t *cache)
@@ -921,7 +921,7 @@ static gboolean _get_image_copy(const int32_t imgid, dt_image_t *buffered_image)
   // load the image:
   // make sure we access the r/w lock as shortly as possible!
   gboolean no_buffer = TRUE;
-  const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
 
   if(cimg)
   {
@@ -929,7 +929,7 @@ static gboolean _get_image_copy(const int32_t imgid, dt_image_t *buffered_image)
     no_buffer = FALSE;
   }
 
-  dt_image_cache_read_release(darktable.image_cache, cimg);
+  dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
 
   return no_buffer;
 }
@@ -981,14 +981,14 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     if(ret == DT_IMAGEIO_OK)
     {
       // swap back new image data, may contain updated EXIF & colorspace
-      dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+      dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
       // dt_image_cache_get() returns NULL if the image vanished from the DB/cache while this
       // full-res I/O was in flight (e.g. removed from the library concurrently) -- nothing left
       // to swap the freshly-read data back into.
       if(!IS_NULL_PTR(img))
       {
         *img = buffered_image;
-        dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
+        dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
       }
     }
     else
@@ -1189,13 +1189,14 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
 
     // Color convert
     cmsHTRANSFORM transform = NULL;
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+    pthread_rwlock_rdlock(&profiles->xprofile_lock);
     gboolean alloc = FALSE;
 
     if(profile == DT_COLORSPACE_DISPLAY)
     { 
       // Convert to whatever display space to save thumbnails into Adobe RGB
-      transform = darktable.color_profiles->transform_display_to_adobe_rgb;
+      transform = dt_colorspaces_get_global()->transform_display_to_adobe_rgb;
     }
     else
     {
@@ -1215,7 +1216,7 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
     // it's still only swapping R <-> B.
     dt_colorspaces_transform_rgba8_to_bgra8(transform, buf, buf, dsc->width, dsc->height);
     if(alloc) cmsDeleteTransform(transform);
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
+    pthread_rwlock_unlock(&profiles->xprofile_lock);
 
     dsc->color_space = DT_COLORSPACE_ADOBERGB;
     dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
@@ -1269,11 +1270,11 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   char filename[PATH_MAX] = { 0 };
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(img)
     {
       source = dt_image_choose_input_path(img, filename, sizeof(filename), FALSE);
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
     }
   }
   if(source == DT_IMAGE_PATH_NONE)
@@ -1284,11 +1285,11 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   }
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   // lock image after we have the buffer, we might need to lock the image struct for
   // writing during raw loading, to write to width/height.
-  const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
 
   dt_iop_roi_t roi_in, roi_out;
   roi_in.x = roi_in.y = 0;
@@ -1307,7 +1308,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
 
   if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
   {
-    dt_image_cache_read_release(darktable.image_cache, image);
+    dt_image_cache_read_release(dt_image_cache_get_global(), image);
     *width = *height = 0;
     *iscale = 0.0f;
     return;
@@ -1348,13 +1349,13 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
     dt_iop_clip_and_zoom(out, (const float *)buf.buf, &roi_out, &roi_in, roi_out.width, roi_in.width);
   }
 
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   *width = roi_out.width;
   *height = roi_out.height;
   *iscale = (float)image->width / (float)roi_out.width;
 
-  dt_image_cache_read_release(darktable.image_cache, image);
+  dt_image_cache_read_release(dt_image_cache_get_global(), image);
 }
 
 
@@ -1466,7 +1467,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     for(dt_mipmap_size_t k = size + 1; k < DT_MIPMAP_F; k++)
     {
       dt_mipmap_buffer_t tmp;
-      dt_mipmap_cache_get(darktable.mipmap_cache, &tmp, imgid, k, DT_MIPMAP_TESTLOCK, 'r');
+      dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &tmp, imgid, k, DT_MIPMAP_TESTLOCK, 'r');
       if(IS_NULL_PTR(tmp.buf)) continue;
 
       *color_space = tmp.color_space;
@@ -1475,7 +1476,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
       dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d (%ix%i->%ix%i)\n", 
         size, imgid, k, tmp.width, tmp.height, *width, *height);
 
-      dt_mipmap_cache_release(darktable.mipmap_cache, &tmp);
+      dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &tmp);
       res = 0;
       break;
     }
@@ -1486,11 +1487,11 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   dt_boundingbox_t usercrop = { 0.f, 0.f, 1.f, 1.f };
   if(use_embedded_jpg)
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(img)
     {
       orientation = (img->orientation != ORIENTATION_NULL) ? img->orientation : ORIENTATION_NONE;
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
     }
 
     // Resolve outside the read lock: this path never decodes the raw, so the framing may still

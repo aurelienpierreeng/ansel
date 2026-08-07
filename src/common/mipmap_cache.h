@@ -26,9 +26,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_MIPMAP_CACHE_H
+#define DT_COMMON_MIPMAP_CACHE_H
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/cache.h"
 #include "common/colorspaces.h"
 #include "common/image.h"
@@ -114,6 +115,9 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img);
 void dt_mipmap_cache_init(dt_mipmap_cache_t *cache);
 void dt_mipmap_cache_cleanup(dt_mipmap_cache_t *cache);
 void dt_mipmap_cache_print(dt_mipmap_cache_t *cache);
+
+// Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
+struct dt_mipmap_cache_t *dt_mipmap_cache_get_global(void);
 
 // One cached mipmap buffer, for the GUI memory view.
 typedef struct dt_mipmap_cache_stats_entry_t
@@ -212,6 +216,8 @@ void dt_mipmap_get_cache_dir(char path[PATH_MAX], const dt_mipmap_cache_t *cache
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_MIPMAP_CACHE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

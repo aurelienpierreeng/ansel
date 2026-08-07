@@ -37,12 +37,16 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_COLORSPACES_H
+#define DT_COMMON_COLORSPACES_H
 
-#include "common/darktable.h"
-#include "common/matrices.h"
+#include "math/matrices.h"
+#include "system/simd.h"
 
+#include <glib.h>
 #include <lcms2.h>
+#include <pthread.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -218,6 +222,12 @@ int mat3inv(float *const dst, const float *const src);
 /** populate the global color profile lists */
 dt_colorspaces_t *dt_colorspaces_init();
 
+/* Process-wide singleton with no per-call context to ride on: this accessor is the
+ * intended end state (same category as dt_conf_*), implemented by the orchestrator.
+ * NOTE: common/colorspaces.c keeps direct access to the global for now; relocating ownership into the
+ * subsystem itself (a file-static set at init) is the follow-up, not an accessor. */
+dt_colorspaces_t *dt_colorspaces_get_global(void);
+
 /** cleanup on shutdown */
 void dt_colorspaces_cleanup(dt_colorspaces_t *self);
 
@@ -300,7 +310,7 @@ gboolean  dt_colorspaces_is_profile_equal(const char *fullname, const char *file
 dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorspaces_cicp_t *cicp, const char *filename);
 
 /** update the display transforms of srgb and adobergb to the display profile.
- * make sure that darktable.color_profiles->xprofile_lock is held when calling this! */
+ * make sure that dt_colorspaces_get_global()->xprofile_lock is held when calling this! */
 void dt_colorspaces_update_display_transforms();
 
 /** Calculate CAM->XYZ, XYZ->CAM matrices **/
@@ -379,6 +389,8 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_COLORSPACES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

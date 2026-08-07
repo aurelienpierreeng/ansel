@@ -20,7 +20,6 @@
 */
 
 #include "common/act_on.h"
-#include "common/collection.h"
 #include "common/selection.h"
 #include "control/control.h"
 #include "views/view.h"
@@ -38,8 +37,8 @@
 // get the list of images to act on during global changes (libs, accels)
 GList *dt_act_on_get_images()
 {
-  if(dt_selection_get_length(darktable.selection) > 0)
-    return dt_selection_get_list(darktable.selection);
+  if(dt_selection_get_length(dt_selection_get_global()) > 0)
+    return dt_selection_get_list(dt_selection_get_global());
 
   else if(dt_view_active_images_get_first() > -1)
     return g_list_copy(dt_view_active_images_get_all());
@@ -53,8 +52,8 @@ GList *dt_act_on_get_images()
 // get only the number of images to act on
 int dt_act_on_get_images_nb(const gboolean only_visible, const gboolean force)
 {
-  if(dt_selection_get_length(darktable.selection) > 0)
-    return dt_selection_get_length(darktable.selection);
+  if(dt_selection_get_length(dt_selection_get_global()) > 0)
+    return dt_selection_get_length(dt_selection_get_global());
 
   else if(dt_view_active_images_get_first() > -1)
     return g_list_length(dt_view_active_images_get_all());
@@ -67,8 +66,8 @@ int dt_act_on_get_images_nb(const gboolean only_visible, const gboolean force)
 
 int32_t dt_act_on_get_first_image()
 {
-  if(dt_selection_get_length(darktable.selection) > 0)
-    return dt_selection_get_first_id(darktable.selection);
+  if(dt_selection_get_length(dt_selection_get_global()) > 0)
+    return dt_selection_get_first_id(dt_selection_get_global());
 
   else if(dt_view_active_images_get_first() > -1)
     return dt_view_active_images_get_first();

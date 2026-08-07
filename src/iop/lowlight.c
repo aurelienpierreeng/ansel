@@ -47,16 +47,16 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/darktable.h"
-#include "common/debug.h"
-#include "common/opencl.h"
-#include "control/conf.h"
-#include "control/control.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
+#include "common/database.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -269,7 +269,7 @@ void init_presets(dt_iop_module_so_t *self)
 {
   dt_iop_lowlight_params_t p;
 
-  dt_database_start_transaction(darktable.db);
+  dt_database_start_transaction(dt_database_get_global());
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -434,7 +434,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("night"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(darktable.db);
+  dt_database_release_transaction(dt_database_get_global());
 }
 
 // fills in new parameters based on mouse position (in 0,1)
@@ -597,7 +597,7 @@ static gboolean lowlight_draw(GtkWidget *widget, cairo_t *crf, gpointer user_dat
   // draw labels:
   PangoLayout *layout;
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   pango_font_description_set_absolute_size(desc,(.06 * height) * PANGO_SCALE);
   layout = pango_cairo_create_layout(cr);
@@ -707,7 +707,7 @@ static gboolean lowlight_button_press(GtkWidget *widget, GdkEventButton *event, 
       p->transition_x[k] = d->transition_x[k];
       p->transition_y[k] = d->transition_y[k];
     }
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     gtk_widget_queue_draw(self->widget);
   }
   else if(event->button == 1)
@@ -791,7 +791,7 @@ void gui_init(struct dt_iop_module_t *self)
                                                   "plugins/darkroom/lowlight/graphheight", 280, 100),
                      FALSE, FALSE, 0);
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(lowlight_draw), self);

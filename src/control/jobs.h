@@ -26,7 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_JOBS_H
+#define DT_CONTROL_JOBS_H
 
 #include <glib.h>
 #include <inttypes.h>
@@ -107,9 +108,11 @@ int32_t dt_control_get_threadid();
 // Flush all non-running jobs queued in the queue matching the ID
 void dt_control_flush_jobs_queue(struct dt_control_t *control, dt_job_queue_t queue_id);
 
-#include "control/jobs/control_jobs.h"
-#include "control/jobs/film_jobs.h"
-#include "control/jobs/image_jobs.h"
+/* No trailing include of the per-subsystem job headers here: each of them includes this
+ * header back (for dt_job_t), which formed a 5-node include cycle. Consumers of a
+ * specific job factory include the matching control/jobs header explicitly. */
+
+#endif // DT_CONTROL_JOBS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

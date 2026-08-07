@@ -21,7 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_CUPS_PRINT_H
+#define DT_COMMON_CUPS_PRINT_H
 
 #include <common/colorspaces.h>
 
@@ -110,6 +111,8 @@ void dt_get_print_layout(const dt_print_info_t *prt,
                          float *px, float *py, float *pwidth, float *pheight,
                          float *ax, float *ay, float *awidth, float *aheight,
                          gboolean *borderless);
+
+#endif // DT_COMMON_CUPS_PRINT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

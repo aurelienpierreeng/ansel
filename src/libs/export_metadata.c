@@ -26,15 +26,13 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/utility.h"
 #include "gui/gdkkeys.h"
-#include "common/debug.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
-#include "control/control.h"
-#include "control/signal.h"
-#include "dtgtk/button.h"
+#include "imageio/imageio_module.h"
+#include "gui/dtgtk/button.h"
 
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
@@ -298,7 +296,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
 {
   dt_lib_export_metadata_t *d = calloc(1, sizeof(dt_lib_export_metadata_t));
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("edit metadata exportation"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);
   d->dialog = dialog;

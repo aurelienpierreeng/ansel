@@ -26,10 +26,11 @@
 */
 
 #include "common/undo.h"
-#include "common/collection.h"
-#include "common/darktable.h"
 #include "common/image.h"
-#include "control/control.h"
+#include "common/logging.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/times.h"
 #include <glib.h>   // for GList, gpointer, g_list_prepend
 #include <stdlib.h> // for NULL, malloc, free
 #include <sys/time.h>

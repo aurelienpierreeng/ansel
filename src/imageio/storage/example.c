@@ -35,17 +35,17 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/paths.h"
 #include "common/file_location.h"
 #include "common/image.h"
 #include "common/image_cache.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
-#include "control/conf.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
 #include "control/control.h"
-#include "dtgtk/button.h"
-#include "dtgtk/paint.h"
-#include "gui/gtk.h"
+#include "gui/dtgtk/paint.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -223,9 +223,9 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
     gchar exif[256] = { 0 };
     _email_attachment_t *attachment = (_email_attachment_t *)iter->data;
     gchar *filename = g_path_get_basename(attachment->file);
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, attachment->imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), attachment->imgid, 'r');
     dt_image_print_exif(img, exif, sizeof(exif));
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
     gchar *imgbody = g_strdup_printf(imageBodyFormat, filename, exif);
     if (!IS_NULL_PTR(body)) {

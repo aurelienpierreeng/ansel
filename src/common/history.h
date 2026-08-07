@@ -31,13 +31,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_HISTORY_H
+#define DT_COMMON_HISTORY_H
 
 #include <gtk/gtk.h>
 #include <inttypes.h>
 #include <sqlite3.h>
 
-#include "common/history_actions.h"
 #include "common/image_cache.h"
 
 #ifdef __cplusplus
@@ -132,6 +132,8 @@ void dt_history_hash_set_mipmap(const int32_t imgid, const uint64_t history_hash
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_HISTORY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

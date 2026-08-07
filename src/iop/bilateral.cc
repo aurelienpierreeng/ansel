@@ -47,20 +47,25 @@
 #define __STDC_FORMAT_MACROS
 
 #include "glib.h"
+#include "common/pixelpipe_cache_alloc.h"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "common/imagebuf.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include <assert.h>
 #include <math.h>
@@ -237,7 +242,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   else
   {
     for(int k = 0; k < 5; k++) sigma[k] = 1.0f / sigma[k];
-    PermutohedralLattice<5, 4> lattice((size_t)roi_in->width * roi_in->height, darktable.num_openmp_threads);
+    PermutohedralLattice<5, 4> lattice((size_t)roi_in->width * roi_in->height, dt_get_num_openmp_threads());
 
 // splat into the lattice
 #ifdef _OPENMP

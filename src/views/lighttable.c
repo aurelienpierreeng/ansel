@@ -73,29 +73,17 @@
 */
 /** this is the view for the lighttable module.  */
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/collection.h"
-#include "common/colorlabels.h"
-#include "common/darktable.h"
-#include "common/debug.h"
-#include "common/file_location.h"
-#include "common/grouping.h"
 #include "common/history.h"
-#include "common/image_cache.h"
-#include "common/ratings.h"
-#include "common/selection.h"
+#include "common/module_versioning.h"
 #include "common/undo.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "control/settings.h"
-#include "dtgtk/button.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
-#include "gui/drag_and_drop.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "libs/lib.h"
 #include "views/view.h"
 #include "views/view_api.h"
 
@@ -144,13 +132,13 @@ static void _view_lighttable_activate_callback(gpointer instance, int32_t imgid,
 {
   if(imgid > UNKNOWN_IMAGE)
   {
-    dt_view_manager_switch(darktable.view_manager, "darkroom");
+    dt_view_manager_switch(dt_view_manager_get_global(), "darkroom");
   }
 }
 
 void configure(dt_view_t *self, int width, int height)
 {
-  dt_thumbtable_t *table = darktable.gui->ui->thumbtable_lighttable;
+  dt_thumbtable_t *table = dt_gui_get_ui()->thumbtable_lighttable;
   dt_thumbtable_set_active_rowid(table);
   dt_thumbtable_redraw(table);
   g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_active_rowid, table);
@@ -161,25 +149,25 @@ void enter(dt_view_t *self)
 {
   dt_view_active_images_reset(FALSE);
 
-  dt_undo_clear(darktable.undo, DT_UNDO_LIGHTTABLE);
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   dt_gui_refocus_center();
-  dt_collection_hint_message(darktable.collection);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
+  dt_collection_hint_message(dt_collection_get_global());
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, FALSE, TRUE);
+  dt_ui_panel_show(dt_gui_get_ui(), DT_UI_PANEL_BOTTOM, FALSE, TRUE);
 
   // Attach shortcuts
-  dt_accels_connect_accels(darktable.gui->accels);
-  dt_accels_connect_active_group(darktable.gui->accels, "lighttable");
+  dt_accels_connect_accels(dt_gui_get_accels());
+  dt_accels_connect_active_group(dt_gui_get_accels(), "lighttable");
 
-  gtk_widget_hide(dt_ui_center(darktable.gui->ui));
-  dt_thumbtable_show(darktable.gui->ui->thumbtable_lighttable);
-  dt_thumbtable_update_parent(darktable.gui->ui->thumbtable_lighttable);
+  gtk_widget_hide(dt_gui_center_widget());
+  dt_thumbtable_show(dt_gui_get_ui()->thumbtable_lighttable);
+  dt_thumbtable_update_parent(dt_gui_get_ui()->thumbtable_lighttable);
 
   /* connect signal for thumbnail image activate */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                             G_CALLBACK(_view_lighttable_activate_callback), self);
 
-  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
 void init(dt_view_t *self)
@@ -192,17 +180,17 @@ void init(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   // Detach shortcuts
-  dt_accels_disconnect_active_group(darktable.gui->accels);
+  dt_accels_disconnect_active_group(dt_gui_get_accels());
 
   // ensure we have no active image remaining
   dt_view_active_images_reset(FALSE);
 
-  dt_thumbtable_stop(darktable.gui->ui->thumbtable_lighttable);
-  dt_thumbtable_hide(darktable.gui->ui->thumbtable_lighttable);
-  gtk_widget_show(dt_ui_center(darktable.gui->ui));
+  dt_thumbtable_stop(dt_gui_get_ui()->thumbtable_lighttable);
+  dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_lighttable);
+  gtk_widget_show(dt_gui_center_widget());
 
   /* disconnect from filmstrip image activate */
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_lighttable_activate_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_view_lighttable_activate_callback),
                                      (gpointer)self);
 }
 

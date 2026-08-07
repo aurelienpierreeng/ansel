@@ -27,20 +27,29 @@
  * (dt_masks_cow_touch).
  */
 
-#pragma once
+#ifndef DT_DEVELOP_MASKS_MASKS_HISTORY_H
+#define DT_DEVELOP_MASKS_MASKS_HISTORY_H
 
-#include "develop/masks.h"
+/* Deliberately does NOT include develop/masks.h: that header includes this one at
+ * its bottom (dt_masks_form_t must be complete first), so including it back formed
+ * an include cycle that only #pragma once made compilable. Every declaration below
+ * takes its arguments by POINTER, so tag declarations are sufficient. */
+
+#include <glib.h>
+
+struct dt_develop_t;
+struct dt_masks_form_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /** take a reference on a form (increments its refcount); returns the same pointer */
-dt_masks_form_t *dt_masks_form_ref(dt_masks_form_t *form);
+struct dt_masks_form_t *dt_masks_form_ref(struct dt_masks_form_t *form);
 
 /** release a reference on a form; frees it once the last reference is dropped.
  *  Signature matches GDestroyNotify for use with g_list_free_full(). */
-void dt_masks_form_unref(dt_masks_form_t *form);
+void dt_masks_form_unref(struct dt_masks_form_t *form);
 
 /** Ensure `form` is private to `dev->forms` before mutating it in place: if
  *  anything else still references it (refcount > 1, e.g. a history snapshot),
@@ -50,7 +59,7 @@ void dt_masks_form_unref(dt_masks_form_t *form);
  *  refcount == 1) or the fresh clone. No-op (returns `form` unchanged) if
  *  `form` is not found in dev->forms (e.g. a transient, not-yet-appended
  *  in-creation shape). */
-dt_masks_form_t *dt_masks_cow_touch(struct dt_develop_t *dev, dt_masks_form_t *form);
+struct dt_masks_form_t *dt_masks_cow_touch(struct dt_develop_t *dev, struct dt_masks_form_t *form);
 
 /** replace dev->forms with forms: shares references with `forms`, does not
  *  deep-copy. `forms` is typically a hist->forms snapshot. */
@@ -63,3 +72,4 @@ GList *dt_masks_snapshot_current_forms(struct dt_develop_t *dev, gboolean reset_
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_DEVELOP_MASKS_MASKS_HISTORY_H

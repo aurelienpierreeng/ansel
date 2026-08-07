@@ -55,24 +55,30 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "common/conf.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/eaw.h"
-#include "common/exif.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include <json-glib/json-glib.h>
+#include "pixel/eaw.h"
 #include "common/imagebuf.h"
-#include "common/nlmeans_core.h"
+#include "pixel/nlmeans_core.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/tiling.h"
-#include "dtgtk/drawingarea.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
@@ -2902,7 +2908,7 @@ static void profile_callback(GtkWidget *w, dt_iop_module_t *self)
     p->a[k] = profile->a[k];
     p->b[k] = profile->b[k];
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void mode_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -2956,7 +2962,7 @@ static void mode_callback(GtkWidget *w, dt_iop_module_t *self)
   gtk_widget_set_visible(g->shadows, p->use_new_vst && !auto_mode);
   gtk_widget_set_visible(g->bias, p->use_new_vst && !auto_mode);
   gtk_widget_set_visible(g->overshooting, auto_mode);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -3407,7 +3413,7 @@ static gboolean denoiseprofile_draw(GtkWidget *widget, cairo_t *crf, gpointer us
   // draw labels:
   PangoLayout *layout;
   PangoRectangle ink;
-  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  PangoFontDescription *desc = pango_font_description_copy_static(dt_bauhaus_get_global()->pango_font_desc);
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   pango_font_description_set_absolute_size(desc, (.08 * height) * PANGO_SCALE);
   layout = pango_cairo_create_layout(cr);
@@ -3468,7 +3474,7 @@ static gboolean denoiseprofile_motion_notify(GtkWidget *widget, GdkEventMotion *
     {
       dt_iop_denoiseprofile_get_params(p, c->channel, c->mouse_x, c->mouse_y + c->mouse_pick, c->mouse_radius);
     }
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else
   {
@@ -3494,7 +3500,7 @@ static gboolean denoiseprofile_button_press(GtkWidget *widget, GdkEventButton *e
       p->x[ch][k] = d->x[ch][k];
       p->y[ch][k] = d->y[ch][k];
     }
-    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     gtk_widget_queue_draw(self->widget);
   }
   else if(event->button == 1)
@@ -3620,7 +3626,7 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK
                                                  | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
-                                                 | GDK_LEAVE_NOTIFY_MASK | darktable.gui->scroll_mask);
+                                                 | GDK_LEAVE_NOTIFY_MASK | dt_gui_get_global()->scroll_mask);
   g_signal_connect(G_OBJECT(g->area), "draw", G_CALLBACK(denoiseprofile_draw), self);
   g_signal_connect(G_OBJECT(g->area), "button-press-event", G_CALLBACK(denoiseprofile_button_press), self);
   g_signal_connect(G_OBJECT(g->area), "button-release-event", G_CALLBACK(denoiseprofile_button_release), self);
@@ -3668,14 +3674,14 @@ void gui_init(dt_iop_module_t *self)
   // start building top level widget
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  g->profile = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->profile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->profile, N_("profile"));
   g_signal_connect(G_OBJECT(g->profile), "value-changed", G_CALLBACK(profile_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), g->profile, TRUE, TRUE, 0);
 
   g->wb_adaptive_anscombe = dt_bauhaus_toggle_from_params(self, "wb_adaptive_anscombe");
 
-  g->mode = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->mode, N_("mode"));
   dt_bauhaus_combobox_add(g->mode, _("non-local means"));
   dt_bauhaus_combobox_add(g->mode, _("non-local means auto"));

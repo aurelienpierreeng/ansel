@@ -29,28 +29,30 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
 #include "common/file_location.h"
-#include "common/image.h"
-#include "common/image_cache.h"
-#include "common/imageio.h"
-#include "common/imageio_module.h"
+#include "common/global_mutexes.h"
+#include "imageio/imageio_core.h"
+#include "imageio/imageio_module.h"
 #include "common/metadata.h"
 #include "common/pwstorage/pwstorage.h"
 #include "common/tags.h"
 #include "common/curl_tools.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 #include "gui/gtk.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <curl/curl.h>
+#include <glib/gstdio.h>
 #include <json-glib/json-glib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include "common/module_versioning.h"
+#include "common/times.h"
+#include "common/utility.h"
 
 DT_MODULE(1)
 
@@ -807,7 +809,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   GtkWidget *hbox, *label, *button;
 
   // account
-  ui->account_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  ui->account_list = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(ui->account_list, N_("accounts"));
   int account_index = -1, index=0;
   for(const GList *a = ui->accounts; a; a = g_list_next(a))
@@ -877,7 +879,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   if(account_index != -1) dt_bauhaus_combobox_set(ui->account_list, account_index);
 
   // permissions list
-  ui->permission_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  ui->permission_list = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(ui->permission_list, N_("visible to"));
   dt_bauhaus_combobox_add(ui->permission_list, _("everyone"));
   dt_bauhaus_combobox_add(ui->permission_list, _("contacts"));
@@ -890,7 +892,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   // album list
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
-  ui->album_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL)); // Available albums
+  ui->album_list = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL)); // Available albums
   dt_bauhaus_widget_set_label(ui->album_list, N_("album"));
   g_signal_connect(G_OBJECT(ui->album_list), "value-changed", G_CALLBACK(_piwigo_album_changed), (gpointer)ui);
   gtk_widget_set_sensitive(ui->album_list, FALSE);
@@ -923,7 +925,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(ui->create_box, hbox, FALSE, FALSE, 0);
 
   // parent album list
-  ui->parent_album_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL)); // Available albums
+  ui->parent_album_list = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL)); // Available albums
   dt_bauhaus_widget_set_label(ui->parent_album_list, N_("parent album"));
   gtk_widget_set_sensitive(ui->parent_album_list, TRUE);
   gtk_box_pack_start(ui->create_box, ui->parent_album_list, TRUE, TRUE, 0);
@@ -1004,7 +1006,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   if((metadata->flags & DT_META_METADATA) && !(metadata->flags & DT_META_CALCULATED))
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
   // If title is not existing, then use the filename without extension. If not, then use title instead
     GList *title = dt_metadata_get(img->id, "Xmp.dc.title", NULL);
     if(!IS_NULL_PTR(title))
@@ -1027,7 +1029,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
       g_list_free_full(desc, dt_free_gpointer);
       desc = NULL;
     }
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
 
     GList *auth = dt_metadata_get(img->id, "Xmp.dc.creator", NULL);
     if(!IS_NULL_PTR(auth))
@@ -1045,7 +1047,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     result = 1;
     goto cleanup;
   }
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   {
     gboolean status = TRUE;
     dt_storage_piwigo_params_t *p = (dt_storage_piwigo_params_t *)sdata;
@@ -1085,7 +1087,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
       dt_free(p->tags);
     }
   }
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
 cleanup:
 

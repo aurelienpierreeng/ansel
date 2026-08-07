@@ -42,10 +42,14 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
-#include "control/conf.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
@@ -204,7 +208,7 @@ static void _resynch_params(struct dt_iop_module_t *self)
   int nalgo[64] = { 2 };
 
   // we go through all forms in blend params
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     int i = 0;
@@ -253,7 +257,7 @@ static gboolean _reset_form_creation(GtkWidget *widget, dt_iop_module_t *self)
          || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_ellipse))))
   {
     // we unset the creation mode
-    dt_masks_change_form_gui(NULL);
+    dt_masks_change_form_gui(self->dev, NULL);
   }
   if(widget != g->bt_path || nb >= 64) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
   if(widget != g->bt_circle || nb >= 64) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
@@ -279,7 +283,7 @@ static int _shape_is_being_added(dt_iop_module_t *self, const int shape_type)
         dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
         if(grpt)
         {
-          const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
+          const dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
           if(!IS_NULL_PTR(form)) being_added = (form->type & shape_type);
         }
       }
@@ -316,7 +320,7 @@ static gboolean _add_shape(GtkWidget *widget, dt_iop_module_t *self)
 
 
   const dt_masks_type_t masks_type = (type | DT_MASKS_CLONE);
-  dt_masks_creation_mode_enter(self, masks_type);
+  dt_masks_creation_mode_enter(self->dev, self, masks_type);
 
 
   dt_control_queue_redraw_center();
@@ -354,7 +358,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
 
   //hide all shapes and free if some are in creation
   if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
-    dt_masks_change_form_gui(NULL);
+    dt_masks_change_form_gui(self->dev, NULL);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
@@ -368,7 +372,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
 
   // update edit shapes status
   dt_develop_blend_params_t *bp = self->blend_params;
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   //only toggle shape show button if shapes exist
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
@@ -743,7 +747,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
       // update edit shapes status
       dt_develop_blend_params_t *bp = self->blend_params;
-      dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
+      dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
       //only toggle shape show button if shapes exist
       if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
       {
@@ -762,7 +766,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     {
       // lost focus, hide all shapes
       if (self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
-        dt_masks_change_form_gui(NULL);
+        dt_masks_change_form_gui(self->dev, NULL);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), FALSE);
@@ -860,7 +864,7 @@ void gui_init(dt_iop_module_t *self)
 void gui_reset(struct dt_iop_module_t *self)
 {
   // hide the previous masks
-  dt_masks_reset_form_gui();
+  dt_masks_reset_form_gui(self->dev);
 }
 
 // clang-format off

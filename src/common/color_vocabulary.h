@@ -18,6 +18,9 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef DT_COMMON_COLOR_VOCABULARY_H
+#define DT_COMMON_COLOR_VOCABULARY_H
+
 #include "common/colorspaces_inline_conversions.h"
 
 #include <glib.h>
@@ -78,6 +81,8 @@ const char *Lch_to_color_name(dt_aligned_pixel_t color);
 
 // Parametric sweeping of Lch boundaries (in CIE Luv 1976) for all known skin tones +/- 2 std
 void get_skin_tones_range();
+
+#endif // DT_COMMON_COLOR_VOCABULARY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

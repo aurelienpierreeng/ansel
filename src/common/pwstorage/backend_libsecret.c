@@ -20,9 +20,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
 #include "backend_libsecret.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include <glib.h>
 #include <json-glib/json-glib.h>

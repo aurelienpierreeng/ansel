@@ -50,13 +50,12 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_IOP_HIGHLIGHTS_GATHER_H
+#define DT_IOP_HIGHLIGHTS_GATHER_H
 
 // Shared CFA gather/remosaic helpers (bilinear interpolation + clip masks, laplacian
 // normalization channel, remosaic to CFA). Public API of the gather TU; see gather.c.
 
-#include "develop/imageop.h"
-#include "iop/highlights/common.h"
 #include <stdint.h>
 
 // CFA reconstruction strategy. It selects ONLY how the disposable demosaic (the gather) and the
@@ -155,3 +154,4 @@ void _remosaic_and_replace_xtrans(const float *const restrict input, const float
                                   const dt_aligned_pixel_t white_balance, const dt_aligned_pixel_t clips,
                                   const int clip_is_floor, const dt_iop_roi_t *const roi_in,
                                   const uint8_t (*const xtrans)[6], const size_t width, const size_t height);
+#endif // DT_IOP_HIGHLIGHTS_GATHER_H

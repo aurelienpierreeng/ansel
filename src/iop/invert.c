@@ -48,11 +48,15 @@
 #include <stdlib.h>
 
 #include "common/colorspaces.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "dtgtk/button.h"
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/resetlabel.h"
 #include "gui/color_picker_proxy.h"
 
 #include "gui/gtk.h"
@@ -204,7 +208,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   gui_update_from_coeffs(self);
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_control_queue_redraw_widget(self->widget);
 }
 
@@ -231,7 +235,7 @@ static void colorpicker_callback(GtkColorButton *widget, dt_iop_module_t *self)
   { // Just to make sure the monochrome stays monochrome we take the luminosity of the chosen color on all channels
     p->color[0] = p->color[1] = p->color[2] = 0.21f*c.red + 0.72f*c.green + 0.07f*c.blue ;
   }
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 __DT_CLONE_TARGETS__

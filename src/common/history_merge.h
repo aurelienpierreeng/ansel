@@ -16,7 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_HISTORY_MERGE_H
+#define DT_COMMON_HISTORY_MERGE_H
 
 #include <glib.h>
 #include <inttypes.h>
@@ -83,6 +84,8 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_HISTORY_MERGE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

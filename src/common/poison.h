@@ -21,7 +21,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
+#ifndef DT_COMMON_POISON_H
+#define DT_COMMON_POISON_H
 
 #if !defined(_RELEASE) && !defined(__cplusplus) && !defined(_WIN32)
 
@@ -47,6 +48,8 @@
 #pragma GCC poison unlink // use g_unlink
 
 #endif
+
+#endif // DT_COMMON_POISON_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

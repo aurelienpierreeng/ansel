@@ -16,9 +16,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
-
-#include "common/darktable.h"
+#ifndef DT_GUI_WINDOW_MANAGER_H
+#define DT_GUI_WINDOW_MANAGER_H
 
 #include <gtk/gtk.h>
 #include <stdint.h>
@@ -144,3 +143,4 @@ void dt_ui_set_image_info_label(dt_ui_t *ui, const char *label);
 #ifdef __cplusplus
 }
 #endif
+#endif // DT_GUI_WINDOW_MANAGER_H

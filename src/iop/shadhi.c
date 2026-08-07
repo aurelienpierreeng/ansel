@@ -43,22 +43,21 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
-#include "common/bilateralcl.h"
-#include "common/debug.h"
-#include "common/gaussian.h"
-#include "common/opencl.h"
-#include "control/control.h"
+#include "gui/bauhaus.h"
+#include "pixel/bilateral.h"
+#include "pixel/gaussian.h"
 #include "develop/develop.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
+#include "common/module_versioning.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "dtgtk/togglebutton.h"
 
-#include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 #include <assert.h>
 #include <math.h>

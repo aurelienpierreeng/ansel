@@ -30,7 +30,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_GUI_PRESETS_H
+#define DT_GUI_PRESETS_H
 
 #include "develop/blend.h"
 
@@ -137,6 +138,8 @@ void dt_gui_presets_show_edit_dialog(const char *name_in, const char *module_nam
                                      gboolean allow_desc_change, gboolean allow_remove, GtkWindow *parent);
 
 void dt_gui_presets_confirm_and_delete(GtkWidget *parent_dialog, const char *name, const char *module_name, int rowid);
+
+#endif // DT_GUI_PRESETS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

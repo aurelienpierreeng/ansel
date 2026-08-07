@@ -20,8 +20,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "control/conf.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/utility.h"
+#include "common/conf.h"
 #include "common/metadata_export.h"
 
 uint32_t dt_lib_export_metadata_default_flags(void)

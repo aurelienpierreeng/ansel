@@ -18,16 +18,17 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/anonymous_ids.h"
+#include "system/sys_resources.h"
 #endif
 
 #include "common/telemetry.h"
-#include "common/darktable.h"
+#include "common/times.h"
 
 #ifdef HAVE_TELEMETRY
 
 #include "common/image.h"
 #include "common/opencl.h"
-#include "control/conf.h"
 #include "gui/gtk.h"
 
 #include <curl/curl.h>
@@ -265,7 +266,7 @@ static JsonObject *_telemetry_session_end_properties(void)
 {
   JsonObject *p = json_object_new();
 
-  const double dur = dt_get_wtime() - darktable.start_wtime;
+  const double dur = dt_get_wtime() - dt_get_start_wtime();
   json_object_set_double_member(p, "session_seconds", (dur > 0.0) ? dur : 0.0);
 
   // Stamp the release on session_end too (not only session_start), so average
@@ -337,17 +338,17 @@ static JsonObject *_telemetry_system_properties(void)
   }
 
   json_object_set_int_member(p, "cpu_cores", g_get_num_processors());
-  if(darktable.dtresources.total_memory > 0)
+  if(dt_get_total_mem() > 0)
     json_object_set_double_member(p, "ram_gb",
-                                  (double)darktable.dtresources.total_memory / (1024.0 * 1024.0 * 1024.0));
+                                  (double)dt_get_total_mem() / (1024.0 * 1024.0 * 1024.0));
 
   const gboolean cl = dt_opencl_is_enabled();
   json_object_set_boolean_member(p, "opencl", cl);
 #ifdef HAVE_OPENCL
   // Device enumeration fields (num_devs/dev) only exist in HAVE_OPENCL builds.
-  if(darktable.opencl && darktable.opencl->inited && darktable.opencl->num_devs > 0 && darktable.opencl->dev
-     && darktable.opencl->dev[0].name)
-    json_object_set_string_member(p, "gpu", darktable.opencl->dev[0].name);
+  if(dt_opencl_get_global() && dt_opencl_is_inited() && dt_opencl_get_global()->num_devs > 0 && dt_opencl_get_global()->dev
+     && dt_opencl_get_global()->dev[0].name)
+    json_object_set_string_member(p, "gpu", dt_opencl_get_global()->dev[0].name);
 #endif
 
 #if !defined(_WIN32) && !defined(__APPLE__)
@@ -357,10 +358,10 @@ static JsonObject *_telemetry_system_properties(void)
   if(desktop && *desktop) json_object_set_string_member(p, "desktop_environment", desktop);
 #endif
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
-    json_object_set_double_member(p, "dpi", darktable.gui->dpi);
-    json_object_set_double_member(p, "ppd", darktable.gui->ppd);
+    json_object_set_double_member(p, "dpi", dt_gui_get_global()->dpi);
+    json_object_set_double_member(p, "ppd", dt_gui_get_global()->ppd);
     GdkDisplay *display = gdk_display_get_default();
     GdkMonitor *mon = display ? gdk_display_get_primary_monitor(display) : NULL;
     if(!mon && display && gdk_display_get_n_monitors(display) > 0) mon = gdk_display_get_monitor(display, 0);

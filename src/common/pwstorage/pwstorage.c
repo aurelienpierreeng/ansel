@@ -39,6 +39,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "system/capabilities.h"
 #endif
 
 #include "pwstorage.h"
@@ -51,7 +52,7 @@
 #include "backend_kwallet.h"
 #endif
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 
 #include <glib.h>
@@ -182,7 +183,7 @@ const dt_pwstorage_t *dt_pwstorage_new()
 void dt_pwstorage_destroy(const dt_pwstorage_t *pwstorage)
 {
   dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_new] Destroying context %p\n", pwstorage);
-  switch(darktable.pwstorage->pw_storage_backend)
+  switch(dt_pwstorage_get_global()->pw_storage_backend)
   {
     case PW_STORAGE_BACKEND_NONE:
       // nothing to be done
@@ -203,20 +204,20 @@ void dt_pwstorage_destroy(const dt_pwstorage_t *pwstorage)
 /** Store (key,value) pairs. */
 gboolean dt_pwstorage_set(const gchar *slot, GHashTable *table)
 {
-  switch(darktable.pwstorage->pw_storage_backend)
+  switch(dt_pwstorage_get_global()->pw_storage_backend)
   {
     case PW_STORAGE_BACKEND_NONE:
       dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_set] no backend. not storing anything.\n");
       break;
     case PW_STORAGE_BACKEND_LIBSECRET:
 #if HAVE_LIBSECRET
-      return dt_pwstorage_libsecret_set((backend_libsecret_context_t *)darktable.pwstorage->backend_context,
+      return dt_pwstorage_libsecret_set((backend_libsecret_context_t *)dt_pwstorage_get_global()->backend_context,
                                         slot, table);
 #endif
       break;
     case PW_STORAGE_BACKEND_KWALLET:
 #ifdef HAVE_KWALLET
-      return dt_pwstorage_kwallet_set((backend_kwallet_context_t *)darktable.pwstorage->backend_context, slot,
+      return dt_pwstorage_kwallet_set((backend_kwallet_context_t *)dt_pwstorage_get_global()->backend_context, slot,
                                       table);
 #endif
       break;
@@ -227,20 +228,20 @@ gboolean dt_pwstorage_set(const gchar *slot, GHashTable *table)
 /** Load (key,value) pairs. */
 GHashTable *dt_pwstorage_get(const gchar *slot)
 {
-  switch(darktable.pwstorage->pw_storage_backend)
+  switch(dt_pwstorage_get_global()->pw_storage_backend)
   {
     case PW_STORAGE_BACKEND_NONE:
       dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_get] no backend. not reading anything.\n");
       break;
     case PW_STORAGE_BACKEND_LIBSECRET:
 #if HAVE_LIBSECRET
-      return dt_pwstorage_libsecret_get((backend_libsecret_context_t *)darktable.pwstorage->backend_context,
+      return dt_pwstorage_libsecret_get((backend_libsecret_context_t *)dt_pwstorage_get_global()->backend_context,
                                         slot);
 #endif
       break;
     case PW_STORAGE_BACKEND_KWALLET:
 #ifdef HAVE_KWALLET
-      return dt_pwstorage_kwallet_get((backend_kwallet_context_t *)darktable.pwstorage->backend_context, slot);
+      return dt_pwstorage_kwallet_get((backend_kwallet_context_t *)dt_pwstorage_get_global()->backend_context, slot);
 #endif
       break;
   }

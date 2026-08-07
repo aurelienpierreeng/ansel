@@ -17,6 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "gui/gtk.h"
 #include "common/selection.h"
 #include "common/collection.h"
 
@@ -24,7 +25,7 @@
 
 gboolean select_all_sensitive_callback()
 {
-  return dt_collection_get_count(darktable.collection) > dt_selection_get_length(darktable.selection)
+  return dt_collection_get_count(dt_collection_get_global()) > dt_selection_get_length(dt_selection_get_global())
     && _is_lighttable();
 }
 
@@ -32,14 +33,14 @@ gboolean select_all_sensitive_callback()
 static gboolean select_all_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(!select_all_sensitive_callback()) return FALSE;
-  dt_thumbtable_select_all(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_select_all(dt_gui_get_ui()->thumbtable_lighttable);
   return TRUE;
 }
 
 
 gboolean clear_selection_sensitive_callback()
 {
-  return dt_selection_get_length(darktable.selection) > 0
+  return dt_selection_get_length(dt_selection_get_global()) > 0
     && _is_lighttable();
 }
 
@@ -47,7 +48,7 @@ gboolean clear_selection_sensitive_callback()
 static gboolean clear_selection_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(!clear_selection_sensitive_callback()) return FALSE;
-  dt_selection_clear(darktable.selection);
+  dt_selection_clear(dt_selection_get_global());
   return TRUE;
 }
 
@@ -55,14 +56,14 @@ static gboolean clear_selection_callback(GtkAccelGroup *group, GObject *accelera
 static gboolean invert_selection_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   if(!clear_selection_sensitive_callback()) return FALSE;
-  dt_thumbtable_invert_selection(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_invert_selection(dt_gui_get_ui()->thumbtable_lighttable);
   return TRUE;
 }
 
 static gboolean scroll_to_selection_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_thumbtable_scroll_to_selection(darktable.gui->ui->thumbtable_filmstrip);
-  dt_thumbtable_scroll_to_selection(darktable.gui->ui->thumbtable_lighttable);
+  dt_thumbtable_scroll_to_selection(dt_gui_get_ui()->thumbtable_filmstrip);
+  dt_thumbtable_scroll_to_selection(dt_gui_get_ui()->thumbtable_lighttable);
   return TRUE;
 }
 

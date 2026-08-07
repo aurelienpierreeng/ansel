@@ -40,15 +40,19 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/database.h"
 #include "common/image_cache.h"
 #include "common/colorlabels.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/hash.h"
+#include "common/logging.h"
+#include "common/paths.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/image.h"
-#include "common/imageio.h"
+#include "imageio/imageio_core.h"
 #include "common/datetime.h"
-#include "control/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"
@@ -164,7 +168,7 @@ static void _image_cache_write_history_hash(const dt_image_t *img)
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "INSERT INTO main.history_hash (imgid, current_hash, basic_hash, auto_hash, mipmap_hash)"
         " VALUES (?1, ?2, NULL, NULL, ?3)"
         " ON CONFLICT (imgid)"
@@ -188,7 +192,7 @@ static sqlite3_stmt *_image_cache_get_stmt(void)
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "SELECT i.id, i.group_id, "
         "       (SELECT COUNT(id) FROM main.images WHERE group_id = i.group_id), "
         "       (SELECT COUNT(imgid) FROM main.history WHERE imgid = i.id), "
@@ -353,7 +357,7 @@ static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid, c
   {
     img->id = -1;
     fprintf(stderr, "[image_cache_reload] failed to open image %" PRIu32 " from database: %s\n", imgid,
-            sqlite3_errmsg(dt_database_get(darktable.db)));
+            sqlite3_errmsg(dt_database_get_sqlite3_global()));
   }
 
   dt_pthread_mutex_unlock(&_image_cache_stmt_mutex);
@@ -564,9 +568,9 @@ static void _image_cache_info_changed_reload_callback(gpointer instance, gpointe
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     if(imgid <= 0) continue;
 
-    dt_image_t *img = dt_image_cache_get_reload(darktable.image_cache, imgid, 'r');
+    dt_image_t *img = dt_image_cache_get_reload(dt_image_cache_get_global(), imgid, 'r');
     if(img)
-      dt_image_cache_read_release(darktable.image_cache, img);
+      dt_image_cache_read_release(dt_image_cache_get_global(), img);
   }
 }
 
@@ -663,7 +667,7 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
 
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "UPDATE main.images"
                               " SET width = ?1, height = ?2, filename = ?3, maker = ?4, model = ?5,"
                               "     lens = ?6, exposure = ?7, aperture = ?8, iso = ?9, focal_length = ?10,"
@@ -733,7 +737,7 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   // FIXME: that a memory leak ?
   GList *imgs = NULL;
   imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, imgs);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED, imgs);
 }
 
 

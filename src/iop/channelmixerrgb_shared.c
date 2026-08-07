@@ -18,15 +18,13 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/colorspaces_inline_conversions.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
-#include "common/chromatic_adaptation.h"
-#include "common/colorspaces_inline_conversions.h"
-#include "common/illuminants.h"
-#include "common/matrices.h"
-#include "develop/imageop_math.h"
-#include "common/solvers/gaussian_elimination.h"
+#include "gui/bauhaus.h"
+#include "pixel/chromatic_adaptation.h"
+#include "pixel/illuminants.h"
+#include "math/matrices.h"
 #include "iop/channelmixerrgb_shared.h"
 
 #include <float.h>

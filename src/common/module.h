@@ -19,7 +19,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef DT_COMMON_MODULE_H
+#define DT_COMMON_MODULE_H
 
 #include <glib.h>
 
@@ -35,6 +36,8 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DT_COMMON_MODULE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

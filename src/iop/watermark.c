@@ -56,19 +56,24 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "bauhaus/bauhaus.h"
+#include "common/global_mutexes.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "common/paths.h"
+#include "common/conf.h"
+#include "gui/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/tags.h"
 #include "common/variables.h"
-#include "common/datetime.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/button.h"
-#include "dtgtk/resetlabel.h"
-#include "dtgtk/togglebutton.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/resetlabel.h"
+#include "gui/dtgtk/togglebutton.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
@@ -87,7 +92,6 @@
 #endif
 
 #include "common/file_location.h"
-#include "common/metadata.h"
 #include "common/utility.h"
 
 DT_MODULE_INTROSPECTION(5, dt_iop_watermark_params_t)
@@ -586,7 +590,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   }
 
   // rsvg (or some part of cairo which is used underneath) isn't thread safe, for example when handling fonts
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
 
   RsvgHandle *svg = NULL;
   if(type == DT_WTM_SVG)
@@ -600,7 +604,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       cairo_surface_destroy(surface);
       dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       fprintf(stderr, "[watermark] error processing svg file: %s\n", error->message);
       g_error_free(error);
       return 0;
@@ -628,7 +632,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
         cairo_surface_destroy(surface);
         dt_free(image);
         dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-        dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
         return 0;
       }
       dimension.width = cairo_image_surface_get_width(surface_two);
@@ -739,7 +743,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       g_object_unref(svg);
       dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       return 1;
     }
     surface_two = cairo_image_surface_create_for_data(image_two, CAIRO_FORMAT_ARGB32, watermark_width,
@@ -753,7 +757,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       dt_free(image);
       dt_free(image_two);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       return 0;
     }
   }
@@ -824,7 +828,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   cairo_paint(cr);
 
   // no more non-thread safe rsvg usage
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
   cairo_destroy(cr);
   cairo_destroy(cr_two);
@@ -873,7 +877,7 @@ static void watermark_callback(GtkWidget *tb, gpointer user_data)
   int n = dt_bauhaus_combobox_get(g->watermarks);
   g_strlcpy(p->filename, (char *)g_list_nth_data(g->watermarks_filenames, n), sizeof(p->filename));
   _text_color_font_set_sensitive(g, p->filename);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -899,7 +903,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   p->color[2] = self->picked_color[2];
   gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g->colorpick), &c);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void load_watermarks(const char *basedir, dt_iop_watermark_gui_data_t *g)
@@ -1001,7 +1005,7 @@ static void alignment_callback(GtkWidget *tb, gpointer user_data)
     g_signal_handlers_unblock_by_func(g->align[i], alignment_callback, user_data);
   }
   p->alignment = index;
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void text_callback(GtkWidget *entry, gpointer user_data)
@@ -1011,7 +1015,7 @@ static void text_callback(GtkWidget *entry, gpointer user_data)
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
   g_strlcpy(p->text, gtk_entry_get_text(GTK_ENTRY(entry)), sizeof(p->text));
   dt_conf_set_string("plugins/darkroom/watermark/text", p->text);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void colorpick_color_set(GtkColorButton *widget, gpointer user_data)
@@ -1029,7 +1033,7 @@ static void colorpick_color_set(GtkColorButton *widget, gpointer user_data)
   dt_conf_set_float("plugins/darkroom/watermark/color_red", p->color[0]);
   dt_conf_set_float("plugins/darkroom/watermark/color_green", p->color[1]);
   dt_conf_set_float("plugins/darkroom/watermark/color_blue", p->color[2]);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void fontsel_callback(GtkWidget *button, gpointer user_data)
@@ -1042,7 +1046,7 @@ static void fontsel_callback(GtkWidget *button, gpointer user_data)
   g_strlcpy(p->font, fontname, sizeof(p->font));
   dt_free(fontname);
   dt_conf_set_string("plugins/darkroom/watermark/font", p->font);
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
@@ -1130,7 +1134,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
   GtkWidget *label = dtgtk_reset_label_new(_("marker"), self, &p->filename, sizeof(p->filename));
-  g->watermarks = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->watermarks = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   gtk_widget_set_hexpand(GTK_WIDGET(g->watermarks), TRUE);
   char *tooltip = g_strdup_printf(_("SVG watermarks in %s/watermarks or %s/watermarks"), configdir, datadir);
   gtk_widget_set_tooltip_text(g->watermarks, tooltip);

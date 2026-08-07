@@ -52,19 +52,21 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "gui/gdkkeys.h"
 #include "libs/lib.h"
+#include "views/view.h"
+#include "common/database.h"
 #include "common/debug.h"
+#include "common/macros.h"
 #include "common/module.h"
-#include "control/conf.h"
+#include "common/module_versioning.h" // dt_version(), used by libs/lib_api.h below
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "dtgtk/button.h"
-#include "dtgtk/expander.h"
-#include "dtgtk/icon.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/expander.h"
 
 #include "gui/color_picker_proxy.h"
 #include "libs/colorpicker.h"
@@ -75,6 +77,7 @@
 #endif
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sqlite3.h>
 
 static sqlite3_stmt *_lib_presets_remove_stmt = NULL;
 static sqlite3_stmt *_lib_presets_add_stmt = NULL;
@@ -157,7 +160,7 @@ static gchar *get_active_preset_name(dt_lib_module_info_t *minfo)
   sqlite3_stmt *stmt;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT name, op_params, writeprotect"
       " FROM data.presets"
       " WHERE operation=?1 AND op_version=?2",
@@ -197,7 +200,7 @@ static void edit_preset(const char *name_in, dt_lib_module_info_t *minfo)
   int rowid = -1;
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT rowid"
                               " FROM data.presets"
                               " WHERE name = ?1 AND operation = ?2 AND op_version = ?3",
@@ -215,7 +218,7 @@ static void edit_preset(const char *name_in, dt_lib_module_info_t *minfo)
   // if we don't have a valid rowid, just exit, there's a problem !
   if(rowid < 0) return;
 
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
   dt_gui_presets_show_edit_dialog(name, minfo->plugin_name, rowid, NULL, NULL, TRUE, TRUE, FALSE,
                                   GTK_WINDOW(window));
 }
@@ -228,7 +231,7 @@ static void menuitem_update_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
 
   if(dt_conf_get_bool("plugins/lighttable/preset/ask_before_delete_preset"))
   {
-    GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                GTK_BUTTONS_YES_NO, _("do you really want to update the preset `%s'?"), name);
@@ -245,7 +248,7 @@ static void menuitem_update_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
     // commit all the module fields
     sqlite3_stmt *stmt;
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "UPDATE data.presets"
                                 " SET op_version=?2, op_params=?3"
                                 " WHERE name=?4 AND operation=?1",
@@ -258,7 +261,7 @@ static void menuitem_update_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_PRESETS_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PRESETS_CHANGED,
                                   g_strdup(minfo->plugin_name));
   }
 }
@@ -271,7 +274,7 @@ static void menuitem_new_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *min
   sqlite3_stmt *stmt;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "INSERT INTO data.presets (name, description, operation, op_version, op_params,"
       "  blendop_params, blendop_version, enabled, model, maker, lens,"
       "  iso_min, iso_max, exposure_min, exposure_max, aperture_min, aperture_max,"
@@ -313,7 +316,7 @@ static void menuitem_delete_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
 
   if(dt_conf_get_bool("plugins/lighttable/preset/ask_before_delete_preset"))
   {
-    GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
                                GTK_BUTTONS_YES_NO, _("do you really want to delete the preset `%s'?"), name);
@@ -329,7 +332,7 @@ static void menuitem_delete_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
   {
     dt_lib_presets_remove(name, minfo->plugin_name, minfo->version);
 
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_PRESETS_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PRESETS_CHANGED,
                                   g_strdup(minfo->plugin_name));
   }
   dt_free(name);
@@ -348,7 +351,7 @@ gchar *dt_lib_presets_duplicate(const gchar *preset, const gchar *module_name, i
     gchar *tx = g_strdup_printf("%s_%d", preset, i);
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "SELECT name"
         " FROM data.presets"
         " WHERE operation = ?1 AND op_version = ?2 AND name = ?3", -1, &stmt, NULL);
@@ -365,7 +368,7 @@ gchar *dt_lib_presets_duplicate(const gchar *preset, const gchar *module_name, i
   // and we duplicate the entry
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "INSERT INTO data.presets"
       " (name, description, operation, op_version, op_params, "
       "  blendop_params, blendop_version, enabled, model, maker, lens, "
@@ -397,7 +400,7 @@ void dt_lib_presets_remove(const gchar *preset, const gchar *module_name, int mo
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "DELETE FROM data.presets"
         " WHERE name=?1 AND operation=?2 AND op_version=?3 AND writeprotect=0", -1, &_lib_presets_remove_stmt,
         NULL);
@@ -418,7 +421,7 @@ gboolean dt_lib_presets_apply(const gchar *preset, const gchar *module_name, int
   sqlite3_stmt *stmt;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT op_params, writeprotect"
       " FROM data.presets"
       " WHERE operation = ?1 AND op_version = ?2 AND name = ?3",
@@ -436,7 +439,7 @@ gboolean dt_lib_presets_apply(const gchar *preset, const gchar *module_name, int
     int writeprotect = sqlite3_column_int(stmt, 1);
     if(blob)
     {
-      for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
+      for(const GList *it = dt_lib_get_global()->plugins; it; it = g_list_next(it))
       {
         dt_lib_module_t *module = (dt_lib_module_t *)it->data;
         if(!strncmp(module->plugin_name, module_name, 128))
@@ -468,7 +471,7 @@ void dt_lib_presets_update(const gchar *preset, const gchar *module_name, int mo
 {
   sqlite3_stmt *stmt;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "UPDATE data.presets"
                               " SET name = ?1, description = ?2, op_params = ?3"
                               " WHERE operation = ?4 AND op_version = ?5 AND name = ?6",
@@ -501,10 +504,10 @@ static void free_module_info(GtkWidget *widget, gpointer user_data)
 
 static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
 {
-  GtkMenu *menu = darktable.gui->presets_popup_menu;
+  GtkMenu *menu = dt_gui_get_global()->presets_popup_menu;
   if(menu) gtk_widget_destroy(GTK_WIDGET(menu));
-  darktable.gui->presets_popup_menu = GTK_MENU(gtk_menu_new());
-  menu = darktable.gui->presets_popup_menu;
+  dt_gui_get_global()->presets_popup_menu = GTK_MENU(gtk_menu_new());
+  menu = dt_gui_get_global()->presets_popup_menu;
 
   const gboolean hide_default = dt_conf_get_bool("plugins/lighttable/hide_default_presets");
   const gboolean default_first = dt_conf_get_bool("modules/default_presets_first");
@@ -523,7 +526,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
                                  " ORDER BY writeprotect %s, LOWER(name), rowid",
                                  default_first ? "DESC" : "ASC");
   // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, minfo->plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, minfo->version);
   dt_free(query);
@@ -554,7 +557,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
     int32_t op_params_size = sqlite3_column_bytes(stmt, 1);
     const char *name = (char *)sqlite3_column_text(stmt, 0);
 
-    if(darktable.gui->last_preset && strcmp(darktable.gui->last_preset, name) == 0) found = 1;
+    if(dt_gui_get_global()->last_preset && strcmp(dt_gui_get_global()->last_preset, name) == 0) found = 1;
 
     // selected in bold:
     // printf("comparing %d bytes to %d\n", op_params_size, minfo->params_size);
@@ -623,14 +626,14 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_new_preset), minfo);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
-    if(darktable.gui->last_preset && found)
+    if(dt_gui_get_global()->last_preset && found)
     {
       char *markup = g_markup_printf_escaped("%s <span weight=\"bold\">%s</span>", _("update preset"),
-                                             darktable.gui->last_preset);
+                                             dt_gui_get_global()->last_preset);
       mi = gtk_menu_item_new_with_label("");
       gtk_widget_set_sensitive(GTK_WIDGET(mi), minfo->params_size > 0);
       gtk_label_set_markup(GTK_LABEL(gtk_bin_get_child(GTK_BIN(mi))), markup);
-      g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(darktable.gui->last_preset), g_free);
+      g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(dt_gui_get_global()->last_preset), g_free);
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_update_preset), minfo);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
       dt_free(markup);
@@ -680,7 +683,7 @@ static int _lib_plugin_body_button_press(GtkWidget *w, GdkEventButton *e, gpoint
 {
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
   int handled = FALSE;
   return handled;
 }
@@ -698,7 +701,7 @@ static int dt_lib_load_module(void *m, const char *libname, const char *module_n
   gboolean load = FALSE;
   for(const char **view_m = module->views(module); *view_m; ++view_m)
   {
-    for(GList *iter = darktable.view_manager->views; iter; iter = g_list_next(iter))
+    for(GList *iter = dt_view_manager_get_global()->views; iter; iter = g_list_next(iter))
     {
       dt_view_t *view = (dt_view_t *)iter->data;
       if(!g_strcmp0(view->module_name, *view_m) || !g_strcmp0("*", *view_m) || !g_strcmp0("special", *view_m))
@@ -791,7 +794,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
     if(!_lib_presets_delete_operation_stmt)
     {
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "DELETE FROM data.presets"
                                   " WHERE operation=?1", -1,
                                   &_lib_presets_delete_operation_stmt, NULL);
@@ -808,7 +811,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
     if(!_lib_presets_select_stmt)
     {
       // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                   "SELECT rowid, op_version, op_params, name"
                                   " FROM data.presets"
                                   " WHERE operation=?1",
@@ -843,7 +846,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
                   module->plugin_name, name, op_version, version);
           sqlite3_stmt *innerstmt;
           // clang-format off
-          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                       "UPDATE data.presets"
                                       " SET op_version=?1, op_params=?2"
                                       " WHERE rowid=?3", -1,
@@ -863,7 +866,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
                   module->plugin_name, name, op_version, version);
           sqlite3_stmt *innerstmt;
           // clang-format off
-          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                       "DELETE FROM data.presets"
                                       " WHERE rowid=?1", -1,
                                       &innerstmt, NULL);
@@ -881,7 +884,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
   if(module->init_presets)
     module->init_presets(module);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_PRESETS_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PRESETS_CHANGED,
                                 g_strdup(module->plugin_name));
 }
 
@@ -900,7 +903,7 @@ static void dt_lib_init_module(void *m)
   dt_lib_module_t *module = (dt_lib_module_t *)m;
   dt_lib_init_presets(module);
 
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
     module->gui_init(module);
     if(module->widget) g_object_ref_sink(module->widget);
@@ -926,32 +929,32 @@ static void dt_lib_init_module(void *m)
       gchar *label = NULL;
       if(!g_strcmp0(*view, "darkroom"))
       {
-        accel_group = darktable.gui->accels->darkroom_accels;
+        accel_group = dt_gui_get_accels()->darkroom_accels;
         label = g_strdup("Darkroom/Toolboxes");
       }
       else if(!g_strcmp0(*view, "lighttable"))
       {
-        accel_group = darktable.gui->accels->lighttable_accels;
+        accel_group = dt_gui_get_accels()->lighttable_accels;
         label = g_strdup("Lighttable/Toolboxes");
       }
       else if(!g_strcmp0(*view, "map"))
       {
-        accel_group = darktable.gui->accels->map_accels;
+        accel_group = dt_gui_get_accels()->map_accels;
         label = g_strdup("Map/Toolboxes");
       }
       else if(!g_strcmp0(*view, "print"))
       {
-        accel_group = darktable.gui->accels->print_accels;
+        accel_group = dt_gui_get_accels()->print_accels;
         label = g_strdup("Print/Toolboxes");
       }
       else if(!g_strcmp0(*view, "slideshow"))
       {
-        accel_group = darktable.gui->accels->slideshow_accels;
+        accel_group = dt_gui_get_accels()->slideshow_accels;
         label = g_strdup("Slideshow/Toolboxes");
       }
 
       if(accel_group && label)
-        dt_accels_new_action_shortcut(darktable.gui->accels, _lib_plugin_focus_accel, m,
+        dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_plugin_focus_accel, m,
                                       accel_group, label, clean_name, 0, 0, FALSE,
                                       _("Focuses the module"));
       dt_free(label);
@@ -965,7 +968,7 @@ void dt_lib_unload_module(dt_lib_module_t *module)
 {
   GtkWidget *retained_widget = module->widget;
 
-  if(darktable.gui && darktable.gui->accels && module->views)
+  if(dt_gui_get_global() && dt_gui_get_accels() && module->views)
   {
     gchar *clean_name = delete_underscore(module->name(module));
     dt_capitalize_label(clean_name);
@@ -983,7 +986,7 @@ void dt_lib_unload_module(dt_lib_module_t *module)
       if(scope)
       {
         gchar *path = dt_accels_build_path(scope, clean_name);
-        dt_accels_remove_shortcut(darktable.gui->accels, path);
+        dt_accels_remove_shortcut(dt_gui_get_accels(), path);
         dt_free(path);
       }
     }
@@ -1043,7 +1046,7 @@ static void presets_popup_callback(GtkButton *button, dt_lib_module_t *module)
   }
   dt_lib_presets_popup_menu_show(mi);
 
-  dt_gui_menu_popup(darktable.gui->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
+  dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
   if(button) dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
 }
@@ -1053,10 +1056,10 @@ static void _lib_module_expander_gone(gpointer user_data, GObject *where_the_obj
   dt_lib_module_t *module = (dt_lib_module_t *)user_data;
   if(IS_NULL_PTR(module)) return;
   if(module->expander == (GtkWidget *)where_the_object_was) module->expander = NULL;
-  if(darktable.gui)
+  if(dt_gui_get_global())
   {
-    if(darktable.gui->scroll_to[0] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[0] = NULL;
-    if(darktable.gui->scroll_to[1] == (GtkWidget *)where_the_object_was) darktable.gui->scroll_to[1] = NULL;
+    if(dt_gui_get_global()->scroll_to[0] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[0] = NULL;
+    if(dt_gui_get_global()->scroll_to[1] == (GtkWidget *)where_the_object_was) dt_gui_get_global()->scroll_to[1] = NULL;
   }
 }
 
@@ -1083,15 +1086,15 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
   if(expanded)
   {
     /* register to receive draw events */
-    darktable.lib->gui_module = module;
-    darktable.gui->scroll_to[1] = module->expander;
+    dt_lib_get_global()->gui_module = module;
+    dt_gui_get_global()->scroll_to[1] = module->expander;
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
   }
   else
   {
-    if(darktable.lib->gui_module == module)
+    if(dt_lib_get_global()->gui_module == module)
     {
-      darktable.lib->gui_module = NULL;
+      dt_lib_get_global()->gui_module = NULL;
       dt_control_queue_redraw();
     }
     dt_gui_refocus_center();
@@ -1111,7 +1114,7 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 
   /* store expanded state of module */
   char var[1024];
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
   snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
   dt_conf_set_bool(var, expanded);
 }
@@ -1126,7 +1129,7 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
     if(!module->widget)
     {
       char var[1024];
-      const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+      const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
       if(IS_NULL_PTR(current_view)) return true;
       snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
       return dt_conf_get_bool(var);
@@ -1136,7 +1139,7 @@ gboolean dt_lib_gui_get_expanded(dt_lib_module_t *module)
   if(!module->widget)
   {
     char var[1024];
-    const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+    const dt_view_t *current_view = dt_view_manager_get_current_view(dt_view_manager_get_global());
     snprintf(var, sizeof(var), "plugins/%s/%s/expanded", current_view->module_name, module->plugin_name);
     return dt_conf_get_bool(var);
   }
@@ -1147,11 +1150,11 @@ static void _toggle_expanded(dt_lib_module_t *module, gboolean close_all)
 {
   if(close_all)
   {
-    const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
+    const dt_view_t *v = dt_view_manager_get_current_view(dt_view_manager_get_global());
     gboolean all_other_closed = TRUE;
     uint32_t container = module->container(module);
 
-    for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
+    for(const GList *it = dt_lib_get_global()->plugins; it; it = g_list_next(it))
     {
       dt_lib_module_t *m = (dt_lib_module_t *)it->data;
 
@@ -1188,7 +1191,7 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
   /* Reset the scrolling focus. If the click happened on any bauhaus element,
    * its internal button_press method will set it for itself */
-  darktable.gui->has_scroll_focus = NULL;
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   if(e->button == 1)
   {
@@ -1198,9 +1201,9 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
     // make gtk scroll to the module once it updated its allocation size
     uint32_t container = module->container(module);
     if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-      darktable.gui->scroll_to[0] = module->expander;
+      dt_gui_get_global()->scroll_to[0] = module->expander;
     else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-      darktable.gui->scroll_to[1] = module->expander;
+      dt_gui_get_global()->scroll_to[1] = module->expander;
 
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
 
@@ -1228,9 +1231,9 @@ static void show_module_callback(dt_lib_module_t *module)
   // make gtk scroll to the module once it updated its allocation size
   uint32_t container = module->container(module);
   if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-    darktable.gui->scroll_to[0] = module->expander;
+    dt_gui_get_global()->scroll_to[0] = module->expander;
   else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-    darktable.gui->scroll_to[1] = module->expander;
+    dt_gui_get_global()->scroll_to[1] = module->expander;
 
   dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
 }
@@ -1325,7 +1328,7 @@ void dt_lib_init(dt_lib_t *lib)
 {
   // Setting everything to null initially
   memset(lib, 0, sizeof(dt_lib_t));
-  darktable.lib->plugins = dt_module_load_modules("/plugins/lighttable", sizeof(dt_lib_module_t),
+  dt_lib_get_global()->plugins = dt_module_load_modules("/plugins/lighttable", sizeof(dt_lib_module_t),
                                                   dt_lib_load_module, dt_lib_init_module, dt_lib_sort_plugins);
 }
 
@@ -1358,7 +1361,7 @@ void dt_lib_presets_add(const char *name, const char *plugin_name, const int32_t
   {
     // clang-format off
     DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get(darktable.db),
+        dt_database_get_sqlite3_global(),
         "INSERT INTO data.presets"
         " (name, description, operation, op_version, op_params, "
         "  blendop_params, blendop_version, enabled, model, maker, lens, "
@@ -1385,8 +1388,8 @@ void dt_lib_presets_add(const char *name, const char *plugin_name, const int32_t
 
 static gchar *_get_lib_view_path(dt_lib_module_t *module, char *suffix)
 {
-  if(IS_NULL_PTR(darktable.view_manager) || !module || IS_NULL_PTR(suffix) || module->plugin_name[0] == '\0') return NULL;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  if(IS_NULL_PTR(dt_view_manager_get_global()) || !module || IS_NULL_PTR(suffix) || module->plugin_name[0] == '\0') return NULL;
+  const dt_view_t *cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
   if(IS_NULL_PTR(cv) || cv->module_name[0] == '\0') return NULL;
   // in lighttable, we store panels states per layout
   char lay[32] = "";
@@ -1396,7 +1399,7 @@ static gchar *_get_lib_view_path(dt_lib_module_t *module, char *suffix)
   }
   else if(g_strcmp0(cv->module_name, "darkroom") == 0)
   {
-    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(darktable.view_manager));
+    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(dt_view_manager_get_global()));
   }
 
   return g_strdup_printf("plugins/%s/%s%s%s", cv->module_name, lay, module->plugin_name, suffix);
@@ -1443,7 +1446,7 @@ gchar *dt_lib_get_localized_name(const gchar *plugin_name)
   if(IS_NULL_PTR(module_names))
   {
     module_names = g_hash_table_new(g_str_hash, g_str_equal);
-    for(const GList *lib = darktable.lib->plugins; lib; lib = g_list_next(lib))
+    for(const GList *lib = dt_lib_get_global()->plugins; lib; lib = g_list_next(lib))
     {
       dt_lib_module_t *module = (dt_lib_module_t *)lib->data;
       g_hash_table_insert(module_names, module->plugin_name, g_strdup(module->name(module)));
@@ -1455,7 +1458,7 @@ gchar *dt_lib_get_localized_name(const gchar *plugin_name)
 
 void dt_lib_colorpicker_set_box_area(dt_lib_t *lib, const dt_boundingbox_t box)
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(sample)) return;
 
@@ -1477,7 +1480,7 @@ void dt_lib_colorpicker_set_box_area(dt_lib_t *lib, const dt_boundingbox_t box)
 
 void dt_lib_colorpicker_set_point(dt_lib_t *lib, const float pos[2])
 {
-  dt_develop_t *const dev = darktable.develop;
+  dt_develop_t *const dev = dt_dev_get_global();
   dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(sample)) return;
 
@@ -1499,7 +1502,7 @@ void dt_lib_colorpicker_set_point(dt_lib_t *lib, const float pos[2])
 dt_lib_module_t *dt_lib_get_module(const char *name)
 {
   /* hide/show modules as last config */
-  for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
   {
     dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
     if(strcmp(plugin->plugin_name, name) == 0)

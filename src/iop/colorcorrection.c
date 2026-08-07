@@ -43,18 +43,21 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
 #include "gui/gdkkeys.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
 #include "common/colorspaces.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/drawingarea.h"
+#include "gui/dtgtk/drawingarea.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -291,7 +294,7 @@ void gui_init(struct dt_iop_module_t *self)
                                                      "bright means highlights, dark means shadows. "
                                                      "use mouse wheel to change saturation."));
 
-  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
@@ -417,13 +420,13 @@ static gboolean dt_iop_colorcorrection_motion_notify(GtkWidget *widget, GdkEvent
     {
       p->loa = ma;
       p->lob = mb;
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
     else if(g->selected == 2)
     {
       p->hia = ma;
       p->hib = mb;
-      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
   else
@@ -455,17 +458,17 @@ static gboolean dt_iop_colorcorrection_button_press(GtkWidget *widget, GdkEventB
     {
       case 1: // only reset lo
         p->loa = p->lob = 0.0;
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
         break;
       case 2: // only reset hi
         p->hia = p->hib = 0.0;
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
         break;
       default: // reset everything
       {
         dt_iop_colorcorrection_params_t *d = (dt_iop_colorcorrection_params_t *)self->default_params;
         memcpy(p, d, sizeof(*p));
-        dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       }
     }
     return TRUE;
@@ -545,7 +548,7 @@ static gboolean dt_iop_colorcorrection_key_press(GtkWidget *widget, GdkEventKey 
       break;
   }
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   gtk_widget_queue_draw(widget);
 
   return TRUE;

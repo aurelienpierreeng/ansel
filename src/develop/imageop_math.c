@@ -28,9 +28,10 @@
 #include <assert.h> // for assert
 #include <glib.h> // for MIN, MAX, CLAMP, inline
 #include <math.h> // for round, floorf, fmaxf
-#include "common/darktable.h"        // for darktable, darktable_t, dt_code...
-#include "common/imageio.h"          // for FILTERS_ARE_4BAYER
-#include "common/interpolation.h"    // for dt_interpolation_new, dt_interp...
+#include "system/openmp.h"           // for __OMP_PARALLEL_FOR__
+#include "system/simd.h"             // for dt_aligned_pixel_t
+#include "imageio/imageio_core.h"          // for FILTERS_ARE_4BAYER
+#include "pixel/interpolation.h"    // for dt_interpolation_new, dt_interp...
 #include "develop/imageop.h"         // for dt_iop_roi_t
 
 void dt_iop_flip_and_zoom_8(const uint8_t *in, int32_t iw, int32_t ih, uint8_t *out, int32_t ow, int32_t oh,

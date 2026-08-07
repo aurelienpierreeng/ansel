@@ -71,31 +71,28 @@
 */
 
 #include "views/view.h"
-#include "bauhaus/bauhaus.h"
-#include "common/collection.h"
-#include "common/darktable.h"
+#include "common/variables.h"
+#include "gui/bauhaus.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
-#include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
 #include "common/module.h"
-#include "common/selection.h"
+#include "common/module_versioning.h"
+#include "common/times.h"
 #include "common/undo.h"
 #include "common/usermanual_url.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"
-#include "dtgtk/button.h"
-#include "dtgtk/expander.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/expander.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #ifdef GDK_WINDOWING_QUARTZ
-#include "osx/osx.h"
 #endif
 
 #include <glib.h>
@@ -264,11 +261,11 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
   dt_control_change_cursor(GDK_LEFT_PTR);
 
   /* Reset Gtk focus */
-  gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
-  darktable.gui->has_scroll_focus = NULL;
+  gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   // also ignore what scrolling there was previously happening
-  memset(darktable.gui->scroll_to, 0, sizeof(darktable.gui->scroll_to));
+  memset(dt_gui_get_global()->scroll_to, 0, sizeof(dt_gui_get_global()->scroll_to));
 
   // destroy old module list
 
@@ -276,7 +273,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
      only part
       of the undo list. This should probably done with a view proxy routine returning the type of undo to
      remove. */
-  dt_undo_clear(darktable.undo, DT_UNDO_ALL);
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_ALL);
 
   /* Special case when entering nothing (just before leaving dt) */
   if(IS_NULL_PTR(new_view))
@@ -287,7 +284,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
       if(old_view->leave) old_view->leave(old_view);
 
       /* iterator plugins and cleanup plugins in current view */
-      for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+      for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
       {
         dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
 
@@ -303,9 +300,9 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
     }
 
     /* remove all widgets in all containers */
-    dt_ui_cleanup_main_table(darktable.gui->ui);
+    dt_ui_cleanup_main_table(dt_gui_get_ui());
     for(int l = 0; l < DT_UI_CONTAINER_SIZE; l++)
-      dt_ui_container_destroy_children(darktable.gui->ui, l);
+      dt_ui_container_destroy_children(dt_gui_get_ui(), l);
     vm->current_view = NULL;
 
     return 0;
@@ -319,7 +316,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
     const int error = new_view->try_enter(new_view);
     if(error)
     {
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CANNOT_CHANGE, old_view, new_view);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CANNOT_CHANGE, old_view, new_view);
       return error;
     }
   }
@@ -331,7 +328,7 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
     if(old_view->leave) old_view->leave(old_view);
 
     /* iterator plugins and cleanup plugins in current view */
-    for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+    for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
     {
       dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
 
@@ -344,18 +341,18 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
 
     /* remove all widets in all containers */
     for(int l = 0; l < DT_UI_CONTAINER_SIZE; l++)
-      dt_ui_container_foreach(darktable.gui->ui, l,(GtkCallback)_remove_child);
+      dt_ui_container_foreach(dt_gui_get_ui(), l,(GtkCallback)_remove_child);
   }
 
   /* change current view to the new view */
   vm->current_view = new_view;
 
   /* restore visible stat of panels for the new view */
-  dt_ui_restore_panels(darktable.gui->ui);
+  dt_ui_restore_panels(dt_gui_get_ui());
 
   /* lets add plugins related to new view into panels.
    * this has to be done in reverse order to have the lowest position at the bottom! */
-  for(GList *iter = g_list_last(darktable.lib->plugins); iter; iter = g_list_previous(iter))
+  for(GList *iter = g_list_last(dt_lib_get_global()->plugins); iter; iter = g_list_previous(iter))
   {
     dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
     if(dt_lib_is_visible_in_view(plugin, new_view))
@@ -381,12 +378,12 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
 
 
       /* add module to its container */
-      dt_ui_container_add_widget(darktable.gui->ui, plugin->container(plugin), w);
+      dt_ui_container_add_widget(dt_gui_get_ui(), plugin->container(plugin), w);
     }
   }
 
   /* hide/show modules as last config */
-  for(GList *iter = darktable.lib->plugins; iter; iter = g_list_next(iter))
+  for(GList *iter = dt_lib_get_global()->plugins; iter; iter = g_list_next(iter))
   {
     dt_lib_module_t *plugin = (dt_lib_module_t *)(iter->data);
     if(dt_lib_is_visible_in_view(plugin, new_view))
@@ -424,13 +421,13 @@ int dt_view_manager_switch_by_view(dt_view_manager_t *vm, const dt_view_t *nv)
   dt_telemetry_record_module_usage("view", new_view->module_name);
 
   /* raise view changed signal */
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED, old_view, new_view);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED, old_view, new_view);
 
   // update log visibility
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_LOG_REDRAW);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_LOG_REDRAW);
 
   // update toast visibility
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_TOAST_REDRAW);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_TOAST_REDRAW);
   return 0;
 }
 
@@ -472,7 +469,7 @@ void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, i
 
     cairo_restore(cr);
     /* expose plugins */
-    for(const GList *plugins = g_list_last(darktable.lib->plugins); plugins; plugins = g_list_previous(plugins))
+    for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins); plugins; plugins = g_list_previous(plugins))
     {
       dt_lib_module_t *plugin = (dt_lib_module_t *)(plugins->data);
 
@@ -497,7 +494,7 @@ void dt_view_manager_mouse_leave(dt_view_manager_t *vm)
 
   /* lets check if any plugins want to handle mouse move */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -525,7 +522,7 @@ void dt_view_manager_mouse_moved(dt_view_manager_t *vm, double x, double y, doub
 
   /* lets check if any plugins want to handle mouse move */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -547,7 +544,7 @@ int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event)
 
   /* lets check if any plugins want to handle button press */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -574,7 +571,7 @@ int dt_view_manager_button_released(dt_view_manager_t *vm, double x, double y, i
 
   /* lets check if any plugins want to handle button press */
   gboolean handled = FALSE;
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins;
       plugins = g_list_previous(plugins))
   {
@@ -601,13 +598,13 @@ int dt_view_manager_button_pressed(dt_view_manager_t *vm, double x, double y, do
   dt_view_t *v = vm->current_view;
 
   /* Reset Gtk focus */
-  gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
-  darktable.gui->has_scroll_focus = NULL;
+  gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
+  dt_gui_get_global()->has_scroll_focus = NULL;
 
   /* lets check if any plugins want to handle button press */
   gboolean handled = FALSE;
 
-  for(const GList *plugins = g_list_last(darktable.lib->plugins);
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
       plugins && !handled;
       plugins = g_list_previous(plugins))
   {
@@ -707,7 +704,7 @@ static void _enqueue_surface_fetch(dt_view_image_surface_fetcher_t *fetcher)
   dt_control_job_set_params_with_size(job, params, sizeof(dt_view_surface_fetch_job_t), g_free);
   fetcher->job_queued = TRUE;
   fetcher->queued_request_id = fetcher->request_id;
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_FG, job);
 }
 
 static gboolean _view_surface_commit_main(gpointer user_data)
@@ -745,7 +742,7 @@ static gboolean _view_surface_commit_main(gpointer user_data)
     GtkWidget *widget = g_weak_ref_get(&fetcher->widget_ref);
     if(widget)
     {
-      if(widget == dt_ui_center(darktable.gui->ui))
+      if(widget == dt_gui_center_widget())
       {
         dt_control_queue_redraw_center();
       }
@@ -1043,7 +1040,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
                                                                 dt_atomic_int *shutdown)
 {
   double tt = 0;
-  if((darktable.unmuted & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
+  if((dt_get_debug_flags() & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
     tt = dt_get_wtime();
 
   dt_view_surface_value_t ret = DT_VIEW_SURFACE_KO;
@@ -1054,19 +1051,19 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   *surface = NULL;
 
   // get mipmap cache image
-  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
+  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   dt_mipmap_size_t mip = DT_MIPMAP_NONE;
 
   if(zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    mip = dt_mipmap_cache_get_matching_size(cache, ceilf(width * darktable.gui->ppd), ceilf(height * darktable.gui->ppd), imgid);
+    mip = dt_mipmap_cache_get_matching_size(cache, ceilf(width * dt_gui_get_global()->ppd), ceilf(height * dt_gui_get_global()->ppd), imgid);
   }
   else
   {
-    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     const int full_width = image->width;
     const int full_height = image->height;
-    dt_image_cache_read_release(darktable.image_cache, image);
+    dt_image_cache_read_release(dt_image_cache_get_global(), image);
 
     if(zoom == DT_THUMBTABLE_ZOOM_HALF)
       mip = dt_mipmap_cache_get_matching_size(cache, ceilf(full_width / 2.f ), ceilf(full_height / 2.f), imgid);
@@ -1097,7 +1094,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   // if we don't get buffer, no image is available at the moment
   if(IS_NULL_PTR(buf.buf))
   {
-    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
     if(dt_supervisor_active())
       dt_supervisor_thumbnail(DT_SV_UPDATE, imgid, width, height, mip, FALSE);
     return DT_VIEW_SURFACE_KO;
@@ -1110,7 +1107,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   if(zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    scale = fminf((float)width / (float)buf_wd, (float)height / (float)buf_ht) * darktable.gui->ppd;
+    scale = fminf((float)width / (float)buf_wd, (float)height / (float)buf_ht) * dt_gui_get_global()->ppd;
     img_width = roundf(buf_wd * scale);
     img_height = roundf(buf_ht * scale);
 
@@ -1132,23 +1129,24 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   uint8_t *rgbbuf = (uint8_t *)calloc((size_t)buf_wd * buf_ht * 4, sizeof(uint8_t));
   if(IS_NULL_PTR(rgbbuf))
   {
-    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
     return ret;
   }
 
   cmsHTRANSFORM transform = NULL;
-  pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+  pthread_rwlock_rdlock(&profiles->xprofile_lock);
   gboolean alloc = FALSE;
 
   // we only color manage when a thumbnail is sRGB or AdobeRGB. everything else just gets dumped to the
   // screen
   if(buf.color_space == DT_COLORSPACE_SRGB)
   {
-    transform = darktable.color_profiles->transform_srgb_to_display;
+    transform = dt_colorspaces_get_global()->transform_srgb_to_display;
   }
   else if(buf.color_space == DT_COLORSPACE_ADOBERGB)
   {
-    transform = darktable.color_profiles->transform_adobe_rgb_to_display;
+    transform = dt_colorspaces_get_global()->transform_adobe_rgb_to_display;
   }
   else if(buf.color_space == DT_COLORSPACE_DISPLAY)
   {
@@ -1175,8 +1173,8 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   dt_colorspaces_transform_rgba8_to_bgra8(transform, buf.buf, rgbbuf, buf.width, buf.height);
   if(alloc) cmsDeleteTransform(transform);
-  pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  pthread_rwlock_unlock(&profiles->xprofile_lock);
+  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   const int32_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, buf_wd);
   cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(rgbbuf, CAIRO_FORMAT_RGB24, buf_wd, buf_ht, stride);
@@ -1209,7 +1207,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   /* The async/shared surface path returns pixel-sized Cairo image surfaces.
    * Publish the widget PPD on the finished surface so GUI callers can place it
    * in logical coordinates without re-deriving HiDPI scaling on every draw. */
-  cairo_surface_set_device_scale(*surface, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_surface_set_device_scale(*surface, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
 
   // we consider skull as ok as the image hasn't to be reloaded
   if(buf_wd <= 8 && buf_ht <= 8)
@@ -1225,13 +1223,13 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   dt_free(rgbbuf);
 
   // logs
-  if((darktable.unmuted & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
+  if((dt_get_debug_flags() & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
   {
     dt_print(DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF,
              "[dt_view_image_get_surface]  id %i, mip code %i, dots %ix%i, mip %ix%i, surf %ix%i created in %0.04f sec\n",
              imgid, mip, width, height, buf_wd, buf_ht, img_width, img_height, dt_get_wtime() - tt);
   }
-  else if(darktable.unmuted & DT_DEBUG_IMAGEIO)
+  else if(dt_get_debug_flags() & DT_DEBUG_IMAGEIO)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[dt_view_image_get_surface]  id %i, mip code %i, dots %ix%i, mip %ix%i, surf %ix%i\n", imgid, mip,
              width, height, buf_wd, buf_ht, img_width, img_height);
@@ -1297,30 +1295,32 @@ char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const g
 
 void dt_view_active_images_reset(gboolean raise)
 {
-  if(IS_NULL_PTR(darktable.view_manager->active_images)) return;
-  g_list_free(darktable.view_manager->active_images);
-  darktable.view_manager->active_images = NULL;
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm->active_images)) return;
+  g_list_free(vm->active_images);
+  vm->active_images = NULL;
 
-  if(raise) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  if(raise) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_active_images_add(int32_t imgid, gboolean raise)
 {
-  darktable.view_manager->active_images
-      = g_list_append(darktable.view_manager->active_images, GINT_TO_POINTER(imgid));
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  vm->active_images = g_list_append(vm->active_images, GINT_TO_POINTER(imgid));
   if(raise)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_active_images_remove(int32_t imgid, gboolean raise)
 {
-  GList *link = g_list_find(darktable.view_manager->active_images, GINT_TO_POINTER(imgid));
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  GList *link = g_list_find(vm->active_images, GINT_TO_POINTER(imgid));
   if(link)
   {
-    darktable.view_manager->active_images = g_list_delete_link(darktable.view_manager->active_images, link);
+    vm->active_images = g_list_delete_link(vm->active_images, link);
 
     if(raise)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
   }
 }
 
@@ -1331,27 +1331,29 @@ gboolean dt_view_active_images_has_imgid(int32_t imgid)
 
 GList *dt_view_active_images_get_all()
 {
-  return darktable.view_manager->active_images;
+  return dt_view_manager_get_global()->active_images;
 }
 
 int32_t dt_view_active_images_get_first()
 {
-  if(IS_NULL_PTR(darktable.view_manager->active_images)) return -1;
-  return GPOINTER_TO_INT(darktable.view_manager->active_images->data);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm->active_images)) return -1;
+  return GPOINTER_TO_INT(vm->active_images->data);
 }
 
 void dt_view_active_images_set(GList *images, gboolean raise)
 {
-  if(!IS_NULL_PTR(darktable.view_manager->active_images)
-     && darktable.view_manager->active_images != images)
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(!IS_NULL_PTR(vm->active_images)
+     && vm->active_images != images)
   {
-    g_list_free(darktable.view_manager->active_images);
+    g_list_free(vm->active_images);
   }
 
-  darktable.view_manager->active_images = images;
+  vm->active_images = images;
 
   if(raise)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 }
 
 void dt_view_manager_module_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t views)
@@ -1500,11 +1502,11 @@ void dt_view_audio_stop(dt_view_manager_t *vm)
 
 void dt_view_image_info_update(int32_t imgid)
 {
-  darktable.view_manager->image_info_id = imgid;
+  dt_view_manager_get_global()->image_info_id = imgid;
 
   if(imgid == UNKNOWN_IMAGE)
   {
-    dt_ui_set_image_info_label(darktable.gui->ui, "");
+    dt_ui_set_image_info_label(dt_gui_get_ui(), "");
     return;
   }
 
@@ -1526,7 +1528,7 @@ void dt_view_image_info_update(int32_t imgid)
   dt_free(pattern);
   dt_variables_params_destroy(vp);
 
-  dt_ui_set_image_info_label(darktable.gui->ui, msg);
+  dt_ui_set_image_info_label(dt_gui_get_ui(), msg);
 
   dt_free(msg);
 }

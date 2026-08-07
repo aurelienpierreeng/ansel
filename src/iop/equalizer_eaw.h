@@ -27,7 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_IOP_EQUALIZER_EAW_H
+#define DT_IOP_EQUALIZER_EAW_H
 
 // edge-avoiding wavelet:
 #define gweight(i, j, ii, jj)                                                                                \
@@ -184,6 +185,9 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
 
 #undef gbuf
 #undef gweight
+
+#endif // DT_IOP_EQUALIZER_EAW_H
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

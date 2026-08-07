@@ -27,7 +27,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "common/utility.h"
+#include "control/control.h"
+#include <glib/gstdio.h>
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/paths.h"
 #include <cups/cups.h>
 #include <cups/ppd.h>
 #include <glib.h>
@@ -37,11 +43,7 @@
 #endif
 
 #include "common/file_location.h"
-#include "common/image.h"
-#include "common/image_cache.h"
-#include "common/mipmap_cache.h"
 #include "common/pdf.h"
-#include "control/jobs/control_jobs.h"
 #include "cups_print.h"
 
 // enable weak linking in libcups on macOS
@@ -224,7 +226,7 @@ void dt_printers_discovery(void (*cb)(dt_printer_info_t *pr, void *user_data), v
     prtctl->user_data = user_data;
 
     dt_control_job_set_params(job, prtctl, g_free);
-    dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_BG, job);
+    dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_SYSTEM_BG, job);
   }
 }
 

@@ -34,16 +34,19 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
 #include "common/geo.h"
+#include "control/settings.h"
 #include "common/curl_tools.h"
-#include "control/conf.h"
-#include "control/control.h"
+#include "common/glib_utils.h"
+#include "common/macros.h"
+#include "common/module_versioning.h"
+#include "common/utility.h"
+#include "common/conf.h"
 #include "control/jobs.h"
-#include "dtgtk/icon.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "views/view.h"
 #include <curl/curl.h>
 #include <gdk/gdkkeysyms.h>
 
@@ -272,7 +275,7 @@ static int32_t _lib_location_place_get_zoom(_lib_location_result_t *place)
 static void _clear_markers(dt_lib_location_t *lib)
 {
   if(lib->marker_type == MAP_DISPLAY_NONE) return;
-  dt_view_map_remove_marker(darktable.view_manager, lib->marker_type, lib->marker);
+  dt_view_map_remove_marker(dt_view_manager_get_global(), lib->marker_type, lib->marker);
   g_object_unref(lib->marker);
   lib->marker = NULL;
   lib->marker_type = MAP_DISPLAY_NONE;
@@ -307,20 +310,20 @@ static void _show_location(dt_lib_location_t *lib, _lib_location_result_t *p)
   if(isnan(p->bbox.lon1) || isnan(p->bbox.lat1) || isnan(p->bbox.lon2) || isnan(p->bbox.lat2))
   {
     int32_t zoom = _lib_location_place_get_zoom(p);
-    dt_view_map_center_on_location(darktable.view_manager, p->lon, p->lat, zoom);
+    dt_view_map_center_on_location(dt_view_manager_get_global(), p->lon, p->lat, zoom);
   }
   else
   {
-    dt_view_map_center_on_bbox(darktable.view_manager, p->bbox.lon1, p->bbox.lat1, p->bbox.lon2, p->bbox.lat2);
+    dt_view_map_center_on_bbox(dt_view_manager_get_global(), p->bbox.lon1, p->bbox.lat1, p->bbox.lon2, p->bbox.lat2);
   }
 
   _clear_markers(lib);
 
-  lib->marker = dt_view_map_add_marker(darktable.view_manager, p->marker_type, p->marker_points);
+  lib->marker = dt_view_map_add_marker(dt_view_manager_get_global(), p->marker_type, p->marker_points);
   lib->marker_type = p->marker_type;
   lib->selected_location = p;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_LOCATION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_LOCATION_CHANGED,
                                 p->marker_type == MAP_DISPLAY_POLYGON ? p->marker_points : NULL);
 }
 

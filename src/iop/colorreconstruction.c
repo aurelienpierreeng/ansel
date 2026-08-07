@@ -38,12 +38,18 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "common/logging.h"
+#include "system/openmp.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/debug.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "control/control.h"
@@ -53,7 +59,6 @@
 #include "develop/tiling.h"
 
 #include "gui/gtk.h"
-#include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <assert.h>

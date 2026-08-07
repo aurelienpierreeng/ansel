@@ -16,16 +16,21 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "common/conf.h"
+#include "common/act_on.h"
+#include "common/history_actions.h"
+#include "control/jobs/control_jobs.h"
 #include "gui/actions/menu.h"
+#ifdef __APPLE__
+#include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
+#endif
 #include "gui/preferences.h"
 #include "common/undo.h"
 #include "common/selection.h"
-#include "common/collection.h"
 #include "common/image_cache.h"
 #include "common/history.h"
 #include "common/history_merge.h"
-#include "common/history_merge_gui.h"
+#include "gui/history_merge_gui.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "control/control.h"
@@ -35,34 +40,36 @@ MAKE_ACCEL_WRAPPER(dt_gui_preferences_show)
 
 static gboolean undo_sensitive_callback()
 {
-  if(IS_NULL_PTR(darktable.view_manager)) return FALSE;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm)) return FALSE;
+  const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return FALSE;
 
   gboolean sensitive = FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
+    sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
+    sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_MAP);
+    sensitive = dt_is_undo_list_populated(dt_undo_get_global(), DT_UNDO_MAP);
 
   return sensitive;
 }
 
 static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  if(IS_NULL_PTR(darktable.view_manager) || !undo_sensitive_callback()) return FALSE;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm) || !undo_sensitive_callback()) return FALSE;
+  const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    dt_undo_do_undo(darktable.undo, DT_UNDO_LIGHTTABLE);
+    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    dt_undo_do_undo(darktable.undo, DT_UNDO_DEVELOP);
+    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "map"))
-    dt_undo_do_undo(darktable.undo, DT_UNDO_MAP);
+    dt_undo_do_undo(dt_undo_get_global(), DT_UNDO_MAP);
   // Beware: it needs to block callbacks declared in view, which may not be loaded.
   // Another piece of shitty peculiar design that doesn't comply with the logic of the rest of the soft.
   // That's what you get from ignoring modularity principles.
@@ -74,18 +81,19 @@ static gboolean undo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
 
 static gboolean redo_sensitive_callback()
 {
-  if(IS_NULL_PTR(darktable.view_manager)) return FALSE;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm)) return FALSE;
+  const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return FALSE;
 
   gboolean sensitive = FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
+    sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
+    sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_MAP);
+    sensitive = dt_is_redo_list_populated(dt_undo_get_global(), DT_UNDO_MAP);
 
   return sensitive;
 }
@@ -93,16 +101,17 @@ static gboolean redo_sensitive_callback()
 
 static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  if(IS_NULL_PTR(darktable.view_manager) || !redo_sensitive_callback()) return FALSE;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  dt_view_manager_t *const vm = dt_view_manager_get_global();
+  if(IS_NULL_PTR(vm) || !redo_sensitive_callback()) return FALSE;
+  const dt_view_t *cv = dt_view_manager_get_current_view(vm);
   if(IS_NULL_PTR(cv)) return FALSE;
 
   if(!strcmp(cv->module_name, "lighttable"))
-    dt_undo_do_redo(darktable.undo, DT_UNDO_LIGHTTABLE);
+    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_LIGHTTABLE);
   else if(!strcmp(cv->module_name, "darkroom"))
-    dt_undo_do_redo(darktable.undo, DT_UNDO_DEVELOP);
+    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_DEVELOP);
   else if(!strcmp(cv->module_name, "map"))
-    dt_undo_do_redo(darktable.undo, DT_UNDO_MAP);
+    dt_undo_do_redo(dt_undo_get_global(), DT_UNDO_MAP);
   //   see undo_callback()
 
   return TRUE;
@@ -117,7 +126,7 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
 
   if(is_darkroom_image_in_list)
   {
-    dt_develop_t *dev = darktable.develop;
+    dt_develop_t *dev = dt_dev_get_global();
     dt_dev_undo_start_record(dev);
     dt_history_compress_on_image(dev->image_storage.id);
     dt_dev_undo_end_record(dev);
@@ -141,13 +150,13 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
 static gboolean copy_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   // Allow copy only when exactly one file is selected
-  if(dt_selection_get_length(darktable.selection) != 1)
+  if(dt_selection_get_length(dt_selection_get_global()) != 1)
   {
     dt_control_log(_("Copy is allowed only with exactly one image selected"));
     return FALSE;
   }
 
-  GList *imgs = dt_selection_get_list(darktable.selection);
+  GList *imgs = dt_selection_get_list(dt_selection_get_global());
   gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
   g_list_free(imgs);
   imgs = NULL;
@@ -157,10 +166,10 @@ static gboolean copy_callback(GtkAccelGroup *group, GObject *acceleratable, guin
     // Copy/paste reloads the source history from the database right away.
     // Flush the current darkroom history synchronously here so the copied
     // source matches the edit stack currently shown in the GUI.
-    dt_dev_write_history(darktable.develop, FALSE);
+    dt_dev_write_history(dt_dev_get_global(), FALSE);
   }
 
-  dt_history_copy(dt_selection_get_first_id(darktable.selection));
+  dt_history_copy(dt_selection_get_first_id(dt_selection_get_global()));
   return TRUE;
 }
 
@@ -168,13 +177,13 @@ static gboolean copy_callback(GtkAccelGroup *group, GObject *acceleratable, guin
 static gboolean copy_parts_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   // Allow copy only when exactly one file is selected
-  if(dt_selection_get_length(darktable.selection) != 1)
+  if(dt_selection_get_length(dt_selection_get_global()) != 1)
   {
     dt_control_log(_("Copy is allowed only with exactly one image selected"));
     return FALSE;
   }
 
-  GList *imgs = dt_selection_get_list(darktable.selection);
+  GList *imgs = dt_selection_get_list(dt_selection_get_global());
   gboolean is_darkroom_image_in_list = dt_dev_history_is_image_in_dev(imgs);
   g_list_free(imgs);
   imgs = NULL;
@@ -184,17 +193,17 @@ static gboolean copy_parts_callback(GtkAccelGroup *group, GObject *acceleratable
     // Selective copy opens the same immediate DB read path as full copy.
     // Keep the persisted history in sync with the current darkroom stack
     // before building the copy/paste state from this image.
-    dt_dev_write_history(darktable.develop, FALSE);
+    dt_dev_write_history(dt_dev_get_global(), FALSE);
   }
 
-  dt_history_copy_parts(dt_selection_get_first_id(darktable.selection));
+  dt_history_copy_parts(dt_selection_get_first_id(dt_selection_get_global()));
   return TRUE;
 }
 
 
 static gboolean paste_sensitive_callback()
 {
-  return darktable.view_manager->copy_paste.copied_imageid > 0;
+  return dt_view_manager_get_global()->copy_paste.copied_imageid > 0;
 }
 
 static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
@@ -215,11 +224,11 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
       return FALSE;
   }
 
-  GList *imgs = dt_selection_get_list(darktable.selection);
+  GList *imgs = dt_selection_get_list(dt_selection_get_global());
 
   // We don't allow pasting on darkroom image
   if(dt_dev_history_is_image_in_dev(imgs))
-    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(dt_dev_get_global()->image_storage.id));
 
   if(imgs) dt_history_paste_on_list(imgs);
 
@@ -246,7 +255,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
       return FALSE;
   }
 
-  GList *imgs = dt_selection_get_list(darktable.selection);
+  GList *imgs = dt_selection_get_list(dt_selection_get_global());
 
   if(!dt_history_paste_parts_prepare())
   {
@@ -257,7 +266,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
 
   // We don't allow pasting on darkroom image
   if(dt_dev_history_is_image_in_dev(imgs))
-    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(dt_dev_get_global()->image_storage.id));
 
   if(imgs) dt_history_paste_parts_on_list(imgs);
 
@@ -277,7 +286,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   if(IS_NULL_PTR(imgs)) return FALSE;
 
   const int act_on_one = g_list_is_singleton(imgs); // list length == 1?
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
           _("open sidecar file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
           _("_open"), _("_cancel"));
@@ -287,7 +296,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   {
     //single image to load xmp to, assume we want to load from same dir
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
     if(img && img->film_id != -1)
     {
       char pathname[PATH_MAX] = { 0 };
@@ -300,7 +309,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
       // i guess that's impossible, but better safe than sorry ;)
       dt_conf_get_folder_to_file_chooser("ui_last/import_path", GTK_FILE_CHOOSER(filechooser));
     }
-    dt_image_cache_read_release(darktable.image_cache, img);
+    dt_image_cache_read_release(dt_image_cache_get_global(), img);
   }
   else
   {
@@ -348,7 +357,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   }
 
   if(dt_dev_history_is_image_in_dev(imgs))
-    dt_apply_dev_history_update(darktable.develop);
+    dt_apply_dev_history_update(dt_dev_get_global());
 
   g_object_unref(filechooser);
   g_list_free(imgs);
@@ -360,13 +369,13 @@ static gboolean duplicate_callback(GtkAccelGroup *group, GObject *acceleratable,
 {
   if(has_active_images())
   {
-    GList *imgs = dt_selection_get_list(darktable.selection);
+    GList *imgs = dt_selection_get_list(dt_selection_get_global());
     if(dt_dev_history_is_image_in_dev(imgs))
     {
       // Duplication copies history from the source image into the new version.
       // When the source is the current darkroom image, persist its live history
       // before the background duplicate job reloads it from the database.
-      dt_dev_write_history(darktable.develop, FALSE);
+      dt_dev_write_history(dt_dev_get_global(), FALSE);
     }
     g_list_free(imgs);
     imgs = NULL;
@@ -383,12 +392,12 @@ static gboolean new_history_callback(GtkAccelGroup *group, GObject *acceleratabl
 {
   if(has_active_images())
   {
-    GList *imgs = dt_selection_get_list(darktable.selection);
+    GList *imgs = dt_selection_get_list(dt_selection_get_global());
     if(dt_dev_history_is_image_in_dev(imgs))
     {
       // Creating a new duplicate version still starts from the current source
       // image state, so flush the live darkroom history before duplicating it.
-      dt_dev_write_history(darktable.develop, FALSE);
+      dt_dev_write_history(dt_dev_get_global(), FALSE);
     }
     g_list_free(imgs);
     imgs = NULL;
@@ -404,7 +413,7 @@ static gboolean new_history_callback(GtkAccelGroup *group, GObject *acceleratabl
 
 static gboolean shortcuts_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_accels_window(darktable.gui->accels, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  dt_accels_window(dt_gui_get_accels(), GTK_WINDOW(dt_gui_main_window()));
   return TRUE;
 }
 

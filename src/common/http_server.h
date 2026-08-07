@@ -21,7 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_COMMON_HTTP_SERVER_H
+#define DT_COMMON_HTTP_SERVER_H
 
 #include <libsoup/soup.h>
 
@@ -44,6 +45,8 @@ dt_http_server_t *dt_http_server_create(const int *ports, const int n_ports, con
  *  this also frees server.
  */
 void dt_http_server_kill(dt_http_server_t *server);
+
+#endif // DT_COMMON_HTTP_SERVER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

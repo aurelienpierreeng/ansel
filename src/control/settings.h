@@ -27,10 +27,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef DT_CONTROL_SETTINGS_H
+#define DT_CONTROL_SETTINGS_H
 
-#include "common/darktable.h"
-#include "common/dtpthread.h"
 #include "control/signal.h"
 
 #include <inttypes.h>
@@ -56,6 +55,8 @@ typedef enum dt_lib_filter_t
   DT_LIB_FILTER_STAR_5 = 6,
   DT_LIB_FILTER_REJECT = 7
 } dt_lib_filter_t;
+
+#endif // DT_CONTROL_SETTINGS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

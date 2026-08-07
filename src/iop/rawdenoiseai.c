@@ -55,14 +55,22 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
-#include "common/darktable.h"
+#include "gui/bauhaus.h"
+#include "common/macros.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "common/logging.h"
+#include "common/module_versioning.h"
+#include <json-glib/json-glib.h>
+#include "common/paths.h"
+#include "gui/gtk.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/nn_model.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
@@ -346,8 +354,141 @@ void input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   dt_iop_buffer_dsc_update_bpp(dsc);
 }
 
+/* Route the executor's scratch through the pixelpipe cache arena, per the
+ * project rule that pixel buffers never come from bare malloc. nn_model
+ * cannot include darktable.h (it is deliberately pipeline-free), so the
+ * arena is injected here, once, before any pipeline runs. */
+/* Per-tile scratch REGION: the whole working set of one process() call —
+ * input planes, output plane and every executor tensor — is reserved from the
+ * pixelpipe arena as ONE allocation, up front, sized by the executor's exact
+ * ledger plus an internal-fragmentation margin. The executor's alloc/free
+ * churn then happens inside the region through the sub-allocator below and is
+ * invisible to the arena: no interleaving with cache entries, no fragmenting
+ * of the arena's free runs, and the tiling engine's largest-free-run cap
+ * guarantees the single reservation fits by construction. Memory is planned,
+ * reserved, then executed within — never discovered at runtime; if the
+ * reservation itself fails, the tile fails BEFORE any compute.
+ *
+ * The sub-allocator is a trivial first-fit block list: at most a dozen live
+ * tensors exist at once, all sized in whole planes. The region pointer is
+ * thread-local because the darkroom's full and preview pipes may run
+ * process() concurrently. */
+#define NN_REGION_MAX_BLOCKS 32
+// the two-ended layout (churn bottom-up, skips top-down) achieves the
+// ledger's live peak exactly; the slack only covers per-block 64-byte
+// alignment crumbs
+#define NN_REGION_SLACK 1.02f
+
+typedef struct nn_region_t
+{
+  char *base;
+  size_t size;
+  struct
+  {
+    size_t off, len;
+  } blocks[NN_REGION_MAX_BLOCKS];
+  int n_blocks;
+} nn_region_t;
+
+static __thread nn_region_t *_nn_region = NULL;
+
+static void *_region_alloc(nn_region_t *r, size_t bytes, int long_lived)
+{
+  bytes = (bytes + 63) & ~(size_t)63; // keep 64-byte alignment inside the region
+  if(r->n_blocks >= NN_REGION_MAX_BLOCKS) return NULL;
+  size_t off = (size_t)-1;
+  int at = 0;
+  if(!long_lived)
+  {
+    // churn packs bottom-up, first fit; blocks are kept sorted by offset
+    size_t gap = 0;
+    for(int i = 0; i <= r->n_blocks; i++)
+    {
+      const size_t end = (i < r->n_blocks) ? r->blocks[i].off : r->size;
+      if(end - gap >= bytes)
+      {
+        off = gap;
+        at = i;
+        break;
+      }
+      if(i == r->n_blocks) break;
+      gap = r->blocks[i].off + r->blocks[i].len;
+    }
+  }
+  else
+  {
+    // long-lived blocks (skip connections) pack top-down, last fit, so they
+    // never split the churn area mid-region — this is what lets the region be
+    // sized at exactly planes + the ledger's live peak, no slack
+    size_t gap_end = r->size;
+    for(int i = r->n_blocks; i >= 0; i--)
+    {
+      const size_t gap_start = (i > 0) ? r->blocks[i - 1].off + r->blocks[i - 1].len : 0;
+      if(gap_end - gap_start >= bytes)
+      {
+        off = gap_end - bytes;
+        at = i;
+        break;
+      }
+      if(i > 0) gap_end = r->blocks[i - 1].off;
+    }
+  }
+  if(off == (size_t)-1)
+  {
+    size_t live = 0, largest_gap = 0, gap = 0;
+    for(int i = 0; i <= r->n_blocks; i++)
+    {
+      const size_t end = (i < r->n_blocks) ? r->blocks[i].off : r->size;
+      if(end - gap > largest_gap) largest_gap = end - gap;
+      if(i == r->n_blocks) break;
+      live += r->blocks[i].len;
+      gap = r->blocks[i].off + r->blocks[i].len;
+    }
+    dt_print(DT_DEBUG_ALWAYS,
+             "[rawdenoiseai] region alloc failed: %" G_GSIZE_FORMAT " bytes (%s), region %" G_GSIZE_FORMAT
+             ", live %" G_GSIZE_FORMAT " in %d blocks, largest gap %" G_GSIZE_FORMAT "\n",
+             bytes, long_lived ? "long-lived" : "churn", r->size, live, r->n_blocks, largest_gap);
+    return NULL;
+  }
+  for(int i = r->n_blocks; i > at; i--) r->blocks[i] = r->blocks[i - 1];
+  r->blocks[at].off = off;
+  r->blocks[at].len = bytes;
+  r->n_blocks++;
+  return r->base + off;
+}
+
+static void _region_free(nn_region_t *r, void *p)
+{
+  const size_t off = (size_t)((char *)p - r->base);
+  for(int i = 0; i < r->n_blocks; i++)
+    if(r->blocks[i].off == off)
+    {
+      for(int j = i; j < r->n_blocks - 1; j++) r->blocks[j] = r->blocks[j + 1];
+      r->n_blocks--;
+      return;
+    }
+}
+
+static void *_nn_arena_alloc(size_t bytes, int long_lived)
+{
+  if(_nn_region) return _region_alloc(_nn_region, bytes, long_lived);
+  return dt_pixelpipe_cache_alloc_align_cache(bytes, 0);
+}
+
+static void _nn_arena_free(void *p)
+{
+  nn_region_t *r = _nn_region;
+  if(r && (char *)p >= r->base && (char *)p < r->base + r->size)
+  {
+    _region_free(r, p);
+    return;
+  }
+  dt_pixelpipe_cache_free_align(p);
+}
+
 void init_global(dt_iop_module_so_t *module)
 {
+  dt_nn_set_allocator(_nn_arena_alloc, _nn_arena_free);
   dt_iop_rawdenoiseai_global_data_t *gd = calloc(1, sizeof(dt_iop_rawdenoiseai_global_data_t));
   dt_pthread_mutex_init(&gd->lock, NULL);
 #ifdef HAVE_OPENCL
@@ -369,6 +510,9 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
+  // the hooks point into this module's code: leaving them set after dlclose
+  // would leave the core library with dangling function pointers
+  dt_nn_set_allocator(NULL, NULL);
   dt_iop_rawdenoiseai_global_data_t *gd = (dt_iop_rawdenoiseai_global_data_t *)module->data;
   if(gd)
   {
@@ -581,6 +725,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   // per input pixel (4 bytes): 5 input planes + 1 output plane + network
   // scratch, all float32. factor is relative to the unit buffer size.
   float extra = 6.0f;
+  float extra_cl = 6.0f;
   unsigned overlap = 0;
   if(d && d->model)
   {
@@ -589,9 +734,24 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     // includes the coarse net's share for unet-ms)
     const gboolean xtrans_cfa = piece->dsc_in.filters == 9u;
     const int bin = dt_nn_model_bin(d->model, xtrans_cfa);
-    extra = (float)(dt_nn_model_in_channels(d->model) + 1);
-    if(bin > 1) extra += 12.0f / (float)(bin * bin);
-    extra += dt_nn_unet_scratch_bytes(d->model, 1, 1) / (float)sizeof(float);
+    const float planes = (float)(dt_nn_model_in_channels(d->model) + 1)
+                         + (bin > 1 ? 12.0f / (float)(bin * bin) : 0.0f);
+    /* Host: process() reserves the tile's whole working set as ONE arena
+     * region — the (in_ch + 1) planes plus the executor's ledger peak times
+     * the sub-allocator's fragmentation margin. The factor declares exactly
+     * that reservation, so the tiling plan, the reservation and the execution
+     * are the same number (the coarse-stage module buffers, 12/bin^2, are the
+     * only separate short-lived arena entries). Expressed as a factor of the
+     * input image size — floats per input pixel — never absolute bytes. */
+    extra = planes + NN_REGION_SLACK * dt_nn_unet_scratch_per_px(d->model);
+    /* Device: no region — buffers are device-side. The CL executor's sequence
+     * differs (it materializes the decoder concat), and the CL path adds
+     * three device planes of its own (dev_den, plus the buffer-format copies
+     * dev_in_buf/dev_out_buf) and the fusion grids (~0.13 plane); count all
+     * of it explicitly rather than letting it ride inside factor_cl's
+     * padding headroom. */
+    extra_cl = planes + dt_nn_unet_scratch_per_px_cl(d->model) + 3.2f;
+
     // The theoretical receptive field of the depth-4 U-Net is ~110 px, but the
     // measured impulse response of the trained model decays to 1.4e-6 of peak
     // at radius 32 (3 orders below 8-bit visibility) and to exactly zero at
@@ -621,7 +781,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
    * headroom (~1.2); the cost of overshooting is a smaller tile, the cost
    * of undershooting is CL_MEM_OBJECT_ALLOCATION_FAILURE and a silent
    * fallback of the whole tile to CPU. */
-  tiling->factor_cl = 2.0f + extra * 1.4f;
+  tiling->factor_cl = 2.0f + extra_cl * 1.4f;
   tiling->maxbuf = 1.0f;
   // device-resident weight blob (up to ~38 MB) plus fixed slack
   tiling->overhead = 64u * 1024u * 1024u;
@@ -1128,18 +1288,28 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int ph = (height + align - 1) / align * align;
   const size_t plane = (size_t)pw * ph;
 
+  /* The tile's whole working set — input planes, output plane, executor
+   * scratch — is ONE arena reservation, made before any compute, sized by the
+   * executor's exact ledger plus the sub-allocator's fragmentation margin.
+   * This is the same quantity tiling_callback declares, so the plan, the
+   * reservation and the execution are one number. */
   const int in_ch = dt_nn_model_in_channels(model);
-  float *const nn_in = dt_pixelpipe_cache_alloc_align_float_cache(plane * in_ch, 0);
-  float *const nn_out = dt_pixelpipe_cache_alloc_align_float_cache(plane, 0);
-  if(IS_NULL_PTR(nn_in) || IS_NULL_PTR(nn_out))
+  nn_region_t region = { 0 };
+  region.size = ((plane * (in_ch + 1) * sizeof(float) + 63) & ~(size_t)63)
+                + (size_t)(NN_REGION_SLACK * (float)dt_nn_unet_scratch_bytes(model, pw, ph));
+  region.size = (region.size + 63) & ~(size_t)63;
+  region.base = dt_pixelpipe_cache_alloc_align_cache(region.size, 0);
+  if(IS_NULL_PTR(region.base))
   {
-    dt_print(DT_DEBUG_ALWAYS, "[rawdenoiseai] plane alloc failed for %dx%d tile (%.1f MB)\n", pw, ph,
-             plane * (in_ch + 1) * sizeof(float) / 1048576.0);
-    if(!IS_NULL_PTR(nn_in)) dt_pixelpipe_cache_free_align(nn_in);
-    if(!IS_NULL_PTR(nn_out)) dt_pixelpipe_cache_free_align(nn_out);
+    dt_print(DT_DEBUG_ALWAYS, "[rawdenoiseai] region alloc failed for %dx%d tile (%.1f MB)\n", pw, ph,
+             region.size / 1048576.0);
     dt_iop_image_copy_by_size(ovoid, ivoid, width, height, 1);
     return 1;
   }
+  _nn_region = &region;
+  float *const nn_in = _region_alloc(&region, plane * in_ch * sizeof(float), 0);
+  float *const nn_out = _region_alloc(&region, plane * sizeof(float), 0);
+  // by construction these cannot fail: the region was sized for them
 
   _k_assemble(in, nn_in, width, height, pw, ph, d, filters, xtrans, roi);
 
@@ -1186,8 +1356,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     _k_blend_crop(in, nn_out, out, width, height, pw, d->strength);
   }
 
-  dt_pixelpipe_cache_free_align(nn_in);
-  dt_pixelpipe_cache_free_align(nn_out);
+  _nn_region = NULL;
+  dt_pixelpipe_cache_free_align(region.base);
   return rc;
 }
 
@@ -1337,14 +1507,14 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     cl_mem guide_src = dev_cden;
     const int KU = gd->k_upsample_n;
     const int three = 3;
-    const long dst_off = (long)plane * 5;
+    const cl_long dst_off = (cl_long)plane * 5;
     dt_opencl_set_kernel_arg(devid, KU, 0, sizeof(cl_mem), &guide_src);
     dt_opencl_set_kernel_arg(devid, KU, 1, sizeof(cl_mem), &dev_planes);
     dt_opencl_set_kernel_arg(devid, KU, 2, sizeof(int), &cw);
     dt_opencl_set_kernel_arg(devid, KU, 3, sizeof(int), &chh);
     dt_opencl_set_kernel_arg(devid, KU, 4, sizeof(int), &bin);
     dt_opencl_set_kernel_arg(devid, KU, 5, sizeof(int), &three);
-    dt_opencl_set_kernel_arg(devid, KU, 6, sizeof(long), &dst_off);
+    dt_opencl_set_kernel_arg(devid, KU, 6, sizeof(cl_long), &dst_off);
     size_t sizes_u[3] = { ROUNDUPDWD(pw, devid), ROUNDUPDHT(ph * 3, devid), 1 };
     err = dt_opencl_enqueue_kernel_2d(devid, KU, sizes_u);
     if(err != CL_SUCCESS) goto cleanup;
@@ -1533,7 +1703,7 @@ static void _custom_model_callback(GtkWidget *w, dt_iop_module_t *self)
     g_strlcpy(p->custom_model, txt, sizeof(p->custom_model));
   else
     p->custom_model[0] = '\0';
-  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void _custom_model_populate(dt_iop_module_t *self)
@@ -1626,7 +1796,7 @@ void gui_init(dt_iop_module_t *self)
                                                   "coarse chroma pass and the low-band fusion — high quality,\n"
                                                   "recommended for high ISO."));
 
-  g->custom_model = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  g->custom_model = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->custom_model, N_("custom model"));
   gtk_box_pack_start(GTK_BOX(box_raw), g->custom_model, TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(g->custom_model,

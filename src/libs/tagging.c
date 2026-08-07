@@ -47,17 +47,21 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/collection.h"
+#include "common/act_on.h"
+#include "gui/dtgtk/togglebutton.h"
 #include "common/selection.h"
-#include "common/darktable.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
+#include "common/module_versioning.h"
+#include "control/signal.h"
+#include "common/utility.h"
 #include "gui/gdkkeys.h"
-#include "common/debug.h"
 #include "common/tags.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
-#include "bauhaus/bauhaus.h"
-#include "dtgtk/button.h"
-#include "dtgtk/icon_cell_renderer.h"
-#include "gui/preferences_dialogs.h"
+#include "gui/bauhaus.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/icon_cell_renderer.h"
 
 #include "gui/gtk.h"
 #include "gui/drag_and_drop.h"
@@ -419,7 +423,7 @@ static void _init_treeview(dt_lib_module_t *self, const int which)
   if(which == 0) // tags of selected images
   {
     const int imgsel = dt_control_get_mouse_over_id();
-    no_sel = imgsel > 0 || dt_selection_get_length(darktable.selection) == 1;
+    no_sel = imgsel > 0 || dt_selection_get_length(dt_selection_get_global()) == 1;
     count = dt_tag_get_attached(imgsel, &tags, d->dttags_flag ? FALSE : TRUE);
     view = d->attached_view;
     // the attached view shows its store directly (no filter), so model == store
@@ -661,11 +665,11 @@ static void _raise_signal_tag_changed(dt_lib_module_t *self)
   if(!d->collection[0])
   {
     // raises change only for other modules
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
   }
 }
 
@@ -1360,7 +1364,7 @@ static void _create_tag_from_entry(dt_lib_module_t *self, GtkEntry *src)
   const gchar *tag = gtk_entry_get_text(src);
   if(IS_NULL_PTR(tag) || tag[0] == '\0') return;
 
-  GList *imgs = dt_selection_get_list(darktable.selection);
+  GList *imgs = dt_selection_get_list(dt_selection_get_global());
   const gboolean res = dt_tag_attach_string_list(tag, imgs, TRUE);
   if(res) dt_image_synch_xmps(imgs);
   g_list_free(imgs);
@@ -1401,7 +1405,7 @@ static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_
       _create_tag_from_entry(self, d->entry);
       break;
     case GDK_KEY_Escape:
-      gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
+      gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
       break;
     case GDK_KEY_ISO_Left_Tab:
     {
@@ -1457,7 +1461,7 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   dt_tag_count_tags_images(tagname, &tag_count, &img_count);
   if(tag_count == 0) return;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons( _("delete node?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                 _("cancel"), GTK_RESPONSE_NONE, _("delete"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
@@ -1502,9 +1506,9 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   GList *tagged_images = NULL;
   dt_tag_get_tags_images(tagname, &tag_family, &tagged_images);
 
-  dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+  dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
   tag_count = dt_tag_remove_list(tag_family);
-  dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+  dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
   dt_control_log(_("%d tags removed"), tag_count);
 
   GtkTreeIter store_iter;
@@ -1541,7 +1545,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
   gtk_tree_model_get(model, &iter, DT_LIB_TAGGING_COL_TAG, &tagname,
         DT_LIB_TAGGING_COL_PATH, &path, DT_LIB_TAGGING_COL_ID, &tagid, -1);
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("create tag"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
@@ -1678,7 +1682,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
     return;
   }
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("edit"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
@@ -1911,7 +1915,7 @@ static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
     {
       GtkWidget *win;
       if(IS_NULL_PTR(dialog))
-        win = dt_ui_main_window(darktable.gui->ui);
+        win = dt_gui_main_window();
       else
         win = dialog;
 
@@ -1969,7 +1973,7 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
   dt_tag_count_tags_images(tagname, &tag_count, &img_count);
   if(tag_count == 0) return;
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_dialog_new_with_buttons(_("change path"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_YES, NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
@@ -2050,9 +2054,9 @@ static void _pop_menu_dictionary_goto_tag_collection(GtkWidget *menuitem, dt_lib
     {
       if(!d->collection[0]) dt_collection_serialize(d->collection, 4096);
       gchar *tag_collection = g_strdup_printf("1:0:%d:%s$", DT_COLLECTION_PROP_TAG, path);
-      dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+      dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
       dt_collection_deserialize(tag_collection);
-      dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+      dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
       dt_free(tag_collection);
     }
     dt_free(path);
@@ -2064,9 +2068,9 @@ static void _pop_menu_dictionary_goto_collection_back(GtkWidget *menuitem, dt_li
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   if(d->collection[0])
   {
-    dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
     dt_collection_deserialize(d->collection);
-    dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+    dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
     d->collection[0] = '\0';
   }
 }
@@ -2100,7 +2104,7 @@ static void _delete_tagids(GList *tagids, dt_lib_module_t *self)
 
   if(img_count > 0 || dt_conf_get_bool("plugins/lighttable/tagging/ask_before_delete_tag"))
   {
-    GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+    GtkWidget *win = dt_gui_main_window();
     GtkWidget *dialog = gtk_dialog_new_with_buttons(_("delete tag?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                   _("cancel"), GTK_RESPONSE_NONE, _("delete"), GTK_RESPONSE_YES, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
@@ -2448,7 +2452,7 @@ static void _import_button_clicked(GtkButton *button, dt_lib_module_t *self)
     last_dirname = g_get_home_dir();
   }
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select a keyword file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_import"), _("_cancel"));
@@ -2481,7 +2485,7 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
     last_dirname = g_get_home_dir();
   }
 
-  GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
         _("select file to export to"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SAVE,
         _("_export"), _("_cancel"));
@@ -3117,7 +3121,7 @@ void gui_init(dt_lib_module_t *self)
   hbox = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   // "view" combobox: render the attached list above as a flat list, or as a hierarchical tree
-  d->attached_view_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->attached_view_combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->attached_view_combo, _("view"));
   dt_bauhaus_combobox_add(d->attached_view_combo, _("list"));
   dt_bauhaus_combobox_add(d->attached_view_combo, _("tree"));
@@ -3129,7 +3133,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(hbox, d->attached_view_combo, TRUE, TRUE, 0);
 
   // "sort" combobox: by name or by image count
-  d->sort_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(NULL));
+  d->sort_combo = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
   dt_bauhaus_widget_set_label(d->sort_combo, _("Sort by"));
   dt_bauhaus_combobox_add(d->sort_combo, _("name"));
   dt_bauhaus_combobox_add(d->sort_combo, _("count"));
@@ -3268,7 +3272,7 @@ void gui_init(dt_lib_module_t *self)
   dt_osx_disallow_fullscreen(d->manage_window);
 #endif
   gtk_window_set_title(GTK_WINDOW(d->manage_window), _("manage tags"));
-  gtk_window_set_transient_for(GTK_WINDOW(d->manage_window), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_transient_for(GTK_WINDOW(d->manage_window), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_default_size(GTK_WINDOW(d->manage_window), DT_PIXEL_APPLY_DPI(400), DT_PIXEL_APPLY_DPI(600));
   // hide instead of destroy so the dictionary widgets/state persist across openings
   g_signal_connect(G_OBJECT(d->manage_window), "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
@@ -3423,13 +3427,13 @@ void gui_init(dt_lib_module_t *self)
 #undef NEW_TOGGLE_BUTTON
 
   /* connect to mouse over id */
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_lib_tagging_redraw_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_TAG_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED,
                             G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_lib_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_collection_updated_callback), self);
 
   d->collection = g_malloc(4096);
@@ -3442,20 +3446,20 @@ void gui_init(dt_lib_module_t *self)
   _refresh_completion_store(self);
   _refresh_collection_tags(self);
 
-  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_show_accel, self,
-                                darktable.gui->accels->lighttable_accels, N_("Lighttable/Tags"),
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self,
+                                dt_gui_get_accels()->lighttable_accels, N_("Lighttable/Tags"),
                                 N_("Tag"), GDK_KEY_t, GDK_CONTROL_MASK, FALSE,
                                 _("Opens the quick tagging entry"));
-  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_redo_accel, self,
-                                darktable.gui->accels->lighttable_accels, N_("Lighttable/Tags"),
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self,
+                                dt_gui_get_accels()->lighttable_accels, N_("Lighttable/Tags"),
                                 N_("Redo last tag"), GDK_KEY_t, GDK_MOD1_MASK, FALSE,
                                 _("Re-applies the last used tag"));
-  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_show_accel, self,
-                                darktable.gui->accels->map_accels, N_("Map/Tags"),
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self,
+                                dt_gui_get_accels()->map_accels, N_("Map/Tags"),
                                 N_("Tag"), GDK_KEY_t, GDK_CONTROL_MASK, FALSE,
                                 _("Opens the quick tagging entry"));
-  dt_accels_new_action_shortcut(darktable.gui->accels, _lib_tagging_tag_redo_accel, self,
-                                darktable.gui->accels->map_accels, N_("Map/Tags"),
+  dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self,
+                                dt_gui_get_accels()->map_accels, N_("Map/Tags"),
                                 N_("Redo last tag"), GDK_KEY_t, GDK_MOD1_MASK, FALSE,
                                 _("Re-applies the last used tag"));
 }
@@ -3467,22 +3471,22 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
 
   gchar *path = dt_accels_build_path(N_("Lighttable/Tags"), N_("Tag"));
-  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_accels_remove_accel(dt_gui_get_accels(), path, self);
   dt_free(path);
   path = dt_accels_build_path(N_("Lighttable/Tags"), N_("Redo last tag"));
-  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_accels_remove_accel(dt_gui_get_accels(), path, self);
   dt_free(path);
   path = dt_accels_build_path(N_("Map/Tags"), N_("Tag"));
-  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_accels_remove_accel(dt_gui_get_accels(), path, self);
   dt_free(path);
   path = dt_accels_build_path(N_("Map/Tags"), N_("Redo last tag"));
-  dt_accels_remove_accel(darktable.gui->accels, path, self);
+  dt_accels_remove_accel(dt_gui_get_accels(), path, self);
   dt_free(path);
 
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_tagging_redraw_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_redraw_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_tagging_tags_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_lib_selection_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
   if(d->manage_window) gtk_widget_destroy(d->manage_window);
   if(d->collection_tags) g_hash_table_destroy(d->collection_tags);
   // d kept its own ref on both attached stores so the view could switch between them
@@ -3509,7 +3513,7 @@ static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event,
       g_list_free(d->floating_tag_imgs);
       d->floating_tag_imgs = NULL;
       gtk_widget_destroy(d->floating_tag_window);
-      gtk_window_present(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+      gtk_window_present(GTK_WINDOW(dt_gui_main_window()));
       return TRUE;
     case GDK_KEY_Tab:
       return TRUE;
@@ -3527,7 +3531,7 @@ static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event,
       _init_treeview(self, 0);
       _init_treeview(self, 1);
       gtk_widget_destroy(d->floating_tag_window);
-      gtk_window_present(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+      gtk_window_present(GTK_WINDOW(dt_gui_main_window()));
       if(res) _raise_signal_tag_changed(self);
 
       return TRUE;
@@ -3585,8 +3589,8 @@ static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject 
   d->floating_tag_imgs = dt_act_on_get_images();
   gint x, y;
   gint px, py, w, h;
-  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
-  GtkWidget *center = dt_ui_center(darktable.gui->ui);
+  GtkWidget *window = dt_gui_main_window();
+  GtkWidget *center = dt_gui_center_widget();
   gdk_window_get_origin(gtk_widget_get_window(center), &px, &py);
 
   w = gdk_window_get_width(gtk_widget_get_window(center));
