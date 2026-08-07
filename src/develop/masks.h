@@ -114,7 +114,7 @@ GList dev->forms
 #include "common/macros.h"
 #include "common/simd.h"
 #include "common/times.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "develop/pixelpipe.h"
 #include "gui/draw.h"
 #include "control/control.h"

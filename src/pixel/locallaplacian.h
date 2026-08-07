@@ -24,7 +24,8 @@
 #ifndef DT_COMMON_LOCALLAPLACIAN_H
 #define DT_COMMON_LOCALLAPLACIAN_H
 
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
+#include "pixel/format.h"   // dt_iop_roi_t
 
 // struct bundling all the auxiliary buffers
 // required to fill the boundary of a full res pipeline

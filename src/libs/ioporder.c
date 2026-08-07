@@ -34,7 +34,7 @@
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "develop/develop.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
 #include "dtgtk/button.h"

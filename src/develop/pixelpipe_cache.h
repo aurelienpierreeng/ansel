@@ -31,7 +31,7 @@
 
 #include "common/memory_arena.h"
 #include "common/atomic.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include <inttypes.h>
 #include <glib.h>
 #include <stddef.h>

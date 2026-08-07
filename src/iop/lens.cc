@@ -74,7 +74,7 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/paths.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "glib.h"
 
 #ifdef HAVE_CONFIG_H

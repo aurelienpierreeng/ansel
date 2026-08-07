@@ -49,7 +49,7 @@
 #include "develop/pixelpipe.h"
 #include "develop/supervisor.h"
 #include "common/opencl.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 
 static __thread const char *dt_pixelpipe_cache_current_module = NULL;
 

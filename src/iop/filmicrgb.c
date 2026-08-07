@@ -58,7 +58,7 @@
 #include "common/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "pixel/bspline.h"
 #include "pixel/dwt.h"
 #include "common/image.h"

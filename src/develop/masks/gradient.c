@@ -36,7 +36,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "gui/gtk.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/conf.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"

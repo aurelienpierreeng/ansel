@@ -31,11 +31,26 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/openmp.h"
-#include "develop/pixelpipe_cache.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Deliberately does NOT include develop/pixelpipe_cache.h. This header is the
+ * ALLOCATOR INTERFACE; the cache implementation is a develop/ concern. Pulling the full
+ * cache header in dragged develop/ into 96 files -- 11 in common/ and 16 in pixel/ --
+ * purely to allocate a buffer, i.e. an upward dependency for something the caller never
+ * touches. The three entry points below take the cache as an opaque pointer, so a tag
+ * declaration is enough; the *_perthread_impl helpers are static inline right here. */
+struct dt_dev_pixelpipe_cache_t;
+
+struct dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void);
+
+void *dt_pixelpipe_cache_alloc_align_cache_impl(struct dt_dev_pixelpipe_cache_t *cache, size_t size,
+                                                int id, const char *name);
+
+void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache, void **mem,
+                                         const char *message);
 
 #define dt_pixelpipe_cache_alloc_align_cache(size, id) \
   dt_pixelpipe_cache_alloc_align_cache_impl(dt_pixelpipe_cache_get_global(), (size), (id), __FILE__ ":" DT_STRINGIFY(__LINE__))

@@ -4,7 +4,7 @@
 
 #include "common/macros.h"
 #include "common/logging.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/iop_order.h"
 #include "common/opencl.h"
 #include "develop/blend.h"

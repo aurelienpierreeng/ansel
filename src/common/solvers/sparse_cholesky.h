@@ -33,7 +33,7 @@
 #include <string.h>
 
 #include "common/macros.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "develop/pixelpipe_hb.h" // dt_dev_pixelpipe_t (arena alloc) — self-contained include order
 
 // Factored SPD matrix (lower-triangular Cholesky factor L, column-compressed).

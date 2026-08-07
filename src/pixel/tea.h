@@ -23,7 +23,7 @@
 #ifndef DT_COMMON_TEA_H
 #define DT_COMMON_TEA_H
 
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 
 // Allocate a buffer for storing the internal state of 'numthreads' parallel instances of the Tiny Encryption
 // Algorithm.  We need to ensure that each state falls in a separate cache line, or all threads sharing a

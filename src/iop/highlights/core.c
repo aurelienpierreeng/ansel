@@ -22,7 +22,7 @@
 #include "common/openmp.h"
 #include "common/simd.h"
 #include "common/target_clones.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
 #include "iop/highlights/coefficient_field.h"
 #include "iop/highlights/core.h"

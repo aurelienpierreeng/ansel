@@ -29,7 +29,7 @@
 #include "common/simd.h"
 #include "gui/gtk.h"
 #include "pixel/eigf.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "develop/openmp_maths.h"
 
 __OMP_DECLARE_SIMD__()

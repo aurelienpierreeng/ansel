@@ -45,7 +45,7 @@
 #include "common/times.h"
 #include "common/glib_utils.h"
 #include "gui/gtk.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/imagebuf.h"

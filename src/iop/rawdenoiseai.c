@@ -65,7 +65,7 @@
 #include <json-glib/json-glib.h>
 #include "common/paths.h"
 #include "gui/gtk.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/nn_model.h"

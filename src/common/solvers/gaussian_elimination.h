@@ -38,7 +38,7 @@
 #define DT_COMMON_SOLVERS_GAUSSIAN_ELIMINATION_H
 
 #include <math.h>
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include <stdlib.h>
 
 // Gaussian elimination with partial vivoting

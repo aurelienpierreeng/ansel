@@ -65,7 +65,7 @@
 #endif
 
 #include "common/paths.h"
-#include "develop/format.h"
+#include "pixel/format.h"
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <inttypes.h>

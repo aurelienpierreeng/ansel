@@ -45,7 +45,7 @@
 #include "common/openmp.h"
 #include "common/simd.h"
 #include "common/target_clones.h"
-#include "develop/pixelpipe_cache_alloc.h"
+#include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
