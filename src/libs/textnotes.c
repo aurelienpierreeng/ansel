@@ -33,7 +33,7 @@
 #include "control/jobs.h"
 #include "control/signal.h"
 #include "gui/gtk.h"
-#include "gui/gtkentry.h"
+#include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "views/view.h"
 

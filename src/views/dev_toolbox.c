@@ -27,7 +27,7 @@
 #include "widgets/button.h"
 #include "widgets/paint.h"
 #include "widgets/togglebutton.h"
-#include "gui/accelerators.h"
+#include "widgets/accelerators.h"
 #include "gui/gtk.h"
 
 #include <limits.h>

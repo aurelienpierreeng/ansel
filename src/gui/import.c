@@ -39,7 +39,7 @@
 #include "control/jobs/import_jobs.h"
 
 #include "gui/draw.h"
-#include "gui/gtkentry.h"
+#include "widgets/gtkentry.h"
 
 #include <gio/gio.h>
 

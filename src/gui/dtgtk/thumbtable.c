@@ -61,7 +61,7 @@
 #include "control/control.h"
 #include "control/jobs/import_jobs.h"
 
-#include "gui/accelerators.h"
+#include "widgets/accelerators.h"
 #include "gui/drag_and_drop.h"
 #include "views/view.h"
 #include "gui/bauhaus.h"

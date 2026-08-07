@@ -76,6 +76,19 @@ static gboolean _gui_thread_set = FALSE;
 // Scroll axis inversion, a user preference the application supplies.
 static gboolean _reverse_x = FALSE, _reverse_y = FALSE;
 
+// Toolkit metrics. Defaults are the 96-DPI, 16px-font reference: correct for standalone
+// dialogs that run after gtk_init() but before the application has resolved the real values.
+static double _dpi_factor = 1.0, _ppd = 1.0, _em = 16.0;
+
+double dt_widget_dpi_factor(void) { return _dpi_factor; }
+void dt_widget_set_dpi_factor(double factor) { if(factor > 0.0) _dpi_factor = factor; }
+
+double dt_widget_ppd(void) { return _ppd; }
+void dt_widget_set_ppd(double ppd) { if(ppd > 0.0) _ppd = ppd; }
+
+double dt_widget_em_size(void) { return _em; }
+void dt_widget_set_em_size(double em) { if(em > 0.0) _em = em; }
+
 void dt_widget_set_gui_thread(pthread_t thread)
 {
   _gui_thread = thread;

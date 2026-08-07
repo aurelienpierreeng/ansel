@@ -62,7 +62,7 @@
 #include "common/paths.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/window_manager.h"
-#include "gui/accelerators.h"
+#include "widgets/accelerators.h"
 
 #include <gtk/gtk.h>
 #include <stdint.h>
@@ -198,13 +198,10 @@ GtkWidget *dt_gui_center_widget(void);
  *   UI zoom (dpi_factor) and the integer scale-factor (ppd) ourselves.
  *
  * Input values are device-independent pixels at the 96 DPI baseline. */
-#define DT_UI_SCALE_UI(value) ((value) * dt_gui_get_global()->dpi_factor)
-#define DT_UI_SCALE_DEVICE(value) ((value) * dt_gui_get_global()->dpi_factor * dt_gui_get_global()->ppd)
+// DT_UI_SCALE_* / DT_PIXEL_APPLY_DPI* now come from widgets/widget_settings.h
 
 /* Deprecated spellings kept so the existing call sites keep compiling. Prefer the
  * intent-named macros above in new code. */
-#define DT_PIXEL_APPLY_DPI(value) DT_UI_SCALE_UI(value)
-#define DT_PIXEL_APPLY_DPI_DPP(value) DT_UI_SCALE_DEVICE(value)
 
 /* Spacing between children widgets within Gtk boxes/grids/flowboxes cannot be set from
  * CSS (margins/paddings on the children would recess the ones sitting on the container
@@ -220,10 +217,7 @@ GtkWidget *dt_gui_center_widget(void);
  * Falls back to the 10px reference before the GUI exists or before gui->em has
  * been resolved. Standalone dialogs may run after gtk_init() but before the
  * main Ansel GUI allocation when startup needs user input. */
-#define DT_GUI_EM_SIZE ((gint)((!IS_NULL_PTR(dt_gui_get_global()) && dt_gui_get_global()->em > 0.0) ? dt_gui_get_global()->em : 16.0))
-#define DT_GUI_BOX_SPACING_EM 0.625
-#define DT_GUI_BOX_SPACING                                                                                     \
-  ((gint)(DT_GUI_EM_SIZE * DT_GUI_BOX_SPACING_EM + 0.5))
+// DT_GUI_BOX_SPACING now comes from widgets/widget_settings.h
 
 enum
 {
@@ -550,7 +544,6 @@ void dt_ellipsize_combo(GtkComboBox *cbox);
 
 // capitalize strings. Because grammar says sentences start with a capital,
 // and typography says it makes it easier to extract the structure of the text.
-void dt_capitalize_label(gchar *text);
 
 #define dt_accels_new_global_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->global_accels, c, d, e, f, FALSE, g)
 

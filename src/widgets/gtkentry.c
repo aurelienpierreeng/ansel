@@ -38,7 +38,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "gtkentry.h"
+#include "widgets/gtkentry.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 
