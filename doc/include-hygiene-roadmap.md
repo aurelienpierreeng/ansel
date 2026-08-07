@@ -405,3 +405,47 @@ surfaces as an undefined reference at link, or not at all.
   `dt_mat3x4_mul_vec4` is a matrix op living among load/store primitives, while the matrix
   headers hand-roll intrinsics instead of using them. Unification is outstanding.
 
+---
+
+## 10. Backlog: subsystems still to be extracted from `common/`
+
+Maintainer's list, each entry verified against the tree rather than taken on trust. Ordered
+by how much of `common/` it removes.
+
+| # | proposed home | files | lines | status |
+|---|---|---|---:|---|
+| 1 | `src/metadata/` | tags, ratings, colorlabels, grouping, gpx, exif.cc, metadata, dng_opcode | 10091 | all present in `common/` |
+| 2 | `src/database/` | database, sqliteicu (+ the `DT_DEBUG_SQLITE3_*` macros in `common/debug.h`) | 5536 | all present |
+| 3 | `src/caches/` | cache (the core), image_cache, mipmap_cache | 3354 | core + 2 of 3; `develop/pixelpipe_cache.{c,h}` is the third and lives elsewhere |
+| 4 | `src/math/` | colormatrices.c, curve_tools (1D interpolation) | 1264 | present |
+| 5 | `src/system/` | resource_limits, dtpthread | 925 | present |
+| 6 | `src/views/` | cups_print — used only by the print view | 813 | 4 consumers, all print-related |
+| 7 | `src/pixel/` | `common/lut3d.{c,h}` (distinct from `iop/lut3d.c`) | 368 | present |
+
+Two that are analysis, not moves:
+
+* **`iop_order.{c,h}` and `iop_profile.{c,h}`** belong with `develop/`, but overlap
+  `colorspaces.{c,h}`. The overlap has to be resolved before either can move cleanly.
+* **`common/colormatrices.c`** is a third maths library, colliding with `system/simd.h` and
+  `math/matrices.h`. Same unresolved overlap noted in section 9.
+
+### Do NOT judge these by the layering counter
+
+Simulated with `--what-if` against a 224 baseline:
+
+```
+curve_tools + colormatrices -> math/      224 -> 224   (+0)
+resource_limits + dtpthread -> system/    224 -> 225   (+1)
+cups_print -> views/                      224 -> 225   (+1)
+common/lut3d -> pixel/                    224 -> 224   (+0)
+```
+
+None of them helps, and two make it marginally worse -- `system/` sits BELOW `common/`, so
+moving a file down there turns its existing `common/` includes into upward edges, exactly
+as happened when `system/` was created.
+
+That is not an argument against the moves. It means the layering metric has largely done its
+job (315 -> 224 over this series) and the remaining work is organisational legibility:
+`common/` should stop being the drawer everything shared gets put in. Judge these by what
+leaves `common/` -- roughly 22000 lines across the seven groups -- not by the counter.
+
