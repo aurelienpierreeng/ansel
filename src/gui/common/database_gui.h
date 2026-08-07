@@ -35,4 +35,9 @@ struct dt_database_t;
  *  to answer first. */
 gboolean dt_database_show_error(struct dt_database_t *db);
 
+/** Register the handler common/database.c puts its mid-init prompts through.
+ *  Must be called BEFORE dt_database_init(), so darktable.c does it -- dt_gui_gtk_init()
+ *  runs too late. See dt_database_set_prompt_handler(). */
+void dt_database_gui_register_handlers(void);
+
 #endif // DT_GUI_COMMON_DATABASE_GUI_H

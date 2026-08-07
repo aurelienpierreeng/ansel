@@ -121,6 +121,97 @@ gboolean dt_database_show_error(struct dt_database_t *db)
   return error;
 }
 
+/* The three prompts dt_database_init() puts, now that it only states them.
+ *
+ * They were built inline in common/database.c with no has_gui guard at all, so a headless
+ * run reached gtk_dialog_new_with_buttons() on a GTK that ansel-cli never initialises.
+ * Registration is what gates them now, and darktable.c only registers when there is a GUI.
+ */
+static dt_database_response_t _database_prompt(const dt_database_prompt_t prompt, const char *dbfilename,
+                                               const char *quick_check, const gboolean snapshot_available)
+{
+  const GtkDialogFlags dflags = GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT;
+  GtkWidget *dialog = NULL;
+  char *label_text = NULL;
+
+  if(prompt == DT_DATABASE_PROMPT_READONLY)
+  {
+    dialog = gtk_dialog_new_with_buttons(_("Ansel - Database is read-only"), NULL, dflags,
+                                         _("Close Ansel"), GTK_RESPONSE_CLOSE, NULL);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+    label_text = g_markup_printf_escaped(_("<span weight='bold'>Ansel library database is read-only</span>\n\n"
+                                           "This happens if you don't have permissions to write on the filesystem\n"
+                                           "or if you have restored a write-protected backup snapshot.\n\n"
+                                           "Please change the filesystem access permissions for:\n\n"
+                                           "\t<span style='italic'>%s</span>"),
+                                         dbfilename);
+  }
+  else
+  {
+    const char *label_options;
+    if(snapshot_available)
+    {
+      dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"), NULL, dflags,
+                                           _("close Ansel"), GTK_RESPONSE_CLOSE,
+                                           _("attempt restore"), GTK_RESPONSE_ACCEPT,
+                                           _("delete database"), GTK_RESPONSE_REJECT, NULL);
+      gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+      label_options = _("do you want to close Ansel now to manually restore\n"
+                        "the database from a backup, attempt an automatic restore\n"
+                        "from the most recent snapshot or delete the corrupted database\n"
+                        "and start with a new one?");
+    }
+    else
+    {
+      dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"), NULL, dflags,
+                                           _("close Ansel"), GTK_RESPONSE_CLOSE,
+                                           _("delete database"), GTK_RESPONSE_REJECT, NULL);
+      gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+      label_options = _("do you want to close Ansel now to manually restore\n"
+                        "the database from a backup or delete the corrupted database\n"
+                        "and start with a new one?");
+    }
+
+    // quick_check is sqlite output, i.e. arbitrary text landing in a markup label. Escaping
+    // is the handler's job because only the handler knows it is markup at all.
+    label_text = g_markup_printf_escaped(_("an error has occurred while trying to open the database from\n"
+                                           "\n"
+                                           "<span style='italic'>%s</span>\n"
+                                           "\n"
+                                           "it seems that the database is corrupted.\n"
+                                           "%s%s"),
+                                         dbfilename, IS_NULL_PTR(quick_check) ? "" : quick_check, label_options);
+  }
+
+  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *label = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(label), label_text);
+  dt_free(label_text);
+  gtk_container_add(GTK_CONTAINER(content_area), label);
+  gtk_widget_show_all(content_area);
+
+  const int resp = gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+
+  switch(resp)
+  {
+    case GTK_RESPONSE_ACCEPT:
+      return DT_DATABASE_RESPONSE_RESTORE;
+    case GTK_RESPONSE_REJECT:
+      return DT_DATABASE_RESPONSE_DELETE;
+    default:
+      // Covers the window being closed outright, which must not be read as consent to
+      // delete anything.
+      return DT_DATABASE_RESPONSE_CLOSE;
+  }
+}
+
+void dt_database_gui_register_handlers(void)
+{
+  dt_database_set_prompt_handler(_database_prompt);
+}
+
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
