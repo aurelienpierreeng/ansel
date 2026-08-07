@@ -423,9 +423,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       int modified;
     } dt_iop_lensfun_params_v5_t;
 
-    const dt_iop_lensfun_params_v5_t *o = static_cast<const dt_iop_lensfun_params_v5_t *>(old_params);
-    dt_iop_lensfun_params_t *n = static_cast<dt_iop_lensfun_params_t *>(new_params);
-    dt_iop_lensfun_params_t *d = static_cast<dt_iop_lensfun_params_t *>(self->default_params);
+    const auto *o = static_cast<const dt_iop_lensfun_params_v5_t *>(old_params);
+    auto n = static_cast<dt_iop_lensfun_params_t *>(new_params);
+    auto d = static_cast<dt_iop_lensfun_params_t *>(self->default_params);
 
     *n = *d;
 
@@ -472,9 +472,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       float scale_md;
     } dt_iop_lensfun_params_v6_t;
 
-    const dt_iop_lensfun_params_v6_t *o = static_cast<const dt_iop_lensfun_params_v6_t *>(old_params);
-    dt_iop_lensfun_params_t *n = static_cast<dt_iop_lensfun_params_t *>(new_params);
-    dt_iop_lensfun_params_t *d = static_cast<dt_iop_lensfun_params_t *>(self->default_params);
+    const auto *o = static_cast<const dt_iop_lensfun_params_v6_t *>(old_params);
+    auto n = static_cast<dt_iop_lensfun_params_t *>(new_params);
+    auto d = static_cast<dt_iop_lensfun_params_t *>(self->default_params);
 
     *n = *d;
 
@@ -894,7 +894,7 @@ static int _distort_backtransform_embedded_metadata_warp(const dt_iop_module_t *
 {
   (void)self;
   (void)pipe;
-  const dt_iop_lensfun_data_t *const d = static_cast<const dt_iop_lensfun_data_t *>(piece->data);
+  const auto *d = static_cast<const dt_iop_lensfun_data_t *>(piece->data);
   if(const auto apply_geom = emb_axes && (emb_axes->apply_distortion || emb_axes->apply_tca); !d->embedded.nc || !apply_geom) return 1;
 
   const float w2 = 0.5f * piece->buf_in.width;
@@ -914,7 +914,7 @@ static int _distort_backtransform_embedded_metadata_warp(const dt_iop_module_t *
   return 1;
 }
 
-static void _distort_mask_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+static void _distort_mask_embedded_metadata_warp(const dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                                   dt_dev_pixelpipe_iop_t *piece, const float *const in,
                                                   float *const out, const dt_iop_roi_t *const roi_in,
                                                   const dt_iop_roi_t *const roi_out,
@@ -3284,9 +3284,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
   const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
 
-  p->distortion_method  = (dt_iop_lens_correction_source_t)CLAMP(static_cast<int>(p->distortion_method), 0, 2);
-  p->vignetting_method  = (dt_iop_lens_correction_source_t)CLAMP(static_cast<int>(p->vignetting_method), 0, 2);
-  p->tca_method         = (dt_iop_lens_tca_source_t)CLAMP(static_cast<int>(p->tca_method), 0, 3);
+  p->distortion_method  = static_cast<dt_iop_lens_correction_source_t>(CLAMP(static_cast<int>(p->distortion_method), 0, 2));
+  p->vignetting_method  = static_cast<dt_iop_lens_correction_source_t>(CLAMP(static_cast<int>(p->vignetting_method), 0, 2));
+  p->tca_method         = static_cast<dt_iop_lens_tca_source_t>(CLAMP(static_cast<int>(p->tca_method), 0, 3));
   dt_bauhaus_combobox_set_from_value(g->per_correction.distortion_source, static_cast<int>(p->distortion_method));
   dt_bauhaus_combobox_set_from_value(g->per_correction.vignetting_source, static_cast<int>(p->vignetting_method));
   dt_bauhaus_combobox_set_from_value(g->per_correction.tca_source,        static_cast<int>(p->tca_method));

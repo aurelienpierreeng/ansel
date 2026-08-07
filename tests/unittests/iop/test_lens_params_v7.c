@@ -292,7 +292,7 @@ typedef struct
  * without deref.
  * --------------------------------------------------------------------------- */
 
-static int legacy_params_v7_stub(test_module_t *self, const void *old_params,
+static int legacy_params_v7_stub(const test_module_t *self, const void *old_params,
                                  int old_version, void *new_params, int new_version)
 {
   if(!old_params || !new_params) return 1;
