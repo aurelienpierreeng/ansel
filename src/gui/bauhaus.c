@@ -59,16 +59,13 @@
 
 #include "widgets/gdkkeys.h"
 #include "widgets/widget_settings.h"
+#include "widgets/paint.h"
 #include "gui/bauhaus.h"
 #include "common/calculator.h"
 #include "math/math.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/utility.h"
-#include "common/conf.h"
-#include "control/control.h"
-#include "develop/develop.h"
-#include "develop/imageop.h"
 
 
 #include "widgets/accelerators.h"
@@ -481,9 +478,11 @@ static gboolean ensure_focus_idle(gpointer data)
   {
     gtk_widget_grab_focus(target);
     dt_widget_set_scroll_focus(target);
-    GtkWidget *gtk_focus = NULL;
-    if(!IS_NULL_PTR(dt_gui_get_global()) && !IS_NULL_PTR(dt_gui_get_ui()))
-      gtk_focus = gtk_window_get_focus(GTK_WINDOW(dt_gui_main_window()));
+    // The widget's own toplevel, rather than the application's main window: this is a debug
+    // trace and has no business knowing which window the host considers primary.
+    GtkWidget *toplevel = gtk_widget_get_toplevel(target);
+    GtkWidget *gtk_focus = (toplevel && gtk_widget_is_toplevel(toplevel))
+                           ? gtk_window_get_focus(GTK_WINDOW(toplevel)) : NULL;
     dt_print(DT_DEBUG_SHORTCUTS,
              "[bauhaus] ensure_focus_idle success target=%s(%p) gtk_focus=%s(%p) scroll_focus=%s(%p)\n",
              gtk_widget_get_name(target), (void *)target,
@@ -543,7 +542,7 @@ gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable,
 {
   if(IS_NULL_PTR(data) || IS_NULL_PTR(accelerable))
   {
-    dt_toast_log(_("The target widget of the action does not exist anymore"));
+    dt_widget_message(_("The target widget of the action does not exist anymore"));
     fprintf(stderr, "The target widget of the action does not exist anymore");
     return FALSE;
   }
@@ -554,20 +553,8 @@ gboolean _action_request_focus(GtkAccelGroup *accel_group, GObject *accelerable,
   // because we can't grab focus on invisible widgets
   if(!IS_NULL_PTR(w->module))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)w->module;
-    if(!IS_NULL_PTR(module->expander))
-    {
-      g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-switch-from-active-once",
-                        GINT_TO_POINTER(TRUE));
-      dt_iop_gui_set_expanded(module, TRUE, TRUE);
-    }
-
-    // If the target module is already marked as focused, modulegroups focus
-    // signal may not be emitted and tab visibility can stay stale. Drop focus
-    // once so the next focus request re-emits the full focus/update sequence.
-    if(!IS_NULL_PTR(dt_dev_get_global()) && dt_dev_get_global()->gui_module == module)
-      dt_iop_request_focus(NULL);
-
+    // Whatever "become visible" means for this module type is the module's business.
+    if(w->module->ensure_visible) w->module->ensure_visible(w->module);
     w->module->focus(w->module, FALSE);
   }
 
@@ -1078,7 +1065,7 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
     // leave from the widget itself.
     const gboolean real_leave = event->mode == GDK_CROSSING_NORMAL
                                 && event->detail != GDK_NOTIFY_INFERIOR
-                                && (!dt_gui_get_global() || !dt_gui_widgets_suppressed());
+                                && !dt_gui_widgets_suppressed();
     if(real_leave && dt_widget_scroll_focus() == widget)
       dt_widget_set_scroll_focus(NULL);
   }
@@ -1107,14 +1094,14 @@ static gboolean _resize_handle_cursor(GtkWidget *widget, GdkEventCrossing *event
   if(event->type == GDK_ENTER_NOTIFY)
   {
     gtk_widget_set_state_flags(widget, GTK_STATE_FLAG_PRELIGHT, FALSE);
-    dt_control_change_cursor(handle->orientation == GTK_ORIENTATION_VERTICAL
+    dt_widget_set_cursor(handle->orientation == GTK_ORIENTATION_VERTICAL
                              ? GDK_SB_V_DOUBLE_ARROW
                              : GDK_SB_H_DOUBLE_ARROW);
   }
   else if(!handle->dragging)
   {
     gtk_widget_unset_state_flags(widget, GTK_STATE_FLAG_PRELIGHT);
-    dt_control_change_cursor(GDK_LEFT_PTR);
+    dt_widget_set_cursor(GDK_LEFT_PTR);
   }
 
   gtk_widget_queue_draw(widget);
@@ -1133,7 +1120,7 @@ static gboolean _resize_handle_button(GtkWidget *widget, GdkEventButton *event, 
     handle->start_size = handle->get_size(handle->user_data);
     handle->current_size = handle->start_size;
     gtk_grab_add(widget);
-    dt_control_change_cursor(handle->orientation == GTK_ORIENTATION_VERTICAL
+    dt_widget_set_cursor(handle->orientation == GTK_ORIENTATION_VERTICAL
                              ? GDK_SB_V_DOUBLE_ARROW
                              : GDK_SB_H_DOUBLE_ARROW);
   }
@@ -1152,7 +1139,7 @@ static gboolean _resize_handle_button(GtkWidget *widget, GdkEventButton *event, 
     else
       gtk_widget_unset_state_flags(widget, GTK_STATE_FLAG_PRELIGHT);
 
-    dt_control_change_cursor(pointer_on_handle
+    dt_widget_set_cursor(pointer_on_handle
                              ? (handle->orientation == GTK_ORIENTATION_VERTICAL
                                 ? GDK_SB_V_DOUBLE_ARROW
                                 : GDK_SB_H_DOUBLE_ARROW)
@@ -1244,8 +1231,8 @@ static void _widget_finalize(GObject *widget)
   }
 
   const char *accel_path = g_object_get_data(G_OBJECT(widget), "accel-path");
-  if(!IS_NULL_PTR(accel_path) && !IS_NULL_PTR(dt_gui_get_global()) && !IS_NULL_PTR(dt_gui_get_accels()))
-    dt_accels_remove_accel(dt_gui_get_accels(), accel_path, widget);
+  if(!IS_NULL_PTR(accel_path) && !IS_NULL_PTR(dt_accels_get_global()))
+    dt_accels_remove_accel(dt_accels_get_global(), accel_path, widget);
 
   if(dt_widget_scroll_focus() == GTK_WIDGET(w))
     dt_widget_set_scroll_focus(NULL);
@@ -1444,56 +1431,56 @@ dt_bauhaus_t * dt_bauhaus_init()
 
   // Keys used by key-pressed event handler when the Bauhaus widget has the focus
   gchar *path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (normal step)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Right, 0);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Decrease value (normal step)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Left, 0);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (fine step)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Right, GDK_CONTROL_MASK);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Decrease value (fine step)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Left, GDK_CONTROL_MASK);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (coarse step)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Right, GDK_SHIFT_MASK);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Decrease value (coarse step)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Left, GDK_SHIFT_MASK);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Toggle color-picker"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Insert, 0);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Open editing mode"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Return, 0);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Exit editing mode"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Escape, 0);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Select previous (in editing mode)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Up, 0);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Select next (in editing mode)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Down, 0);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Validate result (in editing mode)"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Return, 0);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Toggle color-picker"));
-  dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
+  dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
                                   path, NULL, GDK_KEY_Insert, 0);
   dt_free(path);
 
@@ -1864,55 +1851,7 @@ GtkWidget *dt_bauhaus_combobox_new_full(dt_bauhaus_t *bh, dt_gui_module_t *self,
   return combo;
 }
 
-static void _combobox_conf_value_changed(GtkWidget *widget, gpointer user_data)
-{
-  const char *value = (const char *)dt_bauhaus_combobox_get_data(widget);
-  if(value) dt_conf_set_string((const char *)user_data, value);
-}
 
-GtkWidget *dt_bauhaus_combobox_from_conf(dt_bauhaus_t *bh, dt_gui_module_t *self, const char *confkey)
-{
-  if(dt_confgen_type(confkey) != DT_ENUM || !dt_confgen_value_exists(confkey, DT_VALUES))
-  {
-    fprintf(stderr, "[dt_bauhaus_combobox_from_conf] `%s` is not declared as an <enum> config entry\n", confkey);
-    return NULL;
-  }
-
-  GtkWidget *combo = dt_bauhaus_combobox_new(bh, self);
-  dt_bauhaus_widget_set_label(combo, _(dt_confgen_get_label(confkey)));
-
-  const char *tooltip = dt_confgen_get_tooltip(confkey);
-  gtk_widget_set_tooltip_text(combo, (tooltip && *tooltip) ? _(tooltip) : _(dt_confgen_get_label(confkey)));
-
-  gchar *current = dt_conf_get_string(confkey);
-  const char *values = dt_confgen_get(confkey, DT_VALUES);
-  GList *options = dt_util_str_to_glist("][", values);
-
-  int pos = 0, active = 0;
-  for(GList *opt = options; opt; opt = g_list_next(opt))
-  {
-    char *item = (char *)opt->data;
-    // strip the leading '[' of the first entry and the trailing ']' of the last one
-    if(item[0] == '[') item++;
-    else if(item[strlen(item) - 1] == ']') item[strlen(item) - 1] = '\0';
-
-    dt_bauhaus_combobox_add_full(combo, g_dpgettext2(NULL, "preferences", item), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
-                                  g_strdup(item), dt_free_gpointer, TRUE);
-
-    if(!g_strcmp0(current, item)) active = pos;
-    pos++;
-  }
-  g_list_free_full(options, dt_free_gpointer);
-  dt_free(current);
-
-  // Select the entry matching the current config value before connecting the signal,
-  // so the initial sync doesn't bounce back through dt_conf_set_string().
-  dt_bauhaus_combobox_set(combo, active);
-
-  g_signal_connect(G_OBJECT(combo), "value-changed", G_CALLBACK(_combobox_conf_value_changed), (gpointer)confkey);
-
-  return combo;
-}
 
 void dt_bauhaus_combobox_from_widget(dt_bauhaus_t *bh, dt_bauhaus_widget_t* w,dt_gui_module_t *self)
 {
@@ -2228,7 +2167,7 @@ static void _delayed_combobox_commit(gpointer data)
 
   // If a reset started after the timeout was scheduled (e.g. while reloading history,
   // applying a style, etc.), don't commit anything to history from this stale callback.
-  if(dt_gui_get_global() && dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   if(w->use_default_callback)
   {
@@ -3647,7 +3586,7 @@ static void _delayed_slider_commit(gpointer data)
 
   // If a reset started after the timeout was scheduled (e.g. while reloading history,
   // applying a style, etc.), don't commit anything to history from this stale callback.
-  if(dt_gui_get_global() && dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return;
 
   if(w->use_default_callback)
   {

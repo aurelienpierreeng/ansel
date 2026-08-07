@@ -53,6 +53,7 @@
 #include "common/usermanual_url.h"
 #include "develop/blend.h"
 #include "gui/bauhaus.h"
+#include "gui/bauhaus_conf.h"
 #include "common/dtpthread.h"
 #include "math/math.h"
 #include "common/iop_profile.h"

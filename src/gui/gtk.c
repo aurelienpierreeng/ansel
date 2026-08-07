@@ -1063,6 +1063,18 @@ static const char* _get_axis_name(int pos)
 /* ---- Host hooks for the shortcut system (widgets/accelerators.c) --------------------- */
 #define DT_ACCEL_SEARCH_RECENT_KEY "plugins/accel_search/recent_entries"
 
+/* dt_control_change_cursor() and dt_toast_log() are macros, so the widget hooks need real
+ * functions to point at. */
+static void _widget_cursor(GdkCursorType cursor)
+{
+  dt_control_change_cursor(cursor);
+}
+
+static void _widget_message(const char *message)
+{
+  dt_toast_log("%s", message);
+}
+
 static gint _accels_top_offset(void)
 {
   if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return 0;
@@ -1303,6 +1315,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   if(dt_control_get_global()) dt_widget_set_gui_thread(dt_control_get_global()->gui_thread);
   dt_widget_set_scroll_reversed(dt_conf_get_bool("scroll/reverse_x"), dt_conf_get_bool("scroll/reverse_y"));
 
+  dt_widget_set_cursor_handler(_widget_cursor);
+  dt_widget_set_message_handler(_widget_message);
   dt_accels_set_global(gui->accels);
   dt_accels_set_top_offset_handler(_accels_top_offset);
   dt_accels_set_refocus_handler(dt_gui_refocus_center);
