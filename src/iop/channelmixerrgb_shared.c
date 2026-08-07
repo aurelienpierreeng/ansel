@@ -24,7 +24,7 @@
 #include "bauhaus/bauhaus.h"
 #include "pixel/chromatic_adaptation.h"
 #include "pixel/illuminants.h"
-#include "pixel/matrices.h"
+#include "math/matrices.h"
 #include "iop/channelmixerrgb_shared.h"
 
 #include <float.h>

@@ -60,7 +60,7 @@
 #include "gui/gdkkeys.h"
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/utility.h"

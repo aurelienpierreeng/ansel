@@ -57,7 +57,7 @@
 #include "common/module_versioning.h"
 #include "pixel/interpolation.h"
 #include "common/opencl.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/collection.h"
 #include "common/conf.h"
 #include "control/control.h"

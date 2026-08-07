@@ -20,7 +20,7 @@
 #include "common/conf.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/times.h"
 #include "control/signal.h"
 #include "gui/gtk.h"

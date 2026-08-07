@@ -32,7 +32,7 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/openmp.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "develop/imageop.h"

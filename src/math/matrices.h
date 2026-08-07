@@ -28,7 +28,7 @@
 #ifndef DT_COMMON_MATRICES_H
 #define DT_COMMON_MATRICES_H
 
-#include "common/math.h"
+#include "math/math.h"
 
 // a 3x3 matrix, padded to permit SSE instructions to be used for multiplication and addition
 typedef float DT_ALIGNED_ARRAY dt_colormatrix_t[4][4];

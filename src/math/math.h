@@ -32,7 +32,7 @@
 #include <stdint.h>
 
 #include "common/openmp.h"
-#include "common/simd.h"
+#include "math/simd.h"
 
 #define NORM_MIN 1.52587890625e-05f // norm can't be < to 2^(-16)
 

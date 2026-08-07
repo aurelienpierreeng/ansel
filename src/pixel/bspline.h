@@ -24,11 +24,11 @@
 
 #include "common/openmp.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/dwt.h"
-#include "develop/openmp_maths.h"
-#include "common/math.h"
+#include "math/openmp_maths.h"
+#include "math/math.h"
 
 // B spline filter
 #define BSPLINE_FSIZE 5

@@ -34,10 +34,10 @@
 
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/solvers/thinplate.h"
 #include "chart/deltaE.h"
-#include "common/solvers/svd.h"
+#include "math/svd.h"
 
 #include <assert.h>
 #include <float.h>

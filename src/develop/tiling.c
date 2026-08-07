@@ -39,7 +39,7 @@
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"
-#include "common/solvers/nelder_mead_simplex.h"
+#include "math/nelder_mead_simplex.h"
 
 #include <assert.h>
 #include <math.h>

@@ -55,7 +55,7 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/hash.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
@@ -63,7 +63,7 @@
 #include "common/image.h"
 #include "common/imagebuf.h"
 #include "pixel/interpolation.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -145,7 +145,7 @@
 
 // For parameter optimization we are using the Nelder-Mead simplex method
 // implemented by Michael F. Hutt.
-#include "common/solvers/nelder_mead_simplex.h"
+#include "math/nelder_mead_simplex.h"
 
 
 DT_MODULE_INTROSPECTION(5, dt_iop_ashift_params_t)

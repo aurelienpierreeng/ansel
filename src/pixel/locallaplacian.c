@@ -34,7 +34,7 @@
 #include "common/openmp.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/locallaplacian.h"
-#include "common/math.h"
+#include "math/math.h"
 
 #include <string.h>
 #include <stdint.h>

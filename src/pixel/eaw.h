@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include "common/simd.h"
+#include "math/simd.h"
 
 typedef void((*eaw_decompose_t)(float *const restrict out, const float *const restrict in, float *const restrict detail,
                                 const int scale, const float sharpen, const int32_t width, const int32_t height));

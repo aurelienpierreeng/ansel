@@ -28,7 +28,7 @@ import subprocess
 import sys
 
 # Same layer order as tools/include_graph.py -- keep them in sync.
-LAYER = {'external': 0, 'win': 0, 'common': 1, 'pixel': 2, 'control': 3,
+LAYER = {'external': 0, 'win': 0, 'common': 1, 'math': 1, 'pixel': 2, 'control': 3,
          'gui': 4, 'dtgtk': 4, 'bauhaus': 4, 'develop': 5,
          'iop': 6, 'imageio': 6, 'libs': 7, 'views': 7, 'chart': 7,
          'cli': 8, 'generate-cache': 8, 'cltest': 8}

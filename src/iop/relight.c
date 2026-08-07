@@ -54,7 +54,7 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "develop/develop.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"

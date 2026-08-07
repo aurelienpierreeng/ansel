@@ -40,7 +40,7 @@
 #include "common/image.h"
 #include "common/imagebuf.h"
 #include "pixel/interpolation.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "common/opencl.h"
 #include "common/conf.h"
 #include "control/control.h"

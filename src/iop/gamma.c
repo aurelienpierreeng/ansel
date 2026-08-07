@@ -41,7 +41,7 @@
 #include "common/module_versioning.h"
 #include "common/logging.h"
 #include "common/openmp.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/target_clones.h"
 #include "config.h"
 #endif

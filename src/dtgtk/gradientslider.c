@@ -43,7 +43,7 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "gui/gdkkeys.h"
-#include "common/math.h"
+#include "math/math.h"
 #include "gradientslider.h"
 #include "gui/gtk.h"
 

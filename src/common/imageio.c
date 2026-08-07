@@ -62,7 +62,7 @@
 #include "common/openmp.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/paths.h"

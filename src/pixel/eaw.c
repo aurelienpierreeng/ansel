@@ -23,8 +23,8 @@
 #include "pixel/eaw.h"
 #include "common/iop_profile.h"
 #include "common/openmp.h"
-#include "common/simd.h"
-#include "common/math.h"
+#include "math/simd.h"
+#include "math/math.h"
 #include "control/control.h"     // needed by dwt.h
 #include "pixel/dwt.h"          // for dwt_interleave_rows
 #include <math.h>

@@ -26,7 +26,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #include "gui/gtk.h"
 #include "control/control.h"
 #include "develop/develop.h"

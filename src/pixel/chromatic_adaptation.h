@@ -24,7 +24,7 @@
 #ifndef DT_COMMON_CHROMATIC_ADAPTATION_H
 #define DT_COMMON_CHROMATIC_ADAPTATION_H
 
-#include "common/math.h"
+#include "math/math.h"
 #include "common/colorspaces_inline_conversions.h"
 
 typedef enum dt_adaptation_t

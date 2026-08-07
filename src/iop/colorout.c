@@ -55,7 +55,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/simd.h"
+#include "math/simd.h"
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/macros.h"
@@ -65,7 +65,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/colorspaces.h"
-#include "pixel/matrices.h"
+#include "math/matrices.h"
 #include "common/imagebuf.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"
