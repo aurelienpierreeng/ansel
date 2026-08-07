@@ -2258,15 +2258,6 @@ static void _apply_tca_override_lf_legacy(lfLens *lens, float tca_r, float tca_b
   lens->AddCalibTCA(&tca);
 }
 
-static float commit_unified_scale(const dt_image_t *img, float user_scale,
-                                   dt_embedded_lens_knots_t *knots, int *out_nc)
-{
-  const dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
-  float out_scale = 1.0f;
-  *out_nc = dt_embedded_lens_init_coeffs(img, &ft, knots, &out_scale);
-  return user_scale * out_scale;
-}
-
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -2303,8 +2294,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   if(needs_embedded)
   {
-    d->lensfun.scale = commit_unified_scale(&self->dev->image_storage, user_scale,
-                                             &d->embedded.knots, &d->embedded.nc);
+    const dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+    float out_scale = 1.0f;
+    d->embedded.nc = dt_embedded_lens_init_coeffs(&self->dev->image_storage, &ft,
+                                                    &d->embedded.knots, &out_scale);
+    d->lensfun.scale = user_scale * out_scale;
   }
   else
   {
