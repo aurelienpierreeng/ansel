@@ -1256,6 +1256,12 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   gboolean recheck_needed = TRUE;
   while (recheck_needed)
   {
+    // Before, not after: dt_database_init() can hit a read-only or corrupt database and needs
+    // to ask the user what to do about it, and dt_gui_gtk_init() -- where every other backend
+    // handler is registered -- only runs much further down. This is the only place that knows
+    // this early whether there will be anybody to ask.
+    if(init_gui) dt_database_gui_register_handlers();
+
     darktable.db = dt_database_init(dbfilename_from_command, load_data, init_gui);
     if(IS_NULL_PTR(darktable.db))
     {
