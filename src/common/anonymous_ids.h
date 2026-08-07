@@ -21,7 +21,7 @@
 
 /* Anonymous correlation ids shared by crash reporting (common/sentry.c) and usage
  * analytics (common/telemetry.c). Generated/persisted by the orchestrator
- * (common/darktable.c) so both subsystems agree on them. */
+ * (darktable.c) so both subsystems agree on them. */
 
 #ifdef __cplusplus
 extern "C" {

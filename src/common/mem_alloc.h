@@ -20,7 +20,7 @@
 
 /* Cacheline-aligned memory: alignment constants/attributes and the dt_alloc/dt_free
  * family. Self-contained on purpose: low-level compute units include this instead of
- * common/darktable.h. The pixelpipe-cache-tracked allocators
+ * darktable.h. The pixelpipe-cache-tracked allocators
  * (dt_pixelpipe_cache_alloc_*) are NOT here — they reference the darktable global and
  * stay with the orchestrator. */
 

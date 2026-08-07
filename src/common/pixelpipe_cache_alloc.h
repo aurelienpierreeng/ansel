@@ -22,11 +22,11 @@
  * cache singleton (and, for the perthread variants, to the application's OpenMP
  * thread count).
  *
- * They moved here from common/darktable.h: they are pipeline-cache API glue, not
+ * They moved here from darktable.h: they are pipeline-cache API glue, not
  * orchestrator material. The binding goes through the dt_pixelpipe_cache_get_global()
  * and dt_get_num_openmp_threads() accessors — declared by the libs, implemented by
- * the orchestrator (common/darktable.c) — so including this helper does NOT drag
- * common/darktable.h (and with it the whole application) into the translation unit. */
+ * the orchestrator (darktable.c) — so including this helper does NOT drag
+ * darktable.h (and with it the whole application) into the translation unit. */
 
 #include "common/macros.h"
 #include "common/mem_alloc.h"

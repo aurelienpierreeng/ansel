@@ -21,7 +21,7 @@
 #include <glib.h>
 
 /** TRUE if `filename`'s extension is one this build can decode. Declared here, beside
- * the extension table it consults; implemented in common/darktable.c. */
+ * the extension table it consults; implemented in darktable.c. */
 gboolean dt_supported_image(const gchar *filename);
 
 #include <glib.h>

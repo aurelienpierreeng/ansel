@@ -20,7 +20,7 @@
 
 /* dt_hash(): the content-addressing primitive of the whole app (history, pipeline,
  * caches). Pure and dependency-free on purpose: low-level compute units include this
- * instead of common/darktable.h. */
+ * instead of darktable.h. */
 
 #include <stddef.h>
 #include <stdint.h>

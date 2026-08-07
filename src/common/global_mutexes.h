@@ -19,7 +19,7 @@
 #ifndef DT_COMMON_GLOBAL_MUTEXES_H
 #define DT_COMMON_GLOBAL_MUTEXES_H
 
-/* Process-wide locks owned by the orchestrator (common/darktable.c).
+/* Process-wide locks owned by the orchestrator (darktable.c).
  *
  * They are process-wide because the thing they serialize is process-wide -- a
  * non-reentrant third-party library, or a resource the whole application shares.
@@ -29,7 +29,7 @@
  *
  * Declared here so that the modules which need them (iop/lens.cc, iop/watermark.c,
  * imageio/storage/disk.c, imageio/imageio_rawspeed.cc, ...) do not have to include
- * common/darktable.h, and therefore the whole application, to take a lock. */
+ * darktable.h, and therefore the whole application, to take a lock. */
 
 #include "common/dtpthread.h"
 

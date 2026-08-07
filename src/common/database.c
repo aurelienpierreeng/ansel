@@ -2687,7 +2687,7 @@ gboolean dt_database_show_error(const dt_database_t *db)
     {
       // Just try to acquire the lock again: useful once the other instance that held it has
       // since closed. dt_database_show_error() returning FALSE makes the caller's init loop
-      // (common/darktable.c) re-run dt_database_init() without touching any lock file.
+      // (darktable.c) re-run dt_database_init() without touching any lock file.
       error = FALSE;
     }
     else if(choice == 2)

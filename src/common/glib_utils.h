@@ -19,7 +19,7 @@
 #define DT_COMMON_GLIB_UTILS_H
 
 /* Small GLib convenience helpers (GList traversal, string splicing). Application-free
- * on purpose: include this instead of common/darktable.h. */
+ * on purpose: include this instead of darktable.h. */
 
 #include "common/macros.h"
 

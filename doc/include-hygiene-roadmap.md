@@ -99,7 +99,7 @@ never remove in bulk without the verify pass.
    | MinGW: `near` / `grp2` as identifiers | same lost shim; the `#undef` came from `darktable.h` |
    | MinGW: unrelated parse errors | `<immintrin.h>` accidentally placed inside an `extern "C"` block |
 
-   The structural fix applied: the Windows legacy-macro shim moved from `common/darktable.h`
+   The structural fix applied: the Windows legacy-macro shim moved from `darktable.h`
    to `common/macros.h`, so it sits at the bottom of the stack where every TU reaches it,
    instead of riding on the orchestrator that low-level code is supposed to stop including.
 
@@ -299,7 +299,7 @@ Where the calls actually are:
 | `develop/blend_gui.c` | 172 |
 | `develop/imageop.c` | 66 |
 | `common/lut_viewer.c` | 47 |
-| `common/darktable.c` | 25 |
+| `darktable.c` | 25 |
 | `develop/imageop_gui.c` | 17 |
 | `develop/masks/masks_gui.c` | 13 |
 | `common/history_merge_gui.c` | 12 |
@@ -323,7 +323,7 @@ daunting:
    the module that also owns pipeline logic. This is the real work: separate the module
    API from its widget plumbing.
 
-3. **Legitimate.** `common/darktable.c` is the orchestrator; initialising the GUI is its
+3. **Legitimate.** `darktable.c` is the orchestrator; initialising the GUI is its
    job. Not a defect.
 
 The pattern to apply is the one that worked for the two solvers in `math/`: the backend
@@ -350,6 +350,6 @@ six that disappeared were misclassifications rather than fixes.
 
 It also settles the spelling trap recorded in `CLAUDE.md`: while the header lived in
 `src/common/`, files in that directory could spell it `#include "darktable.h"` relative to
-themselves, which hid them from audits grepping for `common/darktable.h`. That spelling is
+themselves, which hid them from audits grepping for `darktable.h`. That spelling is
 now the canonical root-relative one.
 

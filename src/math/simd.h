@@ -20,7 +20,7 @@
 
 /* SIMD pixel primitives: the 4-float aligned pixel type, its vector helpers and the
  * per-channel loop macros. Self-contained on purpose: low-level compute units include
- * this instead of common/darktable.h. */
+ * this instead of darktable.h. */
 
 #include "common/mem_alloc.h"
 #include "common/openmp.h"

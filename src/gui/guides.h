@@ -47,7 +47,7 @@ typedef struct dt_guides_t
 
 /** The registered guide overlays. dt_guides_get_list() is read-only; the `_ref` form
  * returns the address of the list head and exists because registration appends to it —
- * only common/darktable.c's owner and gui/guides.c's registration path may use it. */
+ * only darktable.c's owner and gui/guides.c's registration path may use it. */
 GList *dt_guides_get_list(void);
 GList **dt_guides_get_list_ref(void);
 

@@ -346,7 +346,7 @@ typedef enum dt_debug_signal_action_t
 
 /* read-only accessors for the signal-debugging options, parsed once from the
  * command line at startup and never mutated afterwards (implemented in
- * common/darktable.c, next to dt_get_debug_flags()). */
+ * darktable.c, next to dt_get_debug_flags()). */
 int32_t dt_get_signal_debug_acts(void);
 gboolean dt_get_signal_debug(const int signal);
 
@@ -357,7 +357,7 @@ struct dt_control_signal_t *dt_control_signal_init();
  * global by nature (a process-wide broadcast bus with no per-call context to
  * ride on), so this accessor is the intended end state, not an interim step —
  * same shape as the fully-encapsulated dt_conf_* API. Implemented by the
- * orchestrator (common/darktable.c). */
+ * orchestrator (darktable.c). */
 struct dt_control_signal_t *dt_control_signal_get_global(void);
 /* cleanup the signal framework */
 void dt_control_signal_cleanup(struct dt_control_signal_t *ctlsig);

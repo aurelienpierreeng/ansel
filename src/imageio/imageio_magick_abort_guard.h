@@ -45,7 +45,7 @@
  *  - it restores Ansel's own signal handlers afterward
  *    (common/system_signal_handling.c) since GraphicsMagick is known to
  *    silently steal them as a side effect of its calls (see the
- *    InitializeMagick() callers in common/darktable.c).
+ *    InitializeMagick() callers in darktable.c).
  *
  * Usage, mirroring the existing goto-based error handling in these files:
  *

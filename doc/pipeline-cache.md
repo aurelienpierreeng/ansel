@@ -595,7 +595,7 @@ system-wide available memory.
 
 The defense has four layers, from planning to last resort:
 
-1. **Envelope-aware startup budgets** (`common/darktable.c`). The detected total RAM is clamped
+1. **Envelope-aware startup budgets** (`darktable.c`). The detected total RAM is clamped
    by the physical RAM (so a misconfigured `host_memory_limit` can only shrink, never grow it) and
    by the tightest cgroup-v2 `memory.max` on our own path (containers, Flatpak, systemd slices —
    the kernel OOM-enforces that envelope no matter how much RAM the machine has). A **pressure
@@ -637,7 +637,7 @@ The defense has four layers, from planning to last resort:
    "does this platform answer at all" is a separate `sys_probe_valid` flag: deriving it from an
    `est == 0` sentinel would silently disable the valve at exactly the moment it matters most.
 
-4. **Pressure-aware tiling** (`dt_get_available_mem()`, `common/darktable.c`). The planning value
+4. **Pressure-aware tiling** (`dt_get_available_mem()`, `darktable.c`). The planning value
    tiled modules size their working set from is capped by the live system availability (plus half
    our own cache, which is LRU-evictable on demand — our own hoard must never force tiling), so
    under pressure modules split into smaller tiles instead of planning allocations the valve

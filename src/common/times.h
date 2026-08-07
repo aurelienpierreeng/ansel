@@ -19,9 +19,9 @@
 #define DT_COMMON_TIMES_H
 
 /* Wall-clock / CPU-time measurement helpers. The dt_show_times* implementations
- * live in common/darktable.c (they honor the runtime perf-debug flag), but the
+ * live in darktable.c (they honor the runtime perf-debug flag), but the
  * declarations are application-free: low-level code includes this instead of
- * common/darktable.h. */
+ * darktable.h. */
 
 #ifdef _WIN32
 #include "win/getrusage.h"
@@ -57,7 +57,7 @@ static inline void dt_get_times(dt_times_t *t)
 }
 
 /* Wall-clock time (dt_get_wtime() domain) at which the application started.
- * Written once at startup, never mutated; implemented in common/darktable.c. */
+ * Written once at startup, never mutated; implemented in darktable.c. */
 double dt_get_start_wtime(void);
 
 void dt_show_times(const dt_times_t *start, const char *prefix);

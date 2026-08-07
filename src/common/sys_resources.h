@@ -20,7 +20,7 @@
 #define DT_COMMON_SYS_RESOURCES_H
 
 /* Memory and worker budgets. The values are owned by the orchestrator
- * (common/darktable.c, which fills dt_sys_resources_t once at startup), but the
+ * (darktable.c, which fills dt_sys_resources_t once at startup), but the
  * consumers are low-level compute units -- the pixelpipe cache, tiling, the mipmap
  * cache, the memory arena -- which must not have to include the whole application
  * to ask how much RAM they may use. */

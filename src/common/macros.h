@@ -26,7 +26,7 @@
 
 /* Windows legacy-macro shim. windows.h #defines `near`, `grp2`, `interface` and
  * friends, and win/win.h #undefs them (and orders winsock2 before windows.h). Every
- * TU used to inherit this through common/darktable.h; now that low-level code no
+ * TU used to inherit this through darktable.h; now that low-level code no
  * longer includes the orchestrator, the shim has to live at the bottom of the stack
  * -- this header -- or the collisions come back on MinGW only, far from their cause.
  * Harmless on every other platform: the whole block disappears. */
