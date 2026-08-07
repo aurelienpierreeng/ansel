@@ -54,8 +54,29 @@ sqlite3 *dt_database_get_sqlite3_global(void);
 const gchar *dt_database_get_path(const struct dt_database_t *db);
 /** test if database was already locked by another instance */
 gboolean dt_database_get_lock_acquired(const struct dt_database_t *db);
-/** show an error popup. this has to be postponed until after we tried using dbus to reach another instance */
-gboolean dt_database_show_error(const struct dt_database_t *db);
+/* Why the database would not open, handed to whoever can report it.
+ *
+ * Reporting used to live here as dt_database_show_error(), a stack of modal dialogs inside
+ * a SQL file. The backend now only says what went wrong; the dialogs, and the decision to
+ * retry or delete lock files, are gui/common/database_gui.c's business. */
+typedef struct dt_database_error_t
+{
+  gboolean lock_acquired; /**< TRUE when the database opened fine and there is nothing to report */
+  int other_pid;          /**< the process that holds the lock, 0 if unknown */
+  char *message;          /**< owned by the caller after the take; free with dt_database_error_free() */
+  char *dbfilename;       /**< owned by the caller after the take */
+} dt_database_error_t;
+
+/** Move the pending error out of `db` into `error`, clearing it on the database.
+ *  Consumes it: a second call reports no error. */
+void dt_database_take_error(struct dt_database_t *db, dt_database_error_t *error);
+
+/** Release the strings owned by `error`. */
+void dt_database_error_free(dt_database_error_t *error);
+
+/** Delete data.db.lock and library.db.lock beside `dbfilename`. Returns 0 when every lock
+ *  file that existed was removed. Call only once the user has agreed. */
+int dt_database_delete_lock_files(const char *dbfilename);
 /** perform pre-db-close optimizations (always call when quiting darktable) */
 void dt_database_optimize(const struct dt_database_t *);
 /** conditionally perfrom db maintenance */

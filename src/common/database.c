@@ -2645,100 +2645,53 @@ static void _sanitize_db(dt_database_t *db)
 #undef TRY_PREPARE
 #undef FINALIZE
 
-gboolean dt_database_show_error(const dt_database_t *db)
+void dt_database_take_error(dt_database_t *db, dt_database_error_t *error)
 {
-  gboolean error = TRUE;
+  if(IS_NULL_PTR(db) || IS_NULL_PTR(error)) return;
 
-  if(!db->lock_acquired)
+  // Ownership of the strings moves to the caller; the database keeps no pending error.
+  error->lock_acquired = db->lock_acquired;
+  error->other_pid = db->error_other_pid;
+  error->message = db->error_message;
+  error->dbfilename = db->error_dbfilename;
+
+  db->error_other_pid = 0;
+  db->error_message = NULL;
+  db->error_dbfilename = NULL;
+}
+
+void dt_database_error_free(dt_database_error_t *error)
+{
+  if(IS_NULL_PTR(error)) return;
+  dt_free(error->message);
+  dt_free(error->dbfilename);
+  error->message = NULL;
+  error->dbfilename = NULL;
+}
+
+int dt_database_delete_lock_files(const char *dbfilename)
+{
+  if(IS_NULL_PTR(dbfilename)) return -1;
+
+  char lck_pathname[1024];
+  snprintf(lck_pathname, sizeof(lck_pathname), "%s.lock", dbfilename);
+  char *lck_dirname = g_strdup(lck_pathname);
+  char *slash_pos = g_strrstr(lck_dirname, "/");
+  if(!IS_NULL_PTR(slash_pos)) *slash_pos = '\0';
+
+  int status = 0;
+  const char *names[] = { "/data.db.lock", "/library.db.lock" };
+  for(size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
   {
-    char lck_pathname[1024];
-    snprintf(lck_pathname, sizeof(lck_pathname), "%s.lock", db->error_dbfilename);
-    char *lck_dirname = g_strdup(lck_pathname);
-    char *slash_pos = g_strrstr(lck_dirname, "/");
-    if(!IS_NULL_PTR(slash_pos)) *slash_pos = '\0';
-    // clang-format off
-    char *label_text = g_markup_printf_escaped(
-        _("\n"
-          "  Sorry, Ansel could not be started because the database is locked.\n"
-          "\n"
-          "  How to solve this problem?\n"
-          "\n"
-          "  1 - If another Ansel instance is already running, \n"
-          "      click \"Quit\" and either use that instance or close it before trying to start Ansel again. \n"
-          "      (process ID <i><b>%d</b></i> created the database lock files)\n"
-          "\n"
-          "  2 - If you cannot find any running instance of Ansel, try restarting your session or your computer. \n"
-          "      This will close all running programs and should release any database locks. \n"
-          "\n"
-            "  3 - If you have already tried the above steps, or you are certain that no other instances of Ansel are running, \n"
-            "      this likely means the previous instance ended unexpectedly. \n"
-            "      Click the \"Delete database lock files\" button to remove <i>data.db.lock</i> and <i>library.db.lock</i>. \n"
-            "      Ansel will then attempt to load the database again. \n"
-          "\n\n"
-          "      <i><u>Caution!</u> Do not delete these files without first undertaking the above checks, \n"
-          "      otherwise you risk generating serious inconsistencies in your database.</i>\n"),
-      db->error_other_pid);
-    // clang-format on
-
-    const int choice = dt_gui_show_standalone_three_choice_dialog(_("Error starting Ansel"), label_text,
-                                        _("Quit"), _("Retry"), _("Delete database lock files and try again"));
-
-    if(choice == 1)
-    {
-      // Just try to acquire the lock again: useful once the other instance that held it has
-      // since closed. dt_database_show_error() returning FALSE makes the caller's init loop
-      // (darktable.c) re-run dt_database_init() without touching any lock file.
-      error = FALSE;
-    }
-    else if(choice == 2)
-    {
-      gboolean really_delete_lockfiles =
-        dt_gui_show_standalone_yes_no_dialog
-        (_("Confirmation"),
-         _("\n<u>Caution!</u> Are you sure you want to delete the database lock files?\n"
-          "This action should only be performed if you are certain no other Ansel instances are running.\n"), _("Quit"), _("Yes"));
-      if(really_delete_lockfiles)
-      {
-        int status = 0;
-
-        char *lck_filename = g_strconcat(lck_dirname, "/data.db.lock", NULL);
-        if(g_access(lck_filename, F_OK) != -1)
-          status += remove(lck_filename);
-
-        lck_filename = g_strconcat(lck_dirname, "/library.db.lock", NULL);
-        if(g_access(lck_filename, F_OK) != -1)
-          status += remove(lck_filename);
-        dt_free(lck_filename);
-
-        if(status==0)
-        {
-          dt_gui_show_standalone_yes_no_dialog(_("Done"),
-                                        _("\nThe database lock files have been deleted successfully.\n"),
-                                        _("Continue"), NULL);
-          error = FALSE;
-        }
-
-        else
-          dt_gui_show_standalone_yes_no_dialog
-            (_("Error"), g_markup_printf_escaped(
-              _("\nAt least one lock file could not be removed.\n"
-                "You may try to manually delete the files <i>data.db.lock</i> and <i>library.db.lock</i>\n"
-                "in folder <a href=\"file:///%s\">%s</a>.\n"), lck_dirname, lck_dirname),
-             _("Quit"), NULL);
-      }
-    }
-
-    dt_free(lck_dirname);
-    dt_free(label_text);
+    char *lck_filename = g_strconcat(lck_dirname, names[i], NULL);
+    if(g_access(lck_filename, F_OK) != -1) status += remove(lck_filename);
+    dt_free(lck_filename);
   }
 
-  dt_free(db->error_message);
-  dt_free(db->error_dbfilename);
-  ((dt_database_t *)db)->error_other_pid = 0;
-  ((dt_database_t *)db)->error_message = NULL;
-  ((dt_database_t *)db)->error_dbfilename = NULL;
-  return error;
+  dt_free(lck_dirname);
+  return status;
 }
+
 
 static gboolean pid_is_alive(int pid)
 {
