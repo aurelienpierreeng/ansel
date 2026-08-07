@@ -50,10 +50,10 @@
 #endif
 #include "gui/bauhaus.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/openmp.h"
-#include "common/target_clones.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "pixel/gaussian.h"

@@ -49,7 +49,7 @@ add_dependencies(generate_authors_h generate_authors_file)
 FILE(GLOB SOURCE_FILES
   "gui/bauhaus.c"
   "common/act_on.c"
-  "common/atomic.c"
+  "system/atomic.c"
   "pixel/bilateral.c"
   "pixel/bilateralcl.c"
   "pixel/box_filters.c"
@@ -70,7 +70,7 @@ FILE(GLOB SOURCE_FILES
   "common/dbus.c"
   "common/dtpthread.c"
   "pixel/eaw.c"
-  "common/memory_arena.c"
+  "system/memory_arena.c"
   "common/exif.cc"
   "common/film.c"
   "common/file_location.c"
@@ -274,7 +274,7 @@ endif(WIN32)
 set(SOURCES ${SOURCE_FILES} ${HEADER_FILES})
 
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "ppc64le")
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/ppc64le)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/system/ppc64le)
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})

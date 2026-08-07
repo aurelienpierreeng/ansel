@@ -29,7 +29,7 @@
 #include "iop/drawlayer/brush_profile.h"
 
 #include "common/macros.h"
-#include "math/simd.h"
+#include "system/simd.h"
 #include "iop/noise_generator.h"
 
 #include <math.h>

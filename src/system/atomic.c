@@ -25,7 +25,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 
 extern inline void dt_atomic_set_int(dt_atomic_int *var, int value);
 extern inline int dt_atomic_get_int(dt_atomic_int *var);

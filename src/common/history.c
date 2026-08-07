@@ -42,7 +42,7 @@
 #include "common/database.h"
 #include "common/history.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"

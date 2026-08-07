@@ -29,7 +29,7 @@
 #include "control/jobs/image_jobs.h"
 #include "control/control.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 
 typedef struct dt_image_load_t
 {

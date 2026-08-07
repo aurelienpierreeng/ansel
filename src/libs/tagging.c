@@ -51,7 +51,7 @@
 #include "gui/dtgtk/togglebutton.h"
 #include "common/selection.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "common/utility.h"

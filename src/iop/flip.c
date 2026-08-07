@@ -44,8 +44,8 @@
 #include "config.h"
 #endif
 #include <assert.h>
-#include "common/openmp.h"
-#include "common/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/database.h"

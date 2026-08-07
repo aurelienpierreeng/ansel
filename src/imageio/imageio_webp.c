@@ -17,9 +17,9 @@
 */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/openmp.h"
+#include "system/openmp.h"
 #include <glib/gstdio.h>
 #include <inttypes.h>
 

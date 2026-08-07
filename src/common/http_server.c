@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <libsoup/soup.h>
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/http_server.h"
 #ifndef LIBSOUP_VERSION_MAJOR

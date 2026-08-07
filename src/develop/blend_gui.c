@@ -47,8 +47,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/macros.h"
-#include "common/mem_alloc.h"
-#include "math/simd.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 #include "control/signal.h"
 #include "common/usermanual_url.h"
 #include "develop/blend.h"

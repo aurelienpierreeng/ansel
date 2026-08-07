@@ -61,8 +61,8 @@
 
 #include "common/dtpthread.h"
 #include "common/logging.h"
-#include "common/mem_alloc.h"
-#include "math/simd.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 
 #include "common/introspection.h"
 #include "common/gui_module_api.h"

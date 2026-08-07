@@ -53,10 +53,10 @@
 // LCh highlight reconstruction (Bayer + X-Trans), with its colour interpolation helpers. (implementation; see
 // lch.h for the public API.)
 
-#include "common/openmp.h"
+#include "system/openmp.h"
 #include "iop/highlights/common.h"
-#include "math/simd.h"
-#include "common/target_clones.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/lch.h"
 #include <math.h>

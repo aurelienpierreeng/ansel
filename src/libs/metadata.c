@@ -49,7 +49,7 @@
 #include "common/collection.h"
 #include "common/selection.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/database.h"
 #include "gui/gdkkeys.h"

@@ -35,7 +35,7 @@
 #endif
 
 #include "common/conf.h"
-#include "common/fp_mode.h"
+#include "system/fp_mode.h"
 #include "common/logging.h"
 
 #include <sched.h>

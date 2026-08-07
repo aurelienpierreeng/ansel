@@ -32,7 +32,7 @@
 #ifndef DT_DEVELOP_PIXELPIPE_HB_H
 #define DT_DEVELOP_PIXELPIPE_HB_H
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "imageio/imageio_core.h"
 #include "common/iop_order.h"
 /* develop/imageop.h is deliberately NOT included: it includes this header back.

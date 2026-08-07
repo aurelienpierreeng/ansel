@@ -24,12 +24,12 @@
  */
 
 #include "iop/drawlayer/paint.h"
-#include "math/simd.h"
+#include "system/simd.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/brush_profile.h"
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "math/math.h"

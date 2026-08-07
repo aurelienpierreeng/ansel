@@ -109,10 +109,10 @@ GList dev->forms
 #ifndef DT_DEVELOP_MASKS_H
 #define DT_DEVELOP_MASKS_H
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/logging.h"
 #include "common/macros.h"
-#include "math/simd.h"
+#include "system/simd.h"
 #include "common/times.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "develop/pixelpipe.h"

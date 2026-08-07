@@ -25,7 +25,7 @@
 #include "config.h"
 #endif
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "develop/imageop.h" // for IOP_CS_RGB
 
 #include <assert.h>

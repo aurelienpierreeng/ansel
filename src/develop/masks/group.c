@@ -32,8 +32,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/macros.h"
-#include "common/openmp.h"
-#include "common/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/pixelpipe_cache_alloc.h"

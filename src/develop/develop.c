@@ -68,7 +68,7 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/history.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"

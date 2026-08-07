@@ -18,7 +18,7 @@
 
 #include "gui/gui_throttle.h"
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/dtpthread.h"
 #include "common/conf.h"
 #include "develop/pixelpipe_hb.h"

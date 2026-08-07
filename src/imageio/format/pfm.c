@@ -27,7 +27,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "imageio/imageio_core.h"

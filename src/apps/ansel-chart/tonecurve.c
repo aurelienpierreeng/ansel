@@ -21,7 +21,7 @@
  */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "apps/ansel-chart/tonecurve.h"
 
 #include <assert.h>

@@ -52,8 +52,8 @@
 
 // Simple highlight-clip and the raw-clip visualization mode. (implementation; see clip.h for the public API.)
 
-#include "common/openmp.h"
-#include "common/target_clones.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/clip.h"
 #include <string.h>

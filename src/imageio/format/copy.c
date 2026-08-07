@@ -28,7 +28,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
 #include "common/exif.h"

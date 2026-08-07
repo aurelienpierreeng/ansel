@@ -18,7 +18,7 @@
 
 #define _GNU_SOURCE
 
-#include "common/memory_arena.h"
+#include "system/memory_arena.h"
 
 #include <errno.h>
 #include <stdio.h>

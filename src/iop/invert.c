@@ -48,10 +48,10 @@
 #include <stdlib.h>
 
 #include "common/colorspaces.h"
-#include "common/openmp.h"
-#include "common/target_clones.h"
-#include "common/mem_alloc.h"
-#include "math/simd.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 #include "common/module_versioning.h"
 #include "control/control.h"
 #include "develop/imageop.h"

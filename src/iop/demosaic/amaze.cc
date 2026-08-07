@@ -33,9 +33,9 @@
 
 #define __STDC_FORMAT_MACROS
 
-#include "common/mem_alloc.h"
-#include "common/openmp.h"
-#include "common/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 
 
 #include "develop/imageop.h"

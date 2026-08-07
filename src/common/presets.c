@@ -24,7 +24,7 @@
 #include "common/database.h"
 #include "common/presets.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/debug.h"
 #include "common/exif.h"
 #include "libs/lib.h"

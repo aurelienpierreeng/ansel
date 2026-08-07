@@ -56,7 +56,7 @@
 #include "config.h"
 #endif
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/database.h"
 #include "common/datetime.h"
 #include "common/file_location.h"

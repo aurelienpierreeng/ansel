@@ -19,7 +19,7 @@
 
 // the only dependency this unit takes beyond libm/glib/json-glib: the
 // multi-versioning attribute, duplicated there so darktable.h stays out
-#include "common/target_clones.h"
+#include "system/target_clones.h"
 
 #include <glib/gstdio.h>
 #include <json-glib/json-glib.h>

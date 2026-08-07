@@ -27,7 +27,7 @@
 #include "gui/bauhaus.h"
 #include "gui/dtgtk/button.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/utility.h"
 #include "gui/gtk.h"
 

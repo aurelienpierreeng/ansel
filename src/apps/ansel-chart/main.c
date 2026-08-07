@@ -31,9 +31,9 @@
 #include <gtk/gtk.h>
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
-#include "common/openmp.h"
-#include "math/simd.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/simd.h"
 #include "apps/ansel-chart/dtcairo.h"
 #include "apps/ansel-chart/colorchart.h"
 #include "apps/ansel-chart/common.h"

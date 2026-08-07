@@ -17,7 +17,7 @@
 */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/topological_sort.h"
 #include <stdio.h>
 #include <string.h>

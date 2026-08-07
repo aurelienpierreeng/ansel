@@ -30,10 +30,10 @@
 
 #include "pixel/box_filters.h"
 #include "common/macros.h"
-#include "common/openmp.h"
-#include "common/target_clones.h"
-#include "common/mem_alloc.h"
-#include "math/simd.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "math/math.h"
 

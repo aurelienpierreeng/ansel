@@ -44,7 +44,7 @@
 #include "common/image_cache.h"
 #include "common/colorlabels.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/hash.h"
 #include "common/logging.h"
 #include "common/paths.h"

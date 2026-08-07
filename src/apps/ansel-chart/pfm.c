@@ -24,7 +24,7 @@
  */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include <glib.h>
 #include <glib/gstdio.h>

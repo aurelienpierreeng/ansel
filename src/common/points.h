@@ -33,9 +33,9 @@
 #define DT_COMMON_POINTS_H
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/openmp.h"   // dt_get_thread_num()
+#include "system/openmp.h"   // dt_get_thread_num()
 
 /* Process-wide singleton with no per-call context to ride on: this accessor is the
  * intended end state (same category as dt_conf_*), implemented by the orchestrator. */

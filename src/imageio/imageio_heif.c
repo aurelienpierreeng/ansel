@@ -38,9 +38,9 @@
 
 #include "common/colorspaces.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/openmp.h"
+#include "system/openmp.h"
 #include "common/exif.h"
 #include "develop/develop.h"
 #include "imageio_heif.h"

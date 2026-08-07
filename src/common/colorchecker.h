@@ -26,8 +26,8 @@
 #define DT_COMMON_COLORCHECKER_H
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
-#include "math/simd.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 #include "common/logging.h"
 
 #include <glib/gi18n.h>

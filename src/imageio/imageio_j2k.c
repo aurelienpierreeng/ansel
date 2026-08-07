@@ -30,8 +30,8 @@
 #include "config.h"
 #endif
 #include "common/macros.h"
-#include "common/openmp.h"
-#include "common/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
 #include "common/exif.h"
 #include "imageio/imageio_j2k.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB

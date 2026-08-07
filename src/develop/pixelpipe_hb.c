@@ -52,13 +52,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/colorspaces.h"
-#include "common/capabilities.h"
-#include "common/sys_resources.h"
+#include "system/capabilities.h"
+#include "system/sys_resources.h"
 #include "common/global_mutexes.h"
 #include "common/hash.h"
 #include "common/histogram.h"
 #include "imageio/imageio_core.h"
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/opencl.h"
 #include "common/iop_order.h"
 #include "control/control.h"

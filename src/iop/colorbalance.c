@@ -54,8 +54,8 @@ http://www.youtube.com/watch?v=JVoUgR6bhBc
 #endif
 // our includes go first:
 #include "gui/bauhaus.h"
-#include "common/target_clones.h"
-#include "common/mem_alloc.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/exif.h"
 #include "develop/blend.h"

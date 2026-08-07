@@ -49,7 +49,7 @@
 #include "common/history.h"
 #include "common/styles.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/glib_utils.h"
 #include "common/module_versioning.h"

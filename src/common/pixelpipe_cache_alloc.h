@@ -29,8 +29,8 @@
  * darktable.h (and with it the whole application) into the translation unit. */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
-#include "common/openmp.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
 
 #ifdef __cplusplus
 extern "C" {

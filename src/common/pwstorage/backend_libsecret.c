@@ -21,7 +21,7 @@
 */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "backend_libsecret.h"
 #include "common/conf.h"
 

@@ -24,7 +24,7 @@
     protect the engine's baseline. */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "gui/bauhaus.h"

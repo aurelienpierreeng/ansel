@@ -38,7 +38,7 @@
 */
 #include "common/logging.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "control/signal.h"
 #include "control/control.h"
 #include <glib.h>

@@ -22,7 +22,7 @@
 */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/profiling.h"
 
 dt_timer_t *dt_timer_start_with_name(const char *file, const char *function, const char *description)

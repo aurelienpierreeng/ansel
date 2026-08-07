@@ -47,9 +47,9 @@
 #include "config.h"
 #endif
 #include "gui/bauhaus.h"
-#include "common/openmp.h"
-#include "common/target_clones.h"
-#include "common/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/colorspaces.h"

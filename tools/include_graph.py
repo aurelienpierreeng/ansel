@@ -27,7 +27,7 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
 # GUI toolkit code (gui/, dtgtk/, bauhaus/) is INFRASTRUCTURE used by modules, so it sits
 # below them, not above: an iop's gui_init() legitimately calls gtk/bauhaus helpers.
 LAYERS = [
-    ('external', 0), ('win', 0),
+    ('external', 0), ('win', 0), ('system', 0),
     ('common', 1), ('math', 1),
     # pixel/: image-processing primitives (wavelets, guided filters, colour adaptation,
     # interpolation). Above common/ because they are a domain library rather than

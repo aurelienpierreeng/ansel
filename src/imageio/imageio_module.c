@@ -37,7 +37,7 @@
 #include "common/module_versioning.h"
 #include "imageio/imageio_module.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "gui/gtk.h"
 #include "common/file_location.h"

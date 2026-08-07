@@ -29,7 +29,7 @@
 #ifndef DT_COMMON_MIPMAP_CACHE_H
 #define DT_COMMON_MIPMAP_CACHE_H
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/cache.h"
 #include "common/colorspaces.h"
 #include "common/image.h"

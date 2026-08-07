@@ -41,7 +41,7 @@
 #define DT_COMMON_COLORSPACES_H
 
 #include "math/matrices.h"
-#include "math/simd.h"
+#include "system/simd.h"
 
 #include <glib.h>
 #include <lcms2.h>

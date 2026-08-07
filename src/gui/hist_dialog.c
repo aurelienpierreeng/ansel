@@ -33,7 +33,7 @@
 #include "config.h"
 #endif
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/history.h"
 #include "control/control.h"
 #include "develop/imageop.h"

@@ -21,7 +21,7 @@
 */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/utility.h"
 #include "common/conf.h"
 #include "common/metadata_export.h"

@@ -22,8 +22,8 @@
  * per-channel loop macros. Self-contained on purpose: low-level compute units include
  * this instead of darktable.h. */
 
-#include "common/mem_alloc.h"
-#include "common/openmp.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
 
 #include <glib.h>
 #include <math.h>

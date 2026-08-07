@@ -32,7 +32,7 @@
 #include "common/cache.h"
 #include "common/dtpthread.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 
 #include <assert.h>
 #include <inttypes.h>

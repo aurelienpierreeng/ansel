@@ -26,7 +26,7 @@
 #include "config.h"
 #endif
 
-#include "common/mem_alloc.h"     // for dt_free
+#include "system/mem_alloc.h"     // for dt_free
 #include "common/sentry.h"        // for dt_sentry_backtrace_captured
 #include "common/system_signal_handling.h"
 #include <errno.h>       // for errno

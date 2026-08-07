@@ -31,7 +31,7 @@
 #include "control/control.h"
 #include <glib/gstdio.h>
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/paths.h"
 #include <cups/cups.h>

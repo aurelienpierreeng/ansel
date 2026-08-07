@@ -24,7 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "dtwin.h"
 

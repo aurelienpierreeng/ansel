@@ -24,7 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/sys_resources.h"
+#include "system/sys_resources.h"
 #include "control/jobs.h"
 #include "control/control.h"
 #include "common/times.h"
