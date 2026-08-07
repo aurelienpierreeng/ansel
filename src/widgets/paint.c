@@ -1879,7 +1879,10 @@ void dtgtk_cairo_paint_label(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
 
   if(color < DT_WIDGET_COLORLABEL_COUNT)
   {
-    set_color(cr, (*dt_widget_colorlabel(color)));
+    {
+      const GdkRGBA *lbl = dt_widget_colorlabel(color);
+      if(lbl) set_color(cr, *lbl);
+    }
   }
   else
   {
@@ -1916,8 +1919,11 @@ void dtgtk_cairo_paint_label_sel(cairo_t *cr, gint x, gint y, gint w, gint h, gi
 
   if(color < DT_WIDGET_COLORLABEL_COUNT)
   {
-    GdkRGBA rgba = (*dt_widget_colorlabel(color));
-    cairo_set_source_rgba(cr, rgba.red, rgba.green, rgba.blue, .7);
+    // The palette is published by the theme; before that happens there is nothing to draw
+    // with, so fall back rather than dereference NULL.
+    const GdkRGBA *lbl = dt_widget_colorlabel(color);
+    if(lbl) cairo_set_source_rgba(cr, lbl->red, lbl->green, lbl->blue, .7);
+    else cairo_set_source_rgba(cr, 0.75, 0.75, 0.75, .7);
   }
   else
   {
@@ -2167,35 +2173,50 @@ void dtgtk_cairo_paint_label_flower(cairo_t *cr, gint x, gint y, gint w, gint h,
   if(flags & (1 << DT_WIDGET_COLORLABEL_RED))
   {
     cairo_arc(cr, r, r, r, 0, 2.0f * M_PI);
-    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_RED)));
+    {
+      const GdkRGBA *lbl = dt_widget_colorlabel(DT_WIDGET_COLORLABEL_RED);
+      if(lbl) set_color(cr, *lbl);
+    }
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_WIDGET_COLORLABEL_YELLOW))
   {
     cairo_arc(cr, 1.0 - r, r, r, 0, 2.0f * M_PI);
-    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_YELLOW)));
+    {
+      const GdkRGBA *lbl = dt_widget_colorlabel(DT_WIDGET_COLORLABEL_YELLOW);
+      if(lbl) set_color(cr, *lbl);
+    }
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_WIDGET_COLORLABEL_GREEN))
   {
     cairo_arc(cr, 0.5, 0.5, r, 0, 2.0f * M_PI);
-    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_GREEN)));
+    {
+      const GdkRGBA *lbl = dt_widget_colorlabel(DT_WIDGET_COLORLABEL_GREEN);
+      if(lbl) set_color(cr, *lbl);
+    }
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_WIDGET_COLORLABEL_BLUE))
   {
     cairo_arc(cr, r, 1.0 - r, r, 0, 2.0f * M_PI);
-    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_BLUE)));
+    {
+      const GdkRGBA *lbl = dt_widget_colorlabel(DT_WIDGET_COLORLABEL_BLUE);
+      if(lbl) set_color(cr, *lbl);
+    }
     cairo_fill(cr);
   }
 
   if(flags & (1 << DT_WIDGET_COLORLABEL_PURPLE))
   {
     cairo_arc(cr, 1.0 - r, 1.0 - r, r, 0, 2.0f * M_PI);
-    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_PURPLE)));
+    {
+      const GdkRGBA *lbl = dt_widget_colorlabel(DT_WIDGET_COLORLABEL_PURPLE);
+      if(lbl) set_color(cr, *lbl);
+    }
     cairo_fill(cr);
   }
 
