@@ -571,29 +571,34 @@ Two of the three remaining files are done (PR after #1106):
   private session state under the survey lock, so it goes through a handler registered from
   `dt_gui_gtk_init()`, next to the film and collection ones.
 
-### `common/database.c` — analysed, not done
+### `common/database.c` — done
 
-Three dialogs (~120 lines, 88 GTK tokens), all inside `dt_database_init()` and gated by its
-`has_gui` argument: "database is read-only", and two "error opening database" variants that
-offer to delete lock files or restore a snapshot.
+Three dialogs (~120 lines, 88 GTK tokens), all inside `dt_database_init()`: "database is
+read-only", and two "error opening database" variants offering to restore a snapshot or
+delete and start over.
 
 They were left out of the `dt_database_take_error()` inversion in #1103 for a concrete
 reason: that pattern has the backend *record* an error for the caller to report afterwards,
-and these three are **interactive mid-init** — the user's answer decides whether init
-continues, retries or aborts, so there is nothing to report afterwards to.
+and these are **interactive mid-init** — the answer decides whether init aborts, restores or
+starts over, so there is no "afterwards" to report to. The backend therefore states the
+question and takes back a value: `dt_database_prompt_t` in, `dt_database_response_t` out.
 
-A handler slot does work, and the ordering allows it:
+Registration cannot go where the film/collection/folder-survey handlers go:
 
 ```
 darktable.c:1244   gtk_init()              <- GTK is up
-darktable.c:1259   dt_database_init()      <- the dialogs run here
+darktable.c:1259   dt_database_init()      <- the prompts happen here
 darktable.c:1402   dt_gui_gtk_init()       <- too late to register from
 ```
 
-So registration cannot go where the film/collection/folder-survey handlers go. It belongs in
-`darktable.c` between those two lines, guarded by `init_gui` — legitimate, since `darktable.c`
-is the app layer and is the thing that knows whether there will be a GUI at all.
+It goes in `darktable.c` between the first two, guarded by `init_gui` — legitimate, since
+that is the only thing which knows this early whether there will be anybody to ask.
 
-Each of the three has a different button set and different return semantics, so the slot
-wants a small enum of outcomes rather than a boolean. That, plus the fact that it sits on the
-startup path where a mistake is not subtle, is why it is its own piece of work.
+With no handler every prompt answers `CLOSE`. That is not a fallback that guesses: a corrupt
+database is not deleted or restored on the strength of a question nobody was asked. It also
+closes a latent headless bug — these dialogs had **no `has_gui` guard at all**, so a run
+without a GUI reached `gtk_dialog_new_with_buttons()` on a GTK that `ansel-cli` never
+initialises. Registration is the guard now.
+
+`common/database.c` is down to zero GTK tokens. Its remaining `gui/legacy_presets.h` include
+is a different problem (preset migration, not a dialog) and is left for its own pass.
