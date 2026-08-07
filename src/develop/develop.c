@@ -84,7 +84,7 @@
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
 #include "gui/gtk.h"
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 #include "libs/colorpicker.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)

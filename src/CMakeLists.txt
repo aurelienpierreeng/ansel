@@ -159,6 +159,7 @@ FILE(GLOB SOURCE_FILES
   "control/progress.c"
   "control/signal.c"
   "develop/develop.c"
+  "develop/gui_throttle.c"
   "develop/dev_history.c"
   "develop/dev_pixelpipe.c"
   "develop/dev_snapshot.c"

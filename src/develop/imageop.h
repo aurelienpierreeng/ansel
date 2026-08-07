@@ -73,7 +73,6 @@
 #include "develop/pixelpipe_hb.h"
 #include "widgets/togglebutton.h"
 #include "gui/gtk.h"
-#include "widgets/gui_throttle.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -111,7 +111,7 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"

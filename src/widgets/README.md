@@ -55,7 +55,6 @@ names keep compiling unchanged.
 | `dt_widget_set_natural_width_handler()` | how wide the host's panel wants a widget |
 | `dt_widget_set_cursor_handler()` | pointer shape during a drag |
 | `dt_widget_set_message_handler()` | transient user-facing messages |
-| `dt_gui_throttle_init(saved_runtime_us)` / `_set_timeout_ms()` | persisted state + timeout preference |
 
 Unregistered, each degrades to an inert default — which is what makes headless runs work
 without a single "is there a GUI?" test.
@@ -91,7 +90,6 @@ application as-is, unlike the rest.
 | `resetlabel.c` | a label emitting `"reset"` on double-click |
 | `accelerators.{c,h}` | the whole keyboard-shortcut system (3224 lines) |
 | `bauhaus.{c,h}` | the slider/combobox toolkit (3982 lines) |
-| `gui_throttle.{c,h}` | coalescing/deferral of expensive redraws |
 | `gtkentry.c` | `GtkEntry` completion helper |
 | `gdkkeys.h` | keysym mapping (numpad/main-pad equivalence) |
 | `widget_settings.{c,h}` | toolkit state: scroll, DPI/em metrics, freeze depth, palette |

@@ -17,7 +17,6 @@ set(ANSEL_WIDGETS_SOURCES
   focus_peaking.c
   gradientslider.c
   gtkentry.c
-  gui_throttle.c
   icon.c
   icon_cell_renderer.c
   paint.c

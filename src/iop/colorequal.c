@@ -51,7 +51,7 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 #include "iop/iop_api.h"
 
 #ifdef _OPENMP

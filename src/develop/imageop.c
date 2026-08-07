@@ -94,7 +94,7 @@
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 #include "gui/presets.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

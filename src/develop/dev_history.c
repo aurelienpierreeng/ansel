@@ -71,7 +71,7 @@
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/supervisor.h"
-#include "widgets/gui_throttle.h"
+#include "develop/gui_throttle.h"
 
 #include "gui/presets.h"
 
