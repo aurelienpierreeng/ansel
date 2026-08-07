@@ -662,6 +662,33 @@ static void _apply_vignette_gain_3ch(float *const work_pixel, const float *const
   for(int c = 3; c < ch; c++) work_pixel[c] = in_pixel[c];
 }
 
+static void _apply_embedded_vignette_pass(float *dst, const float *src,
+                                           const dt_iop_roi_t *roi_in,
+                                           const dt_dev_pixelpipe_iop_t *piece,
+                                           int ch, const dt_iop_lensfun_data_t *d)
+{
+  const float w2 = 0.5f * roi_in->scale * piece->buf_in.width;
+  const float h2 = 0.5f * roi_in->scale * piece->buf_in.height;
+  const float rn = hypotf(w2, h2);
+  const float inv_rn = (rn > 1e-6f) ? 1.0f / rn : 0.0f;
+
+  __OMP_PARALLEL_FOR_CPP__(firstprivate(dst, src, roi_in, ch, w2, h2, inv_rn, d))
+  for(int y = 0; y < roi_in->height; y++)
+  {
+    float *const dst_row = dst + (size_t)y * roi_in->width * ch;
+    const float *const src_row = src + (size_t)y * roi_in->width * ch;
+    for(int x = 0; x < roi_in->width; x++)
+    {
+      const float cx = roi_in->x + x - w2;
+      const float cy = roi_in->y + y - h2;
+      const float radius = hypotf(cx, cy) * inv_rn;
+      _apply_vignette_gain_3ch(dst_row + x * ch, src_row + x * ch, ch,
+                                d->embedded.knots.knots_vig, d->embedded.knots.vig,
+                                d->embedded.nc, radius);
+    }
+  }
+}
+
 typedef struct {
   float cx;
   float cy;
@@ -782,25 +809,10 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
 
   if(apply_vignette)
   {
-    __OMP_PARALLEL_FOR_CPP__(firstprivate(work, ivoid, roi_in, ch, w2, h2, inv_rn, d))
-    for(int y = 0; y < roi_in->height; y++)
-    {
-      const float *const in_row = ivoid + (size_t)y * roi_in->width * ch;
-      float *const work_row = work + (size_t)y * roi_in->width * ch;
-      for(int x = 0; x < roi_in->width; x++)
-      {
-        const float cx = roi_in->x + x - w2;
-        const float cy = roi_in->y + y - h2;
-        const float radius = hypotf(cx, cy) * inv_rn;
-        _apply_vignette_gain_3ch(work_row + x * ch, in_row + x * ch, ch,
-                                  d->embedded.knots.knots_vig, d->embedded.knots.vig,
-                                  d->embedded.nc, radius);
-      }
-    }
+    _apply_embedded_vignette_pass(work, (const float *)ivoid, roi_in, piece, ch, d);
   }
   else
   {
-    // Identity vignette: pass pixels through unchanged.
     dt_iop_image_copy_by_size(work, ivoid,
                                 roi_in->width, roi_in->height, ch);
   }
@@ -1201,24 +1213,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
     if(emb_vig)
     {
-      const float w2 = 0.5f * roi_in->scale * piece->buf_in.width;
-      const float h2 = 0.5f * roi_in->scale * piece->buf_in.height;
-      const float rn = hypotf(w2, h2);
-      const float inv_rn = (rn > 1e-6f) ? 1.0f / rn : 0.0f;
-      __OMP_PARALLEL_FOR_CPP__(firstprivate(work_buf, roi_in, ch, w2, h2, inv_rn, d))
-      for(int y = 0; y < roi_in->height; y++)
-      {
-        float *const work_row = work_buf + (size_t)y * roi_in->width * ch;
-        for(int x = 0; x < roi_in->width; x++)
-        {
-          const float cx = roi_in->x + x - w2;
-          const float cy = roi_in->y + y - h2;
-          const float radius = hypotf(cx, cy) * inv_rn;
-          _apply_vignette_gain_3ch(work_row + x * ch, work_row + x * ch, ch,
-                                    d->embedded.knots.knots_vig, d->embedded.knots.vig,
-                                    d->embedded.nc, radius);
-        }
-      }
+      _apply_embedded_vignette_pass(work_buf, work_buf, roi_in, piece, ch, d);
     }
 
     if(modflags & LF_MODIFY_VIGNETTING)
