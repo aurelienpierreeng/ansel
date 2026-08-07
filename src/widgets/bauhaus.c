@@ -1327,6 +1327,10 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   gtk_style_context_lookup_color(ctx, "colorlabel_purple",
                                  &bauhaus->colorlabels[DT_COLORLABELS_PURPLE]);
 
+  // Publish the resolved palette to the widget layer: paint.c draws colour labels and must
+  // not reach back into bauhaus for them. Re-published on every theme reload.
+  dt_widget_set_colorlabels(bauhaus->colorlabels, DT_COLORLABELS_LAST);
+
 
   // make sure we release previously loaded font
   if(bauhaus->pango_font_desc)
