@@ -49,7 +49,7 @@
 #include "common/conf.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "widgets/icon_cell_renderer.h"
 
 #ifdef GDK_WINDOWING_QUARTZ

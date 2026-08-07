@@ -37,7 +37,7 @@
 #include "develop/pixelpipe_hb.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "gui/gtk.h"
 #include "gui/guides.h"
 #include "libs/colorpicker.h"

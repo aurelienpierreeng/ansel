@@ -45,7 +45,7 @@
 #include "control/settings.h"
 #include "common/conf.h"
 #include "control/jobs/control_jobs.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/dtgtk/thumbtable_internal.h"
 #include "gui/dtgtk/thumbnail.h"

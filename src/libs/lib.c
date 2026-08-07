@@ -55,7 +55,7 @@
 #include "common/sentry.h"
 #include "widgets/widget_settings.h"
 #include "common/telemetry.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "libs/lib.h"
 #include "views/view.h"
 #include "common/database.h"

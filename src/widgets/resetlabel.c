@@ -33,7 +33,6 @@
 static void _reset_label_class_init(GtkDarktableResetLabelClass *klass);
 static void _reset_label_init(GtkDarktableResetLabel *label);
 
-
 static guint _reset_signal = 0;
 
 static void _reset_label_class_init(GtkDarktableResetLabelClass *klass)

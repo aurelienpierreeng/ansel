@@ -53,7 +53,7 @@
 #include "common/database.h"
 #include "common/dtpthread.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "develop/masks.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"

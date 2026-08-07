@@ -87,7 +87,7 @@
 #include "pixel/format.h"
 #include "develop/masks.h"
 #include "develop/tiling.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "gui/presets.h"
 #include "widgets/button.h"
 #include "widgets/expander.h"

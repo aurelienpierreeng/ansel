@@ -45,7 +45,7 @@
 #include "control/jobs/control_jobs.h"
 #include "widgets/togglebutton.h"
 #include "libs/lib.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/macros.h"

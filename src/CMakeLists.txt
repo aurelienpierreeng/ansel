@@ -193,6 +193,7 @@ FILE(GLOB SOURCE_FILES
   "develop/format.c"
   "widgets/button.c"
   "widgets/widget_settings.c"
+  "widgets/widget_style.c"
   "widgets/drawingarea.c"
   "widgets/expander.c"
   "widgets/gradientslider.c"

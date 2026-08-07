@@ -23,7 +23,7 @@
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "common/datetime.h"
 #include "common/file_location.h"
 #include "common/image.h"

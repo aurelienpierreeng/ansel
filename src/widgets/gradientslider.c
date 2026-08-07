@@ -41,13 +41,14 @@
 #include <string.h>
 
 #include "common/macros.h"
+#include <math.h>
 #include "widgets/widget_settings.h"
 #include "system/mem_alloc.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "math/math.h"
 #include "gradientslider.h"
-#include "gui/gtk.h"
-
+#include "widgets/widget_style.h"
+#include "widgets/widget_settings.h"
 
 #define DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MAX 50
 #define DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MIN 10
@@ -703,7 +704,6 @@ static void _gradient_slider_set_defaults(GtkDarktableGradientSlider *gslider)
   }
 }
 
-
 // Public functions for multivalue type
 GtkWidget *dtgtk_gradient_slider_multivalue_new(gint positions)
 {
@@ -926,7 +926,6 @@ void dtgtk_gradient_slider_multivalue_set_scale_callback(GtkDarktableGradientSli
   gtk_widget_queue_draw(GTK_WIDGET(gslider));
 }
 
-
 // Public functions for single value type
 GtkWidget *dtgtk_gradient_slider_new()
 {
@@ -1022,7 +1021,6 @@ void dtgtk_gradient_slider_set_increment(GtkDarktableGradientSlider *gslider, gd
   g_return_if_fail(!IS_NULL_PTR(gslider));
   gslider->increment = value;
 }
-
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

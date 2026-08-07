@@ -55,7 +55,7 @@
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "common/utility.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "common/tags.h"
 #include "common/conf.h"
 #include "control/control.h"
