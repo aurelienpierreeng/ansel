@@ -42,6 +42,8 @@
 
 #include "common/dtpthread.h"
 
+G_BEGIN_DECLS
+
 #define DT_ACCELS_WIDGET_SHORTCUT_KEY "dt-accel-shortcut"
 #define DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY "dt-accel-tooltip-disabled"
 
@@ -412,5 +414,7 @@ typedef gchar *(*dt_accels_recent_get_handler_t)(int index);
 typedef void (*dt_accels_recent_set_handler_t)(int index, const char *value);
 void dt_accels_set_recent_handlers(dt_accels_recent_get_handler_t get,
                                    dt_accels_recent_set_handler_t set);
+
+G_END_DECLS
 
 #endif // DT_WIDGETS_ACCELERATORS_H

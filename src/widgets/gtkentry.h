@@ -32,6 +32,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+G_BEGIN_DECLS
+
 typedef struct completion_spec
 {
   gchar *varname;
@@ -50,6 +52,8 @@ const dt_gtkentry_completion_spec *dt_gtkentry_get_default_path_compl_list();
 
 gchar *dt_gtkentry_build_completion_tooltip_text(const gchar *header,
                                                  const dt_gtkentry_completion_spec *compl_list);
+
+G_END_DECLS
 
 #endif // DT_WIDGETS_GTKENTRY_H
 

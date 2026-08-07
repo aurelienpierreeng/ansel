@@ -3,6 +3,8 @@
 
 #include <glib.h>
 
+G_BEGIN_DECLS
+
 
 /* Which render this timing belongs to. Deliberately NOT the pipeline's own enum: the throttle
  * only ever distinguishes the main view from the preview, and taking develop/pixelpipe.h for
@@ -38,4 +40,6 @@ gint64 dt_gui_throttle_get_timeout_us(void);
 
 void dt_gui_throttle_queue(gpointer source, dt_gui_throttle_callback_t callback, gpointer user_data);
 void dt_gui_throttle_cancel(gpointer source);
+G_END_DECLS
+
 #endif // DT_WIDGETS_GUI_THROTTLE_H

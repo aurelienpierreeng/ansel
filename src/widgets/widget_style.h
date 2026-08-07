@@ -26,6 +26,8 @@
 
 #include <gtk/gtk.h>
 
+G_BEGIN_DECLS
+
 /* CSS class helpers. Pure GTK style-context manipulation with a redraw request -- no
  * application involved, which is why they belong here rather than in gui/gtk.c where they
  * used to live. gui/gtk.h includes this, so existing consumers are unaffected. */
@@ -44,5 +46,7 @@ void dt_capitalize_label(gchar *text);
  *  `cr`, sourced from `widget`'s Pango context, else the host root window, else the screen --
  *  so cairo-drawn text matches native widgets instead of reverting to cairo's defaults. */
 void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget);
+
+G_END_DECLS
 
 #endif // DT_WIDGETS_WIDGET_STYLE_H
