@@ -84,7 +84,7 @@
 #include "math/openmp_maths.h"
 #include "develop/tiling.h"
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "pixel/bspline.h"

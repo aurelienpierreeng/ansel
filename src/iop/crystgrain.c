@@ -20,7 +20,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "common/iop_profile.h"

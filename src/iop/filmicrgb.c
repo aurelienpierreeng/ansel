@@ -48,7 +48,7 @@
 #include "config.h"
 #include "common/conf.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "pixel/chromatic_adaptation.h"
 #include "common/macros.h"

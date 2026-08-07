@@ -41,7 +41,7 @@
 
 #include "glib.h"
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
 #include "common/openmp.h"

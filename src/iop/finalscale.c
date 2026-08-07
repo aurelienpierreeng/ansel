@@ -33,7 +33,7 @@
 #include "common/logging.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

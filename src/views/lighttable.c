@@ -73,7 +73,7 @@
 */
 /** this is the view for the lighttable module.  */
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/collection.h"
 #include "common/history.h"
 #include "common/module_versioning.h"

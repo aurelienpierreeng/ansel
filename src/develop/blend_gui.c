@@ -52,7 +52,7 @@
 #include "control/signal.h"
 #include "common/usermanual_url.h"
 #include "develop/blend.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/dtpthread.h"
 #include "math/math.h"
 #include "common/iop_profile.h"

@@ -23,7 +23,7 @@
 #include "common/colorspaces_inline_conversions.h"   // dt_Lab_to_XYZ(), dt_XYZ_to_sRGB()
 #include "common/conf.h"
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
 #include "math/simd.h"

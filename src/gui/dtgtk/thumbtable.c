@@ -64,7 +64,7 @@
 #include "gui/accelerators.h"
 #include "gui/drag_and_drop.h"
 #include "views/view.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

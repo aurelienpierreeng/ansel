@@ -30,7 +30,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/color_picker_proxy.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/color_picker.h"
 #include "control/signal.h"
 #include "control/control.h"

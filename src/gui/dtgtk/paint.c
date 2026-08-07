@@ -50,7 +50,7 @@
 */
 
 #include "common/mem_alloc.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "gui/dtgtk/paint.h"
 #include "gui/draw.h"
 #include <math.h>

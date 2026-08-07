@@ -23,7 +23,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "views/view.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "gui/window_manager.h"
 #include "gui/actions/menu.h"
 #include "gui/dtgtk/sidepanel.h"

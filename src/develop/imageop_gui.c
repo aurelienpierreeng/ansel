@@ -24,7 +24,7 @@
 #include "develop/imageop_gui.h"
 #include "common/conf.h"
 #include "develop/imageop.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "gui/dtgtk/button.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"

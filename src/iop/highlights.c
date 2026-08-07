@@ -59,7 +59,7 @@
 #include "common/target_clones.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "math/choleski.h" // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)

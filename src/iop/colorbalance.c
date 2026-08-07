@@ -53,7 +53,7 @@ http://www.youtube.com/watch?v=JVoUgR6bhBc
 #include "common/conf.h"
 #endif
 // our includes go first:
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"

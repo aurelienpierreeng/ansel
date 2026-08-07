@@ -48,7 +48,7 @@
 #include "math/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "math/math.h"
 #include "common/opencl.h"
 #include "common/exif.h"

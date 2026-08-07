@@ -81,7 +81,7 @@
 */
 /** this is the view for the darkroom module.  */
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include <glib/gstdio.h>
 #include "common/paths.h"
 #include "common/collection.h"

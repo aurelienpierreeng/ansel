@@ -43,7 +43,7 @@
 #include "math/simd.h"
 #include "common/module_versioning.h"
 #include "common/iop_profile.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/rgb_norms.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

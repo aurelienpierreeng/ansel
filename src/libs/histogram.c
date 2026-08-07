@@ -54,7 +54,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
 #include "common/pixelpipe_cache_alloc.h"

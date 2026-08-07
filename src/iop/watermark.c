@@ -64,7 +64,7 @@
 #include "common/target_clones.h"
 #include "common/paths.h"
 #include "common/conf.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/tags.h"
 #include "common/variables.h"

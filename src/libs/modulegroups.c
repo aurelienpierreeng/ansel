@@ -45,7 +45,7 @@
 */
 
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/iop_order.h"
 #include "common/logging.h"
 #include "common/macros.h"
