@@ -32,7 +32,7 @@ that owns one of the `darktable` members), so a *second* inclusion is never legi
 means the header arrived through a path nobody intended. A guard would absorb that
 silently; instead the file `#error`s on re-inclusion. If you hit it, do not add a guard —
 find who included it and give that code the specific lib it needs (`common/logging.h`,
-`common/mem_alloc.h`, …) or the accessor for the global it wants (`dt_dev_get_global()`,
+`system/mem_alloc.h`, …) or the accessor for the global it wants (`dt_dev_get_global()`,
 `dt_control_get_global()`, …). **No header may include it**; as of this writing none does.
 
 **When auditing this, grep for `darktable\.h"` and check the spelling.** Includes can be
@@ -169,7 +169,7 @@ correctly and a second, correct render finishes and gets cached, nothing guarant
 repaint of it (the thumbnail widget can be left showing the first render under a permanent "busy"
 overlay for several seconds, until an unrelated GUI event forces a redraw). Patching the
 recovery/notification side (adding a missing GUI-thread redraw request on one early-return path
-in `dtgtk/thumbnail.c`'s `_get_image_buffer()`) did not fix this reliably and was reverted — the
+in `gui/dtgtk/thumbnail.c`'s `_get_image_buffer()`) did not fix this reliably and was reverted — the
 actual fix is to not let the race start in the first place.
 
 Fixed by `dt_image_duplicate_no_reload()` (`common/image.c`): same as `dt_image_duplicate()` but
@@ -869,7 +869,7 @@ another dialog still open at that point — GTK already hands focus back to a li
 correctly; this only matters for the final return to the application. Also skip
 `GtkFileChooserDialog`/native choosers, which are a separate, already-correct subsystem. Any
 dialog created without a transient parent at all (e.g. a popup menu action, which cannot
-legitimately use the popup's own toplevel — see `dtgtk/thumbnail.c`'s "Active modules" dialog)
+legitimately use the popup's own toplevel — see `gui/dtgtk/thumbnail.c`'s "Active modules" dialog)
 should instead be parented directly to `dt_ui_main_window(darktable.gui->ui)` at creation time.
 
 ### Worker-thread → GUI-thread deferred callbacks referencing a shared struct need a refcount

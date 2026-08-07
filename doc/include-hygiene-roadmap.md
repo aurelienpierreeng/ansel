@@ -353,3 +353,55 @@ It also settles the spelling trap recorded in `CLAUDE.md`: while the header live
 themselves, which hid them from audits grepping for `darktable.h`. That spelling is
 now the canonical root-relative one.
 
+---
+
+## 9. Directory structure: one module, one job
+
+A round of restructuring, driven by the maintainer, on top of section 8. None of it
+changes behaviour; all of it changes what the directory tree asserts.
+
+| move | why |
+|---|---|
+| `dtgtk/` -> `gui/dtgtk/` | a widget toolkit is GUI; top-level only by history |
+| `bauhaus/` -> `gui/bauhaus.{c,h}` | two files do not earn a directory |
+| `common/{lut_viewer,import,history_merge_gui}` -> `gui/` | GUI by content: 69, 243 and 281 GTK tokens |
+| `{cli,cltest,cmstest,generate-cache,chart}` -> `apps/ansel-*` | separate programs, separate build targets |
+| `main.c` -> `apps/ansel/main.c` | the entry point joins the other entry points |
+| hardware/platform/memory code -> `system/` | see below |
+
+| metric | before | after |
+|---|---:|---:|
+| layering violations | 247 | 233 |
+| include cycles | 0 | 0 |
+| files in `common/` | 183 | 162 |
+
+### Three things measurement caught that reading would not have
+
+**`src/chart` was not a program.** Of its 13 files, exactly one compiled -- `chart/common.c`,
+pulled into the `channelmixerrgb` IOP. Moving the directory into `apps/` wholesale would
+have made a live IOP (layer 6) depend on an app (layer 10). What that file actually held
+was 103 lines of projective geometry, so it became `math/homography.{c,h}` and the IOP now
+depends on `math/` instead of on a dead tool. The other 11 files are still built by nothing.
+
+**`ppc64le/altivec.h` has zero include sites.** It is an include-PATH shim, activated by
+`include_directories(.../ppc64le)` in `src/CMakeLists.txt` on that arch, and works by
+`#include_next`. A move that only rewrote `#include` lines would have silently disabled it,
+on an architecture with no CI job and no local cross toolchain.
+
+**`FILE(GLOB)` hides mistakes.** The source lists are glob *patterns*, so an entry matching
+no file is dropped without a configure error. Six had accumulated (`dtgtk/culling.c`,
+`common/matrices.c`, ...). The corollary matters more than the cleanup: a path this kind of
+refactor gets wrong does not fail at configure time -- it drops out of the build and
+surfaces as an undefined reference at link, or not at all.
+
+### Known and deliberate
+
+* `system/` sits at layer 0 and has four upward includes into `common/`
+  (`dtpthread.h`, `macros.h`, `logging.h`). Pre-existing coupling that was invisible while
+  both ends lived in `common/`; the +1 in the count is visibility, not regression.
+* `common/history_actions.c` (604 lines, 17 GTK tokens) stayed put. It is genuinely mixed,
+  and wants splitting rather than relocating.
+* `system/simd.h` overlaps conceptually with `math/matrices.h` and `math/math.h` --
+  `dt_mat3x4_mul_vec4` is a matrix op living among load/store primitives, while the matrix
+  headers hand-roll intrinsics instead of using them. Unification is outstanding.
+
