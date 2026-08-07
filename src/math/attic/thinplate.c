@@ -36,7 +36,7 @@
 #include "common/mem_alloc.h"
 #include "math/simd.h"
 #include "common/solvers/thinplate.h"
-#include "chart/deltaE.h"
+#include "apps/ansel-chart/deltaE.h"
 #include "math/svd.h"
 
 #include <assert.h>

@@ -20,7 +20,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "chart/common.h"
+
+#include "math/homography.h"
 #include "math/gaussian_elimination.h"
 
 // using SVD to solve the system with h[8] also being 0 would be better, but this seems to be good enough

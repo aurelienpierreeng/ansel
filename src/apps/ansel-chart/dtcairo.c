@@ -22,8 +22,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "chart/dtcairo.h"
-#include "chart/common.h"
+#include "apps/ansel-chart/dtcairo.h"
+#include "apps/ansel-chart/common.h"
 
 void draw_no_image(cairo_t *cr, GtkWidget *widget)
 {

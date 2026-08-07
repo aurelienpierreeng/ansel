@@ -24,8 +24,8 @@
 #ifndef DT_CHART_DTCAIRO_H
 #define DT_CHART_DTCAIRO_H
 
-#include "chart/colorchart.h"
-#include "chart/common.h"
+#include "apps/ansel-chart/colorchart.h"
+#include "apps/ansel-chart/common.h"
 
 #include <cairo.h>
 #include <gtk/gtk.h>

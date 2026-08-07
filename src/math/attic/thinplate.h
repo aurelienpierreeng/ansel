@@ -22,7 +22,7 @@
 #ifndef DT_COMMON_SOLVERS_THINPLATE_H
 #define DT_COMMON_SOLVERS_THINPLATE_H
 
-#include "chart/tonecurve.h"
+#include "apps/ansel-chart/tonecurve.h"
 
 int thinplate_match(const tonecurve_t *curve, // tonecurve to apply after this (needed for error estimation)
                     int dim,                  // dimensionality of points
