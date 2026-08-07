@@ -22,6 +22,8 @@
 #include <gtk/gtk.h>
 #include <pthread.h>
 
+G_BEGIN_DECLS
+
 /* Toolkit-wide state that widgets need and the application merely configures.
  *
  * These three used to be fields of dt_gui_gtk_t, which meant a widget had to reach the
@@ -171,5 +173,7 @@ static inline cairo_surface_t *dt_cairo_image_surface_create_for_data(unsigned c
   cairo_surface_set_device_scale(cst, dt_widget_ppd(), dt_widget_ppd());
   return cst;
 }
+
+G_END_DECLS
 
 #endif // DT_WIDGETS_WIDGET_SETTINGS_H

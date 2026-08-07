@@ -28,6 +28,8 @@
 #include <gdk/gdk.h>
 #include <math.h>
 
+G_BEGIN_DECLS
+
 /* Cairo path primitives with no knowledge of anything. Split out of gui/draw.h, which also
  * holds curve/histogram drawing that reaches into the application; widgets/ needs only the
  * shapes. gui/draw.h includes this, so its existing consumers are unaffected. */
@@ -62,5 +64,7 @@ static inline void set_color(cairo_t *cr, GdkRGBA color)
 {
   cairo_set_source_rgba(cr, color.red, color.green, color.blue, color.alpha);
 }
+
+G_END_DECLS
 
 #endif // DT_WIDGETS_CAIRO_SHAPES_H

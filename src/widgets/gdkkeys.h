@@ -21,6 +21,8 @@
 #include <gdk/gdkkeysyms.h>
 #include <glib.h>
 
+G_BEGIN_DECLS
+
 
 /**
  * @brief Find the numpad equivalent key of any given key.
@@ -190,5 +192,7 @@ static inline guint dt_keys_mainpad_alternatives(const guint key_val)
 
   return alt_char;
 }
+
+G_END_DECLS
 
 #endif // DT_WIDGETS_GDKKEYS_H

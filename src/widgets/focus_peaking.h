@@ -27,8 +27,14 @@
 #ifndef DT_WIDGETS_FOCUS_PEAKING_H
 #define DT_WIDGETS_FOCUS_PEAKING_H
 
+#include <glib.h>
+
+G_BEGIN_DECLS
+
 int dt_focuspeaking(cairo_t *cr, uint8_t *const restrict image, const int buf_width,
                     const int buf_height, gboolean draw, float *x, float *y);
+
+G_END_DECLS
 
 #endif // DT_WIDGETS_FOCUS_PEAKING_H
 
