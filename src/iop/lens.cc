@@ -2237,19 +2237,84 @@ static void _apply_tca_override_lf_legacy(lfLens *lens, float tca_r, float tca_b
   lens->AddCalibTCA(&tca);
 }
 
+static void _commit_embedded(dt_iop_lensfun_data_t *d,
+                              const dt_image_t *img,
+                              float user_scale)
+{
+  const dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  float out_scale = 1.0f;
+  d->embedded.nc = dt_embedded_lens_init_coeffs(img, &ft,
+                                                 &d->embedded.knots, &out_scale);
+  d->lensfun.scale = user_scale * out_scale;
+}
+
+static void _commit_lensfun(dt_iop_module_t *self,
+                             dt_iop_lensfun_data_t *d,
+                             dt_iop_lensfun_params_t *p,
+                             dt_iop_lens_tca_source_t tca_method)
+{
+  auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
+  auto dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  const lfCamera *camera = nullptr;
+  const lfCamera **cam = nullptr;
+
+  if(p->camera[0])
+  {
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
+    cam = dt_iop_lensfun_db->FindCamerasExt(NULL, p->camera, 0);
+    if(cam)
+    {
+      camera = cam[0];
+      d->lensfun.crop = cam[0]->CropFactor;
+    }
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+  }
+
+  if(p->lens[0])
+  {
+    dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
+    const lfLens **lens
+        = dt_iop_lensfun_db->FindLenses(camera, NULL, p->lens, 0);
+    dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+    if(lens)
+    {
+      *d->lensfun.lens = *lens[0];
+      if(tca_method == dt_iop_lens_tca_source_t::MANUAL)
+      {
+#ifdef LF_0395
+        const dt_image_t *img = &(self->dev->image_storage);
+
+        d->lensfun.custom_tca =
+          {
+           .Model     = LF_TCA_MODEL_LINEAR,
+           .Focal     = p->focal,
+           .Terms     = { p->tca_r, p->tca_b },
+           .CalibAttr = {
+                         .CenterX = 0.0f,
+                         .CenterY = 0.0f,
+                         .CropFactor = d->lensfun.crop,
+                         .AspectRatio = (float)img->width / (float)img->height
+                         }
+          };
+#else
+        _apply_tca_override_lf_legacy(d->lensfun.lens, p->tca_r, p->tca_b);
+#endif
+      }
+      lf_free(lens);
+    }
+  }
+  lf_free(cam);
+}
+
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  auto p = (dt_iop_lensfun_params_t *)p1;
-
-  // Capture per-correction enums and scale from the HISTORY-SNAPSHOT p1
-  // BEFORE the has_been_set substitution, so the dispatch always follows
-  // the history-recorded per-axis choice, never the substituted defaults.
   const dt_iop_lens_correction_source_t dist_method = ((dt_iop_lensfun_params_t *)p1)->distortion_method;
   const dt_iop_lens_correction_source_t vig_method  = ((dt_iop_lensfun_params_t *)p1)->vignetting_method;
   const dt_iop_lens_tca_source_t        tca_method  = ((dt_iop_lensfun_params_t *)p1)->tca_method;
   const float user_scale = ((dt_iop_lensfun_params_t *)p1)->scale;
 
+  auto p = (dt_iop_lensfun_params_t *)p1;
   if(p->has_been_set == 1)
   {
     p = (dt_iop_lensfun_params_t *)self->default_params;
@@ -2272,13 +2337,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->lensfun.modify_flags = per_axis_modify_flags(dist_method, vig_method, tca_method, monochrome);
 
   if(needs_embedded)
-  {
-    const dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
-    float out_scale = 1.0f;
-    d->embedded.nc = dt_embedded_lens_init_coeffs(&self->dev->image_storage, &ft,
-                                                    &d->embedded.knots, &out_scale);
-    d->lensfun.scale = user_scale * out_scale;
-  }
+    _commit_embedded(d, &self->dev->image_storage, user_scale);
   else
   {
     d->embedded.nc = 0;
@@ -2289,59 +2348,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->lensfun.lens = new lfLens;
 
   if(needs_lensfun)
-  {
-    auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-    auto dt_iop_lensfun_db = (lfDatabase *)gd->db;
-    const lfCamera *camera = nullptr;
-    const lfCamera **cam = nullptr;
-
-    if(p->camera[0])
-    {
-      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-      cam = dt_iop_lensfun_db->FindCamerasExt(NULL, p->camera, 0);
-      if(cam)
-      {
-        camera = cam[0];
-        d->lensfun.crop = cam[0]->CropFactor;
-      }
-      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
-    }
-
-    if(p->lens[0])
-    {
-      dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-      const lfLens **lens
-          = dt_iop_lensfun_db->FindLenses(camera, NULL, p->lens, 0);
-      dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
-      if(lens)
-      {
-        *d->lensfun.lens = *lens[0];
-        if(tca_method == dt_iop_lens_tca_source_t::MANUAL)
-        {
-#ifdef LF_0395
-          const dt_image_t *img = &(self->dev->image_storage);
-
-          d->lensfun.custom_tca =
-            {
-             .Model     = LF_TCA_MODEL_LINEAR,
-             .Focal     = p->focal,
-             .Terms     = { p->tca_r, p->tca_b },
-             .CalibAttr = {
-                           .CenterX = 0.0f,
-                           .CenterY = 0.0f,
-                           .CropFactor = d->lensfun.crop,
-                           .AspectRatio = (float)img->width / (float)img->height
-                           }
-            };
-#else
-          _apply_tca_override_lf_legacy(d->lensfun.lens, p->tca_r, p->tca_b);
-#endif
-        }
-        lf_free(lens);
-      }
-    }
-    lf_free(cam);
-  }
+    _commit_lensfun(self, d, p, tca_method);
 
   d->lensfun.focal = p->focal;
   d->lensfun.aperture = p->aperture;
