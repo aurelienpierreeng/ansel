@@ -449,3 +449,48 @@ job (315 -> 224 over this series) and the remaining work is organisational legib
 `common/` should stop being the drawer everything shared gets put in. Judge these by what
 leaves `common/` -- roughly 22000 lines across the seven groups -- not by the counter.
 
+---
+
+## 11. Next: move the redraw throttle to the history commit
+
+`widgets/gui_throttle.c` currently exists to serve one caller. `bauhaus.c` defers its
+`value-changed` emission so that scrolling a slider or combobox does not trigger a pipeline
+recompute per step. Every other widget that could want the same behaviour would have to
+reimplement it.
+
+It belongs at the **history-commit bottleneck** instead, where it serves every widget without
+any of them knowing it exists.
+
+### Confirmed enabler
+
+`dt_dev_add_history_item_ext()` **already reuses the last history entry for the same module**
+(see `add_new_pipe_node` at `dev_history.c:863` and the "history entry reused" log). Consecutive
+edits of one module therefore coalesce into a single undo step *today*. Widgets can commit on
+every step without spamming the undo stack — only the pipeline recompute needs throttling.
+
+### The design: a queue, processed in order
+
+Each `dt_dev_add_history_item_real()` call enqueues its resync request and returns. The queue
+drains in FIFO order on the throttle's schedule.
+
+**Do NOT merge queued requests.** An earlier draft of this plan proposed collapsing N pending
+requests into one that takes the union of their `add_new_pipe_node` / `has_forms` /
+`has_raster` flags. That is the wrong shape: masks, module enable/disable, the mask manager
+and ordinary parameter edits all commit history with different resync needs, and any merging
+rule is a place to silently drop one. Keep every request, process them in order, stay boring.
+
+### The hazard that must be handled deliberately
+
+`CLAUDE.md` documents that darkroom `leave()` must join the worker before tearing down pipe
+state, because `dev->exit` / `pipe->shutdown` do not preempt it. **A queued resync draining
+after `leave()` is exactly that bug** — it would touch freed `dev->iop` / `pipe->nodes` and
+crash somewhere unrelated, as Sentry issue 133807805 did. `leave()` needs an explicit
+flush-or-drop of the pending queue, written as part of this change rather than discovered
+afterwards.
+
+### Verification this needs
+
+Not a compile: realtime slider drags, combobox scrolling, mask edits, and darkroom exit under
+load. Then `bauhaus.c` loses all 9 `dt_gui_throttle_*` call sites and the module can leave
+`widgets/`.
+
