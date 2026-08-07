@@ -48,6 +48,7 @@
 #include "common/collection.h"
 #include "common/history.h"
 #include "common/styles.h"
+#include "gui/common/styles_gui.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"

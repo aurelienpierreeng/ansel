@@ -79,7 +79,7 @@
  */
 
 #include "common/history_merge.h"
-#include "gui/common/history_merge.h"
+#include "gui/common/history_merge_gui.h"
 
 #include "common/iop_order.h"
 #include "common/topological_sort.h"

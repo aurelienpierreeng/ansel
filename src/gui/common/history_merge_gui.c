@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/common/history_merge.h"
+#include "gui/common/history_merge_gui.h"
 #include "common/conf.h"
 
 #include "common/macros.h"
