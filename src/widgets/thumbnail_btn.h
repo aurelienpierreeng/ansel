@@ -5,7 +5,7 @@
     Copyright (C) 2012, 2014, 2016, 2018 Tobias Ellinghaus.
     Copyright (C) 2013-2016 Roman Lebedev.
     Copyright (C) 2017 luzpaz.
-    Copyright (C) 2020 Pascal Obry.
+    Copyright (C) 2020 Aldric Renaudin.
     Copyright (C) 2022 Martin Bařinka.
     
     darktable is free software: you can redistribute it and/or modify
@@ -22,41 +22,44 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_DTGTK_ICON_H
-#define DT_GUI_DTGTK_ICON_H
+#ifndef DT_WIDGETS_THUMBNAIL_BTN_H
+#define DT_WIDGETS_THUMBNAIL_BTN_H
 
 #include "paint.h"
 #include <gtk/gtk.h>
 G_BEGIN_DECLS
-#define DTGTK_ICON(obj) G_TYPE_CHECK_INSTANCE_CAST(obj, dtgtk_icon_get_type(), GtkDarktableIcon)
-#define DTGTK_ICON_CLASS(klass) G_TYPE_CHECK_CLASS_CAST(klass, dtgtk_icon_get_type(), GtkDarktableIconClass)
-#define DTGTK_IS_ICON(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, dtgtk_icon_get_type())
-#define DTGTK_IS_ICON_CLASS(klass) G_TYPE_CHECK_CLASS_TYPE(obj, dtgtk_icon_get_type())
+#define DTGTK_THUMBNAIL_BTN(obj)                                                                                  \
+  G_TYPE_CHECK_INSTANCE_CAST(obj, dtgtk_thumbnail_btn_get_type(), GtkDarktableThumbnailBtn)
+#define DTGTK_THUMBNAIL_BTN_CLASS(klass)                                                                          \
+  G_TYPE_CHECK_CLASS_CAST(klass, dtgtk_button_get_type(), GtkDarktableThumbnailBtnClass)
+#define DTGTK_IS_THUMBNAIL_BTN(obj) G_TYPE_CHECK_INSTANCE_TYPE(obj, dtgtk_thumbnail_btn_get_type())
+#define DTGTK_IS_THUMBNAIL_BTN_CLASS(klass) G_TYPE_CHECK_CLASS_TYPE(obj, dtgtk_thumbnail_btn_get_type())
 
-typedef struct _GtkDarktableIcon
+
+typedef struct _GtkDarktableThumbnailBtn
 {
-  GtkEventBox widget;
+  GtkDrawingArea widget;
   DTGTKCairoPaintIconFunc icon;
   gint icon_flags;
   void *icon_data;
-} GtkDarktableIcon;
+  gboolean hidden;
+} GtkDarktableThumbnailBtn;
 
-typedef struct _GtkDarktableIconClass
+typedef struct _GtkDarktableThumbnailBtnClass
 {
-  GtkEventBoxClass parent_class;
-} GtkDarktableIconClass;
+  GtkDrawingAreaClass parent_class;
+} GtkDarktableThumbnailBtnClass;
 
-GType dtgtk_icon_get_type(void);
+GType dtgtk_thumbnail_btn_get_type(void);
 
-/** instantiate a new darktable icon control passing paint function as content */
-GtkWidget *dtgtk_icon_new(DTGTKCairoPaintIconFunc paint, gint paintflags, void *paintdata);
+/** instantiate a new darktable button control passing paint function as content */
+GtkWidget *dtgtk_thumbnail_btn_new(DTGTKCairoPaintIconFunc paint, gint paintflags, void *paintdata);
 
-/** set the paint function for a icon */
-void dtgtk_icon_set_paint(GtkWidget *icon, DTGTKCairoPaintIconFunc paint, gint paintflags, void *paintdata);
+gboolean dtgtk_thumbnail_btn_is_hidden(GtkWidget *widget);
 
 G_END_DECLS
 
-#endif // DT_GUI_DTGTK_ICON_H
+#endif // DT_WIDGETS_THUMBNAIL_BTN_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

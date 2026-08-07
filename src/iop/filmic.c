@@ -50,8 +50,8 @@
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop_math.h"
-#include "gui/dtgtk/expander.h"
-#include "gui/dtgtk/paint.h"
+#include "widgets/expander.h"
+#include "widgets/paint.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

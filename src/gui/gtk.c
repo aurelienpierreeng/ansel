@@ -80,11 +80,12 @@
 #include "gui/bauhaus.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "gui/dtgtk/expander.h"
+#include "widgets/expander.h"
 
 #include "gui/gtk.h"
 #include "common/thumbnail_notify.h"
 #include "gui/common/film_gui.h"
+#include "gui/common/collection_gui.h"
 #include "common/startup_progress.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/splash.h"
@@ -1417,6 +1418,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_thumbnail_notify_set_handler(_gui_refresh_thumbnail);
   dt_startup_progress_set_handler(_gui_startup_progress);
   dt_film_gui_register_handlers();
+  dt_collection_gui_register_handlers();
 
   return 0;
 }

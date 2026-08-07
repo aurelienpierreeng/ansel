@@ -48,7 +48,7 @@
 */
 #include "common/collection.h"
 #include "common/act_on.h"
-#include "gui/dtgtk/togglebutton.h"
+#include "widgets/togglebutton.h"
 #include "common/selection.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
@@ -60,8 +60,8 @@
 #include "common/conf.h"
 #include "control/control.h"
 #include "gui/bauhaus.h"
-#include "gui/dtgtk/button.h"
-#include "gui/dtgtk/icon_cell_renderer.h"
+#include "widgets/button.h"
+#include "widgets/icon_cell_renderer.h"
 
 #include "gui/gtk.h"
 #include "gui/drag_and_drop.h"

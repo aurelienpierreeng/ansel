@@ -54,7 +54,7 @@
 #include "iop/noise_generator.h"
 #include "math/openmp_maths.h"
 #include "develop/tiling.h"
-#include "gui/dtgtk/paint.h"
+#include "widgets/paint.h"
 
 #include "gui/gtk.h"
 #include "gui/presets.h"

@@ -56,7 +56,7 @@
 #include "develop/develop.h"
 
 #include "gui/gtk.h"
-#include "gui/dtgtk/button.h"
+#include "widgets/button.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "gui/bauhaus.h"

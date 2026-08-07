@@ -53,6 +53,18 @@
 
 #define NUM_LAST_COLLECTIONS 10
 
+/* Recording the N most recently used collections is a GUI feature: the list exists to fill a
+ * menu, and nothing in the collection backend reads it back. It lived here only because this
+ * is where a collection change is noticed.
+ *
+ * It must run BEFORE DT_SIGNAL_COLLECTION_CHANGED is raised -- some listeners read the recents
+ * list -- so it cannot simply become another listener. The backend therefore calls the handler
+ * at exactly the point the old code did. */
+typedef void (*dt_collection_recents_handler_t)(void);
+
+/** Install the handler that records the current collection as recently used. NULL removes it. */
+void dt_collection_set_recents_handler(dt_collection_recents_handler_t handler);
+
 typedef enum dt_collection_query_flags_t
 {
   COLLECTION_QUERY_SIMPLE             = 0,      // a query with only select and where statement

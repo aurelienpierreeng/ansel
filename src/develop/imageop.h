@@ -71,7 +71,7 @@
 #include "control/settings.h"
 #include "pixel/format.h"
 #include "develop/pixelpipe_hb.h"
-#include "gui/dtgtk/togglebutton.h"
+#include "widgets/togglebutton.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"
 

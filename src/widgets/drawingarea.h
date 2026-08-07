@@ -20,8 +20,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_DTGTK_DRAWINGAREA_H
-#define DT_GUI_DTGTK_DRAWINGAREA_H
+#ifndef DT_WIDGETS_DRAWINGAREA_H
+#define DT_WIDGETS_DRAWINGAREA_H
 
 #include <glib-object.h>
 #include <gtk/gtk.h>
@@ -66,7 +66,7 @@ void dtgtk_drawing_area_set_aspect_ratio(GtkWidget *w, double aspect);
 
 G_END_DECLS
 
-#endif // DT_GUI_DTGTK_DRAWINGAREA_H
+#endif // DT_WIDGETS_DRAWINGAREA_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -49,7 +49,7 @@
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
 #include "gui/gdkkeys.h"
-#include "gui/dtgtk/icon_cell_renderer.h"
+#include "widgets/icon_cell_renderer.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"

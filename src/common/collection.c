@@ -2129,75 +2129,11 @@ void dt_collection_deserialize(const char *buf)
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
-/* Store the n most recent collections in config for re-use in menu */
-static void _update_recentcollections()
+static dt_collection_recents_handler_t _recents_handler = NULL;
+
+void dt_collection_set_recents_handler(dt_collection_recents_handler_t handler)
 {
-  if(IS_NULL_PTR(dt_gui_get_global())) return;
-  if(IS_NULL_PTR(dt_gui_get_ui())) return;
-
-  // Serialize current request
-  char confname[200] = { 0 };
-  char buf[4096];
-  dt_collection_serialize(buf, sizeof(buf));
-
-  int n = -1;
-  gboolean found_duplicate = FALSE;
-
-  // Check if current request already exist in history
-  int num_items = dt_conf_get_int("plugins/lighttable/recentcollect/num_items");
-  for(int k = 0; k < num_items; k++)
-  {
-    snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/line%1d", k);
-    const char *line = dt_conf_get_string_const(confname);
-    if(IS_NULL_PTR(line)) continue;
-    if(!strcmp(line, buf))
-    {
-      n = k;
-      found_duplicate = TRUE;
-      break;
-    }
-  }
-
-  // Shift all history items one step behind. When the history is already full,
-  // the last item has no destination slot and must be dropped before moving
-  // the remaining entries down.
-  const int max_items = CLAMP(dt_conf_get_int("plugins/lighttable/recentcollect/max_items"), 1,
-                              NUM_LAST_COLLECTIONS);
-  int shifted_index = MIN(num_items - (found_duplicate ? 1 : 0), max_items);
-  for(int k = num_items - 1; k > -1; k--)
-  {
-    if(k == n) continue; // this is the duplicate of current collection we found, skip it
-
-    // Get old records
-    snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/line%1d", k);
-    gchar *line1 = dt_conf_get_string(confname);
-    snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/pos%1d", k);
-    uint32_t pos1 = dt_conf_get_int(confname);
-
-    // Write new records shifted by 1 slot
-    if(IS_NULL_PTR(line1) || line1[0] == '\0')
-    {
-      dt_free(line1);
-      continue;
-    }
-
-    if(shifted_index >= 0 && shifted_index < max_items)
-    {
-      snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/line%1d", shifted_index);
-      dt_conf_set_string(confname, line1);
-      snprintf(confname, sizeof(confname), "plugins/lighttable/recentcollect/pos%1d", shifted_index);
-      dt_conf_set_int(confname, pos1);
-    }
-    shifted_index -= 1;
-    dt_free(line1);
-  }
-
-  // Prepend current collection on top of history
-  dt_conf_set_string("plugins/lighttable/recentcollect/line0", buf);
-
-  // Increment items if we didn't find a duplicate
-  num_items += found_duplicate ? 0 : 1;
-  dt_conf_set_int("plugins/lighttable/recentcollect/num_items", CLAMP(num_items, 1, max_items));
+  _recents_handler = handler;
 }
 
 
@@ -2317,7 +2253,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
 
   /* Update recent collections history before we raise the signal,
   *  since some signal listeners will need it */
-  _update_recentcollections();
+  if(_recents_handler) _recents_handler();
 
   /* raise signal of collection change, only if this is an original */
   dt_collection_memory_update();

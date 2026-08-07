@@ -30,7 +30,7 @@
 #include "math/matrices.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "gui/dtgtk/drawingarea.h"
+#include "widgets/drawingarea.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 

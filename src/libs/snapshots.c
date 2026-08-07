@@ -49,7 +49,7 @@
 #include "develop/develop.h"
 #include "develop/dev_history.h"
 #include "develop/dev_snapshot.h"
-#include "gui/dtgtk/paint.h"
+#include "widgets/paint.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"

@@ -40,7 +40,7 @@
 #include "control/control.h"
 #include "control/progress.h"
 #include "develop/develop.h"
-#include "gui/dtgtk/button.h"
+#include "widgets/button.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"

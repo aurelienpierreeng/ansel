@@ -36,7 +36,7 @@
 */
 
 #include "common/collection.h"
-#include "gui/dtgtk/button.h"
+#include "widgets/button.h"
 #include "control/jobs/control_jobs.h"
 #include "common/database.h"
 #include "common/debug.h"
