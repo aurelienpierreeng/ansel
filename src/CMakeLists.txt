@@ -928,18 +928,18 @@ add_subdirectory(imageio)
 
 if(HAVE_OPENCL)
   # have a small test program, to be run as root on some systems to enable the driver to run cl stuff
-  add_subdirectory(cltest)
+  add_subdirectory(apps/cltest)
 endif(HAVE_OPENCL)
 
 # have a command line interface
-add_subdirectory(cli)
+add_subdirectory(apps/cli)
 
 # have a command line utility to generate all the thumbnails
-add_subdirectory(generate-cache)
+add_subdirectory(apps/generate-cache)
 
 # have a small test program that verifies your color management setup
 if(BUILD_CMSTEST)
-  add_subdirectory(cmstest)
+  add_subdirectory(apps/cmstest)
 endif(BUILD_CMSTEST)
 
 # have some test programs for unit testing, ...
@@ -955,7 +955,7 @@ target_link_libraries(help_menu PRIVATE ansel_deps)
 #
 # build ansel executable
 #
-add_executable(ansel ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} main.c ${RESOURCE_OBJECT})
+add_executable(ansel ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} apps/ansel/main.c ${RESOURCE_OBJECT})
 set_target_properties(ansel PROPERTIES LINKER_LANGUAGE C)
 target_link_libraries(ansel PRIVATE lib_ansel)
 
