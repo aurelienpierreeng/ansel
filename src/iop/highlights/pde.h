@@ -23,8 +23,8 @@
 // Public API of this highlights harmonic-transposition module (a compiled TU). Include
 // this header to call into the module; internals are static in the .c. See common.h.
 
-#include "common/solvers/sparse_cholesky.h"
-#include "common/solvers/sparse_cholesky_cl.h"
+#include "math/sparse_cholesky.h"
+#include "math/sparse_cholesky_cl.h"
 #include "iop/highlights/common.h"
 #include <stdint.h>
 

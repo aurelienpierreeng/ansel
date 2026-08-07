@@ -37,7 +37,7 @@
 #include "common/imagebuf.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "control/control.h" // dt_control_log (OOM error toast) — self-contained include order
+#include "common/logging.h"
 
 
 /* DOCUMENTATION
@@ -292,8 +292,7 @@ static inline int solve_hermitian(const float *const restrict A,
 
   if(IS_NULL_PTR(x) || IS_NULL_PTR(L))
   {
-    dt_control_log(_("Choleski decomposition failed to allocate memory, check your RAM settings"));
-    fprintf(stdout, "Choleski decomposition failed to allocate memory, check your RAM settings\n");
+    dt_print(DT_DEBUG_ALWAYS, "[choleski] out of memory allocating the %zu x %zu decomposition\n", n, n);
     err = 1;
     goto error;
   }
@@ -390,7 +389,7 @@ static inline int pseudo_solve(float *const restrict A,
 
   if(IS_NULL_PTR(A_square) || IS_NULL_PTR(y_square))
   {
-    dt_control_log(_("Choleski decomposition failed to allocate memory, check your RAM settings"));
+    dt_print(DT_DEBUG_ALWAYS, "[choleski] out of memory allocating the %zu x %zu pseudo-solve\n", n, n);
     err = 1;
     goto error;
   }

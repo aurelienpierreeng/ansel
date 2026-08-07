@@ -24,7 +24,8 @@
 // symmetric-positive-definite matrix in upper-triangular compressed-sparse-column form and
 // solves A x = b; the caller assembles the matrix (see e.g. the region PDE assembly in the
 // highlights module). Large scratch buffers use the pipeline-cache arena, so the caller
-// passes the dt_dev_pixelpipe_t.
+// passes the arena id (dt_dev_pixelpipe_t.type) -- an int, NOT the pipeline itself:
+// this file is maths and must not depend on develop/.
 
 #include <glib.h>
 #include <limits.h>
@@ -34,7 +35,6 @@
 
 #include "common/macros.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "develop/pixelpipe_hb.h" // dt_dev_pixelpipe_t (arena alloc) — self-contained include order
 
 // Factored SPD matrix (lower-triangular Cholesky factor L, column-compressed).
 typedef struct
@@ -269,18 +269,18 @@ static inline int _sp_ereach(const int dimension, const int *const restrict col_
 // Returns NULL if the matrix turns out not positive definite or on out-of-memory.
 static inline _sp_chol_t *_sp_chol_factor(const int dimension, const int *const restrict matrix_col_ptr,
                                    const int *const restrict matrix_row_index,
-                                   const double *const restrict matrix_values, const dt_dev_pixelpipe_t *pipe)
+                                   const double *const restrict matrix_values, const int cache_id)
 {
   // every O(dimension) or larger buffer lives in the pipeline-cache arena, so the LRU can evict
   // cachelines to make room instead of the factorization competing blindly with them
   _sp_chol_t *factor = (_sp_chol_t *)calloc(1, sizeof(_sp_chol_t));
-  int *parent = dt_pixelpipe_cache_alloc_align_int(dimension, pipe);
-  int *ancestor = dt_pixelpipe_cache_alloc_align_int(dimension, pipe);
-  int *mark = dt_pixelpipe_cache_alloc_align_int(dimension, pipe);
-  int *elim_stack = dt_pixelpipe_cache_alloc_align_int(dimension, pipe);
-  int *col_count = dt_pixelpipe_cache_alloc_align_int(dimension, pipe);
-  int *col_fill = dt_pixelpipe_cache_alloc_align_int(dimension, pipe);
-  double *work = dt_pixelpipe_cache_alloc_align_double(dimension, pipe);
+  int *parent = dt_pixelpipe_cache_alloc_align_int_cache(dimension, cache_id);
+  int *ancestor = dt_pixelpipe_cache_alloc_align_int_cache(dimension, cache_id);
+  int *mark = dt_pixelpipe_cache_alloc_align_int_cache(dimension, cache_id);
+  int *elim_stack = dt_pixelpipe_cache_alloc_align_int_cache(dimension, cache_id);
+  int *col_count = dt_pixelpipe_cache_alloc_align_int_cache(dimension, cache_id);
+  int *col_fill = dt_pixelpipe_cache_alloc_align_int_cache(dimension, cache_id);
+  double *work = dt_pixelpipe_cache_alloc_align_double_cache(dimension, cache_id);
   if(!factor || IS_NULL_PTR(parent) || IS_NULL_PTR(ancestor) || IS_NULL_PTR(mark) || IS_NULL_PTR(elim_stack)
      || IS_NULL_PTR(col_count) || IS_NULL_PTR(col_fill) || IS_NULL_PTR(work))
     goto fail;
@@ -300,13 +300,13 @@ static inline _sp_chol_t *_sp_chol_factor(const int dimension, const int *const 
   }
 
   factor->dimension = dimension;
-  factor->col_ptr = dt_pixelpipe_cache_alloc_align_int((size_t)dimension + 1, pipe);
+  factor->col_ptr = dt_pixelpipe_cache_alloc_align_int_cache((size_t)dimension + 1, cache_id);
   if(IS_NULL_PTR(factor->col_ptr)) goto fail;
   factor->col_ptr[0] = 0;
   for(int i = 0; i < dimension; i++) factor->col_ptr[i + 1] = factor->col_ptr[i] + col_count[i];
   const size_t nonzeros = factor->col_ptr[dimension];
-  factor->row_index = dt_pixelpipe_cache_alloc_align_int(nonzeros, pipe);
-  factor->values = dt_pixelpipe_cache_alloc_align_double(nonzeros, pipe);
+  factor->row_index = dt_pixelpipe_cache_alloc_align_int_cache(nonzeros, cache_id);
+  factor->values = dt_pixelpipe_cache_alloc_align_double_cache(nonzeros, cache_id);
   if(IS_NULL_PTR(factor->row_index) || IS_NULL_PTR(factor->values)) goto fail;
 
   // numeric

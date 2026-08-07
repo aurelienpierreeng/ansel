@@ -137,7 +137,7 @@
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
-#include "common/solvers/choleski.h"
+#include "math/choleski.h"
 #include "libs/colorpicker.h"
 
 #ifdef _OPENMP

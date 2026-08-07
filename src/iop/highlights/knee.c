@@ -23,7 +23,7 @@
 #include "math/simd.h"
 #include "common/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/solvers/sparse_cholesky_cl.h"
+#include "math/sparse_cholesky_cl.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/knee.h"

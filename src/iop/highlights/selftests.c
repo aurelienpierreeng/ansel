@@ -99,7 +99,7 @@ void _sp_chol_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe
 
   // CPU reference
   memcpy(solution_cpu, rhs, sizeof(double) * dimension);
-  _sp_chol_t *factor_cpu = _sp_chol_factor(dimension, matrix_col_ptr, matrix_row_index, matrix_values, pipe);
+  _sp_chol_t *factor_cpu = _sp_chol_factor(dimension, matrix_col_ptr, matrix_row_index, matrix_values, pipe->type);
   if(factor_cpu) _sp_chol_solve(factor_cpu, solution_cpu);
 
   // GPU
