@@ -50,6 +50,7 @@ FILE(GLOB SOURCE_FILES
   "gui/bauhaus.c"
   "common/act_on.c"
   "system/atomic.c"
+  "system/display_profile.c"
   "pixel/bilateral.c"
   "pixel/bilateralcl.c"
   "pixel/box_filters.c"

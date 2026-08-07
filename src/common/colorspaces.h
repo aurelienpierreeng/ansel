@@ -46,6 +46,11 @@
 #include <glib.h>
 #include <lcms2.h>
 #include <pthread.h>
+
+/* Opaque, exactly as GTK spells it: dt_colorspaces_set_display_profile() only passes the
+ * window through to system/display_profile.h. Declaring it here keeps <gtk/gtk.h> out of a
+ * header 200-odd files include, most of which have nothing to do with the GUI. */
+typedef struct _GtkWidget GtkWidget;
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -293,7 +298,10 @@ void rgb2hsl(const dt_aligned_pixel_t rgb, float *h, float *s, float *l);
 void hsl2rgb(dt_aligned_pixel_t rgb, float h, float s, float l);
 
 /** trigger updating the display profile from the system settings (x atom, colord, ...) */
-void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_t profile_type);
+/** Refresh the cached display profile from the monitor showing `widget`.
+ *  The caller owns the window: this module never asks the GUI which one to look at. */
+void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_t profile_type,
+                                       GtkWidget *widget);
 
 /** get the profile described by type & filename.
  *  this doesn't support image specifics like embedded profiles or camera matrices */

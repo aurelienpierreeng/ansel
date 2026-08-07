@@ -80,6 +80,7 @@
 #include "imageio/imageio_png.h"
 #include "imageio/imageio_tiff.h"
 #include "system/target_clones.h"
+#include "system/display_profile.h"
 #ifdef HAVE_LIBAVIF
 #include "imageio/imageio_avif.h"
 #endif
@@ -2092,8 +2093,11 @@ static int _gtk_get_monitor_num(GdkMonitor *monitor)
 // For X display, uses the ICC profile specifications version 0.2 from
 // http://burtonini.com/blog/computers/xicc
 // Based on code from Gimp's modules/cdisplay_lcms.c
-void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_t profile_type)
+void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_t profile_type,
+                                       GtkWidget *widget)
 {
+  if(IS_NULL_PTR(widget)) return;
+
   if(!dt_control_running()) return;
 
   dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
@@ -2128,101 +2132,21 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
 
   /* let's have a look at the xatom, just in case ... */
   if(use_xatom)
-  {
-    GtkWidget *widget = dt_gui_center_widget();
-    GdkWindow *window = gtk_widget_get_window(widget);
-    GdkScreen *screen = gtk_widget_get_screen(widget);
-    if(IS_NULL_PTR(screen)) screen = gdk_screen_get_default();
-
-    GdkDisplay *display = gtk_widget_get_display(widget);
-    int monitor = _gtk_get_monitor_num(gdk_display_get_monitor_at_window(display, window));
-
-    char *atom_name;
-    if(monitor > 0)
-      atom_name = g_strdup_printf("_ICC_PROFILE_%d", monitor);
-    else
-      atom_name = g_strdup("_ICC_PROFILE");
-
-    profile_source = g_strdup_printf("xatom %s", atom_name);
-
-    GdkAtom type = GDK_NONE;
-    gint format = 0;
-    gdk_property_get(gdk_screen_get_root_window(screen), gdk_atom_intern(atom_name, FALSE), GDK_NONE, 0,
-                     64 * 1024 * 1024, FALSE, &type, &format, &buffer_size, &buffer);
-    dt_free(atom_name);
-  }
+    dt_display_profile_read(widget, &buffer, &buffer_size, &profile_source);
 
 #ifdef USE_COLORDGTK
-  /* also try to get the profile from colord. this will set the value asynchronously! */
+  /* also try to get the profile from colord. this will set the value asynchronously!
+   * Stays here rather than in system/: the callback writes this module's own state. */
   if(use_colord)
   {
     CdWindow *window = cd_window_new();
-    GtkWidget *center_widget = dt_gui_center_widget();
-    cd_window_get_profile(window, center_widget, NULL, dt_colorspaces_get_display_profile_colord_callback,
+    cd_window_get_profile(window, widget, NULL, dt_colorspaces_get_display_profile_colord_callback,
                           GINT_TO_POINTER(profile_type));
   }
 #endif
 
-#elif defined GDK_WINDOWING_QUARTZ
-#if 0
-  GtkWidget *widget = (profile_type == DT_COLORSPACE_DISPLAY2) ? dt_dev_get_global()->second_window.second_wnd : dt_gui_center_widget();
-  GdkScreen *screen = gtk_widget_get_screen(widget);
-  if(IS_NULL_PTR(screen)) screen = gdk_screen_get_default();
-  int monitor = gdk_screen_get_monitor_at_window(screen, gtk_widget_get_window(widget));
-
-  CGDirectDisplayID ids[monitor + 1];
-  uint32_t total_ids;
-  CMProfileRef prof = NULL;
-  if(CGGetOnlineDisplayList(monitor + 1, &ids[0], &total_ids) == kCGErrorSuccess && total_ids == monitor + 1)
-    CMGetProfileByAVID(ids[monitor], &prof);
-  if(!IS_NULL_PTR(prof))
-  {
-    CFDataRef data;
-    data = CMProfileCopyICCData(NULL, prof);
-    CMCloseProfile(prof);
-
-    UInt8 *tmp_buffer = (UInt8 *)g_malloc(CFDataGetLength(data));
-    CFDataGetBytes(data, CFRangeMake(0, CFDataGetLength(data)), tmp_buffer);
-
-    buffer = (guint8 *)tmp_buffer;
-    buffer_size = CFDataGetLength(data);
-
-    CFRelease(data);
-  }
-  profile_source = g_strdup("osx color profile api");
-#endif
-#elif defined G_OS_WIN32
-  //HDC hdc = GetDC(NULL);
-  GtkWidget *widget = dt_gui_center_widget();
-  GdkWindow *window = gtk_widget_get_window(widget);
-  HWND hwnd = (HWND)gdk_win32_window_get_handle(window);  // get window handle
-  HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST); // get monitor handle
-  if(IS_NULL_PTR(hMonitor)){  return;} //TODO log error
-  MONITORINFOEX monitorInfo;
-  monitorInfo.cbSize = sizeof(MONITORINFOEX);
-  if(!GetMonitorInfoW(hMonitor,(LPMONITORINFO) &monitorInfo)) { return;} //get monitor info , TODO log error
-  HDC hdc = CreateIC(L"MONITOR",monitorInfo.szDevice,NULL,NULL); // get device-info context of the monitor
-  if(!IS_NULL_PTR(hdc))
-  {
-    DWORD len = 0;
-    GetICMProfile(hdc, &len, NULL);
-    wchar_t *wpath = g_new(wchar_t, len);
-
-    if(GetICMProfileW(hdc, &len, wpath))
-    {
-      gchar *path = g_utf16_to_utf8(wpath, -1, NULL, NULL, NULL);
-      if(path)
-      {
-        gsize size;
-        g_file_get_contents(path, (gchar **)&buffer, &size, NULL);
-        buffer_size = size;
-        dt_free(path);
-      }
-    }
-    dt_free(wpath);
-    DeleteDC(hdc);
-  }
-  profile_source = g_strdup("windows color profile api");
+#else // every non-X11 platform: no xatom/colord choice to make
+  dt_display_profile_read(widget, &buffer, &buffer_size, &profile_source);
 #endif
 
   int profile_changed = buffer_size > 0 && (color_profiles->xprofile_size != buffer_size
