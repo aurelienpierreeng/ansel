@@ -23,7 +23,14 @@ macro(add_iop _lib _src)
   set(_input ${CMAKE_CURRENT_SOURCE_DIR}/${_src})
   set(_output ${CMAKE_CURRENT_BINARY_DIR}/introspection_${_src}) # keep ${_src} in the end to keep the file extension (c vs. cc)
   add_custom_command(
-    DEPENDS ${_input} ${CMAKE_SOURCE_DIR}/src/common/introspection.h ${CMAKE_SOURCE_DIR}/tools/introspection/ast.pm
+    # Depend on the WHOLE generator, not just ast.pm: editing scanner.pm or code_gen.pm used
+    # to leave every introspection_*.c stale, so a generator fix appeared to do nothing.
+    DEPENDS ${_input} ${CMAKE_SOURCE_DIR}/src/common/introspection.h
+            ${CMAKE_SOURCE_DIR}/tools/introspection/parser.pl
+            ${CMAKE_SOURCE_DIR}/tools/introspection/ast.pm
+            ${CMAKE_SOURCE_DIR}/tools/introspection/parser.pm
+            ${CMAKE_SOURCE_DIR}/tools/introspection/scanner.pm
+            ${CMAKE_SOURCE_DIR}/tools/introspection/code_gen.pm
     OUTPUT ${_output}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools/introspection/
     COMMAND ${perl_BIN} ${CMAKE_SOURCE_DIR}/tools/introspection/parser.pl ${CMAKE_CURRENT_SOURCE_DIR}/../ ${_input} ${_output}
