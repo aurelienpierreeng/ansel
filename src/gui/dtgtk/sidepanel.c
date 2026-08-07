@@ -21,7 +21,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "dtgtk/sidepanel.h"
+#include "gui/dtgtk/sidepanel.h"
 #include "common/conf.h"
 
 #include <gtk/gtk.h>

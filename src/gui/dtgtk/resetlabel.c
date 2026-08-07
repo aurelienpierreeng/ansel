@@ -26,7 +26,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/resetlabel.h"
 #include "develop/develop.h"
 
 static void _reset_label_class_init(GtkDarktableResetLabelClass *klass);

@@ -42,7 +42,7 @@
 
 #include "common/collection.h"
 #include "common/conf.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "gui/actions/menu.h"
 
 #include "gui/gtk.h"

@@ -41,7 +41,7 @@
 #include "common/opencl.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe.h"
-#include "dtgtk/gradientslider.h"
+#include "gui/dtgtk/gradientslider.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 

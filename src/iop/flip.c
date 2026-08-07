@@ -62,7 +62,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/resetlabel.h"
+#include "gui/dtgtk/resetlabel.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"

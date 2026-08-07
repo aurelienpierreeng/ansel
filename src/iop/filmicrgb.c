@@ -70,7 +70,7 @@
 #include "iop/noise_generator.h"
 #include "math/openmp_maths.h"
 #include "develop/tiling.h"
-#include "dtgtk/paint.h"
+#include "gui/dtgtk/paint.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"

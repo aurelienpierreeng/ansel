@@ -34,7 +34,7 @@
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gdkkeys.h"
 #include "gui/gtk.h"

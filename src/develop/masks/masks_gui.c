@@ -23,7 +23,7 @@
 #include "common/conf.h"
 #include "control/signal.h"
 #include "develop/imageop_gui.h"
-#include "dtgtk/paint.h"
+#include "gui/dtgtk/paint.h"
 #include "gui/actions/menu.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"

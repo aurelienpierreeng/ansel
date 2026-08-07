@@ -104,8 +104,8 @@
 #include "develop/imageop.h"
 #include "develop/supervisor.h"
 #include "develop/masks.h"
-#include "dtgtk/button.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/button.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"

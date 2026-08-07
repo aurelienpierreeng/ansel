@@ -78,7 +78,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe_cache.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"

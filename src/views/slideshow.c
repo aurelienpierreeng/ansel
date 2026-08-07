@@ -43,7 +43,7 @@
 #include "common/dtpthread.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/gtk.h"
 #include "views/view.h"

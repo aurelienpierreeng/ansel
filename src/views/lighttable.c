@@ -80,7 +80,7 @@
 #include "common/undo.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbtable.h"
 
 #include "gui/draw.h"
 #include "gui/gtk.h"

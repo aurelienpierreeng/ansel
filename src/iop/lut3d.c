@@ -57,7 +57,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/develop.h"
-#include "dtgtk/button.h"
+#include "gui/dtgtk/button.h"
 #include "gui/gtk.h"
 
 #include "iop/iop_api.h"
