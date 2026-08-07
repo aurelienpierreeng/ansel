@@ -247,7 +247,7 @@ void cleanup(dt_view_t *self)
 
   _release_expose_source_caches();
   dt_gui_throttle_cancel(dev);
-  dt_dev_history_cancel_pending_resyncs(dev);
+  dt_dev_history_drop_pending_commits(dev);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
   if(_autoset_manager)
   {
@@ -1880,9 +1880,9 @@ void leave(dt_view_t *self)
   _darkroom_center_pan_drag = FALSE;
   _reset_edge_pan();
   dt_gui_throttle_cancel(dev);
-  // Before anything below touches dev->pipe / dev->iop / dev->history: a queued resync
-  // draining after that point is the teardown race CLAUDE.md documents.
-  dt_dev_history_cancel_pending_resyncs(dev);
+  // Last moment at which committing is still safe -- everything below tears down
+  // dev->pipe / dev->iop / dev->history. Run the pending edit rather than lose it.
+  dt_dev_history_flush_pending_commits(dev);
 
   _release_expose_source_caches();
   if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
