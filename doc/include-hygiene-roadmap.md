@@ -451,7 +451,7 @@ leaves `common/` -- roughly 22000 lines across the seven groups -- not by the co
 
 ---
 
-## 11. Next: move the redraw throttle to the history commit
+## 11. Done: the redraw throttle moved to the history commit
 
 `widgets/gui_throttle.c` currently exists to serve one caller. `bauhaus.c` defers its
 `value-changed` emission so that scrolling a slider or combobox does not trigger a pipeline
@@ -488,9 +488,56 @@ crash somewhere unrelated, as Sentry issue 133807805 did. `leave()` needs an exp
 flush-or-drop of the pending queue, written as part of this change rather than discovered
 afterwards.
 
-### Verification this needs
+### What the implementation measured, and how it changed the plan
 
-Not a compile: realtime slider drags, combobox scrolling, mask edits, and darkroom exit under
-load. Then `bauhaus.c` loses all 9 `dt_gui_throttle_*` call sites and the module can leave
-`widgets/`.
+The plan above says "enqueue the resync request". Reading the code it defers turned out to
+matter, because it settles what the throttle is actually worth:
+
+* `dt_dev_pixelpipe_{update,resync}_history_all()` are **not** the expensive part. Each is an
+  OR onto `pipe->changed` plus `dt_atomic_set_int(&pipe->shutdown, TRUE)`. The O(nodes x
+  history) walk is `dt_dev_pixelpipe_change()`, which runs on the darkroom worker and reads
+  the *accumulated* flag -- so N queued requests still cost one walk.
+* `dt_dev_write_history(dev, TRUE)` already coalesces through the `history_write_pending`
+  atomic, so N commits still cost one DB+XMP rewrite.
+* What the throttle therefore buys is **not** avoiding work: it is the `shutdown` atomic.
+  Committing per scroll step aborted the worker's in-flight frame every time, so the view
+  updated on none of them. That is why `dt_dev_add_history_item_real()`'s own two
+  `shutdown` stores at the top of the function had to go with the deferral -- leaving them
+  would have kept the abort storm and made the queue pointless.
+
+Two consequences the plan did not anticipate:
+
+* Only the resync needs deferring. The history item is still committed **synchronously**, so
+  none of the ~270 `dt_dev_add_history_item()` callers that read `dev->history` right
+  afterwards had to be touched -- a far smaller blast radius than deferring the whole call.
+* It is a **batching window, not a debounce**. `gui_throttle` arms its timer on the first
+  request and does not re-arm on the ones after it. A debounce would have frozen the preview
+  for the whole of a sustained drag; this keeps updating once per window. Preserved
+  deliberately.
+
+### Scope this actually reached
+
+Bigger than "bauhaus": the same throttle-my-own-commit dance existed in **nine IOP modules**
+with curve or graph editors, wrapping a one-line helper (`dt_iop_throttled_history_update`,
+now deleted) plus matching cancels in `gui_update()`/`gui_cleanup()`. All gone. Separating
+history throttling from GUI throttling in `colorequal` exposed a real bug: `gui_cleanup()`
+cancelled the history task and not the `&g->viewer_lut` one, so a queued LUT rebuild could
+fire after the `gui_data` it reads was freed.
+
+`gui_throttle.{c,h}` then had no consumer under `widgets/` at all, and half of it is a
+rolling average of pixelpipe render times -- application state that directory forbids. It
+moved to `develop/`.
+
+### Verification this still needs
+
+Not a compile, and not the metrics: realtime slider drags, combobox scrolling, mask edits,
+and darkroom exit under load.
+
+### Left deliberately alone
+
+`views/darkroom.c`'s mask-edit throttle (`_delayed_history_commit` on `dev`). It does not
+merely defer a commit: it defers `dt_dev_masks_update_hash()`, a scan over every form, and
+only commits if that scan reports a change. Removing it would run that scan on every
+mouse-motion event of a mask drag. Different mechanism, different cost, no request behind
+touching it.
 
