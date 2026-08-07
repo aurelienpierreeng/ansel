@@ -58,7 +58,7 @@
 #include "config.h"
 #include "common/conf.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/debug.h"
 #include "common/presets.h"
 #include "control/control.h"

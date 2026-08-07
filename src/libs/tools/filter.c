@@ -59,7 +59,7 @@
 #include "gui/dtgtk/button.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 
 DT_MODULE(1)
 

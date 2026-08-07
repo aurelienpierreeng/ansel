@@ -39,7 +39,7 @@
 #include "config.h"
 #endif
 // our includes go first:
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/macros.h"
 #include "common/target_clones.h"
 #include "common/mem_alloc.h"

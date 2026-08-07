@@ -55,7 +55,7 @@
 #include <gdk/gdkkeysyms.h>
 #include <strings.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/conf.h"
 #include "gui/gdkkeys.h"
 #include "common/capabilities.h"

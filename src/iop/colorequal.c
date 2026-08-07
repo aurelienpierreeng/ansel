@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/colorequal_shared.h"
 #include "common/macros.h"
 #include "common/openmp.h"
@@ -37,7 +37,7 @@
 #include "common/imagebuf.h"
 #include "pixel/interpolation.h"
 #include "common/lut3d.h"
-#include "common/lut_viewer.h"
+#include "gui/lut_viewer.h"
 #include "common/opencl.h"
 #include "common/conf.h"
 #include "control/control.h"

@@ -122,7 +122,7 @@
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "common/system_signal_handling.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "gui/presets.h"
 #include "gui/splash.h"
 

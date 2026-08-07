@@ -34,7 +34,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/gaussian.h"
 #include "common/opencl.h"
 #include "common/imagebuf.h"

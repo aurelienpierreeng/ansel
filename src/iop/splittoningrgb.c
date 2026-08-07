@@ -21,7 +21,7 @@
 #include "common/conf.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/chromatic_adaptation.h"
 #include "common/macros.h"
 #include "common/openmp.h"

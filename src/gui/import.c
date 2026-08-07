@@ -20,13 +20,13 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/cache.h"
 #include "common/film.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/exif.h"
-#include "common/import.h"
+#include "gui/import.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/image_extensions.h"

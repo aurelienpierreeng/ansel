@@ -61,7 +61,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "math/math.h"
 #include "common/opencl.h"
 #include "pixel/tea.h"

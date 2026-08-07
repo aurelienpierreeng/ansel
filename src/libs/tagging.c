@@ -59,7 +59,7 @@
 #include "common/tags.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "gui/dtgtk/button.h"
 #include "gui/dtgtk/icon_cell_renderer.h"
 

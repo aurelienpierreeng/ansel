@@ -68,7 +68,7 @@
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "develop/imageop.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/collection.h"
 #include "common/debug.h"
 #include "common/exif.h"

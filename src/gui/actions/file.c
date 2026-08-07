@@ -34,7 +34,7 @@
 #include "common/image.h"
 #include "common/selection.h"
 #include "libs/collect.h"
-#include "common/import.h"
+#include "gui/import.h"
 #include "libs/lib.h"
 #include "control/control.h"
 

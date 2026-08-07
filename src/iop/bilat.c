@@ -44,7 +44,7 @@
 #include "config.h"
 #endif
 // our includes go first:
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/bilateral.h"
 #include "pixel/bilateralcl.h"
 #include "pixel/locallaplacian.h"

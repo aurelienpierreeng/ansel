@@ -31,7 +31,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/mem_alloc.h"

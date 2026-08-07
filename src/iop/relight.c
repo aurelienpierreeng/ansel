@@ -53,7 +53,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "math/math.h"
 #include "develop/develop.h"
 #include "common/openmp.h"

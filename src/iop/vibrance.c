@@ -44,7 +44,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/module_versioning.h"
 #include "common/target_clones.h"
 #include "develop/develop.h"

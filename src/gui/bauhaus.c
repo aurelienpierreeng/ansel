@@ -58,7 +58,7 @@
 */
 
 #include "gui/gdkkeys.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/calculator.h"
 #include "math/math.h"
 #include "common/logging.h"

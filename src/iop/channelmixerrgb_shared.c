@@ -21,7 +21,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #endif
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/chromatic_adaptation.h"
 #include "pixel/illuminants.h"
 #include "math/matrices.h"

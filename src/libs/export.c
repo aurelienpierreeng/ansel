@@ -57,7 +57,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/act_on.h"
 #include "control/jobs/control_jobs.h"
 #include "common/collection.h"

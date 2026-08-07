@@ -125,7 +125,7 @@
 
 #include "libs/collect.h"
 #include "control/settings.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/collection.h"
 #include "common/film.h"
 #include "common/image.h"

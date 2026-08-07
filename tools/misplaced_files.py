@@ -27,7 +27,7 @@ import sys
 
 SRC = 'src'
 LAYER = {'external': 0, 'win': 0, 'common': 1, 'math': 1, 'pixel': 2, 'control': 3,
-         'gui': 4, 'bauhaus': 4,   # dtgtk/ is now gui/dtgtk/, so it resolves as 'gui' 'develop': 5,
+         'gui': 4,   # dtgtk/ and bauhaus both live under gui/ now and resolve as 'gui' 'develop': 5,
          'iop': 6, 'imageio': 6, 'libs': 7, 'views': 7, 'chart': 7,
          'cli': 8, 'generate-cache': 8, 'cltest': 8, 'app': 9}
 

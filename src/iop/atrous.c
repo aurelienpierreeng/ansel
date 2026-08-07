@@ -65,7 +65,7 @@
 #include "common/module_versioning.h"
 #include "common/database.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "pixel/eaw.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"

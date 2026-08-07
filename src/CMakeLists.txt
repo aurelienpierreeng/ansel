@@ -47,7 +47,7 @@ add_dependencies(generate_authors_h generate_authors_file)
 # Add files for libansel
 #
 FILE(GLOB SOURCE_FILES
-  "bauhaus/bauhaus.c"
+  "gui/bauhaus.c"
   "common/act_on.c"
   "common/atomic.c"
   "pixel/bilateral.c"
@@ -83,7 +83,7 @@ FILE(GLOB SOURCE_FILES
   "common/history.c"
   "common/history_actions.c"
   "common/history_merge.c"
-  "common/history_merge_gui.c"
+  "gui/history_merge_gui.c"
   "common/history_snapshot.c"
   "common/topological_sort.c"
   "common/gpx.c"
@@ -101,13 +101,13 @@ FILE(GLOB SOURCE_FILES
   "imageio/imageio_tiff.c"
   "imageio/imageio_im.c"
   "imageio/imageio_gm.c"
-  "common/import.c"
+  "gui/import.c"
   "pixel/interpolation.c"
   "pixel/locallaplacian.c"
   "pixel/locallaplaciancl.c"
   "common/l10n.c"
   "common/lut3d.c"
-  "common/lut_viewer.c"
+  "gui/lut_viewer.c"
   "common/metadata.c"
   "common/metadata_export.c"
   "common/mipmap_cache.c"

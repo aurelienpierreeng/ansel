@@ -77,7 +77,7 @@
 #include "common/file_location.h"
 #include "common/utility.h"
 #include "gui/guides.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "gui/dtgtk/expander.h"

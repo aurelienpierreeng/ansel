@@ -29,7 +29,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
 #include "imageio/imageio_core.h"

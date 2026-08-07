@@ -35,7 +35,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "togglebutton.h"
-#include "bauhaus/bauhaus.h"
+#include "gui/bauhaus.h"
 #include "gui/gtk.h"
 #include <string.h>
 
