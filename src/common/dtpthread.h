@@ -557,6 +557,7 @@ static inline int dt_pthread_rwlock_wrlock(dt_pthread_rwlock_t *rwlock)
     if(!res)
     {
       __sync_lock_test_and_set(&(rwlock->writer), pthread_self());
+      rwlock->writer_depth = 1;
       rwlock->last_holder_tid = (long)pthread_self();
       rwlock->last_holder_was_writer = TRUE;
     }
