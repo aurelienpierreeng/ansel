@@ -280,66 +280,17 @@ int dt_film_import(const char *dirname)
   return filmid;
 }
 
-static gboolean ask_and_delete(gpointer user_data)
+static dt_film_confirm_rmdir_handler_t _confirm_rmdir_handler = NULL;
+
+void dt_film_set_confirm_rmdir_handler(dt_film_confirm_rmdir_handler_t handler)
 {
-  GList *empty_dirs = (GList *)user_data;
-  const int n_empty_dirs = g_list_length(empty_dirs);
+  _confirm_rmdir_handler = handler;
+}
 
-  GtkWidget *dialog;
-  GtkWidget *win = dt_gui_main_window();
-
-  dialog = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-                                  GTK_BUTTONS_YES_NO,
-                                  ngettext("do you want to remove this empty directory?",
-                                           "do you want to remove these empty directories?", n_empty_dirs));
-#ifdef GDK_WINDOWING_QUARTZ
-  dt_osx_disallow_fullscreen(dialog);
-#endif
-
-  gtk_window_set_title(GTK_WINDOW(dialog),
-                       ngettext("remove empty directory?", "remove empty directories?", n_empty_dirs));
-
-  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-
-  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-  gtk_widget_set_vexpand(scroll, TRUE);
-  dt_gui_add_class(scroll, "dt_recessed_scroll");
-
-  GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
-
-  for(GList *list_iter = empty_dirs; list_iter; list_iter = g_list_next(list_iter))
-  {
-    GtkTreeIter iter;
-    gtk_list_store_append(store, &iter);
-    gtk_list_store_set(store, &iter, 0, list_iter->data, -1);
-  }
-
-  GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
-  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(tree), FALSE);
-  gtk_widget_set_name(GTK_WIDGET(tree), "delete-dialog");
-  GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(_("name"), gtk_cell_renderer_text_new(),
-                                                                       "text", 0, NULL);
-  gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
-
-  gtk_container_add(GTK_CONTAINER(scroll), tree);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-  gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(25));
-
-  gtk_container_add(GTK_CONTAINER(content_area), scroll);
-
-  gtk_widget_show_all(dialog); // needed for the content area!
-
-  const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_widget_destroy(dialog);
-  if(res == GTK_RESPONSE_YES)
-    for(GList *iter = empty_dirs; iter; iter = g_list_next(iter))
-      rmdir((char *)iter->data);
-
-  g_list_free_full(empty_dirs, dt_free_gpointer);
-  empty_dirs = NULL;
-  g_object_unref(store);
-
-  return FALSE;
+void dt_film_remove_directories(const GList *dirs)
+{
+  for(const GList *iter = dirs; iter; iter = g_list_next(iter))
+    rmdir((char *)iter->data);
 }
 
 void dt_film_remove_empty()
@@ -380,7 +331,15 @@ void dt_film_remove_empty()
 
   // dispatch asking for deletion (and subsequent deletion) to the gui thread
   if(empty_dirs)
-    g_idle_add(ask_and_delete, g_list_reverse(empty_dirs));
+  {
+    empty_dirs = g_list_reverse(empty_dirs);
+    // Nobody to ask -> nothing is deleted. "ask before rmdir" cannot be honoured headless.
+    if(_confirm_rmdir_handler)
+      _confirm_rmdir_handler(empty_dirs);   // takes ownership
+    else
+      g_list_free_full(empty_dirs, dt_free_gpointer);
+    empty_dirs = NULL;
+  }
 }
 
 gboolean dt_film_is_empty(const int id)

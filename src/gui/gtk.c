@@ -84,6 +84,8 @@
 
 #include "gui/gtk.h"
 #include "common/thumbnail_notify.h"
+#include "gui/common/film_gui.h"
+#include "common/startup_progress.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/splash.h"
 
@@ -1199,6 +1201,16 @@ static const char* _get_axis_name(int pos)
   return AXIS_NAMES[pos];
 }
 
+/* common/ reports startup progress; opening the splash on the first message is display
+ * state, so it lives here rather than in whatever subsystem happens to be slow. */
+static void _gui_startup_progress(const char *message)
+{
+  // dt_gui_splash_init() already no-ops once the splash exists, so no "have I opened it?"
+  // flag is needed here -- which is the same flag common/opencl.c used to carry.
+  dt_gui_splash_init();
+  dt_gui_splash_updatef("%s", message);
+}
+
 /* common/ announces that an image's thumbnail is stale; this turns that into the two
  * widget refreshes. Registered at the end of dt_gui_gtk_init(), so headless runs never
  * have a handler and the notification is a no-op there. */
@@ -1403,6 +1415,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // Tell common/ how to repaint a stale thumbnail. The backend announces staleness and
   // knows nothing about thumbtables; this is the only place the two are connected.
   dt_thumbnail_notify_set_handler(_gui_refresh_thumbnail);
+  dt_startup_progress_set_handler(_gui_startup_progress);
+  dt_film_gui_register_handlers();
 
   return 0;
 }
