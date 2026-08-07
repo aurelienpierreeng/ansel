@@ -47,9 +47,13 @@ ad-hoc greps were wrong.
 `common/module_api.h`, `views/view_api.h`, `libs/lib_api.h`,
 `imageio/format/imageio_format_api.h`, `imageio/storage/imageio_storage_api.h`. They are
 X-macro headers, re-included several times in the *same* translation unit with different macros
-defined, and expanded *inside struct bodies* to generate members. For the same reason they must
-carry **no `#include` of their own** — an include at the top of one lands inside those structs.
-Symbols they use (`dt_version()`, `dt_print()`, `IS_NULL_PTR`) are the consuming `.c` file's
+defined, and expanded *inside struct bodies* to generate members. For the same reason a
+**top-level `#include` in one lands inside those structs**. The precise rule, as the imageio
+pair actually implement it: real includes must sit inside the `#ifdef FULL_API_H` block —
+that macro is defined only in full-API mode, while the struct-body expansion defines
+`INCLUDE_API_FROM_MODULE_H` instead and skips the block — and only *other* X-macro headers
+(`common/module_api.h`, which has no includes itself) may be included unguarded. Symbols used
+outside that block (`dt_version()`, `dt_print()`, `IS_NULL_PTR`) are the consuming `.c` file's
 responsibility.
 
 ### No SQL in GUI modules
