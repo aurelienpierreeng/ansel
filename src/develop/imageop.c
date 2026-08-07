@@ -405,6 +405,29 @@ void dt_iop_default_init(dt_iop_module_t *module)
   }
 }
 
+
+/* The bauhaus widgets ask a module to make itself visible before grabbing focus inside it.
+ * For an IOP that means expanding a collapsed expander, and dropping stale focus first --
+ * both develop/ concerns, which is why this lives here and not in the widget. */
+static void _iop_ensure_visible(dt_gui_module_t *m)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)m;
+  if(IS_NULL_PTR(module)) return;
+
+  if(!IS_NULL_PTR(module->expander))
+  {
+    g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-switch-from-active-once",
+                      GINT_TO_POINTER(TRUE));
+    dt_iop_gui_set_expanded(module, TRUE, TRUE);
+  }
+
+  // If the module is already marked focused, modulegroups may not re-emit its focus signal
+  // and tab visibility can stay stale. Drop focus once so the next request replays the
+  // full focus/update sequence.
+  if(!IS_NULL_PTR(dt_dev_get_global()) && dt_dev_get_global()->gui_module == module)
+    dt_iop_request_focus(NULL);
+}
+
 int default_iop_focus(dt_gui_module_t *m, gboolean toggle)
 {
   dt_iop_module_t *module = (dt_iop_module_t *) m;
@@ -558,6 +581,7 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
   module->common_fields.widget_list = NULL;
   module->common_fields.widget_list_bh = NULL;
   module->common_fields.focus = module->iop_focus;
+  module->common_fields.ensure_visible = _iop_ensure_visible;
   module->common_fields.deprecated = (module->flags() & IOP_FLAGS_DEPRECATED) == IOP_FLAGS_DEPRECATED;
 
   return 0;

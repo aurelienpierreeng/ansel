@@ -80,6 +80,29 @@ static gboolean _reverse_x = FALSE, _reverse_y = FALSE;
 // dialogs that run after gtk_init() but before the application has resolved the real values.
 static double _dpi_factor = 1.0, _ppd = 1.0, _em = 16.0;
 
+static dt_widget_cursor_handler_t _cursor_handler = NULL;
+static dt_widget_message_handler_t _message_handler = NULL;
+
+void dt_widget_set_message_handler(dt_widget_message_handler_t handler)
+{
+  _message_handler = handler;
+}
+
+void dt_widget_message(const char *message)
+{
+  if(_message_handler && message) _message_handler(message);
+}
+
+void dt_widget_set_cursor_handler(dt_widget_cursor_handler_t handler)
+{
+  _cursor_handler = handler;
+}
+
+void dt_widget_set_cursor(GdkCursorType cursor)
+{
+  if(_cursor_handler) _cursor_handler(cursor);
+}
+
 double dt_widget_dpi_factor(void) { return _dpi_factor; }
 void dt_widget_set_dpi_factor(double factor) { if(factor > 0.0) _dpi_factor = factor; }
 

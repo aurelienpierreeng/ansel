@@ -76,6 +76,20 @@ gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta);
  *  a widget does not read configuration. */
 void dt_widget_set_scroll_reversed(gboolean reverse_x, gboolean reverse_y);
 
+/* Transient user-facing message ("that widget no longer exists"). How and where it is shown
+ * is the host's decision -- a toast, a status line, or nothing at all. Unregistered, the
+ * message is dropped. */
+typedef void (*dt_widget_message_handler_t)(const char *message);
+void dt_widget_set_message_handler(dt_widget_message_handler_t handler);
+void dt_widget_message(const char *message);
+
+/* Pointer shape during widget interaction (a panel-handle drag wants a resize cursor).
+ * The host owns the window whose cursor changes, so it supplies the setter. Unregistered,
+ * the cursor is left alone. */
+typedef void (*dt_widget_cursor_handler_t)(GdkCursorType cursor);
+void dt_widget_set_cursor_handler(dt_widget_cursor_handler_t handler);
+void dt_widget_set_cursor(GdkCursorType cursor);
+
 /* Toolkit metrics: the UI zoom factor, the integer device scale, and the resolved root font
  * size in pixels. Widgets scale themselves by these; the application computes them from the
  * screen and the theme and pushes them here. They lived in dt_gui_gtk_t, which meant a widget

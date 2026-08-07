@@ -46,8 +46,11 @@ add_dependencies(generate_authors_h generate_authors_file)
 #
 # Add files for libansel
 #
+add_subdirectory(widgets)
+
 FILE(GLOB SOURCE_FILES
   "gui/bauhaus.c"
+  "gui/bauhaus_conf.c"
   "common/act_on.c"
   "system/atomic.c"
   "system/display_profile.c"
@@ -76,7 +79,6 @@ FILE(GLOB SOURCE_FILES
   "common/film.c"
   "common/file_location.c"
   "common/folder_survey.c"
-  "widgets/focus_peaking.c"
   "common/fp_mode.c"
   "pixel/gaussian.c"
   "common/grouping.c"
@@ -191,27 +193,12 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/masks_history.c"
   "develop/masks/polygon.c"
   "develop/format.c"
-  "widgets/button.c"
-  "widgets/widget_settings.c"
-  "widgets/widget_style.c"
-  "widgets/drawingarea.c"
-  "widgets/expander.c"
-  "widgets/gradientslider.c"
-  "widgets/icon.c"
-  "widgets/icon_cell_renderer.c"
-  "widgets/paint.c"
   "gui/dtgtk/preview_window.c"
-  "widgets/resetlabel.c"
-  "widgets/sidepanel.c"
   "gui/dtgtk/thumbnail.c"
   "gui/dtgtk/thumbtable_info.c"
-  "widgets/thumbnail_btn.c"
   "gui/dtgtk/thumbtable.c"
   "gui/dtgtk/filemanager.c"
   "gui/dtgtk/filmstrip.c"
-  "widgets/togglebutton.c"
-  "widgets/accelerators.c"
-  "widgets/gtkentry.c"
   "gui/guides.c"
   "gui/gtk.c"
   "gui/gui_throttle.c"
@@ -860,6 +847,10 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 # Link external libs
 #
 target_link_libraries(lib_ansel PUBLIC ansel_deps)
+# The widget toolkit is its own target (src/widgets/CMakeLists.txt). Whole-archive, because
+# GTK widget types register themselves through GObject and the linker would otherwise drop
+# objects nothing references by name.
+target_link_libraries(lib_ansel PRIVATE -Wl,--whole-archive ansel_widgets -Wl,--no-whole-archive)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
