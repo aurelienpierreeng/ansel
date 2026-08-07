@@ -69,7 +69,6 @@
 
 
 #include "widgets/accelerators.h"
-#include "widgets/gui_throttle.h"
 #include "widgets/widget_style.h"
 
 #include <glib/gi18n.h>
@@ -106,9 +105,9 @@ static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event);
 static void _get_preferred_width(GtkWidget *widget, gint *minimum_size, gint *natural_size);
 static void _get_preferred_height(GtkWidget *widget, gint *minimum_size, gint *natural_size);
 static void _style_updated(GtkWidget *widget);
-static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w, gboolean timeout);
+static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w);
 static void dt_bauhaus_widget_reject(struct dt_bauhaus_widget_t *w);
-static void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout);
+static void _combobox_set(GtkWidget *widget, const int pos);
 
 // !!! EXECUTIVE NOTE !!!
 // Sizing and spacing need to be declared once only in getters/setters functions below.
@@ -590,7 +589,7 @@ static void _combobox_next_sensitive(struct dt_bauhaus_widget_t *w, int delta)
     cur += inc;
   }
   d->hovered = new_pos;
-  _combobox_set(GTK_WIDGET(w), new_pos, TRUE);
+  _combobox_set(GTK_WIDGET(w), new_pos);
 }
 
 static dt_bauhaus_combobox_entry_t *new_combobox_entry(const char *label, const char *tooltip,
@@ -811,7 +810,7 @@ static void show_pango_text(struct dt_bauhaus_widget_t *w,
   g_object_unref(layout);
 }
 
-static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise, gboolean timeout);
+static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise);
 static void _dt_bauhaus_slider_set_with_raise(GtkWidget *widget, float pos, gboolean raise);
 
 static double get_slider_line_offset(const double pos, const double scale, const double x, double y, const double line_height)
@@ -931,7 +930,7 @@ static gboolean dt_bauhaus_popup_motion_notify(GtkWidget *widget, GdkEventMotion
     if(d->is_dragging)
     {
       // On dragging (when holding a click), we commit intermediate values to pipeline for "realtime" preview
-      dt_bauhaus_slider_set_normalized(w, d->oldpos + mouse_off, TRUE, TRUE);
+      dt_bauhaus_slider_set_normalized(w, d->oldpos + mouse_off, TRUE);
     }
     else
     {
@@ -1018,12 +1017,12 @@ static gboolean dt_bauhaus_popup_button_press(GtkWidget *widget, GdkEventButton 
         // d->pos is used for uncommitted drawings.
         const float value = d->pos;
         d->pos = d->oldpos;
-        dt_bauhaus_slider_set_normalized(w, value, TRUE, FALSE);
+        dt_bauhaus_slider_set_normalized(w, value, TRUE);
       }
       else
       {
         _bh_combobox_get_hovered_entry(w);
-        dt_bauhaus_widget_accept(w, FALSE);
+        dt_bauhaus_widget_accept(w);
       }
     }
     bh->hiding = TRUE;
@@ -1238,7 +1237,6 @@ static void _widget_finalize(GObject *widget)
 
   if(dt_widget_scroll_focus() == GTK_WIDGET(w))
     dt_widget_set_scroll_focus(NULL);
-  dt_gui_throttle_cancel(widget);
   if(w->type == DT_BAUHAUS_SLIDER)
   {
     dt_bauhaus_slider_data_t *d = &w->data.slider;
@@ -2166,14 +2164,14 @@ void dt_bauhaus_combobox_set_text(GtkWidget *widget, const char *text)
 }
 
 
-static void _delayed_combobox_commit(gpointer data)
+static void _commit_combobox_value(struct dt_bauhaus_widget_t *w)
 {
-  // Commit combobox value change to pipeline history, handling a safety timout
-  // so incremental scrollings don't trigger a recompute at every scroll step.
-  struct dt_bauhaus_widget_t *w = data;
+  // Announce the new value. Whoever listens decides what it costs: the history commit
+  // batches the pipeline recompute it triggers, so emitting on every scroll step is fine
+  // and this widget has no reason to hold anything back.
 
-  // If a reset started after the timeout was scheduled (e.g. while reloading history,
-  // applying a style, etc.), don't commit anything to history from this stale callback.
+  // Don't commit anything while a reset is in progress (reloading history, applying a
+  // style, ...): those set widget values programmatically and must not reach history.
   if(dt_gui_widgets_suppressed()) return;
 
   if(w->use_default_callback)
@@ -2200,11 +2198,8 @@ static void _delayed_combobox_commit(gpointer data)
  *
  * @param widget
  * @param pos -1 for "custom" value in editable comboboxes, >= 0 for items in the list
- * @param timeout TRUE to apply an adaptative timeout preventing intermediate setting steps (e.g. while scrolling)
- * to emit too many value-changed signals and committing to pipeline. FALSE forces immediate dispatch of new value,
- * when there is no ambiguity that the setting is final (e.g left click).
  */
-void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
+void _combobox_set(GtkWidget *widget, const int pos)
 {
   if(IS_NULL_PTR(widget)) return;
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
@@ -2219,10 +2214,6 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
     if(entry->is_separator) return;
   }
 
-  // When updating programmatically (GUI reset), ensure no delayed commit from a
-  // previous user interaction survives, even if the value doesn't change.
-  if(dt_gui_widgets_suppressed()) dt_gui_throttle_cancel(widget);
-
   if(old_pos != new_pos)
   {
     d->active = new_pos;
@@ -2232,19 +2223,7 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
 
     gtk_widget_queue_draw(GTK_WIDGET(w));
 
-    // If a delayed commit is pending from a previous user interaction, cancel it.
-    // This is especially important when updating widgets programmatically (during GUI reset),
-    // as we don't want stale timeouts to later emit "value-changed" and commit to history.
-    if(!dt_gui_widgets_suppressed())
-    {
-      if(timeout)
-        dt_gui_throttle_queue(widget, _delayed_combobox_commit, w);
-      else
-      {
-        dt_gui_throttle_cancel(widget);
-        _delayed_combobox_commit(w);
-      }
-    }
+    _commit_combobox_value(w);
   }
 }
 
@@ -2255,7 +2234,7 @@ void dt_bauhaus_combobox_set(GtkWidget *widget, const int pos)
   const int selectable_count = _combobox_selectable_count(d);
   const int public_pos = (selectable_count > 0) ? CLAMP(pos, -1, selectable_count - 1) : -1;
   const int entry_pos = _combobox_public_to_entry_pos(d, public_pos, FALSE);
-  _combobox_set(widget, entry_pos, FALSE);
+  _combobox_set(widget, entry_pos);
 }
 
 
@@ -2271,7 +2250,7 @@ gboolean dt_bauhaus_combobox_set_from_text(GtkWidget *widget, const char *text)
     if(entry->is_separator) continue;
     if(!g_strcmp0(entry->label, text))
     {
-      _combobox_set(widget, i, FALSE);
+      _combobox_set(widget, i);
       return TRUE;
     }
   }
@@ -2288,7 +2267,7 @@ gboolean dt_bauhaus_combobox_set_from_value(GtkWidget *widget, int value)
     if(entry->is_separator) continue;
     if(GPOINTER_TO_INT(entry->data) == value)
     {
-      _combobox_set(widget, i, FALSE);
+      _combobox_set(widget, i);
       return TRUE;
     }
   }
@@ -2539,7 +2518,7 @@ static void dt_bauhaus_widget_reject(struct dt_bauhaus_widget_t *w)
     case DT_BAUHAUS_SLIDER:
     {
       dt_bauhaus_slider_data_t *d = &w->data.slider;
-      dt_bauhaus_slider_set_normalized(w, d->oldpos, TRUE, FALSE);
+      dt_bauhaus_slider_set_normalized(w, d->oldpos, TRUE);
     }
     break;
     default:
@@ -2547,7 +2526,7 @@ static void dt_bauhaus_widget_reject(struct dt_bauhaus_widget_t *w)
   }
 }
 
-static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w, gboolean timeout)
+static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w)
 {
   GtkWidget *widget = GTK_WIDGET(w);
 
@@ -2562,7 +2541,7 @@ static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w, gboolean tim
         // combobox is editable and we have text, assume it is a custom input
         memset(d->text, 0, DT_BAUHAUS_COMBO_MAX_TEXT);
         g_strlcpy(d->text, w->bauhaus->keys, DT_BAUHAUS_COMBO_MAX_TEXT);
-        _combobox_set(widget, -1, timeout); // select custom entry
+        _combobox_set(widget, -1); // select custom entry
 
 #if DEBUG
         fprintf(stdout, "combobox went the custom path\n");
@@ -2594,11 +2573,11 @@ static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w, gboolean tim
 
           // Accept result only if exactly one match was found. Anything else is ambiguous
           if(matches == 1)
-            _combobox_set(widget, match, timeout);
+            _combobox_set(widget, match);
         }
         else {
           // Active entry (below cursor or scrolled)
-          _combobox_set(widget, d->hovered, timeout);
+          _combobox_set(widget, d->hovered);
         }
       }
 
@@ -2617,7 +2596,7 @@ static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w, gboolean tim
       // with value-changed signal through dt_bauhaus_slider_set_normalized()
       const float value = d->pos;
       d->pos = d->oldpos;
-      dt_bauhaus_slider_set_normalized(w, value, TRUE, timeout);
+      dt_bauhaus_slider_set_normalized(w, value, TRUE);
       break;
     }
     default:
@@ -3390,7 +3369,6 @@ static gboolean dt_bauhaus_combobox_button_press(GtkWidget *widget, GdkEventButt
   _bh_active_region_t activated = _bh_get_active_region(widget, &event_x, &event_y, &width, NULL);
 
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-  dt_gui_throttle_cancel(widget);
 
   if(activated == BH_REGION_OUT)
   {
@@ -3488,7 +3466,7 @@ static void _dt_bauhaus_slider_set_with_raise(GtkWidget *widget, float pos, gboo
   else
     d->max = rpos;
 
-  dt_bauhaus_slider_set_normalized(w, (rpos - d->min) / (d->max - d->min), raise, FALSE);
+  dt_bauhaus_slider_set_normalized(w, (rpos - d->min) / (d->max - d->min), raise);
 }
 
 void dt_bauhaus_slider_set(GtkWidget *widget, float pos)
@@ -3594,14 +3572,14 @@ void dt_bauhaus_slider_set_offset(GtkWidget *widget, float offset)
   d->offset = offset;
 }
 
-static void _delayed_slider_commit(gpointer data)
+static void _commit_slider_value(struct dt_bauhaus_widget_t *w)
 {
-  // Commit slider value change to pipeline history, handling a safety timout
-  // so incremental scrolls don't trigger a recompute at every scroll step.
-  struct dt_bauhaus_widget_t *w = data;
+  // Announce the new value. Whoever listens decides what it costs: the history commit
+  // batches the pipeline recompute it triggers, so emitting on every scroll step is fine
+  // and this widget has no reason to hold anything back.
 
-  // If a reset started after the timeout was scheduled (e.g. while reloading history,
-  // applying a style, etc.), don't commit anything to history from this stale callback.
+  // Don't commit anything while a reset is in progress (reloading history, applying a
+  // style, ...): those set widget values programmatically and must not reach history.
   if(dt_gui_widgets_suppressed()) return;
 
   if(w->use_default_callback)
@@ -3631,11 +3609,8 @@ static void _delayed_slider_commit(gpointer data)
  * @param raise Set to FALSE to redraw slider position without committing the actual value to pipeline
  * nor sending the `value-changed` event (e.g. in motion-notify events, while dragging).
  * Set to TRUE when the change is finished (e.g. in button-pressed events).
- * @param timeout TRUE to add a timeout preventing intermediate setting steps (e.g. while scrolling) to emit
- * value-changed signal and commit to pipeline too often. FALSE to set immediately, when there is no ambiguity
- * on the final setting (e.g. at init time and on click). Doesn't change anything if raise is FALSE.
  */
-static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise, gboolean timeout)
+static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise)
 {
   dt_bauhaus_slider_data_t *d = &w->data.slider;
   const float old_pos = d->pos;
@@ -3653,23 +3628,7 @@ static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, floa
 
     gtk_widget_queue_draw(GTK_WIDGET(w));
 
-    // If a delayed commit is pending from a previous user interaction, cancel it.
-    // This prevents stale timers from firing after programmatic updates (GUI reset)
-    // and unexpectedly committing module changes to history.
-    if(!dt_gui_widgets_suppressed() && raise)
-    {
-      if(timeout)
-        dt_gui_throttle_queue(GTK_WIDGET(w), _delayed_slider_commit, w);
-      else
-      {
-        dt_gui_throttle_cancel(GTK_WIDGET(w));
-        _delayed_slider_commit(w);
-      }
-    }
-    else if(!raise || dt_gui_widgets_suppressed())
-    {
-      dt_gui_throttle_cancel(GTK_WIDGET(w));
-    }
+    if(raise) _commit_slider_value(w);
   }
 }
 
@@ -3758,7 +3717,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         else
           bh->end_mouse_y = 0;
         bh->keys[bh->keys_cnt] = 0;
-        dt_bauhaus_widget_accept(w, TRUE);
+        dt_bauhaus_widget_accept(w);
         bh->keys_cnt = 0;
         memset(bh->keys, 0, sizeof(bh->keys));
         dt_bauhaus_hide_popup(bh);
@@ -3785,7 +3744,7 @@ static gboolean dt_bauhaus_popup_key_press(GtkWidget *widget, GdkEventKey *event
         bh->keys[bh->keys_cnt] = 0;
         bh->keys_cnt = 0;
         memset(bh->keys, 0, sizeof(bh->keys));
-        dt_bauhaus_widget_accept(bh->current, TRUE);
+        dt_bauhaus_widget_accept(bh->current);
         dt_bauhaus_hide_popup(bh);
       }
       else
@@ -3846,7 +3805,7 @@ static gboolean dt_bauhaus_slider_button_press(GtkWidget *widget, GdkEventButton
         {
           // single left click on slider bar : set new value
           d->is_dragging = 1;
-          dt_bauhaus_slider_set_normalized(w, event_x / main_width, FALSE, FALSE);
+          dt_bauhaus_slider_set_normalized(w, event_x / main_width, FALSE);
         }
       }
     }
@@ -3879,11 +3838,10 @@ static gboolean dt_bauhaus_slider_button_release(GtkWidget *widget, GdkEventButt
   if(d->is_dragging)
   {
     d->is_dragging = 0;
-    dt_gui_throttle_cancel(widget);
 
     if(event->button == 1)
     {
-      dt_bauhaus_slider_set_normalized(w, w->bauhaus->mouse_x / _widget_get_main_width(w, NULL, NULL), TRUE, FALSE);
+      dt_bauhaus_slider_set_normalized(w, w->bauhaus->mouse_x / _widget_get_main_width(w, NULL, NULL), TRUE);
       return TRUE;
     }
   }
@@ -3905,7 +3863,7 @@ static gboolean dt_bauhaus_slider_motion_notify(GtkWidget *widget, GdkEventMotio
 
     w->bauhaus->mouse_x = event_x;
     w->bauhaus->mouse_y = event_y;
-    dt_bauhaus_slider_set_normalized(w, event_x / main_width, TRUE, TRUE);
+    dt_bauhaus_slider_set_normalized(w, event_x / main_width, TRUE);
   }
 
   return activated;
