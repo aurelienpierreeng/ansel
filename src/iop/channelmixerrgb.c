@@ -4639,12 +4639,13 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 
     if(memcmp(&previous, p, sizeof(previous)) != 0)
     {
-      /* Auto-illuminant is driven by live picker motion. Writing history synchronously for every
-         sampled move can outpace the preview worker and keep it permanently in TOP_CHANGED.
-         Queue the standard throttled history update instead so the picker remains live while
-         the worker converges on the latest sampled state. */
+      /* Auto-illuminant is driven by live picker motion, so this commits once per sampled
+         move. That used to outpace the preview worker and keep it permanently in
+         TOP_CHANGED, which is why this call was routed through a throttle of its own; the
+         history commit now batches the resync it triggers, so the picker stays live without
+         any special handling here. */
       dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=auto_set_illuminant\n");
-      dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     }
   }
 }

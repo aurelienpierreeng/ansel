@@ -627,7 +627,6 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_gui_throttle_cancel(self);
   // raw vs non_raw page, from the per-image support flag computed by reload_defaults()
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "non_raw" : "raw");
   gtk_widget_queue_draw(self->widget);
@@ -852,7 +851,7 @@ static gboolean rawdenoise_motion_notify(GtkWidget *widget, GdkEventMotion *even
       dt_iop_rawdenoise_get_params(p, c->channel, c->mouse_x, c->mouse_y + c->mouse_pick, c->mouse_radius);
     }
     gtk_widget_queue_draw(widget);
-    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else
   {
@@ -1013,7 +1012,6 @@ void gui_cleanup(dt_iop_module_t *self)
   dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
   dt_conf_set_int("plugins/darkroom/rawdenoise/gui_channel", c->channel);
   dt_draw_curve_destroy(c->transition_curve);
-  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

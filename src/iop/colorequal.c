@@ -998,9 +998,9 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
 /**
  * The curve-editing mouse handlers below don't go through gui_changed() (unlike bauhaus
  * sliders, which the framework calls automatically) and drag motion can fire far too often
- * to rebuild the LUT synchronously on every event -- so they queue this instead, keyed on
- * &g->viewer_lut rather than `self`, so it coexists with the unrelated, single-slot-per-source
- * dt_iop_throttled_history_update task already queued on `self` for the same interaction.
+ * to rebuild the LUT synchronously on every event -- so they queue this instead. This is a
+ * GUI-side cache and has nothing to do with history: the pipeline recompute those same
+ * handlers trigger is batched by the history commit itself, not here.
  */
 static void _update_gui_lut_cache_throttled(gpointer data)
 {
@@ -1489,7 +1489,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
         _refresh_preview_cursor_sample(self);
         dt_control_queue_redraw_center();
       }
-      dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
       gtk_widget_queue_draw(widget);
     }
@@ -1540,7 +1540,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       _refresh_preview_cursor_sample(self);
       dt_control_queue_redraw_center();
     }
-    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
     gtk_widget_queue_draw(widget);
     return TRUE;
@@ -1563,7 +1563,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
         _refresh_preview_cursor_sample(self);
         dt_control_queue_redraw_center();
       }
-      dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
       gtk_widget_queue_draw(widget);
     }
@@ -1593,7 +1593,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       _refresh_preview_cursor_sample(self);
       dt_control_queue_redraw_center();
     }
-    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
     gtk_widget_queue_draw(widget);
     return TRUE;
@@ -1616,18 +1616,15 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
     g->dragging[ring][channel] = FALSE;
 
     /**
-     * Curve drags are throttled while the pointer moves, but the final pointer
-     * release must always commit the last state to history so the pixelpipes
-     * recompute even if another GUI refresh happens before the throttle timer
-     * expires. The LUT viewer has its own, separately-throttled task (queued on
-     * &g->viewer_lut, not `self`, so it doesn't clobber the history task above --
-     * dt_gui_throttle_queue keeps only one pending task per source); flush it the
-     * same way so the viewer doesn't lag behind the final released state either.
+     * The final pointer release must always commit the last state to history, so the
+     * pixelpipes recompute even if another GUI refresh happens first. The LUT viewer is
+     * still throttled on its own source (&g->viewer_lut, a GUI-side cache with nothing to
+     * do with history); flush it here too so the viewer doesn't lag behind the released
+     * state either.
      */
     if(was_dragging)
     {
-      dt_gui_throttle_cancel(self);
-      dt_iop_throttled_history_update(self);
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
       dt_gui_throttle_cancel(&g->viewer_lut);
       _update_gui_lut_cache(self);
     }
@@ -1786,7 +1783,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   _refresh_preview_cursor_sample(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
-  dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
   return 1;
 }
@@ -1849,7 +1846,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   _refresh_preview_cursor_sample(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area[ring][channel]));
   dt_control_queue_redraw_center();
-  dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_gui_throttle_queue(&g->viewer_lut, _update_gui_lut_cache_throttled, self);
   return 1;
 }
@@ -2269,7 +2266,9 @@ void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
   self->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-  dt_gui_throttle_cancel(self);
+  // The LUT viewer's task holds `self` and reads g->..., both invalid past this point.
+  // (It was never cancelled here: only the history task, which no longer exists, was.)
+  dt_gui_throttle_cancel(&g->viewer_lut);
 
   for(int ring = 0; ring < DT_IOP_COLOREQUAL_NUM_RINGS; ring++)
     for(int ch = 0; ch < DT_IOP_COLOREQUAL_NUM_CHANNELS; ch++)
