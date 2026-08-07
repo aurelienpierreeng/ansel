@@ -91,7 +91,7 @@ FILE(GLOB SOURCE_FILES
   "common/image_cache.c"
   "common/image_extensions.c"
   "common/imagebuf.c"
-  "imageio/imageio.c"
+  "imageio/imageio_core.c"
   "imageio/imageio_jpeg.c"
   "imageio/imageio_png.c"
   "imageio/imageio_module.c"

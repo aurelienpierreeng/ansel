@@ -56,7 +56,7 @@
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 #include "common/history.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"

@@ -32,7 +32,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/metadata.h"
 #include "common/pwstorage/pwstorage.h"

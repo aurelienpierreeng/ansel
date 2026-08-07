@@ -292,7 +292,8 @@ static inline int solve_hermitian(const float *const restrict A,
 
   if(IS_NULL_PTR(x) || IS_NULL_PTR(L))
   {
-    dt_print(DT_DEBUG_ALWAYS, "[choleski] out of memory allocating the %zu x %zu decomposition\n", n, n);
+    dt_print(DT_DEBUG_ALWAYS, "[choleski] out of memory allocating the %" G_GSIZE_FORMAT
+                          " x %" G_GSIZE_FORMAT " decomposition\n", n, n);
     err = 1;
     goto error;
   }
@@ -389,7 +390,8 @@ static inline int pseudo_solve(float *const restrict A,
 
   if(IS_NULL_PTR(A_square) || IS_NULL_PTR(y_square))
   {
-    dt_print(DT_DEBUG_ALWAYS, "[choleski] out of memory allocating the %zu x %zu pseudo-solve\n", n, n);
+    dt_print(DT_DEBUG_ALWAYS, "[choleski] out of memory allocating the %" G_GSIZE_FORMAT
+                          " x %" G_GSIZE_FORMAT " pseudo-solve\n", n, n);
     err = 1;
     goto error;
   }

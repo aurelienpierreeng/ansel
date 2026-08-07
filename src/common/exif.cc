@@ -112,7 +112,7 @@
 #include "common/debug.h"
 #include "common/dng_opcode.h"
 #include "common/image_cache.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "common/exif.h"
 #include "imageio/imageio_jpeg.h"
 #include "common/metadata.h"

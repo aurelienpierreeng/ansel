@@ -57,7 +57,7 @@
 #include <string.h>
 
 #include "common/debug.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

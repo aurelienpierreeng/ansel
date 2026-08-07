@@ -33,7 +33,7 @@
 #define DT_DEVELOP_PIXELPIPE_HB_H
 
 #include "common/atomic.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "common/iop_order.h"
 /* develop/imageop.h is deliberately NOT included: it includes this header back.
  * dt_iop_module_t is only ever used through a pointer here (tag-declared below);

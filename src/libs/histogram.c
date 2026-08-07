@@ -60,7 +60,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "common/image.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "common/iop_profile.h"
 #include "common/imagebuf.h"
 #include "common/image_cache.h"

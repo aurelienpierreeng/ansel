@@ -23,7 +23,7 @@
 
 #include "common/colorspaces.h"
 #include "common/image.h"
-#include "imageio/imageio.h"
+#include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "control/jobs.h"
 #include "iop/drawlayer/cache.h"
