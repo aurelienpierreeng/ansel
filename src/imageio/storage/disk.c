@@ -48,7 +48,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/global_mutexes.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"

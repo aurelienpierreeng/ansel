@@ -78,7 +78,7 @@
 #include "common/file_location.h"
 #include "common/utility.h"
 #include "gui/guides.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "widgets/expander.h"
@@ -1063,6 +1063,21 @@ static const char* _get_axis_name(int pos)
 /* ---- Host hooks for the shortcut system (widgets/accelerators.c) --------------------- */
 #define DT_ACCEL_SEARCH_RECENT_KEY "plugins/accel_search/recent_entries"
 
+static GtkWidget *_widget_root_window(void)
+{
+  return dt_gui_main_window();
+}
+
+static gint _widget_natural_width(GtkWidget *widget)
+{
+  if(IS_NULL_PTR(dt_gui_get_ui())) return -1;
+  if(dt_ui_panel_ancestor(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, widget))
+    return dt_ui_panel_get_size(dt_gui_get_ui(), DT_UI_PANEL_RIGHT);
+  if(dt_ui_panel_ancestor(dt_gui_get_ui(), DT_UI_PANEL_LEFT, widget))
+    return dt_ui_panel_get_size(dt_gui_get_ui(), DT_UI_PANEL_LEFT);
+  return -1;
+}
+
 /* dt_control_change_cursor() and dt_toast_log() are macros, so the widget hooks need real
  * functions to point at. */
 static void _widget_cursor(GdkCursorType cursor)
@@ -1315,6 +1330,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   if(dt_control_get_global()) dt_widget_set_gui_thread(dt_control_get_global()->gui_thread);
   dt_widget_set_scroll_reversed(dt_conf_get_bool("scroll/reverse_x"), dt_conf_get_bool("scroll/reverse_y"));
 
+  dt_widget_set_root_window_handler(_widget_root_window);
+  dt_widget_set_natural_width_handler(_widget_natural_width);
   dt_widget_set_cursor_handler(_widget_cursor);
   dt_widget_set_message_handler(_widget_message);
   dt_accels_set_global(gui->accels);
@@ -1520,36 +1537,6 @@ void dt_gui_set_pango_resolution(PangoLayout *layout)
   pango_cairo_context_set_resolution(pango_layout_get_context(layout), darktable.gui->dpi);
 }
 
-void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget)
-{
-  if(IS_NULL_PTR(cr)) return;
-
-  // Source GTK's resolved text-rendering options (anti-aliasing, hinting, subpixel order,
-  // hint-metrics/kerning), which GTK populates from GtkSettings/Xft/fontconfig. The widget's
-  // Pango context is the same source native widgets use; fall back to the main window, then to the
-  // screen defaults, so an off-screen/scratch Cairo surface never silently reverts to Cairo's
-  // AA-on defaults (which would make our cairo-drawn text look unlike the rest of the UI).
-  const cairo_font_options_t *fo = NULL;
-
-  if(widget)
-  {
-    PangoContext *pc = gtk_widget_get_pango_context(widget);
-    if(pc) fo = pango_cairo_context_get_font_options(pc);
-  }
-  if(!fo && darktable.gui && darktable.gui->ui && darktable.gui->ui->main_window)
-  {
-    PangoContext *pc = gtk_widget_get_pango_context(darktable.gui->ui->main_window);
-    if(pc) fo = pango_cairo_context_get_font_options(pc);
-  }
-  if(!fo)
-  {
-    GdkScreen *screen = gdk_screen_get_default();
-    if(screen) fo = gdk_screen_get_font_options(screen);
-  }
-
-  // cairo_set_font_options() copies internally, so the const pointer's lifetime is not a concern.
-  if(fo) cairo_set_font_options(cr, fo);
-}
 
 static gboolean _focus_in_out_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {

@@ -84,7 +84,7 @@
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
 #include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "widgets/gui_throttle.h"
 #include "libs/colorpicker.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
@@ -793,7 +793,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       // Update the running average of process time for GUI controls thresholding
       if(processed)
-        dt_gui_throttle_record_runtime(pipe, process_runtime_us);
+      {
+        // Map the pipe onto the throttle's own two slots; it does not know pipeline types.
+        const dt_throttle_slot_t slot = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? DT_THROTTLE_SLOT_MAIN
+                                        : (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? DT_THROTTLE_SLOT_PREVIEW
+                                        : DT_THROTTLE_SLOT_OTHER;
+        dt_gui_throttle_record_runtime(slot, process_runtime_us);
+      }
 
       // If everything went well, yell to GUI listeners that they can use the output buffer.
       if(published_backbuffer)

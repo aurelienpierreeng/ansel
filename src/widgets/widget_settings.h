@@ -76,6 +76,20 @@ gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta);
  *  a widget does not read configuration. */
 void dt_widget_set_scroll_reversed(gboolean reverse_x, gboolean reverse_y);
 
+/* The host's root window, used for things that exist before any widget does: resolving theme
+ * colours at toolkit init, and parenting a popup so Wayland compositors place it correctly.
+ * Unregistered: NULL, and callers fall back to screen defaults. */
+typedef GtkWidget *(*dt_widget_root_window_handler_t)(void);
+void dt_widget_set_root_window_handler(dt_widget_root_window_handler_t handler);
+GtkWidget *dt_widget_root_window(void);
+
+/* How wide the host would like `widget` to be naturally -- it knows which panel the widget
+ * sits in and how wide that panel is. Returns -1 when the host has no opinion, which is also
+ * what an unregistered handler reports. */
+typedef gint (*dt_widget_natural_width_handler_t)(GtkWidget *widget);
+void dt_widget_set_natural_width_handler(dt_widget_natural_width_handler_t handler);
+gint dt_widget_natural_width(GtkWidget *widget);
+
 /* Transient user-facing message ("that widget no longer exists"). How and where it is shown
  * is the host's decision -- a toast, a status line, or nothing at all. Unregistered, the
  * message is dropped. */
@@ -136,5 +150,26 @@ enum
  * a theme decision the application supplies. Indices match dt_colorlabels_enum. */
 const GdkRGBA *dt_widget_colorlabel(int index);
 void dt_widget_set_colorlabels(const GdkRGBA *labels, int count);
+
+/* Device-scale-aware cairo surfaces: allocate at ppd resolution and tell cairo about it, so
+ * drawing code works in logical pixels and stays sharp on HiDPI. */
+static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+{
+  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
+//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
+  return (state & modifiers) == desired_modifier_mask;
+}
+
+static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
+  cairo_surface_t *cst = cairo_image_surface_create(format, width * dt_widget_ppd(), height * dt_widget_ppd());
+  cairo_surface_set_device_scale(cst, dt_widget_ppd(), dt_widget_ppd());
+  return cst;
+}
+
+static inline cairo_surface_t *dt_cairo_image_surface_create_for_data(unsigned char *data, cairo_format_t format, int width, int height, int stride) {
+  cairo_surface_t *cst = cairo_image_surface_create_for_data(data, format, width, height, stride);
+  cairo_surface_set_device_scale(cst, dt_widget_ppd(), dt_widget_ppd());
+  return cst;
+}
 
 #endif // DT_WIDGETS_WIDGET_SETTINGS_H

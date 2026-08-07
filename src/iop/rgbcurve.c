@@ -45,7 +45,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #endif
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/iop_profile.h"
 #include "pixel/rgb_norms.h"
 #include "common/macros.h"

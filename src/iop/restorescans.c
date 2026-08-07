@@ -21,7 +21,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #endif
 // our includes go first:
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"

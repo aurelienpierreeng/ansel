@@ -68,7 +68,7 @@
 #include "common/paths.h"
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/iop_profile.h"
 #include "common/colormatrices.c"

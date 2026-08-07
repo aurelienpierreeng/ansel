@@ -123,7 +123,7 @@
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "common/system_signal_handling.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "gui/presets.h"
 #include "gui/splash.h"
 
@@ -157,7 +157,7 @@
 #include "develop/supervisor.h"
 
 #include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "widgets/gui_throttle.h"
 #include "gui/guides.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
@@ -1219,7 +1219,10 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   darktable.l10n = dt_l10n_init(init_gui);
 
   dt_confgen_init();
-  dt_gui_throttle_init();
+  // The throttle's persisted state and timeout preference are configuration, so they are
+  // supplied here rather than read inside it.
+  dt_gui_throttle_init(dt_conf_get_int("processing/gui_throttle_runtime_us"));
+  dt_gui_throttle_set_timeout_ms((guint)MAX(dt_conf_get_int("processing/timeout"), 0));
 
   // Needs to run after dt_confgen_init()
   // Don't override cli argument if any
@@ -1698,6 +1701,7 @@ void dt_cleanup()
   dt_free(darktable.image_cache);
 
   dt_colorspaces_cleanup(darktable.color_profiles);
+  dt_conf_set_int("processing/gui_throttle_runtime_us", dt_gui_throttle_get_runtime_us());
   dt_gui_throttle_cleanup();
   dt_conf_cleanup(darktable.conf);
   dt_free(darktable.conf);

@@ -44,7 +44,7 @@
 #include "control/control.h"
 
 #include <gdk/gdkkeysyms.h>
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 
 const char *dt_colorlabels_name[] = {
   "red", "yellow", "green", "blue", "purple",

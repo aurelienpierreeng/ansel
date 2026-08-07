@@ -38,7 +38,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "develop/imageop.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"

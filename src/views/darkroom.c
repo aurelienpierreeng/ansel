@@ -81,7 +81,7 @@
 */
 /** this is the view for the darkroom module.  */
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "widgets/widget_settings.h"
 #include <glib/gstdio.h>
 #include "common/paths.h"
@@ -111,7 +111,7 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "widgets/gui_throttle.h"
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"

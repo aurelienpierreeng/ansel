@@ -42,7 +42,7 @@
 #include "common/glib_utils.h"
 #include "gui/gtk.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/conf.h"
 #include "develop/blend.h"

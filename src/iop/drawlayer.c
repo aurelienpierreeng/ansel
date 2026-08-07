@@ -28,7 +28,7 @@
 #include "config.h"
 #endif
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/dtpthread.h"
 #include "common/imagebuf.h"
@@ -48,7 +48,7 @@
 #include "pixel/interpolation.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "widgets/gui_throttle.h"
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/common.h"

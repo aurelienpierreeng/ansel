@@ -43,7 +43,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/bilateral.h"
 #include "pixel/gaussian.h"
 #include "develop/develop.h"

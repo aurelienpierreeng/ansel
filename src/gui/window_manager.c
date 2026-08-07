@@ -24,7 +24,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "views/view.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "gui/window_manager.h"
 #include "gui/actions/menu.h"
 #include "widgets/sidepanel.h"

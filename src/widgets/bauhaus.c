@@ -60,7 +60,7 @@
 #include "widgets/gdkkeys.h"
 #include "widgets/widget_settings.h"
 #include "widgets/paint.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/calculator.h"
 #include "math/math.h"
 #include "common/logging.h"
@@ -69,8 +69,10 @@
 
 
 #include "widgets/accelerators.h"
-#include "gui/gui_throttle.h"
-#include "gui/gtk.h"
+#include "widgets/gui_throttle.h"
+#include "widgets/widget_style.h"
+
+#include <glib/gi18n.h>
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -1281,7 +1283,8 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   bauhaus->line_height = 16;
   bauhaus->marker_size = 0.25f;
 
-  GtkWidget *root_window = dt_gui_main_window();
+  GtkWidget *root_window = dt_widget_root_window();
+  if(IS_NULL_PTR(root_window)) return;
   GtkStyleContext *ctx = gtk_widget_get_style_context(root_window);
   gtk_style_context_set_screen(ctx, gtk_widget_get_screen(root_window));
 
@@ -1395,8 +1398,8 @@ dt_bauhaus_t * dt_bauhaus_init()
   gtk_window_set_modal(GTK_WINDOW(bauhaus->popup_window), TRUE);
 
   // Needed for Wayland and Sway :
-  gtk_window_set_transient_for(GTK_WINDOW(bauhaus->popup_window),
-                               GTK_WINDOW(dt_gui_main_window()));
+  GtkWidget *root = dt_widget_root_window();
+  if(root) gtk_window_set_transient_for(GTK_WINDOW(bauhaus->popup_window), GTK_WINDOW(root));
 
   gtk_window_set_decorated(GTK_WINDOW(bauhaus->popup_window), FALSE);
   gtk_window_set_attached_to(GTK_WINDOW(bauhaus->popup_window), NULL);
@@ -3089,12 +3092,9 @@ static void _get_preferred_width(GtkWidget *widget, gint *minimum_size, gint *na
   // growing again when the parent grows.
   *minimum_size = 0;
 
-  if(dt_ui_panel_ancestor(dt_gui_get_ui(), DT_UI_PANEL_RIGHT, widget))
-    *natural_size = dt_ui_panel_get_size(dt_gui_get_ui(), DT_UI_PANEL_RIGHT);
-  else if(dt_ui_panel_ancestor(dt_gui_get_ui(), DT_UI_PANEL_LEFT, widget))
-    *natural_size = dt_ui_panel_get_size(dt_gui_get_ui(), DT_UI_PANEL_LEFT);
-  else
-    *natural_size = DT_PIXEL_APPLY_DPI(300);
+  // The host knows which panel this sits in and how wide it is; -1 means it has no opinion.
+  const gint host_width = dt_widget_natural_width(widget);
+  *natural_size = (host_width >= 0) ? host_width : DT_PIXEL_APPLY_DPI(300);
 }
 
 static void _get_preferred_height(GtkWidget *widget, gint *minimum_size, gint *natural_size)
@@ -3194,7 +3194,11 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   wy += w->margin->top;
 
   gint wwx = 0, wwy = 0;
-  GdkWindow *main_window = gtk_widget_get_window(dt_gui_main_window());
+  // The widget's OWN toplevel, not the host's main window: correct for popups raised from a
+  // secondary window, and it removes the last reason to ask the host which window is primary.
+  GtkWidget *toplevel = gtk_widget_get_toplevel(GTK_WIDGET(w));
+  GdkWindow *main_window = (toplevel && gtk_widget_is_toplevel(toplevel))
+                           ? gtk_widget_get_window(toplevel) : NULL;
   if(main_window) gdk_window_get_origin(main_window, &wwx, &wwy);
 
   GdkRectangle anchor = {

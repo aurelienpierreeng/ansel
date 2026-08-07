@@ -110,12 +110,6 @@ static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
 
 // check whether the specified mask of modifier keys exactly matches, among the set Shift+Control+(Alt/Meta).
 // ignores the state of any other shifting keys
-static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
-{
-  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
-//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
-  return (state & modifiers) == desired_modifier_mask;
-}
 
 // check whether the given modifier state includes AT LEAST the specified mask of modifier keys
 static inline gboolean dt_modifiers_include(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
@@ -426,17 +420,7 @@ void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const c
 #endif
 
 
-static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
-  cairo_surface_t *cst = cairo_image_surface_create(format, width * dt_gui_get_global()->ppd, height * dt_gui_get_global()->ppd);
-  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
-  return cst;
-}
 
-static inline cairo_surface_t *dt_cairo_image_surface_create_for_data(unsigned char *data, cairo_format_t format, int width, int height, int stride) {
-  cairo_surface_t *cst = cairo_image_surface_create_for_data(data, format, width, height, stride);
-  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
-  return cst;
-}
 
 static inline cairo_surface_t *dt_cairo_image_surface_create_from_png(const char *filename) {
   cairo_surface_t *cst = cairo_image_surface_create_from_png(filename);
@@ -547,7 +531,7 @@ void dt_ellipsize_combo(GtkComboBox *cbox);
 
 #define dt_accels_new_global_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->global_accels, c, d, e, f, FALSE, g)
 
-#define dt_accels_new_darkroom_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->darkroom_accels, c, d, e, f, FALSE, g)
+// dt_accels_new_darkroom_action() now lives in widgets/accelerators.h
 
 #define dt_accels_new_lighttable_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->lighttable_accels, c, d, e, f, FALSE, g)
 
@@ -646,7 +630,6 @@ void dt_gui_set_pango_resolution(PangoLayout *layout);
 // settings native GTK widgets use). Call on any off-screen/scratch Cairo surface before drawing
 // text so it matches the rest of the UI instead of Cairo's defaults. @p widget may be NULL (falls
 // back to the main window, then the screen). Pair with dt_gui_set_pango_resolution() for the DPI.
-void dt_gui_cairo_set_font_options(cairo_t *cr, GtkWidget *widget);
 
 // return modifier keys currently pressed, independent of any key event
 GdkModifierType dt_key_modifier_state();

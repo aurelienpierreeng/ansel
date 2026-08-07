@@ -489,7 +489,7 @@ static inline const drawlayer_rt_worker_t *_backend_worker_const(const dt_drawla
 
 static inline gint64 _live_publish_interval_us(void)
 {
-  return MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_DEV_PIXELPIPE_FULL), (gint64)20000);
+  return MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_THROTTLE_SLOT_MAIN), (gint64)20000);
 }
 
 static guint _worker_batch_min_size(void)

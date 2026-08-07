@@ -41,7 +41,7 @@
 #include "config.h"
 #endif
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"

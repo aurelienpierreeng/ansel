@@ -57,7 +57,7 @@
 #include "develop/masks.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/debug.h"
 #include "math/math.h"
 #include "common/conf.h"

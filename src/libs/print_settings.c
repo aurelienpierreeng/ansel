@@ -41,7 +41,7 @@
 #include "common/mipmap_cache.h"
 #include <glib.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/colorspaces.h"
 #include "common/cups_print.h"
 #include "common/file_location.h"

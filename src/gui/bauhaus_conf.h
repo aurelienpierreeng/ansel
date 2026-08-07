@@ -19,7 +19,7 @@
 #ifndef DT_GUI_BAUHAUS_CONF_H
 #define DT_GUI_BAUHAUS_CONF_H
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 
 /* Preference-bound bauhaus widgets.
  *

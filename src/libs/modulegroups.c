@@ -45,7 +45,7 @@
 */
 
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "widgets/widget_settings.h"
 #include "common/iop_order.h"
 #include "common/logging.h"
