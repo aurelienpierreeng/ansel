@@ -1119,6 +1119,36 @@ static void _remap_pixel_inverse_or_not(float *out, const float *bufptr, const f
   }
 }
 
+typedef struct {
+  gboolean emb_vig;
+  gboolean emb_dist;
+  gboolean emb_tca;
+  gboolean any_emb;
+  gboolean lf_vig;
+  gboolean lf_dist;
+  gboolean lf_tca;
+  gboolean any_lf;
+} _lens_axis_flags_t;
+
+static _lens_axis_flags_t _compute_axis_flags(dt_iop_module_t *self,
+                                               const dt_iop_lensfun_params_t *p,
+                                               const dt_iop_lensfun_data_t *d)
+{
+  _lens_axis_flags_t f;
+  f.emb_vig  = (p->vignetting_method == dt_iop_lens_correction_source_t::EMBEDDED) && d->embedded.nc > 0;
+  f.emb_dist = (p->distortion_method == dt_iop_lens_correction_source_t::EMBEDDED) && d->embedded.nc > 0;
+  f.emb_tca  = (p->tca_method == dt_iop_lens_tca_source_t::EMBEDDED) && d->embedded.nc > 0
+              && dt_embedded_lens_has_ca(&self->dev->image_storage);
+  f.any_emb  = f.emb_vig || f.emb_dist || f.emb_tca;
+
+  f.lf_vig  = (p->vignetting_method == dt_iop_lens_correction_source_t::LENSFUN_DB);
+  f.lf_dist = (p->distortion_method == dt_iop_lens_correction_source_t::LENSFUN_DB);
+  f.lf_tca  = (p->tca_method == dt_iop_lens_tca_source_t::LENSFUN_DB)
+             || (p->tca_method == dt_iop_lens_tca_source_t::MANUAL);
+  f.any_lf  = f.lf_vig || f.lf_dist || f.lf_tca;
+  return f;
+}
+
 __DT_CLONE_TARGETS__
 int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
             const void *const ivoid, void *const ovoid)
@@ -1133,21 +1163,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const unsigned int pixelformat = ch == 3 ? LF_CR_3(RED, GREEN, BLUE) : LF_CR_4(RED, GREEN, BLUE, UNKNOWN);
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
 
-  const gboolean emb_vig  = (p->vignetting_method == dt_iop_lens_correction_source_t::EMBEDDED) && d->embedded.nc > 0;
-  const gboolean emb_dist = (p->distortion_method == dt_iop_lens_correction_source_t::EMBEDDED) && d->embedded.nc > 0;
-  const gboolean emb_tca  = (p->tca_method == dt_iop_lens_tca_source_t::EMBEDDED) && d->embedded.nc > 0
-                         && dt_embedded_lens_has_ca(&self->dev->image_storage);
-   const gboolean any_emb  = emb_vig || emb_dist || emb_tca;
-
-  const gboolean lf_vig  = (p->vignetting_method == dt_iop_lens_correction_source_t::LENSFUN_DB);
-  const gboolean lf_dist = (p->distortion_method == dt_iop_lens_correction_source_t::LENSFUN_DB);
-  const gboolean lf_tca  = (p->tca_method == dt_iop_lens_tca_source_t::LENSFUN_DB)
-                           || (p->tca_method == dt_iop_lens_tca_source_t::MANUAL);
-  const gboolean any_lf  = lf_vig || lf_dist || lf_tca;
+  const _lens_axis_flags_t af = _compute_axis_flags(self, p, d);
+  const gboolean any_emb = af.any_emb;
+  const gboolean any_lf  = af.any_lf;
 
   if(any_emb && !any_lf)
   {
-    const _emb_axes_t axes = { emb_vig, emb_dist, emb_tca };
+    const _emb_axes_t axes = { af.emb_vig, af.emb_dist, af.emb_tca };
     return _process_embedded_metadata_warp(self, pipe, piece,
                                            static_cast<const float *>(ivoid),
                                            static_cast<float *>(ovoid), &axes);
@@ -1170,7 +1192,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   {
     if(any_emb)
     {
-      const _emb_axes_t axes = { emb_vig, emb_dist, emb_tca };
+      const _emb_axes_t axes = { af.emb_vig, af.emb_dist, af.emb_tca };
       return _process_embedded_metadata_warp(self, pipe, piece,
                                              static_cast<const float *>(ivoid),
                                              static_cast<float *>(ovoid), &axes);
@@ -1211,7 +1233,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(IS_NULL_PTR(work_buf)) { delete modifier; return 1; }
     memcpy(work_buf, ivoid, bufsize);
 
-    if(emb_vig)
+    if(af.emb_vig)
     {
       _apply_embedded_vignette_pass(work_buf, work_buf, roi_in, piece, ch, d);
     }
@@ -1227,7 +1249,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       }
     }
 
-    if(emb_dist && lf_tca && !lf_dist)
+    if(af.emb_dist && af.lf_tca && !af.lf_dist)
     {
       int tca_modflags = 0;
       lfModifier *tca_modifier = NULL;
@@ -1272,7 +1294,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       }
     }
 
-    if(emb_dist || emb_tca)
+    if(af.emb_dist || af.emb_tca)
     {
       const float w2 = 0.5f * roi_in->scale * piece->buf_in.width;
       const float h2 = 0.5f * roi_in->scale * piece->buf_in.height;
@@ -1290,7 +1312,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         return 1;
       }
 
-      _emb_axes_t axes_w = { FALSE, emb_dist, emb_tca };
+      _emb_axes_t axes_w = { FALSE, af.emb_dist, af.emb_tca };
       const _warp_geom_domain_t dom = {
         ch, ch_width, w2, h2, inv_rn, limw, limh,
         raw_monochrome, axes_w
@@ -1304,7 +1326,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   }
 
   {
-    const gboolean was_warped = any_emb && (emb_dist || emb_tca);
+    const gboolean was_warped = any_emb && (af.emb_dist || af.emb_tca);
     const size_t read_size = was_warped
         ? (size_t)roi_out->width * roi_out->height * ch * sizeof(float)
         : (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
@@ -1667,21 +1689,13 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
   auto g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
 
-  const gboolean emb_vig  = (p->vignetting_method == dt_iop_lens_correction_source_t::EMBEDDED) && d->embedded.nc > 0;
-  const gboolean emb_dist = (p->distortion_method == dt_iop_lens_correction_source_t::EMBEDDED) && d->embedded.nc > 0;
-  const gboolean emb_tca  = (p->tca_method == dt_iop_lens_tca_source_t::EMBEDDED) && d->embedded.nc > 0
-                         && dt_embedded_lens_has_ca(&self->dev->image_storage);
-   const gboolean any_emb  = emb_vig || emb_dist || emb_tca;
-
-  const gboolean lf_vig  = (p->vignetting_method == dt_iop_lens_correction_source_t::LENSFUN_DB);
-  const gboolean lf_dist = (p->distortion_method == dt_iop_lens_correction_source_t::LENSFUN_DB);
-  const gboolean lf_tca  = (p->tca_method == dt_iop_lens_tca_source_t::LENSFUN_DB)
-                           || (p->tca_method == dt_iop_lens_tca_source_t::MANUAL);
-  const gboolean any_lf  = lf_vig || lf_dist || lf_tca;
+  const _lens_axis_flags_t af = _compute_axis_flags(self, p, d);
+  const gboolean any_emb = af.any_emb;
+  const gboolean any_lf  = af.any_lf;
 
   if(any_emb && !any_lf)
   {
-    const _emb_axes_t axes = { emb_vig, emb_dist, emb_tca };
+    const _emb_axes_t axes = { af.emb_vig, af.emb_dist, af.emb_tca };
     return process_embedded_metadata_cl(self, pipe, piece, dev_in, dev_out, d, gd, &axes);
   }
 
