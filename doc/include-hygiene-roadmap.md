@@ -557,3 +557,43 @@ only commits if that scan reports a change. Removing it would run that scan on e
 mouse-motion event of a mask drag. Different mechanism, different cost, no request behind
 touching it.
 
+
+## 12. The last GUI calls in `common/`
+
+Two of the three remaining files are done (PR after #1106):
+
+* **`history_actions.c`** — a *relocation*. Three of its functions asked the user something
+  (`dt_history_copy_parts`, `dt_history_paste_parts_prepare`, `delete_history_callback`) and
+  were the only reason it included `gui/hist_dialog.h`, `gui/gtk.h` and `gui/actions/menu.h`.
+  Both callers already live above this layer, so no handler slot was needed.
+* **`folder_survey.c`** — one relocation and one *inversion*. The resume-at-startup prompt is
+  GUI orchestration end to end and moved whole; the pending-import prompt is interleaved with
+  private session state under the survey lock, so it goes through a handler registered from
+  `dt_gui_gtk_init()`, next to the film and collection ones.
+
+### `common/database.c` — analysed, not done
+
+Three dialogs (~120 lines, 88 GTK tokens), all inside `dt_database_init()` and gated by its
+`has_gui` argument: "database is read-only", and two "error opening database" variants that
+offer to delete lock files or restore a snapshot.
+
+They were left out of the `dt_database_take_error()` inversion in #1103 for a concrete
+reason: that pattern has the backend *record* an error for the caller to report afterwards,
+and these three are **interactive mid-init** — the user's answer decides whether init
+continues, retries or aborts, so there is nothing to report afterwards to.
+
+A handler slot does work, and the ordering allows it:
+
+```
+darktable.c:1244   gtk_init()              <- GTK is up
+darktable.c:1259   dt_database_init()      <- the dialogs run here
+darktable.c:1402   dt_gui_gtk_init()       <- too late to register from
+```
+
+So registration cannot go where the film/collection/folder-survey handlers go. It belongs in
+`darktable.c` between those two lines, guarded by `init_gui` — legitimate, since `darktable.c`
+is the app layer and is the thing that knows whether there will be a GUI at all.
+
+Each of the three has a different button set and different return semantics, so the slot
+wants a small enum of outcomes rather than a boolean. That, plus the fact that it sits on the
+startup path where a mistake is not subtle, is why it is its own piece of work.
