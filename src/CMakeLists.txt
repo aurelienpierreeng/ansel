@@ -845,10 +845,18 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 # Link external libs
 #
 target_link_libraries(lib_ansel PUBLIC ansel_deps)
-# The widget toolkit is its own target (src/widgets/CMakeLists.txt). Whole-archive, because
-# GTK widget types register themselves through GObject and the linker would otherwise drop
-# objects nothing references by name.
-target_link_libraries(lib_ansel PRIVATE -Wl,--whole-archive ansel_widgets -Wl,--no-whole-archive)
+# The widget toolkit is its own target (src/widgets/CMakeLists.txt). Linked whole, because GTK
+# widget types register themselves through GObject and the linker would otherwise drop objects
+# nothing references by name.
+#
+# The spelling is NOT portable: --whole-archive is GNU ld, and Apple's ld64 rejects it
+# outright ("clang: error: linker command failed"), which is why this broke macOS alone while
+# Linux and Windows linked fine. ld64 spells it -force_load and takes the archive path.
+if(APPLE)
+  target_link_libraries(lib_ansel PRIVATE -Wl,-force_load,$<TARGET_FILE:ansel_widgets> ansel_widgets)
+else()
+  target_link_libraries(lib_ansel PRIVATE -Wl,--whole-archive ansel_widgets -Wl,--no-whole-archive)
+endif()
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
