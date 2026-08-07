@@ -2073,20 +2073,6 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
 #endif
 
 #if defined GDK_WINDOWING_X11
-static int _gtk_get_monitor_num(GdkMonitor *monitor)
-{
-  GdkDisplay *display;
-  int n_monitors, i;
-
-  display = gdk_monitor_get_display(monitor);
-  n_monitors = gdk_display_get_n_monitors(display);
-  for(i = 0; i < n_monitors; i++)
-  {
-    if(gdk_display_get_monitor(display, i) == monitor) return i;
-  }
-
-  return -1;
-}
 #endif
 
 // Get the display ICC profile of the monitor associated with the widget.

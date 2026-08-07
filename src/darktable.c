@@ -1293,7 +1293,10 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           if(connection) g_object_unref(connection);
         }
 #endif
-        if(!image_loaded_elsewhere) error = dt_database_show_error(darktable.db);
+        if(!image_loaded_elsewhere)
+          // Reporting CONSUMES the pending error, so the API is non-const; darktable.db is
+          // declared const, hence the cast here rather than a lie in the signature.
+          error = dt_database_show_error((struct dt_database_t *)darktable.db);
       }
       if(error)
       {

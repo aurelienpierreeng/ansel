@@ -3137,6 +3137,14 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   if(w->bauhaus->current) dt_bauhaus_hide_popup(w->bauhaus);
+
+  // Re-parent onto the window this widget actually lives in, which is not necessarily the
+  // application's main window: modules shown in a modal (the export dialog) have their own
+  // toplevel. The popup's position is computed relative to that same window below, so the two
+  // must agree or the popup lands outside its parent.
+  GtkWidget *parent_toplevel = gtk_widget_get_toplevel(widget);
+  if(parent_toplevel && gtk_widget_is_toplevel(parent_toplevel))
+    gtk_window_set_transient_for(GTK_WINDOW(w->bauhaus->popup_window), GTK_WINDOW(parent_toplevel));
   w->bauhaus->current = w;
   w->bauhaus->keys_cnt = 0;
   memset(w->bauhaus->keys, 0, sizeof(w->bauhaus->keys));
