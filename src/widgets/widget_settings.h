@@ -22,6 +22,8 @@
 #include <gtk/gtk.h>
 #include <pthread.h>
 
+#include "system/screen_metrics.h"
+
 G_BEGIN_DECLS
 
 /* Toolkit-wide state that widgets need and the application merely configures.
@@ -153,8 +155,7 @@ enum
 const GdkRGBA *dt_widget_colorlabel(int index);
 void dt_widget_set_colorlabels(const GdkRGBA *labels, int count);
 
-/* Device-scale-aware cairo surfaces: allocate at ppd resolution and tell cairo about it, so
- * drawing code works in logical pixels and stays sharp on HiDPI. */
+/* Does `state` carry exactly `desired_modifier_mask`, ignoring lock/scroll bits? */
 static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
 {
   const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
@@ -162,17 +163,9 @@ static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModi
   return (state & modifiers) == desired_modifier_mask;
 }
 
-static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
-  cairo_surface_t *cst = cairo_image_surface_create(format, width * dt_widget_ppd(), height * dt_widget_ppd());
-  cairo_surface_set_device_scale(cst, dt_widget_ppd(), dt_widget_ppd());
-  return cst;
-}
-
-static inline cairo_surface_t *dt_cairo_image_surface_create_for_data(unsigned char *data, cairo_format_t format, int width, int height, int stride) {
-  cairo_surface_t *cst = cairo_image_surface_create_for_data(data, format, width, height, stride);
-  cairo_surface_set_device_scale(cst, dt_widget_ppd(), dt_widget_ppd());
-  return cst;
-}
+/* dt_cairo_image_surface_create{,_for_data}() moved to system/screen_metrics.h with the ppd
+ * they scale by, so code below this layer can build a device-scaled surface too. This header
+ * includes it, so the ~45 files using them by these names are unaffected. */
 
 G_END_DECLS
 

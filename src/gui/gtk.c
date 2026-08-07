@@ -72,6 +72,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "darktable.h"
+#include "system/screen_metrics.h"
 #include "widgets/widget_settings.h"
 #include "widgets/resize_handle.h"
 #include "common/colorspaces.h"
@@ -1444,6 +1445,7 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
   }
   gui->dpi_factor
       = gui->dpi / 96;
+  dt_screen_set_dpi(gui->dpi); // the raw resolution, for whoever reports it rather than scales by it
   dt_widget_set_dpi_factor(gui->dpi_factor); // according to man xrandr and the docs of gdk_screen_set_resolution 96 is the default
 
   // em depends on the screen DPI (point -> px), so refresh it here too.

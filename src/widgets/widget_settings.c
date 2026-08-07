@@ -20,6 +20,7 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "system/screen_metrics.h"
 #include "widgets/widget_settings.h"
 
 #include "common/macros.h"
@@ -78,7 +79,9 @@ static gboolean _reverse_x = FALSE, _reverse_y = FALSE;
 
 // Toolkit metrics. Defaults are the 96-DPI, 16px-font reference: correct for standalone
 // dialogs that run after gtk_init() but before the application has resolved the real values.
-static double _dpi_factor = 1.0, _ppd = 1.0, _em = 16.0;
+// dpi/ppd/em are screen hardware facts and live in system/screen_metrics.c, which sits
+// below this layer so common/ can read them too. These stay as the toolkit's names for
+// them -- 45-odd files use them -- but hold no copy of their own.
 
 static dt_widget_cursor_handler_t _cursor_handler = NULL;
 static dt_widget_message_handler_t _message_handler = NULL;
@@ -125,14 +128,14 @@ void dt_widget_set_cursor(GdkCursorType cursor)
   if(_cursor_handler) _cursor_handler(cursor);
 }
 
-double dt_widget_dpi_factor(void) { return _dpi_factor; }
-void dt_widget_set_dpi_factor(double factor) { if(factor > 0.0) _dpi_factor = factor; }
+double dt_widget_dpi_factor(void) { return dt_screen_dpi_factor(); }
+void dt_widget_set_dpi_factor(double factor) { dt_screen_set_dpi_factor(factor); }
 
-double dt_widget_ppd(void) { return _ppd; }
-void dt_widget_set_ppd(double ppd) { if(ppd > 0.0) _ppd = ppd; }
+double dt_widget_ppd(void) { return dt_screen_ppd(); }
+void dt_widget_set_ppd(double ppd) { dt_screen_set_ppd(ppd); }
 
-double dt_widget_em_size(void) { return _em; }
-void dt_widget_set_em_size(double em) { if(em > 0.0) _em = em; }
+double dt_widget_em_size(void) { return dt_screen_em_size(); }
+void dt_widget_set_em_size(double em) { dt_screen_set_em_size(em); }
 
 void dt_widget_set_gui_thread(pthread_t thread)
 {
