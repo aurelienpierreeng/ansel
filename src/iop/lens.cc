@@ -183,6 +183,7 @@ typedef struct dt_iop_lensfun_global_data_t
 typedef struct dt_iop_lensfun_data_t
 {
   lfLens *lens;
+  gboolean lens_owned; // TRUE if lens was allocated by this module and must be deleted on cleanup
   int modify_flags;
   int inverse;
   float scale;
@@ -1201,12 +1202,17 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
   const lfCamera *camera = NULL;
   const lfCamera **cam = NULL;
-  if(d->lens)
+  if(d->lens && d->lens_owned)
   {
     delete d->lens;
     d->lens = NULL;
+    d->lens_owned = FALSE;
   }
-  d->lens = new lfLens;
+  else
+  {
+    d->lens = NULL;
+    d->lens_owned = FALSE;
+  }
 
   if(p->camera[0])
   {
@@ -1227,7 +1233,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     if(lens)
     {
-      *d->lens = *lens[0];
+      // Store a direct pointer to the database-owned lfLens rather than
+      // shallow-copying it. The database owns this object; we must not delete it.
+      d->lens = const_cast<lfLens *>(lens[0]);
+      d->lens_owned = FALSE;
       if(p->tca_override)
       {
 #ifdef LF_0395
@@ -1298,11 +1307,11 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 {
   dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
 
-  if(d->lens)
+  if(d->lens && d->lens_owned)
   {
     delete d->lens;
-    d->lens = NULL;
   }
+  d->lens = NULL;
   dt_free_align(piece->data);
   piece->data = NULL;
 }
