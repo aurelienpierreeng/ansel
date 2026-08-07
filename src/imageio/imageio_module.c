@@ -41,7 +41,7 @@
 #include "common/paths.h"
 #include "gui/gtk.h"
 #include "common/file_location.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "common/conf.h"
 #include "control/signal.h"
 #include <stdlib.h>

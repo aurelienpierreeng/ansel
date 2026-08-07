@@ -30,7 +30,7 @@
 #include <math.h> // for round, floorf, fmaxf
 #include "common/openmp.h"           // for __OMP_PARALLEL_FOR__
 #include "math/simd.h"             // for dt_aligned_pixel_t
-#include "common/imageio.h"          // for FILTERS_ARE_4BAYER
+#include "imageio/imageio.h"          // for FILTERS_ARE_4BAYER
 #include "pixel/interpolation.h"    // for dt_interpolation_new, dt_interp...
 #include "develop/imageop.h"         // for dt_iop_roi_t
 

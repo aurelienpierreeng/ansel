@@ -71,7 +71,7 @@
 #include "common/image_cache.h"
 #include "common/history.h"
 #include "common/image_extensions.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "imageio/imageio_module.h"
 #ifdef HAVE_OPENEXR
 #include "imageio/imageio_exr.h"

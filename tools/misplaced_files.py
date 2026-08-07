@@ -44,7 +44,7 @@ def subsystem(path):
 def sources():
     out = []
     for root, dirs, names in os.walk(SRC):
-        dirs[:] = [d for d in dirs if d != 'external']
+        dirs[:] = [d for d in dirs if d not in ('external', 'attic')]
         for n in names:
             if n.endswith(('.c', '.cc', '.cpp', '.h', '.hh', '.hpp')):
                 out.append(os.path.join(root, n))

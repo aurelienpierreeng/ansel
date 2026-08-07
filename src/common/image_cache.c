@@ -51,7 +51,7 @@
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/image.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "common/datetime.h"
 #include "control/control.h"
 #include "control/jobs.h"

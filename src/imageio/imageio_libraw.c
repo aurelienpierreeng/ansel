@@ -24,7 +24,7 @@
 #ifdef HAVE_LIBRAW
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "develop/develop.h"
 #include "common/exif.h"
 

@@ -30,7 +30,7 @@
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/image_extensions.h"
-#include "common/imageio.h"
+#include "imageio/imageio.h"
 #include "common/metadata.h"
 #include "common/datetime.h"
 #include "common/conf.h"
