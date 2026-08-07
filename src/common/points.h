@@ -35,6 +35,7 @@
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/logging.h"
+#include "common/openmp.h"   // dt_get_thread_num()
 
 /* Process-wide singleton with no per-call context to ride on: this accessor is the
  * intended end state (same category as dt_conf_*), implemented by the orchestrator. */
@@ -59,12 +60,23 @@ typedef struct dt_points_state_t
 typedef struct dt_points_t
 {
   dt_points_state_t *s;
+  unsigned int num;                 // 0 when initialisation failed; see dt_points_init()
 } dt_points_t;
 
 static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads)
 {
   p->s = (dt_points_state_t *)malloc(sizeof(dt_points_state_t) * num_threads);
-  for(int k = 0; k < num_threads; k++)
+  p->num = num_threads;
+
+  if(IS_NULL_PTR(p->s))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[points] out of memory allocating the RNG state for %u thread(s)\n", num_threads);
+    p->num = 0;
+    return;
+  }
+
+  for(int k = 0; k < (int)num_threads; k++)
   {
     p->s[k].state0 = 1 + k;
     p->s[k].state1 = 2 + k;
@@ -74,10 +86,19 @@ static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads
 static inline void dt_points_cleanup(dt_points_t *p)
 {
   dt_free(p->s);
+  p->s = NULL;
+  p->num = 0;
 }
 
 static inline float dt_points_get_for(dt_points_t *p, const unsigned int thread_num)
 {
+  /* dt_points_init() logs and leaves p->s NULL when it cannot allocate the state, which
+   * only happens if the system is genuinely out of memory. Degrade to a fixed value
+   * rather than dereferencing NULL: callers use this for dithering and noise, where
+   * losing randomness costs a little image quality, whereas crashing costs the session.
+   * The failure is already reported once, at init, instead of per pixel. */
+  if(IS_NULL_PTR(p) || IS_NULL_PTR(p->s) || thread_num >= p->num) return 0.5f;
+
   uint64_t s1 = p->s[thread_num].state0;
   uint64_t s0 = p->s[thread_num].state1;
   p->s[thread_num].state0 = s0;
@@ -1026,6 +1047,13 @@ static inline void dt_points_cleanup(dt_points_t *p)
 
 static inline float dt_points_get_for(dt_points_t *p, const unsigned int thread_num)
 {
+  /* dt_points_init() logs and leaves p->s NULL when it cannot allocate the state, which
+   * only happens if the system is genuinely out of memory. Degrade to a fixed value
+   * rather than dereferencing NULL: callers use this for dithering and noise, where
+   * losing randomness costs a little image quality, whereas crashing costs the session.
+   * The failure is already reported once, at init, instead of per pixel. */
+  if(IS_NULL_PTR(p) || IS_NULL_PTR(p->s) || thread_num >= p->num) return 0.5f;
+
   return genrand_real2f(p->s[thread_num]);
 }
 
