@@ -48,7 +48,7 @@
 #include "common/collection.h"
 #include "common/tags.h"
 #include "common/selection.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/times.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"

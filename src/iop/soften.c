@@ -51,7 +51,7 @@
 
 #include "gui/bauhaus.h"
 #include "common/module_versioning.h"
-#include "common/target_clones.h"
+#include "system/target_clones.h"
 #include "pixel/box_filters.h"
 #include "common/colorspaces.h"
 #include "common/imagebuf.h"

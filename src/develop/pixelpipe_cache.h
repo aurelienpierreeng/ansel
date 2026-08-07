@@ -29,8 +29,8 @@
 #ifndef DT_DEVELOP_PIXELPIPE_CACHE_H
 #define DT_DEVELOP_PIXELPIPE_CACHE_H
 
-#include "common/memory_arena.h"
-#include "common/atomic.h"
+#include "system/memory_arena.h"
+#include "system/atomic.h"
 #include "pixel/format.h"
 #include <inttypes.h>
 #include <glib.h>

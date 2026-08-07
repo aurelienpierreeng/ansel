@@ -20,8 +20,8 @@
 // API.)
 
 #include "common/macros.h"
-#include "math/simd.h"
-#include "common/target_clones.h"
+#include "system/simd.h"
+#include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "math/sparse_cholesky_cl.h"
 #include "develop/imageop.h"

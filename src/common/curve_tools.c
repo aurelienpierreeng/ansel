@@ -31,7 +31,7 @@
 */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "curve_tools.h"
 
 #include <float.h>

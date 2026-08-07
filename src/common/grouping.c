@@ -31,7 +31,7 @@
 #include "common/grouping.h"
 #include "common/collection.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 

@@ -56,7 +56,7 @@
 
 #include "gui/bauhaus.h"
 #include "common/module_versioning.h"
-#include "common/target_clones.h"
+#include "system/target_clones.h"
 #include "common/imagebuf.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

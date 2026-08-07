@@ -47,7 +47,7 @@
 #ifndef DT_VIEWS_VIEW_H
 #define DT_VIEWS_VIEW_H
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 
 #include "common/history.h"
 #ifdef HAVE_PRINT

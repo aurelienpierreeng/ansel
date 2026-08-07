@@ -19,7 +19,7 @@
 #include "develop/masks/masks_history.h"
 #include "develop/masks.h"
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "develop/develop.h"
 
 dt_masks_form_t *dt_masks_form_ref(dt_masks_form_t *form)

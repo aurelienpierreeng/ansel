@@ -22,7 +22,7 @@
     surface fetcher (fit-to-window or 100% with panning); the darkroom editing
     panels are intentionally absent: this is a viewer, not an editor. */
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/collection.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"

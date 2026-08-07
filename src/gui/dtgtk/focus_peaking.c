@@ -25,8 +25,8 @@
 */
 
 #include "common/macros.h"
-#include "common/openmp.h"
-#include "math/simd.h"
+#include "system/openmp.h"
+#include "system/simd.h"
 #include "gui/gtk.h"
 #include "pixel/eigf.h"
 #include "common/pixelpipe_cache_alloc.h"

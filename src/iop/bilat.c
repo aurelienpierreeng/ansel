@@ -50,7 +50,7 @@
 #include "pixel/locallaplacian.h"
 #include "pixel/locallaplaciancl.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "develop/imageop.h"

@@ -36,7 +36,7 @@
 
 #include "common/imagebuf.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 
 

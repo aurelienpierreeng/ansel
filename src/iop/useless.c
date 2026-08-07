@@ -41,9 +41,9 @@
 // our includes go first:
 #include "gui/bauhaus.h"
 #include "common/macros.h"
-#include "common/target_clones.h"
-#include "common/mem_alloc.h"
-#include "math/simd.h"
+#include "system/target_clones.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 #include "common/module_versioning.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

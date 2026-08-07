@@ -52,7 +52,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/debug.h"
 #include "common/logging.h"
 #include "common/dtpthread.h"

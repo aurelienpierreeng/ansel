@@ -35,7 +35,7 @@
 */
 #include "gui/bauhaus.h"
 #include "common/macros.h"
-#include "common/openmp.h"
+#include "system/openmp.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "gui/gtk.h"

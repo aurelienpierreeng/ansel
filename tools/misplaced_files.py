@@ -26,7 +26,7 @@ import re
 import sys
 
 SRC = 'src'
-LAYER = {'external': 0, 'win': 0, 'common': 1, 'math': 1, 'pixel': 2, 'control': 3,
+LAYER = {'external': 0, 'win': 0, 'system': 0, 'common': 1, 'math': 1, 'pixel': 2, 'control': 3,
          'gui': 4,   # dtgtk/ and bauhaus both live under gui/ now and resolve as 'gui' 'develop': 5,
          'iop': 6, 'imageio': 6, 'libs': 7, 'views': 7, 'chart': 7,
          'apps': 10,   # executables link the orchestrator, so they sit ABOVE it 'app': 9}

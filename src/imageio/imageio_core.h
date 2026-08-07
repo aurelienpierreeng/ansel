@@ -33,7 +33,7 @@
 #ifndef DT_COMMON_IMAGEIO_H
 #define DT_COMMON_IMAGEIO_H
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/image.h"
 #include "imageio/imageio_module.h"
 #include "common/mipmap_cache.h"

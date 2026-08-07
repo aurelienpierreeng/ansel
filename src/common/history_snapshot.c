@@ -25,7 +25,7 @@
 
 #include "common/database.h"
 #include "common/history_snapshot.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/image_cache.h"

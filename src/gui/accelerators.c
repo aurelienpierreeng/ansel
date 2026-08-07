@@ -44,7 +44,7 @@
 #include "accelerators.h"
 #include "common/logging.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/conf.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"

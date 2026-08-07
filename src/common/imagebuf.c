@@ -21,8 +21,8 @@
 
 #include <stdarg.h>
 #include "common/macros.h"
-#include "common/openmp.h"
-#include "common/target_clones.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 

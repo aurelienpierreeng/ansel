@@ -16,7 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "gui/gtk.h"
 #include "gui/actions/menu.h"
 #ifdef __APPLE__

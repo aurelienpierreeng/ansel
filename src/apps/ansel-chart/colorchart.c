@@ -26,8 +26,8 @@
  */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
-#include "math/simd.h"
+#include "system/mem_alloc.h"
+#include "system/simd.h"
 #include <glib/gstdio.h>
 #include <lcms2.h>
 #include <stdio.h>

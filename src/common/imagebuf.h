@@ -27,8 +27,8 @@
 #include "common/pixelpipe_cache_alloc.h"
 #endif
 
-#include "common/openmp.h"
-#include "common/target_clones.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 #include "develop/imageop.h" // for dt_iop_roi_t
 
 #ifdef __cplusplus

@@ -36,7 +36,7 @@
 #include "imageio_tiff.h"
 #include "common/colorspaces.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/exif.h"
 #include "develop/develop.h"

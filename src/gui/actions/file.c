@@ -21,7 +21,7 @@
 #include "common/macros.h"
 #include "common/conf.h"
 #include "control/jobs/control_jobs.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "common/usermanual_url.h"
 #include "control/signal.h"

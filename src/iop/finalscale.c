@@ -27,7 +27,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/conf.h"
 #include "common/module_versioning.h"
 #include "common/logging.h"

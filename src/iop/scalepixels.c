@@ -35,7 +35,7 @@
 #endif
 #include "gui/bauhaus.h"
 #include "common/module_versioning.h"
-#include "common/target_clones.h"
+#include "system/target_clones.h"
 #include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/tiling.h"

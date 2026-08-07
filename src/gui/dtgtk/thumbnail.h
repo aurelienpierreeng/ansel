@@ -34,7 +34,7 @@
 #ifndef DT_DTGTK_THUMBNAIL_H
 #define DT_DTGTK_THUMBNAIL_H
 
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/debug.h"
 #include "common/logging.h"
 #include "gui/dtgtk/thumbtable_info.h"

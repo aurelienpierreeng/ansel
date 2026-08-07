@@ -33,8 +33,8 @@
 #endif
 #include "gui/bauhaus.h"
 #include "common/macros.h"
-#include "common/openmp.h"
-#include "common/mem_alloc.h"
+#include "system/openmp.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/image.h"

@@ -23,7 +23,7 @@
 
 #ifdef HAVE_LIBRAW
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "imageio/imageio_core.h"
 #include "develop/develop.h"
 #include "common/exif.h"

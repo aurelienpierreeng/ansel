@@ -30,8 +30,8 @@
 #include <string.h>
 #include <time.h>
 
-#include "common/openmp.h"
-#include "common/target_clones.h"
+#include "system/openmp.h"
+#include "system/target_clones.h"
 
 
 #define MIN_FLOAT exp2f(-16.0f)

@@ -104,7 +104,7 @@
  * or DT_MODULE() must include common/logging.h, common/mem_alloc.h or
  * common/module_versioning.h itself. */
 #include "common/dtpthread.h"   // dt_pthread_mutex_t / rwlock members of darktable_t
-#include "common/sys_resources.h" // dt_sys_resources_t member of darktable_t
+#include "system/sys_resources.h" // dt_sys_resources_t member of darktable_t
 #include "control/signal.h"     // DT_SIGNAL_COUNT sizes the unmuted_signal_dbg array
 
 #include <glib.h>

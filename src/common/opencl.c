@@ -52,7 +52,7 @@
 
 #include "common/opencl.h"
 #include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
-#include "common/capabilities.h"
+#include "system/capabilities.h"
 #include "pixel/bilateralcl.h"
 #include "darktable.h"
 #include "common/dlopencl.h"
@@ -63,8 +63,8 @@
 #include "pixel/heal.h"
 #include "pixel/interpolation.h"
 #include "pixel/locallaplaciancl.h"
-#include "common/nvidia_gpus.h"
-#include "common/opencl_drivers_blacklist.h"
+#include "system/nvidia_gpus.h"
+#include "system/opencl_drivers_blacklist.h"
 #include "common/conf.h"
 #include "gui/splash.h"
 #include "develop/blend.h"

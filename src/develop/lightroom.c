@@ -39,7 +39,7 @@
 #include "common/colorspaces.h"
 #include "common/curve_tools.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "control/signal.h"
 #include "common/utility.h"

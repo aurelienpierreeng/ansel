@@ -42,7 +42,7 @@
 #endif
 #include "gui/bauhaus.h"
 #include "common/module_versioning.h"
-#include "common/target_clones.h"
+#include "system/target_clones.h"
 #include "pixel/bilateral.h"
 #include "math/math.h"
 #include "control/control.h"

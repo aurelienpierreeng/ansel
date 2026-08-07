@@ -19,7 +19,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #include "common/anonymous_ids.h"
-#include "common/sys_resources.h"
+#include "system/sys_resources.h"
 #endif
 
 #include "common/telemetry.h"

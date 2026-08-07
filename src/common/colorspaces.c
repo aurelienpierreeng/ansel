@@ -79,7 +79,7 @@
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_png.h"
 #include "imageio/imageio_tiff.h"
-#include "common/target_clones.h"
+#include "system/target_clones.h"
 #ifdef HAVE_LIBAVIF
 #include "imageio/imageio_avif.h"
 #endif

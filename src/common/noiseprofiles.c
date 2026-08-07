@@ -26,7 +26,7 @@
 
 #include <json-glib/json-glib.h>
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/paths.h"
 #include "common/noiseprofiles.h"

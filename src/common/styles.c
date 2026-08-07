@@ -50,7 +50,7 @@
 #include "common/database.h"
 #include "common/styles.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/paths.h"
 #include "common/image.h"

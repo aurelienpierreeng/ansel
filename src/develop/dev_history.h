@@ -16,7 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/atomic.h"
+#include "system/atomic.h"
 #include "common/history.h"
 #include "common/history_merge.h"
 

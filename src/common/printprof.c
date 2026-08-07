@@ -22,8 +22,8 @@
 */
 
 #include "common/macros.h"
-#include "common/mem_alloc.h"
-#include "common/openmp.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"
 #include "common/printprof.h"
 #include "lcms2.h"
 #include <glib.h>

@@ -49,7 +49,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "gui/bauhaus.h"
 #include "gui/dtgtk/paint.h"
 #include "gui/draw.h"

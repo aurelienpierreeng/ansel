@@ -47,7 +47,7 @@
 #include "common/utility.h"
 #include "common/tags.h"
 #include "common/macros.h"
-#include "common/mem_alloc.h"
+#include "system/mem_alloc.h"
 #include "common/image.h"
 #include "common/debug.h"
 #include "common/grouping.h"
