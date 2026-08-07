@@ -34,7 +34,7 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"

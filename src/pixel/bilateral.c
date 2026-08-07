@@ -28,7 +28,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/bilateral.h"
+#include "pixel/bilateral.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"

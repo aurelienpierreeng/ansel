@@ -52,7 +52,7 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
+#include "pixel/bilateral.h"
 #include "common/colorspaces.h"
 #include "common/math.h"
 #include "common/opencl.h"

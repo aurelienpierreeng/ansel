@@ -35,7 +35,7 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/bspline.h"
+#include "pixel/bspline.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/module_versioning.h"
@@ -44,7 +44,7 @@
 #include "common/simd.h"
 #include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/dwt.h"
+#include "pixel/dwt.h"
 #include "common/imagebuf.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"

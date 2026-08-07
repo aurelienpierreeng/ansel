@@ -37,8 +37,8 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
-#include "common/gaussian.h"
-#include "common/fast_guided_filter.h"
+#include "pixel/gaussian.h"
+#include "pixel/fast_guided_filter.h"
 
 #include <gtk/gtk.h>
 #include <stdlib.h>

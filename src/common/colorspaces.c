@@ -56,7 +56,7 @@
 #include "common/image_cache.h"
 #include "common/file_location.h"
 #include "common/math.h"
-#include "common/matrices.h"
+#include "pixel/matrices.h"
 #include "common/utility.h"
 #include "control/conf.h"
 #include "control/control.h"

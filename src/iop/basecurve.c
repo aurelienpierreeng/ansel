@@ -74,7 +74,7 @@
 #include "common/database.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/math.h"
-#include "common/rgb_norms.h"
+#include "pixel/rgb_norms.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

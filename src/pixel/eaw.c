@@ -20,13 +20,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/eaw.h"
+#include "pixel/eaw.h"
 #include "common/iop_profile.h"
 #include "common/openmp.h"
 #include "common/simd.h"
 #include "common/math.h"
 #include "control/control.h"     // needed by dwt.h
-#include "common/dwt.h"          // for dwt_interleave_rows
+#include "pixel/dwt.h"          // for dwt_interleave_rows
 #include <math.h>
 
 static inline void weight(const float *c1, const float *c2, const float sharpen, dt_aligned_pixel_t weight)

@@ -44,8 +44,8 @@
 #include "common/simd.h"
 #include "common/logging.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/box_filters.h"
-#include "common/guided_filter.h"
+#include "pixel/box_filters.h"
+#include "pixel/guided_filter.h"
 #include "common/math.h"
 #include "common/opencl.h"
 #include <assert.h>

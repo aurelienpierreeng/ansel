@@ -65,7 +65,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/colorspaces.h"
-#include "common/matrices.h"
+#include "pixel/matrices.h"
 #include "common/imagebuf.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"

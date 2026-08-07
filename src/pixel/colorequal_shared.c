@@ -16,12 +16,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/colorequal_shared.h"
+#include "pixel/colorequal_shared.h"
 
-#include "common/chromatic_adaptation.h"
+#include "pixel/chromatic_adaptation.h"
 #include "common/curve_tools.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/splines.h"
 
 #include <float.h>

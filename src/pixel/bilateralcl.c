@@ -30,8 +30,8 @@
 #include "common/logging.h"
 #ifdef HAVE_OPENCL
 
-#include "common/bilateral.h"
-#include "common/bilateralcl.h"
+#include "pixel/bilateral.h"
+#include "pixel/bilateralcl.h"
 #include "common/opencl.h"    // for dt_opencl_set_kernel_arg, dt_opencl_cr...
 #include <glib.h>             // for MAX
 #include <math.h>             // for roundf

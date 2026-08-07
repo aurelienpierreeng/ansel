@@ -28,7 +28,7 @@
 #include "common/openmp.h"
 #include "common/simd.h"
 #include "gui/gtk.h"
-#include "common/eigf.h"
+#include "pixel/eigf.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "develop/openmp_maths.h"
 

@@ -35,7 +35,7 @@
 #include "develop/pixelpipe_cache_alloc.h"
 #include <assert.h>
 #include <math.h>
-#include "common/gaussian.h"
+#include "pixel/gaussian.h"
 #include "common/math.h"
 #include "common/opencl.h"
 

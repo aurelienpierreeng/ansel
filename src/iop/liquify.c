@@ -55,7 +55,7 @@
 #include "common/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "common/opencl.h"
 #include "common/math.h"
 #include "common/collection.h"

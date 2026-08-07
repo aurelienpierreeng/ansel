@@ -52,7 +52,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/module_versioning.h"
 #include "common/target_clones.h"
-#include "common/box_filters.h"
+#include "pixel/box_filters.h"
 #include "common/colorspaces.h"
 #include "common/imagebuf.h"
 #include "common/math.h"

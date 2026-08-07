@@ -50,7 +50,7 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/nlmeans_core.h"
+#include "pixel/nlmeans_core.h"
 #include "common/opencl.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

@@ -35,7 +35,7 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "common/gaussian.h"
+#include "pixel/gaussian.h"
 #include "common/opencl.h"
 #include "common/imagebuf.h"
 #include "develop/develop.h"

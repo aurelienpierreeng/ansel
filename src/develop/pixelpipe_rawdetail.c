@@ -8,7 +8,7 @@
  * `pixelpipe_hb.c` to keep raw-detail specific geometry logic out of the main pipeline recursion code.
  */
 
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "develop/pixelpipe_cache_alloc.h"
 
 float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *target_module)

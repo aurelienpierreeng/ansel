@@ -45,10 +45,10 @@
 #endif
 // our includes go first:
 #include "bauhaus/bauhaus.h"
-#include "common/bilateral.h"
-#include "common/bilateralcl.h"
-#include "common/locallaplacian.h"
-#include "common/locallaplaciancl.h"
+#include "pixel/bilateral.h"
+#include "pixel/bilateralcl.h"
+#include "pixel/locallaplacian.h"
+#include "pixel/locallaplaciancl.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/logging.h"

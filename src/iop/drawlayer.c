@@ -45,7 +45,7 @@
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe_cache.h"
-#include "common/interpolation.h"
+#include "pixel/interpolation.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
 #include "gui/gui_throttle.h"

@@ -45,7 +45,7 @@
 #include "common/module_versioning.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
-#include "common/gaussian.h"
+#include "pixel/gaussian.h"
 #include "common/imagebuf.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

@@ -53,7 +53,7 @@
 #endif
 
 #include "bauhaus/bauhaus.h"
-#include "common/box_filters.h"
+#include "pixel/box_filters.h"
 #include "common/macros.h"
 #include "common/openmp.h"
 #include "common/target_clones.h"
@@ -61,7 +61,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/guided_filter.h"
+#include "pixel/guided_filter.h"
 #include "control/signal.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

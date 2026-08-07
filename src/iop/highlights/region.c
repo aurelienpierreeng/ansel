@@ -24,7 +24,7 @@
 #include "common/simd.h"
 #include "common/target_clones.h"
 #include "develop/pixelpipe_cache_alloc.h"
-#include "common/gaussian.h"
+#include "pixel/gaussian.h"
 #include "develop/imageop.h"
 #include "develop/noise_generator.h"
 #include "iop/highlights/blur.h"

@@ -52,7 +52,7 @@
 #include <string.h>
 
 #include "bauhaus/bauhaus.h"
-#include "common/box_filters.h"
+#include "pixel/box_filters.h"
 #include "common/math.h"
 #include "common/opencl.h"
 #include "develop/develop.h"

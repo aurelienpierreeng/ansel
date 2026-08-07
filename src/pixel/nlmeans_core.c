@@ -35,7 +35,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "iop/iop_api.h"
-#include "common/nlmeans_core.h"
+#include "pixel/nlmeans_core.h"
 #include <stdbool.h>
 #include <stdlib.h>
 
