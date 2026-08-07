@@ -99,7 +99,15 @@ static void dt_rawspeed_load_meta()
       dt_loc_get_datadir(datadir, sizeof(datadir));
       dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
       // never cleaned up (only when dt closes)
-      meta = new CameraMetaData(camfile);
+      try
+      {
+        meta = new CameraMetaData(camfile);
+      }
+      catch(...)
+      {
+        dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+        throw;
+      }
     }
     dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
   }

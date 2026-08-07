@@ -92,6 +92,12 @@ int dt_exif_read_blob(uint8_t **blob, const char *path, const int32_t imgid, con
 /** Reads exif tags that are not cached in the database */
 void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename);
 
+/** runtime gate for embedded-metadata lens correction (DNG OpcodeList3,
+ * Sony/Fuji/Olympus maker notes): TRUE if the linked Exiv2 is recent enough
+ * (>= 0.27.4) to reliably expose the tags this feature needs. Exposed so callers such
+ * as iop/lens.cc's GUI can hide the "embedded metadata" method without linking
+ * against Exiv2 themselves. */
+gboolean dt_exif_lens_correction_available(void);
 /** Reads only the DNG DefaultUserCrop tag into img->usercrop / img->usercrop_status.
  *
  * Narrow entry point for consumers that need the camera framing without decoding the raw and

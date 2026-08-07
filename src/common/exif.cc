@@ -384,6 +384,8 @@ public:
   ~Lock() { dt_pthread_mutex_unlock(&darktable.exiv2_threadsafe); }
 };
 
+// This Lock nests inside the outer Lock in dt_exif_write_blob — safe because
+// darktable.exiv2_threadsafe is initialized as recursive (PTHREAD_MUTEX_RECURSIVE).
 #define read_metadata_threadsafe(image)                       \
 {                                                             \
   Lock exiv2_lock;                                            \
@@ -900,10 +902,9 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
     pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2"));
   if(pos != exifData.end())
   {
-    uint8_t *data = (uint8_t *)g_malloc(pos->size());
+    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
     pos->copy(data, Exiv2::invalidByteOrder);
     dt_dng_opcode_process_opcode_list_2(data, pos->size(), img);
-    dt_free(data);
     has_opcodes = TRUE;
   }
   else
@@ -911,6 +912,192 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
     dt_vprint(DT_DEBUG_IMAGEIO, "DNG OpcodeList2 tag not found\n");
   }
   return has_opcodes;
+}
+
+gboolean dt_exif_lens_correction_available(void)
+{
+  return Exiv2::testVersion(0, 27, 4) ? TRUE : FALSE;
+}
+
+static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList3"));
+  if(pos == exifData.end()) pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList3"));
+  if(pos != exifData.end())
+  {
+    g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
+    pos->copy(data, Exiv2::invalidByteOrder);
+    dt_dng_opcode_process_opcode_list_3(data, pos->size(), img);
+    if(img->exif_correction_data.dng.has_warp || img->exif_correction_data.dng.has_vignette)
+      img->exif_correction_type = CORRECTION_TYPE_DNG;
+  }
+  else
+  {
+    dt_vprint(DT_DEBUG_IMAGEIO, "DNG OpcodeList3 tag not found\n");
+  }
+}
+
+static void _check_lens_correction_sony(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posd;
+  Exiv2::ExifData::const_iterator posc;
+  Exiv2::ExifData::const_iterator posv;
+  if((_exif_read_exif_tag(exifData, &posd, "Exif.SubImage1.DistortionCorrParams")
+      && _exif_read_exif_tag(exifData, &posc, "Exif.SubImage1.ChromaticAberrationCorrParams")
+      && _exif_read_exif_tag(exifData, &posv, "Exif.SubImage1.VignettingCorrParams"))
+     || (_exif_read_exif_tag(exifData, &posd, "Exif.Image.0x7037")
+         && _exif_read_exif_tag(exifData, &posc, "Exif.Image.0x7035")
+         && _exif_read_exif_tag(exifData, &posv, "Exif.Image.0x7032")))
+  {
+    const int nc = posd->toLong(0);
+    if(nc <= 16 && 2 * nc == posc->toLong(0) && nc == posv->toLong(0)
+       && (int)posd->count() >= nc + 1
+       && (int)posc->count() >= 2 * nc + 1
+       && (int)posv->count() >= nc + 1)
+    {
+      img->exif_correction_data.sony.nc = nc;
+      for(int i = 0; i < nc; i++)
+      {
+        img->exif_correction_data.sony.distortion[i] = posd->toLong(i + 1);
+        img->exif_correction_data.sony.ca_r[i] = posc->toLong(i + 1);
+        img->exif_correction_data.sony.ca_b[i] = posc->toLong(nc + i + 1);
+        img->exif_correction_data.sony.vignetting[i] = posv->toLong(i + 1);
+      }
+      img->exif_correction_type = CORRECTION_TYPE_SONY;
+    }
+  }
+}
+
+static bool _read_fuji_9coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
+                             Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+{
+  f->nc = 9;
+  for(int i = 0; i < 9; i++)
+  {
+    const float kd = posd->toFloat(i + 1);
+    const float kc = posc->toFloat(i + 1);
+    const float kv = posv->toFloat(i + 1);
+    if(kd != kc || kd != kv) return false;
+    f->knots[i] = kd;
+    f->distortion[i] = posd->toFloat(i + 10);
+    f->ca_r[i] = posc->toFloat(i + 10);
+    f->ca_b[i] = posc->toFloat(i + 19);
+    f->vignetting[i] = posv->toFloat(i + 10);
+  }
+  return true;
+}
+
+static bool _read_fuji_11coef(Exiv2::ExifData::const_iterator posd, Exiv2::ExifData::const_iterator posc,
+                               Exiv2::ExifData::const_iterator posv, dt_image_correction_fuji_t *f)
+{
+  f->nc = 11;
+  for(int i = 0; i < 11; i++)
+  {
+    const float kd = posd->toFloat(i + 1);
+    const float kc = (i != 0) ? posc->toFloat(i) : 0.0f;
+    const float kv = posv->toFloat(i + 1);
+    if(kd != kc || kd != kv) return false;
+    f->knots[i] = kd;
+    f->distortion[i] = posd->toFloat(i + 12);
+    if(i == 0)
+    {
+      f->ca_r[i] = 0.0f;
+      f->ca_b[i] = 0.0f;
+    }
+    else
+    {
+      f->ca_r[i] = posc->toFloat(i + 10);
+      f->ca_b[i] = posc->toFloat(i + 20);
+    }
+    f->vignetting[i] = posv->toFloat(i + 12);
+  }
+  return true;
+}
+static void _check_lens_correction_fuji(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posd;
+  Exiv2::ExifData::const_iterator posc;
+  Exiv2::ExifData::const_iterator posv;
+  Exiv2::ExifData::const_iterator posm;
+  if(!_exif_read_exif_tag(exifData, &posd, "Exif.Fujifilm.GeometricDistortionParams")
+     || !_exif_read_exif_tag(exifData, &posc, "Exif.Fujifilm.ChromaticAberrationParams")
+     || !_exif_read_exif_tag(exifData, &posv, "Exif.Fujifilm.VignettingParams"))
+    return;
+
+  if(posd->count() == 19 && posc->count() == 29 && posv->count() == 19)
+  {
+    if(!_read_fuji_9coef(posd, posc, posv, &img->exif_correction_data.fuji))
+    {
+      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      return;
+    }
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+  }
+  else if(posd->count() == 23 && posc->count() == 31 && posv->count() == 23)
+  {
+    if(!_read_fuji_11coef(posd, posc, posv, &img->exif_correction_data.fuji))
+    {
+      img->exif_correction_type = CORRECTION_TYPE_NONE;
+      return;
+    }
+    img->exif_correction_type = CORRECTION_TYPE_FUJI;
+  }
+  else
+  {
+    return;
+  }
+
+  if(_exif_read_exif_tag(exifData, &posm, "Exif.Fujifilm.CropMode")
+     && (posm->toLong() == 2 || posm->toLong() == 4))
+    img->exif_correction_data.fuji.cropf = 1.25f;
+  else
+    img->exif_correction_data.fuji.cropf = 1.0f;
+}
+
+static void _check_lens_correction_olympus(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  Exiv2::ExifData::const_iterator posip;
+
+  if(_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150a") && posip->count() == 4)
+  {
+    for(int i = 0; i < 4; i++)
+    {
+      const float kd = posip->toFloat(i);
+      img->exif_correction_data.olympus.dist[i] = kd;
+      if(kd != 0.0f && i < 3)
+      {
+        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
+        img->exif_correction_data.olympus.has_dist = TRUE;
+      }
+    }
+  }
+
+  if(_exif_read_exif_tag(exifData, &posip, "Exif.OlympusIp.0x150c") && posip->count() == 6)
+  {
+    for(int i = 0; i < 6; i++)
+    {
+      const float kc = posip->toFloat(i);
+      img->exif_correction_data.olympus.ca[i] = kc;
+      if(kc != 0.0f)
+      {
+        img->exif_correction_type = CORRECTION_TYPE_OLYMPUS;
+        img->exif_correction_data.olympus.has_ca = TRUE;
+      }
+    }
+  }
+}
+
+static void _check_lens_correction_data(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  img->exif_correction_type = CORRECTION_TYPE_NONE;
+  memset(&img->exif_correction_data, 0, sizeof(img->exif_correction_data));
+
+  if(!Exiv2::testVersion(0, 27, 4)) return;
+
+  _check_lens_correction_dng(exifData, img);
+  _check_lens_correction_sony(exifData, img);
+  _check_lens_correction_fuji(exifData, img);
+  _check_lens_correction_olympus(exifData, img);
 }
 
 void dt_exif_read_usercrop(dt_image_t *img, const char *filename)
@@ -949,7 +1136,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
     {
       _check_usercrop(exifData, img);
       _check_dng_opcodes(exifData, img);
-      // _check_lens_correction_data(exifData, img);
+      _check_lens_correction_data(exifData, img);
     }
     return;
   }
@@ -1206,6 +1393,8 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     {
       img->flags |= DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
     }
+
+    _check_lens_correction_data(exifData, img);
 
     /*
      * Get the focus distance in meters.
@@ -2608,7 +2797,9 @@ typedef struct history_entry_t
   double iop_order; // kept for compatibility with xmp version < 4
 
   // sanity checking
-  gboolean have_operation, have_params, have_modversion;
+  gboolean have_operation;
+  gboolean have_params;
+  gboolean have_modversion;
 } history_entry_t;
 
 // used for a hash table that maps mask_id to the mask data

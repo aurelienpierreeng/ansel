@@ -303,6 +303,8 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
   if(libraw_err != LIBRAW_SUCCESS) goto error;
   img->dsc.filters = raw->idata.filters;
 
+  dt_exif_img_check_additional_tags(img, filename);
+
   // For CR3, we only have Bayer data and a single channel
   img->dsc.channels = 1;
   img->dsc.datatype = TYPE_UINT16;
