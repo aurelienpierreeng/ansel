@@ -25,13 +25,9 @@
 #define DT_CHART_COLORCHART_H
 
 #include "common/colorspaces.h"
+#include "math/homography.h"   // point_t
 
 #include <glib.h>
-
-typedef struct point_t
-{
-  float x, y;
-} point_t;
 
 typedef struct f_line_t
 {

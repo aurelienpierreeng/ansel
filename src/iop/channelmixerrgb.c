@@ -55,7 +55,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
-#include "chart/common.h"
+#include "math/homography.h"
 #include "pixel/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorchecker.h"

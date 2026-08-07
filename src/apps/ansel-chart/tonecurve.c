@@ -22,7 +22,7 @@
 
 #include "common/macros.h"
 #include "common/mem_alloc.h"
-#include "chart/tonecurve.h"
+#include "apps/ansel-chart/tonecurve.h"
 
 #include <assert.h>
 #include <stdint.h>

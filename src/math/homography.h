@@ -2,7 +2,6 @@
  *    This file is part of darktable,
  *    Copyright (C) 2016 johannes hanika.
  *    Copyright (C) 2016, 2020 Tobias Ellinghaus.
- *    Copyright (C) 2020 Aurélien PIERRE.
  *    Copyright (C) 2020 Pascal Obry.
  *    Copyright (C) 2021 Sakari Kapanen.
  *    Copyright (C) 2022 Martin Bařinka.
@@ -21,47 +20,30 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_CHART_COMMON_H
-#define DT_CHART_COMMON_H
 
-#include "chart/colorchart.h"
+#ifndef DT_MATH_HOMOGRAPHY_H
+#define DT_MATH_HOMOGRAPHY_H
 
-enum
+/* Planar homography: the 3x3 projective map between two quadrilaterals.
+ *
+ * This lived in chart/common.c, next to the colour-chart parser, back when the
+ * chart tool was its own program. It is plain projective geometry with no
+ * dependency on either -- iop/channelmixerrgb.c uses it to map its colour-checker
+ * bounding box, and was compiling chart/common.c directly to get at it. */
+
+typedef struct point_t
 {
-  TOP_LEFT = 0,
-  TOP_RIGHT = 1,
-  BOTTOM_RIGHT = 2,
-  BOTTOM_LEFT = 3
-};
+  float x, y;
+} point_t;
 
-typedef struct image_t
-{
-  GtkWidget *drawing_area;
-
-  cairo_surface_t *surface;
-  cairo_pattern_t *image;
-  int width, height;
-  float *xyz;
-  float scale;
-  int offset_x, offset_y;
-  float shrink;
-
-  point_t bb[4];
-
-  chart_t **chart;
-  gboolean draw_colored;
-} image_t;
-
+/** Solve for the homography `h` (9 floats) mapping the 4 `source` points onto
+ *  the 4 `target` points. Returns 0 on success. */
 int get_homography(const point_t *source, const point_t *target, float *h);
+
+/** Map a single point through the homography `h`. */
 point_t apply_homography(point_t p, const float *h);
-// Gives a factor of scaling areas at point p
+
+/** The factor by which `h` scales AREAS at point `p`. */
 float apply_homography_scaling(point_t p, const float *h);
 
-#endif // DT_CHART_COMMON_H
-
-// clang-format off
-// modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
-// vim: shiftwidth=2 expandtab tabstop=2 cindent
-// kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
-// clang-format on
-
+#endif // DT_MATH_HOMOGRAPHY_H

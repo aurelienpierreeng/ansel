@@ -928,18 +928,18 @@ add_subdirectory(imageio)
 
 if(HAVE_OPENCL)
   # have a small test program, to be run as root on some systems to enable the driver to run cl stuff
-  add_subdirectory(apps/cltest)
+  add_subdirectory(apps/ansel-cltest)
 endif(HAVE_OPENCL)
 
 # have a command line interface
-add_subdirectory(apps/cli)
+add_subdirectory(apps/ansel-cli)
 
 # have a command line utility to generate all the thumbnails
-add_subdirectory(apps/generate-cache)
+add_subdirectory(apps/ansel-generate-cache)
 
 # have a small test program that verifies your color management setup
 if(BUILD_CMSTEST)
-  add_subdirectory(apps/cmstest)
+  add_subdirectory(apps/ansel-cmstest)
 endif(BUILD_CMSTEST)
 
 # have some test programs for unit testing, ...
