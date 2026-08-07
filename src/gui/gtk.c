@@ -73,6 +73,7 @@
 */
 #include "darktable.h"
 #include "widgets/widget_settings.h"
+#include "widgets/resize_handle.h"
 #include "common/colorspaces.h"
 #include "common/l10n.h"
 #include "common/file_location.h"
@@ -2944,7 +2945,7 @@ GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str, dt_u
   // Drag grip floating on the scrolled window's bottom edge (overlay): it takes no layout space,
   // so the wrapper leaves no margin-like gap and stays aligned with neighbouring widgets. The grip
   // is centered on the bottom border via CSS and is invisible until hovered.
-  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
+  GtkWidget *handle = dtgtk_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
                                                    _("Drag to resize"),
                                                    _resizable_scroll_handle_get_size,
                                                    _resizable_scroll_handle_resize, w);
@@ -3037,7 +3038,7 @@ GtkWidget *dt_ui_resizable_drawing_area(GtkWidget *area, char *config_str, int d
   // Drag grip floating on the area's bottom edge (an overlay, not a packed sibling), so it takes
   // no layout space -- the area stays flush with neighbouring widgets, no margin-like gap. It sits
   // over the graph's bottom inset/axis margin (graphs reserve one), invisible until hovered.
-  GtkWidget *handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
+  GtkWidget *handle = dtgtk_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
                                                    _("Drag to resize"),
                                                    _resizable_area_get_size, _resizable_area_resize, area);
 

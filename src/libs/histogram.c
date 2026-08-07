@@ -55,6 +55,7 @@
 #include <inttypes.h>
 
 #include "widgets/bauhaus.h"
+#include "widgets/resize_handle.h"
 #include "widgets/widget_settings.h"
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
@@ -3045,7 +3046,7 @@ void gui_init(dt_lib_module_t *self)
    * Handle to resize the scope vertically. Drag the handle up or down to adjust the height of the scope display.
    */
 
-  d->scope_resize_handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
+  d->scope_resize_handle = dtgtk_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
                                                         _("Drag to resize the scope vertically"),
                                                         _scope_resize_handle_get_size,
                                                         _scope_resize_handle_resize, d);

@@ -20,6 +20,7 @@ set(ANSEL_WIDGETS_SOURCES
   icon.c
   icon_cell_renderer.c
   paint.c
+  resize_handle.c
   resetlabel.c
   sidepanel.c
   thumbnail_btn.c

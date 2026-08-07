@@ -90,6 +90,7 @@ application as-is, unlike the rest.
 | `resetlabel.c` | a label emitting `"reset"` on double-click |
 | `accelerators.{c,h}` | the whole keyboard-shortcut system (3224 lines) |
 | `bauhaus.{c,h}` | the slider/combobox toolkit (3982 lines) |
+| `resize_handle.{c,h}` | the drag grip that resizes a panel, the scope, the filmstrip |
 | `gtkentry.c` | `GtkEntry` completion helper |
 | `gdkkeys.h` | keysym mapping (numpad/main-pad equivalence) |
 | `widget_settings.{c,h}` | toolkit state: scroll, DPI/em metrics, freeze depth, palette |
