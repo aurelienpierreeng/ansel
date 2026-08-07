@@ -97,7 +97,7 @@ typedef enum dt_dev_pixelpipe_cache_writable_status_t
 dt_dev_pixelpipe_cache_t *dt_dev_pixelpipe_cache_init(size_t max_memory);
 
 /** The application-wide pixelpipe cache singleton. DECLARED here because it is this
- * module's object; BOUND by the orchestrator (common/darktable.c), so this header
+ * module's object; BOUND by the orchestrator (darktable.c), so this header
  * never needs to see the application struct. */
 dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void);
 void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);

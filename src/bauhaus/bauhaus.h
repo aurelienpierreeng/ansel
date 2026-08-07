@@ -301,7 +301,7 @@ void dt_bauhaus_cleanup(dt_bauhaus_t *bauhaus);
  * callers a handle source. It is the end state: the context is process-wide (one
  * theme, one font, one popup) and a third of the constructor call sites pass
  * DT_GUI_MODULE(NULL), so the handle cannot ride on the module either.
- * Implemented by the orchestrator (common/darktable.c). */
+ * Implemented by the orchestrator (darktable.c). */
 dt_bauhaus_t *dt_bauhaus_get_global(void);
 
 // load theme colors, fonts, etc

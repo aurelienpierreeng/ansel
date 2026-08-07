@@ -20,7 +20,7 @@
 
 /* Function multi-versioning (target_clones) for SIMD compute functions.
  *
- * This is THE canonical definition of __DT_CLONE_TARGETS__: common/darktable.h
+ * This is THE canonical definition of __DT_CLONE_TARGETS__: darktable.h
  * inherits it from here (it used to carry a deliberate duplicate until the
  * de-glueing landed). Self-contained on purpose — low-level compute units
  * (common/nn_model.c and friends) include this without pulling anything else.

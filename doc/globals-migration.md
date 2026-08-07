@@ -51,7 +51,7 @@ Then: `collection` 97/27, `undo` 91/16, `selection` 88/24, `mipmap_cache` 70/19,
 
 - **A — thread through existing args** (`dev`/`pipe`/`self`/`module`): the real injection.
 - **B — orchestrator-implemented accessor** (declared by the owning lib, implemented in
-  `common/darktable.c`; precedent: `dt_pixelpipe_cache_get_global()`,
+  `darktable.c`; precedent: `dt_pixelpipe_cache_get_global()`,
   `dt_get_num_openmp_threads()`): interim step that already frees lib headers from
   darktable.h.
 - **C — pass at init, store in the subsystem's own struct**: for services with a natural

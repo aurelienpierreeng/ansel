@@ -325,7 +325,7 @@ void dt_control_init(dt_control_t *s);
  * log/toast queue, one pointer state) with no per-call context to ride on, so this
  * accessor is the end state for the handle; finer encapsulation of its three
  * sub-services (log/toast, progress, pointer state) is a separate concern.
- * Implemented by the orchestrator (common/darktable.c). */
+ * Implemented by the orchestrator (darktable.c). */
 struct dt_control_t *dt_control_get_global(void);
 
 // join all worker threads.

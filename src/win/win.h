@@ -25,7 +25,7 @@
 
 /* winsock2.h must precede windows.h, and this shim exists partly to enforce that.
    But it can no longer assume it is the first Windows header in the translation unit:
-   common/darktable.h used to be included very early everywhere, and since the header
+   darktable.h used to be included very early everywhere, and since the header
    de-glueing it often comes after headers that already pulled windows.h. In that case
    including winsock2.h here cannot fix the ordering retroactively -- it only emits
    MinGW's "Please include winsock2.h before windows.h" warning, which -Werror turns

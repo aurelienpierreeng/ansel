@@ -177,7 +177,7 @@ void dt_gui_set_symbolic_icon(GtkWidget *image, const char *icon_name, GtkIconSi
 }
 
 /* ------------------------------------------------------------------------------------------
- * Widget-callback suppression depth (see common/darktable.h for the rationale and API).
+ * Widget-callback suppression depth (see darktable.h for the rationale and API).
  * ------------------------------------------------------------------------------------------ */
 static inline gboolean _dt_on_gui_thread(void)
 {

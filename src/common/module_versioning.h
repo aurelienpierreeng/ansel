@@ -21,7 +21,7 @@
 /* Module-interface versioning: the DT_MODULE()/DT_MODULE_INTROSPECTION() macros every
  * dynamically-loaded module (iop, lib, view, imageio) must instantiate, and the version
  * they are checked against at dlopen time. Application-free on purpose: module-interface
- * headers include this instead of common/darktable.h. */
+ * headers include this instead of darktable.h. */
 
 #ifdef __cplusplus
 extern "C" {

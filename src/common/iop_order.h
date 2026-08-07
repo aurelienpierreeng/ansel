@@ -133,7 +133,7 @@
 
 /* Self-containment: the declarations below use GList/gboolean (glib) and int32_t.
  * This header used to compile only because its consumers happened to include
- * common/darktable.h first. */
+ * darktable.h first. */
 #include <glib.h>
 #include <stdint.h>
 

@@ -19,9 +19,9 @@
 #define DT_COMMON_LOGGING_H
 
 /* Debug-channel flags and the dt_print() family. The implementations live in
- * common/darktable.c (they read the runtime `darktable.unmuted` mask), but the
+ * darktable.c (they read the runtime `darktable.unmuted` mask), but the
  * DECLARATIONS need nothing from the application: low-level compute units include
- * this instead of common/darktable.h to be able to log. */
+ * this instead of darktable.h to be able to log. */
 
 #include <stdint.h>
 
@@ -73,7 +73,7 @@ typedef enum dt_debug_thread_t
 #define DT_DEBUG_SUPERVISOR ((int32_t)(1u << 31))
 
 /* Runtime debug-channel mask (the application's `darktable.unmuted`). Accessor
- * declared here, implemented by the orchestrator (common/darktable.c, next to
+ * declared here, implemented by the orchestrator (darktable.c, next to
  * dt_print()) so header inlines can gate on debug channels without importing
  * the application struct. Test with `dt_get_debug_flags() & DT_DEBUG_XXX`. */
 int32_t dt_get_debug_flags(void);
