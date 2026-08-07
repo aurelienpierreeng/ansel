@@ -41,16 +41,53 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "accelerators.h"
+#include "widgets/accelerators.h"
+
+#include <glib/gi18n.h>
 #include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
-#include "common/conf.h"
-#include "gui/gtk.h"
-#include "gui/gtkentry.h"
+#include "widgets/gtkentry.h"
 #include "widgets/gdkkeys.h"
 #include "widgets/icon_cell_renderer.h"
+
+/* ------------------------------------------------------------------------------------------
+ * Host hooks (see accelerators.h). Each is optional and inert when unregistered.
+ * ------------------------------------------------------------------------------------------ */
+static dt_accels_t *_accels_global = NULL;
+static dt_accels_top_offset_handler_t _top_offset_handler = NULL;
+static dt_accels_refocus_handler_t _refocus_handler = NULL;
+static dt_accels_recent_get_handler_t _recent_get = NULL;
+static dt_accels_recent_set_handler_t _recent_set = NULL;
+
+void dt_accels_set_global(dt_accels_t *accels)
+{
+  _accels_global = accels;
+}
+
+dt_accels_t *dt_accels_get_global(void)
+{
+  return _accels_global;
+}
+
+void dt_accels_set_top_offset_handler(dt_accels_top_offset_handler_t handler)
+{
+  _top_offset_handler = handler;
+}
+
+void dt_accels_set_refocus_handler(dt_accels_refocus_handler_t handler)
+{
+  _refocus_handler = handler;
+}
+
+void dt_accels_set_recent_handlers(dt_accels_recent_get_handler_t get,
+                                   dt_accels_recent_set_handler_t set)
+{
+  _recent_get = get;
+  _recent_set = set;
+}
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -136,9 +173,9 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   if(IS_NULL_PTR(shortcut))
   {
     const char *accel_path = g_object_get_data(G_OBJECT(widget), "accel-path");
-    if(accel_path && dt_gui_get_global() && dt_gui_get_accels())
+    if(accel_path && dt_accels_get_global())
     {
-      dt_accels_t *accels = dt_gui_get_accels();
+      dt_accels_t *accels = dt_accels_get_global();
       dt_pthread_mutex_lock(&accels->lock);
       shortcut = (dt_shortcut_t *)g_hash_table_lookup(accels->acceleratables, accel_path);
       dt_pthread_mutex_unlock(&accels->lock);
@@ -1947,15 +1984,7 @@ static void _shortcut_search_load_recent_entries(GtkListStore *store)
 
   for(gint i = 0; i < DT_ACCEL_SEARCH_RECENT_MAX; i++)
   {
-    gchar *entry_key = g_strdup_printf("%s/%d", DT_ACCEL_SEARCH_RECENT_KEY, i);
-    if(!dt_conf_key_exists(entry_key))
-    {
-      dt_free(entry_key);
-      continue;
-    }
-
-    gchar *entry = dt_conf_get_string(entry_key);
-    dt_free(entry_key);
+    gchar *entry = _recent_get ? _recent_get(i) : NULL;
     if(IS_NULL_PTR(entry) || entry[0] == '\0')
     {
       dt_free(entry);
@@ -2108,15 +2137,7 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
 
   for(gint i = 0; i < DT_ACCEL_SEARCH_RECENT_MAX && entries->len < DT_ACCEL_SEARCH_RECENT_MAX; i++)
   {
-    gchar *entry_key = g_strdup_printf("%s/%d", DT_ACCEL_SEARCH_RECENT_KEY, i);
-    if(!dt_conf_key_exists(entry_key))
-    {
-      dt_free(entry_key);
-      continue;
-    }
-
-    gchar *candidate = dt_conf_get_string(entry_key);
-    dt_free(entry_key);
+    gchar *candidate = _recent_get ? _recent_get(i) : NULL;
     if(IS_NULL_PTR(candidate) || candidate[0] == '\0')
     {
       dt_free(candidate);
@@ -2167,12 +2188,9 @@ static void _shortcut_search_save_recent_entry(const char *query, const dt_short
 
   for(gint i = 0; i < DT_ACCEL_SEARCH_RECENT_MAX; i++)
   {
-    gchar *entry_key = g_strdup_printf("%s/%d", DT_ACCEL_SEARCH_RECENT_KEY, i);
     const gchar *entry_value = (i < entries->len) ? (const gchar *)g_ptr_array_index(entries, i) : "";
-    dt_conf_set_string(entry_key, entry_value);
-    dt_free(entry_key);
+    if(_recent_set) _recent_set(i, entry_value);
   }
-  dt_conf_set_string(DT_ACCEL_SEARCH_RECENT_KEY, "");
 
   g_ptr_array_free(entries_ci, TRUE);
   g_ptr_array_free(entries, TRUE);
@@ -2557,8 +2575,8 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   // Keep module/control focus actions in their UI context.
   // Refocusing center here would move focus to the main view (thumbtable/center)
   // and can race with deferred control focus in action callbacks.
-  if(IS_NULL_PTR(target_widget))
-    dt_gui_refocus_center();
+  if(IS_NULL_PTR(target_widget) && _refocus_handler)
+    _refocus_handler();
 
   // The action we are about to invoke can destroy modules and free this very
   // shortcut and/or its target widget. Capture everything we still need afterwards
@@ -3186,13 +3204,8 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   else
     gtk_window_get_position(main_window, &main_x, &main_y);
 
-  gint top_panel_height = 0;
-  if(!IS_NULL_PTR(dt_gui_get_global()) && !IS_NULL_PTR(dt_gui_get_ui()))
-  {
-    GtkWidget *top_panel = dt_gui_get_ui()->panels[DT_UI_PANEL_TOP];
-    if(!IS_NULL_PTR(top_panel) && gtk_widget_get_visible(top_panel))
-      top_panel_height = gtk_widget_get_allocated_height(top_panel);
-  }
+  // How far down the host wants this window is the host's business.
+  const gint top_panel_height = _top_offset_handler ? _top_offset_handler() : 0;
 
   const gint window_x = main_x + MAX((main_alloc.width - dialog_width) / 2, 0);
   const gint window_y = main_y + MAX(top_panel_height, 0);
@@ -3213,7 +3226,7 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
     dispatch->path = g_strdup(state.selected->path);
     dispatch->accels = !IS_NULL_PTR(state.selected->accels)
                        ? state.selected->accels
-                       : (!IS_NULL_PTR(dt_gui_get_global()) ? dt_gui_get_accels() : NULL);
+                       : dt_accels_get_global();
     dispatch->main_window = main_window;
     g_idle_add(_dispatch_selected_shortcut_idle, dispatch);
   }

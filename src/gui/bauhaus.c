@@ -71,7 +71,7 @@
 #include "develop/imageop.h"
 
 
-#include "gui/accelerators.h"
+#include "widgets/accelerators.h"
 #include "gui/gui_throttle.h"
 #include "gui/gtk.h"
 #ifdef GDK_WINDOWING_QUARTZ

@@ -22,6 +22,9 @@
 
 #include "widgets/widget_style.h"
 
+#include <glib.h>
+#include <string.h>
+
 void dt_gui_add_class(GtkWidget *widget, const gchar *class_name)
 {
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
@@ -40,6 +43,35 @@ void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name)
     gtk_style_context_remove_class(context, class_name);
     gtk_widget_queue_draw(widget);
   }
+}
+
+void dt_capitalize_label(gchar *text)
+{
+  if(!text || !text[0]) return;
+
+  // Deal with strings beginning with a Mnemonics underscore
+  gchar *p = text;
+  if(*p == '_' && p[1]) p++;
+
+  // `p[0] = g_unichar_toupper(p[0])` used to write here directly, but `p[0]` is only
+  // the first *byte* of `p`, not the first character: translated labels routinely
+  // start with a multi-byte UTF-8 character (accented capitals, non-Latin scripts).
+  // Mutating one byte of a multi-byte sequence produces a different, still
+  // "valid-looking" sequence followed by an orphaned continuation byte - invalid
+  // UTF-8 that crashes later collation (e.g. g_utf8_collate -> glibc wcscoll_l).
+  gunichar c = g_utf8_get_char_validated(p, -1);
+  if(c == (gunichar)-1 || c == (gunichar)-2) return; // invalid UTF-8, leave untouched
+
+  gunichar upper = g_unichar_toupper(c);
+  if(upper == c) return;
+
+  gchar utf8_buf[6] = { 0 };
+  gint n = g_unichar_to_utf8(upper, utf8_buf);
+  gint orig_len = g_utf8_next_char(p) - p;
+
+  // Callers pass buffers sized exactly for the original string (often g_strdup'd),
+  // not a longer one - only mutate in place if the uppercase form fits.
+  if(n == orig_len) memcpy(p, utf8_buf, n);
 }
 
 // clang-format off

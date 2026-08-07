@@ -33,7 +33,7 @@
 #include "common/conf.h"
 #include "control/jobs/import_jobs.h"
 #include "gui/gtk.h"
-#include "gui/gtkentry.h"
+#include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 

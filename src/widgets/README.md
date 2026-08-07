@@ -40,10 +40,20 @@ No file here includes anything from `gui/`. What each of them needed came out wi
 `gui/gtk.h` includes `widget_settings.h` and `widget_style.h`, so the 45 files that used those
 names keep compiling unchanged.
 
-**Two things the application must register at startup**, both in `dt_gui_gtk_init()`:
-`dt_widget_set_gui_thread()` (freezing is a deliberate no-op off the GUI thread, and inert
-until registered) and `dt_widget_set_scroll_reversed()` (a user preference, since a widget
-does not read conf).
+**What the application registers at startup**, in `dt_gui_gtk_init()` unless noted:
+
+| call | why |
+|---|---|
+| `dt_widget_set_gui_thread()` | freezing is a no-op off the GUI thread, and inert until registered |
+| `dt_widget_set_scroll_reversed()` | a user preference; a widget does not read conf |
+| `dt_widget_set_dpi_factor/_ppd/_em_size()` | screen and theme metrics, pushed as they are resolved |
+| `dt_accels_set_global()` | the shortcut system's instance |
+| `dt_accels_set_top_offset_handler()` | where the host wants the shortcut window placed |
+| `dt_accels_set_refocus_handler()` | return focus to the host's main area |
+| `dt_accels_set_recent_handlers()` | persistence for the shortcut-search history |
+
+Unregistered, each degrades to an inert default — which is what makes headless runs work
+without a single "is there a GUI?" test.
 
 **The colour-label indices are pinned.** `widgets/` declares its own so it needs no
 application header; `gui/gtk.c` carries a `_Static_assert` tying them to `dt_colorlabels_enum`,
@@ -64,6 +74,16 @@ application as-is, unlike the rest.
 | `drawingarea.c` | aspect-ratio-preserving drawing area |
 | `expander.c` | the collapsible section header |
 | `thumbnail_btn.c` | the small overlay button used on thumbnails |
+| `gradientslider.c` | the gradient slider |
+| `sidepanel.c` | the collapsible side panel |
+| `focus_peaking.c` | focus-peaking overlay rendering |
+| `resetlabel.c` | a label emitting `"reset"` on double-click |
+| `accelerators.{c,h}` | the whole keyboard-shortcut system (3224 lines) |
+| `gtkentry.c` | `GtkEntry` completion helper |
+| `gdkkeys.h` | keysym mapping (numpad/main-pad equivalence) |
+| `widget_settings.{c,h}` | toolkit state: scroll, DPI/em metrics, freeze depth, palette |
+| `widget_style.{c,h}` | CSS class helpers, label capitalisation |
+| `cairo_shapes.h` | `dt_draw_star`, `dt_draw_line`, `set_color` |
 
 ## What stayed behind in `gui/dtgtk/`, and why
 

@@ -1059,6 +1059,33 @@ static const char* _get_axis_name(int pos)
   return AXIS_NAMES[pos];
 }
 
+
+/* ---- Host hooks for the shortcut system (widgets/accelerators.c) --------------------- */
+#define DT_ACCEL_SEARCH_RECENT_KEY "plugins/accel_search/recent_entries"
+
+static gint _accels_top_offset(void)
+{
+  if(IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return 0;
+  GtkWidget *top_panel = dt_gui_get_ui()->panels[DT_UI_PANEL_TOP];
+  if(IS_NULL_PTR(top_panel) || !gtk_widget_get_visible(top_panel)) return 0;
+  return gtk_widget_get_allocated_height(top_panel);
+}
+
+static gchar *_accels_recent_get(int index)
+{
+  gchar *key = g_strdup_printf("%s/%d", DT_ACCEL_SEARCH_RECENT_KEY, index);
+  gchar *value = dt_conf_key_exists(key) ? dt_conf_get_string(key) : NULL;
+  dt_free(key);
+  return value;
+}
+
+static void _accels_recent_set(int index, const char *value)
+{
+  gchar *key = g_strdup_printf("%s/%d", DT_ACCEL_SEARCH_RECENT_KEY, index);
+  dt_conf_set_string(key, value ? value : "");
+  dt_free(key);
+}
+
 /* common/ reports startup progress; opening the splash on the first message is display
  * state, so it lives here rather than in whatever subsystem happens to be slow. */
 static void _gui_startup_progress(const char *message)
@@ -1276,6 +1303,11 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   if(dt_control_get_global()) dt_widget_set_gui_thread(dt_control_get_global()->gui_thread);
   dt_widget_set_scroll_reversed(dt_conf_get_bool("scroll/reverse_x"), dt_conf_get_bool("scroll/reverse_y"));
 
+  dt_accels_set_global(gui->accels);
+  dt_accels_set_top_offset_handler(_accels_top_offset);
+  dt_accels_set_refocus_handler(dt_gui_refocus_center);
+  dt_accels_set_recent_handlers(_accels_recent_get, _accels_recent_set);
+
   dt_thumbnail_notify_set_handler(_gui_refresh_thumbnail);
   dt_startup_progress_set_handler(_gui_startup_progress);
   dt_film_gui_register_handlers();
@@ -1347,6 +1379,7 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
   GtkWidget *widget = gui->ui->main_window;
 
   gui->ppd = dt_get_system_gui_ppd(widget);
+  dt_widget_set_ppd(gui->ppd);
   gui->filter_image = CAIRO_FILTER_GOOD;
   dt_widget_set_image_filter(gui->filter_image);
 
@@ -1376,7 +1409,8 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
       dt_print(DT_DEBUG_CONTROL, "[screen resolution] setting the screen resolution to %f dpi\n", gui->dpi);
   }
   gui->dpi_factor
-      = gui->dpi / 96; // according to man xrandr and the docs of gdk_screen_set_resolution 96 is the default
+      = gui->dpi / 96;
+  dt_widget_set_dpi_factor(gui->dpi_factor); // according to man xrandr and the docs of gdk_screen_set_resolution 96 is the default
 
   // em depends on the screen DPI (point -> px), so refresh it here too.
   dt_gui_update_em();
@@ -1455,6 +1489,8 @@ void dt_gui_update_em(void)
     else
       // points -> px at the screen DPI, matching how GTK renders point-sized fonts
       gui->em = (double)size / PANGO_SCALE * gui->dpi / 72.0;
+
+    dt_widget_set_em_size(gui->em);
   }
   pango_font_description_free(desc);
 
@@ -3298,34 +3334,6 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
                    (gpointer)cs);
 }
 
-void dt_capitalize_label(gchar *text)
-{
-  if(!text || !text[0]) return;
-
-  // Deal with strings beginning with a Mnemonics underscore
-  gchar *p = text;
-  if(*p == '_' && p[1]) p++;
-
-  // `p[0] = g_unichar_toupper(p[0])` used to write here directly, but `p[0]` is only
-  // the first *byte* of `p`, not the first character: translated labels routinely
-  // start with a multi-byte UTF-8 character (accented capitals, non-Latin scripts).
-  // Mutating one byte of a multi-byte sequence produces a different, still
-  // "valid-looking" sequence followed by an orphaned continuation byte - invalid
-  // UTF-8 that crashes later collation (e.g. g_utf8_collate -> glibc wcscoll_l).
-  gunichar c = g_utf8_get_char_validated(p, -1);
-  if(c == (gunichar)-1 || c == (gunichar)-2) return; // invalid UTF-8, leave untouched
-
-  gunichar upper = g_unichar_toupper(c);
-  if(upper == c) return;
-
-  gchar utf8_buf[6] = { 0 };
-  gint n = g_unichar_to_utf8(upper, utf8_buf);
-  gint orig_len = g_utf8_next_char(p) - p;
-
-  // Callers pass buffers sized exactly for the original string (often g_strdup'd),
-  // not a longer one - only mutate in place if the uppercase form fits.
-  if(n == orig_len) memcpy(p, utf8_buf, n);
-}
 
 GtkBox * attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content)
 {

@@ -114,8 +114,8 @@
  * stack, and then rewire the shortcut with the new last item.
  **/
 
-#ifndef DT_GUI_ACCELERATORS_H
-#define DT_GUI_ACCELERATORS_H
+#ifndef DT_WIDGETS_ACCELERATORS_H
+#define DT_WIDGETS_ACCELERATORS_H
 
 typedef struct dt_accels_t
 {
@@ -374,4 +374,37 @@ void dt_accels_remove_shortcut(dt_accels_t *accels, const char *path);
 void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window);
 
 void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *anchor);
-#endif // DT_GUI_ACCELERATORS_H
+
+/* ------------------------------------------------------------------------------------------
+ * Host hooks
+ *
+ * The shortcut system is otherwise self-contained GTK: a key arrives, a path is matched, a
+ * closure fires. These four are the only things it cannot answer by itself, so the host
+ * supplies them instead of the module reaching for application globals.
+ *
+ * All are optional. Unregistered, each degrades to a sensible inert default.
+ * ------------------------------------------------------------------------------------------ */
+
+/** The accels instance this process uses. Set once by the host at GUI init. */
+void dt_accels_set_global(dt_accels_t *accels);
+dt_accels_t *dt_accels_get_global(void);
+
+/** Vertical offset, in pixels, below which a shortcut window should be placed (the host's
+ *  top panel height). Unregistered: 0. */
+typedef gint (*dt_accels_top_offset_handler_t)(void);
+void dt_accels_set_top_offset_handler(dt_accels_top_offset_handler_t handler);
+
+/** Return keyboard focus to the host's main area after an action with no target widget.
+ *  Unregistered: focus is left where it is. */
+typedef void (*dt_accels_refocus_handler_t)(void);
+void dt_accels_set_refocus_handler(dt_accels_refocus_handler_t handler);
+
+/** Persistence for the shortcut-search history. The list is a user preference, so storing it
+ *  belongs to the host. `get` returns a newly-allocated string or NULL; `set` takes a value
+ *  or NULL to clear. Unregistered: the history is in-session only. */
+typedef gchar *(*dt_accels_recent_get_handler_t)(int index);
+typedef void (*dt_accels_recent_set_handler_t)(int index, const char *value);
+void dt_accels_set_recent_handlers(dt_accels_recent_get_handler_t get,
+                                   dt_accels_recent_set_handler_t set);
+
+#endif // DT_WIDGETS_ACCELERATORS_H

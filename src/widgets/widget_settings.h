@@ -76,6 +76,35 @@ gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta);
  *  a widget does not read configuration. */
 void dt_widget_set_scroll_reversed(gboolean reverse_x, gboolean reverse_y);
 
+/* Toolkit metrics: the UI zoom factor, the integer device scale, and the resolved root font
+ * size in pixels. Widgets scale themselves by these; the application computes them from the
+ * screen and the theme and pushes them here. They lived in dt_gui_gtk_t, which meant a widget
+ * had to reach the application global to size itself. */
+double dt_widget_dpi_factor(void);
+void dt_widget_set_dpi_factor(double factor);
+
+double dt_widget_ppd(void);
+void dt_widget_set_ppd(double ppd);
+
+/** Resolved root font size in px; 16.0 until the application resolves it. */
+double dt_widget_em_size(void);
+void dt_widget_set_em_size(double em);
+
+/* Scale a 96-DPI-baseline value. UI: logical pixels GTK will scale further. DEVICE: raw
+ * device pixels for cairo surfaces and hit-tests, which GTK does not scale for us. */
+#define DT_UI_SCALE_UI(value) ((value) * dt_widget_dpi_factor())
+#define DT_UI_SCALE_DEVICE(value) ((value) * dt_widget_dpi_factor() * dt_widget_ppd())
+#define DT_PIXEL_APPLY_DPI(value) DT_UI_SCALE_UI(value)
+#define DT_PIXEL_APPLY_DPI_DPP(value) DT_UI_SCALE_DEVICE(value)
+
+/* Gutter between children of boxes/grids/flowboxes -- settable only from code, so it is
+ * centralised here for the whole app. Expressed as a fraction of 1em so it tracks the user's
+ * font size like the em-based margins in ansel.css. 0.625em == 10px at the 16px reference.
+ * The font's pt->px conversion already folds in DPI, so this needs no DPI scaling on top. */
+#define DT_GUI_EM_SIZE ((gint)dt_widget_em_size())
+#define DT_GUI_BOX_SPACING_EM 0.625
+#define DT_GUI_BOX_SPACING ((gint)(DT_GUI_EM_SIZE * DT_GUI_BOX_SPACING_EM + 0.5))
+
 /* Colour-label slots. These mirror the application's dt_colorlabels_enum, and gui/gtk.c
  * carries a _Static_assert that they cannot drift apart -- that is the one place both
  * headers are visible. Declaring them here keeps widgets/ free of application headers. */

@@ -36,4 +36,8 @@ void dt_gui_add_class(GtkWidget *widget, const gchar *class_name);
 /** Remove `class_name` from `widget`'s style context if present, and queue a redraw. */
 void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name);
 
+/** Capitalise the first character of a label in place, honouring a leading mnemonic
+ *  underscore and multi-byte UTF-8. Pure string work; no application involved. */
+void dt_capitalize_label(gchar *text);
+
 #endif // DT_WIDGETS_WIDGET_STYLE_H

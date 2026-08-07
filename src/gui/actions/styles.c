@@ -30,7 +30,7 @@
 #include "common/styles.h"
 #include "common/usermanual_url.h"
 #include "develop/dev_history.h"
-#include "gui/accelerators.h"
+#include "widgets/accelerators.h"
 #include "common/conf.h"
 #include "control/signal.h"
 #include "libs/lib.h"
