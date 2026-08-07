@@ -728,13 +728,12 @@ typedef struct {
   float limw;
   float limh;
   gboolean raw_monochrome;
-  gboolean apply_dist;
-  gboolean apply_tca;
+  _emb_axes_t axes;
 } _warp_geom_domain_t;
 
 static inline int _select_warp_plane(const int c, const _warp_geom_domain_t *dom)
 {
-  if(dom->apply_dist && !dom->apply_tca) return 1;
+  if(dom->axes.apply_distortion && !dom->axes.apply_tca) return 1;
   if(c < 3 && !dom->raw_monochrome) return c;
   return 1;
 }
@@ -765,7 +764,7 @@ static void _warp_geom_pass(const float *work, float *ovoid,
         const _spline_args_t spl = { d->embedded.knots.knots_dist,
                                       d->embedded.knots.cor_rgb[plane],
                                       d->embedded.nc };
-        _compute_geometric_displacement_3ch(&spl, radius, dom->apply_dist,
+        _compute_geometric_displacement_3ch(&spl, radius, dom->axes.apply_distortion,
                                              &geom, &sx, &sy);
         out_row[x * dom->ch + c] = dt_interpolation_compute_sample(interpolation, work + c, sx, sy,
                                                                     roi_in->width, roi_in->height,
@@ -831,9 +830,10 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   }
   else
   {
+    _emb_axes_t axes = { FALSE, apply_dist, apply_tca };
     const _warp_geom_domain_t dom = {
       ch, ch_width, w2, h2, inv_rn, limw, limh,
-      raw_monochrome, apply_dist, apply_tca
+      raw_monochrome, axes
     };
     _warp_geom_pass(work, ovoid, roi_in, roi_out, d, interpolation, &dom);
   }
@@ -1290,9 +1290,10 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         return 1;
       }
 
+      _emb_axes_t axes_w = { FALSE, emb_dist, emb_tca };
       const _warp_geom_domain_t dom = {
         ch, ch_width, w2, h2, inv_rn, limw, limh,
-        raw_monochrome, emb_dist, emb_tca
+        raw_monochrome, axes_w
       };
       _warp_geom_pass(work_buf, work_ovoid, roi_in, roi_out, d, interpolation, &dom);
       dt_pixelpipe_cache_free_align(work_buf);
@@ -1397,9 +1398,7 @@ typedef struct {
   float w2;
   float h2;
   float inv_rn;
-  gboolean apply_vignette;
-  gboolean apply_dist;
-  gboolean apply_tca;
+  _emb_axes_t axes;
 } _cl_domain_t;
 
 static int _run_md_cl_pass(int devid, int kernel,
@@ -1473,7 +1472,7 @@ typedef struct {
 static cl_int _cl_embedded_run_forward(const _cl_embedded_run_ctx_t *ctx)
 {
   cl_int err;
-  if(ctx->cldom->apply_vignette)
+  if(ctx->cldom->axes.apply_vignette)
   {
     const int k = ctx->gd->kernel_md_vignette;
     dt_opencl_set_kernel_arg(ctx->devid, k, 0, sizeof(cl_mem), (void *)&ctx->dev_in);
@@ -1494,7 +1493,7 @@ static cl_int _cl_embedded_run_forward(const _cl_embedded_run_ctx_t *ctx)
     err = _run_md_cl_pass(ctx->devid, 0, ctx->dev_in, ctx->dev_tmp, ctx->iregion);
   if(err != CL_SUCCESS) return err;
 
-  if(ctx->cldom->apply_dist || ctx->cldom->apply_tca)
+  if(ctx->cldom->axes.apply_distortion || ctx->cldom->axes.apply_tca)
   {
     const int k = ctx->gd->kernel_md_lens_correction;
     dt_opencl_set_kernel_arg(ctx->devid, k, 0, sizeof(cl_mem), (void *)&ctx->dev_tmp);
@@ -1597,13 +1596,14 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   const int monochrome = raw_monochrome ? 1 : 0;
 
-  const _cl_domain_t cldom = {
-    iwidth, iheight, owidth, oheight,
-    roi_in_x, roi_in_y, roi_out_x, roi_out_y,
-    d->embedded.nc, monochrome,
-    w2, h2, inv_rn,
-    apply_vignette, apply_dist, apply_tca
-  };
+    _emb_axes_t axes_ldom = { apply_vignette, apply_dist, apply_tca };
+    const _cl_domain_t cldom = {
+      iwidth, iheight, owidth, oheight,
+      roi_in_x, roi_in_y, roi_out_x, roi_out_y,
+      d->embedded.nc, monochrome,
+      w2, h2, inv_rn,
+      axes_ldom
+    };
 
   cl_mem dev_knots_vig = nullptr;
   cl_mem dev_vig = nullptr;
