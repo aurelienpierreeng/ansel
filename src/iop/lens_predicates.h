@@ -22,7 +22,7 @@ enum class dt_iop_lens_tca_source_t
   EMBEDDED = 3
 };
 
-#define LENSFUN_MODFLAG_MASK (LF_MODIFY_DISTORTION | LF_MODIFY_TCA | LF_MODIFY_VIGNETTING)
+#define LENSFUN_MODFLAG_MASK (LF_MODIFY_DISTORTION | LF_MODIFY_TCA | LF_MODIFY_VIGNETTING | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE)
 
 static inline int correction_source_selector_entries(gboolean has_embedded,
                                                      const char *out_labels[3],
