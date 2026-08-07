@@ -33,8 +33,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "button.h"
-#include "gui/bauhaus.h"
-#include "gui/gtk.h"
+#include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
+#include <math.h>
+#include "widgets/widget_style.h"
 #include <string.h>
 
 static void _button_class_init(GtkDarktableButtonClass *klass);

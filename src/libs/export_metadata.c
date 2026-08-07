@@ -30,7 +30,7 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/utility.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "imageio/imageio_module.h"
 #include "widgets/button.h"
 

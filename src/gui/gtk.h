@@ -55,6 +55,8 @@
 #define DT_GUI_GTK_H
 
 #include "common/glib_utils.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/paths.h"
@@ -86,10 +88,8 @@ extern "C" {
  * drift it), clamped at >= 0, and any unbalanced end is logged with its file:line rather than
  * silently drifting negative and disabling suppression for the rest of the session.
  * ------------------------------------------------------------------------------------------ */
-gboolean dt_gui_widgets_suppressed(void);
-void dt_gui_freeze_begin_(const char *file, int line);
-void dt_gui_freeze_end_(const char *file, int line);
-void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)
+// Implemented in widgets/widget_settings.c -- declared there, re-exposed here so existing
+// consumers keep including only gui/gtk.h.
 #define dt_gui_freeze_begin() dt_gui_freeze_begin_(__FILE__, __LINE__)
 #define dt_gui_freeze_end()   dt_gui_freeze_end_(__FILE__, __LINE__)
 
@@ -290,7 +290,6 @@ typedef struct dt_gui_gtk_t
   // dt_gui_freeze_begin()/end() / dt_gui_widget_freeze() / dt_gui_widgets_suppressed()
   // (declared at the top of this header). Those manage it centrally: GUI-thread-only, clamped
   // at >= 0, and unbalanced ends are logged instead of silently drifting the counter.
-  int32_t _widget_suppress_depth;
   GdkRGBA colors[DT_GUI_COLOR_LAST];
 
   int32_t center_tooltip; // 0 = no tooltip, 1 = new tooltip, 2 = old tooltip
@@ -470,8 +469,6 @@ static inline GdkPixbuf *dt_gdk_pixbuf_new_from_file_at_size(const char *filenam
 }
 
 // call class function to add or remove CSS classes (need to be set on top of this file as first function is used in this file)
-void dt_gui_add_class(GtkWidget *widget, const gchar *class_name);
-void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name);
 
 /**
  * @brief Set a symbolic icon on an image widget, optionally forcing a specific color.
@@ -503,7 +500,6 @@ gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x,
  * only set deltas and return TRUE once scrolls accumulate to >= 1.
  * Effectively makes smooth scroll events act like old-style unit
  * scroll events. */
-gboolean dt_gui_get_scroll_unit_deltas(const GdkEventScroll *event, int *delta_x, int *delta_y);
 
 /* Note that on macOS Shift+vertical scroll can be reported as Shift+horizontal scroll.
  * So if Shift changes scrolling effect, both scrolls should be handled the same.
@@ -517,7 +513,6 @@ gboolean dt_gui_get_scroll_delta(const GdkEventScroll *event, gdouble *delta);
  * only set delta and return TRUE once scrolls accumulate to >= 1.
  * Effectively makes smooth scroll events act like old-style unit
  * scroll events. */
-gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta);
 
 /** \brief gives a widget focus in the container */
 void dt_ui_container_focus_widget(dt_ui_t *ui, const dt_ui_container_t c, GtkWidget *w);

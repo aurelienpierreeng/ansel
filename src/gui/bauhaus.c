@@ -57,7 +57,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "widgets/widget_settings.h"
 #include "gui/bauhaus.h"
 #include "common/calculator.h"

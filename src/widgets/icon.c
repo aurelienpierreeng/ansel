@@ -23,13 +23,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "icon.h"
-#include "gui/gtk.h"
+#include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
+
 #include <string.h>
 
 static void _icon_class_init(GtkDarktableIconClass *klass);
 static void _icon_init(GtkDarktableIcon *icon);
 static gboolean _icon_draw(GtkWidget *widget, cairo_t *cr);
-
 
 static void _icon_class_init(GtkDarktableIconClass *klass)
 {

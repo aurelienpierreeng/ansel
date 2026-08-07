@@ -50,9 +50,9 @@
 */
 
 #include "system/mem_alloc.h"
-#include "gui/bauhaus.h"
+#include "widgets/widget_settings.h"
 #include "widgets/paint.h"
-#include "gui/draw.h"
+#include "widgets/cairo_shapes.h"
 #include <math.h>
 
 #ifndef M_PI
@@ -809,7 +809,6 @@ void dtgtk_cairo_paint_masks_gradient(cairo_t *cr, gint x, gint y, gint w, gint 
   cairo_pattern_destroy(pat);
   cairo_restore(cr);
 
-
   const double line_width = cairo_get_line_width(cr);
   const double thick_width = line_width * 2.;
   const double triangle_size = 0.4;
@@ -832,7 +831,6 @@ void dtgtk_cairo_paint_masks_gradient(cairo_t *cr, gint x, gint y, gint w, gint 
   cairo_line_to(cr, center_x + half_width * base_x, center_y + half_width * base_y);
   cairo_line_to(cr, center_x + triangle_height * tip_x, center_y + triangle_height * tip_y);
   cairo_close_path(cr);
-
 
   cairo_fill(cr);
 
@@ -1877,11 +1875,11 @@ void dtgtk_cairo_paint_label(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
   /* fill base color */
   cairo_arc(cr, 0.5, 0.5, r, 0.0, 2.0 * M_PI);
 
-  const dt_colorlabels_enum color = (flags & 7);
+  const int color = (flags & 7);
 
-  if(color < DT_COLORLABELS_LAST)
+  if(color < DT_WIDGET_COLORLABEL_COUNT)
   {
-    set_color(cr, dt_bauhaus_get_global()->colorlabels[color]);
+    set_color(cr, (*dt_widget_colorlabel(color)));
   }
   else
   {
@@ -1914,11 +1912,11 @@ void dtgtk_cairo_paint_label_sel(cairo_t *cr, gint x, gint y, gint w, gint h, gi
   PREAMBLE(1., 1, 0, 0)
 
   const double r = 0.5;
-  const dt_colorlabels_enum color = (flags & 7);
+  const int color = (flags & 7);
 
-  if(color < DT_COLORLABELS_LAST)
+  if(color < DT_WIDGET_COLORLABEL_COUNT)
   {
-    GdkRGBA rgba = dt_bauhaus_get_global()->colorlabels[color];
+    GdkRGBA rgba = (*dt_widget_colorlabel(color));
     cairo_set_source_rgba(cr, rgba.red, rgba.green, rgba.blue, .7);
   }
   else
@@ -2138,7 +2136,6 @@ void dtgtk_cairo_paint_unaltered(cairo_t *cr, gint x, gint y, gint w, gint h, gi
   FINISH
 }
 
-
 void dtgtk_cairo_paint_audio(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)
@@ -2167,38 +2164,38 @@ void dtgtk_cairo_paint_label_flower(cairo_t *cr, gint x, gint y, gint w, gint h,
 
   const float r = 0.18;
 
-  if(flags & (1 << DT_COLORLABELS_RED))
+  if(flags & (1 << DT_WIDGET_COLORLABEL_RED))
   {
     cairo_arc(cr, r, r, r, 0, 2.0f * M_PI);
-    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_RED]);
+    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_RED)));
     cairo_fill(cr);
   }
 
-  if(flags & (1 << DT_COLORLABELS_YELLOW))
+  if(flags & (1 << DT_WIDGET_COLORLABEL_YELLOW))
   {
     cairo_arc(cr, 1.0 - r, r, r, 0, 2.0f * M_PI);
-    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_YELLOW]);
+    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_YELLOW)));
     cairo_fill(cr);
   }
 
-  if(flags & (1 << DT_COLORLABELS_GREEN))
+  if(flags & (1 << DT_WIDGET_COLORLABEL_GREEN))
   {
     cairo_arc(cr, 0.5, 0.5, r, 0, 2.0f * M_PI);
-    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_GREEN]);
+    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_GREEN)));
     cairo_fill(cr);
   }
 
-  if(flags & (1 << DT_COLORLABELS_BLUE))
+  if(flags & (1 << DT_WIDGET_COLORLABEL_BLUE))
   {
     cairo_arc(cr, r, 1.0 - r, r, 0, 2.0f * M_PI);
-    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_BLUE]);
+    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_BLUE)));
     cairo_fill(cr);
   }
 
-  if(flags & (1 << DT_COLORLABELS_PURPLE))
+  if(flags & (1 << DT_WIDGET_COLORLABEL_PURPLE))
   {
     cairo_arc(cr, 1.0 - r, 1.0 - r, r, 0, 2.0f * M_PI);
-    set_color(cr, dt_bauhaus_get_global()->colorlabels[DT_COLORLABELS_PURPLE]);
+    set_color(cr, (*dt_widget_colorlabel(DT_WIDGET_COLORLABEL_PURPLE)));
     cairo_fill(cr);
   }
 
@@ -2510,7 +2507,6 @@ void dtgtk_cairo_paint_text_label(cairo_t *cr, gint x, gint y, gint w, gint h, g
   FINISH
 }
 
-
 void dtgtk_cairo_paint_or(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)
@@ -2621,7 +2617,6 @@ void dtgtk_cairo_paint_overexposed(cairo_t *cr, gint x, gint y, gint w, gint h, 
   FINISH
 }
 
-
 void dtgtk_cairo_paint_bulb(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)
@@ -2661,7 +2656,6 @@ void dtgtk_cairo_paint_bulb(cairo_t *cr, gint x, gint y, gint w, gint h, gint fl
 
   FINISH
 }
-
 
 void dtgtk_cairo_paint_rawoverexposed(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {

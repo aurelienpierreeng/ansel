@@ -43,6 +43,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "widgets/cairo_shapes.h"   // dt_draw_star, dt_draw_line
 #endif
 
 #include "common/curve_tools.h"
@@ -116,30 +117,7 @@ static inline void dt_draw_set_color_overlay(cairo_t *cr, gboolean bright, doubl
   cairo_set_source_rgba(cr, gui->overlay_red * amt, gui->overlay_green * amt, gui->overlay_blue * amt, alpha);
 }
 
-/** draws a rating star
- */
-static inline void dt_draw_star(cairo_t *cr, float x, float y, float r1, float r2)
-{
-  const float d = 2.0 * M_PI * 0.1f;
-  const float dx[10] = { sinf(0.0),   sinf(d),     sinf(2 * d), sinf(3 * d), sinf(4 * d),
-                         sinf(5 * d), sinf(6 * d), sinf(7 * d), sinf(8 * d), sinf(9 * d) };
-  const float dy[10] = { cosf(0.0),   cosf(d),     cosf(2 * d), cosf(3 * d), cosf(4 * d),
-                         cosf(5 * d), cosf(6 * d), cosf(7 * d), cosf(8 * d), cosf(9 * d) };
 
-  cairo_move_to(cr, x + r1 * dx[0], y - r1 * dy[0]);
-  for(int k = 1; k < 10; k++)
-    if(k & 1)
-      cairo_line_to(cr, x + r2 * dx[k], y - r2 * dy[k]);
-    else
-      cairo_line_to(cr, x + r1 * dx[k], y - r1 * dy[k]);
-  cairo_close_path(cr);
-}
-
-static inline void dt_draw_line(cairo_t *cr, float left, float top, float right, float bottom)
-{
-  cairo_move_to(cr, left, top);
-  cairo_line_to(cr, right, bottom);
-}
 
 static inline void dt_draw_grid(cairo_t *cr, const int num, const int left, const int top, const int right,
                                 const int bottom)

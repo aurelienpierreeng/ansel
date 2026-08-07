@@ -20,6 +20,7 @@
 #define DT_WIDGETS_WIDGET_SETTINGS_H
 
 #include <gtk/gtk.h>
+#include <pthread.h>
 
 /* Toolkit-wide state that widgets need and the application merely configures.
  *
@@ -45,5 +46,52 @@ void dt_widget_set_scroll_focus(GtkWidget *widget);
 /** Cairo filter used when scaling images outside the darkroom. Set once at GUI init. */
 cairo_filter_t dt_widget_image_filter(void);
 void dt_widget_set_image_filter(cairo_filter_t filter);
+
+
+/* Widget-update suppression.
+ *
+ * Programmatic widget updates must not be mistaken for user input. Code wraps such updates
+ * in dt_gui_freeze_begin()/end() and every widget callback opens with
+ * `if(dt_gui_widgets_suppressed()) return;`.
+ *
+ * The depth counter used to live in dt_gui_gtk_t, which meant a widget had to reach the
+ * application global to find out whether it should ignore its own callback. */
+gboolean dt_gui_widgets_suppressed(void);
+
+/** Register the thread that owns widget state. Freeze/unfreeze is a deliberate no-op on any
+ *  other thread -- worker-thread reload_defaults has no widgets to suppress, and a concurrent
+ *  non-atomic ++/-- would drift the depth and break suppression for the GUI thread.
+ *  Until this is called, freezing is inert. */
+void dt_widget_set_gui_thread(pthread_t thread);
+void dt_gui_freeze_begin_(const char *file, int line);
+void dt_gui_freeze_end_(const char *file, int line);
+void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)
+
+/* Scroll deltas in discrete units, accumulating smooth-scroll fractions and discarding
+ * pointer-emulated duplicates. Pure GTK event arithmetic. */
+gboolean dt_gui_get_scroll_unit_deltas(const GdkEventScroll *event, int *delta_x, int *delta_y);
+gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta);
+
+/** Whether each scroll axis is inverted. A user preference, supplied by the application --
+ *  a widget does not read configuration. */
+void dt_widget_set_scroll_reversed(gboolean reverse_x, gboolean reverse_y);
+
+/* Colour-label slots. These mirror the application's dt_colorlabels_enum, and gui/gtk.c
+ * carries a _Static_assert that they cannot drift apart -- that is the one place both
+ * headers are visible. Declaring them here keeps widgets/ free of application headers. */
+enum
+{
+  DT_WIDGET_COLORLABEL_RED = 0,
+  DT_WIDGET_COLORLABEL_YELLOW,
+  DT_WIDGET_COLORLABEL_GREEN,
+  DT_WIDGET_COLORLABEL_BLUE,
+  DT_WIDGET_COLORLABEL_PURPLE,
+  DT_WIDGET_COLORLABEL_COUNT
+};
+
+/* The colour-label palette, as RGBA. Widgets paint colour labels; which colours those are is
+ * a theme decision the application supplies. Indices match dt_colorlabels_enum. */
+const GdkRGBA *dt_widget_colorlabel(int index);
+void dt_widget_set_colorlabels(const GdkRGBA *labels, int count);
 
 #endif // DT_WIDGETS_WIDGET_SETTINGS_H

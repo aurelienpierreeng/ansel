@@ -45,7 +45,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "common/pixelpipe_cache_alloc.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "config.h"
 #endif
 #include "gui/bauhaus.h"

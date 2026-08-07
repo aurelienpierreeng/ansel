@@ -57,7 +57,7 @@
 
 #include "gui/bauhaus.h"
 #include "common/conf.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "system/capabilities.h"
 #include "common/debug.h"
 #include "common/file_location.h"

@@ -42,6 +42,7 @@
 #define DT_GUI_BAUHAUS_H
 
 #include "common/colorlabels.h"
+#include "widgets/cairo_shapes.h"   // set_color
 #include "common/gui_module_api.h"
 #include "common/introspection.h"
 
@@ -452,11 +453,6 @@ void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeM
 void dt_bauhaus_disable_accels(GtkWidget *widget);
 /** Prevent this Bauhaus widget from being tracked in the parent module refresh lists. */
 void dt_bauhaus_disable_module_list(GtkWidget *widget);
-
-static inline void set_color(cairo_t *cr, GdkRGBA color)
-{
-  cairo_set_source_rgba(cr, color.red, color.green, color.blue, color.alpha);
-}
 
 /**
  * @brief Tell the widget to use the globally-defined default callback in the bauhaus structure

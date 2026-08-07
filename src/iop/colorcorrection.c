@@ -43,7 +43,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "widgets/widget_settings.h"
 #include "config.h"
 #endif

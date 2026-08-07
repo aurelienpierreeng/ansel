@@ -124,31 +124,21 @@
  */
 
 /* generic callback for redraw widget signals */
+
+/* widgets/ carries its own colour-label indices so it needs no application header. This is
+ * the only place both enums are visible, so this is where they are pinned together. */
+_Static_assert((int)DT_WIDGET_COLORLABEL_RED == (int)DT_COLORLABELS_RED
+                   && (int)DT_WIDGET_COLORLABEL_PURPLE == (int)DT_COLORLABELS_PURPLE
+                   && (int)DT_WIDGET_COLORLABEL_COUNT == (int)DT_COLORLABELS_LAST,
+               "widget colour-label indices drifted from dt_colorlabels_enum");
+
 static void _ui_widget_redraw_callback(gpointer instance, GtkWidget *widget);
 /* callback for redraw log signals */
 static void _ui_log_redraw_callback(gpointer instance, GtkWidget *widget);
 static void _ui_toast_redraw_callback(gpointer instance, GtkWidget *widget);
 
 // set class function to add CSS classes with just a simple line call
-void dt_gui_add_class(GtkWidget *widget, const gchar *class_name)
-{
-  GtkStyleContext *context = gtk_widget_get_style_context(widget);
-  if(!gtk_style_context_has_class(context, class_name))
-  {
-    gtk_style_context_add_class(context, class_name);
-    gtk_widget_queue_draw(widget);
-  }
-}
 
-void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name)
-{
-  GtkStyleContext *context = gtk_widget_get_style_context(widget);
-  if(gtk_style_context_has_class(context, class_name))
-  {
-    gtk_style_context_remove_class(context, class_name);
-    gtk_widget_queue_draw(widget);
-  }
-}
 
 void dt_gui_set_symbolic_icon(GtkWidget *image, const char *icon_name, GtkIconSize size, const GdkRGBA *color)
 {
@@ -185,12 +175,6 @@ void dt_gui_set_symbolic_icon(GtkWidget *image, const char *icon_name, GtkIconSi
 /* ------------------------------------------------------------------------------------------
  * Widget-callback suppression depth (see darktable.h for the rationale and API).
  * ------------------------------------------------------------------------------------------ */
-static inline gboolean _dt_on_gui_thread(void)
-{
-  // Same idiom as dt_control_signal (control/signal.c): is the caller the GUI/main thread?
-  return dt_control_get_global() && pthread_equal(dt_control_get_global()->gui_thread, pthread_self());
-}
-
 /* Sub-handle accessors for the GUI singleton (declared in gui/gtk.h). The orchestrator
  * binds darktable.gui via dt_gui_get_global(); these narrow it to the parts callers
  * actually want, so they stop walking the application struct. */
@@ -214,45 +198,9 @@ GtkWidget *dt_gui_center_widget(void)
   return dt_ui_center(dt_gui_get_global()->ui);
 }
 
-gboolean dt_gui_widgets_suppressed(void)
-{
-  return darktable.gui && darktable.gui->_widget_suppress_depth > 0;
-}
 
-void dt_gui_freeze_begin_(const char *file, int line)
-{
-  // Only the GUI thread owns widget state. Off-thread callers (notably worker-thread
-  // reload_defaults during thumbnail/export, which has no widgets to suppress) must not touch
-  // the shared depth, or concurrent non-atomic ++/-- drift it and break suppression for the
-  // GUI thread. For them this is a deliberate no-op.
-  if(!darktable.gui || !_dt_on_gui_thread()) return;
-  // MAX(.,0) heals any pre-existing negative drift so the depth is always genuinely suppressing.
-  darktable.gui->_widget_suppress_depth = MAX(darktable.gui->_widget_suppress_depth, 0) + 1;
-  (void)file;
-  (void)line;
-}
 
-void dt_gui_freeze_end_(const char *file, int line)
-{
-  if(!darktable.gui || !_dt_on_gui_thread()) return;
-  if(darktable.gui->_widget_suppress_depth <= 0)
-  {
-    // A bare end with nothing to match: an unbalanced freeze bracket exists. Surface it (with
-    // the offending site) instead of letting the counter go negative and silently disable
-    // suppression for the rest of the session.
-    fprintf(stderr, "[dt_gui_freeze] unbalanced end at %s:%d (depth was %d); "
-                    "look for a freeze begin without a matching end.\n",
-            file, line, darktable.gui->_widget_suppress_depth);
-    darktable.gui->_widget_suppress_depth = 0;
-    return;
-  }
-  darktable.gui->_widget_suppress_depth--;
-}
 
-void dt_gui_freeze_reset(void)
-{
-  if(darktable.gui) darktable.gui->_widget_suppress_depth = 0;
-}
 
 /*
  * OLD UI API
@@ -320,88 +268,6 @@ gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x,
   return handled;
 }
 
-gboolean dt_gui_get_scroll_unit_deltas(const GdkEventScroll *event, int *delta_x, int *delta_y)
-{
-  // avoid double counting real and emulated events when receiving smooth scrolls
-  if(gdk_event_get_pointer_emulated((GdkEvent*)event)) return FALSE;
-
-  // accumulates scrolling regardless of source or the widget being scrolled
-  static gdouble acc_x = 0.0, acc_y = 0.0;
-
-  gboolean handled = FALSE;
-
-  switch(event->direction)
-  {
-    // is one-unit cardinal, e.g. from a mouse scroll wheel
-    case GDK_SCROLL_LEFT:
-      if(delta_x)
-      {
-        *delta_x = dt_conf_get_bool("scroll/reverse_x") ? 1 : -1;
-        if(delta_y) *delta_y = 0;
-        handled = TRUE;
-      }
-      break;
-    case GDK_SCROLL_RIGHT:
-      if(delta_x)
-      {
-        *delta_x = dt_conf_get_bool("scroll/reverse_x") ? -1 : 1;
-        if(delta_y) *delta_y = 0;
-        handled = TRUE;
-      }
-      break;
-    case GDK_SCROLL_UP:
-      if(delta_y)
-      {
-        if(delta_x) *delta_x = 0;
-        *delta_y = dt_conf_get_bool("scroll/reverse_y") ? 1 : -1;
-        handled = TRUE;
-      }
-      break;
-    case GDK_SCROLL_DOWN:
-      if(delta_y)
-      {
-        if(delta_x) *delta_x = 0;
-        *delta_y = dt_conf_get_bool("scroll/reverse_y") ? -1 : 1;
-        handled = TRUE;
-      }
-      break;
-    // is trackpad (or touch) scroll
-    case GDK_SCROLL_SMOOTH:
-      // stop events reset accumulated delta
-      if(event->is_stop)
-      {
-        acc_x = acc_y = 0.0;
-        break;
-      }
-      // accumulate trackpad/touch scrolls until they make a unit
-      // scroll, and only then tell caller that there is a scroll to
-      // handle
-#ifdef GDK_WINDOWING_QUARTZ // on macOS deltas need to be scaled
-      acc_x += dt_conf_get_bool("scroll/reverse_x") ? -event->delta_x / 50. : event->delta_x / 50.;
-      acc_y += dt_conf_get_bool("scroll/reverse_y") ? -event->delta_y / 50. : event->delta_y / 50.;
-#else
-      acc_x += dt_conf_get_bool("scroll/reverse_x") ? -event->delta_x : event->delta_x;
-      acc_y += dt_conf_get_bool("scroll/reverse_y") ? -event->delta_y : event->delta_y;
-#endif
-      const gdouble amt_x = trunc(acc_x);
-      const gdouble amt_y = trunc(acc_y);
-      if(amt_x != 0 || amt_y != 0)
-      {
-        acc_x -= amt_x;
-        acc_y -= amt_y;
-        if((delta_x && amt_x != 0) || (delta_y && amt_y != 0))
-        {
-          if(delta_x) *delta_x = (int)amt_x;
-          if(delta_y) *delta_y = (int)amt_y;
-          handled = TRUE;
-        }
-      }
-      break;
-    default:
-      break;
-  }
-  return handled;
-}
 
 gboolean dt_gui_get_scroll_delta(const GdkEventScroll *event, gdouble *delta)
 {
@@ -414,16 +280,6 @@ gboolean dt_gui_get_scroll_delta(const GdkEventScroll *event, gdouble *delta)
   return FALSE;
 }
 
-gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta)
-{
-  int delta_x, delta_y;
-  if(dt_gui_get_scroll_unit_deltas(event, &delta_x, &delta_y))
-  {
-    *delta = delta_x + delta_y;
-    return TRUE;
-  }
-  return FALSE;
-}
 
 
 static gboolean _draw(GtkWidget *da, cairo_t *cr, gpointer user_data)
@@ -1416,6 +1272,10 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   // Tell common/ how to repaint a stale thumbnail. The backend announces staleness and
   // knows nothing about thumbtables; this is the only place the two are connected.
+  // Tell the widget layer which thread owns widget state, and how the user wants scrolling.
+  if(dt_control_get_global()) dt_widget_set_gui_thread(dt_control_get_global()->gui_thread);
+  dt_widget_set_scroll_reversed(dt_conf_get_bool("scroll/reverse_x"), dt_conf_get_bool("scroll/reverse_y"));
+
   dt_thumbnail_notify_set_handler(_gui_refresh_thumbnail);
   dt_startup_progress_set_handler(_gui_startup_progress);
   dt_film_gui_register_handlers();

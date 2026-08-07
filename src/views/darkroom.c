@@ -86,7 +86,7 @@
 #include <glib/gstdio.h>
 #include "common/paths.h"
 #include "common/collection.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "common/hash.h"
 #include "common/history.h"
 #include "common/iop-autoset.h"

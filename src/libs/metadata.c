@@ -52,7 +52,7 @@
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/database.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "common/debug.h"
 #include "common/conf.h"
 

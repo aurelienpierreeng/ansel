@@ -35,8 +35,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "togglebutton.h"
-#include "gui/bauhaus.h"
-#include "gui/gtk.h"
+#include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
+#include <math.h>
+#include "widgets/widget_style.h"
 #include <string.h>
 
 static void _togglebutton_class_init(GtkDarktableToggleButtonClass *klass);
@@ -184,7 +185,6 @@ GType dtgtk_togglebutton_get_type()
   }
   return dtgtk_togglebutton_type;
 }
-
 
 void dtgtk_togglebutton_set_paint(GtkDarktableToggleButton *button, DTGTKCairoPaintIconFunc paint,
                                   gint paintflags, void *paintdata)

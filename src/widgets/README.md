@@ -23,23 +23,38 @@ arrives through setters (`dtgtk_side_panel_set_min_width()`), shared toolkit sta
 the caller to act on (`resetlabel` emits `"reset"`; `develop/imageop_gui.c` attaches the
 IOP meaning).
 
-### Not yet true: independence from `gui/`
+### Independence from `gui/`: achieved
 
-Seven files still include `gui/gtk.h`, `gui/bauhaus.h`, `gui/draw.h` or `gui/gdkkeys.h`.
-`gui/` is the *same* layer, so this is not a layering violation, but it does mean these
-files are not yet droppable into another GTK application. The dependency is small and
-entirely toolkit-level — measured, not estimated:
+No file here includes anything from `gui/`. What each of them needed came out with it:
 
-| symbol | uses | where it should end up |
-|---|---:|---|
-| `dt_gui_add_class` | 7 | a CSS helper — belongs in `widgets/` |
-| `dt_bauhaus_get_global` | 7 | `paint.c` reads bauhaus colours; needs bauhaus reworked first |
-| `dt_draw_star` | 3 | a drawing primitive — belongs in `widgets/` |
-| `dt_gui_widgets_suppressed`, `dt_gui_get_scroll_unit_delta` | 3 | toolkit helpers — `widget_settings` |
-| `dt_pixelpipe_cache_alloc_*` | 3 | `focus_peaking.c` buffer allocation — should take a caller-provided buffer |
+| was | now |
+|---|---|
+| `dt_gui_add_class` / `remove_class` (gui/gtk.c) | `widget_style.{c,h}` |
+| widget-freeze depth + `dt_gui_widgets_suppressed` | `widget_settings` — the counter left `dt_gui_gtk_t` |
+| `dt_gui_get_scroll_unit_delta(s)` | `widget_settings` |
+| `dt_draw_star`, `dt_draw_line`, `set_color` | `cairo_shapes.h` |
+| bauhaus colour-label palette | `dt_widget_colorlabel()` + `DT_WIDGET_COLORLABEL_*` |
+| `gui/gdkkeys.h` (pure keysym mapping) | `widgets/gdkkeys.h` |
+| pipeline-tracked allocator in `focus_peaking` | plain `dt_alloc_align` |
 
-Until those move, treat "reusable" as *"holds no application state"*, which is true and
-enforced, rather than *"compiles standalone"*, which is not yet.
+`gui/gtk.h` includes `widget_settings.h` and `widget_style.h`, so the 45 files that used those
+names keep compiling unchanged.
+
+**Two things the application must register at startup**, both in `dt_gui_gtk_init()`:
+`dt_widget_set_gui_thread()` (freezing is a deliberate no-op off the GUI thread, and inert
+until registered) and `dt_widget_set_scroll_reversed()` (a user preference, since a widget
+does not read conf).
+
+**The colour-label indices are pinned.** `widgets/` declares its own so it needs no
+application header; `gui/gtk.c` carries a `_Static_assert` tying them to `dt_colorlabels_enum`,
+because that is the only place both are visible. They cannot drift silently.
+
+### What is still depended on, and legitimately
+
+Downward includes only: `system/` (allocation, SIMD), `math/`, `common/macros.h` for
+`IS_NULL_PTR`, and — in `focus_peaking.c` alone — `pixel/eigf.h` for the guided filter. All
+sit below layer 4. That last one means `focus_peaking.c` is not portable to another
+application as-is, unlike the rest.
 
 | file | what it is |
 |---|---|
