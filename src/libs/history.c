@@ -51,6 +51,7 @@
 */
 
 #include "common/history_actions.h"
+#include "gui/common/history_actions_gui.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/styles.h"

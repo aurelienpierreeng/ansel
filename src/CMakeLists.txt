@@ -88,6 +88,7 @@ FILE(GLOB SOURCE_FILES
   "gui/common/collection_gui.c"
   "gui/common/database_gui.c"
   "gui/common/film_gui.c"
+  "gui/common/history_actions_gui.c"
   "gui/common/history_merge_gui.c"
   "gui/common/styles_gui.c"
   "common/history_snapshot.c"
