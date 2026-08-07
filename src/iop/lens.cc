@@ -1936,6 +1936,38 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
+static int _distort_lensfun_common(dt_iop_module_t *self,
+                                    const dt_dev_pixelpipe_iop_t *piece,
+                                    float *const __restrict points,
+                                    size_t points_count)
+{
+  auto d = (dt_iop_lensfun_data_t *)piece->data;
+
+  if(!d->lensfun.lens || !d->lensfun.lens->Maker || d->lensfun.crop <= 0.0f) return 0;
+
+  const float orig_w = piece->buf_in.width;
+  const float orig_h = piece->buf_in.height;
+  int modflags;
+  const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage))
+      ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
+  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
+
+  if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
+  {
+    __OMP_PARALLEL_FOR_CPP__(firstprivate(points, points_count, modifier) if(points_count > 100))
+    for(size_t i = 0; i < points_count * 2; i += 2)
+    {
+      float DT_ALIGNED_ARRAY buf[6];
+      modifier->ApplySubpixelGeometryDistortion(points[i], points[i + 1], 1, 1, buf);
+      points[i] = buf[2];
+      points[i + 1] = buf[3];
+    }
+  }
+
+  delete modifier;
+  return 1;
+}
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const __restrict points, size_t points_count)
 {
@@ -1954,31 +1986,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     return _distort_transform_embedded_metadata_warp(self, pipe, piece, points, points_count, &axes);
   }
 
-  if(!d->lensfun.lens || !d->lensfun.lens->Maker || d->lensfun.crop <= 0.0f) return 0;
-
-  const float orig_w = piece->buf_in.width;
-  const float orig_h = piece->buf_in.height;
-  int modflags;
-
-  const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage)) ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
-
-  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
-  if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
-  {
-    __OMP_PARALLEL_FOR_CPP__(firstprivate(points, points_count, modifier) if(points_count > 100))
-    for(size_t i = 0; i < points_count * 2; i += 2)
-    {
-      float DT_ALIGNED_ARRAY buf[6];
-      modifier->ApplySubpixelGeometryDistortion(points[i], points[i + 1], 1, 1, buf);
-      // take green channel distortion, like distort_mask() does, so x and y come from the
-      // same color channel's distortion field instead of mixing red's x with green's y.
-      points[i] = buf[2];
-      points[i + 1] = buf[3];
-    }
-  }
-
-  delete modifier;
-  return 1;
+  return _distort_lensfun_common(self, piece, points, points_count);
 }
 
 int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
@@ -1999,31 +2007,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
     return _distort_backtransform_embedded_metadata_warp(self, pipe, piece, points, points_count, &axes);
   }
 
-  if(!d->lensfun.lens || !d->lensfun.lens->Maker || d->lensfun.crop <= 0.0f) return 0;
-
-  const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage)) ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
-
-  const float orig_w = piece->buf_in.width;
-  const float orig_h = piece->buf_in.height;
-  int modflags;
-  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
-
-  if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
-  {
-    __OMP_PARALLEL_FOR_CPP__(firstprivate(points_count, modifier, points) if(points_count > 100))
-    for(size_t i = 0; i < points_count * 2; i += 2)
-    {
-      float DT_ALIGNED_ARRAY buf[6];
-      modifier->ApplySubpixelGeometryDistortion(points[i], points[i + 1], 1, 1, buf);
-      // take green channel distortion, like distort_mask() does, so x and y come from the
-      // same color channel's distortion field instead of mixing red's x with green's y.
-      points[i] = buf[2];
-      points[i + 1] = buf[3];
-    }
-  }
-
-  delete modifier;
-  return 1;
+  return _distort_lensfun_common(self, piece, points, points_count);
 }
 
 // TODO: Shall we keep LF_MODIFY_TCA in the modifiers?
