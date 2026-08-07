@@ -540,14 +540,14 @@ static char *_lens_sanitize(const char *orig_lens)
 }
 
 __DT_CLONE_TARGETS__
-static lfModifier * get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_t *d, int mods_filter)
+static lfModifier * get_modifier(int *mods_done, int w, int h, const dt_iop_lensfun_data_t *d, int mods_filter, gboolean reverse)
 {
   lfModifier *mod;
   int mods_todo = d->lensfun.modify_flags & mods_filter;
   int mods_done_tmp = 0;
 
 #ifdef LF_0395
-  mod = new lfModifier(d->lensfun.crop, w, h, LF_PF_F32, FALSE);
+  mod = new lfModifier(d->lensfun.crop, w, h, LF_PF_F32, reverse);
   if(mods_todo & LF_MODIFY_DISTORTION)
     mods_done_tmp |= mod->EnableDistortionCorrection(d->lensfun.lens, d->lensfun.focal);
   if((mods_todo & LF_MODIFY_GEOMETRY) && (d->lensfun.lens->Type != d->lensfun.target_geom))
@@ -566,7 +566,7 @@ static lfModifier * get_modifier(int *mods_done, int w, int h, const dt_iop_lens
 #else
   mod = new lfModifier(d->lensfun.lens, d->lensfun.crop, w, h);
   mods_done_tmp = mod->Initialize(d->lensfun.lens, LF_PF_F32, d->lensfun.focal, d->lensfun.aperture, d->lensfun.distance, d->lensfun.scale, d->lensfun.target_geom, mods_todo,
-                                  FALSE);
+                                  reverse);
 #endif
 
   if(mods_done) *mods_done = mods_done_tmp;
@@ -1216,7 +1216,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   int modflags;
-  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
+  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
 
   dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
@@ -1257,7 +1257,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       tca_modifier = get_modifier(&tca_modflags,
                                   roi_in->scale * piece->buf_in.width,
                                   roi_in->scale * piece->buf_in.height,
-                                  d, LF_MODIFY_TCA);
+                                  d, LF_MODIFY_TCA, FALSE);
       dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       if(tca_modifier)
       {
@@ -1797,7 +1797,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(IS_NULL_PTR(dev_tmpbuf)) goto error;
 
   dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-  modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
+  modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
   dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
   if(modflags & LF_MODIFY_VIGNETTING)
@@ -1953,7 +1953,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
 static int _distort_lensfun_common(dt_iop_module_t *self,
                                     const dt_dev_pixelpipe_iop_t *piece,
                                     float *const __restrict points,
-                                    size_t points_count)
+                                    size_t points_count,
+                                    gboolean reverse)
 {
   auto d = (dt_iop_lensfun_data_t *)piece->data;
 
@@ -1964,7 +1965,7 @@ static int _distort_lensfun_common(dt_iop_module_t *self,
   int modflags;
   const int used_lf_mask = (dt_image_is_monochrome(&self->dev->image_storage))
       ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
-  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask);
+  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, reverse);
 
   if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
   {
@@ -2000,7 +2001,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     return _distort_transform_embedded_metadata_warp(self, pipe, piece, points, points_count, &axes);
   }
 
-  return _distort_lensfun_common(self, piece, points, points_count);
+  return _distort_lensfun_common(self, piece, points, points_count, TRUE);
 }
 
 int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
@@ -2021,7 +2022,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
     return _distort_backtransform_embedded_metadata_warp(self, pipe, piece, points, points_count, &axes);
   }
 
-  return _distort_lensfun_common(self, piece, points, points_count);
+  return _distort_lensfun_common(self, piece, points, points_count, FALSE);
 }
 
 // TODO: Shall we keep LF_MODIFY_TCA in the modifiers?
@@ -2056,7 +2057,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   const float orig_h_cl = roi_in->scale * piece->buf_in.height;
   dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   int modflags;
-  const lfModifier *modifier = get_modifier(&modflags, orig_w_cl, orig_h_cl, d, LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE);
+  const lfModifier *modifier = get_modifier(&modflags, orig_w_cl, orig_h_cl, d, LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE, FALSE);
 
   dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
@@ -2154,7 +2155,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   const float orig_w = roi_in->scale * piece->buf_in.width;
   const float orig_h = roi_in->scale * piece->buf_in.height;
   int modflags;
-  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, LF_MODIFY_ALL);
+  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, LF_MODIFY_ALL, FALSE);
 
   if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
   {
@@ -3357,7 +3358,7 @@ static float get_autoscale(dt_iop_module_t *self, dt_iop_lensfun_params_t *p, co
       d.lensfun.custom_tca.Model = LF_TCA_MODEL_NONE;
 #endif
 
-      lfModifier *modifier = get_modifier(NULL, iwd, iht, &d, modify_flags);
+      lfModifier *modifier = get_modifier(NULL, iwd, iht, &d, modify_flags, FALSE);
 
       scale = modifier->GetAutoScale(FALSE);
       delete modifier;
@@ -3650,7 +3651,7 @@ void gui_update(struct dt_iop_module_t *self)
       const int used_lf_mask = raw_monochrome ? (LF_MODIFY_ALL & ~LF_MODIFY_TCA) : LF_MODIFY_ALL;
       dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
       lfModifier *modifier = get_modifier(&modflags, lens_piece->buf_in.width, lens_piece->buf_in.height,
-                                          lens_d, used_lf_mask);
+                                          lens_d, used_lf_mask, FALSE);
       delete modifier;
       modflags &= LENSFUN_MODFLAG_MASK;
       dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
