@@ -16,8 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_HISTORY_MERGE_GUI_H
-#define DT_GUI_HISTORY_MERGE_GUI_H
+#ifndef DT_GUI_COMMON_HISTORY_MERGE_H
+#define DT_GUI_COMMON_HISTORY_MERGE_H
 
 #include "common/history_merge.h"
 
@@ -76,4 +76,4 @@ gboolean _hm_show_merge_report_popup(struct dt_develop_t *dev_dest, struct dt_de
                                      const GPtrArray *orig_styles, const GHashTable *orig_ids,
                                      const GHashTable *mod_list_ids, const char *source_label,
                                      dt_hm_batch_state_t *batch);
-#endif // DT_GUI_HISTORY_MERGE_GUI_H
+#endif // DT_GUI_COMMON_HISTORY_MERGE_H

@@ -30,7 +30,7 @@
 #include "common/image_cache.h"
 #include "common/history.h"
 #include "common/history_merge.h"
-#include "gui/history_merge_gui.h"
+#include "gui/common/history_merge.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "control/control.h"
