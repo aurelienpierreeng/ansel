@@ -64,7 +64,7 @@
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/utility.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

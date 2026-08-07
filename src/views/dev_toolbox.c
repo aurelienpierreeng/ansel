@@ -19,7 +19,7 @@
 #include "common/colorspaces.h"
 #include "common/file_location.h"
 #include "common/usermanual_url.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/develop.h"

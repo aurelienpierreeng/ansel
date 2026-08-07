@@ -15,7 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "control/conf.h"
+#include "common/conf.h"
 #include "import_jobs.h"
 #include "common/collection.h"
 #include "common/datetime.h"

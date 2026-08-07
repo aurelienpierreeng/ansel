@@ -60,7 +60,7 @@
 #include "common/metadata.h"
 #include "common/utility.h"
 #include "common/variables.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "dtgtk/button.h"
 #include "dtgtk/paint.h"

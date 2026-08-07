@@ -41,7 +41,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "develop/pixelpipe_cache_alloc.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"

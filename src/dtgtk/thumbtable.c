@@ -43,7 +43,7 @@
 #include "common/image_extensions.h"
 #include "common/act_on.h"
 #include "control/settings.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/jobs/control_jobs.h"
 #include "gui/gdkkeys.h"
 #include "dtgtk/thumbtable.h"

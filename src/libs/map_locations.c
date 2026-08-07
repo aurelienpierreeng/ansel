@@ -33,7 +33,7 @@
 #include "common/module_versioning.h"
 #include "common/utility.h"
 #include "common/map_locations.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 
 #include "libs/lib.h"

@@ -102,7 +102,7 @@
 #include "imageio/imageio_libraw.h"
 #include "common/mipmap_cache.h"
 #include "common/styles.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"

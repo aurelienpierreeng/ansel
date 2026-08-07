@@ -55,7 +55,7 @@
 #include "common/gpx.h"
 #include "common/geo.h"
 #include "common/datetime.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "dtgtk/button.h"
 #include "control/jobs.h"
 

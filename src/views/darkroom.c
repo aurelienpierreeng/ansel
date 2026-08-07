@@ -95,7 +95,7 @@
 #include "common/selection.h"
 #include "common/tags.h"
 #include "common/undo.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/blend.h"

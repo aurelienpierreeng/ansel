@@ -19,7 +19,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/macros.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/jobs/control_jobs.h"
 #include "common/mem_alloc.h"
 #include "common/paths.h"

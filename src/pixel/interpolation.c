@@ -40,7 +40,7 @@
 #include "common/simd.h"
 #include "develop/pixelpipe_cache_alloc.h"
 #include "common/math.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include <assert.h>
 #include <glib.h>

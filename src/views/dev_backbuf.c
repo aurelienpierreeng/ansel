@@ -21,7 +21,7 @@
 
 #include "views/dev_backbuf.h"
 #include "common/colorspaces_inline_conversions.h"   // dt_Lab_to_XYZ(), dt_XYZ_to_sRGB()
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"

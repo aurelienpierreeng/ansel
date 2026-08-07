@@ -17,7 +17,7 @@
 */
 #include "common/logging.h"
 #include "common/iop_profile.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/macros.h"
 #include "common/mem_alloc.h"
 #include "common/simd.h"

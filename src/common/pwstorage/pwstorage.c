@@ -52,7 +52,7 @@
 #include "backend_kwallet.h"
 #endif
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 
 #include <glib.h>

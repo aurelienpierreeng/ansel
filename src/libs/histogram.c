@@ -72,7 +72,7 @@
 #include "common/openmp.h"
 #include "common/simd.h"
 #include "common/times.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/dev_pixelpipe.h"

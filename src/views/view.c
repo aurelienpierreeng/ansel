@@ -82,7 +82,7 @@
 #include "common/times.h"
 #include "common/undo.h"
 #include "common/usermanual_url.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"

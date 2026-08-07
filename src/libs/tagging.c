@@ -57,7 +57,7 @@
 #include "common/utility.h"
 #include "gui/gdkkeys.h"
 #include "common/tags.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "bauhaus/bauhaus.h"
 #include "dtgtk/button.h"

@@ -59,7 +59,7 @@
 #include "common/imageio.h"
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_module.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/jobs.h"
 #include "develop/imageop_math.h"
 

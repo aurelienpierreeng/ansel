@@ -32,7 +32,7 @@
 #include "common/file_location.h"
 #include "common/image.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "gui/gtk.h"
 
 #include <sentry.h>

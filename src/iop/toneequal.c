@@ -122,7 +122,7 @@
 #include "pixel/interpolation.h"
 #include "pixel/luminance_mask.h"
 #include "common/collection.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"

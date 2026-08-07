@@ -64,7 +64,7 @@
 */
 
 #include "common/darktable.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "develop/imageop.h"

@@ -60,7 +60,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/math.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"

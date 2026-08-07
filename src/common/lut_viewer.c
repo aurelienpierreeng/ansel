@@ -28,7 +28,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "pixel/matrices.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "dtgtk/drawingarea.h"
 #include "gui/draw.h"

@@ -37,7 +37,7 @@
 #include "common/debug.h"
 #include "common/collection.h"
 #include "common/undo.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 #include <stdlib.h>
 #include "common/utility.h"

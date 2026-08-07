@@ -58,7 +58,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/history.h"
 
 #include "common/undo.h"

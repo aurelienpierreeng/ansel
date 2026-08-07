@@ -98,7 +98,7 @@
 #include "common/grouping.h"
 #include "common/utility.h"
 #include "common/datetime.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "develop/imageop_math.h"
 #include "develop/develop.h"
 

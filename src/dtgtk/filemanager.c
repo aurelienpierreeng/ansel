@@ -22,7 +22,7 @@
  *        lives in thumbtable.c; see thumbtable_internal.h for the ops contract.
  */
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/selection.h"
 #include "common/usermanual_url.h"
 #include "dtgtk/thumbtable.h"

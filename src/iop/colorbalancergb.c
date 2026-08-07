@@ -34,7 +34,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #endif
 // our includes go first:
 #include "bauhaus/bauhaus.h"

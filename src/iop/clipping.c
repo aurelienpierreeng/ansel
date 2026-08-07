@@ -82,7 +82,7 @@
 #include "common/imagebuf.h"
 #include "pixel/interpolation.h"
 #include "common/math.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

@@ -59,7 +59,7 @@
 #include "common/utility.h"
 #include "common/tags.h"
 #include "common/datetime.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/exif.h"
 
 #include <stdio.h>

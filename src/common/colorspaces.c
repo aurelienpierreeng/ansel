@@ -58,7 +58,7 @@
 #include "common/math.h"
 #include "pixel/matrices.h"
 #include "common/utility.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 

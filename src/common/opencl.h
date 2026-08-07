@@ -66,7 +66,7 @@
 
 #include "common/dlopencl.h"
 #include "common/iop_profile.h"
-#include "control/conf.h"
+#include "common/conf.h"
 
 // #pragma GCC diagnostic push
 // #pragma GCC diagnostic ignored "-Wcomment"
@@ -591,7 +591,7 @@ gboolean dt_opencl_is_pinned_memory(cl_mem mem);
 
 #else
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include <stdlib.h>
 
 #ifdef __cplusplus

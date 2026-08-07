@@ -69,7 +69,7 @@
 #include "pixel/eaw.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"

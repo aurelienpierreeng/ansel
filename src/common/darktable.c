@@ -146,7 +146,7 @@
 #include "common/styles.h"
 #include "common/undo.h"
 #include "common/fp_mode.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "control/crawler.h"
 #include "control/jobs/film_jobs.h"

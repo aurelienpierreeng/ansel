@@ -30,7 +30,7 @@
 #include "common/history_merge.h"
 #include "common/image.h"
 #include "common/styles.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"

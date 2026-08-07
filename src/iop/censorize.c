@@ -42,7 +42,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/noise_generator.h"
+#include "iop/noise_generator.h"
 #include "develop/tiling.h"
 
 #include "iop/iop_api.h"

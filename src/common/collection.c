@@ -81,7 +81,7 @@
 #include "common/map_locations.h"
 #include "common/datetime.h"
 #include "common/selection.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "control/control.h"
 #include "views/view.h"
 

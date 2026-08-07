@@ -37,7 +37,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/mipmap_cache.h"
 #include <glib.h>
 

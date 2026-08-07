@@ -56,7 +56,7 @@
 #include <strings.h>
 
 #include "bauhaus/bauhaus.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "gui/gdkkeys.h"
 #include "common/capabilities.h"
 #include "common/debug.h"

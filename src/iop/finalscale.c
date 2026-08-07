@@ -28,7 +28,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "common/mem_alloc.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #include "common/module_versioning.h"
 #include "common/logging.h"
 #include "config.h"

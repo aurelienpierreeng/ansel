@@ -46,7 +46,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "control/conf.h"
+#include "common/conf.h"
 #endif
 #include "bauhaus/bauhaus.h"
 #include "common/macros.h"

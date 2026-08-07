@@ -48,7 +48,7 @@
 #include "common/mipmap_cache.h" // for dt_mipmap_size_t, etc
 #include "common/file_location.h"
 #include "config.h"              // for GETTEXT_PACKAGE, etc
-#include "control/conf.h"        // for dt_conf_get_bool
+#include "common/conf.h"        // for dt_conf_get_bool
 #include "common/utility.h"
 
 #ifdef __APPLE__
