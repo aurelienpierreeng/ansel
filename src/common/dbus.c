@@ -24,7 +24,7 @@
 */
 
 #include "common/dbus.h"
-#include "common/darktable.h"
+#include "darktable.h"
 #include "control/control.h"
 #include "common/file_location.h"
 

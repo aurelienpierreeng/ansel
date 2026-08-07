@@ -26,7 +26,7 @@ Enforcement: `python3 tools/pragma_once_to_guards.py --verify` exits non-zero if
 `#pragma once` reappears. `python3 tools/include_graph.py --summary` must keep reporting
 `cycles 0`.
 
-**`common/darktable.h` has no guard either — it has a TRIPWIRE.** It ends up included by
+**`darktable.h` (at `src/`, not in a module) has no guard either — it has a TRIPWIRE.** It ends up included by
 at most one path per translation unit (an entry point calling `dt_init()`, or a subsystem
 that owns one of the `darktable` members), so a *second* inclusion is never legitimate: it
 means the header arrived through a path nobody intended. A guard would absorb that
@@ -35,9 +35,10 @@ find who included it and give that code the specific lib it needs (`common/loggi
 `common/mem_alloc.h`, …) or the accessor for the global it wants (`dt_dev_get_global()`,
 `dt_control_get_global()`, …). **No header may include it**; as of this writing none does.
 
-**When auditing this, grep for `darktable\.h"`, not `common/darktable.h"`.** Includes can be
-written relative to the including file's own directory, so `src/common/*` spells it
-`#include "darktable.h"`. Three files (and one *header*, `common/colorchecker.h`) hid behind
+**When auditing this, grep for `darktable\.h"` and check the spelling.** Includes can be
+written relative to the including file's own directory, which is how several files hid from
+earlier audits while the header still lived in `src/common/`. It now sits at `src/`, so
+`#include "darktable.h"` IS the canonical root-relative spelling. Three files (and one *header*, `common/colorchecker.h`) hid behind
 that spelling through several audits of this series; the compile-time tripwire is what
 finally caught them. `tools/include_graph.py` resolves both spellings and was right when the
 ad-hoc greps were wrong.
@@ -971,7 +972,7 @@ See `doc/sentry.md` for setup details.
 
 Ansel carries the burden of Darktable legacy, which made it a principle to entangle all
 application layers (GUI, pipeline, history, database) and imported the whole software
-into the whole software through `#include "common/darktable.h"`. This voids the modularity
+into the whole software through `#include "darktable.h"`. This voids the modularity
 principle, creates many bugs, data races, and makes any maintenance tedious and prone to 
 edge effects, since the app is heavily asynchronous and parallel.
 
@@ -979,7 +980,7 @@ The Ansel codebase should move toward more enclosed modularity, making data stru
 to each translation unit and exposing only API to the outside (getters/setters/init/cleanup). 
 Direct value changes on data not owned by the current TU are forbidden. The dependency graph 
 should be simplified and only a minimal set of `#include` should be kept per TU. In particular,
-`src/common/darktable.h` should inherit from lower-level modules, but lower-level modules
+`src/darktable.h` should inherit from lower-level modules, but lower-level modules
 should not inherit it, so it should stop being the glue of all common helpers throughout
 the software.
 

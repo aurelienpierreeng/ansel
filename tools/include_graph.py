@@ -39,6 +39,7 @@ LAYERS = [
     ('iop', 6), ('imageio', 6),
     ('libs', 7), ('views', 7), ('chart', 7),
     ('cli', 8), ('generate-cache', 8), ('cltest', 8),
+    ('app', 9),                       # main.c, darktable.c/h -- directly in src/
 ]
 LAYER = dict(LAYERS)
 
@@ -46,6 +47,10 @@ def layer_of(path):
     parts = path.split(os.sep)
     if len(parts) < 2:
         return None
+    # A file directly in src/ (main.c, darktable.c/h) is the application root: the
+    # orchestrator sits ABOVE every module, so nothing it includes can be an inversion.
+    if len(parts) == 2:
+        return LAYER['app']
     return LAYER.get(parts[1])
 
 def collect():
@@ -277,7 +282,7 @@ def summary(files, graph, headers, closure, comps, viol):
         print(f"tu_max_closure_lines\t{tu_line_costs[-1]}")
 
     # How far the application orchestrator still reaches.
-    dt_h = os.path.join(SRC, 'common', 'darktable.h')
+    dt_h = os.path.join(SRC, 'darktable.h')   # the orchestrator now lives at src/
     if dt_h in files:
         reach = sum(1 for f in files if dt_h in closure(f))
         direct = sum(1 for f in files if dt_h in graph.get(f, ()))

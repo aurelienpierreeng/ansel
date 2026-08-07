@@ -49,7 +49,7 @@
  *  - profit
  */
 
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/exif.h"
 #include "common/film.h"
 #include "common/file_location.h"

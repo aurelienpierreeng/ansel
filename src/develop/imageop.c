@@ -63,7 +63,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/conf.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"

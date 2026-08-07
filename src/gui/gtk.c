@@ -71,7 +71,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/colorspaces.h"
 #include "common/l10n.h"
 #include "common/file_location.h"

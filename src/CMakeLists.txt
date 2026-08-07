@@ -64,7 +64,7 @@ FILE(GLOB SOURCE_FILES
   "common/curve_tools.c"
   "common/splines.cpp"
   "common/curl_tools.c"
-  "common/darktable.c"
+  "darktable.c"
   "common/database.c"
   "common/datetime.c"
   "common/dbus.c"

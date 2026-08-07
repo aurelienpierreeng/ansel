@@ -107,7 +107,7 @@
 #include "glib.h"
 
 #include "common/colorlabels.h"
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/deprecations.h"
 #include "common/debug.h"
 #include "common/dng_opcode.h"
