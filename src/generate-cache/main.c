@@ -42,7 +42,7 @@
 #include <string.h>  // for strcmp
 #include <unistd.h>  // for access, R_OK
 
-#include "common/darktable.h"    // for darktable, darktable_t, dt_cleanup, etc
+#include "darktable.h"    // for darktable, darktable_t, dt_cleanup, etc
 #include "common/database.h"     // for dt_database_get
 #include "common/debug.h"        // for DT_DEBUG_SQLITE3_PREPARE_V2
 #include "common/mipmap_cache.h" // for dt_mipmap_size_t, etc

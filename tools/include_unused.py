@@ -55,7 +55,7 @@ SIDE_EFFECT_HEADERS = {
     'imageio/format/imageio_format_api.h',
     'imageio/storage/imageio_storage_api.h',
     'external/ThreadSafetyAnalysis.h',
-    'common/darktable.h',       # the orchestrator: handled by its own migration
+    'darktable.h',              # the orchestrator: handled by its own migration
 }
 
 # Declaration shapes. Deliberately generous: a missed declaration turns into a false

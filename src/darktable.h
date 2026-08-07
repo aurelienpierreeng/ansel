@@ -73,10 +73,10 @@
  * (dt_dev_get_global(), dt_control_get_global(), ...). See doc/include-graph.md.
  *
  * NEVER include this header from another header. As of this commit, zero headers do. */
-#ifdef DT_COMMON_DARKTABLE_H
-#error "common/darktable.h included more than once in this translation unit -- see the comment at the top of that file"
+#ifdef DT_DARKTABLE_H
+#error "darktable.h included more than once in this translation unit -- see the comment at the top of that file"
 #endif
-#define DT_COMMON_DARKTABLE_H
+#define DT_DARKTABLE_H
 
 
 // just to be sure. the build system should set this for us already:

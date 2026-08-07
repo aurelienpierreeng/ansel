@@ -54,7 +54,7 @@
 #include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
 #include "common/capabilities.h"
 #include "pixel/bilateralcl.h"
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/dlopencl.h"
 #include "pixel/dwt.h"
 #include "common/file_location.h"

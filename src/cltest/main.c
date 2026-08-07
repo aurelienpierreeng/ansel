@@ -24,7 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/opencl.h"
 
 #ifdef __APPLE__

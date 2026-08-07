@@ -332,3 +332,24 @@ already returned an error code the caller checked — the reporting belonged to 
 Most of the 94 are likely to be that shape: a toast, a redraw request, or a widget
 update issued from code whose job is to compute and return.
 
+---
+
+## 8. The orchestrator lives at `src/`
+
+`darktable.c` and `darktable.h` moved out of `src/common/` to `src/`, beside `main.c`.
+
+They are the application root, not a common library: `darktable.h` declares the
+`darktable_t` struct that owns every subsystem, and `darktable.c` initialises them. Being
+filed under `common/` — the BOTTOM layer — inverted that relationship on paper, and made
+the tooling count the orchestrator's legitimate reach into `gui/`, `control/` and
+`develop/` as `common/` violating the layer order.
+
+The layer model gains `app` (9), above every module: nothing the orchestrator includes can
+be an inversion, because there is nothing above it. Layering violations 253 -> 247, and the
+six that disappeared were misclassifications rather than fixes.
+
+It also settles the spelling trap recorded in `CLAUDE.md`: while the header lived in
+`src/common/`, files in that directory could spell it `#include "darktable.h"` relative to
+themselves, which hid them from audits grepping for `common/darktable.h`. That spelling is
+now the canonical root-relative one.
+

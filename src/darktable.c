@@ -89,7 +89,7 @@
 
 /* Platform memory-query APIs used by dt_get_total_memory()/dt_get_system_available_mem()
  * below: sysctl(CTL_HW, ...) on Apple/BSD and the mach host/task statistics on Apple.
- * These used to arrive through common/darktable.h's OS block; this TU is their only
+ * These used to arrive through darktable.h's OS block; this TU is their only
  * non-external consumer in the tree (common/telemetry.c carries its own), so it declares
  * them itself. */
 #ifdef __APPLE__
@@ -108,7 +108,7 @@
 #include "common/collection.h"
 #include "common/colorspaces.h"
 #include "common/colorlabels.h"
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/anonymous_ids.h"
 #include "common/capabilities.h"
 #include "common/global_mutexes.h"
@@ -190,7 +190,7 @@
 #include <MagickWand/MagickWand.h>
 #endif
 
-#include "dbus.h"
+#include "common/dbus.h"
 #include "common/utility.h"
 
 #if defined(__SUNOS__)
@@ -501,7 +501,7 @@ void *dt_alloc_align(size_t size)
 
 /* Singleton accessors: the orchestrator BINDS the application-wide instances to the
  * lower-level libs that declare these symbols (develop/pixelpipe_cache.h and
- * common/openmp.h). This keeps those libs free of common/darktable.h — they link
+ * common/openmp.h). This keeps those libs free of darktable.h — they link
  * against two functions instead of importing the whole application struct. */
 struct dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void)
 {
