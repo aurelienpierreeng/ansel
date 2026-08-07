@@ -24,8 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_IMAGEIO_RAWSPEED_H
-#define DT_COMMON_IMAGEIO_RAWSPEED_H
+#ifndef DT_IMAGEIO_IMAGEIO_RAWSPEED_H
+#define DT_IMAGEIO_IMAGEIO_RAWSPEED_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"
@@ -47,7 +47,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
 }
 #endif
 
-#endif // DT_COMMON_IMAGEIO_RAWSPEED_H
+#endif // DT_IMAGEIO_IMAGEIO_RAWSPEED_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

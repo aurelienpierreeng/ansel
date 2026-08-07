@@ -17,8 +17,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_EAW_H
-#define DT_COMMON_EAW_H
+#ifndef DT_PIXEL_EAW_H
+#define DT_PIXEL_EAW_H
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -54,7 +54,7 @@ void eaw_dn_decompose_sse(float *const restrict out, const float *const restrict
                           dt_aligned_pixel_t sum_squared, const int scale, const float inv_sigma2,
                           const int32_t width, const int32_t height);
 
-#endif // DT_COMMON_EAW_H
+#endif // DT_PIXEL_EAW_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

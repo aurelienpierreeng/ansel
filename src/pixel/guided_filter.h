@@ -28,8 +28,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_GUIDED_FILTER_H
-#define DT_COMMON_GUIDED_FILTER_H
+#ifndef DT_PIXEL_GUIDED_FILTER_H
+#define DT_PIXEL_GUIDED_FILTER_H
 
 #include "common/macros.h"
 #include "common/opencl.h"
@@ -114,7 +114,7 @@ int guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, int width, 
 
 #endif
 
-#endif // DT_COMMON_GUIDED_FILTER_H
+#endif // DT_PIXEL_GUIDED_FILTER_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

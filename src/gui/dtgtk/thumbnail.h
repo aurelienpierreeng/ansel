@@ -31,8 +31,8 @@
 */
 /** this is the thumbnail class for the lighttable module.  */
 
-#ifndef DT_DTGTK_THUMBNAIL_H
-#define DT_DTGTK_THUMBNAIL_H
+#ifndef DT_GUI_DTGTK_THUMBNAIL_H
+#define DT_GUI_DTGTK_THUMBNAIL_H
 
 #include "system/atomic.h"
 #include "common/debug.h"
@@ -176,7 +176,7 @@ static inline dt_thumbnail_overlay_t sanitize_overlays(dt_thumbnail_overlay_t ov
   return (dt_thumbnail_overlay_t)MIN(overlays, DT_THUMBNAIL_OVERLAYS_LAST - 1);
 }
 
-#endif // DT_DTGTK_THUMBNAIL_H
+#endif // DT_GUI_DTGTK_THUMBNAIL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

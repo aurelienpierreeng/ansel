@@ -44,8 +44,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DTGTK_PAINT_H
-#define DT_DTGTK_PAINT_H
+#ifndef DT_GUI_DTGTK_PAINT_H
+#define DT_GUI_DTGTK_PAINT_H
 
 #include <cairo.h>
 #include <gtk/gtk.h>
@@ -387,7 +387,7 @@ void dtgtk_liquify_cairo_paint_curve_tool(cairo_t *cr, const gint x, const gint 
 }
 #endif
 
-#endif // DT_DTGTK_PAINT_H
+#endif // DT_GUI_DTGTK_PAINT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

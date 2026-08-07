@@ -19,8 +19,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_COMMON_SOLVERS_THINPLATE_H
-#define DT_COMMON_SOLVERS_THINPLATE_H
+#ifndef DT_MATH_ATTIC_THINPLATE_H
+#define DT_MATH_ATTIC_THINPLATE_H
 
 #include "apps/ansel-chart/tonecurve.h"
 
@@ -38,7 +38,7 @@ int thinplate_match(const tonecurve_t *curve, // tonecurve to apply after this (
 
 float thinplate_color_pos(float L, float a, float b);
 
-#endif // DT_COMMON_SOLVERS_THINPLATE_H
+#endif // DT_MATH_ATTIC_THINPLATE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

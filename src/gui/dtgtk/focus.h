@@ -27,8 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_FOCUS_H
-#define DT_COMMON_FOCUS_H
+#ifndef DT_GUI_DTGTK_FOCUS_H
+#define DT_GUI_DTGTK_FOCUS_H
 
 #include "common/image_cache.h"
 #include "develop/develop.h"
@@ -372,7 +372,7 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
 #undef gbuf
 #undef FOCUS_THRS
 
-#endif // DT_COMMON_FOCUS_H
+#endif // DT_GUI_DTGTK_FOCUS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

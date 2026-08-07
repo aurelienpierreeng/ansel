@@ -80,8 +80,8 @@
  * Added constraints.
  */
 
-#ifndef DT_COMMON_SOLVERS_NELDER_MEAD_SIMPLEX_H
-#define DT_COMMON_SOLVERS_NELDER_MEAD_SIMPLEX_H
+#ifndef DT_MATH_NELDER_MEAD_SIMPLEX_H
+#define DT_MATH_NELDER_MEAD_SIMPLEX_H
 
 // Nelder-Mead reflection / contraction / expansion coefficients (the algorithm's standard
 // constants). Guarded so a caller may override them before including this header.
@@ -432,7 +432,7 @@ static int simplex(double (*objfunc)(double[], void *params), double start[], in
  * end of nmsimplex code
  *==================================================================================*/
 
-#endif // DT_COMMON_SOLVERS_NELDER_MEAD_SIMPLEX_H
+#endif // DT_MATH_NELDER_MEAD_SIMPLEX_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

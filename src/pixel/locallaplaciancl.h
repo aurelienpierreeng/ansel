@@ -19,8 +19,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_COMMON_LOCALLAPLACIANCL_H
-#define DT_COMMON_LOCALLAPLACIANCL_H
+#ifndef DT_PIXEL_LOCALLAPLACIANCL_H
+#define DT_PIXEL_LOCALLAPLACIANCL_H
 #ifdef HAVE_OPENCL
 typedef struct dt_local_laplacian_cl_global_t
 {
@@ -69,7 +69,7 @@ void dt_local_laplacian_free_cl(dt_local_laplacian_cl_t *g);
 cl_int dt_local_laplacian_cl(dt_local_laplacian_cl_t *g, cl_mem input, cl_mem output);
 #endif
 
-#endif // DT_COMMON_LOCALLAPLACIANCL_H
+#endif // DT_PIXEL_LOCALLAPLACIANCL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

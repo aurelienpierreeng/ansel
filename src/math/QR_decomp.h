@@ -16,8 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_SOLVERS_QR_DECOMP_H
-#define DT_COMMON_SOLVERS_QR_DECOMP_H
+#ifndef DT_MATH_QR_DECOMP_H
+#define DT_MATH_QR_DECOMP_H
 
 /**
  * @file
@@ -135,4 +135,4 @@ inline void QR_dec(double *A, double *Q, double *R, int rows, int cols)
   }
 }
 
-#endif // DT_COMMON_SOLVERS_QR_DECOMP_H
+#endif // DT_MATH_QR_DECOMP_H

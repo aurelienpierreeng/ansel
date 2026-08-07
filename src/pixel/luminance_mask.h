@@ -21,8 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_LUMINANCE_MASK_H
-#define DT_COMMON_LUMINANCE_MASK_H
+#ifndef DT_PIXEL_LUMINANCE_MASK_H
+#define DT_PIXEL_LUMINANCE_MASK_H
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
@@ -262,7 +262,7 @@ static inline void luminance_mask(const float *const restrict in, float *const r
   }
 }
 
-#endif // DT_COMMON_LUMINANCE_MASK_H
+#endif // DT_PIXEL_LUMINANCE_MASK_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

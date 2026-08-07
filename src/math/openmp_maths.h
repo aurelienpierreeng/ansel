@@ -22,8 +22,8 @@
 #include <glib.h>            // for inline
 #include <math.h>            // for log, logf, powf
 
-#ifndef DT_DEVELOP_OPENMP_MATHS_H
-#define DT_DEVELOP_OPENMP_MATHS_H
+#ifndef DT_MATH_OPENMP_MATHS_H
+#define DT_MATH_OPENMP_MATHS_H
 
 
 #if defined(_OPENMP) && !defined(_WIN32) && !defined(__GNUC__)
@@ -130,7 +130,7 @@ static inline float clamp_simd(const float x)
   return fminf(fmaxf(x, 0.0f), 1.0f);
 }
 
-#endif // DT_DEVELOP_OPENMP_MATHS_H
+#endif // DT_MATH_OPENMP_MATHS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

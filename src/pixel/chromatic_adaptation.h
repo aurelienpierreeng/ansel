@@ -21,8 +21,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_CHROMATIC_ADAPTATION_H
-#define DT_COMMON_CHROMATIC_ADAPTATION_H
+#ifndef DT_PIXEL_CHROMATIC_ADAPTATION_H
+#define DT_PIXEL_CHROMATIC_ADAPTATION_H
 
 #include "math/math.h"
 #include "common/colorspaces_inline_conversions.h"
@@ -372,7 +372,7 @@ static inline void convert_D50_to_LMS(const dt_adaptation_t adaptation, dt_align
   }
 }
 
-#endif // DT_COMMON_CHROMATIC_ADAPTATION_H
+#endif // DT_PIXEL_CHROMATIC_ADAPTATION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -19,8 +19,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_EIGF_H
-#define DT_COMMON_EIGF_H
+#ifndef DT_PIXEL_EIGF_H
+#define DT_PIXEL_EIGF_H
 
 #include "pixel/fast_guided_filter.h"
 #include "common/pixelpipe_cache_alloc.h"
@@ -344,7 +344,7 @@ error:
   return err;
 }
 
-#endif // DT_COMMON_EIGF_H
+#endif // DT_PIXEL_EIGF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

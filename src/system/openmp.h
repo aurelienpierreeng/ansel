@@ -15,8 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_COMMON_OPENMP_H
-#define DT_COMMON_OPENMP_H
+#ifndef DT_SYSTEM_OPENMP_H
+#define DT_SYSTEM_OPENMP_H
 
 /* OpenMP wrappers: the pragma shorthands used across the pixel code, with
  * single-threaded fallbacks when OpenMP is disabled. Self-contained on purpose:
@@ -123,7 +123,7 @@ static inline void dt_sfence()
 }
 #endif
 
-#endif // DT_COMMON_OPENMP_H
+#endif // DT_SYSTEM_OPENMP_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

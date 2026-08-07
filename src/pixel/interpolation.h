@@ -26,8 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_INTERPOLATION_H
-#define DT_COMMON_INTERPOLATION_H
+#ifndef DT_PIXEL_INTERPOLATION_H
+#define DT_PIXEL_INTERPOLATION_H
 
 #include "common/opencl.h"
 #include "develop/pixelpipe_hb.h"
@@ -198,7 +198,7 @@ void dt_interpolation_resample_roi_1c(const struct dt_interpolation *itor,
 
 G_END_DECLS
 
-#endif // DT_COMMON_INTERPOLATION_H
+#endif // DT_PIXEL_INTERPOLATION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

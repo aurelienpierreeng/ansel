@@ -16,8 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_FP_MODE_H
-#define DT_COMMON_FP_MODE_H
+#ifndef DT_SYSTEM_FP_MODE_H
+#define DT_SYSTEM_FP_MODE_H
 
 #include <math.h>
 
@@ -124,4 +124,4 @@ static inline void dt_fp_print(const char *tag)
 #ifdef __cplusplus
 }
 #endif
-#endif // DT_COMMON_FP_MODE_H
+#endif // DT_SYSTEM_FP_MODE_H

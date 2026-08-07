@@ -24,8 +24,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_COMMON_MATH_H
-#define DT_COMMON_MATH_H
+#ifndef DT_MATH_MATH_H
+#define DT_MATH_MATH_H
 
 #include <stddef.h>
 #include <math.h>
@@ -485,7 +485,7 @@ static inline float f_inv_sqrtf(const float x)
   return y;
 }
 
-#endif // DT_COMMON_MATH_H
+#endif // DT_MATH_MATH_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

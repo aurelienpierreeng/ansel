@@ -25,8 +25,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DTGTK_SIDEPANEL_H
-#define DT_DTGTK_SIDEPANEL_H
+#ifndef DT_GUI_DTGTK_SIDEPANEL_H
+#define DT_GUI_DTGTK_SIDEPANEL_H
 
 #include <glib-object.h>
 #include <gtk/gtk.h>
@@ -62,7 +62,7 @@ GtkWidget *dtgtk_side_panel_new();
 
 G_END_DECLS
 
-#endif // DT_DTGTK_SIDEPANEL_H
+#endif // DT_GUI_DTGTK_SIDEPANEL_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

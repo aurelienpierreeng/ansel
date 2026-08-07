@@ -35,8 +35,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_IMAGEIO_MODULE_H
-#define DT_COMMON_IMAGEIO_MODULE_H
+#ifndef DT_IMAGEIO_IMAGEIO_MODULE_H
+#define DT_IMAGEIO_IMAGEIO_MODULE_H
 
 #include "common/colorspaces.h"
 #include "common/metadata_export.h"
@@ -164,7 +164,7 @@ gchar *dt_imageio_resizing_factor_get_and_parsing(double *num, double *denum);
 }
 #endif
 
-#endif // DT_COMMON_IMAGEIO_MODULE_H
+#endif // DT_IMAGEIO_IMAGEIO_MODULE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

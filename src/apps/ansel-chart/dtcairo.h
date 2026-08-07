@@ -21,8 +21,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_CHART_DTCAIRO_H
-#define DT_CHART_DTCAIRO_H
+#ifndef DT_APPS_ANSEL_CHART_DTCAIRO_H
+#define DT_APPS_ANSEL_CHART_DTCAIRO_H
 
 #include "apps/ansel-chart/colorchart.h"
 #include "apps/ansel-chart/common.h"
@@ -49,7 +49,7 @@ void stroke_boxes(cairo_t *cr, float line_width);
 void set_offset_and_scale(image_t *image, float width, float height);
 cairo_surface_t *cairo_surface_create_from_xyz_data(const float *const image, const int width, const int height);
 
-#endif // DT_CHART_DTCAIRO_H
+#endif // DT_APPS_ANSEL_CHART_DTCAIRO_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -22,8 +22,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_IMAGEIO_IM_H
-#define DT_IMAGEIO_IM_H
+#ifndef DT_IMAGEIO_IMAGEIO_IM_H
+#define DT_IMAGEIO_IMAGEIO_IM_H
 
 #include "common/image.h"
 #include "common/mipmap_cache.h"

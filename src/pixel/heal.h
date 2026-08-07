@@ -19,8 +19,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DEVELOP_HEAL_H
-#define DT_DEVELOP_HEAL_H
+#ifndef DT_PIXEL_HEAL_H
+#define DT_PIXEL_HEAL_H
 
 /* heals dest_buffer using src_buffer as a reference and mask_buffer to define the area to be healed
  * the 3 buffers must have the same size, but mask_buffer is 1 channel and is tested for != 0.f

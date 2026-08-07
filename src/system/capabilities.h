@@ -16,8 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_CAPABILITIES_H
-#define DT_COMMON_CAPABILITIES_H
+#ifndef DT_SYSTEM_CAPABILITIES_H
+#define DT_SYSTEM_CAPABILITIES_H
 
 /* Optional features detected at runtime, depending on the environment and the
  * compile options: OpenCL, libsecret, kwallet... Registered by whichever subsystem
@@ -37,7 +37,7 @@ void dt_capabilities_cleanup();
 }
 #endif
 
-#endif // DT_COMMON_CAPABILITIES_H
+#endif // DT_SYSTEM_CAPABILITIES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
