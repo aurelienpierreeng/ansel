@@ -83,7 +83,7 @@
 #include "gui/guides.h"
 #include "widgets/expander.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "common/thumbnail_notify.h"
 #include "gui/common/film_gui.h"
 #include "gui/common/folder_survey_gui.h"
@@ -112,6 +112,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include "widgets/container.h"
+#include "widgets/widget_style.h"
 #ifdef MAC_INTEGRATION
 #include <gtkosxapplication.h>
 #endif
@@ -144,7 +146,7 @@ static void _ui_toast_redraw_callback(gpointer instance, GtkWidget *widget);
 /* ------------------------------------------------------------------------------------------
  * Widget-callback suppression depth (see darktable.h for the rationale and API).
  * ------------------------------------------------------------------------------------------ */
-/* Sub-handle accessors for the GUI singleton (declared in gui/gtk.h). The orchestrator
+/* Sub-handle accessors for the GUI singleton (declared in gui/application.h). The orchestrator
  * binds darktable.gui via dt_gui_get_global(); these narrow it to the parts callers
  * actually want, so they stop walking the application struct. */
 struct dt_ui_t *dt_gui_get_ui(void)

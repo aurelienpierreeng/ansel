@@ -51,9 +51,11 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "gui/window_manager.h"
+#include "widgets/popup.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

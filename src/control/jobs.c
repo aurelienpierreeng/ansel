@@ -28,6 +28,7 @@
 #include "control/jobs.h"
 #include "control/control.h"
 #include "common/times.h"
+#include "common/logging.h"
 
 #define DT_CONTROL_FG_PRIORITY 4
 

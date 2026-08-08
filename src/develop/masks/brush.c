@@ -40,7 +40,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/glib_utils.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/conf.h"
 #include "develop/imageop.h"

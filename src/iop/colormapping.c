@@ -59,7 +59,6 @@
 #include "develop/tiling.h"
 #include "widgets/drawingarea.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>
@@ -67,6 +66,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
 
 /**
  * color transfer somewhat based on the glorious paper `color transfer between images'

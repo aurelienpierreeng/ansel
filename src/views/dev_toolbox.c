@@ -28,9 +28,10 @@
 #include "widgets/paint.h"
 #include "widgets/togglebutton.h"
 #include "widgets/accelerators.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <limits.h>
+#include "widgets/popup.h"
 
 #define DT_DEV_TOOLBOX_BUTTON_TYPE_KEY "dt-dev-toolbox-button-type"
 

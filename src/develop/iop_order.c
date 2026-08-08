@@ -50,6 +50,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "common/utility.h"
+#include <glib.h>
+#include "common/glib_utils.h"
 
 #define DT_IOP_ORDER_VERSION 5
 

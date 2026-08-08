@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include "common/times.h"
 #include "common/utility.h"
+#include "gui/application.h"
 
 typedef struct dt_film_import1_t
 {

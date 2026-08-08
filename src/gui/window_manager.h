@@ -19,6 +19,8 @@
 #ifndef DT_GUI_WINDOW_MANAGER_H
 #define DT_GUI_WINDOW_MANAGER_H
 
+#include "gui/dtgtk/thumbtable.h"
+#include "gui/dtgtk/thumbnail.h"
 #include <gtk/gtk.h>
 #include <stdint.h>
 

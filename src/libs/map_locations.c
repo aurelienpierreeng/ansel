@@ -38,6 +38,9 @@
 
 #include "libs/lib.h"
 #include "views/view.h"
+#include "gui/window_manager.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 // map position module uses the tag dictionary with dt_geo_tag_root as a prefix.
 // Synonym field is used to store positions coordinates in ascii format.

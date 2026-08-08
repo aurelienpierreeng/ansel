@@ -20,10 +20,13 @@
 
 #include "common/act_on.h"
 #include "common/selection.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 #include "math.h"
 #include "menu.h"
+#include "widgets/label.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

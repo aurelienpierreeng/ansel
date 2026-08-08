@@ -157,7 +157,7 @@
 #include "develop/imageop.h"
 #include "develop/supervisor.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "develop/gui_throttle.h"
 #include "gui/guides.h"
 #include "gui/presets.h"

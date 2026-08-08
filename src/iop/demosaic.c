@@ -89,7 +89,6 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "pixel/bspline.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <memory.h>
@@ -98,6 +97,7 @@
 #include <time.h>
 #include <complex.h>
 #include <glib.h>
+#include "widgets/label.h"
 
 #ifdef __GNUC__
   #define INLINE __inline

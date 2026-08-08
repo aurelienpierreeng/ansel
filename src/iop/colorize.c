@@ -58,7 +58,6 @@
 #include "develop/imageop_gui.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

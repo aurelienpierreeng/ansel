@@ -53,7 +53,6 @@
 #include "widgets/expander.h"
 #include "widgets/paint.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
@@ -66,6 +65,8 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(1)
 

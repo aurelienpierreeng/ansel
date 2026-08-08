@@ -35,6 +35,9 @@
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "control/control.h"
+#include <glib.h>
+#include "gui/application.h"
+#include "widgets/accelerators.h"
 
 
 MAKE_ACCEL_WRAPPER(dt_gui_preferences_show)

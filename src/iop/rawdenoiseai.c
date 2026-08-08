@@ -63,7 +63,6 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include <json-glib/json-glib.h>
-#include "gui/gtk.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
@@ -78,6 +77,8 @@
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/collapsible_section.h"
+#include "widgets/label.h"
 
 #define DT_RAWDENOISEAI_MODEL_LEN 128
 

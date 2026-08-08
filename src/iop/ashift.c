@@ -72,7 +72,6 @@
 #include "widgets/button.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include "gui/guides.h"
@@ -145,6 +144,8 @@
 // For parameter optimization we are using the Nelder-Mead simplex method
 // implemented by Michael F. Hutt.
 #include "math/nelder_mead_simplex.h"
+#include "widgets/collapsible_section.h"
+#include "widgets/label.h"
 
 
 DT_MODULE_INTROSPECTION(5, dt_iop_ashift_params_t)

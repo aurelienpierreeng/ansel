@@ -24,7 +24,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "gui/actions/menu.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 
 #include "gui/window_manager.h"

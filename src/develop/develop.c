@@ -83,9 +83,11 @@
 #include "develop/lightroom.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "develop/gui_throttle.h"
 #include "libs/colorpicker.h"
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 

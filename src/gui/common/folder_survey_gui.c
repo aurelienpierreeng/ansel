@@ -28,10 +28,12 @@
 
 #include "common/conf.h"
 #include "common/folder_survey.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 
 #include <glib/gi18n.h>
+#include "widgets/dialog.h"
+#include "widgets/widget_settings.h"
 
 /* Asks about images sitting in the surveyed folder that the library does not have yet.
  * Returns TRUE to import them. The "delete originals" checkbox is only meaningful when

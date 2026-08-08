@@ -27,6 +27,7 @@
 
 #include <gio/gio.h>
 #include "common/utility.h"
+#include "common/logging.h"
 
 #define DT_FOLDER_SURVEY_STATE_FILE "folder-survey-state.ini"
 

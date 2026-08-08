@@ -58,10 +58,12 @@
 #include "develop/develop.h"
 #include "develop/masks.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include <complex.h>
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

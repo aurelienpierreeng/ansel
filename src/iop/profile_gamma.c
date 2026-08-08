@@ -58,7 +58,6 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
@@ -66,6 +65,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_profilegamma_params_t)
 

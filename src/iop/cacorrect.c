@@ -62,11 +62,11 @@
 #include "develop/imageop_math.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/label.h"
 
 /**
  * @brief WARNING: mem allocs are not protected against out-of-memory (NULL buffers)

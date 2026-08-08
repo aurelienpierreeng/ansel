@@ -59,12 +59,13 @@
 #include "common/utility.h"
 #include "control/jobs.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
 
 #include <glib/gstdio.h>
+#include "widgets/label.h"
 
 DT_MODULE(4)
 

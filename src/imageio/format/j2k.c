@@ -73,7 +73,6 @@
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
 #include "imageio/format/imageio_format_api.h"
-#include "gui/gtk.h"
 
 #include <stdio.h>
 #include <stdlib.h>

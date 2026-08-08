@@ -102,7 +102,7 @@
 #include "develop/imageop_math.h"
 
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <gio/gio.h>
 #include <glib.h>

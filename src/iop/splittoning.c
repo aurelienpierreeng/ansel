@@ -74,7 +74,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
@@ -83,6 +82,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_splittoning_params_t)
 

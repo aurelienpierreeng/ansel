@@ -42,6 +42,7 @@
 #ifndef DT_CONTROL_SIGNAL_H
 #define DT_CONTROL_SIGNAL_H
 
+#include "common/logging.h"
 #include <glib-object.h>
 #include <stdint.h>
 

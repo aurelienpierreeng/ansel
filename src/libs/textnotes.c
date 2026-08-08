@@ -32,7 +32,7 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "views/view.h"
@@ -42,6 +42,10 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
+#include "widgets/popup.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_settings.h"
 
 #ifdef _OPENMP
 #include <omp.h>

@@ -54,7 +54,6 @@
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "gui/gtk.h"
 #include "pixel/bilateral.h"
 #include "pixel/bilateralcl.h"
 #include "common/colorspaces_inline_conversions.h"
@@ -73,6 +72,7 @@
 
 #include "gui/color_picker_proxy.h"
 #include <stdlib.h>
+#include "widgets/label.h"
 
 // this is the version of the modules parameters,
 // and includes version information about compile-time dt

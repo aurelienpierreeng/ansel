@@ -38,7 +38,7 @@
 #include "widgets/button.h"
 #include "widgets/paint.h"
 #include "widgets/togglebutton.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
 
@@ -48,6 +48,9 @@
 #include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
+#include "widgets/popup.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE(1)
 

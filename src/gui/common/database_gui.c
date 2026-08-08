@@ -26,7 +26,7 @@
 #include "common/database.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
-#include "gui/gtk.h"
+#include "widgets/dialog.h"
 
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>

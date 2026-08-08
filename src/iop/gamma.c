@@ -55,6 +55,7 @@
 #include "develop/develop.h"
 
 #include "iop/iop_api.h"
+#include "widgets/widget_settings.h"
 
 /**
  * @brief This module converts float32 RGBA pixels to uint8 BGRA pixels, for

@@ -71,6 +71,9 @@
 
 #include <glib-object.h>
 #include <math.h>
+#include <glib.h>
+#include "gui/application.h"
+#include "widgets/widget_style.h"
 
 
 static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)

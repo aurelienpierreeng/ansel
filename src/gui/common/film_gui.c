@@ -25,10 +25,12 @@
 
 #include "common/film.h"
 #include "system/mem_alloc.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"

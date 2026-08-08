@@ -144,12 +144,15 @@
 #include "widgets/paint.h"
 #include "widgets/togglebutton.h"
 #include "gui/drag_and_drop.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
 #ifndef _WIN32
 #include <gio/gunixmounts.h>
 #endif

@@ -57,6 +57,7 @@
 
 #include <glib.h>
 #include <string.h>
+#include "common/logging.h"
 
 /** Initializes a new pwstorage context. */
 const dt_pwstorage_t *dt_pwstorage_new()

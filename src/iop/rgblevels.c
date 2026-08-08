@@ -51,7 +51,8 @@
 
 #include "gui/color_picker_proxy.h"
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 

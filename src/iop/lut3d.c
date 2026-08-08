@@ -58,7 +58,7 @@
 #include "develop/imageop_gui.h"
 #include "develop/develop.h"
 #include "widgets/button.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include "iop/iop_api.h"
 
@@ -68,6 +68,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
+#include "widgets/widget_style.h"
 #if defined (_WIN32)
 #include "win/getdelim.h"
 #endif // defined (_WIN32)

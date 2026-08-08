@@ -206,7 +206,7 @@ FILE(GLOB SOURCE_FILES
   "gui/dtgtk/filemanager.c"
   "gui/dtgtk/filmstrip.c"
   "gui/guides.c"
-  "gui/gtk.c"
+  "gui/application.c"
   "gui/splash.c"
   "gui/hist_dialog.c"
   "gui/preferences.c"

@@ -91,7 +91,7 @@
 #include "gui/dtgtk/thumbtable.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

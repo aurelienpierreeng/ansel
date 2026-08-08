@@ -54,11 +54,14 @@
 #include "widgets/gdkkeys.h"
 #include "common/debug.h"
 #include "common/conf.h"
+#include "widgets/label.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 static sqlite3_stmt *_metadata_update_stmt = NULL;
 #include "control/signal.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #ifdef GDK_WINDOWING_QUARTZ

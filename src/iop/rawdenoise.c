@@ -66,11 +66,13 @@
 #include "math/openmp_maths.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_rawdenoise_params_t)
 

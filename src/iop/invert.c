@@ -60,8 +60,8 @@
 #include "widgets/resetlabel.h"
 #include "gui/color_picker_proxy.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
+#include "widgets/widget_settings.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_invert_params_t)
 

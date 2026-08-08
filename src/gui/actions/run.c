@@ -24,6 +24,9 @@
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
+#include "gui/application.h"
+#include "gui/dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbtable.h"
 
 /// Job parameters for preloading image cache with a maximum mipmap size.
 typedef struct _preload_cache_params_t

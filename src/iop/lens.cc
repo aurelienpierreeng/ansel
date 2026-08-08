@@ -89,7 +89,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include <assert.h>
 #include <ctype.h>
@@ -100,6 +99,8 @@
 #include <string.h>
 
 #include <lensfun.h>
+#include "widgets/popup.h"
+#include "widgets/widget_style.h"
 
 extern "C" {
 

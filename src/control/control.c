@@ -59,7 +59,7 @@
 #include "control/control.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 
 #include <assert.h>

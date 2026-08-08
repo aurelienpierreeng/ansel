@@ -26,7 +26,7 @@
 #include "widgets/paint.h"
 #include "gui/actions/menu.h"
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <math.h>
 #include <stdlib.h>

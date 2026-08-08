@@ -40,11 +40,11 @@
 #include "develop/imageop.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_scalepixels_params_t)
 

@@ -30,6 +30,7 @@
 #ifndef DT_GUI_DTGTK_FOCUS_H
 #define DT_GUI_DTGTK_FOCUS_H
 
+#include "gui/application.h"
 #include "common/image_cache.h"
 #include "develop/develop.h"
 

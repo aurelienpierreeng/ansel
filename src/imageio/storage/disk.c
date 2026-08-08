@@ -59,7 +59,7 @@
 #include "control/control.h"
 #include "widgets/button.h"
 #include "widgets/paint.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "widgets/gtkentry.h"
 #include "imageio/storage/imageio_storage_api.h"
 #ifdef GDK_WINDOWING_QUARTZ

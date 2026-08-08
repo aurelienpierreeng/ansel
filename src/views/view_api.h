@@ -25,7 +25,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/module_api.h"
-#include "gui/gtk.h"
+#include <gtk/gtk.h>
 
 #ifdef FULL_API_H
 

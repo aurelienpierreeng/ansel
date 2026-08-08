@@ -34,13 +34,13 @@
 #include "system/target_clones.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include "pixel/gaussian.h"
 #include "pixel/fast_guided_filter.h"
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_cacorrectrgb_params_t)
 

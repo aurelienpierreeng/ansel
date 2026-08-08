@@ -39,7 +39,7 @@
 #include "gui/dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 #include "views/view_api.h"
 
@@ -47,6 +47,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/widget_settings.h"
 
 DT_MODULE(1)
 

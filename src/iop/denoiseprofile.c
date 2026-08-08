@@ -82,13 +82,15 @@
 #include "develop/tiling.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdlib.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
 // which version of the non-local means code should be used?  0=old (this file), 1=new (src/common/nlmeans_core.c)
 #define USE_NEW_IMPL_CL 0
 

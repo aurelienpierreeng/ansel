@@ -55,11 +55,13 @@
 #include "control/control.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "widgets/button.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "widgets/bauhaus.h"
+#include "widgets/popup.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE(1)
 

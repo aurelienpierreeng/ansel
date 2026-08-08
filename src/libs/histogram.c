@@ -81,10 +81,14 @@
 #include "widgets/button.h"
 #include "gui/color_picker_proxy.h"
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "libs/colorpicker.h"
+#include "widgets/collapsible_section.h"
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

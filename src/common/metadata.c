@@ -40,6 +40,10 @@
 
 #include <stdlib.h>
 #include "common/utility.h"
+#include <glib/gi18n.h>
+#include "common/image.h"
+#include "common/macros.h"
+#include "system/mem_alloc.h"
 
 // this array should contain all dt metadata
 

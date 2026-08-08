@@ -45,9 +45,11 @@
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/actions/menu.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE(1)
 

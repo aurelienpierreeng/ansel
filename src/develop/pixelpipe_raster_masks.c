@@ -1,3 +1,4 @@
+#include "widgets/label.h"
 /**
  * @file pixelpipe_raster_masks.c
  * @brief Raster-mask retrieval and transport through already-processed pipeline nodes.

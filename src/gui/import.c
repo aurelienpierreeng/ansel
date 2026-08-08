@@ -49,6 +49,12 @@
 #endif
 #include <librsvg/rsvg.h>
 #include "common/utility.h"
+#include "common/logging.h"
+#include "gui/application.h"
+#include "widgets/accelerators.h"
+#include "widgets/popup.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 // ugh, ugly hack. why do people break stuff all the time?
 #ifndef RSVG_CAIRO_H
 #include <librsvg/rsvg-cairo.h>

@@ -39,7 +39,6 @@
 #include "develop/imageop.h"
 #include "math/openmp_maths.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "iop/channelmixerrgb_shared.h"
 #include "iop/iop_api.h"
 
@@ -51,6 +50,8 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_splittoning_rgb_params_t)
 

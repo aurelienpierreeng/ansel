@@ -59,7 +59,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #ifdef HAVE_OPENCL
@@ -68,6 +67,7 @@
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_hotpixels_params_t)
 

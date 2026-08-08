@@ -61,7 +61,6 @@
 #endif
 #include <cairo.h>
 #include <gmodule.h>
-#include <gui/gtk.h>
 #include <inttypes.h>
 #include <sqlite3.h>
 

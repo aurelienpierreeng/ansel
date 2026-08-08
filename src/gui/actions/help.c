@@ -17,7 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "system/mem_alloc.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/actions/menu.h"
 #ifdef __APPLE__
 #include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below

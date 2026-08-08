@@ -72,7 +72,6 @@
 #include "pixel/format.h"
 #include "develop/pixelpipe_hb.h"
 #include "widgets/togglebutton.h"
-#include "gui/gtk.h"
 
 #ifdef __cplusplus
 extern "C" {
