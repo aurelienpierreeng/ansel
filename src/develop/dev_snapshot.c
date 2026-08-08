@@ -18,7 +18,6 @@
 
 #include "develop/dev_snapshot.h"
 
-#include "common/history.h"
 #include "common/iop_order.h"
 #include "common/mipmap_cache.h"
 #include "control/control.h"

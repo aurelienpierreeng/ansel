@@ -69,7 +69,6 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "develop/tiling.h"
 #include "widgets/button.h"
 
 #include "gui/draw.h"

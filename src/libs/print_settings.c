@@ -50,7 +50,6 @@
 #include "common/macros.h"
 #include "common/metadata.h"
 #include "common/module_versioning.h"
-#include "common/paths.h"
 #include "common/pdf.h"
 #include "common/printprof.h"
 #include "common/printing.h"
@@ -58,7 +57,6 @@
 #include "common/tags.h"
 #include "common/usermanual_url.h"
 #include "common/utility.h"
-#include "common/variables.h"
 #include "control/jobs.h"
 
 #include "gui/gtk.h"

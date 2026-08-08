@@ -39,7 +39,6 @@
 #include "config.h"
 #endif
 
-#include "common/imagebuf.h"
 #include "common/module_versioning.h"
 #include "develop/develop.h"
 

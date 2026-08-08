@@ -65,7 +65,6 @@
 #include "math/math.h"
 #include "common/logging.h"
 #include "common/macros.h"
-#include "common/utility.h"
 
 
 #include "widgets/accelerators.h"
@@ -77,7 +76,6 @@
 #endif
 
 #include <math.h>
-#include <strings.h>
 
 #include <pango/pangocairo.h>
 #ifdef GDK_WINDOWING_WAYLAND

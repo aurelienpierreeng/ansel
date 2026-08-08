@@ -30,7 +30,6 @@
 #include "gui/gtk.h"
 
 #ifndef _WIN32
-#include <glob.h>
 #endif
 #include <string.h>
 #include <glib/gstdio.h>

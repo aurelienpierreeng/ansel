@@ -23,7 +23,6 @@
 #include "system/screen_metrics.h"
 #include "widgets/widget_settings.h"
 
-#include "common/macros.h"
 
 #include <stdint.h>
 #include <math.h>

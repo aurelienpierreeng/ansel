@@ -25,10 +25,8 @@
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/mipmap_cache.h"
-#include "common/imagebuf.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/dev_pixelpipe.h"
 #include "iop/iop_api.h"
 
 #include <string.h>

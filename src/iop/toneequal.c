@@ -120,7 +120,6 @@
 #include "develop/masks.h"
 #include "pixel/fast_guided_filter.h"
 #include "pixel/eigf.h"
-#include "pixel/interpolation.h"
 #include "pixel/luminance_mask.h"
 #include "common/collection.h"
 #include "common/conf.h"
@@ -128,7 +127,6 @@
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe_cache.h"
 

@@ -20,7 +20,6 @@
 */
 
 #include "control/control.h"
-#include "gui/gtk.h"
 
 #include "gui/actions/menu.h"
 

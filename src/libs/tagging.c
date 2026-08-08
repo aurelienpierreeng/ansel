@@ -67,12 +67,10 @@
 #include "gui/drag_and_drop.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
-#include "views/view.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
 #include <gdk/gdkkeysyms.h>
-#include <math.h>
 
 #define FLOATING_ENTRY_WIDTH DT_PIXEL_APPLY_DPI(150)
 

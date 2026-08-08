@@ -34,14 +34,12 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "widgets/bauhaus.h"
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "pixel/interpolation.h"
 #include "math/math.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/tiling.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 

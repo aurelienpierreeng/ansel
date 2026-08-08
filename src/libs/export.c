@@ -65,7 +65,6 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/paths.h"
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/file_location.h"
@@ -73,7 +72,6 @@
 #include "common/styles.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "control/jobs.h"
 #include "control/signal.h"
 
 #include "gui/gtk.h"
@@ -87,7 +85,6 @@
 static sqlite3_stmt *_export_presets_stmt = NULL;
 #include <gtk/gtk.h>
 #include <stdlib.h>
-#include <ctype.h>
 
 #include <glib.h>
 

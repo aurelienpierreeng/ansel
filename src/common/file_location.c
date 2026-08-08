@@ -42,7 +42,6 @@
 #include "config.h"
 
 #include <pwd.h>
-#include <sys/types.h>
 #define HAVE_GETPWNAM_R 1
 #endif
 

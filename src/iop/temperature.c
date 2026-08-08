@@ -80,7 +80,6 @@
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
-#include "develop/tiling.h"
 
 #include "gui/gtk.h"
 #include "gui/color_picker_proxy.h"

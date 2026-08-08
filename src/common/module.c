@@ -23,7 +23,6 @@
 
 #include "common/macros.h"
 #include "system/mem_alloc.h"
-#include "common/paths.h"
 #include <stdlib.h>
 #include <string.h>
 #include <gmodule.h>

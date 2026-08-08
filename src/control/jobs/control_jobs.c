@@ -100,7 +100,6 @@
 #include "common/datetime.h"
 #include "common/conf.h"
 #include "develop/imageop_math.h"
-#include "develop/develop.h"
 
 
 #include "gui/gtk.h"
@@ -109,7 +108,6 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #ifndef _WIN32
-#include <glob.h>
 #endif
 #ifdef __APPLE__
 #include "osx/osx.h"

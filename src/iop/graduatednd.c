@@ -76,7 +76,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/tiling.h"
 
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"

@@ -55,7 +55,6 @@
 #endif
 #include "widgets/bauhaus.h"
 #include "common/colorspaces.h"
-#include "math/math.h"
 #include "develop/develop.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -67,7 +66,6 @@
 #include "develop/imageop_math.h"
 #include "math/openmp_maths.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 

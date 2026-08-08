@@ -30,7 +30,6 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/paths.h"
 #include "common/exif.h"
 #include "common/image_cache.h"
 #include "imageio/imageio_module.h"

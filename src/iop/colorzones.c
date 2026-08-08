@@ -86,7 +86,6 @@
 #include "gui/draw.h"
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
-#include "libs/lib.h"
 
 DT_MODULE_INTROSPECTION(5, dt_iop_colorzones_params_t)
 

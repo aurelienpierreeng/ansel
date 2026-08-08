@@ -33,7 +33,6 @@
 #include "math/math.h"
 #include "common/opencl.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "iop/iop_api.h"
 #include "pixel/nlmeans_core.h"
 #include <stdbool.h>

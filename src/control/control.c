@@ -59,7 +59,6 @@
 #include "control/control.h"
 #include "develop/develop.h"
 
-#include "gui/draw.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 
@@ -67,10 +66,8 @@
 #include <gdk/gdkkeysyms.h>
 #include <glib/gstdio.h>
 #include <lcms2.h>
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 static dt_control_pointer_input_t _pointer_input = { 0 };
 

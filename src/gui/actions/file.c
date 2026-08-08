@@ -22,7 +22,6 @@
 #include "common/conf.h"
 #include "control/jobs/control_jobs.h"
 #include "system/mem_alloc.h"
-#include "common/paths.h"
 #include "common/usermanual_url.h"
 #include "control/signal.h"
 #include "gui/gtk.h"

@@ -25,7 +25,6 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "widgets/bauhaus.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/conf.h"

@@ -27,7 +27,6 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/distance_transform.h"
 #include "math/sparse_cholesky_cl.h"
-#include "develop/imageop_math.h"
 #include "iop/highlights/blur.h"
 #include "iop/highlights/gather.h"
 #include "iop/highlights/knee.h"

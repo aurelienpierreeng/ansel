@@ -22,7 +22,6 @@
 #include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "math/choleski.h"
-#include "develop/imageop.h"
 #include "iop/highlights/dome.h"
 #include "iop/highlights/pde.h"
 #include <math.h>

@@ -83,7 +83,6 @@
 #include "common/iop_order.h"
 #include "common/topological_sort.h"
 #include "control/control.h"
-#include "develop/blend.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

@@ -34,7 +34,6 @@
 #include "imageio/imageio_module.h"
 #include "imageio/format/imageio_format_api.h"
 #include <glib/gstdio.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

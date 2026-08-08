@@ -28,7 +28,6 @@
 
 #include "common/conf.h"
 #include "common/folder_survey.h"
-#include "common/macros.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 

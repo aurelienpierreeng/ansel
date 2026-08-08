@@ -41,7 +41,6 @@
 #include "control/progress.h"
 #include "develop/develop.h"
 #include "widgets/button.h"
-#include "gui/draw.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"

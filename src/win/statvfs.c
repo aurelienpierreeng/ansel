@@ -44,7 +44,6 @@
 #include <glib.h>
 
 #include <string.h>
-#include <malloc.h>
 
 //#include <winpr/crt.h>
 #include "win/win.h"

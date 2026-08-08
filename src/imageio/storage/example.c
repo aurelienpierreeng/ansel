@@ -45,7 +45,6 @@
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "control/control.h"
-#include "widgets/paint.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <stdio.h>
 #include <stdlib.h>

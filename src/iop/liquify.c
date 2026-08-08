@@ -48,7 +48,6 @@
 #include "widgets/gdkkeys.h"
 #include "config.h"
 #endif
-#include "widgets/bauhaus.h"
 #include "common/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"

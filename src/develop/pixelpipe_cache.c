@@ -46,7 +46,6 @@
 #include "develop/pixelpipe_hb.h"
 #include "control/signal.h"
 #include "develop/pixelpipe_cache.h"
-#include "develop/pixelpipe.h"
 #include "develop/supervisor.h"
 #include "common/opencl.h"
 #include "pixel/format.h"

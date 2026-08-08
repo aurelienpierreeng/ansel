@@ -34,9 +34,7 @@
 
 #include "common/macros.h"
 #include "system/mem_alloc.h"
-#include "system/simd.h"
 #include "common/solvers/thinplate.h"
-#include "apps/ansel-chart/deltaE.h"
 #include "math/svd.h"
 
 #include <assert.h>

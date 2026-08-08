@@ -42,11 +42,9 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "widgets/bauhaus.h"
 #include "common/act_on.h"
 #include "common/history_actions.h"
 #include "common/collection.h"
-#include "common/history.h"
 #include "common/styles.h"
 #include "gui/common/styles_gui.h"
 #include "common/macros.h"
@@ -58,7 +56,6 @@
 #include "common/database.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "control/jobs.h"
 
 #include "gui/gtk.h"
 #include "gui/styles.h"

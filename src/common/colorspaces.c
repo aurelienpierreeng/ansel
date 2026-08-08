@@ -55,7 +55,6 @@
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/file_location.h"
-#include "math/math.h"
 #include "math/matrices.h"
 #include "common/utility.h"
 #include "common/conf.h"

@@ -34,7 +34,6 @@
 #include "pixel/bilateralcl.h"
 #include "common/opencl.h"    // for dt_opencl_set_kernel_arg, dt_opencl_cr...
 #include <glib.h>             // for MAX
-#include <math.h>             // for roundf
 #include <stdlib.h>           // for free, malloc
 
 dt_bilateral_cl_global_t *dt_bilateral_init_cl_global()

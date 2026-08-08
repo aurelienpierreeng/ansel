@@ -54,7 +54,6 @@
 #include "common/opencl.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 /**

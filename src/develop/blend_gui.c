@@ -63,7 +63,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
-#include "develop/tiling.h"
 #include "widgets/button.h"
 #include "widgets/gradientslider.h"
 
@@ -72,10 +71,8 @@
 #include "libs/colorpicker.h"
 
 #include <assert.h>
-#include <gmodule.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 #define NEUTRAL_GRAY 0.5
 #define BLEND_MASKMODE_CONF_KEY "plugins/darkroom/blending/mask_mode_tab"

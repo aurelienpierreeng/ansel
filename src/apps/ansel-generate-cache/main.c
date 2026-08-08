@@ -40,7 +40,6 @@
 #include <stdio.h>   // for fprintf, stderr, snprintf, NULL, etc
 #include <stdlib.h>  // for exit, EXIT_FAILURE
 #include <string.h>  // for strcmp
-#include <unistd.h>  // for access, R_OK
 
 #include "darktable.h"    // for darktable, darktable_t, dt_cleanup, etc
 #include "common/database.h"     // for dt_database_get

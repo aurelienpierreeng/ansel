@@ -52,7 +52,6 @@
 
 #include "common/opencl.h"
 #include "common/startup_progress.h"
-#include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
 #include "system/capabilities.h"
 #include "pixel/bilateralcl.h"
 #include "darktable.h"
@@ -78,7 +77,6 @@
 #include <strings.h>
 
 #include <ctype.h>
-#include <errno.h>
 #include <libgen.h>
 #include <sys/stat.h>
 #include <zlib.h>

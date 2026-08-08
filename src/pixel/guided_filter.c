@@ -46,7 +46,6 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/box_filters.h"
 #include "pixel/guided_filter.h"
-#include "math/math.h"
 #include "common/opencl.h"
 #include <assert.h>
 #include <float.h>

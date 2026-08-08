@@ -19,7 +19,6 @@
 #include "common/macros.h"
 
 #include <string.h>
-#include <strings.h>
 
 /* These 3 lists are the decode-routing ground truth: each extension appears in AT MOST one of
  * them. Do NOT list an extension in more than one -- dt_imageio_open() tries the matching

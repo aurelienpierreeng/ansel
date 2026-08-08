@@ -54,12 +54,10 @@
 
 #include "gui/drag_and_drop.h"
 #include "gui/draw.h"
-#include "libs/lib.h"
 #include "views/view.h"
 #include "views/view_api.h"
 #include <gdk/gdkkeysyms.h>
 
-#include <osm-gps-map.h>
 
 DT_MODULE(1)
 

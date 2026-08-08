@@ -73,7 +73,6 @@
 #include "system/mem_alloc.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
-#include "common/paths.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "glib.h"
 
@@ -90,7 +89,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 
-#include "gui/draw.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include <assert.h>

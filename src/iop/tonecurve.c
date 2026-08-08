@@ -89,7 +89,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "widgets/paint.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"

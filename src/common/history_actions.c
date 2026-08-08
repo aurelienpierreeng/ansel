@@ -18,7 +18,6 @@
 
 #include "common/history_actions.h"
 
-#include "common/act_on.h"
 #include "common/collection.h"
 #include "common/exif.h"
 #include "common/history.h"

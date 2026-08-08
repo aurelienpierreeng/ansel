@@ -20,7 +20,6 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "widgets/bauhaus.h"
 #include "common/cache.h"
 #include "common/film.h"
 #include "common/pixelpipe_cache_alloc.h"
@@ -38,7 +37,6 @@
 #include "control/signal.h"
 #include "control/jobs/import_jobs.h"
 
-#include "gui/draw.h"
 #include "widgets/gtkentry.h"
 
 #include <gio/gio.h>
@@ -49,7 +47,6 @@
 #ifdef _WIN32
 //MSVCRT does not have strptime implemented
 #endif
-#include <strings.h>
 #include <librsvg/rsvg.h>
 #include "common/utility.h"
 // ugh, ugly hack. why do people break stuff all the time?

@@ -65,7 +65,6 @@
 #include "system/simd.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
-#include "common/paths.h"
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
@@ -79,11 +78,9 @@
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "gui/gtk.h"
 
 #ifdef HAVE_OPENJPEG
 #endif
-#include "imageio/imageio_jpeg.h"
 #ifdef HAVE_LIBAVIF
 #endif
 #ifdef HAVE_LIBHEIF

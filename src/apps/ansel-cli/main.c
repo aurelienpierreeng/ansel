@@ -56,16 +56,11 @@
 #include "common/history.h"
 #include "common/image.h"
 #include "common/image_cache.h"
-#include "imageio/imageio_core.h"
-#include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_module.h"
 #include "common/l10n.h"
-#include "common/points.h"
 
 #include <inttypes.h>
 #include <libintl.h>
-#include <sys/time.h>
-#include <unistd.h>
 
 #ifdef __APPLE__
 #include "osx/osx.h"

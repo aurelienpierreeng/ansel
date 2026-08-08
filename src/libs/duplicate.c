@@ -42,7 +42,6 @@
 #include "common/debug.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
-#include "common/history.h"
 #include "common/metadata.h"
 #include "control/control.h"
 #include "develop/develop.h"
