@@ -1,0 +1,18 @@
+# Unused-include detection, and nothing else.
+#
+# The full misc-include-cleaner check has two halves. The "is not used directly" half is what
+# this repository wants: an include that no longer carries its weight is dead weight, and --
+# as src/common/metadata.h showed, an unused include in a *header* silently propagates a whole
+# subsystem into every file downstream of it.
+#
+# The other half ("no header providing X is directly included") is unusable here. On a
+# glib/GTK codebase it fires on essentially every symbol, because include-cleaner attributes
+# g_strrstr() to glib/gstrfuncs.h rather than to the <glib.h> umbrella everyone includes.
+# Measured: 46 warnings on one 900-line file, 45 of them that half. tools/check_unused_includes.sh
+# filters it out; it is left enabled here only because the check offers no switch to disable it.
+#
+# IgnoreHeaders keeps umbrella and system headers out of the "unused" verdict for the same
+# reason -- <glib.h> is "unused" whenever the symbols actually came from its sub-headers.
+Checks: '-*,misc-include-cleaner'
+CheckOptions:
+  misc-include-cleaner.IgnoreHeaders: 'glib[.]h;glib/.*;glib-object[.]h;gtk/.*;gdk/.*;gdk-pixbuf/.*;gio/.*;cairo.*;pango/.*;lcms2[.]h;sqlite3[.]h;json-glib/.*;librsvg/.*;lensfun[.]h;.*intrin[.]h;omp[.]h;.*/external/.*;.*/build/.*'
