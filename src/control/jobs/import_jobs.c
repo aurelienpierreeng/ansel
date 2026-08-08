@@ -20,7 +20,7 @@
 #include "common/collection.h"
 #include "common/datetime.h"
 #include "common/exif.h"
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 #include "common/metadata.h"
 #include "common/styles.h"
 #include "control/control.h"

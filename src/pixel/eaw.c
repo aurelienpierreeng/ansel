@@ -21,7 +21,7 @@
 */
 
 #include "pixel/eaw.h"
-#include "common/iop_profile.h"
+#include "pixel/iop_profile.h"
 #include "system/openmp.h"
 #include "system/simd.h"
 #include "math/math.h"

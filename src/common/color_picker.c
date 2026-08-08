@@ -37,7 +37,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/iop_profile.h"
+#include "pixel/iop_profile.h"
 #include "pixel/format.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

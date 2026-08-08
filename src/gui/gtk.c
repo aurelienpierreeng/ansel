@@ -89,7 +89,7 @@
 #include "common/thumbnail_notify.h"
 #include "gui/common/film_gui.h"
 #include "gui/common/folder_survey_gui.h"
-#include "gui/common/history_merge_gui.h"
+#include "gui/develop/history_merge_gui.h"
 #include "gui/common/collection_gui.h"
 #include "common/startup_progress.h"
 #include "gui/dtgtk/thumbtable.h"

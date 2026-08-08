@@ -63,8 +63,8 @@
 
 #include "common/undo.h"
 #include "common/image_cache.h"
-#include "common/history_merge.h"
-#include "common/iop_order.h"
+#include "develop/history_merge.h"
+#include "develop/iop_order.h"
 #include "develop/dev_history.h"
 #include "develop/blend.h"
 #include "develop/develop.h"

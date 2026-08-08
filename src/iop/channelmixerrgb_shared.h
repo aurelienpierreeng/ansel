@@ -2,7 +2,7 @@
 #define DT_IOP_CHANNELMIXERRGB_SHARED_H
 
 #include "pixel/chromatic_adaptation.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 
 #include <glib.h>
 

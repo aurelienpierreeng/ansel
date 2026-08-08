@@ -46,7 +46,7 @@
 #endif
 
 #include "widgets/bauhaus.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "pixel/rgb_norms.h"
 #include "common/macros.h"
 #include "system/openmp.h"

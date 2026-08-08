@@ -87,7 +87,7 @@
 #include "common/film.h"
 #include "common/gpx.h"
 #include "common/history.h"
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "imageio/imageio_core.h"

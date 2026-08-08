@@ -62,7 +62,7 @@
 #include "common/file_location.h"
 #include "pixel/illuminants.h"
 #include "common/imagebuf.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/imageop_gui.h"

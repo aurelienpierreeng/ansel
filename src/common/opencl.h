@@ -65,7 +65,7 @@
 #ifdef HAVE_OPENCL
 
 #include "common/dlopencl.h"
-#include "common/iop_profile.h"
+#include "pixel/iop_profile.h"
 #include "common/conf.h"
 
 // #pragma GCC diagnostic push

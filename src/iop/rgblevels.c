@@ -43,7 +43,7 @@
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/module_versioning.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "widgets/bauhaus.h"
 #include "pixel/rgb_norms.h"
 #include "develop/imageop.h"

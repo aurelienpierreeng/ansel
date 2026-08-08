@@ -37,7 +37,7 @@
 #include "config.h"
 #endif
 
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/styles.h"
 #include "common/debug.h"
 #include "common/deprecations.h"

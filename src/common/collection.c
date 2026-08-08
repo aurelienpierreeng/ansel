@@ -75,7 +75,7 @@
 #include "common/colorlabels.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/metadata.h"
 #include "common/utility.h"
 #include "common/map_locations.h"

@@ -34,7 +34,7 @@
 
 #include "system/atomic.h"
 #include "imageio/imageio_core.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 /* develop/imageop.h is deliberately NOT included: it includes this header back.
  * dt_iop_module_t is only ever used through a pointer here (tag-declared below);
  * the concrete types needed by value (dt_iop_roi_t, dt_iop_buffer_dsc_t) live in

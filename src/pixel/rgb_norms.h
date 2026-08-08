@@ -23,7 +23,7 @@
 #ifndef DT_PIXEL_RGB_NORMS_H
 #define DT_PIXEL_RGB_NORMS_H
 
-#include "common/iop_profile.h"
+#include "pixel/iop_profile.h"
 
  typedef enum dt_iop_rgb_norms_t
  {

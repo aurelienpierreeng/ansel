@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/logging.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/conf.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"

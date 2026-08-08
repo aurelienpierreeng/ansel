@@ -23,7 +23,7 @@
 #include "widgets/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "math/math.h"
 #include "common/macros.h"
 #include "system/openmp.h"

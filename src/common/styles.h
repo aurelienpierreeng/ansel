@@ -36,7 +36,7 @@
 #ifndef DT_COMMON_STYLES_H
 #define DT_COMMON_STYLES_H
 
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 

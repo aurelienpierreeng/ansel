@@ -40,6 +40,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/macros.h"
+#include "develop/iop_profile.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"

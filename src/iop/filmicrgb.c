@@ -62,7 +62,7 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/bspline.h"
 #include "common/image.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"

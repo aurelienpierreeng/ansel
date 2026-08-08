@@ -136,7 +136,7 @@
 #include "common/image_cache.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_module.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/l10n.h"
 #include "common/metadata.h"
 #include "common/mipmap_cache.h"

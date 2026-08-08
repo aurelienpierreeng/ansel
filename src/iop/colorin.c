@@ -69,7 +69,7 @@
 #endif
 #include "widgets/bauhaus.h"
 #include "common/imagebuf.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/colormatrices.c"
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"

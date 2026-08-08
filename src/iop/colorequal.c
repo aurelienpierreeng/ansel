@@ -18,6 +18,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "develop/iop_profile.h"
 #endif
 
 #include <math.h>

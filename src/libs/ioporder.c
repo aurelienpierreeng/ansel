@@ -27,7 +27,7 @@
 #include "common/colorspaces.h"
 #include "common/database.h"
 #include "common/debug.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
