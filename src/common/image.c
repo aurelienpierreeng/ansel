@@ -96,7 +96,6 @@
 #include "common/datetime.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "control/jobs.h"
 #include "develop/lightroom.h"
 #include "develop/develop.h"
 #include "views/view.h"

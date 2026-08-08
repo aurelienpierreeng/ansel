@@ -53,7 +53,6 @@
 #include "develop/iop_profile.h"
 #include "math/matrices.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "develop/pixelpipe.h"
 #include "develop/develop.h"
 
