@@ -49,10 +49,22 @@ if out.returncode != 0:
     sys.exit(f"error: statelessness_audit.py failed:\n{out.stderr[:800]}")
 data = json.loads(out.stdout)
 
+# A function-local static is named differently by each compiler, and the gate has to see past
+# that or it reports GObject boilerplate as real state on one compiler and not the other:
+#
+#   gcc    static_g_define_type_id.1        <variable>.<n>
+#   clang  dt_bh_get_type.static_g_define_type_id     <function>.<variable>
+#
+# Reduce to the variable name, then match. (Found the hard way: the gate passed on three local
+# GCC builds and failed the LLVM job.)
+def bare(sym):
+    s = re.sub(r"\.\d+$", "", sym)              # gcc's disambiguating suffix
+    return s.rsplit(".", 1)[-1]                  # clang's function prefix
+
 # Emitted by G_DEFINE_TYPE / g_type_register_static / g_signal_new. Registering a type once
 # per process and caching its id is what defining a GTK widget class is.
-GOBJECT = re.compile(r"(_private_offset$|_parent_class$|^static_g_define_type_id|_type\.\d+$|"
-                     r"^_?signals?$|_signal$|_info\.\d+$)")
+GOBJECT = re.compile(r"(^static_g_define_type_id$|_private_offset$|_parent_class$|_type$|"
+                     r"_info$|^_?signals?$|_signal$)")
 REGISTRIES = {"src/widgets/widget_settings.c", "src/widgets/accelerators.c"}
 
 findings = []
@@ -64,7 +76,7 @@ for f, v in sorted(data.items()):
                   f"reaches state via {' -> '.join((v.get('chain') or ['?'])[1:3])}"
             findings.append(f"{f}: {why}")
     elif f.startswith("src/widgets/") and f not in REGISTRIES:
-        real = [s for s in own if not GOBJECT.search(s)]
+        real = [s for s in own if not GOBJECT.search(bare(s))]
         if real:
             findings.append(f"{f}: holds {', '.join(real[:4])} "
                             f"(not GObject registration)")
