@@ -58,8 +58,6 @@
 #include "math/matrices.h"
 #include "common/utility.h"
 #include "common/conf.h"
-#include "control/control.h"
-#include "develop/imageop.h"
 
 #include <strings.h>
 
@@ -154,6 +152,21 @@ static const cmsCIExyYTRIPLE ProPhoto_Primaries = {
 };
 
 cmsCIEXYZTRIPLE Rec709_Primaries_Prequantized;
+
+/* Someone to tell when the display profile changes. The application puts it on its signal bus;
+ * this module has no bus and no business knowing there is a control loop. Unregistered, the
+ * notification is dropped -- correct for a headless run, where nothing is watching a monitor. */
+static dt_colorspaces_profile_changed_handler_t _profile_changed_handler = NULL;
+
+void dt_colorspaces_set_profile_changed_handler(dt_colorspaces_profile_changed_handler_t handler)
+{
+  _profile_changed_handler = handler;
+}
+
+static void _notify_profile_changed(void)
+{
+  if(_profile_changed_handler) _profile_changed_handler();
+}
 
 #define generate_mat3inv_body(c_type, A, B)                                                                  \
   int mat3inv_##c_type(c_type *const dst, const c_type *const src)                                           \
@@ -821,56 +834,6 @@ static cmsHPROFILE dt_colorspaces_create_linear_infrared_profile(void)
   cmsFreeToneCurve(transferFunction);
 
   return profile;
-}
-
-const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int32_t imgid)
-{
-  // find the colorin module -- the pointer stays valid until darktable shuts down
-  static const dt_iop_module_so_t *colorin = NULL;
-  if(IS_NULL_PTR(colorin))
-  {
-    for(const GList *modules = dt_iop_get_modules_so(); modules; modules = g_list_next(modules))
-    {
-      const dt_iop_module_so_t *module = (const dt_iop_module_so_t *)(modules->data);
-      if(!strcmp(module->op, "colorin"))
-      {
-        colorin = module;
-        break;
-      }
-    }
-  }
-
-  const dt_colorspaces_color_profile_t *p = NULL;
-
-  if(colorin && colorin->get_p)
-  {
-    // get the profile assigned from colorin
-    // FIXME: does this work when using JPEG thumbs and the image was never opened?
-    sqlite3_stmt *stmt;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get_sqlite3_global(),
-      "SELECT op_params FROM main.history WHERE imgid=?1 AND operation='colorin' ORDER BY num DESC LIMIT 1", -1,
-      &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    if(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      // use introspection to get the profile name from the binary params blob
-      const void *params = sqlite3_column_blob(stmt, 0);
-      dt_colorspaces_color_profile_type_t *type = colorin->get_p(params, "type_work");
-      char *filename = colorin->get_p(params, "filename_work");
-
-      if(type && filename) p = dt_colorspaces_get_profile(*type, filename,
-                                                          DT_PROFILE_DIRECTION_WORK);
-    }
-    sqlite3_finalize(stmt);
-  }
-
-  // if all else fails -> fall back to linear Rec2020 RGB
-  if(IS_NULL_PTR(p)) p = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK);
-
-  return p;
 }
 
 dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t imgid, cmsHPROFILE *output, gboolean *new_profile)
@@ -2067,7 +2030,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
 
   pthread_rwlock_unlock(&color_profiles->xprofile_lock);
 
-  if(profile_changed) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_CHANGED);
+  if(profile_changed) _notify_profile_changed();
 }
 #endif
 
@@ -2082,8 +2045,6 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
                                        GtkWidget *widget)
 {
   if(IS_NULL_PTR(widget)) return;
-
-  if(!dt_control_running()) return;
 
   dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
 
@@ -2149,7 +2110,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
     dt_free(buffer);
   }
   pthread_rwlock_unlock(&color_profiles->xprofile_lock);
-  if(profile_changed) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_CHANGED);
+  if(profile_changed) _notify_profile_changed();
   dt_free(profile_source);
 }
 
