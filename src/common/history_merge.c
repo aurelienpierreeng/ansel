@@ -79,7 +79,6 @@
  */
 
 #include "common/history_merge.h"
-#include "gui/common/history_merge_gui.h"
 
 #include "common/iop_order.h"
 #include "common/topological_sort.h"
@@ -92,6 +91,68 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* ---- The four user-facing moments of a merge, dispatched to whoever registered for them.
+ * Each has a defined answer for when nobody did; see history_merge.h for why each default is
+ * the one it is. Registration happens once, from the GUI; a headless merge simply never has
+ * a handler and takes the defaults throughout. */
+
+static dt_hm_constraints_choice_handler_t _constraints_choice_handler = NULL;
+static dt_hm_missing_raster_handler_t _missing_raster_handler = NULL;
+static dt_hm_toposort_cycle_handler_t _toposort_cycle_handler = NULL;
+static dt_hm_merge_report_handler_t _merge_report_handler = NULL;
+
+void dt_hm_set_constraints_choice_handler(dt_hm_constraints_choice_handler_t handler)
+{
+  _constraints_choice_handler = handler;
+}
+
+void dt_hm_set_missing_raster_handler(dt_hm_missing_raster_handler_t handler)
+{
+  _missing_raster_handler = handler;
+}
+
+void dt_hm_set_toposort_cycle_handler(dt_hm_toposort_cycle_handler_t handler)
+{
+  _toposort_cycle_handler = handler;
+}
+
+void dt_hm_set_merge_report_handler(dt_hm_merge_report_handler_t handler)
+{
+  _merge_report_handler = handler;
+}
+
+static dt_hm_constraint_choice_t _hm_constraints_choice(GHashTable *id_ht, const char *faulty_id,
+                                                        const char *src_prev, const char *src_next,
+                                                        const char *dst_prev, const char *dst_next)
+{
+  if(IS_NULL_PTR(_constraints_choice_handler)) return DT_HM_CONSTRAINTS_PREFER_DEST;
+  return _constraints_choice_handler(id_ht, faulty_id, src_prev, src_next, dst_prev, dst_next);
+}
+
+static gboolean _hm_confirm_missing_raster(const GList *mod_list)
+{
+  if(IS_NULL_PTR(_missing_raster_handler)) return TRUE;
+  return _missing_raster_handler(mod_list);
+}
+
+static void _hm_report_toposort_cycle(GList *cycle_nodes, GHashTable *id_ht)
+{
+  if(IS_NULL_PTR(_toposort_cycle_handler)) return;
+  _toposort_cycle_handler(cycle_nodes, id_ht);
+}
+
+static gboolean _hm_report_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const gboolean merge_iop_order,
+                                 const gboolean used_source_order, const dt_history_merge_strategy_t strategy,
+                                 GHashTable *src_last_by_id, GHashTable *dst_last_before_by_id,
+                                 const GHashTable *orig_ids, const GHashTable *mod_list_ids,
+                                 const char *source_label, dt_hm_batch_state_t *batch)
+{
+  if(IS_NULL_PTR(_merge_report_handler)) return FALSE;
+  return _merge_report_handler(dev_dest, dev_src, merge_iop_order, used_source_order, strategy, src_last_by_id,
+                               dst_last_before_by_id, orig_ids, mod_list_ids, source_label, batch);
+}
+
 
 char *_hm_make_node_id(const char *op, const char *multi_name)
 {
@@ -289,8 +350,9 @@ typedef struct
   GList *history;
   int history_end;
   GList *iop_order_list;
-  GPtrArray *orig_labels;
-  GPtrArray *orig_styles;
+  /* The module-instance map as it was before the merge. The report dialog derives its
+   * "before" labels from this; it used to be handed ready-made label strings captured
+   * here, which had the backend building presentation on the GUI's behalf. */
   GHashTable *orig_ids;
 } _hm_dest_backup_t;
 
@@ -323,19 +385,11 @@ static int _hm_backup_dest(const dt_develop_t *dev_dest, const GHashTable *mod_l
 
   GHashTable *last_by_id = NULL;
   if(_hm_build_last_history_by_id_from_history(backup->history, backup->history_end, &last_by_id)) return 1;
-  backup->orig_labels = _hm_collect_labels_from_history_map(last_by_id, mod_list_ids, &backup->orig_styles);
-  if(IS_NULL_PTR(backup->orig_labels) || IS_NULL_PTR(backup->orig_styles))
-  {
-    if(backup->orig_labels) g_ptr_array_free(backup->orig_labels, TRUE);
-    if(backup->orig_styles) g_ptr_array_free(backup->orig_styles, TRUE);
-    g_hash_table_destroy(last_by_id);
-    return 1;
-  }
   backup->orig_ids = last_by_id;
   dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
-           "[_hm_backup_dest] imgid=%d history_end=%d history_len=%d iop_order=%d labels=%u selected=%d\n",
+           "[_hm_backup_dest] imgid=%d history_end=%d history_len=%d iop_order=%d modules=%u selected=%d\n",
            dev_dest->image_storage.id, backup->history_end, g_list_length(backup->history),
-           g_list_length(backup->iop_order_list), backup->orig_labels->len,
+           g_list_length(backup->iop_order_list), g_hash_table_size(backup->orig_ids),
            mod_list_ids ? g_hash_table_size((GHashTable *)mod_list_ids) : 0);
   return 0;
 }
@@ -372,13 +426,9 @@ static void _hm_backup_cleanup(_hm_dest_backup_t *backup)
     g_list_free_full(backup->iop_order_list, dt_free_gpointer);
     backup->iop_order_list = NULL;
   }
-  if(backup->orig_labels) g_ptr_array_free(backup->orig_labels, TRUE);
-  if(backup->orig_styles) g_ptr_array_free(backup->orig_styles, TRUE);
   if(backup->orig_ids) g_hash_table_destroy(backup->orig_ids);
   backup->history = NULL;
   backup->iop_order_list = NULL;
-  backup->orig_labels = NULL;
-  backup->orig_styles = NULL;
   backup->orig_ids = NULL;
 }
 
@@ -1253,7 +1303,7 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
         g_list_length(_hm_cycles));
 
     const dt_hm_constraint_choice_t choice
-        = _hm_ask_user_constraints_choice(id_ht, faulty ? faulty->id : NULL, sp, sn, dp, dn);
+        = _hm_constraints_choice(id_ht, faulty ? faulty->id : NULL, sp, sn, dp, dn);
 
     dt_print(DT_DEBUG_HISTORY,
              "[dt_history_merge_module_list_into_image_topological] incompatible constraints choice: %s\n",
@@ -1348,7 +1398,7 @@ static int _hm_topo_sort_constraints(_hm_topo_merge_ctx_t *ctx)
   {
     dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_list_into_image_topological] iop-order merge: "
                                "unsatisfiable constraints (cycle)\n");
-    _hm_show_toposort_cycle_popup(cycle_nodes, ctx->id_ht);
+    _hm_report_toposort_cycle(cycle_nodes, ctx->id_ht);
     if(cycle_nodes)
     {
       g_list_free(cycle_nodes);
@@ -1673,7 +1723,7 @@ static const char *_hm_failure_message(const char *cleanup_reason)
 {
   if(IS_NULL_PTR(cleanup_reason)) return NULL;
 
-  if(!g_strcmp0(cleanup_reason, "_hm_show_merge_report_popup() revert"))
+  if(!g_strcmp0(cleanup_reason, "merge report revert"))
     return NULL; // user-initiated cancel, not a failure
 
   if(!g_strcmp0(cleanup_reason, "_hm_try_merge_iop_order_topologically()"))
@@ -1715,7 +1765,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   if(dest_imgid <= 0) return 1;
   if(IS_NULL_PTR(mod_list)) return 0;
 
-  if(!_hm_warn_missing_raster_producers(mod_list)) return 1;
+  if(!_hm_confirm_missing_raster(mod_list)) return 1;
 
   int rc = 1;
   gboolean used_source_order = merge_iop_order;
@@ -1870,10 +1920,9 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   if(silent)
     revert = (batch->decision == DT_HM_BATCH_REVERT);
   else
-    revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order, strategy,
-                                         src_last_by_id, dst_last_before_by_id, backup.orig_labels,
-                                         backup.orig_styles, backup.orig_ids, mod_list_ids, source_label,
-                                         batch);
+    revert = _hm_report_merge(dev_dest, dev_src, merge_iop_order, used_source_order, strategy,
+                                         src_last_by_id, dst_last_before_by_id, backup.orig_ids,
+                                         mod_list_ids, source_label, batch);
 
   // Capture the resolved order once, from the first image where the user opted into a silent "accept" for
   // the whole batch. Subsequent images replay it via `_hm_apply_cached_order()` above.
@@ -1883,7 +1932,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   if(revert)
   {
     _hm_restore_dest_from_backup(dev_dest, &backup);
-    cleanup_reason = "_hm_show_merge_report_popup() revert";
+    cleanup_reason = "merge report revert";
     cleanup_line = __LINE__;
     goto cleanup;
   }
