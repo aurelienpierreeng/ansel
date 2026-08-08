@@ -350,8 +350,20 @@ justify an include it has always carried is how mechanical work starts dragging 
 Roughly in dependency order. Layering violations (217) fall as these land.
 
 **Merge the LittleCMS2 code.** `common/colorspaces.c` (218 LCMS2 calls) and
-`pixel/iop_profile.c` (7) belong in `colorprofiles/` alongside `printprof.c`. The split
-between them today follows where the code was written, not what it does.
+`pixel/iop_profile.c` (7) belong in `colorprofiles/` alongside `printprof.c`. The split between
+them today follows where the code was written, not what it does.
+
+Measured order, once the upward clusters are gone: return the image→profile family
+(`dt_image_find_best_color_profile` and the five functions around it, ~640 lines) to
+`imageio/` — it looks like profile work but is codec work, and is the only reason
+`colorspaces.c` includes six `imageio/*` headers — then `git mv` the rest. `develop/iop_profile.c`
+does **not** move: 12 of its 15 functions take develop/ types, and it is the pipeline-facing
+half. Nor does `colorspaces_inline_conversions.h`, the tree's heaviest header at 465k
+preprocessed lines; moving it measures +6 and it needs splitting by colour space first.
+
+Blocked on a decision, not on work: `_build_embedded_profile()` appends to the global profile
+registry at runtime with no lock (see CLAUDE.md). Moving that function without settling how the
+registry is synchronised would relocate a race rather than fix it.
 
 **Extract `database`, `caches`, `metadata` from `common/`.** `common/` is 63 translation units
 and remains the largest undifferentiated module. Database access in particular should be behind
