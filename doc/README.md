@@ -33,6 +33,19 @@ Dependencies and function calls graphs are also plotted for each object. These a
 
 As time will go, we will add real dev documentation, explaining how the core tasks are handled, based on what assumptions and covering what use cases. This should prevent re-implementing the same feature, sometimes 4 times or more, as was seen in Darktable since 2020.
 
+## Working on the codebase structure
+
+`reorganisation.md` is the entry point: the module map (what each `src/` directory is for, and
+whether it holds state), the rules CI enforces, and what remains to be done. Read its *Module
+map* and *The rules* sections before any structural change.
+
+Related, more specific:
+
+- `include-graph.md` — why include guards rather than `#pragma once`, and how cycles are measured
+- `globals-migration.md` — dispatching the `darktable` global through function arguments
+- `pipeline-cache.md` — the cache-wait protocol and raster-mask side-band cachelines
+- `image-type-detection.md` — the provisional → resolved image lifecycle
+
 ## Useful links
 
 - [User documentation](https://ansel.photos/en/doc/), in particular:

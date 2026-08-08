@@ -13,8 +13,8 @@ Currently one file:
 It is deliberately a module rather than a home for one file. Two more belong here and are not
 yet moved:
 
-- `common/colorspaces.c` — 79 LCMS2 calls, the largest of the three
-- `pixel/iop_profile.c` — 12, the pipeline-facing half of profile handling
+- `common/colorspaces.c` — 218 LCMS2 calls, the largest of the three
+- `pixel/iop_profile.c` — 7, the pipeline-facing half of profile handling
 
 Merging them is the point: all three wrap the same library, and the split between them today
 follows where the code happened to be written rather than what it does. That merge is a change
