@@ -52,6 +52,7 @@
 #include "imageio/format/imageio_format_api.h"
 
 #include <avif/avif.h>
+#include "imageio/imageio_profile.h"
 
 #define AVIF_MIN_TILE_SIZE 512
 #define AVIF_MAX_TILE_SIZE 3072

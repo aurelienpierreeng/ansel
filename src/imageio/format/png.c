@@ -59,6 +59,7 @@
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
 #include "imageio/format/imageio_format_api.h"
+#include "imageio/imageio_profile.h"
 
 DT_MODULE(3)
 

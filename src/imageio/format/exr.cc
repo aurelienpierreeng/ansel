@@ -61,6 +61,7 @@
 #include <OpenEXR/ImfStandardAttributes.h>
 #include <OpenEXR/ImfThreading.h>
 #include <OpenEXR/ImfOutputFile.h>
+#include "imageio/imageio_profile.h"
 
 #ifdef __cplusplus
 extern "C" {

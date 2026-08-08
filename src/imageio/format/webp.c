@@ -49,6 +49,7 @@
 
 #include <webp/encode.h>
 #include <webp/mux.h>
+#include "imageio/imageio_profile.h"
 
 DT_MODULE(2)
 

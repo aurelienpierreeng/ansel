@@ -58,6 +58,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <tiffio.h>
+#include "imageio/imageio_profile.h"
 
 // it would be nice to save space by storing the masks as single channel float data,
 // but at least GIMP can't open TIFF files where not all layers have the same format.
