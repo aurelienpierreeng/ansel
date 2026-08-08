@@ -56,6 +56,13 @@ fi
 
 # Line numbers this change added, per file, in new-file coordinates -- the same coordinates
 # clang-tidy reports. Empty when files were named explicitly, which means "check them all".
+# Headers the change RENAMED rather than introduced, as "<file>:<basename>". A path rewrite
+# (common/macros.h -> system/macros.h) shows up as an added line, and gating it would demand
+# the file justify an include it has always carried -- which is how a mechanical rename starts
+# dragging unrelated cleanup along with it. Measured: one finding on the branch that prompted
+# this, common/cups_print.c, whose include was correct all along (it uses IS_NULL_PTR;
+# clang-tidy attributes the macro to whichever header happens to reach it first).
+renamed_headers=""
 added_lines=""
 if [ "${1:-}" = "--changed" ]; then
   added_lines="$(git diff -U0 --diff-filter=d "${2}" HEAD -- 'src/*.c' 'src/*.cc' \
@@ -72,6 +79,23 @@ for line in sys.stdin:
             count = int(m.group(2)) if m.group(2) is not None else 1
             for n in range(start, start + count):
                 print(f"{path}:{n}")
+')"
+  renamed_headers="$(git diff -U0 --diff-filter=d "${2}" HEAD -- 'src/*.c' 'src/*.cc' \
+                     | ${PYTHON:-python3} -c '
+import os, re, sys
+path, added, removed = None, {}, {}
+for line in sys.stdin:
+    if line.startswith("+++ b/"):
+        path = line[6:].strip()
+    elif line.startswith(("+#include", "-#include")) and path:
+        m = re.search(r"[\"<]([^\">]+)[\">]", line)
+        if not m:
+            continue
+        (added if line.startswith("+") else removed).setdefault(path, set()).add(
+            os.path.basename(m.group(1)))
+for p, names in added.items():
+    for n in sorted(names & removed.get(p, set())):
+        print(f"{p}:{n}")
 ')"
 fi
 
@@ -146,7 +170,11 @@ for f in "${files[@]}"; do
   while IFS= read -r finding; do
     # clang-tidy prints an absolute path; the diff speaks in repo-relative ones.
     lineno="$(printf '%s' "$finding" | sed -n "s|.*/${f}:\([0-9]*\):.*|\1|p")"
-    if [ -n "${lineno}" ] && printf '%s\n' "${added_lines}" | grep -qxF "${f}:${lineno}"; then
+    header="$(printf '%s' "$finding" | sed -n 's|.*included header \([^ ]*\) is not used.*|\1|p')"
+    if [ -n "${header}" ] && printf '%s\n' "${renamed_headers}" | grep -qxF "${f}:${header}"; then
+      printf 'note (renamed in place, not introduced here): %s\n' "$finding"
+      pre_existing=$((pre_existing + 1))
+    elif [ -n "${lineno}" ] && printf '%s\n' "${added_lines}" | grep -qxF "${f}:${lineno}"; then
       printf '%s\n' "$finding"
       findings=$((findings + 1))
     else
