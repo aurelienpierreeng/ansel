@@ -88,7 +88,12 @@ for f in "${files[@]}"; do
     *.h) continue ;;
   esac
 
-  if ! printf '%s\n' "${tu_list}" | grep -qF "/${f}"; then
+  # No pipe here, deliberately. Piping into `grep -q` makes grep exit on the first match and
+  # SIGPIPE the writer; under `set -o pipefail` that failing writer becomes the pipeline's
+  # status, so a file that IS in the database reads as absent and gets silently skipped.
+  # Measured in CI: 42 obvious translation units -- darktable.c, dev_history.c, most of iop/ --
+  # reported as "not a translation unit" while printf logged a broken pipe for each.
+  if [[ "${tu_list}" != *"/${f}"* ]]; then
     echo "note: $f is not a translation unit in this build; not checked"
     skipped_not_tu=$((skipped_not_tu + 1))
     continue
