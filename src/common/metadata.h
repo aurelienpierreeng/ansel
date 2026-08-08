@@ -30,7 +30,12 @@
 #ifndef DT_COMMON_METADATA_H
 #define DT_COMMON_METADATA_H
 
-#include "gui/gtk.h"
+// Types this header's own declarations use. They used to arrive through gui/gtk.h, which
+// this file included without using a single GTK symbol -- and which it then propagated to
+// all 16 of its includers.
+#include <glib.h>
+#include <stdint.h>
+
 
 #ifdef __cplusplus
 extern "C" {

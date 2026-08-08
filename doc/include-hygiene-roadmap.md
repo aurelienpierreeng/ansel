@@ -602,3 +602,54 @@ initialises. Registration is the guard now.
 
 `common/database.c` is down to zero GTK tokens. Its remaining `gui/legacy_presets.h` include
 is a different problem (preset migration, not a dialog) and is left for its own pass.
+
+## 14. Done: the last `gui/` includes leave `common/`
+
+Four things, found by pulling on the one thread §12 left dangling.
+
+### `gui/legacy_presets.h` was a database migration in the wrong directory
+
+A **1144-line header** holding ~1100 lines of SQL string literals, plus the function that
+runs them, so every translation unit including it got a private copy of the array. Presets
+are a GUI concept, which is presumably how it landed in `gui/`; creating a table of them
+from hard-coded SQL is a database migration and nothing else. No GUI code ever included it —
+`common/database.c` did, and was its only consumer.
+
+Now `common/legacy_presets.{c,h}`, with the data in the `.c` and one declaration in the `.h`.
+
+### …and it never committed its transaction
+
+The loop was bounded by a hand-maintained `static const int num_sql_lines = 99;` against an
+array of **100** elements. The last one is `"COMMIT"`. So every statement ran inside the
+transaction opened by the leading `"BEGIN TRANSACTION"`, which was then left dangling on the
+connection for whatever came next to commit or roll back.
+
+Bounded by `G_N_ELEMENTS(sql_lines)` now, which fixes it and makes the class of bug
+unrepresentable. Worth noting the shape: a hand-maintained count next to the array it counts
+is a bug waiting for someone to append an element.
+
+### `common/metadata.h` included `gui/gtk.h` and used no GTK at all
+
+A dead include **in a header**, so it propagated `gui/gtk.h` into all 16 of its includers.
+It was, however, where several of them were getting `<glib.h>` and `<stdint.h>` from —
+including `metadata.h` itself, for its own declarations. Those are declared directly now.
+
+This is the argument for the clang-tidy `misc-include-cleaner` gate in §10: nothing about
+this include was visible at the point of use, and it survived every previous audit in this
+series because the audits grepped `.c` files.
+
+### `dt_gui_gtk_t.selection_stacked` was selection state parked on the GUI struct
+
+Removing the above exposed `common/selection.c` reaching for `dt_gui_get_global()` — not for
+anything GUI, but to read and write a flag of its own that happened to live on
+`dt_gui_gtk_t`. Three touch points, no GUI code among them. It is `dt_selection_t.stacked`
+now, and the field is gone from `dt_gui_gtk_t` (same treatment as `has_scroll_focus`).
+
+Note this also corrects the claim in #1109 that `selection.c`'s `gui/gtk.h` include was
+"dead": it was *redundant* — `dt_gui_get_global()` was arriving through
+`metadata.h` → `gui/gtk.h` — not unused.
+
+### Where that leaves it
+
+`common/` has **one** `gui/` include: `history_merge.c`, removed by #1110. Layering
+violations 219 → 218, and 244 at the start of this series.

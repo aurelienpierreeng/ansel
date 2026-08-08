@@ -1,32 +1,37 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2012 Aldric Renaudin.
-    Copyright (C) 2012 johannes hanika.
-    Copyright (C) 2012 Mikko Rasa.
-    Copyright (C) 2013-2014, 2016 Tobias Ellinghaus.
-    Copyright (C) 2020-2021 Pascal Obry.
-    Copyright (C) 2021 HansBull.
-    Copyright (C) 2022 Martin Bařinka.
-    Copyright (C) 2025 Aurélien PIERRE.
-    
+    Copyright (C) 2011-2020 darktable developers.
+    Copyright (C) 2026 Aurélien PIERRE.
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_LEGACY_PRESETS_H
-#define DT_GUI_LEGACY_PRESETS_H
+/* The pre-auto-apply-cleanup preset table, as a database migration.
+ *
+ * This lived in gui/legacy_presets.h -- a 1144-line *header* holding ~1100 lines of SQL
+ * string literals plus the function that runs them, so every translation unit including it
+ * got its own copy of the array. It was also the last gui/ include in common/, which is how
+ * it was found: presets are a GUI concept, but creating a table of them from hard-coded SQL
+ * is a database migration and nothing else. No GUI code ever included it; database.c did.
+ */
+
+#include "common/legacy_presets.h"
 
 #include "common/database.h"
+
+#include <glib.h>
+#include <sqlite3.h>
 
 static const char *sql_lines[] = {
   "BEGIN TRANSACTION;",
@@ -1126,16 +1131,19 @@ static const char *sql_lines[] = {
   "','%','%','%',0.0,51200.0,0.0,10000000.0,0.0,100000000.0,0.0,1000.0,1,1,0,0,2);",
   "COMMIT"
 };
-static const int num_sql_lines = 99;
 
-static void dt_legacy_presets_create(const struct dt_database_t *db)
+void dt_legacy_presets_create(const struct dt_database_t *db)
 {
   // a bit stupid, deletes and re-inserts every time :(
-  for(int i = 0; i < num_sql_lines; i++)
+  //
+  // The bound is G_N_ELEMENTS, not a hand-maintained count. It used to be
+  // `static const int num_sql_lines = 99;` against an array of 100, so the loop stopped one
+  // short and the final "COMMIT" never ran: every statement here executed inside the
+  // transaction opened by the leading "BEGIN TRANSACTION", which was then left dangling on
+  // the connection for whatever came next to commit or roll back.
+  for(size_t i = 0; i < G_N_ELEMENTS(sql_lines); i++)
     sqlite3_exec(dt_database_get(db), sql_lines[i], NULL, NULL, NULL);
 }
-
-#endif // DT_GUI_LEGACY_PRESETS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -296,7 +296,6 @@ typedef struct dt_gui_gtk_t
 
   // Track if the current selection has pushed on the backup copy
   // see common/selection.h:dt_selection_push()
-  gboolean selection_stacked;
 
   // Global accelerators for main menu, needed for GtkMenu mnemonics.
   dt_accels_t *accels;

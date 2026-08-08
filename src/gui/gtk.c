@@ -1188,7 +1188,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->surface = NULL;
   gui->center_tooltip = 0;
   gui->culling_mode = FALSE;
-  gui->selection_stacked = FALSE;
   gui->presets_popup_menu = NULL;
   gui->last_preset = NULL;
   gui->export_popup.window = NULL;

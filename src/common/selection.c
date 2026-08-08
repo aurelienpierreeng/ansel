@@ -57,6 +57,12 @@ typedef struct dt_selection_t
 
   /* GList of ids of all images in selection */
   GList *ids;
+
+  /* TRUE while a selection is parked in memory.selected_backup by dt_selection_push(),
+     waiting for the matching dt_selection_pop(). This lived on dt_gui_gtk_t, which is why a
+     layer-1 module reached for dt_gui_get_global() to read its own state -- it is not GUI
+     state, and no GUI code ever touched it. */
+  gboolean stacked;
 } dt_selection_t;
 
 
@@ -206,12 +212,12 @@ static void _selection_deselect(dt_selection_t *selection, int32_t imgid)
 void dt_selection_push(dt_selection_t *selection)
 {
   // Backup current selection
-  if(!dt_gui_get_global()->selection_stacked)
+  if(!selection->stacked)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.selected_backup", NULL, NULL, NULL);
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO memory.selected_backup"
                                                          " SELECT * FROM main.selected_images", NULL, NULL, NULL);
-    dt_gui_get_global()->selection_stacked = TRUE;
+    selection->stacked = TRUE;
 
     // Commit from DB to GList of imgids
     dt_selection_reload_from_database(selection);
@@ -223,12 +229,12 @@ void dt_selection_push(dt_selection_t *selection)
 void dt_selection_pop(dt_selection_t *selection)
 {
   // Restore current selection
-  if(dt_gui_get_global()->selection_stacked)
+  if(selection->stacked)
   {
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM main.selected_images", NULL, NULL, NULL);
     DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO main.selected_images"
                                                          " SELECT * FROM memory.selected_backup", NULL, NULL, NULL);
-    dt_gui_get_global()->selection_stacked = FALSE;
+    selection->stacked = FALSE;
 
     // Commit from DB to GList of imgids
     dt_selection_reload_from_database(selection);
