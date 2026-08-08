@@ -71,7 +71,7 @@
 #include "develop/imageop_gui.h"
 #include "widgets/button.h"
 
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 

@@ -90,7 +90,7 @@
 #include "widgets/expander.h"
 #include "gui/dtgtk/thumbtable.h"
 
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -446,7 +446,7 @@ void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, i
 {
   if(IS_NULL_PTR(vm->current_view))
   {
-    dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_BG);
+    dt_widget_set_source_rgb(cr, DT_GUI_COLOR_BG);
     cairo_paint(cr);
     return;
   }

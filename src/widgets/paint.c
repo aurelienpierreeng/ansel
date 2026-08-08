@@ -52,7 +52,7 @@
 #include "system/mem_alloc.h"
 #include "widgets/widget_settings.h"
 #include "widgets/paint.h"
-#include "widgets/cairo_shapes.h"
+#include "widgets/draw.h"
 #include <math.h>
 
 #ifndef M_PI
@@ -73,16 +73,10 @@
 #define FINISH { cairo_identity_matrix(cr); \
                  cairo_restore(cr); }
 
-static void _rounded_rectangle(cairo_t *cr)  // create rounded rectangle to use in other icons
+// The icon canvas is the unit square, with a tenth of it as the corner radius.
+static inline void _rounded_rectangle(cairo_t *cr)
 {
-  const double degrees = M_PI / 180.0;
-
-  cairo_new_sub_path (cr);
-  cairo_arc (cr, 0.9, 0.1, 0.1, -90 * degrees, 0 * degrees);
-  cairo_arc (cr, 0.9, 0.9, 0.1, 0 * degrees, 90 * degrees);
-  cairo_arc (cr, 0.1, 0.9, 0.1, 90 * degrees, 180 * degrees);
-  cairo_arc (cr, 0.1, 0.1, 0.1, 180 * degrees, 270 * degrees);
-  cairo_close_path (cr);
+  dt_draw_rounded_rectangle_path(cr, 0.0, 0.0, 1.0, 1.0, 0.1);
 }
 
 /**
@@ -150,32 +144,6 @@ static void _paint_cursor_arrow(cairo_t *cr, const double tip_x, const double ti
   cairo_fill(cr);
 
   cairo_restore(cr);
-}
-
-/**
- * @brief Draw a plus sign centered at the given position.
- *
- * The line width scale is applied to the current Cairo line width so the
- * plus sign stays consistent with the caller's icon scaling.
- *
- * @param cr Cairo context.
- * @param x Center X in normalized icon space.
- * @param y Center Y in normalized icon space.
- * @param size Half-length of each arm in normalized icon space.
- * @param line_width_scale Multiplier applied to the current line width.
- */
-static void _draw_plus_sign(cairo_t *cr, float x, float y, float size, float line_width_scale)
-{
-  const float base_line_width = cairo_get_line_width(cr);
-  cairo_set_line_width(cr, base_line_width * line_width_scale);
-
-  cairo_move_to(cr, x, y - size);
-  cairo_line_to(cr, x, y + size);
-  cairo_move_to(cr, x - size, y);
-  cairo_line_to(cr, x + size, y);
-
-  cairo_stroke(cr);
-  cairo_set_line_width(cr, base_line_width);
 }
 
 void dtgtk_cairo_paint_empty(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
@@ -2235,7 +2203,7 @@ void dtgtk_cairo_paint_colorpicker(cairo_t *cr, gint x, gint y, gint w, gint h, 
   if(flags & CPF_ALTER)
   {
     // plus sign
-    _draw_plus_sign(cr, 0.18f, 0.18f, 0.18f, 1.0f);
+    dt_draw_plus_sign(cr, 0.18f, 0.18f, 0.18f, 1.0f);
   }
 
   cairo_translate(cr, 0.5, 0.5);

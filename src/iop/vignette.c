@@ -73,7 +73,7 @@
 
 #include "gui/gtk.h"
 #include "gui/presets.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "iop/iop_api.h"
 #include <gtk/gtk.h>
 #include <inttypes.h>

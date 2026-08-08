@@ -81,6 +81,26 @@ static inline cairo_surface_t *dt_cairo_image_surface_create_for_data(unsigned c
   return cst;
 }
 
+static inline cairo_surface_t *dt_cairo_image_surface_create_from_png(const char *filename)
+{
+  cairo_surface_t *cst = cairo_image_surface_create_from_png(filename);
+  cairo_surface_set_device_scale(cst, dt_screen_ppd(), dt_screen_ppd());
+  return cst;
+}
+
+/* The size a device-scaled surface occupies in logical coordinates -- what the caller asked
+ * for, not the ppd-multiplied pixel count cairo actually allocated. */
+
+static inline int dt_cairo_image_surface_get_width(cairo_surface_t *surface)
+{
+  return cairo_image_surface_get_width(surface) / dt_screen_ppd();
+}
+
+static inline int dt_cairo_image_surface_get_height(cairo_surface_t *surface)
+{
+  return cairo_image_surface_get_height(surface) / dt_screen_ppd();
+}
+
 G_END_DECLS
 
 #endif // DT_SYSTEM_SCREEN_METRICS_H

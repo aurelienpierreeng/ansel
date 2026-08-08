@@ -332,7 +332,7 @@ void expose(dt_view_t *self, cairo_t *cri, int32_t width_i, int32_t height_i, in
   dt_print_t *prt = (dt_print_t *)self->data;
 
   // clear the current surface
-  dt_gui_gtk_set_source_rgb(cri, DT_GUI_COLOR_PRINT_BG);
+  dt_widget_set_source_rgb(cri, DT_GUI_COLOR_PRINT_BG);
   cairo_paint(cri);
 
   // Draw the page first so the image fetcher paints into the same clipped print

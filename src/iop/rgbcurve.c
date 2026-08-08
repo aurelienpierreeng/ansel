@@ -61,7 +61,7 @@
 #include "gui/gtk.h"
 #include "widgets/gdkkeys.h"
 #include "gui/presets.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "control/control.h"
 
 #include "libs/colorpicker.h"

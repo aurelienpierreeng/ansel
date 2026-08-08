@@ -131,7 +131,7 @@
 #include "develop/pixelpipe_cache.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"

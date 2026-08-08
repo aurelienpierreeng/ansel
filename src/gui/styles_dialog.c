@@ -41,7 +41,7 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "gui/gtk.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/styles.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"

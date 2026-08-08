@@ -530,9 +530,9 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
   cairo_move_to(cr, xc - wd, yc + 1. / 3. * fontsize - fontsize);
   pango_cairo_layout_path(cr, layout);
   cairo_set_line_width(cr, 2.0);
-  dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_BG);
+  dt_widget_set_source_rgb(cr, DT_GUI_COLOR_LOG_BG);
   cairo_stroke_preserve(cr);
-  dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_FG);
+  dt_widget_set_source_rgb(cr, DT_GUI_COLOR_LOG_FG);
   cairo_fill(cr);
   pango_font_description_free(desc);
   g_object_unref(layout);

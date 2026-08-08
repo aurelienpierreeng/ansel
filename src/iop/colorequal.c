@@ -48,7 +48,7 @@
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe_cache.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 #include "develop/gui_throttle.h"
 #include "iop/iop_api.h"

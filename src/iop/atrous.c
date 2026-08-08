@@ -76,7 +76,7 @@
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
 
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"

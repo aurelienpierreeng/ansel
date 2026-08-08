@@ -126,7 +126,7 @@ static void _studio_import_update_state(dt_lib_studio_import_t *d)
   }
   else
   {
-    const GdkRGBA *warning = &dt_gui_get_global()->colors[DT_GUI_COLOR_WARNING];
+    const GdkRGBA *warning = &dt_widget_colors()[DT_GUI_COLOR_WARNING];
     dt_gui_set_symbolic_icon(d->status_icon, "emblem-important-symbolic", GTK_ICON_SIZE_BUTTON, warning);
     gchar *color = g_strdup_printf("#%02x%02x%02x", (int)(warning->red * 255), (int)(warning->green * 255),
                                    (int)(warning->blue * 255));

@@ -60,7 +60,7 @@
 
 
 #include "develop/imageop.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 
 #include <assert.h>
 #include <math.h>
