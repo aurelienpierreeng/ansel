@@ -93,7 +93,7 @@
 #include "widgets/expander.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "develop/gui_throttle.h"
 #include "gui/presets.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -107,6 +107,10 @@
 #include <math.h>
 #include <complex.h>
 #include <stdlib.h>
+#include "widgets/container.h"
+#include "widgets/label.h"
+#include "widgets/popup.h"
+#include "widgets/widget_style.h"
 
 static sqlite3_stmt *_iop_presets_select_stmt = NULL;
 #include <string.h>

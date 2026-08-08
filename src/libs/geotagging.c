@@ -71,6 +71,11 @@
 #include <gdk/gdkkeysyms.h>
 #include <glib/gstdio.h>
 #include <sqlite3.h>
+#include "gui/application.h"
+#include "gui/window_manager.h"
+#include "widgets/accelerators.h"
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

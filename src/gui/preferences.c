@@ -69,11 +69,15 @@
 #include "develop/imageop.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/preferences.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
 #include "preferences_gen.h"
+#include "widgets/dialog.h"
+#include "widgets/gtkentry.h"
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

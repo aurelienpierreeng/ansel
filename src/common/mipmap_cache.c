@@ -70,6 +70,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include "common/database.h"
 
 #if !defined(_WIN32)
 #include <sys/statvfs.h>

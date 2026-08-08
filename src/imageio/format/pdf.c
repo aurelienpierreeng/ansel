@@ -43,6 +43,8 @@
 #include "imageio/format/imageio_format_api.h"
 
 #include <strings.h>
+#include "widgets/accelerators.h"
+#include "widgets/label.h"
 
 DT_MODULE(1)
 

@@ -1,3 +1,4 @@
+#include "widgets/label.h"
 /*
     This file is part of darktable,
     Copyright (C) 2013-2016 Roman Lebedev.
@@ -63,7 +64,6 @@ http://www.youtube.com/watch?v=JVoUgR6bhBc
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"

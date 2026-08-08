@@ -24,7 +24,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/paths.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "common/dtpthread.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"

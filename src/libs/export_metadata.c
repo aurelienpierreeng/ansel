@@ -34,7 +34,7 @@
 #include "imageio/imageio_module.h"
 #include "widgets/button.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -44,6 +44,7 @@
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/widget_style.h"
 
 typedef enum dt_lib_tagging_cols_t
 {

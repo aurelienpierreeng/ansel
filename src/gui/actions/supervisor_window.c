@@ -22,7 +22,7 @@
 #include "common/opencl.h"
 #include "develop/pixelpipe_cache.h"
 #include "develop/supervisor.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <gtk/gtk.h>
 #include <json-glib/json-glib.h>

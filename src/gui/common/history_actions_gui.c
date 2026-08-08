@@ -37,11 +37,12 @@
 #include "develop/develop.h"
 #include "develop/dev_history.h"
 #include "gui/actions/menu.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/hist_dialog.h"
 #include "views/view.h"
 
 #include <glib/gi18n.h>
+#include "widgets/dialog.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"

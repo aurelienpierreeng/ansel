@@ -24,7 +24,7 @@
 #include "system/mem_alloc.h"
 #include "common/usermanual_url.h"
 #include "control/signal.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/actions/menu.h"
 #ifdef __APPLE__
 #include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
@@ -36,6 +36,8 @@
 #include "gui/import.h"
 #include "libs/lib.h"
 #include "control/control.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 
 static void pretty_print_collection(const char *buf, char *out, size_t outsize)

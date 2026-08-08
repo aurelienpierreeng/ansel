@@ -82,7 +82,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 #include "widgets/draw.h"
-#include "gui/gtk.h"
 #include "gui/presets.h"
 
 #include "iop/iop_api.h"
@@ -92,6 +91,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/scroll_wrap.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 #define DT_GUI_CURVE_INFL .3f

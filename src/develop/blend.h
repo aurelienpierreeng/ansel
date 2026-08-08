@@ -37,13 +37,13 @@
 #ifndef DT_DEVELOP_BLEND_H
 #define DT_DEVELOP_BLEND_H
 
+#include "widgets/collapsible_section.h"
 #include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe.h"
 #include "widgets/gradientslider.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -13,8 +13,10 @@ separates three cases for every includer:
   OWN    - uses a symbol the header itself declares/defines. Needs whichever new header
            that symbol lands in.
   VIA    - uses no own symbol, but uses a symbol from a header this one includes. The
-           include is a transitive supply line; the file needs to include that header
-           directly instead.
+           include is a transitive supply line; the file needs that header from somewhere
+           else. Only headers it cannot already reach through its *other* includes are
+           reported, so the list is what actually has to be added, not everything it happens
+           to touch.
   UNUSED - uses nothing from the header or its transitive closure. The include can go.
 
 Symbols are collected per header (functions, macros, types, enums, struct tags) and matched
@@ -54,9 +56,16 @@ DECLARE_PATTERNS = [
 # Enum members are supplied too, and they are how DT_GUI_COLOR_* / DT_UI_CONTAINER_* travel.
 ENUM_MEMBER = re.compile(r"^\s*(DT_[A-Z0-9_]+)\s*(?:=|,|$)")
 
+# Keywords and primitive types get matched by the declaration patterns (a `void foo(` line
+# yields both) and by every consumer, so they would attribute every file to every header.
 NOISE = {
     "if", "for", "while", "switch", "return", "sizeof", "defined", "else", "do",
     "static", "inline", "const", "struct", "union", "enum", "typedef", "extern",
+    "void", "int", "char", "float", "double", "long", "short", "unsigned", "signed",
+    "gboolean", "gint", "guint", "gchar", "gpointer", "gdouble", "gfloat", "gsize",
+    "size_t", "ssize_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+    "int8_t", "int16_t", "int32_t", "int64_t", "va_list", "FILE",
+    "TRUE", "FALSE", "NULL",
 }
 
 
@@ -143,8 +152,10 @@ def main():
             supplier.setdefault(sym, os.path.relpath(dep, SRC))
 
     basename = os.path.basename(rel)
+    # Both spellings: a project header included as <gui/gtk.h> counts exactly the same, and
+    # two headers in this tree are written that way.
     include_re = re.compile(
-        r'^\s*#\s*include\s+"(?:.*/)?' + re.escape(basename) + r'"', re.M)
+        r'^\s*#\s*include\s+["<](?:.*/)?' + re.escape(basename) + r'[">]', re.M)
 
     rows = []
     for path in walk_sources():
@@ -156,9 +167,26 @@ def main():
         body = strip_noise(include_re.sub(" ", raw))
         words = set(re.findall(r"\b[A-Za-z_]\w*\b", body))
 
+        # What this file can already reach without the header under audit. A symbol available
+        # through one of its own other includes is not something it needs to add.
+        # Scanned on the raw text: strip_noise() blanks string literals, which is where an
+        # include path lives.
+        already = set()
+        for line in include_re.sub(" ", raw).split("\n"):
+            m = INCLUDE.match(line)
+            if not m:
+                continue
+            target = resolve(m.group(1), os.path.dirname(path))
+            if target:
+                already.add(target)
+                already |= closure(target)
+        already = {os.path.relpath(h, SRC) for h in already}
+
         used_own = sorted(own & words)
         used_via = collections.defaultdict(list)
         for sym in words & supplier.keys():
+            if supplier[sym] in already:
+                continue
             used_via[supplier[sym]].append(sym)
 
         kind = "own" if used_own else ("via" if used_via else "unused")

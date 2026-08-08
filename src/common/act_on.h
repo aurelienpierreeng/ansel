@@ -21,8 +21,10 @@
 #ifndef DT_COMMON_ACT_ON_H
 #define DT_COMMON_ACT_ON_H
 
-#include <gui/gtk.h>
 
+#include <glib.h>
+#include <stdint.h>
+#include "common/http_server.h"
 // get images to act on for globals change (via libs or accels)
 // The list needs to be freed by the caller
 GList *dt_act_on_get_images();

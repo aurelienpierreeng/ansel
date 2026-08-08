@@ -47,10 +47,11 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
+#include "widgets/scroll_wrap.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"

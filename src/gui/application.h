@@ -1,3 +1,15 @@
+/* The application's GUI: the window it owns, the panels in it, the theme it wears, and the
+ * process of bringing all of that up and taking it down.
+ *
+ * This is the half of the old gui/gtk.c that is genuinely about *this* application. The other
+ * half -- containers, labels, popovers, notebooks, dialogs, resizable panes -- was toolkit
+ * code that merely happened to live here, and now lives in widgets/ with no way back to any
+ * of this. The file is no longer called gtk.c partly because that name described its
+ * accidental contents rather than its purpose, and partly because a gtk.h of our own, two
+ * directories away from the system <gtk/gtk.h>, is a trap nobody needs -- as the first
+ * attempt at this rewrite proved by matching that path with a sloppy pattern.
+ */
+
 /*
     This file is part of darktable,
     Copyright (C) 2009-2014 johannes hanika.
@@ -51,8 +63,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_GTK_H
-#define DT_GUI_GTK_H
+#ifndef DT_GUI_APPLICATION_H
+#define DT_GUI_APPLICATION_H
 
 #include "common/glib_utils.h"
 #include "common/macros.h"
@@ -61,20 +73,7 @@
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/window_manager.h"
 
-/* Re-exported while the split lands: every widget helper that used to be declared here now
- * lives in its own widgets/ module. Consumers are being moved onto the specific headers one
- * by one; until that sweep finishes these keep the existing call sites compiling. */
-#include "widgets/accelerators.h"
-#include "widgets/collapsible_section.h"
-#include "widgets/container.h"
-#include "widgets/dialog.h"
-#include "widgets/gtkentry.h"
-#include "widgets/label.h"
-#include "widgets/notebook.h"
-#include "widgets/popup.h"
-#include "widgets/scroll_wrap.h"
-#include "widgets/widget_settings.h"
-#include "widgets/widget_style.h"
+#include "widgets/accelerators.h"   // the accels registry the macros below bind to
 
 #include <gtk/gtk.h>
 #include <stdint.h>
@@ -240,8 +239,6 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui);
 void dt_gui_gtk_quit();
 void dt_gui_store_last_preset(const char *name);
 int dt_gui_gtk_write_config();
-void dt_widget_set_source_rgb(cairo_t *cr, dt_gui_color_t);
-void dt_widget_set_source_rgba(cairo_t *cr, dt_gui_color_t, float opacity_coef);
 
 /** \brief gives a widget focus in the container */
 void dt_ui_container_focus_widget(dt_ui_t *ui, const dt_ui_container_t c, GtkWidget *w);
@@ -318,7 +315,7 @@ void dt_gui_refocus_center();
 }
 #endif
 
-#endif // DT_GUI_GTK_H
+#endif // DT_GUI_APPLICATION_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -57,7 +57,7 @@
 #include "common/conf.h"
 #include "control/control.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/styles.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -68,6 +68,7 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <libxml/parser.h>
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

@@ -77,12 +77,13 @@
 #include "develop/tiling.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <math.h>
 #include <stdlib.h>
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
 //#define USE_NEW_CL  //uncomment to use the new, more memory-efficient OpenCL code (not yet finished)
 
 #define INSET DT_PIXEL_APPLY_DPI(5)

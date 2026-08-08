@@ -58,13 +58,14 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "widgets/gdkkeys.h"
 #include "gui/presets.h"
 #include "widgets/draw.h"
 #include "control/control.h"
 
 #include "libs/colorpicker.h"
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(1)
 #define DT_IOP_RGBCURVE_RES 256

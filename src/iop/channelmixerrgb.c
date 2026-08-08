@@ -69,7 +69,6 @@
 #include "math/openmp_maths.h"
 #include "math/gaussian_elimination.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/channelmixerrgb_shared.h"
 #include "iop/iop_api.h"
@@ -87,6 +86,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
 
 DT_MODULE_INTROSPECTION(3, dt_iop_channelmixer_rgb_params_t)
 

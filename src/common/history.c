@@ -54,6 +54,7 @@
 #include "common/undo.h"
 #include "common/utility.h"
 #include "develop/masks.h"
+#include "widgets/label.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 

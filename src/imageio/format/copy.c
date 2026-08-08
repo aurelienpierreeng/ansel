@@ -35,7 +35,8 @@
 #include "imageio/imageio_module.h"
 #include "common/utility.h"
 #include "imageio/format/imageio_format_api.h"
-#include "gui/gtk.h"
+#include "widgets/label.h"
+#include "widgets/widget_settings.h"
 #include <glib/gstdio.h>
 #include <inttypes.h>
 #include <stdio.h>

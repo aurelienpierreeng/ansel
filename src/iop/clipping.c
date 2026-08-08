@@ -89,7 +89,6 @@
 #include "develop/imageop_gui.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
 #include "gui/guides.h"
 #include "iop/iop_api.h"
 
@@ -100,6 +99,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/notebook.h"
 
 DT_MODULE_INTROSPECTION(5, dt_iop_clipping_params_t)
 

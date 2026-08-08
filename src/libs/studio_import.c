@@ -31,10 +31,13 @@
 #include "common/folder_survey.h"
 #include "common/conf.h"
 #include "control/jobs/import_jobs.h"
-#include "gui/gtk.h"
 #include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "gui/window_manager.h"
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/popup.h"
 
 DT_MODULE(1)
 

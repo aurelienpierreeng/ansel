@@ -46,7 +46,7 @@
 #include "control/control.h"
 #include "gui/dtgtk/thumbtable.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 #include "views/view_api.h"
 

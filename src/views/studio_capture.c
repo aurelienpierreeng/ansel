@@ -38,7 +38,7 @@
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/color_picker_proxy.h"
 #include "widgets/gdkkeys.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"

@@ -55,7 +55,6 @@
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "gui/gtk.h"
 #include "control/control.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "math/math.h"

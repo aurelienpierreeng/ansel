@@ -25,11 +25,12 @@
 #include "system/mem_alloc.h"
 
 #include "iop/drawlayer/paint.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <float.h>
 #include <math.h>
 #include <string.h>
+#include "widgets/widget_settings.h"
 
 /** @file
  *  @brief Drawlayer widget helpers (picker, swatch, color history).

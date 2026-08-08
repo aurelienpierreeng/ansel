@@ -40,9 +40,11 @@
 #include "common/styles.h"
 #include "control/control.h"
 #include "develop/imageop.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "widgets/draw.h"
 #include "gui/styles.h"
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

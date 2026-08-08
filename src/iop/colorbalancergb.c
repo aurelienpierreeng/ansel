@@ -56,13 +56,16 @@
 #include "develop/imageop_gui.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
 
 //#include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
 #define LUT_ELEM 360     // gamut LUT number of elements: resolution of 1°
 #define STEPS 92         // so we test 92x92x92 combinations of RGB in [0; 1] to build the gamut LUT
 

@@ -73,7 +73,7 @@
 #include "widgets/paint.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "math/gaussian_elimination.h"
 #include "iop/iop_api.h"
 
@@ -86,6 +86,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
 
 #define INVERSE_SQRT_3 0.5773502691896258f
 #define SAFETY_MARGIN 0.01f

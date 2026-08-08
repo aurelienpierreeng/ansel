@@ -37,7 +37,6 @@
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
-#include "gui/gtk.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
 

@@ -58,7 +58,6 @@
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <assert.h>
@@ -67,6 +66,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
 
 #define DT_COLORRECONSTRUCT_BILATERAL_MAX_RES_S 500
 #define DT_COLORRECONSTRUCT_BILATERAL_MAX_RES_R 100

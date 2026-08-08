@@ -58,7 +58,6 @@
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
-#include "gui/gtk.h"
 #include "imageio/format/imageio_format_api.h"
 
 DT_MODULE(3)

@@ -71,12 +71,12 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "widgets/draw.h"
 #include "iop/iop_api.h"
 #include <gtk/gtk.h>
 #include <inttypes.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(4, dt_iop_vignette_params_t)
 

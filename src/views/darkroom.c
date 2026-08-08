@@ -106,7 +106,7 @@
 #include "gui/dtgtk/thumbtable.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "develop/gui_throttle.h"
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
@@ -126,6 +126,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
 
 #ifndef G_SOURCE_FUNC // Defined for glib >= 2.58
 #define G_SOURCE_FUNC(f) ((GSourceFunc) (void (*)(void)) (f))

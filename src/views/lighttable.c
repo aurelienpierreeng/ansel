@@ -83,7 +83,6 @@
 #include "gui/dtgtk/thumbtable.h"
 
 #include "widgets/draw.h"
-#include "gui/gtk.h"
 #include "views/view.h"
 #include "views/view_api.h"
 #include "control/signal.h"  // DT_SIGNAL_* / dt_control_signal_*, previously reached through gui/draw.h

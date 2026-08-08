@@ -29,10 +29,13 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <glib.h>
 #include <string.h>
+#include "widgets/dialog.h"
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
 
 typedef struct
 {

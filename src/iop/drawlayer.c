@@ -47,7 +47,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "pixel/interpolation.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "develop/gui_throttle.h"
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
@@ -68,6 +68,8 @@
 #include <sched.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/notebook.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_drawlayer_params_t)
 

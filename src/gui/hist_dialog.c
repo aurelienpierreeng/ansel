@@ -38,9 +38,12 @@
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/dev_history.h"  // dt_history_module_skip_copy, previously reached through gui/draw.h
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/hist_dialog.h"
 #include "widgets/draw.h"
+#include "widgets/dialog.h"
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

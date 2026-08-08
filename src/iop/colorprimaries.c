@@ -41,8 +41,10 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_colorprimaries_params_t)
 

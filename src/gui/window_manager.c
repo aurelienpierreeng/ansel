@@ -29,6 +29,11 @@
 #include "gui/actions/menu.h"
 #include "widgets/sidepanel.h"
 #include "libs/lib.h"
+#include "gui/application.h"
+#include "gui/dtgtk/thumbnail.h"
+#include "gui/dtgtk/thumbtable.h"
+#include "widgets/accelerators.h"
+#include "widgets/widget_style.h"
 
 #define WINDOW_DEBUG 0
 

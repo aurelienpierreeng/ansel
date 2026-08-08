@@ -53,9 +53,9 @@
 #include "math/openmp_maths.h"
 #include "develop/tiling.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
+#include "widgets/label.h"
 
 // Set to one to output intermediate image steps as PFM in /tmp
 #define DEBUG_DUMP_PFM 0

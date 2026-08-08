@@ -28,6 +28,7 @@
 #include "views/dev_backbuf.h"
 
 #include <math.h>
+#include "gui/application.h"
 
 // Real state behind a dt_dev_snapshot_t handle. Heap-allocated and refcounted so that copying a
 // dt_dev_snapshot_t (e.g. libs/snapshots.c shuffling its fixed-size slot array) only ever copies a

@@ -44,7 +44,6 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/glib_utils.h"
-#include "gui/gtk.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
 #include "common/conf.h"

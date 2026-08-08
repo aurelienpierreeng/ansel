@@ -37,7 +37,7 @@ No file here includes anything from `gui/`. What each of them needed came out wi
 | `gui/gdkkeys.h` (pure keysym mapping) | `widgets/gdkkeys.h` |
 | pipeline-tracked allocator in `focus_peaking` | plain `dt_alloc_align` |
 
-`gui/gtk.h` includes `widget_settings.h` and `widget_style.h`, so the 45 files that used those
+`gui/application.h` includes `widget_settings.h` and `widget_style.h`, so the 45 files that used those
 names keep compiling unchanged.
 
 **What the application registers at startup**, in `dt_gui_gtk_init()` unless noted:

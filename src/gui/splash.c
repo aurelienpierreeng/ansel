@@ -22,13 +22,15 @@
 #include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "common/file_location.h"
-#include "gui/gtk.h"
+#include "common/glib_utils.h"
+#include "widgets/widget_settings.h"
 
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
 #include <math.h>
 #include <pango/pangocairo.h>
 #include <stdlib.h>
+#include "config.h"
 typedef struct dt_splash_t
 {
   GtkWidget *window;

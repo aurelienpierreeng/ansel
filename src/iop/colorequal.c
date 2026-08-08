@@ -49,9 +49,11 @@
 #include "develop/pixelpipe_cache.h"
 #include "gui/color_picker_proxy.h"
 #include "widgets/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "develop/gui_throttle.h"
 #include "iop/iop_api.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
 
 #ifdef _OPENMP
 #include <omp.h>

@@ -32,10 +32,11 @@
 #include "common/styles.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
+#include "gui/window_manager.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

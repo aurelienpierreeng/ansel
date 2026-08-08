@@ -55,11 +55,13 @@
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 
 #include <glib/gstdio.h>
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE(1)
 

@@ -46,7 +46,9 @@
 #include "common/image.h"
 #include "common/utility.h"
 #include "crawler.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

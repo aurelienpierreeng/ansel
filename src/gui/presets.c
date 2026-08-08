@@ -65,12 +65,14 @@
 #include "develop/blend.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/presets.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
 #include <assert.h>
+#include "widgets/dialog.h"
+#include "widgets/widget_style.h"
 
 const int dt_gui_presets_exposure_value_cnt = 24;
 const float dt_gui_presets_exposure_value[]

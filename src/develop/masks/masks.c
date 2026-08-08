@@ -47,7 +47,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/glib_utils.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "common/database.h"

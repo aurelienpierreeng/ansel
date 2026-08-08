@@ -31,7 +31,7 @@
 #include "common/conf.h"
 #include "control/control.h"
 #include "widgets/drawingarea.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <math.h>
 #include <stdlib.h>

@@ -71,11 +71,14 @@
 #include "control/control.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 
 #include <gdk/gdkkeysyms.h>
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

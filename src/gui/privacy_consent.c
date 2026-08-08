@@ -21,11 +21,13 @@
 #endif
 
 #include "gui/privacy_consent.h"
+#include <glib/gi18n.h>
+#include "gui/application.h"
 
 #if defined(HAVE_SENTRY) || defined(HAVE_TELEMETRY)
 
 #include "common/conf.h"
-#include "gui/gtk.h"
+#include "widgets/widget_settings.h"
 
 // Non-confgen sentinel: its presence means the user has already been asked. The
 // per-feature toggles (sentry/enabled, telemetry/enabled) are confgen keys shown

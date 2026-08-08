@@ -41,7 +41,6 @@
 #include "common/conf.h"
 #include "control/control.h"
 #include "widgets/button.h"
-#include "gui/gtk.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <curl/curl.h>
 #include <glib/gstdio.h>
@@ -53,6 +52,8 @@
 #include "common/module_versioning.h"
 #include "common/times.h"
 #include "common/utility.h"
+#include "widgets/accelerators.h"
+#include "widgets/label.h"
 
 DT_MODULE(1)
 

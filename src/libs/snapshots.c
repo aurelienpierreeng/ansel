@@ -51,13 +51,14 @@
 #include "widgets/paint.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "widgets/draw.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
 
 #include <math.h>
+#include "gui/window_manager.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

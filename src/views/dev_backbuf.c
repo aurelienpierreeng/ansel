@@ -27,7 +27,7 @@
 #include "common/colorspaces.h"
 #include "common/macros.h"
 #include "system/simd.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe_cache.h"

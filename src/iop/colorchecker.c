@@ -58,7 +58,6 @@
 #include "math/openmp_maths.h"
 #include "widgets/drawingarea.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 #include "math/gaussian_elimination.h"

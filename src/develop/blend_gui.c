@@ -67,12 +67,19 @@
 #include "widgets/gradientslider.h"
 
 #include "gui/actions/menu.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/colorpicker.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/collapsible_section.h"
+#include "widgets/container.h"
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/popup.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
 
 #define NEUTRAL_GRAY 0.5
 #define BLEND_MASKMODE_CONF_KEY "plugins/darkroom/blending/mask_mode_tab"

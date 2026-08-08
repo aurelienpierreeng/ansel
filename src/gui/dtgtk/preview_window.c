@@ -24,12 +24,13 @@
 #include "system/simd.h"
 #include "common/times.h"
 #include "control/signal.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "control/control.h"
 #include "common/image_cache.h"
 #include "views/view.h"
 
 #include <gtk/gtk.h>
+#include "widgets/widget_settings.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"

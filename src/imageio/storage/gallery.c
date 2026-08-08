@@ -64,13 +64,15 @@
 #include "control/control.h"
 #include "widgets/button.h"
 #include "widgets/paint.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "widgets/gtkentry.h"
 #include "imageio/storage/imageio_storage_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #endif
 #include <stdio.h>
 #include <stdlib.h>
+#include "widgets/label.h"
+#include "widgets/widget_settings.h"
 
 DT_MODULE(2)
 
