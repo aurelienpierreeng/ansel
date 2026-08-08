@@ -96,6 +96,7 @@
 #include <strings.h>
 
 #include <lcms2.h>
+#include "imageio/imageio_profile.h"
 
 // max iccprofile file name length
 // must be in synch with dt_colorspaces_color_profile_t

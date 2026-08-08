@@ -66,6 +66,7 @@
 
 #include <glib/gstdio.h>
 #include "widgets/label.h"
+#include "imageio/imageio_profile.h"
 
 DT_MODULE(4)
 

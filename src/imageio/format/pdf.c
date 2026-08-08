@@ -45,6 +45,7 @@
 #include <strings.h>
 #include "widgets/accelerators.h"
 #include "widgets/label.h"
+#include "imageio/imageio_profile.h"
 
 DT_MODULE(1)
 

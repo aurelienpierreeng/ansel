@@ -59,6 +59,7 @@
 #undef HAVE_STDLIB_H
 #undef HAVE_STDDEF_H
 #include <jpeglib.h>
+#include "imageio/imageio_profile.h"
 #undef HAVE_STDLIB_H
 #undef HAVE_STDDEF_H
 

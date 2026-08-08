@@ -123,6 +123,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include "imageio/imageio_profile.h"
 
 /**
  * @brief Map Exiv2 preview MIME types to decoder format identifiers.
