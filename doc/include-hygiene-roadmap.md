@@ -766,3 +766,65 @@ unit references nothing, so every one of the header's includes comes out "unused
 This matters because **the case that motivated both checks is exactly the case this one
 cannot see** — `common/metadata.h` including `gui/gtk.h` and using no GTK symbol (§14). The
 layering ratchet is what catches that class, which is why both exist.
+
+## 16. Backlog, and the end goal it serves
+
+### Why any of this
+
+**Ansel intends to move from GTK to Qt.** That is what the whole series is for, and it sets
+the bar for "done":
+
+1. **Backend and frontend entirely decoupled**, so the backend is untouched by a toolkit swap.
+2. **Within the frontend, pure-toolkit overlays separated from implementation and config** —
+   so what has to be rewritten for Qt is a thin, identifiable layer rather than smeared
+   through the application.
+
+There is a second, nearer benefit: **the blast radius of the migration cannot even be
+estimated today.** `gui/gtk.h` is a god-header and GTK calls run through `libs/`, `views/`
+and `iop/`. Layering first is what makes the question answerable.
+
+### 16.1 Definitions that live far from their declaration
+
+Find symbols declared in `example.h` but defined somewhere other than `example.c`. These are
+maintenance traps: the definition is not where anyone looks for it, and nothing warns.
+
+`common/history_merge.c` already produced two of these (§13) — `_hm_make_node_id()` and
+friends declared in the *GUI* header while defined in the backend, and
+`_hm_collect_labels_from_history_map()` the other way round. Both were invisible until an
+include had to be removed.
+
+Mechanical to detect: for every declaration in `X.h`, locate the definition and flag anything
+not in `X.c`/`X.cc`. Worth a tool alongside `check_layering.sh`, since the answer is a list,
+not a judgement.
+
+### 16.2 Split `common/` and parts of `develop/` into real modules
+
+Following §10, three named subsystems:
+
+| module | contents |
+|---|---|
+| `src/database` | everything touching SQLite, and the whole SQLite↔C conversion layer: image metadata rows, edit histories, styles, presets, tags |
+| `src/caches` | mipmap, image, pixelpipe caches |
+| `src/metadata` | XMP, IPTC, EXIF, ratings, colour labels, tags, titles — i.e. what happens *after* `database` has converted rows to C structures |
+
+The `database`/`metadata` boundary is the one to get right: `database` owns persistence and
+the row↔struct conversion, `metadata` owns the meaning of the fields and the sidecar formats.
+
+### 16.3 More `math/` and `pixel/` candidates
+
+Sweep for code that belongs in the existing low layers rather than where history left it:
+solvers, vector algebra and interpolation to `src/math`; generic image filters to
+`src/pixel`. `math/homography.{c,h}` (extracted from `apps/ansel-chart`) is the pattern.
+
+### 16.4 Break up the `gtk.{c,h}` god-header
+
+Two halves, and they belong in different directories:
+
+* **stateless GTK wrappers** — helpers that only wrap toolkit calls and carry no application
+  state → `src/widgets`, under the rule in its README;
+* **implementation** — anything that knows about views, panels, config or `dt_*_get_global()`
+  → stays in `src/gui`.
+
+This is 16.4 rather than 16.1 because it is the largest single lever on the goal above: the
+stateless half is roughly the part a Qt port must rewrite, and the implementation half is
+roughly the part that should survive it. Splitting them is how the estimate gets made.
