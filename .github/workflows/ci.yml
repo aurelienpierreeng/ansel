@@ -162,6 +162,15 @@ jobs:
         run: |
           "${SRC_DIR}/tools/check_layering.sh"
           "${SRC_DIR}/tools/check_module_boundaries.sh"
+      - name: Check for includes added inside a conditional block
+        # Pull requests only: it compares against the base branch. An include placed inside a
+        # platform #ifdef compiles wherever that macro is set and fails everywhere else, which
+        # a single-platform build cannot show you.
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          cd "${SRC_DIR}"
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          ./tools/check_conditional_includes.sh "origin/${{ github.base_ref }}"
       - name: Check statelessness rules
         # Measured from the compiled objects, so it needs the build above; Debug keeps the
         # symbol tables objdump reads (an LTO Release build emits bytecode instead).
