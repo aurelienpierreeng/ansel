@@ -46,7 +46,7 @@
 
 
 #include "widgets/widget_settings.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"

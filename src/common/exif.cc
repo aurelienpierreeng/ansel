@@ -117,7 +117,7 @@
 #include "imageio/imageio_jpeg.h"
 #include "common/metadata.h"
 #include "common/tags.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/variables.h"
 #include "common/utility.h"
 #include "common/history.h"

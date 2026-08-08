@@ -19,7 +19,7 @@
 #ifndef DT_GUI_COMMON_HISTORY_MERGE_H
 #define DT_GUI_COMMON_HISTORY_MERGE_H
 
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 
 #include <glib.h>
 
@@ -65,7 +65,7 @@ gboolean _hm_show_merge_report_popup(struct dt_develop_t *dev_dest, struct dt_de
                                      GHashTable *dst_last_before_by_id, const GHashTable *orig_ids,
                                      const GHashTable *mod_list_ids, const char *source_label,
                                      dt_hm_batch_state_t *batch);
-/** Register the four handlers common/history_merge.c asks through. Called from
+/** Register the four handlers develop/history_merge.c asks through. Called from
  *  dt_gui_gtk_init(); without it merging simply takes its no-handler defaults. */
 void dt_history_merge_gui_register_handlers(void);
 

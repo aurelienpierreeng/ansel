@@ -29,7 +29,7 @@
 #ifndef DT_COMMON_COLOR_PICKER_H
 #define DT_COMMON_COLOR_PICKER_H
 
-#include "common/iop_profile.h"
+#include "pixel/iop_profile.h"
 
 struct dt_iop_buffer_dsc_t;
 struct dt_iop_roi_t;

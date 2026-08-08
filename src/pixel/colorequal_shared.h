@@ -20,7 +20,7 @@
 #define DT_PIXEL_COLOREQUAL_SHARED_H
 
 #include "common/dtpthread.h"
-#include "common/iop_profile.h"
+#include "pixel/iop_profile.h"
 #include "common/lut3d.h"
 
 /**

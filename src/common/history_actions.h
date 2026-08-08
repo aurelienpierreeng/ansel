@@ -22,7 +22,7 @@
 #include <glib.h>
 #include <inttypes.h>
 
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 
 /** copy history from imgid and pasts on selected images, merge or overwrite... */
 gboolean dt_history_copy(int32_t imgid);

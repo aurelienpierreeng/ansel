@@ -45,7 +45,7 @@
 #include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/dwt.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"

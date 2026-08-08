@@ -44,7 +44,7 @@
 #include "common/macros.h"
 #include "common/module_versioning.h"
 #include "common/history.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"

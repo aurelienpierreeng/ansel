@@ -60,7 +60,7 @@
 #include "imageio/imageio_core.h"
 #include "system/atomic.h"
 #include "common/opencl.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/blend.h"

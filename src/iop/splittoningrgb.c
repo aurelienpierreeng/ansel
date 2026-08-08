@@ -30,7 +30,7 @@
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "pixel/illuminants.h"
 #include "math/matrices.h"
 #include "common/opencl.h"

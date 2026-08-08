@@ -45,6 +45,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "develop/iop_profile.h"
 #include "common/pixelpipe_cache_alloc.h"
 #endif
 

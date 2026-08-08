@@ -16,13 +16,13 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/common/history_merge_gui.h"
+#include "gui/develop/history_merge_gui.h"
 #include "common/conf.h"
 
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/topological_sort.h"
 #include "develop/blend.h"
 #include "develop/dev_history.h"

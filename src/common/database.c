@@ -61,7 +61,7 @@
 #include "common/datetime.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/styles.h"
 #include "common/history.h"
 #ifdef HAVE_ICU

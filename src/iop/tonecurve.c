@@ -66,6 +66,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "widgets/gdkkeys.h"
+#include "develop/iop_profile.h"
 #include "widgets/widget_settings.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "config.h"

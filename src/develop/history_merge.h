@@ -16,8 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_HISTORY_MERGE_H
-#define DT_COMMON_HISTORY_MERGE_H
+#ifndef DT_DEVELOP_HISTORY_MERGE_H
+#define DT_DEVELOP_HISTORY_MERGE_H
 
 #include <glib.h>
 #include <inttypes.h>
@@ -87,7 +87,7 @@ extern "C"
 
 
 /* Node identity helpers, defined in history_merge.c. They were declared in
- * gui/common/history_merge_gui.h, which had the backend including a GUI header to see
+ * gui/develop/history_merge_gui.h, which had the backend including a GUI header to see
  * its own functions; the GUI half needs them too, and gets them from here. */
 char *_hm_make_node_id(const char *op, const char *multi_name);
 void _hm_id_to_op_name(const char *id, char *op, char *name);
@@ -106,7 +106,7 @@ typedef enum dt_hm_constraint_choice_t
  *
  * Merging runs deep in the backend but hits situations only a person can settle. Those
  * dialogs used to be called from here directly, which is why a layer-1 file included a gui/
- * header. They are handlers now, registered by gui/common/history_merge_gui.c, and each has
+ * header. They are handlers now, registered by gui/develop/history_merge_gui.c, and each has
  * a defined answer for when nobody registered one -- a headless merge must still finish, or
  * refuse, on its own.
  */
@@ -140,7 +140,7 @@ void dt_hm_set_missing_raster_handler(dt_hm_missing_raster_handler_t handler);
 void dt_hm_set_toposort_cycle_handler(dt_hm_toposort_cycle_handler_t handler);
 void dt_hm_set_merge_report_handler(dt_hm_merge_report_handler_t handler);
 
-#endif // DT_COMMON_HISTORY_MERGE_H
+#endif // DT_DEVELOP_HISTORY_MERGE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

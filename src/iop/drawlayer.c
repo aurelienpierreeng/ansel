@@ -33,7 +33,7 @@
 #include "common/dtpthread.h"
 #include "common/imagebuf.h"
 #include "imageio/imageio_module.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "common/conf.h"
 #include "control/control.h"

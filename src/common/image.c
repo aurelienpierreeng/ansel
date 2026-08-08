@@ -83,7 +83,7 @@
 #include "common/file_location.h"
 #include "common/grouping.h"
 #include "common/history.h"
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
 #include "common/image_extensions.h"

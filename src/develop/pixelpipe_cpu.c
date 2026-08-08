@@ -3,10 +3,11 @@
 */
 
 #include "common/macros.h"
+#include "develop/iop_profile.h"
 #include "system/openmp.h"
 #include "common/logging.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe_cpu.h"
 

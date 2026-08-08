@@ -51,7 +51,7 @@
 #include "common/imagebuf.h"
 #include "common/colorspaces.h"
 #include "common/file_location.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/lut3d.h"
 #include "control/control.h"
 #include "develop/imageop.h"

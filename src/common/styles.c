@@ -59,7 +59,7 @@
 #include "common/file_location.h"
 #include "common/history.h"
 #include "common/history_snapshot.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/tags.h"
 #include "control/control.h"
 

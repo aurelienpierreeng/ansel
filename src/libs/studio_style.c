@@ -27,7 +27,7 @@
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "common/folder_survey.h"
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 #include "common/image.h"
 #include "common/styles.h"
 #include "common/conf.h"

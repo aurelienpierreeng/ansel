@@ -56,7 +56,7 @@
 #include "gui/bauhaus_conf.h"
 #include "common/dtpthread.h"
 #include "math/math.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"

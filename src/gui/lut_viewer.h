@@ -21,7 +21,7 @@
 
 #include "common/dtpthread.h"
 #include "common/gui_module_api.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 
 #include <stddef.h>
 #include <gtk/gtk.h>

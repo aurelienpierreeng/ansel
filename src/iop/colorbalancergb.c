@@ -34,6 +34,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "develop/iop_profile.h"
 #include "widgets/widget_settings.h"
 #include "common/conf.h"
 #endif

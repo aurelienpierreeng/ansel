@@ -66,7 +66,7 @@
 #include "common/colorspaces.h"
 #include "math/matrices.h"
 #include "common/imagebuf.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "common/conf.h"
 #include "control/control.h"

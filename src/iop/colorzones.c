@@ -73,7 +73,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/database.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/imagebuf.h"
 #include "math/math.h"

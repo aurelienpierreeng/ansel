@@ -37,7 +37,7 @@
 #ifndef DT_DEVELOP_BLEND_H
 #define DT_DEVELOP_BLEND_H
 
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe.h"
