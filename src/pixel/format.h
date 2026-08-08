@@ -38,9 +38,6 @@
 extern "C" {
 #endif
 
-struct dt_dev_pixelpipe_iop_t;
-struct dt_dev_pixelpipe_t;
-struct dt_iop_module_t;
 
 /**
  * @brief Region of interest passed through the pixelpipe.
@@ -60,6 +57,25 @@ typedef enum dt_iop_buffer_type_t {
   TYPE_UINT16,
   TYPE_UINT8,
 } dt_iop_buffer_type_t;
+
+/** colorspace enums, must be in synch with dt_iop_colorspace_type_t in color_conversion.cl */
+typedef enum dt_iop_colorspace_type_t
+{
+  IOP_CS_NONE = -1,
+  IOP_CS_RAW = 0,
+  IOP_CS_LAB = 1,
+  IOP_CS_RGB = 2,
+  IOP_CS_LCH = 3,
+  IOP_CS_HSL = 4,
+  IOP_CS_JZCZHZ = 5,
+  IOP_CS_RGB_DISPLAY = 6,
+} dt_iop_colorspace_type_t;
+
+/* Trivial predicate over the enum above; it lived in develop/imageop.h. */
+static inline gboolean dt_iop_colorspace_is_rgb(const dt_iop_colorspace_type_t cst)
+{
+  return cst == IOP_CS_RGB || cst == IOP_CS_RGB_DISPLAY;
+}
 
 typedef struct dt_iop_buffer_dsc_t
 {
@@ -105,13 +121,11 @@ typedef struct dt_iop_buffer_dsc_t
 void dt_iop_buffer_dsc_update_bpp(struct dt_iop_buffer_dsc_t *dsc);
 size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc);
 
-void default_input_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
-                          struct dt_dev_pixelpipe_iop_t *piece, struct dt_iop_buffer_dsc_t *dsc);
-
-void default_output_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
-                           struct dt_dev_pixelpipe_iop_t *piece, struct dt_iop_buffer_dsc_t *dsc);
-
-int default_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe, const struct dt_dev_pixelpipe_iop_t *piece);
+/* default_input_format(), default_output_format() and default_blend_colorspace() used to be
+ * declared here. They are IOP-module defaults, they take dt_iop_module_t and
+ * dt_dev_pixelpipe_t, and declaring them here is what forced this layer-2 header to
+ * forward-declare three develop/ types. They live in develop/imageop.h now, beside their
+ * definitions' layer and beside the module API every caller already includes. */
 
 #ifdef __cplusplus
 }

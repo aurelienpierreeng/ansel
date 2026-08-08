@@ -212,23 +212,9 @@ typedef enum dt_dev_request_colorpick_flags_t
   DT_REQUEST_COLORPICK_MODULE = 1 // requested by module (should take precedence)
 } dt_dev_request_colorpick_flags_t;
 
-/** colorspace enums, must be in synch with dt_iop_colorspace_type_t in color_conversion.cl */
-typedef enum dt_iop_colorspace_type_t
-{
-  IOP_CS_NONE = -1,
-  IOP_CS_RAW = 0,
-  IOP_CS_LAB = 1,
-  IOP_CS_RGB = 2,
-  IOP_CS_LCH = 3,
-  IOP_CS_HSL = 4,
-  IOP_CS_JZCZHZ = 5,
-  IOP_CS_RGB_DISPLAY = 6,
-} dt_iop_colorspace_type_t;
+/* dt_iop_colorspace_type_t moved to pixel/format.h: it tags a pixel buffer's colour
+ * space, which is a layer-2 concept, and pixel/iop_profile.h needs it. */
 
-static inline gboolean dt_iop_colorspace_is_rgb(const dt_iop_colorspace_type_t cst)
-{
-  return cst == IOP_CS_RGB || cst == IOP_CS_RGB_DISPLAY;
-}
 
 /** part of the module which only contains the cached dlopen stuff. */
 typedef struct dt_iop_module_so_t
@@ -710,6 +696,20 @@ GList *dt_iop_get_modules_so(void);
 #ifdef __cplusplus
 }
 #endif
+
+
+/* Defaults an IOP's input_format()/output_format()/blend_colorspace() callbacks can delegate
+ * to. Defined in develop/format.c. They were declared in pixel/format.h, which is layer 2 and
+ * had to forward-declare dt_iop_module_t and dt_dev_pixelpipe_t just to say this -- so they
+ * moved here, to the module API every caller already includes. */
+void default_input_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                          struct dt_dev_pixelpipe_iop_t *piece, struct dt_iop_buffer_dsc_t *dsc);
+
+void default_output_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                           struct dt_dev_pixelpipe_iop_t *piece, struct dt_iop_buffer_dsc_t *dsc);
+
+int default_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                             const struct dt_dev_pixelpipe_iop_t *piece);
 
 #endif // DT_DEVELOP_IMAGEOP_H
 
