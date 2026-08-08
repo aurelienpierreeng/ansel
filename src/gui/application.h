@@ -66,14 +66,21 @@
 #ifndef DT_GUI_APPLICATION_H
 #define DT_GUI_APPLICATION_H
 
-#include "common/glib_utils.h"
-#include "common/macros.h"
+/* Only what the declarations below need, and nothing else -- a header that includes more
+ * becomes an invisible supply line for its consumers (see CLAUDE.md, "A header includes only
+ * what its own declarations need"). Audited symbol by symbol:
+ *   paths.h        PATH_MAX, for the gtkrc member
+ *   dtpthread.h    dt_pthread_mutex_t, likewise a member -- it used to arrive transitively
+ *   window_manager dt_ui_t, dt_ui_container_t, dt_ui_panel_t in the panel signatures
+ *   accelerators   dt_accels_t, and dt_accels_new_action_shortcut() for the macros below
+ *   gtk.h          GtkWidget, GtkGrid, GtkMenu, cairo_surface_t, cairo_filter_t, PangoLayout
+ *   stdint.h       int32_t
+ * glib_utils.h, macros.h, mem_alloc.h and dtgtk/thumbtable.h were here for code that has
+ * since moved to widgets/; nothing declared here uses them. */
+#include "common/dtpthread.h"
 #include "common/paths.h"
-#include "system/mem_alloc.h"
-#include "gui/dtgtk/thumbtable.h"
 #include "gui/window_manager.h"
-
-#include "widgets/accelerators.h"   // the accels registry the macros below bind to
+#include "widgets/accelerators.h"
 
 #include <gtk/gtk.h>
 #include <stdint.h>

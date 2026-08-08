@@ -44,7 +44,7 @@
 #include "common/colorlabels.h"
 #include "common/gui_module_api.h"
 #include "common/introspection.h"
-#include "widgets/draw.h"
+#include "widgets/widget_settings.h"   // DT_GUI_BOX_SPACING, for INTERNAL_PADDING
 
 #include <assert.h>
 #include <gdk/gdkkeysyms.h>

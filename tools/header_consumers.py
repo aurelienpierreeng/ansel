@@ -46,8 +46,9 @@ INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"')
 # What counts as a symbol this header supplies.
 DECLARE_PATTERNS = [
     re.compile(r"^\s*#\s*define\s+([A-Za-z_]\w*)"),
-    re.compile(r"^\s*}\s*([A-Za-z_]\w*)\s*;"),                  # typedef struct/enum tail
-    re.compile(r"^\s*typedef\s+.*?\b([A-Za-z_]\w*)\s*;"),       # typedef one-liner
+    re.compile(r"^\s*}[^;]*?\b([A-Za-z_]\w*)\s*;"),   # `} name;` and `} ATTR(..) name;`
+    re.compile(r"^\s*typedef\s+.*?\b([A-Za-z_]\w*)\s*;"),
+    re.compile(r"^\s*typedef\s+.*\(\s*\*\s*([A-Za-z_]\w*)\s*\)\s*\("),  # function-pointer typedef       # typedef one-liner
     re.compile(r"^\s*(?:struct|union|enum)\s+([A-Za-z_]\w*)\s*[;{]"),
     # A declaration or definition at file scope: <type stuff> name(
     re.compile(r"^\s*(?:[A-Za-z_][\w \t*]*?[ \t*])([A-Za-z_]\w*)\s*\("),

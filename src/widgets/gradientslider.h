@@ -33,7 +33,6 @@
 
 #define GRADIENT_SLIDER_MAX_POSITIONS 10
 
-#include "widgets/paint.h"
 #include <gtk/gtk.h>
 G_BEGIN_DECLS
 #define DTGTK_GRADIENT_SLIDER(obj)                                                                           \

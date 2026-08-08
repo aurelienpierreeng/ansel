@@ -38,6 +38,7 @@
 #include <glib.h>
 #include "gui/application.h"
 #include "widgets/accelerators.h"
+#include "common/glib_utils.h"
 
 
 MAKE_ACCEL_WRAPPER(dt_gui_preferences_show)

@@ -56,6 +56,7 @@
 #include "gui/window_manager.h"
 #include "widgets/popup.h"
 #include "widgets/scroll_wrap.h"
+#include "system/screen_metrics.h"
 
 DT_MODULE(1)
 
