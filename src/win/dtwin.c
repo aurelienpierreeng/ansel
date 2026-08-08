@@ -21,6 +21,8 @@
 */
 #include "common/macros.h"
 #include "system/mem_alloc.h"
+#include "dtwin.h"
+#include <setjmp.h>
 #include <windows.h>
 
 // Required by (at least) clang 10.0 as packaged by MSYS2 MinGW64.
