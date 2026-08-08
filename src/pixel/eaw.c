@@ -20,14 +20,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/opencl.h"   // cl_mem, for pixel/dwt.h which uses it without including CL
 #include "pixel/eaw.h"
-#include "pixel/iop_profile.h"
+#include "math/math.h"   // dt_fast_expf, fast_mexp2f
 #include "system/openmp.h"
 #include "system/simd.h"
-#include "math/math.h"
-#include "control/control.h"     // needed by dwt.h
 #include "pixel/dwt.h"          // for dwt_interleave_rows
-#include <math.h>
 
 static inline void weight(const float *c1, const float *c2, const float sharpen, dt_aligned_pixel_t weight)
 {

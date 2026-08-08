@@ -72,6 +72,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "darktable.h"
+#include "common/colorlabels.h"   // DT_COLORLABELS_*
 #include "system/screen_metrics.h"
 #include "widgets/widget_settings.h"
 #include "widgets/resize_handle.h"
@@ -80,9 +81,6 @@
 #include "common/file_location.h"
 #include "common/utility.h"
 #include "gui/guides.h"
-#include "widgets/bauhaus.h"
-#include "develop/develop.h"
-#include "develop/imageop.h"
 #include "widgets/expander.h"
 
 #include "gui/gtk.h"
@@ -121,7 +119,6 @@
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
-#include <pthread.h>
 
 /*
  * NEW UI API

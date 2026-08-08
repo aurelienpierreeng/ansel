@@ -43,7 +43,6 @@
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"
-#include "common/history.h"
 #include "develop/iop_order.h"
 #include "control/control.h"
 #include "develop/develop.h"
