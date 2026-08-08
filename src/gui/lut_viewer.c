@@ -36,6 +36,8 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "system/screen_metrics.h"
+#include "widgets/draw.h"
 
 #define DT_LUT_VIEWER_MARGIN DT_PIXEL_APPLY_DPI(12)
 #define DT_LUT_VIEWER_TARGET_SAMPLES 4096

@@ -58,6 +58,7 @@
 */
 
 #include "widgets/gdkkeys.h"
+#include "widgets/draw.h"
 #include "widgets/widget_settings.h"
 #include "widgets/paint.h"
 #include "widgets/bauhaus.h"

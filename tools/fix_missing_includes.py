@@ -74,8 +74,9 @@ MISSING = [
 
 DECLARE = [
     re.compile(r"^\s*#\s*define\s+([A-Za-z_]\w*)"),
-    re.compile(r"^\s*}\s*([A-Za-z_]\w*)\s*;"),
+    re.compile(r"^\s*}[^;]*?\b([A-Za-z_]\w*)\s*;"),   # `} name;` and `} ATTR(..) name;`
     re.compile(r"^\s*typedef\s+.*?\b([A-Za-z_]\w*)\s*;"),
+    re.compile(r"^\s*typedef\s+.*\(\s*\*\s*([A-Za-z_]\w*)\s*\)\s*\("),  # function-pointer typedef
     re.compile(r"^\s*(?:struct|union|enum)\s+([A-Za-z_]\w*)\s*[;{]"),
     re.compile(r"^\s*(?:[A-Za-z_][\w \t*]*?[ \t*])([A-Za-z_]\w*)\s*\("),
 ]
