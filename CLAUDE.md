@@ -652,10 +652,24 @@ An embedded profile is a property of one image, so the image owns it:
 rebuilt. The application list is init-only again — verified by checking that every remaining
 `profiles = g_list_append` sits inside `dt_colorspaces_init()`.
 
-**The trap, if something like this comes back:** do not "fix" such a race by locking the append
-alone. With ~23 unlocked readers that relocates the unsynchronised write rather than removing
-it. Either lock every reader, or — better, and what was done here — stop mutating the shared
-structure at runtime and give the data to whatever actually owns it.
+**Two traps, both paid for once already:**
+
+*Do not "fix" such a race by locking the append alone.* With ~23 unlocked readers that relocates
+the unsynchronised write rather than removing it. Either lock every reader, or — better, and
+what was done here — stop mutating the shared structure at runtime and give the data to whatever
+actually owns it.
+
+*A `cmsHPROFILE` in a container is not necessarily the container's to close.* Several branches
+of `dt_image_find_best_color_profile()` return a profile **borrowed** from the application-wide
+list (`dt_colorspaces_get_profile(...)->profile`) and leave its `new_profile` out-parameter
+FALSE; only the branches that build one set it TRUE. Giving the container to the image and
+closing its profile on eviction therefore double-freed every borrowed profile — the list closes
+it again at shutdown. `dt_colorspaces_color_profile_t.owns_profile` records which case a
+container is in, and only owning containers close.
+
+That second one aborted all eight CI runners with `corrupted size vs prev_size in fastbins`
+after passing four build configurations and every static gate. Nothing static can see it:
+`tools/check_it_runs.sh` runs the binary once, which does.
 
 ### Brush masks rasterize as radial spokes — wedge holes across the stroke (OPEN)
 

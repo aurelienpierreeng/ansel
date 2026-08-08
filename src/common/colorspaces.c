@@ -1166,6 +1166,10 @@ static const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32
     if(profile && new_profile) dt_colorspaces_cleanup_profile(profile);
     return NULL;
   }
+  /* Several branches of dt_image_find_best_color_profile() return a profile borrowed from the
+   * application-wide list rather than a fresh one, and leave new_profile FALSE. Closing such a
+   * profile when the image is evicted double-frees it -- the list closes it again at shutdown. */
+  container->owns_profile = new_profile;
 
   if(profile && new_profile)
   {
@@ -1205,7 +1209,8 @@ static const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32
 void dt_colorspaces_free_image_profile(struct dt_colorspaces_color_profile_t *profile)
 {
   if(IS_NULL_PTR(profile)) return;
-  dt_colorspaces_cleanup_profile(profile->profile);
+  // Only close what this container created; a borrowed profile belongs to the application list.
+  if(profile->owns_profile) dt_colorspaces_cleanup_profile(profile->profile);
   dt_free(profile);
 }
 
