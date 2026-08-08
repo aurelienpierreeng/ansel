@@ -24,7 +24,6 @@
 #include "gui/gtk.h"
 #include "gui/styles.h"
 #include "common/act_on.h"
-#include "common/history.h"
 #include "common/history_merge.h"
 #include "gui/common/history_merge_gui.h"
 #include "common/styles.h"

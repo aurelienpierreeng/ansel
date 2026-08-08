@@ -45,7 +45,6 @@
 #include "widgets/widget_settings.h"
 #include "system/mem_alloc.h"
 #include "widgets/gdkkeys.h"
-#include "math/math.h"
 #include "gradientslider.h"
 #include "widgets/widget_style.h"
 #include "widgets/widget_settings.h"

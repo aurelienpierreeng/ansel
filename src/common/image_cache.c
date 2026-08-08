@@ -49,19 +49,15 @@
 #include "common/logging.h"
 #include "common/paths.h"
 #include "common/debug.h"
-#include "common/exif.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"
 #include "common/datetime.h"
 #include "control/control.h"
-#include "control/jobs.h"
 #include "control/signal.h"
-#include "develop/develop.h"
 #include "develop/supervisor.h"
 
 #include <sqlite3.h>
 #include <inttypes.h>
-#include <math.h>
 
 static sqlite3_stmt *_image_cache_load_stmt = NULL;
 static sqlite3_stmt *_image_cache_write_history_hash_stmt = NULL;

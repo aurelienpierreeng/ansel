@@ -27,23 +27,19 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/logging.h"
 #include "system/openmp.h"
 #include "system/simd.h"
 #include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
-#include "widgets/bauhaus.h"
 #include "pixel/gaussian.h"
-#include "common/opencl.h"
 #include "common/imagebuf.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "iop/noise_generator.h"
-#include "develop/tiling.h"
 
 #include "iop/iop_api.h"
 #include <assert.h>

@@ -49,13 +49,11 @@
 #include "common/mipmap_cache.h"
 #include "system/sys_resources.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "common/exif.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"
 #include "common/image_cache.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
-#include "common/history.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_module.h"
@@ -64,8 +62,6 @@
 #include "develop/imageop_math.h"
 
 #include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <inttypes.h>
@@ -74,7 +70,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <unistd.h>
 
 #if !defined(_WIN32)
 #include <sys/statvfs.h>

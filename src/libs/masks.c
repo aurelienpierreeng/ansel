@@ -39,7 +39,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "develop/masks.h"
-#include "widgets/bauhaus.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "common/module_versioning.h"

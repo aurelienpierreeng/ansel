@@ -29,11 +29,9 @@
 #include "common/exif.h"
 #include "libs/lib.h"
 
-#include <libxml/encoding.h>
 #include <libxml/xmlwriter.h>
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
-#include <libxml/xpathInternals.h>
 
 #include <glib.h>
 #include <inttypes.h>

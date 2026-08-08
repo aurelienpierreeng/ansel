@@ -88,18 +88,15 @@
 #include "common/collection.h"
 #include "widgets/gdkkeys.h"
 #include "common/hash.h"
-#include "common/history.h"
 #include "common/iop-autoset.h"
 #include "imageio/imageio_module.h"
 #include "common/mipmap_cache.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
-#include "common/tags.h"
 #include "common/undo.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -109,7 +106,6 @@
 #include "gui/dtgtk/thumbtable.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
 #include "gui/gtk.h"
 #include "develop/gui_throttle.h"
 #include "gui/guides.h"
@@ -129,7 +125,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 
 #ifndef G_SOURCE_FUNC // Defined for glib >= 2.58

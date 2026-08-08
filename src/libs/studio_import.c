@@ -28,7 +28,6 @@
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "widgets/bauhaus.h"
-#include "common/datetime.h"
 #include "common/folder_survey.h"
 #include "common/conf.h"
 #include "control/jobs/import_jobs.h"

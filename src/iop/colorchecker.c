@@ -56,7 +56,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "math/openmp_maths.h"
-#include "develop/tiling.h"
 #include "widgets/drawingarea.h"
 
 #include "gui/gtk.h"

@@ -21,7 +21,6 @@
 
 #include "iop/highlights/blur.h"
 #include "iop/highlights/common.h"
-#include <string.h>
 
 static __thread _hl_gauss_slot_t _hl_gauss_cache[HL_GAUSS_SLOTS] = { { 0 } };
 static __thread int _hl_gauss_rr = 0;

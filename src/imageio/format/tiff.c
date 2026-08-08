@@ -54,7 +54,6 @@
 #include "imageio/format/imageio_format_api.h"
 #include "develop/pixelpipe_hb.h"
 #include <inttypes.h>
-#include <memory.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>

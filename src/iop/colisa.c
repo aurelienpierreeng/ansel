@@ -36,7 +36,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "widgets/bauhaus.h"
 #include "develop/develop.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -45,7 +44,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/tiling.h"
 
 #include "iop/iop_api.h"
 

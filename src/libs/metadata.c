@@ -46,7 +46,6 @@
 
 #include "common/metadata.h"
 #include "common/act_on.h"
-#include "common/collection.h"
 #include "common/selection.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"

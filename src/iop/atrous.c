@@ -82,7 +82,6 @@
 #include "iop/iop_api.h"
 
 #include <math.h>
-#include <memory.h>
 #include <stdlib.h>
 //#define USE_NEW_CL  //uncomment to use the new, more memory-efficient OpenCL code (not yet finished)
 

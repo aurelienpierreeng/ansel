@@ -61,7 +61,6 @@
 #include "common/module_versioning.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/bspline.h"
-#include "pixel/dwt.h"
 #include "common/image.h"
 #include "common/iop_profile.h"
 #include "common/opencl.h"

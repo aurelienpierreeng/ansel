@@ -23,7 +23,6 @@
 
 #include "gui/common/styles_gui.h"
 
-#include "common/macros.h"
 #include "control/control.h"
 #include "gui/styles.h"
 

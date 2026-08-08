@@ -69,7 +69,6 @@
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
-#include <strings.h>
 
 DT_MODULE_INTROSPECTION(2, dt_iop_rawdenoise_params_t)
 

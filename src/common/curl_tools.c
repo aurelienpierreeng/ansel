@@ -28,7 +28,6 @@
 */
 
 #include "system/mem_alloc.h"
-#include "common/paths.h"
 #include "common/curl_tools.h"
 #include "common/file_location.h"
 

@@ -39,7 +39,6 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
-#include "common/variables.h"
 #include "control/control.h"
 #include "imageio/format/imageio_format_api.h"
 

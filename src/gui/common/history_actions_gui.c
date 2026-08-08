@@ -33,7 +33,6 @@
 #include "common/conf.h"
 #include "common/history_actions.h"
 #include "common/macros.h"
-#include "common/selection.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"

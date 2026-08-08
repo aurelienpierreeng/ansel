@@ -24,7 +24,6 @@
 #include "gui/common/film_gui.h"
 
 #include "common/film.h"
-#include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "gui/gtk.h"
 

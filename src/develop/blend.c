@@ -48,7 +48,6 @@
 #include "pixel/gaussian.h"
 #include "pixel/guided_filter.h"
 #include "common/imagebuf.h"
-#include "pixel/interpolation.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/imageop.h"
@@ -56,7 +55,6 @@
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 #include "develop/tiling.h"
-#include "develop/imageop_math.h"
 #include <inttypes.h>
 #include <math.h>
 #include <string.h>

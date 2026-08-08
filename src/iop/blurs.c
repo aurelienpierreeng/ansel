@@ -36,11 +36,9 @@
 #endif
 // our includes go first:
 #include "widgets/bauhaus.h"
-#include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "widgets/drawingarea.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 // #include <fftw3.h> // one day, include FFT convolution

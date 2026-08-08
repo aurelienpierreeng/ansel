@@ -51,7 +51,6 @@
 #include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "develop/tiling.h"
 #include "common/image_cache.h"
 
 #include "gui/gtk.h"

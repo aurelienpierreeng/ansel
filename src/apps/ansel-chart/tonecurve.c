@@ -26,7 +26,6 @@
 
 #include <assert.h>
 #include <stdint.h>
-#include <stdlib.h>
 
 // apply and undo a tone curve (L channel only),
 // created from the 24 grey input patches from the it8.

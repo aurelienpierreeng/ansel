@@ -64,8 +64,6 @@
 #include "common/image.h"
 #include "imageio/imageio_core.h"
 #include "common/iop_profile.h"
-#include "common/imagebuf.h"
-#include "common/image_cache.h"
 #include "common/logging.h"
 #include "common/macros.h"
 #include "math/math.h"

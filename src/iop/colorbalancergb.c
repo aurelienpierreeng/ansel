@@ -51,7 +51,6 @@
 #include "common/opencl.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "math/openmp_maths.h"
 #include "develop/imageop_gui.h"
 

@@ -21,7 +21,6 @@
 #include "pixel/chromatic_adaptation.h"
 #include "common/curve_tools.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "pixel/interpolation.h"
 #include "common/splines.h"
 
 #include <float.h>

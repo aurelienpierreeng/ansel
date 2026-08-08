@@ -60,7 +60,6 @@
 #include "common/tags.h"
 #include "common/datetime.h"
 #include "common/conf.h"
-#include "common/exif.h"
 
 #include <stdio.h>
 #include <string.h>

@@ -27,7 +27,6 @@
 #include "common/printprof.h"
 #include "lcms2.h"
 #include <glib.h>
-#include <unistd.h>
 
 static cmsUInt32Number ComputeOutputFormatDescriptor (cmsUInt32Number dwInput, int OutColorSpace, int bps)
 {

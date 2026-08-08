@@ -52,7 +52,6 @@
 #include "config.h"
 #include "widgets/widget_settings.h"
 #endif
-#include "widgets/bauhaus.h"
 #include "pixel/bilateral.h"
 #include "common/colorspaces.h"
 #include "math/math.h"
@@ -69,7 +68,6 @@
 #include "develop/tiling.h"
 #include "widgets/drawingarea.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "gui/presets.h"
 
 #include "iop/iop_api.h"

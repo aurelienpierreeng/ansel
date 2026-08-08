@@ -16,7 +16,6 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "develop/pixelpipe_cache.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/common.h"
 #include "control/control.h"

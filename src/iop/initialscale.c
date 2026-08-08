@@ -32,11 +32,9 @@
 #include "common/logging.h"
 #include "config.h"
 #endif
-#include "widgets/bauhaus.h"
 #include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "develop/tiling.h"
 #include "iop/iop_api.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_initialscale_params_t)

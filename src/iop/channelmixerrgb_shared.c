@@ -29,7 +29,6 @@
 
 #include <float.h>
 #include <math.h>
-#include <string.h>
 
 #define DT_IOP_CHANNELMIXER_SHARED_INV_SQRT_3 0.5773502691896258f
 

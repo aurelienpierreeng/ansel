@@ -55,7 +55,6 @@
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 #include "widgets/drawingarea.h"
@@ -68,7 +67,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 /**
  * color transfer somewhat based on the glorious paper `color transfer between images'

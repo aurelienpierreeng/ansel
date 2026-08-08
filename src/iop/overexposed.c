@@ -59,7 +59,6 @@
 #include <cairo.h>
 
 #include "common/opencl.h"
-#include "common/imagebuf.h"
 #include "common/iop_profile.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

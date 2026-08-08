@@ -57,7 +57,6 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/paths.h"
 #include "common/image.h"
 #include "control/signal.h"
 #include "common/database.h"
@@ -77,7 +76,6 @@
 #include "libs/lib_api.h"
 
 #include <gdk/gdkkeysyms.h>
-#include <sys/param.h>
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

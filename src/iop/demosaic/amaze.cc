@@ -38,7 +38,6 @@
 #include "system/target_clones.h"
 
 
-#include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/imageop_math.h"
 

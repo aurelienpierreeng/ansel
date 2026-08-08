@@ -38,9 +38,7 @@
 #include "win/win.h"
 #include <config.h>
 #include <stdio.h>
-#include <errno.h>
 #include <psapi.h>
-#include <sys/time.h>
 #include "getrusage.h"
 
 static void usage_to_timeval(FILETIME *ft, struct timeval *tv)

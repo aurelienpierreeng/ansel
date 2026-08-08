@@ -51,10 +51,8 @@
 #include "system/target_clones.h"
 #include "pixel/box_filters.h"
 #include "common/imagebuf.h"
-#include "math/math.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 

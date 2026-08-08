@@ -60,7 +60,6 @@
 #include "develop/imageop_gui.h"
 #include "widgets/drawingarea.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 

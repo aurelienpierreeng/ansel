@@ -63,10 +63,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_gui.h"
-#include "widgets/resetlabel.h"
 
-#include "gui/draw.h"
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 

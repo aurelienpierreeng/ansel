@@ -71,7 +71,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "widgets/drawingarea.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <librsvg/rsvg.h>

@@ -54,7 +54,6 @@
 /* Include ICU headers */
 #include <unicode/utypes.h>
 #include <unicode/uregex.h>
-#include <unicode/ustring.h>
 #include <unicode/ucol.h>
 
 #include <assert.h>

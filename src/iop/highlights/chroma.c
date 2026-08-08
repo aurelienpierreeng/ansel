@@ -23,7 +23,6 @@
 #include "system/simd.h"
 #include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
-#include "develop/imageop.h"
 #include "iop/highlights/chroma.h"
 #include "iop/highlights/pde.h"
 #include <string.h>

@@ -24,7 +24,6 @@
 #include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "math/sparse_cholesky_cl.h"
-#include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/knee.h"
 #include <math.h>

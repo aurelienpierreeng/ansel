@@ -32,18 +32,15 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/utility.h"
-#include "gui/gtk.h"
 
 
 #ifdef GDK_WINDOWING_QUARTZ
 #endif
 
 #include <assert.h>
-#include <gmodule.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <time.h>
 
 typedef struct dt_module_param_t

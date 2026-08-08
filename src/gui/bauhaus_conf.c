@@ -24,7 +24,6 @@
 #include "gui/bauhaus_conf.h"
 
 #include "common/conf.h"
-#include "common/macros.h"
 #include "common/utility.h"
 #include "system/mem_alloc.h"
 

@@ -32,7 +32,6 @@
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/glib_utils.h"
-#include "math/math.h"
 #include <glib.h>
 #include <inttypes.h>
 

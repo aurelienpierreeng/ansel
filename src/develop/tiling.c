@@ -37,7 +37,6 @@
 #include "develop/tiling.h"
 #include "common/opencl.h"
 #include "control/control.h"
-#include "develop/blend.h"
 #include "develop/pixelpipe.h"
 #include "math/nelder_mead_simplex.h"
 
@@ -45,8 +44,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <unistd.h>
 
 #define CLAMPI(a, mn, mx) ((a) < (mn) ? (mn) : ((a) > (mx) ? (mx) : (a)))
 

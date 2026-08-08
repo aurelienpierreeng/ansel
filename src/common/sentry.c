@@ -41,7 +41,6 @@
 #include <string.h> // for strrchr, strcmp
 
 #if defined(__linux__)
-#include <fcntl.h>      // for open flags
 #include <sys/prctl.h>  // for PR_SET_PTRACER
 #include <sys/wait.h>   // for waitpid
 #include <unistd.h>     // for fork, getpid

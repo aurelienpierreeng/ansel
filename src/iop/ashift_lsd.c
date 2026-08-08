@@ -153,7 +153,6 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <float.h>
-#include "math/math.h"
 
 #ifndef FALSE
 #define FALSE 0
