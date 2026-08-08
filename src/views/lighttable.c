@@ -82,7 +82,6 @@
 #include "control/jobs.h"
 #include "gui/dtgtk/thumbtable.h"
 
-#include "widgets/draw.h"
 #include "views/view.h"
 #include "views/view_api.h"
 

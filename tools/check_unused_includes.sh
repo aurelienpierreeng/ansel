@@ -2,15 +2,24 @@
 #
 # Report #includes that the file does not use, via clang-tidy's misc-include-cleaner.
 #
-# Scope is deliberately the files a change touches, not the whole tree. A measured ~0.78
-# unused includes per translation unit means the tree carries several hundred of them; a
-# blocking whole-tree gate would demand that cleanup up front and would simply be turned off.
-# Gating the diff instead means every file anyone touches comes out clean, with no baseline
-# file to drift out of date.
+# Scope is the include lines a change ADDS, not every include in a file it touches, and not
+# the whole tree. A measured ~0.78 unused includes per translation unit means the tree carries
+# several hundred of them; a blocking whole-tree gate would demand that cleanup up front and
+# would simply be turned off.
+#
+# "Every file you touch comes out clean" was the original rule, and it is the right one for a
+# normal change. It stops being the right one when a refactor rewrites a single include line
+# in 180 files: the gate then reports that file's whole inherited backlog as if the change
+# introduced it. Measured on the gtk.h removal: 95 findings, of which 12 were on lines the
+# branch actually added. Judging added lines keeps the gate prescriptive -- you may not
+# introduce an unused include -- without making unrelated cleanup the price of a path rewrite.
+#
+# Findings on lines the change did not touch are still printed, as a note, so the backlog
+# stays visible rather than silently accepted.
 #
 # Usage:
-#   tools/check_unused_includes.sh --changed <base-ref>   # files changed since <base-ref>
-#   tools/check_unused_includes.sh <file>...              # explicit files
+#   tools/check_unused_includes.sh --changed <base-ref>   # lines added since <base-ref>
+#   tools/check_unused_includes.sh <file>...              # explicit files, every include
 #
 # Requires a configured build directory with compile_commands.json (BUILD_DIR, default ./build).
 
@@ -45,6 +54,27 @@ else
   files=("$@")
 fi
 
+# Line numbers this change added, per file, in new-file coordinates -- the same coordinates
+# clang-tidy reports. Empty when files were named explicitly, which means "check them all".
+added_lines=""
+if [ "${1:-}" = "--changed" ]; then
+  added_lines="$(git diff -U0 --diff-filter=d "${2}" HEAD -- 'src/*.c' 'src/*.cc' \
+                 | ${PYTHON:-python3} -c '
+import re, sys
+path = None
+for line in sys.stdin:
+    if line.startswith("+++ b/"):
+        path = line[6:].strip()
+    elif line.startswith("@@") and path:
+        m = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+        if m:
+            start = int(m.group(1))
+            count = int(m.group(2)) if m.group(2) is not None else 1
+            for n in range(start, start + count):
+                print(f"{path}:{n}")
+')"
+fi
+
 if [ ${#files[@]} -eq 0 ]; then
   echo "No source files changed; nothing to check."
   exit 0
@@ -69,6 +99,7 @@ PYEOF
 findings=0
 checked=0
 skipped_not_tu=0
+pre_existing=0
 
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue
@@ -103,14 +134,33 @@ for f in "${files[@]}"; do
          | grep "is not used directly" | grep -F "${f}:")"
 
   checked=$((checked + 1))
-  if [ -n "$out" ]; then
+  [ -n "$out" ] || continue
+
+  if [ -z "${added_lines}" ]; then
+    # Explicit file list: no diff to attribute against, so every finding counts.
     printf '%s\n' "$out"
     findings=$((findings + $(printf '%s\n' "$out" | wc -l)))
+    continue
   fi
+
+  while IFS= read -r finding; do
+    # clang-tidy prints an absolute path; the diff speaks in repo-relative ones.
+    lineno="$(printf '%s' "$finding" | sed -n "s|.*/${f}:\([0-9]*\):.*|\1|p")"
+    if [ -n "${lineno}" ] && printf '%s\n' "${added_lines}" | grep -qxF "${f}:${lineno}"; then
+      printf '%s\n' "$finding"
+      findings=$((findings + 1))
+    else
+      printf 'note (pre-existing, not introduced here): %s\n' "$finding"
+      pre_existing=$((pre_existing + 1))
+    fi
+  done <<< "$out"
 done
 
 echo
-echo "Checked ${checked} file(s); ${findings} unused include(s) found."
+echo "Checked ${checked} file(s); ${findings} unused include(s) introduced by this change."
+if [ "${pre_existing}" -gt 0 ]; then
+  echo "${pre_existing} pre-existing unused include(s) in touched files, reported but not gated."
+fi
 if [ "${skipped_not_tu}" -gt 0 ]; then
   echo "${skipped_not_tu} file(s) skipped: not translation units in this build (see above)."
 fi

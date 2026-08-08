@@ -74,6 +74,7 @@
 #include "iop/iop_api.h"
 
 #include <librsvg/rsvg.h>
+#include "system/screen_metrics.h"
 // ugh, ugly hack. why do people break stuff all the time?
 #ifndef RSVG_CAIRO_H
 #include <librsvg/rsvg-cairo.h>

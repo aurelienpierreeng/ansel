@@ -18,8 +18,6 @@
 
 #include "widgets/collapsible_section.h"
 
-#include "common/macros.h"            // IS_NULL_PTR
-#include "widgets/button.h"
 #include "widgets/expander.h"
 #include "widgets/label.h"
 #include "widgets/paint.h"
