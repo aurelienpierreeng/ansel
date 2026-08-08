@@ -35,7 +35,7 @@ SRC = os.path.join(REPO, "src")
 # layer order would be worse than none.
 LAYERS = [
     ('external', 0), ('win', 0), ('system', 0),
-    ('common', 1), ('math', 1),
+    ('common', 1), ('math', 1), ('colorprofiles', 1),
     ('pixel', 2),
     ('control', 3),
     ('gui', 4), ('widgets', 4),
