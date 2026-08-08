@@ -656,13 +656,13 @@ gboolean dt_dev_transient_params_get(struct dt_develop_t *dev, const struct dt_i
 /** @brief Whether a transient slot is currently active for `module` (cheap, locked read). */
 gboolean dt_dev_transient_params_active(struct dt_develop_t *dev, const struct dt_iop_module_t *module);
 
-#ifdef __cplusplus
-}
-#endif
-
 /** Deep-copy a history list. Defined in dev_history.c; declared in common/history.h until it
  *  was moved here, since it walks dt_dev_history_item_t and resolves modules through
  *  dt_iop_get_module() -- neither of which layer 1 can see. */
 GList *dt_history_duplicate(GList *hist);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DT_DEVELOP_DEV_HISTORY_H

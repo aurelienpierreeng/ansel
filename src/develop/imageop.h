@@ -693,11 +693,6 @@ void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant);
 GList *dt_iop_get_modules_so(void);
 
 
-#ifdef __cplusplus
-}
-#endif
-
-
 /* Defaults an IOP's input_format()/output_format()/blend_colorspace() callbacks can delegate
  * to. Defined in develop/format.c. They were declared in pixel/format.h, which is layer 2 and
  * had to forward-declare dt_iop_module_t and dt_dev_pixelpipe_t just to say this -- so they
@@ -710,6 +705,11 @@ void default_output_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe
 
 int default_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
                              const struct dt_dev_pixelpipe_iop_t *piece);
+
+#ifdef __cplusplus
+}
+#endif
+
 
 #endif // DT_DEVELOP_IMAGEOP_H
 
