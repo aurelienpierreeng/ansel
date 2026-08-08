@@ -296,6 +296,11 @@ const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type, co
 void rgb2hsl(const dt_aligned_pixel_t rgb, float *h, float *s, float *l);
 void hsl2rgb(dt_aligned_pixel_t rgb, float h, float s, float l);
 
+/* Release a profile container owned by an image (dt_image_t.embedded_profile), closing the
+ * LCMS2 handle inside it. Called by the image cache when the image is evicted; nothing else
+ * should need it. Declared here so common/image_cache.c does not need the struct layout. */
+void dt_colorspaces_free_image_profile(struct dt_colorspaces_color_profile_t *profile);
+
 /* Notification that the display profile changed. The application relays it on its signal bus;
  * this module does not know there is one. Unregistered, the notification is dropped. */
 typedef void (*dt_colorspaces_profile_changed_handler_t)(void);

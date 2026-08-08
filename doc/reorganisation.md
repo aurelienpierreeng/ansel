@@ -361,10 +361,6 @@ does **not** move: 12 of its 15 functions take develop/ types, and it is the pip
 half. Nor does `colorspaces_inline_conversions.h`, the tree's heaviest header at 465k
 preprocessed lines; moving it measures +6 and it needs splitting by colour space first.
 
-Blocked on a decision, not on work: `_build_embedded_profile()` appends to the global profile
-registry at runtime with no lock (see CLAUDE.md). Moving that function without settling how the
-registry is synchronised would relocate a race rather than fix it.
-
 **Extract `database`, `caches`, `metadata` from `common/`.** `common/` is 63 translation units
 and remains the largest undifferentiated module. Database access in particular should be behind
 one API with its own per-image locking, so thread-safety stops depending on every caller

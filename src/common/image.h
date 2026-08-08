@@ -62,6 +62,9 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+
+// Opaque here: only a pointer is stored. colorprofiles owns the definition.
+struct dt_colorspaces_color_profile_t;
 #endif
 
 #include "common/paths.h"
@@ -369,6 +372,11 @@ typedef struct dt_image_t
   float d65_color_matrix[9]; // the 3x3 matrix embedded in some DNGs
   uint8_t *profile;          // embedded profile, for example from JPEGs
   uint32_t profile_size;
+  /* The parsed form of the bytes above, built on demand by the export path and owned by THIS
+   * image -- not by the application-wide profile list, which is built at init and read-only
+   * thereafter. NULL until something asks for it; freed with the image. Guarded by the image
+   * cache entry's own lock, like every other member here. */
+  struct dt_colorspaces_color_profile_t *embedded_profile;
   dt_image_colorspace_t colorspace; // the colorspace that is specified in exif. mostly used for jpeg files
 
   dt_image_raw_parameters_t legacy_flip; // unfortunately needed to convert old bits to new flip module.
