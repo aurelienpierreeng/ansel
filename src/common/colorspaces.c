@@ -537,7 +537,7 @@ static cmsHPROFILE dt_colorspaces_create_adobergb_profile(void)
 
 cmsHPROFILE dt_colorspaces_create_alternate_profile(const char *makermodel)
 {
-  dt_profiled_colormatrix_t *preset = NULL;
+  const dt_profiled_colormatrix_t *preset = NULL;
   for(int k = 0; k < dt_alternate_colormatrix_cnt; k++)
   {
     if(!strcmp(makermodel, dt_alternate_colormatrices[k].makermodel))
@@ -587,7 +587,7 @@ cmsHPROFILE dt_colorspaces_create_alternate_profile(const char *makermodel)
 
 cmsHPROFILE dt_colorspaces_create_vendor_profile(const char *makermodel)
 {
-  dt_profiled_colormatrix_t *preset = NULL;
+  const dt_profiled_colormatrix_t *preset = NULL;
   for(int k = 0; k < dt_vendor_colormatrix_cnt; k++)
   {
     if(!strcmp(makermodel, dt_vendor_colormatrices[k].makermodel))
@@ -637,7 +637,7 @@ cmsHPROFILE dt_colorspaces_create_vendor_profile(const char *makermodel)
 
 cmsHPROFILE dt_colorspaces_create_darktable_profile(const char *makermodel)
 {
-  dt_profiled_colormatrix_t *preset = NULL;
+  const dt_profiled_colormatrix_t *preset = NULL;
   for(int k = 0; k < dt_profiled_colormatrix_cnt; k++)
   {
     if(!strcasecmp(makermodel, dt_profiled_colormatrices[k].makermodel))
