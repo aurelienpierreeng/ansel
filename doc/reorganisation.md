@@ -2,7 +2,16 @@
 
 ## The initial problem
 
-Darktable was not modular, as the [/src dependency graph](@ref src) shows: everything is wired to the GUI, IOP "modules" are all aware of everything. Modifying anything __somewhere__ typically broke something unexpected __somewhere else__.
+Darktable was not modular, as the [/src dependency graph](@ref src) shows: everything is wired
+to the GUI, IOP "modules" are all aware of everything. Modifying anything __somewhere__
+typically broke something unexpected __somewhere else__.
+
+The end goal is a backend that does not know a GUI exists, and a frontend thin enough that
+replacing GTK with Qt is a sizeable job rather than a rewrite. Everything below serves that.
+
+**Where the code stands is in [§ Module map](#module-map) and the rules that keep it there are
+in [§ The rules](#the-rules). Read those two before changing anything structural.** The rest of
+this document describes the architecture those rules protect.
 
 ## Definitions
 
@@ -81,7 +90,7 @@ Caches are high-level manager that host a list of cachelines (whether as `GList`
 
 As a general rule, thread locks should be promoted to read/write locks when it is safe for several threads to concurrently read from the same buffers.
 
-#### Database
+#### Database {#database}
 
 The database is handled through SQLite3, which is not thread-safe in itself, so writing the same data for the same image from concurrent threads leads to undefined behaviour. We achieve thread-safety through locking in write mode the image cache entry of the manipulated image whenever performing read/write DB operations. But that needs to be carefully implemented in each layer (development history, tagging, rating, colorlabels, metadata, etc.) and I can't guarantee I didn't forget some spots.
 
@@ -186,7 +195,191 @@ Here is a complete image lifecycle, assuming it is already imported into databas
 Notes: XMP files are interfaced with the library database, they are never used directly.
 
 
-## Conclusion - Perspectives
+---
+
+# Module map {#module-map}
+
+`src/` is sorted so that a file's directory answers two questions without opening it: **what
+layer is it** and **does it hold state**. Both are enforced (see [§ The rules](#the-rules));
+neither is a convention you have to remember.
+
+Layers run low to high. A file may include from its own layer or below, never above.
+
+| layer | directory | holds state? | what belongs there |
+|---|---|---|---|
+| 0 | `system/` | **no — guaranteed** | platform and machine facts: allocation, SIMD, OpenMP, thread wrappers, dynamic loading, resource limits, the arena allocator, device-scaled cairo surface arithmetic |
+| 0 | `win/`, `external/` | — | Windows shims for POSIX; vendored third-party |
+| 1 | `math/` | **no — guaranteed** | pure algorithms: splines, expression evaluation, topological sort |
+| 1 | `common/` | yes | application services: database, caches, config, logging, image metadata, styles, tags |
+| 2 | `colorprofiles/` | not yet | LittleCMS2 profile work (see the module README) |
+| 2 | `pixel/` | no file holds its own | pixel maths: filters, wavelets, interpolation, colour transforms |
+| 3 | `control/` | yes | jobs, signals, progress, the control loop |
+| 4 | `widgets/` | two named registries only | the GTK widget set — reusable, and **may not include `gui/`** |
+| 4 | `gui/` | yes | this application's windows, panels, theme, screen metrics |
+| 5 | `develop/` | yes | history, pipeline, masks |
+| 6 | `iop/`, `imageio/` | yes | image operations; codecs and export |
+| 7 | `libs/`, `views/` | yes | panel modules and views |
+| 9 | `src/` root | yes | `darktable.c`, the orchestrator |
+
+Measured with `tools/statelessness_audit.py`: 739 files, 316 headers, **0 include cycles**,
+217 layering violations.
+
+## What "stateless" buys, and why it is worth enforcing
+
+A stateless module can be reused, tested, threaded and ported without dragging the application
+behind it. The point of sorting by it is that **the check becomes mechanical**: anything built
+only from `system/` and `math/` is stateless too, and nobody has to re-derive that per file.
+
+That inference is only sound while those directories stay closed, which is why
+`tools/check_module_boundaries.sh` pins what `system/` may include. One exception would cost
+every reader the check the arrangement exists to avoid.
+
+## Two exceptions, both deliberate
+
+**`widgets/` cannot be stateless.** Ten of its files hold GObject type registration —
+`G_DEFINE_TYPE`'s `_private_offset`/`_parent_class`/`static_g_define_type_id`, the cached
+`g_type_register_static` id, `g_signal_new` ids. Registering a type once per process and
+caching the id is *what defining a GTK widget class is*. The rule instead is: **no state
+outside `widget_settings.c` and `accelerators.c`**, its two named registries.
+
+**`common/` is where state is allowed to live.** It is not a dumping ground — it is the answer
+to "this needs a database connection / a config file / a cache". If something there holds no
+state, it belongs in `system/`, `math/` or a module of its own.
+
+# The rules {#the-rules}
+
+Five gates run in CI. Each exists because the thing it checks broke something that no other
+gate could see, and all five fail the build rather than warn.
+
+| gate | rule |
+|---|---|
+| `check_layering.sh` | no include from a higher layer; no include cycles. A ratchet — the count may fall, never rise |
+| `check_module_boundaries.sh` | `system/` includes nothing that could bring state with it; `widgets/` does not include `gui/` |
+| `check_statelessness.sh` | `system/` and `math/` hold no state; `widgets/` holds none outside its two registries. Measured from the compiled objects |
+| `check_unused_includes.sh` | no *newly added* include is unused. Renames and pre-existing findings are reported, not gated |
+| `check_conditional_includes.sh` | no *newly added* include sits inside a conditional block |
+
+Plus the two invariants that predate them: **no `#pragma once`** (explicit guards make cyclic
+includes greppable; see `include-graph.md`), and **`darktable.h` has a re-inclusion tripwire
+rather than a guard** — if you hit it, give the file the specific library it needs.
+
+## Header discipline
+
+**A header includes only what its own declarations need. Everything else belongs in the `.c`.**
+
+A header that includes more becomes a supply line its consumers never asked for and cannot see.
+They compile because something upstream happened to pull in what they use, and the day anyone
+tidies that include away, the breakage surfaces somewhere else entirely — in a file nobody
+touched. Two real instances:
+
+- removing `gui/gtk.h` broke a dozen IOPs, because it had been the only thing pulling
+  `sqlite3.h` in ahead of `common/points.h`, whose vendored SFMT `#define N` then collided with
+  `sqlite3_compileoption_get(int N)`;
+- deleting an unused `widgets/label.h` from `widgets/dialog.c` removed `dt_free`, which had been
+  arriving through `label.h` → `system/mem_alloc.h` in a file that named neither.
+
+Implementations do not belong in headers either: five `static inline` helpers in
+`widgets/label.h` forced four extra includes on every one of its ~30 consumers. The one
+legitimate exception is a header whose published interface *is* inline code (`widgets/draw.h`),
+which necessarily includes what that code calls. Keep those rare and honest — they are a
+performance trade, not a convenience.
+
+## Inverting a dependency
+
+When a lower layer needs something only a higher layer knows, do not include upward. Declare a
+handler and let the higher layer register it:
+
+```c
+/* in the lower layer's header */
+typedef void (*dt_widget_message_handler_t)(const char *message);
+void dt_widget_set_message_handler(dt_widget_message_handler_t handler);
+void dt_widget_message(const char *message);   /* no-op until registered */
+```
+
+Unregistered must be a defined no-op, so headless runs and early startup work without a single
+"is there a GUI?" test. `widgets/widget_settings.h` is the worked example — cursor shape, toast
+messages, natural width, per-widget persistence and the root window all arrive this way.
+
+For a *value* rather than a callback, push it down instead: the application resolves it once and
+stores it where the consumer already lives. Screen DPI works like that — `widget_settings` owns
+it because every widget reads it on every draw, and `gui/screen_metrics.c` forwards under the
+`dt_screen_*` names for the few readers below layer 4.
+
+# Working on this codebase {#working-on-it}
+
+## Diagnostics
+
+| tool | answers |
+|---|---|
+| `include_graph.py --summary` | cycles, layering violations, closure sizes |
+| `statelessness_audit.py --dir src/x` | which files hold or reach state, and the chain that gets there |
+| `header_consumers.py <header>` | what each includer actually takes from a header — its own symbols vs. what it merely forwards |
+| `header_includes_audit.py <header>` | includes a header does not need, and types it reaches transitively |
+| `fix_missing_includes.py` | reads a compiler log, adds the header declaring each missing symbol |
+| `check_windows_syntax.sh` | syntax-checks changed files under the Windows preprocessor via MinGW, without a Windows build |
+
+## Verifying a structural change
+
+A green build on one configuration proves very little here.
+
+- **Build four configurations**: Release, `nofeatures` (mirrors CI's reduced dependency set),
+  Debug, and a **clang** Debug. Compilers disagree in ways that matter — the statelessness gate
+  once passed three GCC builds and failed the LLVM job, because clang names function-local
+  statics `<function>.<variable>` where GCC uses `<variable>.<n>`.
+- **Check the platforms you cannot build.** Anything selected by `_WIN32`, `__APPLE__` or
+  `GDK_WINDOWING_*` is invisible on a Linux desktop. `check_windows_syntax.sh` covers the
+  preprocessor-branch case for about a second per file.
+- **Compare symbols, not line counts.** For any change that moves code, diff the set of
+  functions `ctags` finds before and after. Line counts and build status both miss silent
+  deletion — a view truncated to its include block still compiles, it just stops being a view.
+
+## Two failure modes worth naming
+
+**Silent supply.** Most breakage in this series was not the code that changed; it was code that
+had been compiling by accident and stopped. Expect a structural change to surface unrelated
+files, and read that as the point of the exercise rather than as collateral damage.
+
+**Gates that tax the wrong thing.** A gate scoped to "every file this change touches" reports a
+file's entire inherited backlog when a refactor rewrites one include line in 180 files, and a
+gate that cries wolf gets switched off. Scope to what the change *adds*; report the rest as
+notes. The same applies to renames — a moved header is an added line, and demanding the file
+justify an include it has always carried is how mechanical work starts dragging cleanup along.
+
+# What remains {#what-remains}
+
+Roughly in dependency order. Layering violations (217) fall as these land.
+
+**Merge the LittleCMS2 code.** `common/colorspaces.c` (218 LCMS2 calls) and
+`pixel/iop_profile.c` (7) belong in `colorprofiles/` alongside `printprof.c`. The split
+between them today follows where the code was written, not what it does.
+
+**Extract `database`, `caches`, `metadata` from `common/`.** `common/` is 63 translation units
+and remains the largest undifferentiated module. Database access in particular should be behind
+one API with its own per-image locking, so thread-safety stops depending on every caller
+remembering to lock the image cache first (see [§ Database](#database)).
+
+**Move the GUI half of `imageio/`.** `imageio/format/`, `imageio/storage/` and
+`imageio_module.c` are export dialogs and settings widgets, not codecs. They belong in `gui/`.
+
+**Split `develop/imageop_math.h`.** The curve-fitting maths is pure and belongs in `math/`.
+
+**Remove `dev->proxy`.** It is an anti-pattern that breaks modularity by design — a grab-bag of
+function pointers letting anything reach anything.
+
+**Make `pixel/` stateless.** No file there holds state of its own; all 13 that reach state do so
+through `common/opencl.c` (the device registry) or `develop/pixelpipe_cache.c`. Inverting those
+two dependencies would make the tree's whole pixel-maths layer stateless.
+
+**Close `system/` fully.** It no longer includes anything outside itself, but the gate is what
+guarantees that rather than the structure. Nothing to do unless it regresses.
+
+---
+
+# Architectural notes and open problems
+
+These concern the *runtime* architecture rather than the module layout above: known contention,
+and directions the pipeline could take. They are design intent and measured problems, not
+descriptions of finished work — anything marked **open** is unclaimed.
 
 ### History item refcounting and the `history_mutex` contention
 
@@ -213,6 +406,11 @@ This is directly observable with the named-rwlock diagnostic added to `dt_pthrea
 **Status: open.** The refcounting/COW infrastructure above is a prerequisite for resyncing a
 pipe against a snapshot of `dev->history` instead of holding `history_mutex` for the whole
 resync, which is the direction to pursue to remove this stall.
+
+### Where the pipeline architecture could go
+
+The following are **proposals**, enabled by the pipeline-cache design described above but not
+implemented. They are recorded because the cache rewrite was done partly to make them possible.
 
 The history is so far incrusted into the `dt_develop_t` object, with its own `history_end` and `history_mutex` lock. It mixes both module parameters history, and masks/forms history in a weird fashion. The history use to be scattered all over the software, with parts handled in SQL and parts handled in C. Now that everything is handled in C and the history handling methods have been contained in `history.c` and `dev_history.c`, it might be a good idea to move it entirely out of the `dt_develop_t` object to have it managed globally, like the pipeline cache, but behind an API that allows to track precisely the lifecycle of data and concurrent accesses. Writing history to database and to XMP is currently handled in separate, short-lived threads, this completely enclosed architecture would allow to have all history tasks (including reading) handled in parallel, while ensuring thread safety. 
 

@@ -14,8 +14,9 @@
 # branch actually added. Judging added lines keeps the gate prescriptive -- you may not
 # introduce an unused include -- without making unrelated cleanup the price of a path rewrite.
 #
-# Findings on lines the change did not touch are still printed, as a note, so the backlog
-# stays visible rather than silently accepted.
+# Findings on lines the change did not touch are summarised by file rather than printed one per
+# line: a hundred notes scrolling past on every run is not visibility, it is noise that trains
+# people to skip the whole step. Set UNUSED_INCLUDES_VERBOSE=1 to see each one.
 #
 # Usage:
 #   tools/check_unused_includes.sh --changed <base-ref>   # lines added since <base-ref>
@@ -124,6 +125,7 @@ findings=0
 checked=0
 skipped_not_tu=0
 pre_existing=0
+pre_existing_files=""
 
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue
@@ -149,7 +151,9 @@ for f in "${files[@]}"; do
   # Measured in CI: 42 obvious translation units -- darktable.c, dev_history.c, most of iop/ --
   # reported as "not a translation unit" while printf logged a broken pipe for each.
   if [[ "${tu_list}" != *"/${f}"* ]]; then
-    echo "note: $f is not a translation unit in this build; not checked"
+    if [ -n "${UNUSED_INCLUDES_VERBOSE:-}" ]; then
+      echo "note: $f is not a translation unit in this build; not checked"
+    fi
     skipped_not_tu=$((skipped_not_tu + 1))
     continue
   fi
@@ -172,13 +176,18 @@ for f in "${files[@]}"; do
     lineno="$(printf '%s' "$finding" | sed -n "s|.*/${f}:\([0-9]*\):.*|\1|p")"
     header="$(printf '%s' "$finding" | sed -n 's|.*included header \([^ ]*\) is not used.*|\1|p')"
     if [ -n "${header}" ] && printf '%s\n' "${renamed_headers}" | grep -qxF "${f}:${header}"; then
-      printf 'note (renamed in place, not introduced here): %s\n' "$finding"
+      if [ -n "${UNUSED_INCLUDES_VERBOSE:-}" ]; then
+        printf 'note (renamed in place, not introduced here): %s\n' "$finding"
+      fi
       pre_existing=$((pre_existing + 1))
     elif [ -n "${lineno}" ] && printf '%s\n' "${added_lines}" | grep -qxF "${f}:${lineno}"; then
       printf '%s\n' "$finding"
       findings=$((findings + 1))
     else
-      printf 'note (pre-existing, not introduced here): %s\n' "$finding"
+      if [ -n "${UNUSED_INCLUDES_VERBOSE:-}" ]; then
+        printf 'note (pre-existing, not introduced here): %s\n' "$finding"
+      fi
+      pre_existing_files="${pre_existing_files}${f}\n"
       pre_existing=$((pre_existing + 1))
     fi
   done <<< "$out"
@@ -187,10 +196,16 @@ done
 echo
 echo "Checked ${checked} file(s); ${findings} unused include(s) introduced by this change."
 if [ "${pre_existing}" -gt 0 ]; then
-  echo "${pre_existing} pre-existing unused include(s) in touched files, reported but not gated."
+  echo "${pre_existing} pre-existing unused include(s) in touched files -- not gated, and not"
+  echo "this change's to fix. Worst offenders:"
+  printf '%b' "${pre_existing_files}" | grep -v '^$' | sort | uniq -c | sort -rn | head -5 \
+    | sed 's/^/    /'
+  echo "  (UNUSED_INCLUDES_VERBOSE=1 lists every one)"
 fi
 if [ "${skipped_not_tu}" -gt 0 ]; then
-  echo "${skipped_not_tu} file(s) skipped: not translation units in this build (see above)."
+  echo "${skipped_not_tu} file(s) skipped: not translation units in this build -- IOP modules"
+  echo "  (compiled through a generated wrapper), platform sources, and anything this cmake"
+  echo "  configuration excludes. Not a finding; set UNUSED_INCLUDES_VERBOSE=1 to list them."
 fi
 
 # Findings differ between clang-tidy releases -- 19 and 20 disagree about which symbols
