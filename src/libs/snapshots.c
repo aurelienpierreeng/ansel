@@ -52,7 +52,7 @@
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"

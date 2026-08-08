@@ -50,7 +50,7 @@
 #include "develop/imageop_gui.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)

@@ -73,7 +73,7 @@
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "math/openmp_maths.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 
 #include "gui/presets.h"

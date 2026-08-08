@@ -208,77 +208,6 @@ GtkWidget *dt_gui_center_widget(void)
 static void _init_widgets(dt_gui_gtk_t *gui);
 static gboolean _configure(GtkWidget *da, GdkEventConfigure *event, gpointer user_data);
 
-gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x, gdouble *delta_y)
-{
-  // avoid double counting real and emulated events when receiving smooth scrolls
-  if(gdk_event_get_pointer_emulated((GdkEvent*)event)) return FALSE;
-
-  gboolean handled = FALSE;
-  switch(event->direction)
-  {
-    // is one-unit cardinal, e.g. from a mouse scroll wheel
-    case GDK_SCROLL_LEFT:
-      if(delta_x)
-      {
-        *delta_x = dt_conf_get_bool("scroll/reverse_x") ? 1.0 : -1.0;
-        if(delta_y) *delta_y = 0.0;
-        handled = TRUE;
-      }
-      break;
-    case GDK_SCROLL_RIGHT:
-      if(delta_x)
-      {
-        *delta_x = dt_conf_get_bool("scroll/reverse_x") ? -1.0 : 1.0;
-        if(delta_y) *delta_y = 0.0;
-        handled = TRUE;
-      }
-      break;
-    case GDK_SCROLL_UP:
-      if(delta_y)
-      {
-        if(delta_x) *delta_x = 0.0;
-        *delta_y = dt_conf_get_bool("scroll/reverse_y") ? 1.0 : -1.0;
-        handled = TRUE;
-      }
-      break;
-    case GDK_SCROLL_DOWN:
-      if(delta_y)
-      {
-        if(delta_x) *delta_x = 0.0;
-        *delta_y = dt_conf_get_bool("scroll/reverse_y") ? -1.0 : 1.0;
-        handled = TRUE;
-      }
-      break;
-    // is trackpad (or touch) scroll
-    case GDK_SCROLL_SMOOTH:
-      if((delta_x && event->delta_x != 0) || (delta_y && event->delta_y != 0))
-      {
-#ifdef GDK_WINDOWING_QUARTZ // on macOS deltas need to be scaled
-        if(delta_x) *delta_x = dt_conf_get_bool("scroll/reverse_x") ? -event->delta_x / 50. : event->delta_x / 50.;
-        if(delta_y) *delta_y = dt_conf_get_bool("scroll/reverse_y") ? -event->delta_y / 50. : event->delta_y / 50.;
-#else
-        if(delta_x) *delta_x = dt_conf_get_bool("scroll/reverse_x") ? -event->delta_x : event->delta_x;
-        if(delta_y) *delta_y = dt_conf_get_bool("scroll/reverse_y") ? -event->delta_y : event->delta_y;
-#endif
-        handled = TRUE;
-      }
-    default:
-      break;
-    }
-  return handled;
-}
-
-
-gboolean dt_gui_get_scroll_delta(const GdkEventScroll *event, gdouble *delta)
-{
-  gdouble delta_x, delta_y;
-  if(dt_gui_get_scroll_deltas(event, &delta_x, &delta_y))
-  {
-    *delta = delta_x + delta_y;
-    return TRUE;
-  }
-  return FALSE;
-}
 
 
 
@@ -293,39 +222,6 @@ static gboolean _draw(GtkWidget *da, cairo_t *cr, gpointer user_data)
   return TRUE;
 }
 
-#ifdef _DEBUG
-void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line)
-{
-  if(!GTK_IS_WIDGET(widget))
-  {
-    dt_print(DT_DEBUG_GTK, "gtk_widget_queue_draw(%s) called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
-             name, file, line, widget);
-    return;
-  }
-  else
-    dt_print(DT_DEBUG_GTK, "queueing redraw for `%s` (`%s`) at %s:%d\n",
-             name, gtk_widget_get_name(widget), file, line);
-
-
-  (gtk_widget_queue_draw)(widget);
-}
-
-void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
-                                         const char *file, const int line)
-{
-  if(!GTK_IS_TOGGLE_BUTTON(toggle_button))
-  {
-    dt_print(DT_DEBUG_GTK, "gtk_toggle_button_set_active(%s) called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
-            name, file, line, toggle_button);
-    return;
-  }
-  else
-    dt_print(DT_DEBUG_GTK, "setting toggle button `%s` (`%s`) to %s at %s:%d\n", name, gtk_widget_get_name(GTK_WIDGET(toggle_button)),
-            active ? "active" : "inactive", file, line);
-
-  (gtk_toggle_button_set_active)(toggle_button, active);
-}
-#endif
 
 static gboolean _scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
@@ -399,17 +295,6 @@ int dt_gui_gtk_write_config()
   return 0;
 }
 
-void dt_gui_gtk_set_source_rgb(cairo_t *cr, dt_gui_color_t color)
-{
-  const GdkRGBA bc = darktable.gui->colors[color];
-  cairo_set_source_rgb(cr, bc.red, bc.green, bc.blue);
-}
-
-void dt_gui_gtk_set_source_rgba(cairo_t *cr, dt_gui_color_t color, float opacity_coef)
-{
-  GdkRGBA bc = darktable.gui->colors[color];
-  cairo_set_source_rgba(cr, bc.red, bc.green, bc.blue, bc.alpha * opacity_coef);
-}
 
 void dt_gui_gtk_quit()
 {
@@ -1321,7 +1206,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // finally set the cursor to be the default.
   // for some reason this is needed on some systems to pick up the correctly themed cursor
   dt_control_change_cursor(GDK_LEFT_PTR);
-  gui->mouse.effect_radius = DT_UI_SCALE_DEVICE(15.0f);
+  dt_widget_set_mouse_radius(DT_UI_SCALE_DEVICE(15.0f), DT_UI_SCALE_DEVICE(15.0f));
 
   // Tell common/ how to repaint a stale thumbnail. The backend announces staleness and
   // knows nothing about thumbtables; this is the only place the two are connected.
@@ -2294,7 +2179,7 @@ void dt_gui_load_theme(const char *theme)
 
   // setup the colors
 
-  GdkRGBA *c = darktable.gui->colors;
+  GdkRGBA *c = dt_widget_colors();
   GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
   GtkStyleContext *ctx = gtk_widget_get_style_context(main_window);
 
@@ -3179,18 +3064,6 @@ static void _popover_set_relative_to_topmost_parent(GtkPopover *popover, GtkWidg
 }
 
 // draw rounded rectangle
-void dt_gui_draw_rounded_rectangle(cairo_t *cr, float width, float height, float x, float y)
-{
-  const float radius = height / 5.0f;
-  const float degrees = M_PI / 180.0;
-  cairo_new_sub_path(cr);
-  cairo_arc(cr, x + width - radius, y + radius, radius, -90 * degrees, 0 * degrees);
-  cairo_arc(cr, x + width - radius, y + height - radius, radius, 0 * degrees, 90 * degrees);
-  cairo_arc(cr, x + radius, y + height - radius, radius, 90 * degrees, 180 * degrees);
-  cairo_arc(cr, x + radius, y + radius, radius, 180 * degrees, 270 * degrees);
-  cairo_close_path(cr);
-  cairo_fill(cr);
-}
 
 gboolean dt_gui_search_start(GtkWidget *widget, GdkEventKey *event, GtkSearchEntry *entry)
 {

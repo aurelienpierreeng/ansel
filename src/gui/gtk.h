@@ -108,18 +108,6 @@ static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
       __attribute__((cleanup(dt_gui_freeze_release_))) = { __FILE__, __LINE__ };      \
   dt_gui_freeze_begin_(__FILE__, __LINE__)
 
-// check whether the specified mask of modifier keys exactly matches, among the set Shift+Control+(Alt/Meta).
-// ignores the state of any other shifting keys
-
-// check whether the given modifier state includes AT LEAST the specified mask of modifier keys
-static inline gboolean dt_modifiers_include(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
-{
-//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
-  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
-  // check whether all modifier bits of interest are turned on
-  return (state & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
-}
-
 /**
  * @brief Remove underscore from GUI labels containing mnemonics
  */
@@ -176,9 +164,6 @@ GList *dt_gui_get_themes(void);
 void dt_gui_set_themes(GList *themes);
 GtkWidget *dt_gui_center_widget(void);
 
-// Mouse hit-test radius in darkroom image space, clamped for usable overlay selection.
-#define DT_GUI_MOUSE_EFFECT_RADIUS dt_gui_get_global()->mouse.effect_radius_clamped
-
 /* Pixel scaling - two intents, chosen by the *destination sink* (not by platform).
  * See doc/gui.md "Pixel scaling" for the full rationale.
  *
@@ -226,43 +211,6 @@ typedef struct dt_gui_widgets_t
   GtkGrid *panel_right;
 } dt_gui_widgets_t;
 
-typedef enum dt_gui_color_t
-{
-  DT_GUI_COLOR_BG = 0,
-  DT_GUI_COLOR_DARKROOM_BG,
-  DT_GUI_COLOR_DARKROOM_PREVIEW_BG,
-  DT_GUI_COLOR_LIGHTTABLE_BG,
-  DT_GUI_COLOR_LIGHTTABLE_PREVIEW_BG,
-  DT_GUI_COLOR_LIGHTTABLE_FONT,
-  DT_GUI_COLOR_PRINT_BG,
-  DT_GUI_COLOR_BRUSH_CURSOR,
-  DT_GUI_COLOR_BRUSH_TRACE,
-  DT_GUI_COLOR_BUTTON_FG,
-  DT_GUI_COLOR_THUMBNAIL_BG,
-  DT_GUI_COLOR_THUMBNAIL_SELECTED_BG,
-  DT_GUI_COLOR_THUMBNAIL_HOVER_BG,
-  DT_GUI_COLOR_THUMBNAIL_OUTLINE,
-  DT_GUI_COLOR_THUMBNAIL_SELECTED_OUTLINE,
-  DT_GUI_COLOR_THUMBNAIL_HOVER_OUTLINE,
-  DT_GUI_COLOR_THUMBNAIL_FONT,
-  DT_GUI_COLOR_THUMBNAIL_SELECTED_FONT,
-  DT_GUI_COLOR_THUMBNAIL_HOVER_FONT,
-  DT_GUI_COLOR_THUMBNAIL_BORDER,
-  DT_GUI_COLOR_THUMBNAIL_SELECTED_BORDER,
-  DT_GUI_COLOR_FILMSTRIP_BG,
-  DT_GUI_COLOR_PREVIEW_HOVER_BORDER,
-  DT_GUI_COLOR_LOG_BG,
-  DT_GUI_COLOR_LOG_FG,
-  DT_GUI_COLOR_MAP_COUNT_SAME_LOC,
-  DT_GUI_COLOR_MAP_COUNT_DIFF_LOC,
-  DT_GUI_COLOR_MAP_COUNT_BG,
-  DT_GUI_COLOR_MAP_LOC_SHAPE_HIGH,
-  DT_GUI_COLOR_MAP_LOC_SHAPE_LOW,
-  DT_GUI_COLOR_MAP_LOC_SHAPE_DEF,
-  DT_GUI_COLOR_WARNING,
-  DT_GUI_COLOR_LAST
-} dt_gui_color_t;
-
 typedef struct dt_gui_gtk_t
 {
 
@@ -273,12 +221,6 @@ typedef struct dt_gui_gtk_t
   cairo_surface_t *surface;
   GtkMenu *presets_popup_menu;
   char *last_preset;
-
-  // Widget-callback suppression depth. PRIVATE: never touch directly -- go through
-  // dt_gui_freeze_begin()/end() / dt_gui_widget_freeze() / dt_gui_widgets_suppressed()
-  // (declared at the top of this header). Those manage it centrally: GUI-thread-only, clamped
-  // at >= 0, and unbalanced ends are logged instead of silently drifting the counter.
-  GdkRGBA colors[DT_GUI_COLOR_LAST];
 
   int32_t center_tooltip; // 0 = no tooltip, 1 = new tooltip, 2 = old tooltip
 
@@ -302,8 +244,6 @@ typedef struct dt_gui_gtk_t
 
   GList *input_devices;
 
-  double overlay_red, overlay_blue, overlay_green, overlay_contrast;
-
   double dpi, dpi_factor, ppd;
 
   // Resolved root font size (1em) in device-independent px, read from the active
@@ -313,10 +253,6 @@ typedef struct dt_gui_gtk_t
 
 
   struct {
-    // Raw mouse hit-test radius in display pixels
-    float effect_radius;
-    // Mouse hit-test radius coordinates, clamped for usable overlay selection.
-    float effect_radius_clamped;
     gboolean is_dragging;
     gboolean is_painting;
   } mouse;
@@ -388,62 +324,10 @@ typedef struct dt_gui_widget_auto_height_t
 } dt_gui_widget_auto_height_t;
 
 
-#ifdef _DEBUG
-/** \brief Queue a GTK widget redraw with the Ansel call site in diagnostics.
- *
- * GTK only reports its own assertion site when a non-widget reaches
- * gtk_widget_queue_draw(). Keep the caller location explicit in debug-capable
- * builds so invalid GUI ownership/lifetime bugs point to the Ansel source line
- * that queued the redraw.
- */
-void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line);
-#define dt_gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw_ext((GtkWidget *)(widget), #widget, __FILE__, __LINE__)
-#define gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw(widget)
-
-/** \brief Set a GTK toggle button state with the Ansel call site in diagnostics.
- *
- * Toggle state changes are often followed by redraws, so reporting the original
- * invalid toggle object makes the first ownership/lifetime error visible before
- * GTK emits secondary redraw assertions.
- */
-void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
-                                         const char *file, const int line);
-#define dt_gtk_toggle_button_set_active(toggle_button, active)                                                 \
-  dt_gtk_toggle_button_set_active_ext((GtkToggleButton *)(toggle_button), #toggle_button, active, __FILE__, __LINE__)
-#define gtk_toggle_button_set_active(toggle_button, active)                                                   \
-  dt_gtk_toggle_button_set_active(toggle_button, active)
-
-#else
-#define dt_gtk_widget_queue_draw(widget) gtk_widget_queue_draw(widget)
-#define dt_gtk_toggle_button_set_active(toggle_button, active) gtk_toggle_button_set_active(toggle_button, active)
-#endif
 
 
 
 
-static inline cairo_surface_t *dt_cairo_image_surface_create_from_png(const char *filename) {
-  cairo_surface_t *cst = cairo_image_surface_create_from_png(filename);
-  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
-  return cst;
-}
-
-static inline int dt_cairo_image_surface_get_width(cairo_surface_t *surface) {
-  return cairo_image_surface_get_width(surface) / dt_gui_get_global()->ppd;
-}
-
-static inline int dt_cairo_image_surface_get_height(cairo_surface_t *surface) {
-  return cairo_image_surface_get_height(surface) / dt_gui_get_global()->ppd;
-}
-
-static inline cairo_surface_t *dt_gdk_cairo_surface_create_from_pixbuf(const GdkPixbuf *pixbuf, int scale, GdkWindow *for_window) {
-  cairo_surface_t *cst = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, for_window);
-  cairo_surface_set_device_scale(cst, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
-  return cst;
-}
-
-static inline GdkPixbuf *dt_gdk_pixbuf_new_from_file_at_size(const char *filename, int width, int height, GError **error) {
-  return gdk_pixbuf_new_from_file_at_size(filename, width * dt_gui_get_global()->ppd, height * dt_gui_get_global()->ppd, error);
-}
 
 // call class function to add or remove CSS classes (need to be set on top of this file as first function is used in this file)
 
@@ -464,32 +348,9 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui);
 void dt_gui_gtk_quit();
 void dt_gui_store_last_preset(const char *name);
 int dt_gui_gtk_write_config();
-void dt_gui_gtk_set_source_rgb(cairo_t *cr, dt_gui_color_t);
-void dt_gui_gtk_set_source_rgba(cairo_t *cr, dt_gui_color_t, float opacity_coef);
+void dt_widget_set_source_rgb(cairo_t *cr, dt_gui_color_t);
+void dt_widget_set_source_rgba(cairo_t *cr, dt_gui_color_t, float opacity_coef);
 double dt_get_system_gui_ppd(GtkWidget *widget);
-
-/* Return requested scroll delta(s) from event. If delta_x or delta_y
- * is NULL, do not return that delta. Return TRUE if requested deltas
- * can be retrieved. Handles both GDK_SCROLL_UP/DOWN/LEFT/RIGHT and
- * GDK_SCROLL_SMOOTH style scroll events. */
-gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x, gdouble *delta_y);
-/* Same as above, except accumulate smooth scrolls deltas of < 1 and
- * only set deltas and return TRUE once scrolls accumulate to >= 1.
- * Effectively makes smooth scroll events act like old-style unit
- * scroll events. */
-
-/* Note that on macOS Shift+vertical scroll can be reported as Shift+horizontal scroll.
- * So if Shift changes scrolling effect, both scrolls should be handled the same.
- * For this case (or if it's otherwise useful) use the following 2 functions. */
-
-/* Return sum of scroll deltas from event. Return TRUE if any deltas
- * can be retrieved. Handles both GDK_SCROLL_UP/DOWN/LEFT/RIGHT and
- * GDK_SCROLL_SMOOTH style scroll events. */
-gboolean dt_gui_get_scroll_delta(const GdkEventScroll *event, gdouble *delta);
-/* Same as above, except accumulate smooth scrolls deltas of < 1 and
- * only set delta and return TRUE once scrolls accumulate to >= 1.
- * Effectively makes smooth scroll events act like old-style unit
- * scroll events. */
 
 /** \brief gives a widget focus in the container */
 void dt_ui_container_focus_widget(dt_ui_t *ui, const dt_ui_container_t c, GtkWidget *w);
@@ -713,8 +574,6 @@ void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_ancho
  * @return the widget to use as popup parent, or NULL when @p widget is NULL.
  */
 GtkWidget *dt_gui_get_popup_relative_widget(GtkWidget *widget, GdkRectangle *rect);
-
-void dt_gui_draw_rounded_rectangle(cairo_t *cr, float width, float height, float x, float y);
 
 // event handler for "key-press-event" of GtkTreeView to decide if focus switches to GtkSearchEntry
 gboolean dt_gui_search_start(GtkWidget *widget, GdkEventKey *event, GtkSearchEntry *entry);

@@ -61,9 +61,11 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/dev_history.h"  // dt_dev_add_history_item, previously reached through gui/draw.h
+#include "develop/develop.h"
 #include "math/openmp_maths.h"
 
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 

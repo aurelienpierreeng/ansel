@@ -32,7 +32,7 @@ No file here includes anything from `gui/`. What each of them needed came out wi
 | `dt_gui_add_class` / `remove_class` (gui/gtk.c) | `widget_style.{c,h}` |
 | widget-freeze depth + `dt_gui_widgets_suppressed` | `widget_settings` — the counter left `dt_gui_gtk_t` |
 | `dt_gui_get_scroll_unit_delta(s)` | `widget_settings` |
-| `dt_draw_star`, `dt_draw_line`, `set_color` | `cairo_shapes.h` |
+| `dt_draw_star`, `dt_draw_line`, `set_color` | `draw.h` |
 | bauhaus colour-label palette | `dt_widget_colorlabel()` + `DT_WIDGET_COLORLABEL_*` |
 | `gui/gdkkeys.h` (pure keysym mapping) | `widgets/gdkkeys.h` |
 | pipeline-tracked allocator in `focus_peaking` | plain `dt_alloc_align` |
@@ -95,7 +95,7 @@ application as-is, unlike the rest.
 | `gdkkeys.h` | keysym mapping (numpad/main-pad equivalence) |
 | `widget_settings.{c,h}` | toolkit state: scroll, DPI/em metrics, freeze depth, palette |
 | `widget_style.{c,h}` | CSS class helpers, label capitalisation |
-| `cairo_shapes.h` | `dt_draw_star`, `dt_draw_line`, `set_color` |
+| `draw.h` | `dt_draw_star`, `dt_draw_line`, `set_color` |
 
 ## What stayed behind in `gui/dtgtk/`, and why
 

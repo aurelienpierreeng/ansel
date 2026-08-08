@@ -163,6 +163,118 @@ static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModi
   return (state & modifiers) == desired_modifier_mask;
 }
 
+/* Does `state` carry AT LEAST `desired_modifier_mask`? Same arithmetic, weaker test. */
+static inline gboolean dt_modifiers_include(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+{
+//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
+  const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
+  return (state & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
+}
+
+/* Scroll deltas as fractions, for consumers that want the raw smooth-scroll amount rather
+ * than the accumulated discrete units above. */
+gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x, gdouble *delta_y);
+gboolean dt_gui_get_scroll_delta(const GdkEventScroll *event, gdouble *delta);
+
+
+/* ------------------------------------------------------------------------------------------
+ * Theme palette.
+ *
+ * The colours widgets paint with are a theme decision the application resolves (from CSS, at
+ * dt_gui_load_theme() time) and pushes here. Widgets read them; they do not look them up.
+ * Storage lives here rather than in the application struct so that widgets/draw.h can be a
+ * leaf header -- it paints with DT_GUI_COLOR_BUTTON_FG and must not reach for gui/.
+ * ------------------------------------------------------------------------------------------ */
+typedef enum dt_gui_color_t
+{
+  DT_GUI_COLOR_BG = 0,
+  DT_GUI_COLOR_DARKROOM_BG,
+  DT_GUI_COLOR_DARKROOM_PREVIEW_BG,
+  DT_GUI_COLOR_LIGHTTABLE_BG,
+  DT_GUI_COLOR_LIGHTTABLE_PREVIEW_BG,
+  DT_GUI_COLOR_LIGHTTABLE_FONT,
+  DT_GUI_COLOR_PRINT_BG,
+  DT_GUI_COLOR_BRUSH_CURSOR,
+  DT_GUI_COLOR_BRUSH_TRACE,
+  DT_GUI_COLOR_BUTTON_FG,
+  DT_GUI_COLOR_THUMBNAIL_BG,
+  DT_GUI_COLOR_THUMBNAIL_SELECTED_BG,
+  DT_GUI_COLOR_THUMBNAIL_HOVER_BG,
+  DT_GUI_COLOR_THUMBNAIL_OUTLINE,
+  DT_GUI_COLOR_THUMBNAIL_SELECTED_OUTLINE,
+  DT_GUI_COLOR_THUMBNAIL_HOVER_OUTLINE,
+  DT_GUI_COLOR_THUMBNAIL_FONT,
+  DT_GUI_COLOR_THUMBNAIL_SELECTED_FONT,
+  DT_GUI_COLOR_THUMBNAIL_HOVER_FONT,
+  DT_GUI_COLOR_THUMBNAIL_BORDER,
+  DT_GUI_COLOR_THUMBNAIL_SELECTED_BORDER,
+  DT_GUI_COLOR_FILMSTRIP_BG,
+  DT_GUI_COLOR_PREVIEW_HOVER_BORDER,
+  DT_GUI_COLOR_LOG_BG,
+  DT_GUI_COLOR_LOG_FG,
+  DT_GUI_COLOR_MAP_COUNT_SAME_LOC,
+  DT_GUI_COLOR_MAP_COUNT_DIFF_LOC,
+  DT_GUI_COLOR_MAP_COUNT_BG,
+  DT_GUI_COLOR_MAP_LOC_SHAPE_HIGH,
+  DT_GUI_COLOR_MAP_LOC_SHAPE_LOW,
+  DT_GUI_COLOR_MAP_LOC_SHAPE_DEF,
+  DT_GUI_COLOR_WARNING,
+  DT_GUI_COLOR_LAST
+} dt_gui_color_t;
+
+/** The palette itself, writable so the theme loader can fill it in place. Zeroed until then. */
+GdkRGBA *dt_widget_colors(void);
+
+/** Set a cairo source from the palette, opaque or scaled by the palette entry's own alpha. */
+void dt_widget_set_source_rgb(cairo_t *cr, dt_gui_color_t color);
+void dt_widget_set_source_rgba(cairo_t *cr, dt_gui_color_t color, float opacity_coef);
+
+/* Overlay tint for shapes drawn over the image (mask outlines, guides, crop handles). A user
+ * preference the application resolves; widgets/draw.h paints with it. */
+typedef struct dt_widget_overlay_color_t
+{
+  double red, green, blue, contrast;
+} dt_widget_overlay_color_t;
+
+const dt_widget_overlay_color_t *dt_widget_overlay_color(void);
+void dt_widget_set_overlay_color(double red, double green, double blue, double contrast);
+
+/* Mouse hit-test radius in device pixels: the raw value, and the one clamped to stay usable
+ * for overlay selection at any zoom. The darkroom recomputes both when the zoom changes. */
+float dt_widget_mouse_radius(void);
+float dt_widget_mouse_radius_clamped(void);
+void dt_widget_set_mouse_radius(float radius, float clamped);
+
+/** Mouse hit-test radius in darkroom image space, clamped for usable overlay selection. */
+#define DT_GUI_MOUSE_EFFECT_RADIUS dt_widget_mouse_radius_clamped()
+
+
+/* ------------------------------------------------------------------------------------------
+ * Call-site diagnostics for two GTK setters.
+ *
+ * GTK reports only its own assertion site when a non-widget reaches gtk_widget_queue_draw(),
+ * which says nothing about which Ansel code owned the bad pointer. In debug-capable builds
+ * both calls are rerouted through a wrapper that names the caller's file and line, so an
+ * ownership/lifetime bug points at the source line that queued the redraw. Toggle state
+ * changes are wrapped for the same reason: they usually precede a redraw, so catching the
+ * invalid object here surfaces the first error rather than the secondary redraw assertion.
+ * ------------------------------------------------------------------------------------------ */
+#ifdef _DEBUG
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line);
+#define dt_gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw_ext((GtkWidget *)(widget), #widget, __FILE__, __LINE__)
+#define gtk_widget_queue_draw(widget) dt_gtk_widget_queue_draw(widget)
+
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
+                                         const char *file, const int line);
+#define dt_gtk_toggle_button_set_active(toggle_button, active)                                                 \
+  dt_gtk_toggle_button_set_active_ext((GtkToggleButton *)(toggle_button), #toggle_button, active, __FILE__, __LINE__)
+#define gtk_toggle_button_set_active(toggle_button, active)                                                   \
+  dt_gtk_toggle_button_set_active(toggle_button, active)
+#else
+#define dt_gtk_widget_queue_draw(widget) gtk_widget_queue_draw(widget)
+#define dt_gtk_toggle_button_set_active(toggle_button, active) gtk_toggle_button_set_active(toggle_button, active)
+#endif
+
 /* dt_cairo_image_surface_create{,_for_data}() moved to system/screen_metrics.h with the ppd
  * they scale by, so code below this layer can build a device-scaled surface too. This header
  * includes it, so the ~45 files using them by these names are unaffected. */

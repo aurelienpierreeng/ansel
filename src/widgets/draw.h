@@ -36,30 +36,41 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_GUI_DRAW_H
-#define DT_GUI_DRAW_H
+#ifndef DT_WIDGETS_DRAW_H
+#define DT_WIDGETS_DRAW_H
 
-/** some common drawing routines. */
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#include "widgets/cairo_shapes.h"   // dt_draw_star, dt_draw_line
-#endif
+/* Cairo drawing shared across the application: grids, histograms, mask overlay shapes, and
+ * the spline sampler the tone-curve widgets draw from.
+ *
+ * This is a leaf header on purpose. Everything it paints with -- the overlay tint, the theme
+ * palette, the DPI scale, the mouse hit radius -- is read through widgets/widget_settings.h,
+ * which the application pushes into. Nothing here reaches for a global, so no drawing code
+ * has to drag in gui/ or develop/ to put a line on screen. The one develop/ type it mentions,
+ * dt_develop_t, is an opaque pointer threaded through to shape callbacks and never
+ * dereferenced.
+ */
 
 #include "common/curve_tools.h"
 #include "common/logging.h"
 #include "common/splines.h"
-#include "develop/develop.h"
+#include "system/mem_alloc.h"
+#include "system/openmp.h"        // __OMP_DECLARE_SIMD__, __OMP_PARALLEL_FOR_SIMD__
+#include "system/screen_metrics.h"
+#include "widgets/paint.h"          // DTGTKCairoPaintIconFunc
+#include "widgets/widget_settings.h"
+
 #include <cairo.h>
 #include <glib.h>
+#include <gtk/gtk.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <gui/gtk.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct dt_develop_t;
 
 #ifndef M_PI
 #define M_PI 3.141592654
@@ -84,9 +95,39 @@ extern "C" {
 #define DT_DRAW_RADIUS_NODE          DT_PIXEL_APPLY_DPI_DPP(5.0f * DT_DRAW_SIZE_GLOBAL_FACTOR)
 #define DT_DRAW_RADIUS_NODE_SELECTED (1.25f * DT_DRAW_RADIUS_NODE)
 
-// used to detect the area where rotation of a shape is possible. Don't apply the global factor here since it's an user interaction area.
-#define DT_DRAW_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI_DPP(50.0f)
-#define DT_DRAW_SELECTION_ROTATION_RADIUS(dev)   (DT_DRAW_SELECTION_ROTATION_AREA / dt_dev_get_zoom_level((dt_develop_t *)dev))  
+/***** PRIMITIVES */
+
+/** Draw a rating star: `r1` outer radius, `r2` inner. */
+static inline void dt_draw_star(cairo_t *cr, float x, float y, float r1, float r2)
+{
+  const float d = 2.0 * M_PI * 0.1f;
+  const float dx[10] = { sinf(0.0),   sinf(d),     sinf(2 * d), sinf(3 * d), sinf(4 * d),
+                         sinf(5 * d), sinf(6 * d), sinf(7 * d), sinf(8 * d), sinf(9 * d) };
+  const float dy[10] = { cosf(0.0),   cosf(d),     cosf(2 * d), cosf(3 * d), cosf(4 * d),
+                         cosf(5 * d), cosf(6 * d), cosf(7 * d), cosf(8 * d), cosf(9 * d) };
+
+  cairo_move_to(cr, x + r1 * dx[0], y - r1 * dy[0]);
+  for(int k = 1; k < 10; k++)
+    if(k & 1)
+      cairo_line_to(cr, x + r2 * dx[k], y - r2 * dy[k]);
+    else
+      cairo_line_to(cr, x + r1 * dx[k], y - r1 * dy[k]);
+  cairo_close_path(cr);
+}
+
+/** A straight segment from (left, top) to (right, bottom). */
+static inline void dt_draw_line(cairo_t *cr, float left, float top, float right, float bottom)
+{
+  cairo_move_to(cr, left, top);
+  cairo_line_to(cr, right, bottom);
+}
+
+/** Set the cairo source to a GdkRGBA, alpha included. */
+static inline void set_color(cairo_t *cr, GdkRGBA color)
+{
+  cairo_set_source_rgba(cr, color.red, color.green, color.blue, color.alpha);
+}
+
 
 /**dash type */
 typedef enum dt_draw_dash_type_t
@@ -106,15 +147,11 @@ typedef struct dt_draw_curve_t
 /** set color based on gui overlay preference */
 static inline void dt_draw_set_color_overlay(cairo_t *cr, gboolean bright, double alpha)
 {
-  double amt;
-  const struct dt_gui_gtk_t *gui = dt_gui_get_global();
+  const dt_widget_overlay_color_t *overlay = dt_widget_overlay_color();
+  const double amt = bright ? 0.5 + overlay->contrast * 0.5
+                            : (1.0 - overlay->contrast) * 0.5;
 
-  if(bright)
-    amt = 0.5 + gui->overlay_contrast * 0.5;
-  else
-    amt = (1.0 - gui->overlay_contrast) * 0.5;
-
-  cairo_set_source_rgba(cr, gui->overlay_red * amt, gui->overlay_green * amt, gui->overlay_blue * amt, alpha);
+  cairo_set_source_rgba(cr, overlay->red * amt, overlay->green * amt, overlay->blue * amt, alpha);
 }
 
 
@@ -498,6 +535,61 @@ static inline GdkPixbuf *dt_draw_paint_to_pixbuf
                                                (GdkPixbufDestroyNotify)free, NULL);
   cairo_surface_destroy(cst);
   return pixbuf;
+}
+
+/* Device-scaled pixbuf/surface bridges. dt_cairo_image_surface_* live one layer down in
+ * system/screen_metrics.h with the ppd they scale by; these two need gdk-pixbuf, so they
+ * sit here instead. */
+
+static inline cairo_surface_t *dt_gdk_cairo_surface_create_from_pixbuf(const GdkPixbuf *pixbuf, int scale,
+                                                                      GdkWindow *for_window)
+{
+  cairo_surface_t *cst = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, for_window);
+  cairo_surface_set_device_scale(cst, dt_screen_ppd(), dt_screen_ppd());
+  return cst;
+}
+
+static inline GdkPixbuf *dt_gdk_pixbuf_new_from_file_at_size(const char *filename, int width, int height,
+                                                             GError **error)
+{
+  return gdk_pixbuf_new_from_file_at_size(filename, width * dt_screen_ppd(), height * dt_screen_ppd(), error);
+}
+
+/** Trace a rounded rectangle as a closed sub-path, leaving it current for the caller to
+ * stroke, fill or clip. */
+static inline void dt_draw_rounded_rectangle_path(cairo_t *cr, float x, float y, float width, float height,
+                                                  float radius)
+{
+  const float degrees = M_PI / 180.0;
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, x + width - radius, y + radius, radius, -90 * degrees, 0 * degrees);
+  cairo_arc(cr, x + width - radius, y + height - radius, radius, 0 * degrees, 90 * degrees);
+  cairo_arc(cr, x + radius, y + height - radius, radius, 90 * degrees, 180 * degrees);
+  cairo_arc(cr, x + radius, y + radius, radius, 180 * degrees, 270 * degrees);
+  cairo_close_path(cr);
+}
+
+/** Fill a rectangle whose corners are rounded to a fifth of its height. */
+static inline void dt_gui_draw_rounded_rectangle(cairo_t *cr, float width, float height, float x, float y)
+{
+  dt_draw_rounded_rectangle_path(cr, x, y, width, height, height / 5.0f);
+  cairo_fill(cr);
+}
+
+/** A plus sign centred on (x, y), each arm `size` long. The line width is scaled relative to
+ * whatever the caller had set, and restored afterwards, so it tracks the surrounding icon. */
+static inline void dt_draw_plus_sign(cairo_t *cr, float x, float y, float size, float line_width_scale)
+{
+  const float base_line_width = cairo_get_line_width(cr);
+  cairo_set_line_width(cr, base_line_width * line_width_scale);
+
+  cairo_move_to(cr, x, y - size);
+  cairo_line_to(cr, x, y + size);
+  cairo_move_to(cr, x - size, y);
+  cairo_line_to(cr, x + size, y);
+
+  cairo_stroke(cr);
+  cairo_set_line_width(cr, base_line_width);
 }
 
 /***** SHAPES */
@@ -930,7 +1022,7 @@ static inline GdkPixbuf *dt_draw_get_pixbuf_from_cairo(DTGTKCairoPaintIconFunc p
 {
   cairo_surface_t *cst = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
   cairo_t *cr = cairo_create(cst);
-  dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BUTTON_FG, 1.0);
+  dt_widget_set_source_rgba(cr, DT_GUI_COLOR_BUTTON_FG, 1.0);
   paint(cr, 0, 0, width, height, 0, NULL);
   cairo_destroy(cr);
 
@@ -950,7 +1042,7 @@ static inline GdkPixbuf *dt_draw_get_pixbuf_from_cairo(DTGTKCairoPaintIconFunc p
 }
 #endif
 
-#endif // DT_GUI_DRAW_H
+#endif // DT_WIDGETS_DRAW_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -23,6 +23,8 @@
 #include "system/screen_metrics.h"
 #include "widgets/widget_settings.h"
 
+#include "common/logging.h"
+
 
 #include <stdint.h>
 #include <math.h>
@@ -305,6 +307,174 @@ gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta)
   }
   return FALSE;
 }
+/* ------------------------------------------------------------------------------------------
+ * Theme palette, overlay tint and mouse radius.
+ *
+ * All three used to be fields of dt_gui_gtk_t, which meant a widget had to reach the
+ * application global to find out what colour to paint with or how close a click counts as a
+ * hit. They are toolkit state: the application resolves them (from the CSS theme, from user
+ * preferences, from the darkroom zoom) and pushes them here, and widgets read them.
+ * ------------------------------------------------------------------------------------------ */
+static GdkRGBA _colors[DT_GUI_COLOR_LAST] = { { 0.0, 0.0, 0.0, 1.0 } };
+static dt_widget_overlay_color_t _overlay = { 1.0, 1.0, 1.0, 0.5 };
+static float _mouse_radius = 15.f;
+static float _mouse_radius_clamped = 15.f;
+
+GdkRGBA *dt_widget_colors(void)
+{
+  return _colors;
+}
+
+void dt_widget_set_source_rgb(cairo_t *cr, dt_gui_color_t color)
+{
+  const GdkRGBA bc = _colors[color];
+  cairo_set_source_rgb(cr, bc.red, bc.green, bc.blue);
+}
+
+void dt_widget_set_source_rgba(cairo_t *cr, dt_gui_color_t color, float opacity_coef)
+{
+  const GdkRGBA bc = _colors[color];
+  cairo_set_source_rgba(cr, bc.red, bc.green, bc.blue, bc.alpha * opacity_coef);
+}
+
+const dt_widget_overlay_color_t *dt_widget_overlay_color(void)
+{
+  return &_overlay;
+}
+
+void dt_widget_set_overlay_color(double red, double green, double blue, double contrast)
+{
+  _overlay.red = red;
+  _overlay.green = green;
+  _overlay.blue = blue;
+  _overlay.contrast = contrast;
+}
+
+float dt_widget_mouse_radius(void)
+{
+  return _mouse_radius;
+}
+
+float dt_widget_mouse_radius_clamped(void)
+{
+  return _mouse_radius_clamped;
+}
+
+void dt_widget_set_mouse_radius(float radius, float clamped)
+{
+  _mouse_radius = radius;
+  _mouse_radius_clamped = clamped;
+}
+
+
+/* Scroll deltas as fractions. Same event arithmetic as the discrete-unit pair below, minus
+ * the accumulation: callers of this form want the raw smooth-scroll amount. */
+gboolean dt_gui_get_scroll_deltas(const GdkEventScroll *event, gdouble *delta_x, gdouble *delta_y)
+{
+  // avoid double counting real and emulated events when receiving smooth scrolls
+  if(gdk_event_get_pointer_emulated((GdkEvent *)event)) return FALSE;
+
+  gboolean handled = FALSE;
+  switch(event->direction)
+  {
+    // is one-unit cardinal, e.g. from a mouse scroll wheel
+    case GDK_SCROLL_LEFT:
+      if(delta_x)
+      {
+        *delta_x = _reverse_x ? 1.0 : -1.0;
+        if(delta_y) *delta_y = 0.0;
+        handled = TRUE;
+      }
+      break;
+    case GDK_SCROLL_RIGHT:
+      if(delta_x)
+      {
+        *delta_x = _reverse_x ? -1.0 : 1.0;
+        if(delta_y) *delta_y = 0.0;
+        handled = TRUE;
+      }
+      break;
+    case GDK_SCROLL_UP:
+      if(delta_y)
+      {
+        if(delta_x) *delta_x = 0.0;
+        *delta_y = _reverse_y ? 1.0 : -1.0;
+        handled = TRUE;
+      }
+      break;
+    case GDK_SCROLL_DOWN:
+      if(delta_y)
+      {
+        if(delta_x) *delta_x = 0.0;
+        *delta_y = _reverse_y ? -1.0 : 1.0;
+        handled = TRUE;
+      }
+      break;
+    // is trackpad (or touch) scroll
+    case GDK_SCROLL_SMOOTH:
+      if((delta_x && event->delta_x != 0) || (delta_y && event->delta_y != 0))
+      {
+#ifdef GDK_WINDOWING_QUARTZ // on macOS deltas need to be scaled
+        if(delta_x) *delta_x = _reverse_x ? -event->delta_x / 50. : event->delta_x / 50.;
+        if(delta_y) *delta_y = _reverse_y ? -event->delta_y / 50. : event->delta_y / 50.;
+#else
+        if(delta_x) *delta_x = _reverse_x ? -event->delta_x : event->delta_x;
+        if(delta_y) *delta_y = _reverse_y ? -event->delta_y : event->delta_y;
+#endif
+        handled = TRUE;
+      }
+      break;
+    default:
+      break;
+  }
+  return handled;
+}
+
+gboolean dt_gui_get_scroll_delta(const GdkEventScroll *event, gdouble *delta)
+{
+  gdouble delta_x, delta_y;
+  if(dt_gui_get_scroll_deltas(event, &delta_x, &delta_y))
+  {
+    *delta = delta_x + delta_y;
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+#ifdef _DEBUG
+void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const char *file, const int line)
+{
+  if(!GTK_IS_WIDGET(widget))
+  {
+    dt_print(DT_DEBUG_GTK, "gtk_widget_queue_draw(%s) called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
+             name, file, line, widget);
+    return;
+  }
+  else
+    dt_print(DT_DEBUG_GTK, "queueing redraw for `%s` (`%s`) at %s:%d\n",
+             name, gtk_widget_get_name(widget), file, line);
+
+  (gtk_widget_queue_draw)(widget);
+}
+
+void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const char *name, const gboolean active,
+                                         const char *file, const int line)
+{
+  if(!GTK_IS_TOGGLE_BUTTON(toggle_button))
+  {
+    dt_print(DT_DEBUG_GTK, "gtk_toggle_button_set_active(%s) called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
+             name, file, line, toggle_button);
+    return;
+  }
+  else
+    dt_print(DT_DEBUG_GTK, "setting toggle button `%s` (`%s`) to %s at %s:%d\n",
+             name, gtk_widget_get_name(GTK_WIDGET(toggle_button)), active ? "active" : "inactive", file, line);
+
+  (gtk_toggle_button_set_active)(toggle_button, active);
+}
+#endif
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

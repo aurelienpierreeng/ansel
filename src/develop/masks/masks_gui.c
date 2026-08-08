@@ -25,7 +25,7 @@
 #include "develop/imageop_gui.h"
 #include "widgets/paint.h"
 #include "gui/actions/menu.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "gui/gtk.h"
 
 #include <math.h>
