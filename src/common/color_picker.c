@@ -39,7 +39,6 @@
 #include "common/pixelpipe_cache_alloc.h"
 #include "pixel/iop_profile.h"
 #include "pixel/format.h"
-#include "develop/imageop.h"
 #include "develop/imageop_math.h"
 
 static inline size_t _box_size(const int *const box)
