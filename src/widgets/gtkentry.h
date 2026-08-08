@@ -53,6 +53,13 @@ const dt_gtkentry_completion_spec *dt_gtkentry_get_default_path_compl_list();
 gchar *dt_gtkentry_build_completion_tooltip_text(const gchar *header,
                                                  const dt_gtkentry_completion_spec *compl_list);
 
+// event handler for "key-press-event" of a GtkTreeView, deciding whether focus should switch
+// to the GtkSearchEntry that filters it
+gboolean dt_gui_search_start(GtkWidget *widget, GdkEventKey *event, GtkSearchEntry *entry);
+
+// event handler for "stop-search" of a GtkSearchEntry
+void dt_gui_search_stop(GtkSearchEntry *entry, GtkWidget *widget);
+
 G_END_DECLS
 
 #endif // DT_WIDGETS_GTKENTRY_H

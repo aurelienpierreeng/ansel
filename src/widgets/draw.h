@@ -51,7 +51,6 @@
  */
 
 #include "common/curve_tools.h"
-#include "common/logging.h"
 #include "common/splines.h"
 #include "system/mem_alloc.h"
 #include "system/openmp.h"        // __OMP_DECLARE_SIMD__, __OMP_PARALLEL_FOR_SIMD__
@@ -694,7 +693,7 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
   cairo_stroke(cr);
 
-  if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+  if(dt_widget_debug_overlays())
   {
     const float debug_radius = DT_GUI_MOUSE_EFFECT_RADIUS;
     cairo_arc(cr, x, y, debug_radius, 0.0, 2.0 * M_PI);

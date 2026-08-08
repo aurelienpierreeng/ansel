@@ -12,6 +12,9 @@ set(ANSEL_WIDGETS_SOURCES
   accelerators.c
   bauhaus.c
   button.c
+  collapsible_section.c
+  container.c
+  dialog.c
   drawingarea.c
   expander.c
   focus_peaking.c
@@ -19,9 +22,13 @@ set(ANSEL_WIDGETS_SOURCES
   gtkentry.c
   icon.c
   icon_cell_renderer.c
+  label.c
+  notebook.c
   paint.c
+  popup.c
   resize_handle.c
   resetlabel.c
+  scroll_wrap.c
   sidepanel.c
   thumbnail_btn.c
   togglebutton.c

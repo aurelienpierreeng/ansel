@@ -21,6 +21,7 @@
 
 #include <gtk/gtk.h>
 #include <pthread.h>
+#include <stdarg.h>
 
 #include "system/screen_metrics.h"
 
@@ -71,6 +72,24 @@ void dt_gui_freeze_begin_(const char *file, int line);
 void dt_gui_freeze_end_(const char *file, int line);
 void dt_gui_freeze_reset(void); // hard-reset depth to 0 (GUI init only)
 
+/* Bracket programmatic widget updates with these so the widget's own "value-changed" handler
+ * does not mistake them for user input. The scope-guard form ends the freeze automatically on
+ * every exit path, including an early return, which the raw pair leaks. */
+#define dt_gui_freeze_begin() dt_gui_freeze_begin_(__FILE__, __LINE__)
+#define dt_gui_freeze_end()   dt_gui_freeze_end_(__FILE__, __LINE__)
+
+typedef struct { const char *file; int line; } dt_gui_freeze_token_t;
+static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
+{
+  dt_gui_freeze_end_(t->file, t->line);
+}
+#define DT_FREEZE_CAT_(a, b) a##b
+#define DT_FREEZE_CAT(a, b) DT_FREEZE_CAT_(a, b)
+#define dt_gui_widget_freeze()                                                       \
+  dt_gui_freeze_token_t DT_FREEZE_CAT(_dt_freeze_guard_, __LINE__)                    \
+      __attribute__((cleanup(dt_gui_freeze_release_))) = { __FILE__, __LINE__ };      \
+  dt_gui_freeze_begin_(__FILE__, __LINE__)
+
 /* Scroll deltas in discrete units, accumulating smooth-scroll fractions and discarding
  * pointer-emulated duplicates. Pure GTK event arithmetic. */
 gboolean dt_gui_get_scroll_unit_deltas(const GdkEventScroll *event, int *delta_x, int *delta_y);
@@ -108,6 +127,78 @@ typedef void (*dt_widget_cursor_handler_t)(GdkCursorType cursor);
 void dt_widget_set_cursor_handler(dt_widget_cursor_handler_t handler);
 void dt_widget_set_cursor(GdkCursorType cursor);
 
+/* ------------------------------------------------------------------------------------------
+ * Diagnostics.
+ *
+ * A debug build prints straight to stdout; a release build compiles the call away. widgets/
+ * deliberately does not route diagnostics through the application: a logging system means a
+ * global flags word and a global stream, and reaching for either is what this module exists to
+ * avoid. Nothing is lost by keeping it local -- these messages describe widget internals, and
+ * whoever is reading them is running a debug build anyway.
+ * ------------------------------------------------------------------------------------------ */
+#ifdef _DEBUG
+void dt_widget_log(const char *format, ...) G_GNUC_PRINTF(1, 2);
+#define dt_widget_log_enabled() TRUE
+#else
+#define dt_widget_log(...) do { } while(0)
+#define dt_widget_log_enabled() FALSE
+#endif
+
+/** Whether to draw diagnostic overlays (hit-test radii and the like) on top of normal
+ *  rendering. A debugging aid the host switches on; off by default. */
+gboolean dt_widget_debug_overlays(void);
+void dt_widget_set_debug_overlays(gboolean enabled);
+
+/* ------------------------------------------------------------------------------------------
+ * Per-widget persistence.
+ *
+ * A resizable panel remembers the height the user dragged it to; a collapsible section
+ * remembers whether they left it open. The key is supplied by whoever built the widget --
+ * widgets/ neither invents keys nor knows where they are stored, because a configuration
+ * system is application state reached through a global, which is exactly what this module
+ * exists to keep out of the toolkit.
+ *
+ * Unregistered, nothing is stored and every read reports "not set", so a widget falls back to
+ * its default size or its collapsed state. That is also the correct behaviour for any host
+ * that has no preferences to offer.
+ * ------------------------------------------------------------------------------------------ */
+typedef gboolean (*dt_widget_stored_int_getter_t)(const char *key, int *value);
+typedef void (*dt_widget_stored_int_setter_t)(const char *key, int value);
+typedef gboolean (*dt_widget_stored_bool_getter_t)(const char *key);
+typedef void (*dt_widget_stored_bool_setter_t)(const char *key, gboolean value);
+
+void dt_widget_set_storage_handlers(dt_widget_stored_int_getter_t get_int,
+                                    dt_widget_stored_int_setter_t set_int,
+                                    dt_widget_stored_bool_getter_t get_bool,
+                                    dt_widget_stored_bool_setter_t set_bool);
+
+/** Read a stored integer. Returns FALSE (leaving @p value untouched) if nothing is stored. */
+gboolean dt_widget_stored_int(const char *key, int *value);
+void dt_widget_store_int(const char *key, int value);
+
+/** Read a stored flag. FALSE when nothing is stored, which is the collapsed/default state. */
+gboolean dt_widget_stored_bool(const char *key);
+void dt_widget_store_bool(const char *key, gboolean value);
+
+/* Has the application loaded its CSS theme yet? Dialogs that can run during startup -- before
+ * any styling exists -- pad themselves by hand when it has not. */
+gboolean dt_widget_theme_loaded(void);
+void dt_widget_set_theme_loaded(gboolean loaded);
+
+/* Return keyboard focus to the application's main working area. A widget that swallows keys
+ * (a text entry) has to hand focus back when the user presses Escape, but which widget is
+ * "the main area" is the host's business -- the image in darkroom, the grid in lighttable.
+ * Unregistered, the request is dropped. */
+typedef void (*dt_widget_refocus_handler_t)(void);
+void dt_widget_set_refocus_handler(dt_widget_refocus_handler_t handler);
+void dt_widget_refocus(void);
+
+/* A GtkNotebook the host registered an owner for has switched page. The host relays this on
+ * its own signal bus; widgets/ has no bus and no idea what the owner is. */
+typedef void (*dt_widget_notebook_page_handler_t)(gpointer owner);
+void dt_widget_set_notebook_page_handler(dt_widget_notebook_page_handler_t handler);
+void dt_widget_notebook_page_changed(gpointer owner);
+
 /* Toolkit metrics: the UI zoom factor, the integer device scale, and the resolved root font
  * size in pixels. Widgets scale themselves by these; the application computes them from the
  * screen and the theme and pushes them here. They lived in dt_gui_gtk_t, which meant a widget
@@ -121,6 +212,13 @@ void dt_widget_set_ppd(double ppd);
 /** Resolved root font size in px; 16.0 until the application resolves it. */
 double dt_widget_em_size(void);
 void dt_widget_set_em_size(double em);
+
+/** The device scale GTK reports for the monitor `widget` is on, i.e. how many device pixels
+ *  it puts in a logical one. Probed from the toolkit, not from our own settings. */
+double dt_get_system_gui_ppd(GtkWidget *widget);
+
+/** Modifier keys currently held, independent of any key event. */
+GdkModifierType dt_key_modifier_state(void);
 
 /* Scale a 96-DPI-baseline value. UI: logical pixels GTK will scale further. DEVICE: raw
  * device pixels for cairo surfaces and hit-tests, which GTK does not scale for us. */

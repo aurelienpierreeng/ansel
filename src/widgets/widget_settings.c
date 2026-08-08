@@ -23,12 +23,12 @@
 #include "system/screen_metrics.h"
 #include "widgets/widget_settings.h"
 
-#include "common/logging.h"
 
 
 #include <stdint.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 
 // Toolkit state, set by the application during GUI init and read everywhere after.
@@ -307,6 +307,105 @@ gboolean dt_gui_get_scroll_unit_delta(const GdkEventScroll *event, int *delta)
   }
   return FALSE;
 }
+#ifdef _DEBUG
+void dt_widget_log(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap, format);
+  vfprintf(stdout, format, ap);
+  va_end(ap);
+  // Unflushed diagnostics are lost when the process does not exit cleanly, which is exactly
+  // the run you were debugging.
+  fflush(stdout);
+}
+#endif
+
+static gboolean _debug_overlays = FALSE;
+
+gboolean dt_widget_debug_overlays(void)
+{
+  return _debug_overlays;
+}
+
+void dt_widget_set_debug_overlays(gboolean enabled)
+{
+  _debug_overlays = enabled;
+}
+
+static dt_widget_stored_int_getter_t _stored_int_getter = NULL;
+static dt_widget_stored_int_setter_t _stored_int_setter = NULL;
+static dt_widget_stored_bool_getter_t _stored_bool_getter = NULL;
+static dt_widget_stored_bool_setter_t _stored_bool_setter = NULL;
+
+void dt_widget_set_storage_handlers(dt_widget_stored_int_getter_t get_int,
+                                    dt_widget_stored_int_setter_t set_int,
+                                    dt_widget_stored_bool_getter_t get_bool,
+                                    dt_widget_stored_bool_setter_t set_bool)
+{
+  _stored_int_getter = get_int;
+  _stored_int_setter = set_int;
+  _stored_bool_getter = get_bool;
+  _stored_bool_setter = set_bool;
+}
+
+gboolean dt_widget_stored_int(const char *key, int *value)
+{
+  if(!key || !_stored_int_getter) return FALSE;
+  return _stored_int_getter(key, value);
+}
+
+void dt_widget_store_int(const char *key, int value)
+{
+  if(key && _stored_int_setter) _stored_int_setter(key, value);
+}
+
+gboolean dt_widget_stored_bool(const char *key)
+{
+  if(!key || !_stored_bool_getter) return FALSE;
+  return _stored_bool_getter(key);
+}
+
+void dt_widget_store_bool(const char *key, gboolean value)
+{
+  if(key && _stored_bool_setter) _stored_bool_setter(key, value);
+}
+
+static gboolean _theme_loaded = FALSE;
+
+gboolean dt_widget_theme_loaded(void)
+{
+  return _theme_loaded;
+}
+
+void dt_widget_set_theme_loaded(gboolean loaded)
+{
+  _theme_loaded = loaded;
+}
+
+static dt_widget_refocus_handler_t _refocus_handler = NULL;
+static dt_widget_notebook_page_handler_t _notebook_page_handler = NULL;
+
+void dt_widget_set_refocus_handler(dt_widget_refocus_handler_t handler)
+{
+  _refocus_handler = handler;
+}
+
+void dt_widget_refocus(void)
+{
+  if(_refocus_handler) _refocus_handler();
+}
+
+void dt_widget_set_notebook_page_handler(dt_widget_notebook_page_handler_t handler)
+{
+  _notebook_page_handler = handler;
+}
+
+void dt_widget_notebook_page_changed(gpointer owner)
+{
+  if(_notebook_page_handler) _notebook_page_handler(owner);
+}
+
+
 /* ------------------------------------------------------------------------------------------
  * Theme palette, overlay tint and mouse radius.
  *
@@ -447,12 +546,12 @@ void dt_gtk_widget_queue_draw_ext(GtkWidget *widget, const char *name, const cha
 {
   if(!GTK_IS_WIDGET(widget))
   {
-    dt_print(DT_DEBUG_GTK, "gtk_widget_queue_draw(%s) called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
+    dt_widget_log("gtk_widget_queue_draw(%s) called with a non-WIDGET or NULL widget at %s:%d (widget=%p)\n",
              name, file, line, widget);
     return;
   }
   else
-    dt_print(DT_DEBUG_GTK, "queueing redraw for `%s` (`%s`) at %s:%d\n",
+    dt_widget_log("queueing redraw for `%s` (`%s`) at %s:%d\n",
              name, gtk_widget_get_name(widget), file, line);
 
   (gtk_widget_queue_draw)(widget);
@@ -463,17 +562,49 @@ void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const c
 {
   if(!GTK_IS_TOGGLE_BUTTON(toggle_button))
   {
-    dt_print(DT_DEBUG_GTK, "gtk_toggle_button_set_active(%s) called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
+    dt_widget_log("gtk_toggle_button_set_active(%s) called with a non-TOGGLE_BUTTON or NULL widget at %s:%d (toggle_button=%p)\n",
              name, file, line, toggle_button);
     return;
   }
   else
-    dt_print(DT_DEBUG_GTK, "setting toggle button `%s` (`%s`) to %s at %s:%d\n",
+    dt_widget_log("setting toggle button `%s` (`%s`) to %s at %s:%d\n",
              name, gtk_widget_get_name(GTK_WIDGET(toggle_button)), active ? "active" : "inactive", file, line);
 
   (gtk_toggle_button_set_active)(toggle_button, active);
 }
 #endif
+
+// refactored function to read current ppd, because gtk for osx has been unreliable
+// we use the specific function here. Anyway, if nothing meaningful is found we default back to 1.0
+double dt_get_system_gui_ppd(GtkWidget *widget)
+{
+  double res = 0.0f;
+#ifdef GDK_WINDOWING_QUARTZ
+  res = dt_osx_get_ppd();
+#else
+  res = gtk_widget_get_scale_factor(widget);
+#endif
+  if((res < 1.0f) || (res > 4.0f))
+  {
+    dt_widget_log("[dt_get_system_gui_ppd] can't detect system ppd\n");
+    return 1.0f;
+  }
+  dt_widget_log("[dt_get_system_gui_ppd] system ppd is %f\n", res);
+  return res;
+}
+
+GdkModifierType dt_key_modifier_state()
+{
+  guint state = 0;
+  GdkWindow *window = gtk_widget_get_window(dt_widget_root_window());
+  gdk_device_get_state(gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_window_get_display(window))), window, NULL, &state);
+  return state;
+
+/* FIXME double check correct way of doing this (merge conflict with Input System NG 20210319)
+  GdkKeymap *keymap = gdk_keymap_get_for_display(gdk_display_get_default());
+  return gdk_keymap_get_modifier_state(keymap) & gdk_keymap_get_modifier_mask(keymap, GDK_MODIFIER_INTENT_DEFAULT_MOD_MASK);
+*/
+}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

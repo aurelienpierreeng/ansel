@@ -55,14 +55,26 @@
 #define DT_GUI_GTK_H
 
 #include "common/glib_utils.h"
-#include "widgets/widget_settings.h"
-#include "widgets/widget_style.h"
 #include "common/macros.h"
-#include "system/mem_alloc.h"
 #include "common/paths.h"
+#include "system/mem_alloc.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/window_manager.h"
+
+/* Re-exported while the split lands: every widget helper that used to be declared here now
+ * lives in its own widgets/ module. Consumers are being moved onto the specific headers one
+ * by one; until that sweep finishes these keep the existing call sites compiling. */
 #include "widgets/accelerators.h"
+#include "widgets/collapsible_section.h"
+#include "widgets/container.h"
+#include "widgets/dialog.h"
+#include "widgets/gtkentry.h"
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/popup.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 #include <gtk/gtk.h>
 #include <stdint.h>
@@ -75,70 +87,6 @@ extern "C" {
 
 /* --- Moved from darktable.h: GUI-flavored helpers belong to the GUI layer, and
  * the orchestrator header must not export GTK/Pango API to the whole application. --- */
-
-/* ------------------------------------------------------------------------------------------
- * Widget-callback suppression (replaces the legacy raw `dt_gui_get_global()->reset` counter).
- *
- * Programmatic widget updates must not re-trigger their own "value-changed" handlers. Bracket
- * such updates with dt_gui_freeze_begin()/dt_gui_freeze_end() (or the dt_gui_widget_freeze()
- * scope guard), and open every widget callback with `if(dt_gui_widgets_suppressed()) return;`.
- *
- * The depth is managed centrally: it is mutated only on the GUI thread (off-thread begin/end
- * are no-ops, so worker threads -- e.g. thumbnail/export reload_defaults -- can never race or
- * drift it), clamped at >= 0, and any unbalanced end is logged with its file:line rather than
- * silently drifting negative and disabling suppression for the rest of the session.
- * ------------------------------------------------------------------------------------------ */
-// Implemented in widgets/widget_settings.c -- declared there, re-exposed here so existing
-// consumers keep including only gui/gtk.h.
-#define dt_gui_freeze_begin() dt_gui_freeze_begin_(__FILE__, __LINE__)
-#define dt_gui_freeze_end()   dt_gui_freeze_end_(__FILE__, __LINE__)
-
-typedef struct { const char *file; int line; } dt_gui_freeze_token_t;
-static inline void dt_gui_freeze_release_(dt_gui_freeze_token_t *t)
-{
-  dt_gui_freeze_end_(t->file, t->line);
-}
-// Scope guard: begins a freeze that is automatically ended when the enclosing block exits,
-// including via early return/goto/break. Use it for spans that contain an early exit (the
-// raw begin/end pair would leak the depth on such paths).
-#define DT_FREEZE_CAT_(a, b) a##b
-#define DT_FREEZE_CAT(a, b) DT_FREEZE_CAT_(a, b)
-#define dt_gui_widget_freeze()                                                       \
-  dt_gui_freeze_token_t DT_FREEZE_CAT(_dt_freeze_guard_, __LINE__)                    \
-      __attribute__((cleanup(dt_gui_freeze_release_))) = { __FILE__, __LINE__ };      \
-  dt_gui_freeze_begin_(__FILE__, __LINE__)
-
-/**
- * @brief Remove underscore from GUI labels containing mnemonics
- */
-// Remove underscore from GUI labels containing mnemonics
-static inline gchar *delete_underscore(const char *s)
-{
-  return dt_string_replace(s, "_");
-}
-
-/**
- * @brief Remove Pango/Gtk markup and accels mnemonics from text labels.
- * If the markup parsing fails, fallback to returning a copy of the original string.
- *
- * @param s Original string to clean
- * @return gchar* Newly-allocated string. The caller is responsible for freeing it.
- */
-static inline gchar *strip_markup(const char *s)
-{
-  if(IS_NULL_PTR(s)) return g_strdup("");
-
-  PangoAttrList *attrs = NULL;
-  gchar *plain = NULL;
-
-  const gchar *underscore = "_";
-  gunichar mnemonic = underscore[0];
-  if(!pango_parse_markup(s, -1, mnemonic, &attrs, &plain, NULL, NULL))
-    plain = delete_underscore(s);
-
-  pango_attr_list_unref(attrs);
-  return plain;
-}
 
 /* Application-wide GUI singleton accessor: declared here by the owning lib, implemented by
  * the orchestrator (darktable.c, next to dt_pixelpipe_cache_get_global()). It binds
@@ -197,12 +145,6 @@ GtkWidget *dt_gui_center_widget(void);
  * been resolved. Standalone dialogs may run after gtk_init() but before the
  * main Ansel GUI allocation when startup needs user input. */
 // DT_GUI_BOX_SPACING now comes from widgets/widget_settings.h
-
-enum
-{
-  TREE_LIST_MIN_ROWS = 3,
-  TREE_LIST_MAX_ROWS = 11
-};
 
 typedef struct dt_gui_widgets_t
 {
@@ -285,44 +227,6 @@ typedef struct dt_gui_gtk_t
   dt_pthread_mutex_t mutex;
 } dt_gui_gtk_t;
 
-typedef struct _gui_collapsible_section_t
-{
-  GtkBox *parent;       // the parent widget
-  const char *confname; // configuration name for the toggle status
-  GtkWidget *toggle;    // toggle button
-  GtkWidget *expander;  // the expanded
-  GtkBox *container;    // the container for all widgets into the section
-  GtkWidget *label;     // The section label
-} dt_gui_collapsible_section_t;
-
-typedef enum dt_ui_resize_mode_t
-{
-  // Auto-fit: the area shrinks to its content (up to the user/max height). Best for widgets
-  // updated rarely; their height following content is helpful, not disruptive.
-  DT_UI_RESIZE_DYNAMIC = 0,
-  // Fixed: the area keeps the user-set (or default) height regardless of content, so it never
-  // shifts the surrounding layout when its content changes. Best for widgets that refresh on
-  // hover/selection (tags, notes, metadata) and the collection/library list.
-  DT_UI_RESIZE_STATIC
-} dt_ui_resize_mode_t;
-
-typedef struct dt_gui_widget_auto_height_t
-{
-  char *config_str;   // conf key persisting the user-chosen height (px); owned
-  int min_size;       // minimum height floor in device pixels
-  int last_height;    // last applied bare (pre-padding) height, shared with the drag handle
-  dt_ui_resize_mode_t mode;
-  GtkTreeModel *model;
-  GtkTextBuffer *buffer;
-  gulong model_row_inserted;
-  gulong model_row_deleted;
-  gulong model_row_changed;
-  gulong model_rows_reordered;
-  gulong model_row_expanded;
-  gulong model_row_collapsed;
-  gulong buffer_changed;
-} dt_gui_widget_auto_height_t;
-
 
 
 
@@ -331,18 +235,6 @@ typedef struct dt_gui_widget_auto_height_t
 
 // call class function to add or remove CSS classes (need to be set on top of this file as first function is used in this file)
 
-/**
- * @brief Set a symbolic icon on an image widget, optionally forcing a specific color.
- *
- * gtk_image_set_from_icon_name() colors symbolic icons from the current CSS "color", but
- * ansel.css's main theme provider is loaded at GTK_STYLE_PROVIDER_PRIORITY_USER + 1 (gui/gtk.c),
- * which outranks any per-widget provider added at the more common
- * GTK_STYLE_PROVIDER_PRIORITY_APPLICATION and silently wins the cascade. Loading the icon as a
- * pre-tinted pixbuf via GtkIconInfo sidesteps CSS entirely, so the requested color always wins.
- * Pass color = NULL for the normal (untinted, theme-foreground) rendering.
- */
-void dt_gui_set_symbolic_icon(GtkWidget *image, const char *icon_name, GtkIconSize size, const GdkRGBA *color);
-
 int dt_gui_gtk_init(dt_gui_gtk_t *gui);
 void dt_gui_gtk_run(dt_gui_gtk_t *gui);
 void dt_gui_gtk_quit();
@@ -350,7 +242,6 @@ void dt_gui_store_last_preset(const char *name);
 int dt_gui_gtk_write_config();
 void dt_widget_set_source_rgb(cairo_t *cr, dt_gui_color_t);
 void dt_widget_set_source_rgba(cairo_t *cr, dt_gui_color_t, float opacity_coef);
-double dt_get_system_gui_ppd(GtkWidget *widget);
 
 /** \brief gives a widget focus in the container */
 void dt_ui_container_focus_widget(dt_ui_t *ui, const dt_ui_container_t c, GtkWidget *w);
@@ -367,24 +258,13 @@ void dt_ui_notify_user();
 /** \brief get visible state of panel */
 gboolean dt_ui_panel_visible(dt_ui_t *ui, const dt_ui_panel_t);
 /**  \brief get width of right, left, or bottom panel */
-int dt_ui_panel_get_size(dt_ui_t *ui, const dt_ui_panel_t p);
 /** \brief is the panel ancestor of widget */
-gboolean dt_ui_panel_ancestor(dt_ui_t *ui, const dt_ui_panel_t p, GtkWidget *w);
 /** \brief get the center drawable widget */
-GtkWidget *dt_ui_center(dt_ui_t *ui);
-GtkWidget *dt_ui_center_base(dt_ui_t *ui);
 /** \brief get the main window widget */
-GtkWidget *dt_ui_main_window(dt_ui_t *ui);
 
 /** \brief get the log message widget */
-GtkWidget *dt_ui_log_msg(dt_ui_t *ui);
 /** \brief get the toast message widget */
-GtkWidget *dt_ui_toast_msg(dt_ui_t *ui);
 
-GtkBox *dt_ui_get_container(dt_ui_t *ui, const dt_ui_container_t c);
-
-/*  activate ellipsization of the combox entries */
-void dt_ellipsize_combo(GtkComboBox *cbox);
 
 // capitalize strings. Because grammar says sentences start with a capital,
 // and typography says it makes it easier to extract the structure of the text.
@@ -403,70 +283,6 @@ void dt_ellipsize_combo(GtkComboBox *cbox);
 
 #define dt_accels_new_darkroom_locked_action(a, b, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, dt_gui_get_global()->accels->darkroom_accels, c, d, e, f, TRUE, g)
 
-
-static inline void dt_ui_section_label_set(GtkWidget *label)
-{
-  gtk_widget_set_halign(label, GTK_ALIGN_FILL); // make it span the whole available width
-  gtk_label_set_xalign (GTK_LABEL(label), 0.5f);
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END); // ellipsize labels
-  dt_gui_add_class(label, "dt_section_label"); // make sure that we can style these easily
-}
-
-static inline GtkWidget *dt_ui_section_label_new(const gchar *str)
-{
-  gchar *str_cpy = g_strdup(str);
-  dt_capitalize_label(str_cpy);
-  GtkWidget *label = gtk_label_new(str_cpy);
-  dt_free(str_cpy);
-  dt_ui_section_label_set(label);
-  return label;
-};
-
-static inline GtkWidget *dt_ui_label_new(const gchar *str)
-{
-  gchar *str_cpy = g_strdup(str);
-  dt_capitalize_label(str_cpy);
-  GtkWidget *label = gtk_label_new(str_cpy);
-  dt_free(str_cpy);
-  gtk_widget_set_halign(label, GTK_ALIGN_START);
-  gtk_label_set_xalign (GTK_LABEL(label), 0.0f);
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
-  return label;
-};
-
-GtkNotebook *dt_ui_notebook_new();
-
-GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const char *tooltip);
-
-/** \brief Register an opaque owner for a GtkNotebook's page switches, and relay every
- * "switch_page" as DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED(owner).
- *
- * This widget layer does not know or care what @p owner is: it is carried through the
- * signal as-is. Any interested listener (e.g. the color picker, which resets a picker
- * left active on a page the user just switched away from) connects to that signal and
- * casts the payload back to whatever type it registered here. Works on any GtkNotebook,
- * whether created via dt_ui_notebook_new() or a plain gtk_notebook_new().
- */
-void dt_ui_notebook_set_picker_owner(GtkNotebook *notebook, gpointer owner);
-
-// show a dialog box with 2 buttons in case some user interaction is required BEFORE dt's gui is initialised.
-// this expects gtk_init() to be called already which should be the case during most of dt's init phase.
-gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *markup, const char *no_text,
-                                              const char *yes_text);
-
-// same as above, but with 3 buttons: returns 0 for first_text, 1 for second_text, 2 for third_text.
-int dt_gui_show_standalone_three_choice_dialog(const char *title, const char *markup, const char *first_text,
-                                               const char *second_text, const char *third_text);
-
-// similar to the one above. this one asks the user for some string. the hint is shown in the empty entry box
-char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup, const char *placeholder,
-                                           const char *no_text, const char *yes_text);
-
-// Explicitly return keyboard focus to a just-closed modal/dialog window's parent, falling
-// back to the main window if @p parent is NULL or not a window. Call right after destroying
-// a dialog (gtk_widget_destroy / gtk_dialog_run's caller): the transient-for hint is not
-// enough to get focus back reliably on every platform (macOS/quartz in particular).
-void dt_gui_refocus_parent(GtkWindow *parent);
 
 void dt_gui_add_help_link(GtkWidget *widget, char *link);
 
@@ -491,159 +307,7 @@ void dt_gui_set_pango_resolution(PangoLayout *layout);
 // text so it matches the rest of the UI instead of Cairo's defaults. @p widget may be NULL (falls
 // back to the main window, then the screen). Pair with dt_gui_set_pango_resolution() for the DPI.
 
-// return modifier keys currently pressed, independent of any key event
-GdkModifierType dt_key_modifier_state();
 
-
-/**
- * @brief Wrap a scrollable widget in a recessed, vertically resizable scrolled window with a drag handle.
- *
- * Compatible with GtkTreeView, GtkTextView and any other content widget. A drag grip floats on the
- * scrolled window's bottom edge (invisible until hovered); the chosen height is persisted under
- * @p config_str. Returns the wrapper overlay, not the scrolled window.
- *
- * @param w content widget.
- * @param min_size minimum height floor, in device-independent pixels (rescaled by DT_PIXEL_APPLY_DPI).
- *                 In DT_UI_RESIZE_STATIC mode it also serves as the default height before the user drags.
- * @param config_str conf key persisting the user-chosen height (copied internally).
- * @param mode DT_UI_RESIZE_DYNAMIC to auto-fit content, or DT_UI_RESIZE_STATIC to keep a fixed height
- *             regardless of content (avoids layout shifts for hover-/selection-driven widgets).
- */
-GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str, dt_ui_resize_mode_t mode);
-
-/**
- * @brief Return the inner GtkScrolledWindow of a dt_ui_scroll_wrap() wrapper, or NULL.
- */
-GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper);
-
-/**
- * @brief Make a self-drawing widget (typically a GtkDrawingArea graph or scope) vertically resizable.
- *
- * The widget is given a fixed height-request (persisted under @p config_str) and a drag grip floating
- * on its bottom edge — the same grip used by panels, scroll wrappers and the histogram scope. The
- * content is not scrolled: it keeps drawing to its live allocation, only the height-request changes.
- * Returns a wrapper overlay to pack in place of @p area.
- *
- * @param area the drawing widget (its callbacks/refs stay valid; pack the returned overlay instead).
- * @param config_str conf key persisting the user-chosen height (copied internally).
- * @param default_height default height in device-independent px (rescaled by DT_PIXEL_APPLY_DPI).
- * @param min_height minimum height floor in device-independent px.
- */
-GtkWidget *dt_ui_resizable_drawing_area(GtkWidget *area, char *config_str, int default_height, int min_height);
-
-/**
- * @brief Apply the standard recessed-input text padding to a GtkTextView.
- *
- * CSS padding on the textview "text" node is parsed but ignored for layout
- * in GTK3, so the 2px/4px inset matching `entry`/`treeview` (see
- * data/themes/.css) has to be set on the widget itself.
- *
- * @param textview The GtkTextView to update.
- */
-void dt_gui_textview_set_padding(GtkTextView *textview);
-// check whether the given container has any user-added children
-gboolean dt_gui_container_has_children(GtkContainer *container);
-// return a count of the user-added children in the given container
-int dt_gui_container_num_children(GtkContainer *container);
-// return the first child of the given container
-GtkWidget *dt_gui_container_first_child(GtkContainer *container);
-// return the requested child of the given container, or NULL if it has fewer children
-GtkWidget *dt_gui_container_nth_child(GtkContainer *container, int which);
-
-// remove all of the children we've added to the container.  Any which no longer have any references will
-// be destroyed.
-void dt_gui_container_remove_children(GtkContainer *container);
-
-// delete all of the children we've added to the container.  Use this function only if you are SURE
-// there are no other references to any of the children (if in doubt, use dt_gui_container_remove_children
-// instead; it's a bit slower but safer).
-void dt_gui_container_destroy_children(GtkContainer *container);
-
-void dt_gui_menu_popup(GtkMenu *menu, GtkWidget *button, GdkGravity widget_anchor, GdkGravity menu_anchor);
-
-/**
- * @brief Resolve the widget used as parent for nested popups on Wayland.
- *
- * Gtk on Wayland requires popups to use the top-most enclosing popup as parent.
- * This helper walks the parent chain to find that anchor while keeping the caller
- * in charge of the popup logic. When @p rect is not NULL, it returns the position
- * and size of @p widget in the coordinate system of the returned anchor.
- *
- * @param widget the widget the popup should visually point to.
- * @param rect optional output rectangle receiving the geometry of @p widget.
- * @return the widget to use as popup parent, or NULL when @p widget is NULL.
- */
-GtkWidget *dt_gui_get_popup_relative_widget(GtkWidget *widget, GdkRectangle *rect);
-
-// event handler for "key-press-event" of GtkTreeView to decide if focus switches to GtkSearchEntry
-gboolean dt_gui_search_start(GtkWidget *widget, GdkEventKey *event, GtkSearchEntry *entry);
-
-// event handler for "stop-search" of GtkSearchEntry
-void dt_gui_search_stop(GtkSearchEntry *entry, GtkWidget *widget);
-
-/**
- * @brief Create a collapsible section and pack it into the parent box.
- *
- * The `pack` argument makes the insertion side explicit so callers control
- * layout order without reordering children later.
- *
- * @param cs section storage owned by the caller.
- * @param confname configuration key used to persist the expanded state.
- * @param label UI label for the section header.
- * @param parent GtkBox that receives the section.
- * @param pack either `GTK_PACK_START` or `GTK_PACK_END` to choose insertion side.
- */
-void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
-                                    const char *confname, const char *label,
-                                    GtkBox *parent, GtkPackType pack);
-// routine to be called from gui_update
-void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs);
-
-// routine to hide the collapsible section
-void dt_gui_hide_collapsible_section(dt_gui_collapsible_section_t *cs);
-
-/**
- * Add an arbitrary button next to the widget that opens a popover with arbitrary content.
- * @param widget the original widget next to which the popover button will be added. DON'T add it to a container.
- * @param icon the Freedesktop icon name to put in the button
- * @param content the widget that will fit inside the popover
- * @return the GtkBox containing both the original widget and its popover button.
- * That's what you will need to add it to your container.
-*/
-GtkBox *attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content);
-
-/**
- * Add an help button triggering a popover label next to an arbitrary widget, to document its action.
- * This is a better take at help tooltips that most people don't see, unless they know about them.
- * Also tooltips window positionning is wonky (can easily overflow viewport),
- * line breaks are added manually (ugly hack),
- * and they appear and disappear on hover (not available on touch screens),
- * so it's flimsy UI.
- * @param widget the original widget to document. DON'T add it to a container.
- * @param label the in-app "docstring" for the widget
- * @return the GtkBox containing both the original widget and its popover button.
- * That's what you will need to add it to your container.
-*/
-GtkBox *attach_help_popover(GtkWidget *widget, const char *label);
-
-
-/**
- * @brief Disconnects accels when a text or search entry gets the focus,
- * and reconnects them when it looses it. This helps dealing with one-key shortcuts.
- *
- * @param widget
- */
-void dt_accels_disconnect_on_text_input(GtkWidget *widget);
-
-// Get the top-most window attached to a widget.
-// This is a dynamic get that takes into account destroyed widgets and such.
-static inline GtkWindow *dt_gtk_get_window(GtkWidget *widget)
-{
-  if(IS_NULL_PTR(widget)) return NULL;
-  GtkWidget *toplevel = gtk_widget_get_toplevel(widget);
-  if(toplevel && gtk_widget_is_toplevel(toplevel)) return GTK_WINDOW(toplevel);
-  return NULL;
-}
 
 
 // Give back the focus to the main/center widget, either
