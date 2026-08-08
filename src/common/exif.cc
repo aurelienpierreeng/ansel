@@ -130,7 +130,7 @@
 
 using namespace std;
 
-#define DT_XMP_EXIF_VERSION 5
+#define DT_XMP_EXIF_VERSION 6
 
 #if EXIV2_TEST_VERSION(0,28,0)
 #define AnyError Error
@@ -2626,6 +2626,10 @@ typedef struct mask_entry_t
   gboolean already_added;
   int mask_num;
   int version;
+  // v6+ dedup: index (1-based, matching the XMP array position) of another entry in the same
+  // Xmp.darktable.masks_history array that carries this entry's actual mask_points/mask_nb/
+  // mask_src. 0 means unset (this entry is self-contained). See read_masks_v6().
+  int mask_content_ref;
 } mask_entry_t;
 
 static void print_history_entry(history_entry_t *entry) __attribute__((unused));
@@ -3120,6 +3124,140 @@ skip:
   return history_entries;
 }
 
+// v6+: same array/parse loop as read_masks_v3(), plus darktable:mask_content_ref. A referencing
+// entry omits mask_points/mask_nb/mask_src on disk (the actual size reduction, see
+// doc/masks_history_dedup.md) and instead carries the 1-based array position of the entry that
+// has them. Resolved here, after the parse loop, into a deep copy (both entries go through
+// free_mask_entry() independently) so every returned mask_entry_t is fully self-contained, same
+// as read_masks_v3()'s output -- nothing downstream of this function needs to know v6 exists.
+static GList *read_masks_v6(Exiv2::XmpData &xmpData, const char *filename, const int version)
+{
+  GList *history_entries = NULL;
+  mask_entry_t *current_entry = NULL;
+
+  for(auto history = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.masks_history")); history != xmpData.end(); history++)
+  {
+    std::string key_item = history->key();
+    char *key = g_strdup(key_item.c_str());
+    char *key_iter = key;
+    if(g_str_has_prefix(key, "Xmp.darktable.masks_history["))
+    {
+      key_iter += strlen("Xmp.darktable.masks_history[");
+      errno = 0;
+      unsigned int n = strtol(key_iter, &key_iter, 10);
+      if(errno)
+      {
+        std::cerr << "error reading masks history from '" << key << "' (" << filename << ")" << std::endl;
+        g_list_free_full(history_entries, free_mask_entry);
+        history_entries = NULL;
+        dt_free(key);
+        return NULL;
+      }
+
+      // skip everything that isn't part of the actual array
+      if(*(key_iter++) != ']')
+      {
+        std::cerr << "error reading masks history from '" << key << "' (" << filename << ")" << std::endl;
+        g_list_free_full(history_entries, free_mask_entry);
+        history_entries = NULL;
+        dt_free(key);
+        return NULL;
+      }
+      if(*(key_iter++) != '/') goto skip;
+      if(*key_iter == '?') key_iter++;
+
+      // make sure we are filling in the details of the correct entry
+      unsigned int length = g_list_length(history_entries);
+      if(n > length)
+      {
+        current_entry = (mask_entry_t *)calloc(1, sizeof(mask_entry_t));
+        current_entry->version = version;
+        history_entries = g_list_append(history_entries, current_entry);
+      }
+      else if(n < length)
+      {
+        current_entry = (mask_entry_t *)g_list_nth_data(history_entries, n - 1); // XMP starts counting at 1!
+      }
+
+      // go on reading things into current_entry
+      if(g_str_has_prefix(key_iter, "darktable:mask_num"))
+      {
+        current_entry->mask_num = history->toLong();
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_id"))
+      {
+        current_entry->mask_id = history->toLong();
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_type"))
+      {
+        current_entry->mask_type = history->toLong();
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_name"))
+      {
+        std::string value_item = history->toString();
+        current_entry->mask_name = g_strdup(value_item.c_str());
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_version"))
+      {
+        current_entry->mask_version = history->toLong();
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_points"))
+      {
+        std::string value_item = history->toString();
+        current_entry->mask_points = dt_exif_xmp_decode(value_item.c_str(),
+                                                        history->size(),
+                                                        &current_entry->mask_points_len);
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_nb"))
+      {
+        current_entry->mask_nb = history->toLong();
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_src"))
+      {
+        std::string value_item = history->toString();
+        current_entry->mask_src = dt_exif_xmp_decode(value_item.c_str(),
+                                                     history->size(),
+                                                     &current_entry->mask_src_len);
+      }
+      else if(g_str_has_prefix(key_iter, "darktable:mask_content_ref"))
+      {
+        current_entry->mask_content_ref = history->toLong();
+      }
+
+    }
+skip:
+    dt_free(key);
+  }
+
+  // Resolve mask_content_ref into a deep copy of the referenced entry's content. The referenced
+  // entry was necessarily written earlier in the array (see the writer in dt_set_xmp_dt_history()),
+  // so by the time we get here every reference target has already been fully parsed above.
+  for(GList *iter = history_entries; iter; iter = g_list_next(iter))
+  {
+    mask_entry_t *entry = (mask_entry_t *)iter->data;
+    if(entry->mask_content_ref <= 0) continue;
+
+    mask_entry_t *source = (mask_entry_t *)g_list_nth_data(history_entries, entry->mask_content_ref - 1);
+    if(!source)
+    {
+      std::cerr << "error resolving mask_content_ref " << entry->mask_content_ref << " (" << filename << ")" << std::endl;
+      continue;
+    }
+
+    entry->mask_points_len = source->mask_points_len;
+    entry->mask_points = (unsigned char *)malloc(entry->mask_points_len);
+    memcpy(entry->mask_points, source->mask_points, entry->mask_points_len);
+
+    entry->mask_nb = source->mask_nb;
+
+    entry->mask_src_len = source->mask_src_len;
+    entry->mask_src = (unsigned char *)malloc(entry->mask_src_len);
+    memcpy(entry->mask_src, source->mask_src, entry->mask_src_len);
+  }
+
+  return history_entries;
+}
+
 static void add_mask_entry_to_db(int32_t imgid, mask_entry_t *entry)
 {
   // add the mask entry only once
@@ -3281,7 +3419,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     // when we are reading the xmp data it doesn't make sense to flag the image as removed
     img->flags &= ~DT_IMAGE_REMOVE;
 
-    if(xmp_version == 4 || xmp_version == 5)
+    if(xmp_version == 4 || xmp_version == 5 || xmp_version == 6)
     {
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.iop_order_version"))) != xmpData.end())
       {
@@ -3328,6 +3466,10 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     // read the masks from the file first so we can add them to the db while reading history entries
     if(xmp_version < 3)
       mask_entries = read_masks(xmpData, filename, xmp_version);
+    else if(xmp_version >= 6)
+      // Same mask_entry_t GList shape as read_masks_v3() -- resolves mask_content_ref
+      // internally, nothing downstream needs to know v6 exists.
+      mask_entries_v3 = read_masks_v6(xmpData, filename, xmp_version);
     else
       mask_entries_v3 = read_masks_v3(xmpData, filename, xmp_version);
 
@@ -3363,7 +3505,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if(!history_entries) // didn't work? try super old version with rdf:Bag
         history_entries = read_history_v1(xmpPacket, filename, 1);
     }
-    else if(xmp_version == 2 || xmp_version == 3 || xmp_version == 4 || xmp_version == 5 )
+    else if(xmp_version == 2 || xmp_version == 3 || xmp_version == 4 || xmp_version == 5 || xmp_version == 6)
       history_entries = read_history_v2(xmpData, filename);
     else
     {
@@ -3624,13 +3766,22 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(
       dt_database_get_sqlite3_global(),
-      "SELECT imgid, formid, form, name, version, points, points_count, source, num"
+      "SELECT imgid, formid, form, name, version, points, points_count, source, num, content_ref, rowid"
       " FROM main.masks_history"
       " WHERE imgid = ?1"
       " ORDER BY num",
       -1, &stmt, NULL);
   // clang-format on
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+
+  // Maps a masks_history rowid to the XMP array position (the `num` loop counter below) its
+  // full content was written at, so a later dedup row can reference that position via
+  // mask_content_ref instead of re-encoding its points/nb/src -- the actual size reduction over
+  // the v3 format. ORDER BY num above guarantees a row's content_ref target (always written
+  // earlier in the same delete+rewrite pass, see dt_dev_write_history_ext() in dev_history.c)
+  // has already been visited and registered here. See doc/masks_history_dedup.md.
+  GHashTable *rowid_to_xmp_num = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const int32_t mask_num = sqlite3_column_int(stmt, 8);
@@ -3638,11 +3789,8 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
     const int32_t mask_type = sqlite3_column_int(stmt, 2);
     const char *mask_name = (const char *)sqlite3_column_text(stmt, 3);
     const int32_t mask_version = sqlite3_column_int(stmt, 4);
-    int32_t len = sqlite3_column_bytes(stmt, 5);
-    char *mask_d = dt_exif_xmp_encode((const unsigned char *)sqlite3_column_blob(stmt, 5), len, NULL);
-    const int32_t mask_nb = sqlite3_column_int(stmt, 6);
-    len = sqlite3_column_bytes(stmt, 7);
-    char *mask_src = dt_exif_xmp_encode((const unsigned char *)sqlite3_column_blob(stmt, 7), len, NULL);
+    const gint64 content_ref = sqlite3_column_int64(stmt, 9);
+    const gint64 rowid = sqlite3_column_int64(stmt, 10);
 
     snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_num", num);
     xmpData[key] = mask_num;
@@ -3654,19 +3802,42 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
     xmpData[key] = mask_name;
     snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_version", num);
     xmpData[key] = mask_version;
-    snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_points", num);
-    xmpData[key] = mask_d;
-    snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_nb", num);
-    xmpData[key] = mask_nb;
-    snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_src", num);
-    xmpData[key] = mask_src;
 
-    dt_free(mask_d);
-    dt_free(mask_src);
+    gpointer xmp_pos = content_ref > 0 ? g_hash_table_lookup(rowid_to_xmp_num, &content_ref) : NULL;
+    if(xmp_pos)
+    {
+      // Dedup: identical content to an earlier entry already written in this same array --
+      // reference it instead of re-encoding the (possibly large) points/nb/src again.
+      snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_content_ref", num);
+      xmpData[key] = GPOINTER_TO_INT(xmp_pos);
+    }
+    else
+    {
+      int32_t len = sqlite3_column_bytes(stmt, 5);
+      char *mask_d = dt_exif_xmp_encode((const unsigned char *)sqlite3_column_blob(stmt, 5), len, NULL);
+      const int32_t mask_nb = sqlite3_column_int(stmt, 6);
+      len = sqlite3_column_bytes(stmt, 7);
+      char *mask_src = dt_exif_xmp_encode((const unsigned char *)sqlite3_column_blob(stmt, 7), len, NULL);
+
+      snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_points", num);
+      xmpData[key] = mask_d;
+      snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_nb", num);
+      xmpData[key] = mask_nb;
+      snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_src", num);
+      xmpData[key] = mask_src;
+
+      dt_free(mask_d);
+      dt_free(mask_src);
+
+      gint64 *rowid_key = g_new(gint64, 1);
+      *rowid_key = rowid;
+      g_hash_table_insert(rowid_to_xmp_num, rowid_key, GINT_TO_POINTER(num));
+    }
 
     num++;
   }
   sqlite3_finalize(stmt);
+  g_hash_table_destroy(rowid_to_xmp_num);
 
   // history stack:
   num = 1;

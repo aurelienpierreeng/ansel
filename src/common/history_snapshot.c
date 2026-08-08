@@ -89,13 +89,17 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   all_ok = all_ok && (sqlite3_step(stmt) == SQLITE_DONE);
   sqlite3_finalize(stmt);
 
-  // copy current state into undo_masks_history
+  // copy current state into undo_masks_history. rowid is captured as orig_rowid so it can be
+  // restored verbatim below -- content_ref values are rowids into main.masks_history itself, and
+  // a plain INSERT...SELECT does not preserve rowids, so without this a restored row's
+  // content_ref would point at whatever unrelated row later claimed that rowid, not at the
+  // sibling row it originally meant. See doc/masks_history_dedup.md.
 
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO memory.undo_masks_history"
                               "  SELECT ?1, imgid, num, formid, form, name, version,"
-                              "         points, points_count, source"
+                              "         points, points_count, source, content_ref, rowid"
                               "  FROM main.masks_history"
                               "  WHERE imgid=?2", -1, &stmt, NULL);
   // clang-format on
@@ -162,13 +166,20 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   all_ok &= (sqlite3_step(stmt) == SQLITE_DONE);
   sqlite3_finalize(stmt);
 
-  // copy undo_masks_history snapshot back as current masks_history state
+  // copy undo_masks_history snapshot back as current masks_history state. Restoring at the
+  // original rowid (explicit column list required: main.masks_history has no declared
+  // INTEGER PRIMARY KEY alias for it) is what keeps content_ref -- captured at snapshot time as
+  // a rowid into this same table -- pointing at the right sibling row after restore. Safe to
+  // reuse: dt_history_delete_on_image_ext() above already cleared this image's own rows, and
+  // SQLite never reissues a rowid once used elsewhere in the table.
 
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO main.masks_history"
-                              "  SELECT imgid, num, formid, form, name, version, "
-                              "         points, points_count, source"
+                              "  (rowid, imgid, num, formid, form, name, version, points, "
+                              "   points_count, source, content_ref)"
+                              "  SELECT orig_rowid, imgid, num, formid, form, name, version, "
+                              "         points, points_count, source, content_ref"
                               "  FROM memory.undo_masks_history"
                               "  WHERE imgid=?2 AND id=?1",
                               -1, &stmt, NULL);

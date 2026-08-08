@@ -60,6 +60,7 @@
 */
 #include "common/conf.h"
 #include "common/history.h"
+#include "common/database.h"
 
 #include "common/undo.h"
 #include "common/image_cache.h"
@@ -1666,12 +1667,26 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 }
 
 
-// helper used to synch a single history item with db
-int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int32_t num)
+// Tracks, per formid, the last dt_masks_form_t* written to masks_history during one
+// dt_dev_write_history_ext() call and the DB rowid that holds its content. The copy-on-write
+// invariant (develop/masks/masks_history.h) guarantees an unchanged form keeps the exact same
+// pointer across consecutive history steps, so a pointer match here proves the content is
+// identical -- no BLOB comparison needed. See doc/masks_history_dedup.md.
+typedef struct _dt_masks_written_form_t
+{
+  dt_masks_form_t *form;
+  int64_t rowid;
+} _dt_masks_written_form_t;
+
+// helper used to synch a single history item with db. last_written_forms is the per-formid
+// dedup table described above, owned and freed by the dt_dev_write_history_ext() call this
+// belongs to.
+int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int32_t num,
+                              GHashTable *last_written_forms)
 {
   if(IS_NULL_PTR(h)) return 1;
 
-  dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) (enabled %i) at pipe position %i for image %i\n", 
+  dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) (enabled %i) at pipe position %i for image %i\n",
                                                     h->op_name, h->multi_name, h->enabled, h->iop_order, imgid);
 
   const char *operation = h->module ? h->module->op : h->op_name;
@@ -1692,8 +1707,25 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
   for(GList *forms = g_list_first(h->forms); forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
-    if (form)
-      dt_masks_write_masks_history_item(imgid, num, form);
+    if(!form) continue;
+
+    _dt_masks_written_form_t *prev
+        = (_dt_masks_written_form_t *)g_hash_table_lookup(last_written_forms, GINT_TO_POINTER(form->formid));
+    const int64_t content_ref = (prev && prev->form == form) ? prev->rowid : 0;
+
+    const int64_t rowid = dt_masks_write_masks_history_item(imgid, num, form, content_ref);
+
+    if(content_ref == 0)
+    {
+      // full write just happened: (re)seat this formid's canonical content pointer
+      if(!prev)
+      {
+        prev = malloc(sizeof(_dt_masks_written_form_t));
+        g_hash_table_insert(last_written_forms, GINT_TO_POINTER(form->formid), prev);
+      }
+      prev->form = form;
+      prev->rowid = rowid;
+    }
   }
 
   return 0;
@@ -1701,7 +1733,9 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
 
 void dt_dev_history_cleanup(void)
 {
-  // No-op: SQL statement caching/cleanup for history lives in common/history.c (dt_history_cleanup()).
+  // No-op: SQL statement caching/cleanup for history lives in common/history.c
+  // (dt_history_cleanup()) and, for masks_history, in develop/masks/masks.c
+  // (dt_masks_history_cleanup()).
 }
 
 
@@ -1715,6 +1749,14 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
 
+  // Per-formid pointer-identity dedup table for this rewrite pass, see
+  // dt_dev_write_history_item() and doc/masks_history_dedup.md.
+  GHashTable *last_written_forms = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, dt_free_gpointer);
+
+  // Everything below used to run as N+M+2 separate autocommits (one per DELETE/INSERT); wrapping
+  // it in a single transaction is the single biggest win for a commit's DB write time.
+  dt_database_start_transaction(dt_database_get_global());
+
   _cleanup_history(imgid);
 
   // write history entries
@@ -1722,7 +1764,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-    dt_dev_write_history_item(imgid, hist, i);
+    dt_dev_write_history_item(imgid, hist, i, last_written_forms);
     i++;
   }
 
@@ -1730,6 +1772,10 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   // write the current iop-order-list for this image
   dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
+
+  dt_database_release_transaction(dt_database_get_global());
+
+  g_hash_table_destroy(last_written_forms);
 
   cache_img->history_hash = dt_dev_get_history_hash(dev);
 

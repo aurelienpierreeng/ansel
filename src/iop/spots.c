@@ -190,7 +190,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       {
         bp->mask_id = form->formid;
       }
-      dt_masks_write_masks_history_item(self->dev->image_storage.id, last_spot_num, form);
+      dt_masks_write_masks_history_item(self->dev->image_storage.id, last_spot_num, form, 0);
     }
 
     return 0;
