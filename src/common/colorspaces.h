@@ -203,6 +203,12 @@ typedef struct dt_colorspaces_t
 
 typedef struct dt_colorspaces_color_profile_t
 {
+  /* TRUE when this container created `profile` and must close it. FALSE when `profile` is
+   * borrowed from the application-wide list, which owns and closes it -- see
+   * dt_image_find_best_color_profile(), several of whose branches hand back a pointer into
+   * that list rather than a fresh profile. Only per-image containers set this; entries in the
+   * application list are freed by dt_colorspaces_cleanup() as they always were. */
+  gboolean owns_profile;
   dt_colorspaces_color_profile_type_t type; // filename is only used for type DT_COLORSPACE_FILE
   char filename[DT_IOP_COLOR_ICC_LEN];      // icc file name
   char name[512];                           // product name, displayed in GUI
