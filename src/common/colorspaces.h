@@ -249,7 +249,6 @@ cmsHPROFILE dt_colorspaces_create_vendor_profile(const char *makermodel);
 cmsHPROFILE dt_colorspaces_create_alternate_profile(const char *makermodel);
 
 /** return the work profile as set in colorin */
-const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int32_t imgid);
 
 /** return the embedded profile of a particular image **/
 const cmsHPROFILE dt_colorspaces_get_embedded_profile(const int32_t imgid, dt_colorspaces_color_profile_type_t *type, gboolean *new_profile);
@@ -296,6 +295,11 @@ const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type, co
 /** common functions to change between colorspaces, used in iop modules */
 void rgb2hsl(const dt_aligned_pixel_t rgb, float *h, float *s, float *l);
 void hsl2rgb(dt_aligned_pixel_t rgb, float h, float s, float l);
+
+/* Notification that the display profile changed. The application relays it on its signal bus;
+ * this module does not know there is one. Unregistered, the notification is dropped. */
+typedef void (*dt_colorspaces_profile_changed_handler_t)(void);
+void dt_colorspaces_set_profile_changed_handler(dt_colorspaces_profile_changed_handler_t handler);
 
 /** trigger updating the display profile from the system settings (x atom, colord, ...) */
 /** Refresh the cached display profile from the monitor showing `widget`.

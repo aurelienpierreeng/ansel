@@ -134,6 +134,7 @@ _Static_assert((int)DT_WIDGET_COLORLABEL_RED == (int)DT_COLORLABELS_RED
                    && (int)DT_WIDGET_COLORLABEL_COUNT == (int)DT_COLORLABELS_LAST,
                "widget colour-label indices drifted from dt_colorlabels_enum");
 
+static void _update_display_profile(void);
 static void _ui_widget_redraw_callback(gpointer instance, GtkWidget *widget);
 /* callback for redraw log signals */
 static void _ui_log_redraw_callback(gpointer instance, GtkWidget *widget);
@@ -347,7 +348,7 @@ static gboolean _configure(GtkWidget *da, GdkEventConfigure *event, gpointer use
     cairo_surface_destroy(darktable.gui->surface);
     darktable.gui->surface = tmpsurface;
     // maybe we are on another screen now with > 50% of the area
-    dt_colorspaces_set_display_profile(DT_COLORSPACE_DISPLAY, dt_gui_center_widget());
+    _update_display_profile();
   }
   oldw = event->width;
   oldh = event->height;
@@ -366,7 +367,7 @@ static gboolean _window_configure(GtkWidget *da, GdkEvent *event, gpointer user_
   if(oldx != event->configure.x || oldy != event->configure.y)
   {
     // maybe we are on another screen now with > 50% of the area
-    dt_colorspaces_set_display_profile(DT_COLORSPACE_DISPLAY, dt_gui_center_widget());
+    _update_display_profile();
     oldx = event->configure.x;
     oldy = event->configure.y;
   }
@@ -959,6 +960,21 @@ static void _widget_store_bool(const char *key, gboolean value)
   dt_conf_set_bool(key, value);
 }
 
+// The display profile can only be probed once the control loop is up: before that there is no
+// realised window to read an X atom or a colord property from. common/colorspaces.c does not
+// know what a control loop is, so the check lives here, with the three call sites it guards.
+static void _update_display_profile(void)
+{
+  if(!dt_control_running()) return;
+  dt_colorspaces_set_display_profile(DT_COLORSPACE_DISPLAY, dt_gui_center_widget());
+}
+
+// Relay a display-profile change onto the signal bus. colorspaces/ raises nothing itself.
+static void _notify_profile_changed(void)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_CHANGED);
+}
+
 static void _notebook_page_changed(gpointer owner)
 {
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_NOTEBOOK_TAB_CHANGED, owner);
@@ -1131,7 +1147,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   dt_gui_presets_init();
 
-  dt_colorspaces_set_display_profile(DT_COLORSPACE_DISPLAY, dt_gui_center_widget());
+  _update_display_profile();
   // update the profile when the window is moved. resize is already handled in configure()
   widget = dt_ui_main_window(darktable.gui->ui);
   g_signal_connect(G_OBJECT(widget), "configure-event", G_CALLBACK(_window_configure), NULL);
@@ -1217,6 +1233,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_widget_set_natural_width_handler(_widget_natural_width);
   dt_widget_set_cursor_handler(_widget_cursor);
   dt_widget_set_refocus_handler(dt_gui_refocus_center);
+  dt_colorspaces_set_profile_changed_handler(_notify_profile_changed);
   dt_widget_set_debug_overlays((dt_get_debug_flags() & DT_DEBUG_MASKS) != 0);
   dt_widget_set_storage_handlers(_widget_stored_int, _widget_store_int,
                                  _widget_stored_bool, _widget_store_bool);
