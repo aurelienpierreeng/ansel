@@ -85,6 +85,61 @@ extern "C"
 }
 #endif
 
+
+/* Node identity helpers, defined in history_merge.c. They were declared in
+ * gui/common/history_merge_gui.h, which had the backend including a GUI header to see
+ * its own functions; the GUI half needs them too, and gets them from here. */
+char *_hm_make_node_id(const char *op, const char *multi_name);
+void _hm_id_to_op_name(const char *id, char *op, char *name);
+int _hm_build_last_history_by_id(const struct dt_develop_t *dev, GHashTable **out_map);
+
+
+typedef enum dt_hm_constraint_choice_t
+{
+  // Keep the destination adjacency constraints when breaking incompatible 2-cycles.
+  DT_HM_CONSTRAINTS_PREFER_DEST = 0,
+  // Keep the source/pasted adjacency constraints when breaking incompatible 2-cycles.
+  DT_HM_CONSTRAINTS_PREFER_SRC = 1
+} dt_hm_constraint_choice_t;
+
+/* The four moments a merge needs a user for.
+ *
+ * Merging runs deep in the backend but hits situations only a person can settle. Those
+ * dialogs used to be called from here directly, which is why a layer-1 file included a gui/
+ * header. They are handlers now, registered by gui/common/history_merge_gui.c, and each has
+ * a defined answer for when nobody registered one -- a headless merge must still finish, or
+ * refuse, on its own.
+ */
+
+/** Break an incompatible 2-cycle by keeping either the destination's or the source's
+ *  adjacency constraints. With no handler: PREFER_DEST. The destination image's existing
+ *  pipeline order is the thing a merge nobody is watching must not quietly rearrange. */
+typedef dt_hm_constraint_choice_t (*dt_hm_constraints_choice_handler_t)(GHashTable *id_ht, const char *faulty_id,
+                                                                       const char *src_prev, const char *src_next,
+                                                                       const char *dst_prev, const char *dst_next);
+
+/** Warn that pasted modules reference raster mask providers not coming with them; return
+ *  FALSE to abort. With no handler: proceed. The modules land without their raster source,
+ *  which is what the warning is about -- not grounds to refuse work nobody can confirm. */
+typedef gboolean (*dt_hm_missing_raster_handler_t)(const GList *mod_list);
+
+/** Report that the module graph could not be topologically sorted. Informational. */
+typedef void (*dt_hm_toposort_cycle_handler_t)(GList *cycle_nodes, GHashTable *id_ht);
+
+/** Show what the merge did and offer to revert it; return TRUE to revert. With no handler:
+ *  FALSE. A merge that completed is kept. */
+typedef gboolean (*dt_hm_merge_report_handler_t)(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
+                                                 const gboolean merge_iop_order, const gboolean used_source_order,
+                                                 const dt_history_merge_strategy_t strategy,
+                                                 GHashTable *src_last_by_id, GHashTable *dst_last_before_by_id,
+                                                 const GHashTable *orig_ids, const GHashTable *mod_list_ids,
+                                                 const char *source_label, dt_hm_batch_state_t *batch);
+
+void dt_hm_set_constraints_choice_handler(dt_hm_constraints_choice_handler_t handler);
+void dt_hm_set_missing_raster_handler(dt_hm_missing_raster_handler_t handler);
+void dt_hm_set_toposort_cycle_handler(dt_hm_toposort_cycle_handler_t handler);
+void dt_hm_set_merge_report_handler(dt_hm_merge_report_handler_t handler);
+
 #endif // DT_COMMON_HISTORY_MERGE_H
 
 // clang-format off

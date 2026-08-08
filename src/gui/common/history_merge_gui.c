@@ -1277,8 +1277,7 @@ static void _hm_report_align_drag_hint(GtkWidget *widget, GtkAllocation *allocat
 gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_src,
                                      const gboolean merge_iop_order, const gboolean used_source_order,
                                      const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
-                                     GHashTable *dst_last_before_by_id, const GPtrArray *orig_labels,
-                                     const GPtrArray *orig_styles, const GHashTable *orig_ids,
+                                     GHashTable *dst_last_before_by_id, const GHashTable *orig_ids,
                                      const GHashTable *mod_list_ids, const char *source_label,
                                      dt_hm_batch_state_t *batch)
 {
@@ -1288,6 +1287,19 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
 
   GtkWidget *window = dt_gui_main_window();
   if(IS_NULL_PTR(window)) return FALSE;
+
+  /* The "before" rows. Derived here, from the pre-merge module map the backend kept, rather
+   * than handed over ready-made: they are display strings, built with dt_capitalize_label()
+   * and friends, and the backend has no business holding those. */
+  GPtrArray *orig_styles = NULL;
+  GPtrArray *orig_labels
+      = _hm_collect_labels_from_history_map((GHashTable *)orig_ids, mod_list_ids, &orig_styles);
+  if(IS_NULL_PTR(orig_labels) || IS_NULL_PTR(orig_styles))
+  {
+    if(orig_labels) g_ptr_array_free(orig_labels, TRUE);
+    if(orig_styles) g_ptr_array_free(orig_styles, TRUE);
+    return FALSE;
+  }
 
   const char *merge_mode = merge_iop_order ? _("merge") : _("destination");
   const char *strategy_name
@@ -1633,6 +1645,10 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   dt_free(dst_title);
   dt_free(title_text);
 
+  // Built at the top of this function, so freed here rather than by the caller.
+  g_ptr_array_free(orig_labels, TRUE);
+  g_ptr_array_free(orig_styles, TRUE);
+
   return (res == GTK_RESPONSE_ACCEPT || res == GTK_RESPONSE_DELETE_EVENT);
 }
 
@@ -1746,4 +1762,13 @@ gboolean dt_gui_merge_options_dialog(const char *title, const char *mode_key,
   gtk_widget_destroy(GTK_WIDGET(dialog));
   dt_gui_refocus_parent(dialog_parent);
   return res == GTK_RESPONSE_OK;
+}
+
+
+void dt_history_merge_gui_register_handlers(void)
+{
+  dt_hm_set_constraints_choice_handler(_hm_ask_user_constraints_choice);
+  dt_hm_set_missing_raster_handler(_hm_warn_missing_raster_producers);
+  dt_hm_set_toposort_cycle_handler(_hm_show_toposort_cycle_popup);
+  dt_hm_set_merge_report_handler(_hm_show_merge_report_popup);
 }

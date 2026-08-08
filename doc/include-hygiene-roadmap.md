@@ -603,6 +603,71 @@ initialises. Registration is the guard now.
 `common/database.c` is down to zero GTK tokens. Its remaining `gui/legacy_presets.h` include
 is a different problem (preset migration, not a dialog) and is left for its own pass.
 
+## 13. Done: `common/history_merge.c` stops calling the GUI
+
+This file's `#include "gui/common/history_merge_gui.h"` was two problems wearing one include.
+
+**Misplaced ownership.** `_hm_make_node_id()`, `_hm_id_to_op_name()` and
+`_hm_build_last_history_by_id()` are *defined in* `history_merge.c` but were *declared in*
+the GUI header — so the backend included a GUI header to see its own functions. The
+declarations moved to `common/history_merge.h`; the GUI half includes that.
+
+**Four real GUI calls**, now handler slots:
+
+| call | sites |
+|---|---|
+| `_hm_show_merge_report_popup()` | 3 |
+| `_hm_ask_user_constraints_choice()` | 1 |
+| `_hm_warn_missing_raster_producers()` | 1 |
+| `_hm_show_toposort_cycle_popup()` | 1 |
+
+Each took the handler-slot pattern already used by `dt_film_confirm_rmdir_handler`,
+`dt_folder_survey_confirm_import_handler_t` and `dt_database_prompt_handler_t`. Note the
+shapes differ: the report popup and the two warnings are one-way notifications (`void`,
+no-op with no handler), while `_hm_ask_user_constraints_choice()` returns a
+`dt_hm_constraint_choice_t` the merge algorithm branches on — so that one needs a defined
+no-handler answer, chosen the same way as the database prompts: the conservative option that
+does not silently discard the user's history.
+
+### Done — but not the way this section first said to do it
+
+Two earlier attempts, and the advice written here after them, were wrong in the same way,
+and it is worth recording because the wrong answer was the plausible one.
+
+`_hm_collect_labels_from_history_map()` is defined in `gui/common/history_merge_gui.c` and
+was *called from* `history_merge.c`, so the include could not go. It contains no GTK, which
+made it look like a backend helper stranded on the GUI side, and this section said to move
+it — with `_hm_clean_module_name()`, `_hm_module_row_label()`, `_hm_label_t` and
+`_hm_label_cmp()` behind it — down into `common/`.
+
+**That would have been a new violation, not a fix.** `_hm_clean_module_name()` calls
+`dt_capitalize_label()`, which lives in `widgets/widget_style.h` — layer 4. The whole chain
+is *presentation*: it builds the display strings the merge report's rows are made of. "No
+GTK in it" is not the same as "belongs below the GUI", and taking the first for the second
+is what cost two broken builds.
+
+The actual defect was one level up. `_hm_backup_dest()` snapshots the destination before a
+merge, and among that snapshot it captured `orig_labels` / `orig_styles` — **ready-made
+display strings, held by the backend purely so a dialog could show them later**. They were
+passed straight through to the report popup and used nowhere else.
+
+So the fix was to delete them from `_hm_dest_backup_t` entirely. The report derives them
+itself now, at report time, from `orig_ids` (the pre-merge module map, which is genuine
+backend data and was already being passed to it). That shortened the report signature by two
+parameters, and left nothing in `history_merge.c` needing anything from the GUI header.
+
+The four handler slots then went in as planned — `dt_hm_set_{constraints_choice,
+missing_raster,toposort_cycle,merge_report}_handler()`, registered from
+`dt_gui_gtk_init()`, with the no-handler defaults described above — and
+`#include "gui/common/history_merge_gui.h"` left `common/history_merge.c`. The
+`dt_hm_constraint_choice_t` enum moved to `common/history_merge.h`, since the merge
+algorithm is what branches on it.
+
+With #1108, #1109 and this one all landed, **`common/*.c` is down to a single `gui/`
+include**: `database.c`'s `gui/legacy_presets.h`. That one is preset migration rather than a
+dialog, so it is a different kind of problem and gets its own pass. Layering violations are
+at 219.
+
 ## 14. Done: the last `gui/` includes leave `common/`
 
 Four things, found by pulling on the one thread §12 left dangling.

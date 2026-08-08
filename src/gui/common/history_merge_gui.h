@@ -25,16 +25,7 @@
 
 struct dt_develop_t;
 
-char *_hm_make_node_id(const char *op, const char *multi_name);
-void _hm_id_to_op_name(const char *id, char *op, char *name);
 
-typedef enum dt_hm_constraint_choice_t
-{
-  // Keep the destination adjacency constraints when breaking incompatible 2-cycles.
-  DT_HM_CONSTRAINTS_PREFER_DEST = 0,
-  // Keep the source/pasted adjacency constraints when breaking incompatible 2-cycles.
-  DT_HM_CONSTRAINTS_PREFER_SRC = 1
-} dt_hm_constraint_choice_t;
 
 dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, const char *faulty_id,
                                                          const char *src_prev, const char *src_next,
@@ -44,7 +35,6 @@ gboolean _hm_warn_missing_raster_producers(const GList *mod_list);
 
 void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht);
 
-int _hm_build_last_history_by_id(const struct dt_develop_t *dev, GHashTable **out_map);
 
 GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHashTable *mod_list_ids,
                                                GPtrArray **out_styles);
@@ -72,8 +62,11 @@ gboolean dt_gui_merge_options_dialog(const char *title,
 gboolean _hm_show_merge_report_popup(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
                                      const gboolean merge_iop_order, const gboolean used_source_order,
                                      const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
-                                     GHashTable *dst_last_before_by_id, const GPtrArray *orig_labels,
-                                     const GPtrArray *orig_styles, const GHashTable *orig_ids,
+                                     GHashTable *dst_last_before_by_id, const GHashTable *orig_ids,
                                      const GHashTable *mod_list_ids, const char *source_label,
                                      dt_hm_batch_state_t *batch);
+/** Register the four handlers common/history_merge.c asks through. Called from
+ *  dt_gui_gtk_init(); without it merging simply takes its no-handler defaults. */
+void dt_history_merge_gui_register_handlers(void);
+
 #endif // DT_GUI_COMMON_HISTORY_MERGE_H
