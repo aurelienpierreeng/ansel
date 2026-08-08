@@ -66,7 +66,7 @@
 #include "common/history.h"
 #ifdef HAVE_ICU
 #endif
-#include "gui/legacy_presets.h"
+#include "common/legacy_presets.h"
 
 #include <gio/gio.h>
 #include <glib.h>

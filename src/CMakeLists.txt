@@ -115,6 +115,7 @@ FILE(GLOB SOURCE_FILES
   "pixel/locallaplacian.c"
   "pixel/locallaplaciancl.c"
   "common/l10n.c"
+  "common/legacy_presets.c"
   "common/lut3d.c"
   "gui/lut_viewer.c"
   "common/metadata.c"
