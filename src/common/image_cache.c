@@ -58,6 +58,7 @@
 
 #include <sqlite3.h>
 #include <inttypes.h>
+#include "common/colorspaces.h"   // dt_colorspaces_free_image_profile
 
 static sqlite3_stmt *_image_cache_load_stmt = NULL;
 static sqlite3_stmt *_image_cache_write_history_hash_stmt = NULL;
@@ -382,6 +383,8 @@ void dt_image_cache_deallocate(void *data, dt_cache_entry_t *entry)
   if(dt_supervisor_active()) dt_supervisor_image(DT_SV_DELETE, (int32_t)entry->key, NULL);
 
   dt_free(img->profile);
+  dt_colorspaces_free_image_profile(img->embedded_profile);
+  img->embedded_profile = NULL;
   g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
   img->dng_gain_maps = NULL;
   dt_free(img);

@@ -1139,29 +1139,75 @@ const cmsHPROFILE dt_colorspaces_get_embedded_profile(const int32_t imgid, dt_co
 }
 
 
-const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32_t imgid, dt_colorspaces_color_profile_type_t *type)
+/* Build (or reuse) the parsed profile for an image's embedded ICC, and give it to the image.
+ *
+ * It used to be appended to dt_colorspaces_t.profiles instead. That list is built once by
+ * dt_colorspaces_init() and then read from ~23 places without any lock, which is only safe
+ * while it is immutable -- and this function made it mutable, from export jobs that run in
+ * parallel. It also grew the list for the lifetime of the session (one entry per exported
+ * image), and leaked the container outright whenever the profile was not newly created,
+ * because only the new_profile branch ever registered it.
+ *
+ * An embedded profile is a property of one image, so the image owns it: stored under the image
+ * cache entry's own lock, freed when the image is evicted, and reused on the next export of the
+ * same image instead of built again.
+ */
+static const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32_t imgid,
+                                                                     dt_colorspaces_color_profile_type_t *type)
 {
-  gboolean new_profile;
+  gboolean new_profile = FALSE;
   cmsHPROFILE profile = dt_colorspaces_get_embedded_profile(imgid, type, &new_profile);
 
-  // create a dt profile object. -1 in all indices ensures it's hidden from GUI
+  // -1 in all indices ensures it is hidden from the GUI: this profile belongs to one image and
+  // has no place in any combo box.
   dt_colorspaces_color_profile_t *container = _create_profile(*type, profile, "", -1, -1, -1, -1, -1);
-
-  if(profile && container && new_profile)
+  if(IS_NULL_PTR(container))
   {
-    // Set the name string for the profile
+    if(profile && new_profile) dt_colorspaces_cleanup_profile(profile);
+    return NULL;
+  }
+
+  if(profile && new_profile)
+  {
     char *lang = getenv("LANG");
     if(IS_NULL_PTR(lang)) lang = "en_US";
     dt_colorspaces_get_profile_name(profile, lang, lang + 3, container->name, sizeof(container->name));
-
-    // add it to the stack of dt profiles so it gets freed properly when we don't need it anymore
-    dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
-    color_profiles->profiles = g_list_append(color_profiles->profiles, container);
   }
 
-  return (const dt_colorspaces_color_profile_t *)container;
+  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    // No image to hand it to. Better to leak nothing and let the caller fall back than to put
+    // it back on the global list.
+    dt_colorspaces_free_image_profile(container);
+    return NULL;
+  }
+
+  const dt_colorspaces_color_profile_t *result;
+  if(img->embedded_profile)
+  {
+    // Another thread got here first while we were parsing. Theirs is as good as ours, and it is
+    // the one every other borrower already holds.
+    dt_colorspaces_free_image_profile(container);
+    result = img->embedded_profile;
+  }
+  else
+  {
+    img->embedded_profile = container;
+    result = container;
+  }
+  // Nothing persistent changed: this is a cached derivation of bytes already in the image.
+  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+
+  return result;
 }
 
+void dt_colorspaces_free_image_profile(struct dt_colorspaces_color_profile_t *profile)
+{
+  if(IS_NULL_PTR(profile)) return;
+  dt_colorspaces_cleanup_profile(profile->profile);
+  dt_free(profile);
+}
 
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const int32_t imgid,
                                                                         dt_colorspaces_color_profile_type_t *over_type,

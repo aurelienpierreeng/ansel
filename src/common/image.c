@@ -2076,6 +2076,7 @@ void dt_image_init(dt_image_t *img)
   img->d65_color_matrix[0] = NAN;
   img->profile = NULL;
   img->profile_size = 0;
+  img->embedded_profile = NULL;
   img->colorspace = DT_IMAGE_COLORSPACE_NONE;
   img->fuji_rotation_pos = 0;
   img->pixel_aspect_ratio = 1.0f;

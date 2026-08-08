@@ -629,36 +629,33 @@ similar snap anywhere in this path would silently mask a regression here rather 
 
 ## Masks / forms history
 
-### The colour-profile registry is appended to at runtime, unlocked (OPEN)
+### An embedded ICC profile belongs to its image, not to the application
 
-`dt_colorspaces_t.profiles` (`common/colorspaces.h`) is a `GList` built once by
-`dt_colorspaces_init()` and thereafter read from everywhere — ~23 unsynchronised touches in
-`colorspaces.c` alone. That is safe only because it is otherwise immutable after init.
+`dt_colorspaces_t.profiles` (`common/colorspaces.h`) is the application-wide profile list. It is
+built once by `dt_colorspaces_init()` and read from ~23 places with no lock, which is only sound
+while it is immutable after init. **It must stay that way.**
 
-It is not immutable. `_build_embedded_profile()` (`colorspaces.c`, reached from
-`dt_colorspaces_get_output_profile()`) appends a container for an image's embedded ICC profile
-at **runtime**:
+It did not used to be. `_build_embedded_profile()`, reached from
+`dt_colorspaces_get_output_profile()`, appended a container for an image's embedded ICC to that
+list at runtime — from export jobs, which run in parallel. Three defects in one function:
 
-```c
-color_profiles->profiles = g_list_append(color_profiles->profiles, container);
-```
+- an unsynchronised `g_list_append` against a list ~23 readers walk without a lock
+  (`xprofile_lock` does not cover this; it guards the *display* profile, and the readers of
+  `profiles` never take it);
+- unbounded growth — one entry per exported image, held until shutdown;
+- an outright leak whenever the profile was not newly created, because only the `new_profile`
+  branch ever registered the container it had already allocated.
 
-with no lock held. `dt_colorspaces_get_output_profile()` is called from export, and exports run
-in parallel jobs, so two exports of images with embedded profiles can append concurrently — and
-any reader walking the list at that moment sees it mutate.
+An embedded profile is a property of one image, so the image owns it:
+`dt_image_t.embedded_profile`, written under the image cache entry's own lock, freed by
+`dt_image_cache_deallocate()`, and reused on the next export of the same image rather than
+rebuilt. The application list is init-only again — verified by checking that every remaining
+`profiles = g_list_append` sits inside `dt_colorspaces_init()`.
 
-`xprofile_lock` does NOT cover this. It is documented as guarding the *display* profile (the X
-atom / colord path) and the readers of `profiles` do not take it.
-
-**Do not "fix" this by locking the append alone.** With 23 unlocked readers that only moves
-where the unsynchronised write happens. A correct fix is one of:
-
-1. take a write lock on append and a read lock in every reader (audit all 23), or
-2. stop mutating the list at runtime — give embedded profiles their own per-image storage
-   instead of the global registry, which is where they conceptually belong anyway (they are a
-   property of one image, not of the application).
-
-(2) is the better shape and also removes the reason `colorspaces.c` reaches into `imageio/`.
+**The trap, if something like this comes back:** do not "fix" such a race by locking the append
+alone. With ~23 unlocked readers that relocates the unsynchronised write rather than removing
+it. Either lock every reader, or — better, and what was done here — stop mutating the shared
+structure at runtime and give the data to whatever actually owns it.
 
 ### Brush masks rasterize as radial spokes — wedge holes across the stroke (OPEN)
 
