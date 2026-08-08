@@ -56,6 +56,32 @@ that macro is defined only in full-API mode, while the struct-body expansion def
 outside that block (`dt_version()`, `dt_print()`, `IS_NULL_PTR`) are the consuming `.c` file's
 responsibility.
 
+### A header includes only what its own declarations need
+
+Everything else belongs in the `.c`. A header that includes more becomes a supply line its
+consumers never asked for and cannot see: they compile because something upstream happened to
+pull in what they use, and the day anyone tidies that include away the breakage surfaces
+somewhere else entirely, in a file that was never touched.
+
+This is not theoretical. Removing `gui/gtk.h` broke a dozen IOPs because it had been the only
+thing pulling `sqlite3.h` in ahead of `common/points.h` (whose vendored SFMT `#define N` then
+collided with `sqlite3_compileoption_get(int N)`). And within the same series, deleting an
+unused `widgets/label.h` from `widgets/dialog.c` removed `dt_free` — arriving through
+`label.h` -> `system/mem_alloc.h` — from a file that had never named either header.
+
+Concretely: if a header declares `void f(GtkWidget *w)`, it includes `<gtk/gtk.h>` and nothing
+more. Implementations do not belong there either — `widgets/label.h` carried five `static
+inline` helpers, and those five forced four extra includes on all ~30 of its consumers.
+Moving them to `label.c` left the header needing only `<gtk/gtk.h>`.
+
+The one legitimate exception is a header whose published interface *is* inline code
+(`widgets/draw.h`), which necessarily includes what that code calls. Keep those rare, and keep
+them honest: they are a deliberate performance trade, not a convenience.
+
+`tools/check_unused_includes.sh` gates the include lines a change adds.
+`tools/header_consumers.py` reports what each includer of a header actually takes from it,
+separating a header's own symbols from what it merely forwards.
+
 ### No SQL in GUI modules
 
 `src/libs/` and `src/views/` modules must contain no raw SQL. Database access belongs behind
@@ -602,6 +628,43 @@ similar snap anywhere in this path would silently mask a regression here rather 
 ---
 
 ## Masks / forms history
+
+### Brush masks rasterize as radial spokes — wedge holes across the stroke (OPEN)
+
+Reported 2026-08-08 on `_DSC9410.NEF` (sidecar alongside it): a 57-node brush leaves four
+wedge-shaped holes in its mask, the largest 1336x966 px. **Not caused by the gtk.h/widgets
+refactor** — exports from that branch and from master are bit-identical, image and mask
+channel alike (0 differing pixels of 24,160,256).
+
+Two things make the diagnosis quick, and both were got wrong on the first pass:
+
+- **They are not the interiors of self-crossing loops.** A brush paints a stroke of finite
+  width, so a loop's interior legitimately stays unpainted, and the largest hole looks exactly
+  like that at a glance. Look at the small ones at full resolution instead: each has a
+  *perfectly straight* edge cutting across the stroke, which no smooth outline produces.
+- **They are not the sparse-sampling path.** `use_sparse` in `_brush_get_mask_roi()`
+  (`develop/masks/brush.c`) is gated on `dt_dev_pixelpipe_has_preview_output() || pipe->type ==
+  DT_DEV_PIXELPIPE_THUMBNAIL`, and that predicate returns FALSE immediately on
+  `!dev->gui_attached`. An `ansel-cli` export therefore runs the full-sampling branch
+  (`sparse_step = 1`), and the holes are present there.
+
+The mechanism the shape points at: the mask is not a filled polygon but the **union of radial
+spokes** — for each border sample `i`, `_brush_falloff_roi()` stamps a segment from centreline
+point `points[i]` out to `border[i]`. Where consecutive spokes fan out faster than the border
+sampling density, the wedge between them is never stamped, and both its straight edges are
+spokes. That is precisely "holes orthogonal to the path".
+
+Where to look: `_brush_get_pts_border()`, and the two arc-filling helpers
+`_brush_points_recurs_border_gaps()` / `_brush_points_recurs_border_small_gaps()`. Both bail
+out with `if(l < 2) return;` where `l = |delta_angle| * max(r1, r2)` — a pixel-count test on
+arc length, which is the shape of a threshold that is right at the resolution it was tuned for
+and too coarse elsewhere. **Measure before theorising**: dump `points`/`border` for this brush
+and check actual spoke spacing at the four hole coordinates. This file's history (see the
+highlights sections above) is full of plausible-but-wrong theories that survived source
+reading and died on the first measurement.
+
+Reproduce: export with `--export_masks 1`; page 1 of the TIFF is the mask. Flood-fill from the
+border and anything left unset is a hole.
 
 ### Forms are refcounted, not deep-copied
 

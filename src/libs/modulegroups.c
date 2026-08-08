@@ -62,6 +62,7 @@
 #include <glib/gstdio.h>
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
+#include "system/screen_metrics.h"
 
 DT_MODULE(1)
 

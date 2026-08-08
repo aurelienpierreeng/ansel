@@ -19,10 +19,11 @@
 #include "widgets/notebook.h"
 
 #include "common/macros.h"            // IS_NULL_PTR
-#include "widgets/label.h"            // dt_capitalize_label, delete_underscore
+#include "widgets/widget_style.h"     // dt_capitalize_label
 #include "widgets/widget_settings.h"  // DT_PIXEL_APPLY_DPI, dt_widget_notebook_page_changed
 #include "widgets/widget_style.h"     // dt_gui_add_class
 #include <glib/gi18n.h>
+#include "system/mem_alloc.h"
 
 static void _notebook_size_callback(GtkNotebook *notebook, GdkRectangle *allocation, gpointer *data)
 {

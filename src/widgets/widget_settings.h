@@ -19,11 +19,14 @@
 #ifndef DT_WIDGETS_WIDGET_SETTINGS_H
 #define DT_WIDGETS_WIDGET_SETTINGS_H
 
+/* Only what the declarations below need: GtkWidget/GdkRGBA/cairo_t (gtk.h), pthread_t, and
+ * va_list. This header used to include system/screen_metrics.h purely to re-export
+ * dt_cairo_image_surface_*() to ~45 consumers that never asked it for them -- a supply line
+ * nobody declared and nobody could see, which breaks somewhere unrelated the day it is
+ * tidied. Those files include screen_metrics.h themselves now. */
 #include <gtk/gtk.h>
 #include <pthread.h>
 #include <stdarg.h>
-
-#include "system/screen_metrics.h"
 
 G_BEGIN_DECLS
 
@@ -372,10 +375,6 @@ void dt_gtk_toggle_button_set_active_ext(GtkToggleButton *toggle_button, const c
 #define dt_gtk_widget_queue_draw(widget) gtk_widget_queue_draw(widget)
 #define dt_gtk_toggle_button_set_active(toggle_button, active) gtk_toggle_button_set_active(toggle_button, active)
 #endif
-
-/* dt_cairo_image_surface_create{,_for_data}() moved to system/screen_metrics.h with the ppd
- * they scale by, so code below this layer can build a device-scaled surface too. This header
- * includes it, so the ~45 files using them by these names are unaffected. */
 
 G_END_DECLS
 

@@ -31,6 +31,10 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#ifdef GDK_WINDOWING_QUARTZ
+#include "osx/osx.h"   // dt_osx_get_ppd(), the only reliable ppd source on quartz
+#endif
+
 // Toolkit state, set by the application during GUI init and read everywhere after.
 // Single-threaded by construction: all of it is touched from the GUI thread only.
 static GdkEventMask _scroll_mask = GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK;

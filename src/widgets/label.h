@@ -26,20 +26,16 @@
  * hand-rolled at ~55 call sites before this pair existed, which is why some panels centred
  * their headings and others did not. */
 
-#include "common/glib_utils.h"     // dt_string_replace
-#include "common/macros.h"         // IS_NULL_PTR
-#include "system/mem_alloc.h"    // dt_free
-#include "widgets/widget_style.h"  // dt_gui_add_class, dt_capitalize_label
-
+/* Only what the declarations below need: GtkWidget, gchar. A header that includes anything
+ * else becomes a supply line its consumers do not know they are using, and the breakage
+ * surfaces somewhere else entirely the day someone tidies it up. */
 #include <gtk/gtk.h>
 
 G_BEGIN_DECLS
 
-/** Remove the underscores GTK reads as mnemonic markers from a label. */
-static inline gchar *delete_underscore(const char *s)
-{
-  return dt_string_replace(s, "_");
-}
+/** Remove the underscores GTK reads as mnemonic markers from a label.
+ *  Newly-allocated; the caller frees it. */
+gchar *delete_underscore(const char *s);
 
 /**
  * @brief Remove Pango/Gtk markup and accel mnemonics from a text label.
@@ -48,55 +44,17 @@ static inline gchar *delete_underscore(const char *s)
  * @param s Original string to clean
  * @return gchar* Newly-allocated string. The caller is responsible for freeing it.
  */
-static inline gchar *strip_markup(const char *s)
-{
-  if(IS_NULL_PTR(s)) return g_strdup("");
-
-  PangoAttrList *attrs = NULL;
-  gchar *plain = NULL;
-
-  const gchar *underscore = "_";
-  gunichar mnemonic = underscore[0];
-  if(!pango_parse_markup(s, -1, mnemonic, &attrs, &plain, NULL, NULL))
-    plain = delete_underscore(s);
-
-  pango_attr_list_unref(attrs);
-  return plain;
-}
+gchar *strip_markup(const char *s);
 
 /** Turn an existing label into a section heading: full width, centred, ellipsized. */
-static inline void dt_ui_section_label_set(GtkWidget *label)
-{
-  gtk_widget_set_halign(label, GTK_ALIGN_FILL); // make it span the whole available width
-  gtk_label_set_xalign (GTK_LABEL(label), 0.5f);
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END); // ellipsize labels
-  dt_gui_add_class(label, "dt_section_label"); // make sure that we can style these easily
-}
+void dt_ui_section_label_set(GtkWidget *label);
 
 /** A section heading. Capitalised: grammar says sentences start with a capital, and typography
  * says it makes the structure of the text easier to pick out. */
-static inline GtkWidget *dt_ui_section_label_new(const gchar *str)
-{
-  gchar *str_cpy = g_strdup(str);
-  dt_capitalize_label(str_cpy);
-  GtkWidget *label = gtk_label_new(str_cpy);
-  dt_free(str_cpy);
-  dt_ui_section_label_set(label);
-  return label;
-}
+GtkWidget *dt_ui_section_label_new(const gchar *str);
 
 /** A plain label: start-aligned, capitalised, ellipsized. */
-static inline GtkWidget *dt_ui_label_new(const gchar *str)
-{
-  gchar *str_cpy = g_strdup(str);
-  dt_capitalize_label(str_cpy);
-  GtkWidget *label = gtk_label_new(str_cpy);
-  dt_free(str_cpy);
-  gtk_widget_set_halign(label, GTK_ALIGN_START);
-  gtk_label_set_xalign (GTK_LABEL(label), 0.0f);
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
-  return label;
-}
+GtkWidget *dt_ui_label_new(const gchar *str);
 
 /*  activate ellipsization of the combox entries */
 void dt_ellipsize_combo(GtkComboBox *cbox);

@@ -18,12 +18,9 @@
 
 #include "widgets/dialog.h"
 
-#include "common/l10n.h"
-#include "common/macros.h"            // IS_NULL_PTR
 #include "widgets/accelerators.h"     // dt_accels_disable around a modal text entry
-#include "widgets/label.h"
 #include "widgets/widget_settings.h"  // DT_GUI_BOX_SPACING, DT_PIXEL_APPLY_DPI, root window
-#include "widgets/widget_style.h"
+#include "system/mem_alloc.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
