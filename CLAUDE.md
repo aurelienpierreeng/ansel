@@ -629,6 +629,37 @@ similar snap anywhere in this path would silently mask a regression here rather 
 
 ## Masks / forms history
 
+### The colour-profile registry is appended to at runtime, unlocked (OPEN)
+
+`dt_colorspaces_t.profiles` (`common/colorspaces.h`) is a `GList` built once by
+`dt_colorspaces_init()` and thereafter read from everywhere — ~23 unsynchronised touches in
+`colorspaces.c` alone. That is safe only because it is otherwise immutable after init.
+
+It is not immutable. `_build_embedded_profile()` (`colorspaces.c`, reached from
+`dt_colorspaces_get_output_profile()`) appends a container for an image's embedded ICC profile
+at **runtime**:
+
+```c
+color_profiles->profiles = g_list_append(color_profiles->profiles, container);
+```
+
+with no lock held. `dt_colorspaces_get_output_profile()` is called from export, and exports run
+in parallel jobs, so two exports of images with embedded profiles can append concurrently — and
+any reader walking the list at that moment sees it mutate.
+
+`xprofile_lock` does NOT cover this. It is documented as guarding the *display* profile (the X
+atom / colord path) and the readers of `profiles` do not take it.
+
+**Do not "fix" this by locking the append alone.** With 23 unlocked readers that only moves
+where the unsynchronised write happens. A correct fix is one of:
+
+1. take a write lock on append and a read lock in every reader (audit all 23), or
+2. stop mutating the list at runtime — give embedded profiles their own per-image storage
+   instead of the global registry, which is where they conceptually belong anyway (they are a
+   property of one image, not of the application).
+
+(2) is the better shape and also removes the reason `colorspaces.c` reaches into `imageio/`.
+
 ### Brush masks rasterize as radial spokes — wedge holes across the stroke (OPEN)
 
 Reported 2026-08-08 on `_DSC9410.NEF` (sidecar alongside it): a 57-node brush leaves four
