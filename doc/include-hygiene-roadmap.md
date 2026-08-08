@@ -718,3 +718,51 @@ Note this also corrects the claim in #1109 that `selection.c`'s `gui/gtk.h` incl
 
 `common/` has **one** `gui/` include: `history_merge.c`, removed by #1110. Layering
 violations 219 → 218, and 244 at the start of this series.
+## 15. CI gates: what each one can and cannot see
+
+Two checks, because neither covers the other's cases.
+
+### `tools/check_layering.sh` — a ratchet on the include graph
+
+Layering violations may fall, never rise; cycles must stay at zero. Baseline in
+`tools/include_baseline.txt`, updated with `--update` when the number improves.
+
+A ratchet rather than a threshold because the tree carries ~217 inherited violations:
+demanding zero would mean the check gets switched off. "No worse than yesterday" costs
+nothing to comply with and cannot be quietly eroded. Cycles are *not* ratcheted — the
+explicit include guards this repository uses instead of `#pragma once` exist precisely so a
+cycle is a hard error, and a baseline there would hand that back.
+
+Verified by injecting `#include "gui/gtk.h"` into `common/image_extensions.h`: 220 → 221,
+exit 1, restored → exit 0. And again in the other direction, unplanned: rebasing this branch
+onto a master that had gained #1110 and #1111 made the check fail with *fell 220 → 217*,
+which is the ratchet working — an improvement that is not recorded is an improvement the
+next regression gets to spend.
+
+### `tools/check_unused_includes.sh` — clang-tidy on the diff
+
+`misc-include-cleaner`, filtered to the "is not used directly" half and run only on the `.c`
+files a pull request touches.
+
+**Filtered**, because the other half ("no header providing X is directly included") is
+unusable on a glib/GTK codebase: include-cleaner attributes `g_strrstr()` to
+`glib/gstrfuncs.h` rather than to the `<glib.h>` umbrella everyone includes. Measured 46
+warnings on one file, 45 of them that half. `IgnoreHeaders` in `.clang-tidy` covers the
+umbrella and system headers for the same reason.
+
+**On the diff**, because the measured density is ~0.78 unused includes per translation unit —
+several hundred tree-wide. Gating the diff means every file anyone touches comes out clean,
+with no baseline file to drift.
+
+### The gap, stated plainly
+
+**The unused-include check cannot see headers, and that is not a configuration mistake.**
+include-cleaner analyses the symbols referenced by a translation unit's *main file*; a header
+is not one. `--header-filter` does not help — measured, it selects which files' diagnostics
+are printed, not which are analysed, and reports the `.c`'s unused includes while saying
+nothing about the `.h`. Compiling the header as a synthetic translation unit is worse: that
+unit references nothing, so every one of the header's includes comes out "unused".
+
+This matters because **the case that motivated both checks is exactly the case this one
+cannot see** — `common/metadata.h` including `gui/gtk.h` and using no GTK symbol (§14). The
+layering ratchet is what catches that class, which is why both exist.

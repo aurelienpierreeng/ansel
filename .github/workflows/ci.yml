@@ -115,7 +115,7 @@ jobs:
           sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg llvm-snapshot.gpg.key
           echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y clang-20 libomp-20-dev
+          sudo apt-get install -y clang-20 libomp-20-dev clang-tidy-20
       - uses: actions/checkout@v6
         with:
           submodules: true
@@ -155,6 +155,24 @@ jobs:
           done
 
           exit $status
+      - name: Check include hygiene
+        # Cheap, no compilation database needed, so it runs on every Linux variant. The
+        # ratchet is what catches a header pulling in a higher layer -- the case the
+        # unused-include check below is structurally blind to.
+        run: |
+          "${SRC_DIR}/tools/check_layering.sh"
+      - name: Check for unused includes in changed files
+        # Only on the LLVM variant: clang-tidy reads compile_commands.json, and a database
+        # written by GCC carries flags clang-tidy rejects. Only on pull requests, because it
+        # gates the diff rather than the tree -- see the script's header for why.
+        if: ${{ github.event_name == 'pull_request' && matrix.compiler.compiler == 'LLVM20' && matrix.target == 'skiptest' }}
+        env:
+          BUILD_DIR: ${{ github.workspace }}/build
+          CLANG_TIDY: clang-tidy-20
+        run: |
+          cd "${SRC_DIR}"
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          ./tools/check_unused_includes.sh --changed "origin/${{ github.base_ref }}"
       - name: Upload ansel backtrace
         if: always()
         uses: actions/upload-artifact@v4
