@@ -46,7 +46,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "control/signal.h"
@@ -54,7 +54,7 @@
 #include "develop/blend.h"
 #include "widgets/bauhaus.h"
 #include "gui/bauhaus_conf.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "math/math.h"
 #include "develop/iop_profile.h"
 #include "common/conf.h"

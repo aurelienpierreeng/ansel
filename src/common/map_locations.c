@@ -24,7 +24,7 @@
 #include "common/database.h"
 #include "common/geo.h"
 #include "common/map_locations.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/debug.h"
 #include "common/tags.h"

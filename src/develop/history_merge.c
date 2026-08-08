@@ -81,7 +81,7 @@
 #include "develop/history_merge.h"
 
 #include "develop/iop_order.h"
-#include "common/topological_sort.h"
+#include "math/topological_sort.h"
 #include "control/control.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"

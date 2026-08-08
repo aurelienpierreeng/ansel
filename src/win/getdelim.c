@@ -41,7 +41,7 @@
 
 #include <config.h>
 
-#include "common/macros.h"
+#include "system/macros.h"
 
 /* Don't use __attribute__ __nonnull__ in this compilation unit.  Otherwise gcc
    optimizes away the IS_NULL_PTR(lineptr) || IS_NULL_PTR(n) || IS_NULL_PTR(fp) tests below. */

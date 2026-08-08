@@ -143,7 +143,7 @@
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
 #include "common/points.h"
-#include "common/resource_limits.h"
+#include "system/resource_limits.h"
 #include "common/tags.h"
 #include "common/styles.h"
 #include "common/undo.h"

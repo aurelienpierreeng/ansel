@@ -40,7 +40,7 @@
 #include "control/jobs/control_jobs.h"
 #include "common/database.h"
 #include "common/debug.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/metadata.h"
 #include "control/control.h"

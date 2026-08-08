@@ -54,7 +54,7 @@
 
 #include "common/collection.h"
 #include "common/act_on.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/image.h"

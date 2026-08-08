@@ -4,10 +4,8 @@
     Copyright (C) 2010 johannes hanika.
     Copyright (C) 2010 Pascal de Bruijn.
     Copyright (C) 2012 Richard Wonka.
-    Copyright (C) 2013-2014 Jérémy Rosen.
-    Copyright (C) 2014-2015, 2020 Pascal Obry.
-    Copyright (C) 2015-2017 Tobias Ellinghaus.
-    Copyright (C) 2016 Roman Lebedev.
+    Copyright (C) 2013, 2016 Tobias Ellinghaus.
+    Copyright (C) 2020, 2022 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     
     darktable is free software: you can redistribute it and/or modify
@@ -24,20 +22,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_PRINTPROF_H
-#define DT_COMMON_PRINTPROF_H
+#ifndef DT_MATH_CALCULATOR_H
+#define DT_MATH_CALCULATOR_H
 
-#include <glib.h>
-#include <inttypes.h>
-#include <lcms2.h>
-#include <stddef.h>
+/** solve the mathematical expression in formula, the only allowed variable is 'x' */
+float dt_calculator_solve(const float x, const char *formula);
 
-int dt_apply_printer_profile(void **in, uint32_t width, uint32_t height, int bpp, cmsHPROFILE hInProfile,
-                             cmsHPROFILE hOutProfile, int intent, gboolean black_point_compensation);
-// this routines takes as input an image of 8 or 16 bpp but always return a 8 bpp result. It is indeed better to
-// apply the profile to a 16bit input but we do not need this for printing.
-
-#endif // DT_COMMON_PRINTPROF_H
+#endif // DT_MATH_CALCULATOR_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

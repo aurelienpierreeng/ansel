@@ -20,7 +20,6 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "system/screen_metrics.h"
 #include "widgets/widget_settings.h"
 
 
@@ -84,9 +83,22 @@ static gboolean _reverse_x = FALSE, _reverse_y = FALSE;
 
 // Toolkit metrics. Defaults are the 96-DPI, 16px-font reference: correct for standalone
 // dialogs that run after gtk_init() but before the application has resolved the real values.
-// dpi/ppd/em are screen hardware facts and live in system/screen_metrics.c, which sits
-// below this layer so common/ can read them too. These stay as the toolkit's names for
-// them -- 45-odd files use them -- but hold no copy of their own.
+//
+// The store is here rather than in gui/, even though the GUI is what resolves the values,
+// because every widget reads them on every draw: putting it in gui/ would make widgets/
+// depend on gui/, and that dependency direction is what makes this module portable at all.
+// gui/screen_metrics.c forwards to these under the dt_screen_* names for the handful of
+// readers below layer 4 (the crash reporter, telemetry) and for the cairo helpers.
+static double _dpi = 96.0;
+static double _dpi_factor = 1.0;
+static double _ppd = 1.0;
+static double _em = 16.0;
+static gboolean _metrics_probed = FALSE;
+
+double dt_widget_dpi(void) { return _dpi; }
+void dt_widget_set_dpi(double dpi) { if(dpi > 0.0) { _dpi = dpi; _metrics_probed = TRUE; } }
+
+gboolean dt_widget_metrics_probed(void) { return _metrics_probed; }
 
 static dt_widget_cursor_handler_t _cursor_handler = NULL;
 static dt_widget_message_handler_t _message_handler = NULL;
@@ -133,14 +145,14 @@ void dt_widget_set_cursor(GdkCursorType cursor)
   if(_cursor_handler) _cursor_handler(cursor);
 }
 
-double dt_widget_dpi_factor(void) { return dt_screen_dpi_factor(); }
-void dt_widget_set_dpi_factor(double factor) { dt_screen_set_dpi_factor(factor); }
+double dt_widget_dpi_factor(void) { return _dpi_factor; }
+void dt_widget_set_dpi_factor(double factor) { if(factor > 0.0) { _dpi_factor = factor; _metrics_probed = TRUE; } }
 
-double dt_widget_ppd(void) { return dt_screen_ppd(); }
-void dt_widget_set_ppd(double ppd) { dt_screen_set_ppd(ppd); }
+double dt_widget_ppd(void) { return _ppd; }
+void dt_widget_set_ppd(double ppd) { if(ppd > 0.0) { _ppd = ppd; _metrics_probed = TRUE; } }
 
-double dt_widget_em_size(void) { return dt_screen_em_size(); }
-void dt_widget_set_em_size(double em) { dt_screen_set_em_size(em); }
+double dt_widget_em_size(void) { return _em; }
+void dt_widget_set_em_size(double em) { if(em > 0.0) _em = em; }
 
 void dt_widget_set_gui_thread(pthread_t thread)
 {
@@ -372,6 +384,18 @@ gboolean dt_widget_stored_bool(const char *key)
 void dt_widget_store_bool(const char *key, gboolean value)
 {
   if(key && _stored_bool_setter) _stored_bool_setter(key, value);
+}
+
+static gint _min_panel_width = 350;
+
+gint dt_widget_min_panel_width(void)
+{
+  return _min_panel_width;
+}
+
+void dt_widget_set_min_panel_width(gint width)
+{
+  _min_panel_width = width;
 }
 
 static gboolean _theme_loaded = FALSE;

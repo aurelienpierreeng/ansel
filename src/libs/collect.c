@@ -129,7 +129,7 @@
 #include "common/collection.h"
 #include "common/film.h"
 #include "common/image.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/metadata.h"
 #include "common/mipmap_cache.h"
 #include "common/module_versioning.h"

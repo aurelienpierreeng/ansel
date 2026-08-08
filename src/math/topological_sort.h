@@ -16,8 +16,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_TOPOLOGICAL_SORT_H
-#define DT_COMMON_TOPOLOGICAL_SORT_H
+#ifndef DT_MATH_TOPOLOGICAL_SORT_H
+#define DT_MATH_TOPOLOGICAL_SORT_H
 
 /**
  * @file topological_sort.h
@@ -244,4 +244,4 @@ dt_digraph_node_t *dt_digraph_node_new(const char *id);
 
 G_END_DECLS
 
-#endif // DT_COMMON_TOPOLOGICAL_SORT_H
+#endif // DT_MATH_TOPOLOGICAL_SORT_H

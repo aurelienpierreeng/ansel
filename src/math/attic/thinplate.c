@@ -32,7 +32,7 @@
 #define MIN(a, b) ((a) > (b) ? (b) : (a))
 #endif
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/solvers/thinplate.h"
 #include "math/svd.h"

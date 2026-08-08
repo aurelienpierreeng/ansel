@@ -67,7 +67,7 @@
 */
 #include "common/global_mutexes.h"
 #include "common/utility.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/logging.h"
 #include "system/mem_alloc.h"

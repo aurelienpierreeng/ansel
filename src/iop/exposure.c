@@ -66,7 +66,7 @@
 #include <string.h>
 
 #include "widgets/bauhaus.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -88,6 +88,7 @@
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
 #include "widgets/label.h"
+#include "gui/screen_metrics.h"
 
 #define exposure2white(x) exp2f(-(x))
 #define white2exposure(x) -dt_log2f(fmaxf(1e-20f, x))

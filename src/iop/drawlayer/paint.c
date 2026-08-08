@@ -28,7 +28,7 @@
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/brush_profile.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/times.h"

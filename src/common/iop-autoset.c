@@ -17,7 +17,7 @@
 */
 
 #include "iop-autoset.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"

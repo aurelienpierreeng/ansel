@@ -14,11 +14,11 @@ A file belongs here only if it carries **no application state**:
 * no `dt_*_get_global()` accessor of any kind,
 * no `dt_conf_*` — a widget is configured by its caller, not by reading preferences,
 * no `#include` from `common/`, `develop/`, `control/`, `views/`, `libs/` or `imageio/`
-  *except* pure macro headers that carry no state (`common/macros.h` for `IS_NULL_PTR`),
+  *except* pure macro headers that carry no state (`system/macros.h` for `IS_NULL_PTR`),
   which sit at a lower layer and are legitimate to depend on.
 
 **Every file here satisfies the first three — verified, zero violations.** Configuration
-arrives through setters (`dtgtk_side_panel_set_min_width()`), shared toolkit state lives in
+arrives through setters (`dt_widget_set_min_panel_width()`), shared toolkit state lives in
 `widget_settings.h`, and behaviour that needs the application is announced as a signal for
 the caller to act on (`resetlabel` emits `"reset"`; `develop/imageop_gui.c` attaches the
 IOP meaning).
@@ -71,7 +71,7 @@ of one.
 
 ### What is still depended on, and legitimately
 
-Downward includes only: `system/` (allocation, SIMD), `math/`, `common/macros.h` for
+Downward includes only: `system/` (allocation, SIMD), `math/`, `system/macros.h` for
 `IS_NULL_PTR`, and — in `focus_peaking.c` alone — `pixel/eigf.h` for the guided filter. All
 sit below layer 4. That last one means `focus_peaking.c` is not portable to another
 application as-is, unlike the rest.

@@ -17,7 +17,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "splines.h"
+#include "math/splines.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>

@@ -31,7 +31,7 @@
 /* workaround to fix issue #12720 */
 #define _DARWIN_C_SOURCE
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include <Carbon/Carbon.h>
 #include <ApplicationServices/ApplicationServices.h>

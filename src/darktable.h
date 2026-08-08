@@ -103,7 +103,7 @@
  * application into every translation unit. A file needing dt_print(), dt_alloc_align()
  * or DT_MODULE() must include common/logging.h, common/mem_alloc.h or
  * common/module_versioning.h itself. */
-#include "common/dtpthread.h"   // dt_pthread_mutex_t / rwlock members of darktable_t
+#include "system/dtpthread.h"   // dt_pthread_mutex_t / rwlock members of darktable_t
 #include "system/sys_resources.h" // dt_sys_resources_t member of darktable_t
 #include "control/signal.h"     // DT_SIGNAL_COUNT sizes the unmuted_signal_dbg array
 
@@ -112,7 +112,7 @@
 #include <stdint.h>
 
 /* win/win.h (windows.h/psapi + the #undef of the legacy `near`/`grp2`/`interface`
- * macros) now comes in through common/macros.h, which every TU includes. It used to
+ * macros) now comes in through system/macros.h, which every TU includes. It used to
  * live here, which meant dropping this header silently dropped the shim too --
  * a MinGW-only breakage, far from its cause. Nothing to do here any more. */
 

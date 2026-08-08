@@ -19,7 +19,7 @@
 // R9 sensor-rolloff (knee) estimation and inversion (CPU + OpenCL). (implementation; see knee.h for the public
 // API.)
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/simd.h"
 #include "system/target_clones.h"
 #include "common/pixelpipe_cache_alloc.h"

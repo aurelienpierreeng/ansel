@@ -73,7 +73,7 @@
 */
 #include "darktable.h"
 #include "common/colorlabels.h"   // DT_COLORLABELS_*
-#include "system/screen_metrics.h"
+#include "gui/screen_metrics.h"
 #include "widgets/widget_settings.h"
 #include "widgets/resize_handle.h"
 #include "common/colorspaces.h"

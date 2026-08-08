@@ -57,7 +57,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -74,7 +74,7 @@
 #include "iop/iop_api.h"
 
 #include <librsvg/rsvg.h>
-#include "system/screen_metrics.h"
+#include "gui/screen_metrics.h"
 // ugh, ugly hack. why do people break stuff all the time?
 #ifndef RSVG_CAIRO_H
 #include <librsvg/rsvg-cairo.h>

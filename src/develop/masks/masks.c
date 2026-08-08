@@ -40,7 +40,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/hash.h"
@@ -51,7 +51,7 @@
 #include "control/control.h"
 #include "control/signal.h"
 #include "common/database.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
 #include "develop/masks.h"

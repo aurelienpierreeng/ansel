@@ -59,7 +59,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/logging.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"

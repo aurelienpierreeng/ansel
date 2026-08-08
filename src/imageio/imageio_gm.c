@@ -27,7 +27,7 @@
 
 #ifdef HAVE_GRAPHICSMAGICK
 #include "imageio_gm.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/logging.h"
 #include "common/exif.h"
 #include "imageio/imageio_magick_abort_guard.h"

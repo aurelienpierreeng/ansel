@@ -40,7 +40,7 @@
 #endif
 // our includes go first:
 #include "widgets/bauhaus.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -66,6 +66,7 @@
 #include "widgets/label.h"
 #include "widgets/notebook.h"
 #include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 #define LUT_ELEM 360     // gamut LUT number of elements: resolution of 1°
 #define STEPS 92         // so we test 92x92x92 combinations of RGB in [0; 1] to build the gamut LUT
 

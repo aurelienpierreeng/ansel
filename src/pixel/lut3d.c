@@ -18,7 +18,7 @@
 
 #include "system/openmp.h"
 #include "system/target_clones.h"
-#include "common/lut3d.h"
+#include "pixel/lut3d.h"
 
 #include <math.h>
 

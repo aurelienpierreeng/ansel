@@ -19,7 +19,7 @@
 #include "common/colorspaces.h"   // dt_colorspaces_get_global, and lcms2
 #include "common/colorspaces_inline_conversions.h"   // dt_Lab_to_XYZ
 #include "common/conf.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/times.h"

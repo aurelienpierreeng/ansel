@@ -45,7 +45,7 @@
 #include "config.h"
 #endif
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 
 #include <glib.h>
 #include <gtk/gtk.h>

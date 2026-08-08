@@ -62,7 +62,7 @@
 #include "control/jobs/control_jobs.h"
 #include "common/collection.h"
 #include "common/colorspaces.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/database.h"

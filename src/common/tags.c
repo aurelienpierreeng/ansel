@@ -46,7 +46,7 @@
 #include "common/metadata_export.h"
 #include "common/utility.h"
 #include "common/tags.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/image.h"
 #include "common/debug.h"

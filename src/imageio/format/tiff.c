@@ -41,7 +41,7 @@
 #include "widgets/bauhaus.h"
 #include "develop/imageop.h"
 #include "common/colorspaces.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/pixelpipe_cache_alloc.h"

@@ -49,7 +49,7 @@
 #include "pixel/bilateralcl.h"
 #include "pixel/locallaplacian.h"
 #include "pixel/locallaplaciancl.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"

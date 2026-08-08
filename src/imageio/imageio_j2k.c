@@ -29,7 +29,7 @@
 #include <glib/gstdio.h>
 #include "config.h"
 #endif
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/exif.h"

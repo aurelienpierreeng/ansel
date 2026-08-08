@@ -57,7 +57,7 @@
 */
 
 #include "common/global_mutexes.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "system/mem_alloc.h"
 #include "system/openmp.h"

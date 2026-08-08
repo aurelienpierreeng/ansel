@@ -78,7 +78,7 @@
 #include "develop/imageop.h"
 #include "common/collection.h"
 #include "common/debug.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/exif.h"
 #include "common/file_location.h"
 #include "common/grouping.h"

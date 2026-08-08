@@ -19,9 +19,9 @@
 #ifndef DT_PIXEL_COLOREQUAL_SHARED_H
 #define DT_PIXEL_COLOREQUAL_SHARED_H
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "pixel/iop_profile.h"
-#include "common/lut3d.h"
+#include "pixel/lut3d.h"
 
 /**
  * We keep the same GUI hue convention as the original color equalizer so the

@@ -31,7 +31,7 @@
  * imageio/storage/disk.c, imageio/imageio_rawspeed.cc, ...) do not have to include
  * darktable.h, and therefore the whole application, to take a lock. */
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -26,8 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_DTPTHREAD_H
-#define DT_COMMON_DTPTHREAD_H
+#ifndef DT_SYSTEM_DTPTHREAD_H
+#define DT_SYSTEM_DTPTHREAD_H
 
 #include "external/ThreadSafetyAnalysis.h"
 #include <assert.h>
@@ -620,7 +620,7 @@ int dt_pthread_create(pthread_t *thread, void *(*start_routine)(void *), void *a
 
 void dt_pthread_setname(const char *name);
 
-#endif // DT_COMMON_DTPTHREAD_H
+#endif // DT_SYSTEM_DTPTHREAD_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

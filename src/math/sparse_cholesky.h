@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/pixelpipe_cache_alloc.h"
 
 // Factored SPD matrix (lower-triangular Cholesky factor L, column-compressed).

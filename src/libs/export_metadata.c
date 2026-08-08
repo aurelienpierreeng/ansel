@@ -27,7 +27,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "widgets/bauhaus.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/utility.h"
 #include "widgets/gdkkeys.h"

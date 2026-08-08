@@ -161,6 +161,14 @@ jobs:
         # unused-include check below is structurally blind to.
         run: |
           "${SRC_DIR}/tools/check_layering.sh"
+          "${SRC_DIR}/tools/check_module_boundaries.sh"
+      - name: Check statelessness rules
+        # Measured from the compiled objects, so it needs the build above; Debug keeps the
+        # symbol tables objdump reads (an LTO Release build emits bytecode instead).
+        env:
+          BUILD_DIR: ${{ github.workspace }}/build
+        run: |
+          "${SRC_DIR}/tools/check_statelessness.sh"
       - name: Check for unused includes in changed files
         # Only on the LLVM variant: clang-tidy reads compile_commands.json, and a database
         # written by GCC carries flags clang-tidy rejects. Only on pull requests, because it

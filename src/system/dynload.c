@@ -25,7 +25,7 @@
 
 #ifdef HAVE_OPENCL
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include <stdlib.h>
 #ifndef __APPLE__
@@ -36,7 +36,7 @@
 #include <glib.h>
 #endif //!__APPLE__
 
-#include "common/dynload.h"
+#include "system/dynload.h"
 
 
 #ifndef __APPLE__

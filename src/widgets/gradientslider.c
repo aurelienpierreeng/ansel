@@ -39,7 +39,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include <math.h>
 #include "widgets/widget_settings.h"
 #include "system/mem_alloc.h"

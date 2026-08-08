@@ -26,7 +26,7 @@
 #include "common/opencl.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"

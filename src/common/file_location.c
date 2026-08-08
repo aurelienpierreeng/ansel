@@ -57,7 +57,7 @@
 #include "darktable.h"
 #include "file_location.h"
 #include "whereami.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/utility.h"

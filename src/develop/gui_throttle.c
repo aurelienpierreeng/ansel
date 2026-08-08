@@ -17,10 +17,10 @@
 */
 
 #include "develop/gui_throttle.h"
-#include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
+#include "system/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
 
 #include "system/atomic.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 
 #include <stdint.h>
 

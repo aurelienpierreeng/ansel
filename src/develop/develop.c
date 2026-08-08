@@ -88,6 +88,7 @@
 #include "libs/colorpicker.h"
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
+#include "gui/screen_metrics.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 

@@ -34,7 +34,7 @@
 #include <gdk/gdkwayland.h>
 #endif
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 
 G_BEGIN_DECLS
 

@@ -23,7 +23,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "thumbnail_btn.h"
-#include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
+#include "system/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
 #include "widgets/widget_style.h"
 #include <string.h>
 

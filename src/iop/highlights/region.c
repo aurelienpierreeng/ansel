@@ -19,7 +19,7 @@
 // Per-region gather/composite + the region reconstruction driver (CPU + OpenCL). (implementation; see region.h for
 // the public API.)
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "system/target_clones.h"

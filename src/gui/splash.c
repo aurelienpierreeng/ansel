@@ -18,7 +18,7 @@
 
 #include "gui/splash.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "common/file_location.h"

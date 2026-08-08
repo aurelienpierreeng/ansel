@@ -28,7 +28,7 @@
 */
 
 #ifdef HAVE_IMAGEMAGICK
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/logging.h"
 #include "develop/develop.h"
 #include "common/exif.h"

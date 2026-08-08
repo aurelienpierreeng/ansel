@@ -58,7 +58,7 @@
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -74,6 +74,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include "gui/screen_metrics.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_monochrome_params_t)
 

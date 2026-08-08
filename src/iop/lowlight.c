@@ -67,6 +67,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_lowlight_params_t)
 

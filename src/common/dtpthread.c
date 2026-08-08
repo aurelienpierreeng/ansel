@@ -122,7 +122,7 @@ int dt_pthread_create(pthread_t *thread, void *(*start_routine)(void *), void *a
   return ret;
 }
 
-// Named-rwlock wait-time diagnostics (see common/dtpthread.h). Split into this .c file, which
+// Named-rwlock wait-time diagnostics (see system/dtpthread.h). Split into this .c file, which
 // unlike dtpthread.h can include common/logging.h, so the traces go through dt_print(DT_DEBUG_HISTORY,
 // ...) and respect `-d history` instead of firing unconditionally via a raw fprintf.
 void _dt_pthread_rwlock_diag_log_rdlock(const char *name, unsigned long tid, double wait_ms,

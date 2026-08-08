@@ -63,7 +63,7 @@
 #include "widgets/bauhaus.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -78,6 +78,7 @@
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 #include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 #define DT_GUI_CURVE_INFL .3f

@@ -19,7 +19,7 @@
 #ifndef DT_GUI_LUT_VIEWER_H
 #define DT_GUI_LUT_VIEWER_H
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/gui_module_api.h"
 #include "develop/iop_profile.h"
 

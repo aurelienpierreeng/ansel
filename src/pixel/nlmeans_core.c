@@ -26,7 +26,7 @@
 #include "config.h"
 #include "common/pixelpipe_cache_alloc.h"
 #endif
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/simd.h"

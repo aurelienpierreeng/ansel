@@ -61,7 +61,7 @@
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -91,6 +91,7 @@
 #include "widgets/label.h"
 #include "widgets/notebook.h"
 #include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 // which version of the non-local means code should be used?  0=old (this file), 1=new (src/common/nlmeans_core.c)
 #define USE_NEW_IMPL_CL 0
 

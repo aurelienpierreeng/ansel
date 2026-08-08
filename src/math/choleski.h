@@ -35,7 +35,7 @@
 #include <time.h>
 
 #include "common/imagebuf.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 

@@ -28,7 +28,7 @@
 #include "iop/drawlayer/paint.h"
 #include "iop/drawlayer/brush_profile.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/simd.h"
 #include "iop/noise_generator.h"
 

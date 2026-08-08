@@ -25,7 +25,7 @@
 #ifndef DT_COMMON_CACHE_H
 #define DT_COMMON_CACHE_H
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include <glib.h>
 #include <inttypes.h>
 #include <stddef.h>

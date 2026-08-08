@@ -31,7 +31,7 @@
 #ifndef DT_COMMON_UNDO_H
 #define DT_COMMON_UNDO_H
 
-#include "common/dtpthread.h"  // for dt_pthread_mutex_t
+#include "system/dtpthread.h"  // for dt_pthread_mutex_t
 #include <glib.h>              // for gpointer, GList, gboolean
 #include <stdint.h>            // for uint32_t
 

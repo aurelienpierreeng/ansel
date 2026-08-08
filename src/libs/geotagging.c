@@ -48,7 +48,7 @@
 #include "widgets/gdkkeys.h"
 #include "common/database.h"
 #include "common/debug.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/file_location.h"
 #include "common/image_cache.h"

@@ -28,7 +28,7 @@
 #include "common/undo.h"
 #include "common/image.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/times.h"
 #include <glib.h>   // for GList, gpointer, g_list_prepend
