@@ -20,7 +20,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/opencl.h"   // cl_mem, for pixel/dwt.h which uses it without including CL
 #include "pixel/eaw.h"
 #include "math/math.h"   // dt_fast_expf, fast_mexp2f
 #include "system/openmp.h"
