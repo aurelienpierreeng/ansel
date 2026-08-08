@@ -20,7 +20,7 @@
 #define DT_WIDGETS_WIDGET_SETTINGS_H
 
 /* Only what the declarations below need: GtkWidget/GdkRGBA/cairo_t (gtk.h), pthread_t, and
- * va_list. This header used to include system/screen_metrics.h purely to re-export
+ * va_list. This header used to include gui/screen_metrics.h purely to re-export
  * dt_cairo_image_surface_*() to ~45 consumers that never asked it for them -- a supply line
  * nobody declared and nobody could see, which breaks somewhere unrelated the day it is
  * tidied. Those files include screen_metrics.h themselves now. */
@@ -206,11 +206,27 @@ void dt_widget_notebook_page_changed(gpointer owner);
  * size in pixels. Widgets scale themselves by these; the application computes them from the
  * screen and the theme and pushes them here. They lived in dt_gui_gtk_t, which meant a widget
  * had to reach the application global to size itself. */
+/** Screen resolution in dots per inch; 96.0 (the X/GDK default) until resolved. */
+double dt_widget_dpi(void);
+void dt_widget_set_dpi(double dpi);
+
+/** TRUE once something has actually interrogated a display. The getters are always safe to
+ *  call, but answer with neutral defaults until then -- use this only where reporting an
+ *  invented 96dpi would be worse than reporting nothing (a crash report, a telemetry
+ *  payload), never as an "is there a GUI?" test for scaling. */
+gboolean dt_widget_metrics_probed(void);
+
 double dt_widget_dpi_factor(void);
 void dt_widget_set_dpi_factor(double factor);
 
 double dt_widget_ppd(void);
 void dt_widget_set_ppd(double ppd);
+
+/** Minimum width a side panel may shrink to, in logical px. A user preference the
+ *  application supplies; the panel widget reads it when its class is initialised. 350 until
+ *  the application says otherwise. */
+gint dt_widget_min_panel_width(void);
+void dt_widget_set_min_panel_width(gint width);
 
 /** Resolved root font size in px; 16.0 until the application resolves it. */
 double dt_widget_em_size(void);

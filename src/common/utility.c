@@ -51,8 +51,8 @@
 #include <locale.h>
 
 #include <glib/gstdio.h>
-#include "common/macros.h"
-#include "system/screen_metrics.h"
+#include "system/macros.h"
+#include "gui/screen_metrics.h"
 #include "system/mem_alloc.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"

@@ -39,7 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "widgets/gtkentry.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 
 #include <glib/gi18n.h>
@@ -199,7 +199,7 @@ void dt_gtkentry_setup_completion(GtkEntry *entry, const dt_gtkentry_completion_
  */
 const dt_gtkentry_completion_spec *dt_gtkentry_get_default_path_compl_list()
 {
-  static dt_gtkentry_completion_spec default_path_compl_list[]
+  static const dt_gtkentry_completion_spec default_path_compl_list[]
       = { { "FOLDER.NAME", N_("$(FOLDER.NAME) - name of the folder containing the input image") },
           { "FILE.FOLDER", N_("$(FILE.FOLDER) - directory structure containing the input image") },
           { "FILE.NAME", N_("$(FILE.NAME) - basename of the input image") },

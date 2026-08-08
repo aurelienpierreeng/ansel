@@ -21,7 +21,7 @@
 
 #include "widgets/bauhaus.h"
 #include "common/colorspaces.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
@@ -36,7 +36,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include "system/screen_metrics.h"
+#include "gui/screen_metrics.h"
 #include "widgets/draw.h"
 
 #define DT_LUT_VIEWER_MARGIN DT_PIXEL_APPLY_DPI(12)

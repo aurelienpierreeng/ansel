@@ -48,7 +48,7 @@
 #include "widgets/gdkkeys.h"
 #include "config.h"
 #endif
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"

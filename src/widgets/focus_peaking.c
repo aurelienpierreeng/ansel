@@ -24,7 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include <math.h>
 #include "widgets/widget_settings.h"
 #include "system/openmp.h"

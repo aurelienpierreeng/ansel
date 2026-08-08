@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/image_extensions.h"
-#include "common/macros.h"
+#include "system/macros.h"
 
 #include <string.h>
 

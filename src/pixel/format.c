@@ -33,7 +33,7 @@
 
 #include "pixel/format.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 
 #include <stddef.h>
 #include <stdint.h>

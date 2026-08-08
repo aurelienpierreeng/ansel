@@ -77,7 +77,7 @@
  *   stdint.h       int32_t
  * glib_utils.h, macros.h, mem_alloc.h and dtgtk/thumbtable.h were here for code that has
  * since moved to widgets/; nothing declared here uses them. */
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/paths.h"
 #include "gui/window_manager.h"
 #include "widgets/accelerators.h"

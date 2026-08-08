@@ -28,7 +28,7 @@
 #include "common/database.h"
 #include "common/debug.h"
 #include "develop/iop_order.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "develop/develop.h"

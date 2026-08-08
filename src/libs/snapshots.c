@@ -41,7 +41,7 @@
 
 #include "widgets/bauhaus.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "develop/iop_order.h"
 #include "control/control.h"

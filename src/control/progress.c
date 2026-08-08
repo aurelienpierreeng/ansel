@@ -23,7 +23,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 // NOLINTNEXTLINE(misc-include-cleaner) -- dt_gui_main_window() is used only
 // under _WIN32 below; a Linux clang-tidy run analyses the other branch and

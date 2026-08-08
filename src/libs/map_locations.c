@@ -29,7 +29,7 @@
 #include "widgets/togglebutton.h"
 #include "widgets/paint.h"
 #include "common/collection.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"
 #include "common/map_locations.h"

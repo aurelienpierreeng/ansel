@@ -67,6 +67,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "gui/screen_metrics.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_colorcorrection_params_t)
 

@@ -29,7 +29,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "pixel/format.h"   // dt_iop_roi_t
 #include "system/openmp.h"
 #include "common/pixelpipe_cache_alloc.h"

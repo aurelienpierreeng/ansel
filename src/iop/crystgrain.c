@@ -25,7 +25,7 @@
 #include "common/opencl.h"
 #include "develop/iop_profile.h"
 #include "math/math.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"

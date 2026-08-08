@@ -40,7 +40,7 @@
 */
 #include "develop/masks.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "control/control.h"
 #include "develop/blend.h"

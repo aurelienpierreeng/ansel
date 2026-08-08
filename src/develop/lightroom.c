@@ -38,7 +38,7 @@
 #include "common/colorlabels.h"
 #include "common/colorspaces.h"
 #include "common/curve_tools.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "control/signal.h"

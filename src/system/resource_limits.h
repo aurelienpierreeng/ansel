@@ -1,10 +1,9 @@
 /*
     This file is part of darktable,
     Copyright (C) 2009-2011 johannes hanika.
-    Copyright (C) 2011 Ulrich Pegelow.
     Copyright (C) 2012 Richard Wonka.
-    Copyright (C) 2013-2014, 2016 Tobias Ellinghaus.
-    Copyright (C) 2020 parafin.
+    Copyright (C) 2016 Roman Lebedev.
+    Copyright (C) 2016 Tobias Ellinghaus.
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     
@@ -22,43 +21,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_DYNLOAD_H
-#define DT_COMMON_DYNLOAD_H
+#ifndef DT_SYSTEM_RESOURCE_LIMITS_H
+#define DT_SYSTEM_RESOURCE_LIMITS_H
 
-#ifdef HAVE_OPENCL
+void dt_set_rlimits();
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
-#ifndef __APPLE__
-#include <glib.h>
-#include <gmodule.h>
-#endif //!__APPLE__
-
-typedef struct dt_gmodule_t
-{
-#ifndef __APPLE__
-  GModule *gmodule;
-#else
-  void *gmodule;
-#endif
-  char *library;
-} dt_gmodule_t;
-
-
-/* check if gmodules is supported on this platform */
-int dt_gmodule_supported(void);
-
-/* dynamically load library */
-dt_gmodule_t *dt_gmodule_open(const char *);
-
-/* get pointer to function */
-int dt_gmodule_symbol(dt_gmodule_t *, const char *, void (**)(void));
-
-#endif // HAVE_OPENCL
-
-#endif // DT_COMMON_DYNLOAD_H
+#endif // DT_SYSTEM_RESOURCE_LIMITS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

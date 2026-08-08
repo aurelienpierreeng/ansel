@@ -24,6 +24,7 @@
 #include "widgets/sidepanel.h"
 
 #include <gtk/gtk.h>
+#include "widgets/widget_settings.h"
 
 G_DEFINE_TYPE(GtkDarktableSidePanel, dtgtk_side_panel, GTK_TYPE_BOX);
 
@@ -39,13 +40,6 @@ static void dtgtk_side_panel_get_preferred_width(GtkWidget *widget, gint *minimu
   *minimum_size = *natural_size = class->width;
 }
 
-static int _min_panel_width = 350;
-
-void dtgtk_side_panel_set_min_width(int width)
-{
-  _min_panel_width = width;
-}
-
 static void dtgtk_side_panel_class_init(GtkDarktableSidePanelClass *class)
 {
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(class);
@@ -54,8 +48,9 @@ static void dtgtk_side_panel_class_init(GtkDarktableSidePanelClass *class)
   widget_class->get_preferred_width = dtgtk_side_panel_get_preferred_width;
 
   // Minimum width only; the real size is applied later. The application overrides this from
-  // its preferences via dtgtk_side_panel_set_min_width() -- a widget does not read conf.
-  class->width = _min_panel_width;
+  // its preferences via dt_widget_set_min_panel_width() -- a widget does not read conf, and
+  // does not hold the value either: widget_settings is where toolkit state lives.
+  class->width = dt_widget_min_panel_width();
 }
 
 static void dtgtk_side_panel_init(GtkDarktableSidePanel *panel)

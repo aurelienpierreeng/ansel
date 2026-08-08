@@ -29,7 +29,7 @@
 #include "develop/imageop.h"
 #include "widgets/bauhaus.h"
 #include "widgets/button.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/utility.h"
 

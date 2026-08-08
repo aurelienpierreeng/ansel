@@ -18,14 +18,14 @@
 */
 
 #include "common/conf.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/hash.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/paths.h"
 #include "gui/application.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"

@@ -37,7 +37,7 @@
 #include "widgets/widget_settings.h"
 #endif
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -53,6 +53,7 @@
 #include "widgets/draw.h"
 #include "widgets/notebook.h"
 #include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 

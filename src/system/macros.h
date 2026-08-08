@@ -15,8 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_COMMON_MACROS_H
-#define DT_COMMON_MACROS_H
+#ifndef DT_SYSTEM_MACROS_H
+#define DT_SYSTEM_MACROS_H
 
 /* Base language-level macros with zero dependencies. This is the bottom of the
  * include graph: anything may include it, it includes nothing of ours. */
@@ -87,7 +87,7 @@ static inline void dt_unreachable_codepath_with_caller(const char *description, 
 }
 #endif
 
-#endif // DT_COMMON_MACROS_H
+#endif // DT_SYSTEM_MACROS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

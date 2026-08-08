@@ -19,11 +19,11 @@
 #include "gui/develop/history_merge_gui.h"
 #include "common/conf.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "develop/iop_order.h"
-#include "common/topological_sort.h"
+#include "math/topological_sort.h"
 #include "develop/blend.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"

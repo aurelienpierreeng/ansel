@@ -16,8 +16,10 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_SYSTEM_SCREEN_METRICS_H
-#define DT_SYSTEM_SCREEN_METRICS_H
+#ifndef DT_GUI_SCREEN_METRICS_H
+#define DT_GUI_SCREEN_METRICS_H
+
+#include "system/surface_scaling.h"
 
 #include <cairo.h>
 #include <glib.h>
@@ -34,6 +36,18 @@ G_BEGIN_DECLS
  *
  * They live here instead, as the single copy. Whoever can interrogate the display pushes
  * them in once -- dt_gui_gtk_init() does, from GDK -- and everyone else reads.
+ *
+ * This is state, so it is not in src/system: that directory answers "is this stateless?" with
+ * its own name, and one exception would cost every reader the check the arrangement exists to
+ * avoid. The scaling arithmetic these values feed has no state and did stay there, in
+ * system/surface_scaling.h, taking the scale as an argument. The constructors below are those
+ * same functions bound to the current screen.
+ *
+ * It lives in gui/ because the GUI is what resolves these values -- it is the only thing that
+ * can interrogate a display. That makes every reader below layer 4 an upward include, which
+ * is not a regression but the coupling becoming visible: code in common/ that needs to know
+ * the screen's DPI always depended on there being a screen. Callers that know their own scale
+ * should use system/surface_scaling.h directly and depend on nothing.
  *
  * Before that push, the getters return neutral values (1.0 scaling, 96 dpi), which is what
  * makes a headless run and early startup work without a single "is there a GUI?" test.
@@ -63,47 +77,39 @@ gboolean dt_screen_metrics_probed(void);
 double dt_screen_em_size(void);
 void dt_screen_set_em_size(double em);
 
-/* Device-scale-aware cairo surfaces: allocate at ppd resolution and tell cairo about it, so
- * callers keep drawing in logical coordinates and get a sharp result on a HiDPI screen. */
+/* The scaling helpers from system/surface_scaling.h, bound to the current screen. Callers that
+ * already know their scale -- an export at a fixed size, a test -- should use those directly
+ * and stay independent of the display. */
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height)
 {
-  cairo_surface_t *cst = cairo_image_surface_create(format, width * dt_screen_ppd(), height * dt_screen_ppd());
-  cairo_surface_set_device_scale(cst, dt_screen_ppd(), dt_screen_ppd());
-  return cst;
+  return dt_cairo_surface_create_at_scale(format, width, height, dt_screen_ppd());
 }
 
 static inline cairo_surface_t *dt_cairo_image_surface_create_for_data(unsigned char *data, cairo_format_t format,
                                                                      int width, int height, int stride)
 {
-  cairo_surface_t *cst = cairo_image_surface_create_for_data(data, format, width, height, stride);
-  cairo_surface_set_device_scale(cst, dt_screen_ppd(), dt_screen_ppd());
-  return cst;
+  return dt_cairo_surface_create_for_data_at_scale(data, format, width, height, stride, dt_screen_ppd());
 }
 
 static inline cairo_surface_t *dt_cairo_image_surface_create_from_png(const char *filename)
 {
-  cairo_surface_t *cst = cairo_image_surface_create_from_png(filename);
-  cairo_surface_set_device_scale(cst, dt_screen_ppd(), dt_screen_ppd());
-  return cst;
+  return dt_cairo_surface_create_from_png_at_scale(filename, dt_screen_ppd());
 }
-
-/* The size a device-scaled surface occupies in logical coordinates -- what the caller asked
- * for, not the ppd-multiplied pixel count cairo actually allocated. */
 
 static inline int dt_cairo_image_surface_get_width(cairo_surface_t *surface)
 {
-  return cairo_image_surface_get_width(surface) / dt_screen_ppd();
+  return dt_cairo_surface_logical_width(surface, dt_screen_ppd());
 }
 
 static inline int dt_cairo_image_surface_get_height(cairo_surface_t *surface)
 {
-  return cairo_image_surface_get_height(surface) / dt_screen_ppd();
+  return dt_cairo_surface_logical_height(surface, dt_screen_ppd());
 }
 
 G_END_DECLS
 
-#endif // DT_SYSTEM_SCREEN_METRICS_H
+#endif // DT_GUI_SCREEN_METRICS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

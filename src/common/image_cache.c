@@ -43,7 +43,7 @@
 #include "common/database.h"
 #include "common/image_cache.h"
 #include "common/colorlabels.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/hash.h"
 #include "common/logging.h"

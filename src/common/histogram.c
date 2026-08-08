@@ -29,7 +29,7 @@
 #include <stdlib.h>
 
 #include "common/colorspaces_inline_conversions.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/openmp.h"
 #include "system/simd.h"

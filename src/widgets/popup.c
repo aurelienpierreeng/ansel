@@ -18,7 +18,7 @@
 
 #include "widgets/popup.h"
 
-#include "common/macros.h"        // IS_NULL_PTR
+#include "system/macros.h"        // IS_NULL_PTR
 #include "widgets/widget_settings.h"  // DT_GUI_BOX_SPACING, DT_PIXEL_APPLY_DPI, root window
 #include "widgets/widget_style.h"     // dt_gui_add_class
 

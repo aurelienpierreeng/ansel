@@ -19,7 +19,7 @@
 #ifndef DT_SYSTEM_MEMORY_ARENA_H
 #define DT_SYSTEM_MEMORY_ARENA_H
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include <glib.h>
 #include <stdint.h>
 

@@ -18,7 +18,7 @@
 
 #include "widgets/scroll_wrap.h"
 
-#include "common/macros.h"            // IS_NULL_PTR
+#include "system/macros.h"            // IS_NULL_PTR
 #include "system/mem_alloc.h"
 #include "widgets/resize_handle.h"
 #include "widgets/widget_settings.h"

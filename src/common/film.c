@@ -45,7 +45,7 @@
 #include "common/collection.h"
 #include "common/mipmap_cache.h"
 #include "common/debug.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/image_cache.h"
 #include "common/tags.h"
 #include "common/conf.h"

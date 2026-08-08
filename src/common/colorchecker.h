@@ -25,7 +25,7 @@
 #ifndef DT_COMMON_COLORCHECKER_H
 #define DT_COMMON_COLORCHECKER_H
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"

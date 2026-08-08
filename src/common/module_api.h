@@ -27,7 +27,7 @@
  * (INCLUDE_API_FROM_MODULE_LOAD, ...) and expanded INSIDE struct bodies to generate
  * members. An include at the top of it lands inside those structs.
  * dt_version()/dt_print()/IS_NULL_PTR used below must therefore be provided by each
- * consuming .c (common/module_versioning.h, common/logging.h, common/macros.h). */
+ * consuming .c (common/module_versioning.h, common/logging.h, system/macros.h). */
 
 #include <glib.h>
 

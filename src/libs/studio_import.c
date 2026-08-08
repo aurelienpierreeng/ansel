@@ -23,7 +23,7 @@
     source folder and the scan frequency are locked during a session to
     protect the engine's baseline. */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"

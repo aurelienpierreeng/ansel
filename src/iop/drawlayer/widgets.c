@@ -21,7 +21,7 @@
 #endif
 
 #include "iop/drawlayer/widgets.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 
 #include "iop/drawlayer/paint.h"

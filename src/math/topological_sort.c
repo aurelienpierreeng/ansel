@@ -16,9 +16,9 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "common/topological_sort.h"
+#include "math/topological_sort.h"
 #include <stdio.h>
 #include <string.h>
 

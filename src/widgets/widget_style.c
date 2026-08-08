@@ -22,7 +22,7 @@
 
 #include "widgets/widget_style.h"
 #include "widgets/widget_settings.h"
-#include "common/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
+#include "system/macros.h"   // IS_NULL_PTR -- a pure macro header, no state
 
 #include <pango/pangocairo.h>
 

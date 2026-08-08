@@ -30,7 +30,7 @@
 #ifndef DT_COMMON_FILM_H
 #define DT_COMMON_FILM_H
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 
 #include <glib.h>
 #include <inttypes.h>

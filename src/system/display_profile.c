@@ -27,7 +27,7 @@
 #include "system/display_profile.h"
 #include "system/mem_alloc.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 
 #ifdef _WIN32
 #include <dwmapi.h>

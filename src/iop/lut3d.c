@@ -42,7 +42,7 @@
 #endif
 
 #include "widgets/bauhaus.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
@@ -52,7 +52,7 @@
 #include "common/colorspaces.h"
 #include "common/file_location.h"
 #include "develop/iop_profile.h"
-#include "common/lut3d.h"
+#include "pixel/lut3d.h"
 #include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

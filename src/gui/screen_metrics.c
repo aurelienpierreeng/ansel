@@ -16,32 +16,31 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "system/screen_metrics.h"
+#include "gui/screen_metrics.h"
+#include "widgets/widget_settings.h"
 
 /* Written once at startup by whoever can interrogate the display, read everywhere after.
  * The defaults are the neutral ones, so a reader that runs before the push -- or in a
  * headless process where the push never happens -- gets unscaled geometry rather than
  * zeroes. Setters reject non-positive values for the same reason: a bad probe must not be
  * able to collapse every length in the application to 0. */
-static double _dpi = 96.0;
-static double _dpi_factor = 1.0;
-static double _ppd = 1.0;
-static double _em = 16.0;
-static gboolean _probed = FALSE;
+/* Forwarders. The store lives in widgets/widget_settings.c -- see the comment there for why
+ * the toolkit owns it rather than the GUI. These names exist for the readers below layer 4
+ * (the crash reporter, the telemetry payload) and for the cairo helpers in the header. */
 
-double dt_screen_dpi(void) { return _dpi; }
-void dt_screen_set_dpi(double dpi) { if(dpi > 0.0) { _dpi = dpi; _probed = TRUE; } }
+double dt_screen_dpi(void) { return dt_widget_dpi(); }
+void dt_screen_set_dpi(double dpi) { dt_widget_set_dpi(dpi); }
 
-double dt_screen_dpi_factor(void) { return _dpi_factor; }
-void dt_screen_set_dpi_factor(double factor) { if(factor > 0.0) { _dpi_factor = factor; _probed = TRUE; } }
+double dt_screen_dpi_factor(void) { return dt_widget_dpi_factor(); }
+void dt_screen_set_dpi_factor(double factor) { dt_widget_set_dpi_factor(factor); }
 
-double dt_screen_ppd(void) { return _ppd; }
-void dt_screen_set_ppd(double ppd) { if(ppd > 0.0) { _ppd = ppd; _probed = TRUE; } }
+double dt_screen_ppd(void) { return dt_widget_ppd(); }
+void dt_screen_set_ppd(double ppd) { dt_widget_set_ppd(ppd); }
 
-gboolean dt_screen_metrics_probed(void) { return _probed; }
+gboolean dt_screen_metrics_probed(void) { return dt_widget_metrics_probed(); }
 
-double dt_screen_em_size(void) { return _em; }
-void dt_screen_set_em_size(double em) { if(em > 0.0) _em = em; }
+double dt_screen_em_size(void) { return dt_widget_em_size(); }
+void dt_screen_set_em_size(double em) { dt_widget_set_em_size(em); }
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

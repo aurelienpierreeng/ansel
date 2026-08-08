@@ -2,7 +2,7 @@
     Private OpenCL pixelpipe backend.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "develop/iop_profile.h"
 #include "common/logging.h"
 #include "common/pixelpipe_cache_alloc.h"

@@ -23,7 +23,7 @@
 
 #include "common/database.h"
 #include "common/presets.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/debug.h"
 #include "common/exif.h"

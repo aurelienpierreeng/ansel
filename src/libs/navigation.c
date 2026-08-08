@@ -44,7 +44,7 @@
 */
 
 #include "widgets/bauhaus.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/times.h"
 #include "control/control.h"
@@ -56,7 +56,7 @@
 #include "gui/window_manager.h"
 #include "widgets/popup.h"
 #include "widgets/scroll_wrap.h"
-#include "system/screen_metrics.h"
+#include "gui/screen_metrics.h"
 
 DT_MODULE(1)
 

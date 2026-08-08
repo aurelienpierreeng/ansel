@@ -51,10 +51,9 @@
  */
 
 #include "common/curve_tools.h"
-#include "common/splines.h"
+#include "math/splines.h"
 #include "system/mem_alloc.h"
 #include "system/openmp.h"        // __OMP_DECLARE_SIMD__, __OMP_PARALLEL_FOR_SIMD__
-#include "system/screen_metrics.h"
 #include "widgets/paint.h"          // DTGTKCairoPaintIconFunc
 #include "widgets/widget_settings.h"
 
@@ -534,24 +533,6 @@ static inline GdkPixbuf *dt_draw_paint_to_pixbuf
                                                (GdkPixbufDestroyNotify)free, NULL);
   cairo_surface_destroy(cst);
   return pixbuf;
-}
-
-/* Device-scaled pixbuf/surface bridges. dt_cairo_image_surface_* live one layer down in
- * system/screen_metrics.h with the ppd they scale by; these two need gdk-pixbuf, so they
- * sit here instead. */
-
-static inline cairo_surface_t *dt_gdk_cairo_surface_create_from_pixbuf(const GdkPixbuf *pixbuf, int scale,
-                                                                      GdkWindow *for_window)
-{
-  cairo_surface_t *cst = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, for_window);
-  cairo_surface_set_device_scale(cst, dt_screen_ppd(), dt_screen_ppd());
-  return cst;
-}
-
-static inline GdkPixbuf *dt_gdk_pixbuf_new_from_file_at_size(const char *filename, int width, int height,
-                                                             GError **error)
-{
-  return gdk_pixbuf_new_from_file_at_size(filename, width * dt_screen_ppd(), height * dt_screen_ppd(), error);
 }
 
 /** Trace a rounded rectangle as a closed sub-path, leaving it current for the caller to

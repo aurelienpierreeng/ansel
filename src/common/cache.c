@@ -30,8 +30,8 @@
 #include "config.h"
 
 #include "common/cache.h"
-#include "common/dtpthread.h"
-#include "common/macros.h"
+#include "system/dtpthread.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 
 #include <assert.h>

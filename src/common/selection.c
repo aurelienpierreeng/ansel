@@ -39,7 +39,7 @@
 #include "common/database.h"
 #include "common/collection.h"
 #include "common/selection.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/image.h"
 #include "control/signal.h"

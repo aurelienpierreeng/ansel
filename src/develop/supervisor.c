@@ -19,7 +19,7 @@
 #include "develop/supervisor.h"
 #include "common/logging.h"
 #include "common/times.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/image.h"            // dt_image_t
 #include "common/introspection.h"    // dt_introspection_field_t
 #include "develop/imageop.h"         // dt_iop_module_t (introspection accessors)

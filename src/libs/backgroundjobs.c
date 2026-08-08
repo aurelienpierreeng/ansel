@@ -33,10 +33,10 @@
 */
 
 #include "system/atomic.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "control/control.h"
 #include "control/progress.h"
 #include "develop/develop.h"

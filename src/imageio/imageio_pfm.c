@@ -26,7 +26,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "imageio/imageio_pfm.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB

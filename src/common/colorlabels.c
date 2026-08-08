@@ -37,7 +37,7 @@
 #include "common/database.h"
 #include "common/colorlabels.h"
 #include "common/collection.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/debug.h"
 #include "common/image_cache.h"
 #include "common/undo.h"

@@ -24,7 +24,7 @@
 #include "gui/common/collection_gui.h"
 
 #include "common/collection.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"   // dt_free(), previously arriving through common/metadata.h -> gui/gtk.h
 #include "common/conf.h"
 

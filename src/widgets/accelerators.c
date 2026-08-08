@@ -46,7 +46,7 @@
 #include <glib/gi18n.h>
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "widgets/gtkentry.h"
 #include "widgets/gdkkeys.h"

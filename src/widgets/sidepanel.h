@@ -60,7 +60,6 @@ GType dtgtk_side_panel_get_type(void);
 
 /** Minimum panel width, in pixels. The application sets this from its preferences before the
  *  first panel is created; the widget itself never reads configuration. */
-void dtgtk_side_panel_set_min_width(int width);
 
 GtkWidget *dtgtk_side_panel_new();
 

@@ -18,7 +18,7 @@
 
 #include "widgets/container.h"
 
-#include "common/macros.h"   // IS_NULL_PTR
+#include "system/macros.h"   // IS_NULL_PTR
 
 gboolean dt_gui_container_has_children(GtkContainer *container)
 {

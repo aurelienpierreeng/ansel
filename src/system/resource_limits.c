@@ -24,7 +24,7 @@
 #include "config.h"
 #endif
 
-#include "common/resource_limits.h"
+#include "system/resource_limits.h"
 #include <assert.h>       // for assert
 #include <errno.h>        // for errno
 #include <stdint.h>       // for uintmax_t

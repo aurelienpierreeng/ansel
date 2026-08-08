@@ -65,7 +65,7 @@
 #include "imageio/imageio_core.h"
 #include "develop/iop_profile.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "math/math.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
@@ -89,6 +89,7 @@
 #include "widgets/label.h"
 #include "widgets/scroll_wrap.h"
 #include "widgets/widget_style.h"
+#include "gui/screen_metrics.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

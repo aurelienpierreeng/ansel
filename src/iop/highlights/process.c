@@ -20,7 +20,7 @@
 // API.)
 
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/simd.h"
 #include "system/target_clones.h"

@@ -62,9 +62,9 @@
 #include "widgets/widget_settings.h"
 #include "widgets/paint.h"
 #include "widgets/bauhaus.h"
-#include "common/calculator.h"
+#include "math/calculator.h"
 #include "math/math.h"
-#include "common/macros.h"
+#include "system/macros.h"
 
 
 #include "widgets/accelerators.h"
@@ -80,6 +80,7 @@
 #include <pango/pangocairo.h>
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
+#include "system/surface_scaling.h"   // dt_cairo_surface_create_at_scale
 #endif
 
 G_DEFINE_TYPE(DtBauhausWidget, dt_bh, GTK_TYPE_DRAWING_AREA)
@@ -2473,7 +2474,7 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   // get area properties
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
-  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
+  cairo_surface_t *cst = dt_cairo_surface_create_at_scale(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height, dt_widget_ppd());
   cairo_t *cr = cairo_create(cst);
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
 
@@ -2694,7 +2695,7 @@ static float _get_combobox_max_width(GtkWidget *widget)
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
   const GtkStateFlags state = gtk_widget_get_state_flags(widget);
 
-  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 999, 999);
+  cairo_surface_t *cst = dt_cairo_surface_create_at_scale(CAIRO_FORMAT_ARGB32, 999, 999, dt_widget_ppd());
   cairo_t *cr = cairo_create(cst);
 
   float width = 0.f;
@@ -2768,7 +2769,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   // Force allocate to our requirements. Yes, it's ugly.
   gtk_widget_size_allocate(widget, &allocation);
 
-  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
+  cairo_surface_t *cst = dt_cairo_surface_create_at_scale(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height, dt_widget_ppd());
   cairo_t *cr = cairo_create(cst);
 
   GdkRGBA *text_color = default_color_assign();

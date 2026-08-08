@@ -1,11 +1,12 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2010-2011 Henrik Andersson.
-    Copyright (C) 2010 johannes hanika.
-    Copyright (C) 2010 Pascal de Bruijn.
+    Copyright (C) 2009-2011 johannes hanika.
     Copyright (C) 2012 Richard Wonka.
-    Copyright (C) 2013, 2016 Tobias Ellinghaus.
-    Copyright (C) 2020, 2022 Pascal Obry.
+    Copyright (C) 2016 Roman Lebedev.
+    Copyright (C) 2016 Tobias Ellinghaus.
+    Copyright (C) 2017 Peter Budai.
+    Copyright (C) 2019 Heiko Bauke.
+    Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     
     darktable is free software: you can redistribute it and/or modify
@@ -22,13 +23,27 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_CALCULATOR_H
-#define DT_COMMON_CALCULATOR_H
+#ifndef DT_MATH_SPLINES_H
+#define DT_MATH_SPLINES_H
 
-/** solve the mathematical expression in formula, the only allowed variable is 'x' */
-float dt_calculator_solve(const float x, const char *formula);
+#if defined(__cplusplus)
+extern "C"
+{
+#endif
 
-#endif // DT_COMMON_CALCULATOR_H
+#include "common/curve_tools.h"
+
+  float interpolate_val_V2(int n, CurveAnchorPoint Points[], float x, unsigned int type);
+  float interpolate_val_V2_periodic(int n, CurveAnchorPoint Points[], float x, unsigned int type, float period);
+
+  int CurveDataSampleV2(CurveData *curve, CurveSample *sample);
+  int CurveDataSampleV2Periodic(CurveData *curve, CurveSample *sample);
+
+#if defined(__cplusplus)
+}
+#endif
+
+#endif // DT_MATH_SPLINES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

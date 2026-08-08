@@ -21,7 +21,7 @@
 #include "control/jobs/control_jobs.h"
 #include "common/database.h"
 #include "common/image.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/grouping.h"
 #include "common/colorlabels.h"
 #include "common/ratings.h"

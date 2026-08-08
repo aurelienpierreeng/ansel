@@ -2,7 +2,7 @@
     Private CPU pixelpipe backend.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "develop/iop_profile.h"
 #include "system/openmp.h"
 #include "common/logging.h"

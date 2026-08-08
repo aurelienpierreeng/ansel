@@ -60,7 +60,7 @@
 
 #include <gtk/gtk.h>
 #include "common/conf.h"
-#include "common/calculator.h"
+#include "math/calculator.h"
 
 #define NON_DEF_CHAR "●"
 

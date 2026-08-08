@@ -48,7 +48,7 @@
 #include "widgets/widget_settings.h"
 #include "develop/iop_order.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/usermanual_url.h"
 #include "common/conf.h"
@@ -62,7 +62,7 @@
 #include <glib/gstdio.h>
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
-#include "system/screen_metrics.h"
+#include "gui/screen_metrics.h"
 
 DT_MODULE(1)
 

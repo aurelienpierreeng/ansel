@@ -55,7 +55,7 @@
 #include "system/atomic.h"
 #include "common/debug.h"
 #include "common/logging.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"

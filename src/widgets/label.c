@@ -19,11 +19,11 @@
 #include "widgets/label.h"
 
 #include "common/glib_utils.h"     // dt_string_replace
-#include "common/macros.h"         // IS_NULL_PTR
+#include "system/macros.h"         // IS_NULL_PTR
 #include "system/mem_alloc.h"      // dt_free
 #include "widgets/widget_style.h"  // dt_gui_add_class, dt_capitalize_label
 
-#include "common/macros.h"   // IS_NULL_PTR
+#include "system/macros.h"   // IS_NULL_PTR
 #include "widgets/widget_settings.h"   // DT_PIXEL_APPLY_DPI
 
 void dt_gui_set_symbolic_icon(GtkWidget *image, const char *icon_name, GtkIconSize size, const GdkRGBA *color)

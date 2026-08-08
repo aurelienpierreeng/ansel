@@ -56,7 +56,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "widgets/widget_settings.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -84,6 +84,7 @@
 #include <stdlib.h>
 #include "widgets/notebook.h"
 #include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 //#define USE_NEW_CL  //uncomment to use the new, more memory-efficient OpenCL code (not yet finished)
 
 #define INSET DT_PIXEL_APPLY_DPI(5)

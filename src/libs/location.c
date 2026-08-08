@@ -38,7 +38,7 @@
 #include "control/settings.h"
 #include "common/curl_tools.h"
 #include "common/glib_utils.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"
 #include "common/conf.h"

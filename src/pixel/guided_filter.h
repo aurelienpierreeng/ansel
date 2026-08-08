@@ -31,7 +31,7 @@
 #ifndef DT_PIXEL_GUIDED_FILTER_H
 #define DT_PIXEL_GUIDED_FILTER_H
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/opencl.h"
 #include "common/pixelpipe_cache_alloc.h"
 

@@ -18,7 +18,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "system/screen_metrics.h"
+#include "gui/screen_metrics.h"
 #include "common/anonymous_ids.h"
 #include "system/sys_resources.h"
 #endif

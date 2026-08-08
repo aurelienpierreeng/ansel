@@ -19,7 +19,7 @@
 #include "widgets/resize_handle.h"
 #include "widgets/widget_settings.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 
 #include <math.h>
 

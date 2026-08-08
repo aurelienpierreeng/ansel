@@ -39,7 +39,7 @@
 
 #include "common/logging.h"
 #include "common/history_actions.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/database.h"
 #include "common/debug.h"

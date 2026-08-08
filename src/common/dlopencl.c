@@ -32,9 +32,9 @@
 #ifdef HAVE_OPENCL
 
 #include "common/dlopencl.h"
-#include "common/dynload.h"
+#include "system/dynload.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 
 #include <assert.h>

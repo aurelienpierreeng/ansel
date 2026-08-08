@@ -50,7 +50,7 @@
 #include "common/act_on.h"
 #include "widgets/togglebutton.h"
 #include "common/selection.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"

@@ -24,7 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"

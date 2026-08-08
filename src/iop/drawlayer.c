@@ -17,7 +17,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/logging.h"
 #include "system/mem_alloc.h"
@@ -30,7 +30,7 @@
 
 #include "widgets/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/imagebuf.h"
 #include "imageio/imageio_module.h"
 #include "develop/iop_profile.h"

@@ -24,7 +24,7 @@
  * (dt_pixelpipe_cache_alloc_*) are NOT here — they reference the darktable global and
  * stay with the orchestrator. */
 
-#include "common/macros.h"
+#include "system/macros.h"
 
 #include <glib.h>
 #include <stdint.h>

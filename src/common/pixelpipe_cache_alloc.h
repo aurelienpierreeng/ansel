@@ -28,7 +28,7 @@
  * the orchestrator (darktable.c) — so including this helper does NOT drag
  * darktable.h (and with it the whole application) into the translation unit. */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/openmp.h"
 

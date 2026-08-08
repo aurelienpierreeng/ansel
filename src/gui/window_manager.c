@@ -418,7 +418,7 @@ static void _ui_init_panel_left(dt_ui_t *ui, GtkWidget *container)
   /* create left panel main widget and add it to ui */
   // Configuration reaches the widget from here, not from inside it. Must precede the first
   // dtgtk_side_panel_new(): the value is read in the GObject class_init.
-  dtgtk_side_panel_set_min_width(dt_conf_get_int("min_panel_width"));
+  dt_widget_set_min_panel_width(dt_conf_get_int("min_panel_width"));
 
   widget = ui->panels[DT_UI_PANEL_LEFT] = dtgtk_side_panel_new();
   gtk_widget_set_name(widget, "left");

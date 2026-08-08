@@ -22,7 +22,7 @@
 #include "common/debug.h"
 #include "common/image.h"
 #include "common/image_cache.h"
-#include "common/macros.h"
+#include "system/macros.h"
 
 #include <glib.h>
 #include <glib/gi18n.h>

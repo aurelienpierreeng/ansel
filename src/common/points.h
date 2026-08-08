@@ -32,7 +32,7 @@
 #ifndef DT_COMMON_POINTS_H
 #define DT_COMMON_POINTS_H
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "system/openmp.h"   // dt_get_thread_num()
