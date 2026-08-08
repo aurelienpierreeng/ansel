@@ -71,7 +71,6 @@
 #include "osx/osx.h"
 #endif
 #include <assert.h>
-#include <stdlib.h>
 
 const int dt_gui_presets_exposure_value_cnt = 24;
 const float dt_gui_presets_exposure_value[]

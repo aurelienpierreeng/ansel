@@ -50,8 +50,25 @@ if [ ${#files[@]} -eq 0 ]; then
   exit 0
 fi
 
+# Files that are not translation units in the compilation database cannot be checked here,
+# and must not be reported as clean. Three kinds show up:
+#   - platform sources (src/win/*.c) that this build never compiles;
+#   - IOP modules, whose .c is #included by a generated introspection_*.c wrapper rather than
+#     compiled directly;
+#   - anything excluded by the current cmake options.
+# Running clang-tidy on them anyway makes it guess a compile command, so the preprocessor
+# takes whichever branch that guess implies -- on a Linux database, the wrong one for
+# Windows sources. That is the same class of mistake that broke this tree's macOS and
+# Windows builds. Skip them, and say so.
+tu_list="$(${PYTHON:-python3} - "${BUILD_DIR}/compile_commands.json" <<'PYEOF'
+import json, sys
+print("\n".join(sorted({e["file"] for e in json.load(open(sys.argv[1]))})))
+PYEOF
+)"
+
 findings=0
 checked=0
+skipped_not_tu=0
 
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue
@@ -71,6 +88,12 @@ for f in "${files[@]}"; do
     *.h) continue ;;
   esac
 
+  if ! printf '%s\n' "${tu_list}" | grep -qF "/${f}"; then
+    echo "note: $f is not a translation unit in this build; not checked"
+    skipped_not_tu=$((skipped_not_tu + 1))
+    continue
+  fi
+
   out="$("${CLANG_TIDY}" -p "${BUILD_DIR}" --quiet "$f" 2>/dev/null \
          | grep "is not used directly" | grep -F "${f}:")"
 
@@ -83,6 +106,13 @@ done
 
 echo
 echo "Checked ${checked} file(s); ${findings} unused include(s) found."
+if [ "${skipped_not_tu}" -gt 0 ]; then
+  echo "${skipped_not_tu} file(s) skipped: not translation units in this build (see above)."
+fi
+
+# Findings differ between clang-tidy releases -- 19 and 20 disagree about which symbols
+# <stdlib.h> owns, for one. CI pins clang-tidy-20; reproduce with CLANG_TIDY=clang-tidy-20 if
+# a local run of a different version disagrees with it.
 if [ "${findings}" -gt 0 ]; then
   cat <<'MSG'
 
