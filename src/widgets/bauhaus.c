@@ -63,7 +63,6 @@
 #include "widgets/bauhaus.h"
 #include "common/calculator.h"
 #include "math/math.h"
-#include "common/logging.h"
 #include "common/macros.h"
 
 
@@ -482,8 +481,7 @@ static gboolean ensure_focus_idle(gpointer data)
     GtkWidget *toplevel = gtk_widget_get_toplevel(target);
     GtkWidget *gtk_focus = (toplevel && gtk_widget_is_toplevel(toplevel))
                            ? gtk_window_get_focus(GTK_WINDOW(toplevel)) : NULL;
-    dt_print(DT_DEBUG_SHORTCUTS,
-             "[bauhaus] ensure_focus_idle success target=%s(%p) gtk_focus=%s(%p) scroll_focus=%s(%p)\n",
+    dt_widget_log("[bauhaus] ensure_focus_idle success target=%s(%p) gtk_focus=%s(%p) scroll_focus=%s(%p)\n",
              gtk_widget_get_name(target), (void *)target,
              !IS_NULL_PTR(gtk_focus) ? gtk_widget_get_name(gtk_focus) : "<null>", (void *)gtk_focus,
              !IS_NULL_PTR(dt_widget_scroll_focus()) ? gtk_widget_get_name(dt_widget_scroll_focus()) : "<null>",
@@ -496,8 +494,7 @@ static gboolean ensure_focus_idle(gpointer data)
   const int tries = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY)) + 1;
   if(tries >= DT_BAUHAUS_FOCUS_IDLE_MAX_TRIES)
   {
-    dt_print(DT_DEBUG_SHORTCUTS,
-             "[bauhaus] ensure_focus_idle abort target=%s(%p) tries=%d drawable=%d\n",
+    dt_widget_log("[bauhaus] ensure_focus_idle abort target=%s(%p) tries=%d drawable=%d\n",
              gtk_widget_get_name(target), (void *)target, tries, gtk_widget_is_drawable(target));
     g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_SOURCE_KEY, NULL);
     g_object_set_data(G_OBJECT(target), DT_BAUHAUS_FOCUS_IDLE_TRIES_KEY, NULL);

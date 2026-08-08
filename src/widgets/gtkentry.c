@@ -315,6 +315,32 @@ gchar *dt_gtkentry_build_completion_tooltip_text(const gchar *header,
 }
 
 
+gboolean dt_gui_search_start(GtkWidget *widget, GdkEventKey *event, GtkSearchEntry *entry)
+{
+  if(gtk_search_entry_handle_event(entry, (GdkEvent *)event))
+  {
+    gtk_entry_grab_focus_without_selecting(GTK_ENTRY(entry));
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+void dt_gui_search_stop(GtkSearchEntry *entry, GtkWidget *widget)
+{
+  gtk_widget_grab_focus(widget);
+
+  gtk_entry_set_text(GTK_ENTRY(entry), "");
+
+  if(GTK_IS_TREE_VIEW(widget))
+  {
+    GtkTreePath *path = NULL;
+    gtk_tree_view_get_cursor(GTK_TREE_VIEW(widget), &path, NULL);
+    gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(widget)), path);
+    gtk_tree_path_free(path);
+  }
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

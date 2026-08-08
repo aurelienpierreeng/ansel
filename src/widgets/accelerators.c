@@ -46,7 +46,6 @@
 #include <glib/gi18n.h>
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
-#include "common/logging.h"
 #include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "widgets/gtkentry.h"
@@ -964,10 +963,10 @@ static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *key
                                       event->key.group, // this ensures that numlock or shift are properly decoded
                                       keyval, NULL, NULL, &consumed);
 
-  if(dt_get_debug_flags() & DT_DEBUG_SHORTCUTS)
+  if(dt_widget_log_enabled())
   {
     gchar *accel_name = gtk_accelerator_name(*keyval, *mods);
-    dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] %s : %s\n",
+    dt_widget_log("[shortcuts] %s : %s\n",
              (event->type == GDK_KEY_PRESS) ? "Key pressed" : "Key released", accel_name);
     dt_free(accel_name);
   }
@@ -1028,7 +1027,7 @@ static inline void _for_each_accel(gpointer key, gpointer value, gpointer user_d
     if(!g_strcmp0(path, shortcut->path))
     {
       results->results = g_list_prepend(results->results, shortcut->path);
-      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Found accel %s for typed keys\n", path);
+      dt_widget_log("[shortcuts] Found accel %s for typed keys\n", path);
     }
     else
     {
@@ -1076,7 +1075,7 @@ static inline void _for_each_non_virtual_accel(gpointer key, gpointer value, gpo
     if(!g_strcmp0(path, shortcut->path))
     {
       results->results = g_list_prepend(results->results, shortcut);
-      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Found accel %s for typed keys\n", path);
+      dt_widget_log("[shortcuts] Found accel %s for typed keys\n", path);
     }
     else
     {
@@ -1109,14 +1108,14 @@ static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels,
 {
   // Get the accelerator entry from the accel group
   gchar *accel_name = gtk_accelerator_name(keyval, mods);
-  dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Combination of keys decoded: %s\n", accel_name);
+  dt_widget_log("[shortcuts] Combination of keys decoded: %s\n", accel_name);
   dt_free(accel_name);
 
   // Look into the active group first, aka darkroom, lighttable, etc.
   dt_shortcut_t *shortcut = _find_non_virtual_shortcut(accels, accels->active_group, keyval, mods);
   if(!IS_NULL_PTR(shortcut) && _call_shortcut_cclosure(shortcut, GTK_WINDOW(w), NULL))
   {
-    dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Active group action executed\n");
+    dt_widget_log("[shortcuts] Active group action executed\n");
     return TRUE;
   }
 
@@ -1124,7 +1123,7 @@ static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels,
   shortcut = _find_non_virtual_shortcut(accels, accels->global_accels, keyval, mods);
   if(!IS_NULL_PTR(shortcut) && _call_shortcut_cclosure(shortcut, GTK_WINDOW(w), NULL))
   {
-    dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Global group action executed\n");
+    dt_widget_log("[shortcuts] Global group action executed\n");
     return TRUE;
   }
 
@@ -2535,7 +2534,7 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
 
   if(IS_NULL_PTR(shortcut))
   {
-    dt_print(DT_DEBUG_SHORTCUTS, "[accel_search] dispatch skipped: shortcut '%s' no longer exists\n",
+    dt_widget_log("[accel_search] dispatch skipped: shortcut '%s' no longer exists\n",
              !IS_NULL_PTR(state->path) ? state->path : "<null>");
     return;
   }
@@ -2596,22 +2595,19 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   if(!IS_NULL_PTR(closure))
   {
     const gboolean handled = _call_shortcut_cclosure(shortcut, state->main_window, closure);
-    dt_print(DT_DEBUG_SHORTCUTS,
-             "[accel_search] dispatch closure target='%s' description='%s' handled=%d\n",
+    dt_widget_log("[accel_search] dispatch closure target='%s' description='%s' handled=%d\n",
              path, desc, handled);
   }
   else if(!IS_NULL_PTR(shortcut_widget))
   {
     const gboolean activated = gtk_widget_activate(shortcut_widget);
-    dt_print(DT_DEBUG_SHORTCUTS,
-             "[accel_search] dispatch widget target='%s' description='%s' activated=%d widget=%s\n",
+    dt_widget_log("[accel_search] dispatch widget target='%s' description='%s' activated=%d widget=%s\n",
              path, desc, activated,
              !IS_NULL_PTR(shortcut_widget) ? gtk_widget_get_name(shortcut_widget) : "<destroyed>");
   }
   else
   {
-    dt_print(DT_DEBUG_SHORTCUTS,
-             "[accel_search] dispatch failed: no callable target for '%s' description='%s'\n",
+    dt_widget_log("[accel_search] dispatch failed: no callable target for '%s' description='%s'\n",
              path, desc);
   }
 
@@ -2643,8 +2639,7 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
   }
   const gboolean target_focused = target_focused_gtk || target_focused_scroll;
 
-  dt_print(DT_DEBUG_SHORTCUTS,
-           "[accel_search] focus check (pre-idle) target='%s' target_widget=%s(%p) gtk_focus=%s(%p)"
+  dt_widget_log("[accel_search] focus check (pre-idle) target='%s' target_widget=%s(%p) gtk_focus=%s(%p)"
            " scroll_focus=%s(%p) target_focused_gtk=%d target_focused_scroll=%d target_focused=%d\n",
            path,
            !IS_NULL_PTR(target_widget) ? gtk_widget_get_name(target_widget) : "<null>",
@@ -2665,8 +2660,7 @@ static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
     retry->accels = state->accels;
     retry->main_window = state->main_window;
     retry->retries = state->retries + 1;
-    dt_print(DT_DEBUG_SHORTCUTS,
-             "[accel_search] dispatch retry scheduled target='%s' retry=%u\n",
+    dt_widget_log("[accel_search] dispatch retry scheduled target='%s' retry=%u\n",
              path, retry->retries);
     g_timeout_add_full(G_PRIORITY_DEFAULT, DT_ACCEL_SEARCH_DISPATCH_RETRY_DELAY_MS,
                        _dispatch_selected_shortcut_idle, retry, NULL);
@@ -2746,8 +2740,7 @@ static gboolean _queue_action_from_shortcut(dt_shortcut_t *shortcut, GtkWidget *
   gchar *query_sep = g_strstr_len(query, -1, DT_ACCEL_SEARCH_INLINE_SEPARATOR);
   if(!IS_NULL_PTR(query_sep)) *query_sep = '\0';
   g_strstrip(query);
-  dt_print(DT_DEBUG_SHORTCUTS,
-           "[accel_search] validate query='%s' shortcut='%s' description='%s'\n",
+  dt_widget_log("[accel_search] validate query='%s' shortcut='%s' description='%s'\n",
            query,
            !IS_NULL_PTR(shortcut) && !IS_NULL_PTR(shortcut->path) ? shortcut->path : "<null>",
            !IS_NULL_PTR(shortcut) && !IS_NULL_PTR(shortcut->description) ? shortcut->description : "<null>");
@@ -3234,4 +3227,35 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window, GtkWidget *an
   if(!IS_NULL_PTR(state.preferred_command)) dt_free(state.preferred_command);
   if(!IS_NULL_PTR(state.recent_entries)) g_object_unref(state.recent_entries);
   g_object_unref(store);
+}
+
+
+static gboolean _text_entry_focus_in_event(GtkWidget *self, GdkEventFocus event, gpointer user_data)
+{
+  dt_accels_disable(dt_accels_get_global(), TRUE);
+  return FALSE;
+}
+
+static gboolean _text_entry_focus_out_event(GtkWidget *self, GdkEventFocus event, gpointer user_data)
+{
+  dt_accels_disable(dt_accels_get_global(), FALSE);
+  return FALSE;
+}
+
+static gboolean _text_entry_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
+{
+  if(event->keyval == GDK_KEY_Escape)
+  {
+    dt_widget_refocus();
+    return TRUE;
+  }
+  return FALSE;
+}
+
+void dt_accels_disconnect_on_text_input(GtkWidget *widget)
+{
+  gtk_widget_add_events(widget, GDK_FOCUS_CHANGE_MASK);
+  g_signal_connect(G_OBJECT(widget), "focus-in-event", G_CALLBACK(_text_entry_focus_in_event), NULL);
+  g_signal_connect(G_OBJECT(widget), "focus-out-event", G_CALLBACK(_text_entry_focus_out_event), NULL);
+  g_signal_connect(G_OBJECT(widget), "key-press-event", G_CALLBACK(_text_entry_key_pressed), NULL);
 }
