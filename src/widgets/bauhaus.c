@@ -78,9 +78,9 @@
 #include <math.h>
 
 #include <pango/pangocairo.h>
+#include "system/surface_scaling.h"
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
-#include "system/surface_scaling.h"   // dt_cairo_surface_create_at_scale
 #endif
 
 G_DEFINE_TYPE(DtBauhausWidget, dt_bh, GTK_TYPE_DRAWING_AREA)

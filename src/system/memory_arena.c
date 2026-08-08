@@ -25,8 +25,8 @@
  * one property its name promises. A debug build prints straight to stdout; a release build
  * compiles the call away. Same arrangement as widgets/, and for the same reason. */
 #ifdef _DEBUG
-#include <stdarg.h>
-#include <stdio.h>
+#include <stdarg.h>   // conditional-ok: only _arena_log below uses these, and it
+#include <stdio.h>    // conditional-ok: is itself compiled away outside _DEBUG
 static inline void _arena_log(const char *format, ...)
 {
   va_list ap;
