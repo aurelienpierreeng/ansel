@@ -25,6 +25,7 @@
 
 #include "common/macros.h"
 #include "system/mem_alloc.h"
+#include "gui/gtk.h"
 #include "common/dbus.h"
 #include "control/progress.h"
 #include "control/control.h"

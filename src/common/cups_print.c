@@ -30,8 +30,10 @@
 #include "common/utility.h"
 #include "control/control.h"
 #include <glib/gstdio.h>
+#include "common/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
+#include "common/paths.h"
 #include <cups/cups.h>
 #include <cups/ppd.h>
 #include <glib.h>
