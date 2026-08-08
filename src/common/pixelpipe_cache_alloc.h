@@ -42,6 +42,13 @@ extern "C" {
  * purely to allocate a buffer, i.e. an upward dependency for something the caller never
  * touches. The three entry points below take the cache as an opaque pointer, so a tag
  * declaration is enough; the *_perthread_impl helpers are static inline right here. */
+/* An OPAQUE handle, deliberately. dt_decl_def_audit reports the two functions below as
+ * declared here but defined in develop/pixelpipe_cache.c, and that is correct and should
+ * stay: they need the cache's internals, which develop/ owns, while the allocation macros
+ * built on them are used from pixel/ (14 files), common/ (6), math/ and imageio/. Moving the
+ * declarations up to develop/ would force every one of those layers to include develop/;
+ * moving the definitions down would drag the cache internals into layer 1. Passing an opaque
+ * pointer through costs neither. */
 struct dt_dev_pixelpipe_cache_t;
 
 struct dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void);

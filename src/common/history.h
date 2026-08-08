@@ -98,8 +98,9 @@ gboolean dt_history_db_write_history_item(const int32_t imgid, const int num, co
                                          const void *blendop_params, const int blendop_params_size,
                                          const int blendop_version, const int multi_priority, const char *multi_name);
 
-/* duplicate an history list */
-GList *dt_history_duplicate(GList *hist);
+/* dt_history_duplicate() used to be declared here. It walks dt_dev_history_item_t and calls
+ * dt_iop_get_module(), both of which develop/ owns, so its definition cannot come down to
+ * this layer -- the declaration went up to develop/dev_history.h instead, beside it. */
 
 
 
