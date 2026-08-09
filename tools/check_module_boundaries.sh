@@ -117,6 +117,7 @@ elif [ "${accessor_now}" -lt "${accessor_baseline}" ] || [ "${lock_now}" -lt "${
 fi
 
 echo
+system_widgets_failed=0
 if [ "${findings}" -gt 0 ]; then
   cat <<'MSG'
 A module boundary was crossed.
@@ -135,8 +136,48 @@ through widgets/widget_settings.h -- that is what those handler slots are for.
 Adding an exception to this script should be the last resort, and needs the reason written
 next to it.
 MSG
+  system_widgets_failed=1
+fi
+
+
+# 4. src/common/opencl is closed: nothing outside it names the module's state.
+#
+# `darktable.opencl` used to be a member of the application struct, so dt_opencl_t's device
+# array, its per-device locks and nine other subsystems' kernel bundles were one dereference
+# away from any file that included darktable.h. The struct is a file-static in
+# common/opencl.c now and is not even declared in the header, so both counts are structurally
+# zero -- this check is what keeps someone from re-exporting it "just for one caller".
+#
+# The kernel-bundle count is separate because it is the shape that comes back: a subsystem
+# that hands its own state to opencl.c to hold is re-creating the round trip that was removed.
+opencl_state_baseline=0
+opencl_parked_baseline=0
+
+opencl_state_now=$(grep -rn 'darktable\.opencl\|dt_opencl_get_global' src/ --include='*.c' --include='*.h' --include='*.cc' \
+                   2>/dev/null | grep -v '^src/common/opencl' | grep -cv '^\s*[0-9]*:\s*[/ ]\*')
+# A member of dt_opencl_t that is really another module's: `struct dt_<x>_cl_global_t *` on it.
+# The struct lives in the .c now -- that is the point of the check -- so look for it there,
+# and in the header too, so that re-exporting it does not make the count silently zero.
+opencl_parked_now=$(cat src/common/opencl.c src/common/opencl.h 2>/dev/null \
+                    | sed -n '/^typedef struct dt_opencl_t$/,/^} dt_opencl_t;/p' \
+                    | grep -c '_cl_global_t \*')
+
+echo "opencl:        ${opencl_state_now} external references to the module's state (baseline ${opencl_state_baseline}),"
+echo "               ${opencl_parked_now} foreign kernel bundles parked on dt_opencl_t (baseline ${opencl_parked_baseline})."
+
+if [ "${opencl_state_now}" -gt "${opencl_state_baseline}" ] || [ "${opencl_parked_now}" -gt "${opencl_parked_baseline}" ]; then
+  echo "opencl: a count ROSE. Ask the module a question (dt_opencl_get_num_devices(),"
+  echo "        dt_opencl_get_device_name(), dt_opencl_reserve_device_*()) instead of reaching"
+  echo "        into its state, and keep your own kernels in your own file."
+  findings=$((findings + 1))
+elif [ "${opencl_state_now}" -lt "${opencl_state_baseline}" ] || [ "${opencl_parked_now}" -lt "${opencl_parked_baseline}" ]; then
+  echo "opencl: a count fell -- lower the baseline in this script, in the same commit."
+  findings=$((findings + 1))
+fi
+
+if [ "${findings}" -gt 0 ]; then
   exit 1
 fi
 
-echo "OK: src/system is closed, src/widgets does not reach into gui/, colorprofiles held."
+echo "OK: src/system is closed, src/widgets does not reach into gui/, colorprofiles and opencl held."
 exit 0
