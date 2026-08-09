@@ -1319,21 +1319,28 @@ static GList* _get_profiles()
   prof->ppos = -2;
   list = g_list_prepend(list, prof);
 
-  // add the profiles from datadir/color/out/*.icc
-  for(GList *iter = dt_colorspaces_get_global()->profiles; iter; iter = g_list_next(iter))
+  /* Every on-disk profile, from color/in/ as well as color/out/ -- this list applies no
+   * direction predicate, only a type filter, which IN|OUT reproduces exactly: a
+   * DT_COLORSPACE_FILE entry gets in_pos from the in/ batch or out_pos from the out/
+   * batch, never neither, and no built-in has type DT_COLORSPACE_FILE. Enumeration order
+   * is list order, so the resulting menu is unchanged. */
+  dt_colorprofile_desc_t *file_profiles = NULL;
+  const size_t n_file_profiles = dt_colorspaces_enumerate_profiles(
+      DT_PROFILE_DIRECTION_IN | DT_PROFILE_DIRECTION_OUT, &file_profiles);
+
+  for(size_t k = 0; k < n_file_profiles; k++)
   {
-    dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
-    if(p->type == DT_COLORSPACE_FILE)
-    {
-      prof = (dt_lib_export_profile_t *)g_malloc0(sizeof(dt_lib_export_profile_t));
-      g_strlcpy(prof->name, p->name, sizeof(prof->name));
-      g_strlcpy(prof->filename, p->filename, sizeof(prof->filename));
-      prof->type = DT_COLORSPACE_FILE;
-      prof->pos = -2;
-      prof->ppos = -2;
-      list = g_list_prepend(list, prof);
-    }
+    if(file_profiles[k].type != DT_COLORSPACE_FILE) continue;
+
+    prof = (dt_lib_export_profile_t *)g_malloc0(sizeof(dt_lib_export_profile_t));
+    g_strlcpy(prof->name, file_profiles[k].name, sizeof(prof->name));
+    g_strlcpy(prof->filename, file_profiles[k].filename, sizeof(prof->filename));
+    prof->type = DT_COLORSPACE_FILE;
+    prof->pos = -2;
+    prof->ppos = -2;
+    list = g_list_prepend(list, prof);
   }
+  dt_free_align(file_profiles);
 
   return g_list_reverse(list);  // list was built in reverse order, so un-reverse it
 }

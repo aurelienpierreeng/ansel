@@ -276,7 +276,8 @@ static gboolean filmstrip_checked_callback(GtkWidget *widget)
 
 static gboolean profile_checked_callback(GtkWidget *widget)
 {
-  dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)get_custom_data(widget);
+  const dt_colorprofile_desc_t *prof = (const dt_colorprofile_desc_t *)get_custom_data(widget);
+  if(IS_NULL_PTR(prof)) return FALSE;
 
   dt_colorprofiles_settings_t settings;
   dt_colorprofiles_get_settings(&settings);
@@ -287,7 +288,8 @@ static gboolean profile_checked_callback(GtkWidget *widget)
 
 static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)get_custom_data(GTK_WIDGET(user_data));
+  const dt_colorprofile_desc_t *pp = (const dt_colorprofile_desc_t *)get_custom_data(GTK_WIDGET(user_data));
+  if(IS_NULL_PTR(pp)) return TRUE;
 
   /* The setter owns the lock, the changed decision and the transform rebuild. pp comes
    * straight from the menu item, which was built from the profile list, so "not found" is
@@ -439,16 +441,22 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_top_submenu_entry(menus, lists, _("Monitor color profile"), index);
   GtkWidget *parent = get_last_widget(lists);
 
-  // Add available color profiles to the sub-menu
-  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->display_pos > -1)
-    {
-      add_sub_sub_menu_entry(menus, parent, lists, prof->name, index, prof, profile_callback, profile_checked_callback, NULL, NULL, 0, 0);
-      //gtk_check_menu_item_set_draw_as_radio(GTK_CHECK_MENU_ITEM(get_last_widget(lists)), TRUE);
-    }
-  }
+  /* Add available color profiles to the sub-menu.
+   *
+   * The menu items keep a pointer to their profile identity, read back by
+   * profile_callback() and profile_checked_callback(). That used to be a raw pointer into
+   * the module's own list; it is an owned copy now, so the menu holds no reference into
+   * module state. The array has the same lifetime as the menu -- built once at startup,
+   * alive for the process -- so it is deliberately not freed. */
+  static dt_colorprofile_desc_t *display_profiles = NULL;
+  static size_t n_display_profiles = 0;
+
+  if(IS_NULL_PTR(display_profiles))
+    n_display_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_DISPLAY, &display_profiles);
+
+  for(size_t k = 0; k < n_display_profiles; k++)
+    add_sub_sub_menu_entry(menus, parent, lists, display_profiles[k].name, index, &display_profiles[k],
+                           profile_callback, profile_checked_callback, NULL, NULL, 0, 0);
 
   // Parent sub-menu profile intent
   add_top_submenu_entry(menus, lists, _("Monitor color intent"), index);

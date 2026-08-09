@@ -221,13 +221,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 
 static void _resolve_work_profile(dt_colorspaces_color_profile_type_t *work_type, char *work_filename)
 {
-  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->work_pos > -1 && *work_type == prof->type
-       && (prof->type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(prof->filename, work_filename)))
-      return;
-  }
+  if(dt_colorspaces_profile_exists(DT_PROFILE_DIRECTION_WORK, *work_type, work_filename)) return;
 
   dt_print(DT_DEBUG_COLORPROFILE,
            "[colorin] profile `%s' not suitable for work profile. it has been replaced by linear Rec2020 RGB!\n",
@@ -516,21 +510,33 @@ static void profile_changed(GtkWidget *widget, gpointer user_data)
   dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)self->params;
   dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
   int pos = dt_bauhaus_combobox_get(widget);
-  GList *prof;
+
+  /* The combo lists this image's own derived profiles first (g->image_profiles, which
+   * belongs to this module and is NOT the module-wide list), then the registered input
+   * profiles. */
   if(pos < g->n_image_profiles)
-    prof = g->image_profiles;
+  {
+    for(const GList *prof = g->image_profiles; prof; prof = g_list_next(prof))
+    {
+      const dt_colorspaces_color_profile_t *pp = (const dt_colorspaces_color_profile_t *)prof->data;
+      if(pp->in_pos == pos)
+      {
+        p->type = pp->type;
+        memcpy(p->filename, pp->filename, sizeof(p->filename));
+        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_INPUT);
+        return;
+      }
+    }
+  }
   else
   {
-    prof = dt_colorspaces_get_global()->profiles;
-    pos -= g->n_image_profiles;
-  }
-  for(; prof; prof = g_list_next(prof))
-  {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
-    if(pp->in_pos == pos)
+    dt_colorprofile_desc_t desc;
+    if(dt_colorspaces_profile_at(DT_PROFILE_DIRECTION_IN, pos - g->n_image_profiles, &desc))
     {
-      p->type = pp->type;
-      memcpy(p->filename, pp->filename, sizeof(p->filename));
+      p->type = desc.type;
+      memcpy(p->filename, desc.filename, sizeof(p->filename));
       dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
       DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_INPUT);
@@ -553,16 +559,12 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
   dt_colorspaces_color_profile_type_t type_work = DT_COLORSPACE_NONE;
   char filename_work[DT_IOP_COLOR_ICC_LEN];
 
-  int pos = dt_bauhaus_combobox_get(widget);
-  for(const GList *prof = dt_colorspaces_get_global()->profiles; prof; prof = g_list_next(prof))
+  const int pos = dt_bauhaus_combobox_get(widget);
+  dt_colorprofile_desc_t work_desc;
+  if(dt_colorspaces_profile_at(DT_PROFILE_DIRECTION_WORK, pos, &work_desc))
   {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
-    if(pp->work_pos == pos)
-    {
-      type_work = pp->type;
-      g_strlcpy(filename_work, pp->filename, sizeof(filename_work));
-      break;
-    }
+    type_work = work_desc.type;
+    g_strlcpy(filename_work, work_desc.filename, sizeof(filename_work));
   }
 
   if(type_work != DT_COLORSPACE_NONE)
@@ -1463,18 +1465,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->clipping_combobox, p->normalize);
 
   // working profile
-  int idx = -1;
-  for(const GList *prof = dt_colorspaces_get_global()->profiles; prof; prof = g_list_next(prof))
-  {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
-    if(pp->work_pos > -1
-       && pp->type == p->type_work
-       && (pp->type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(pp->filename, p->filename_work)))
-    {
-      idx = pp->work_pos;
-      break;
-    }
-  }
+  int idx = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_WORK, p->type_work, p->filename_work);
 
   if(idx < 0)
   {
@@ -1495,16 +1486,11 @@ void gui_update(struct dt_iop_module_t *self)
     }
   }
 
-  for(const GList *prof = dt_colorspaces_get_global()->profiles; prof; prof = g_list_next(prof))
+  const int in_idx = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_IN, p->type, p->filename);
+  if(in_idx > -1)
   {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
-    if(pp->in_pos > -1
-       && pp->type == p->type
-       && (pp->type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(pp->filename, p->filename)))
-    {
-      dt_bauhaus_combobox_set(g->profile_combobox, pp->in_pos + g->n_image_profiles);
-      return;
-    }
+    dt_bauhaus_combobox_set(g->profile_combobox, in_idx + g->n_image_profiles);
+    return;
   }
 
   // Error happened, otherwise we would have returned earlier
@@ -1640,48 +1626,49 @@ static void update_profile_list(dt_iop_module_t *self)
   }
   gboolean input_system_profile_separator_added = FALSE;
   gboolean input_file_profile_separator_added = FALSE;
-  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
+  dt_colorprofile_desc_t *in_profiles = NULL;
+  const size_t n_in_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_IN, &in_profiles);
+  for(size_t k = 0; k < n_in_profiles; k++)
   {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->in_pos > -1)
+    const dt_colorprofile_desc_t *const prof = &in_profiles[k];
+
+    if(g->n_image_profiles > 0 && !input_system_profile_separator_added)
     {
-      if(g->n_image_profiles > 0 && !input_system_profile_separator_added)
-      {
-        dt_bauhaus_combobox_add_separator(g->profile_combobox);
-        input_system_profile_separator_added = TRUE;
-      }
-      if(prof->type == DT_COLORSPACE_FILE && !input_file_profile_separator_added)
-      {
-        dt_bauhaus_combobox_add_separator(g->profile_combobox);
-        input_file_profile_separator_added = TRUE;
-      }
-      if(prof->type == DT_COLORSPACE_FILE)
-        dt_bauhaus_combobox_add_with_tooltip(g->profile_combobox, prof->name, prof->filename);
-      else
-        dt_bauhaus_combobox_add(g->profile_combobox, prof->name);
+      dt_bauhaus_combobox_add_separator(g->profile_combobox);
+      input_system_profile_separator_added = TRUE;
     }
+    if(prof->type == DT_COLORSPACE_FILE && !input_file_profile_separator_added)
+    {
+      dt_bauhaus_combobox_add_separator(g->profile_combobox);
+      input_file_profile_separator_added = TRUE;
+    }
+    if(prof->type == DT_COLORSPACE_FILE)
+      dt_bauhaus_combobox_add_with_tooltip(g->profile_combobox, prof->name, prof->filename);
+    else
+      dt_bauhaus_combobox_add(g->profile_combobox, prof->name);
   }
+  dt_free_align(in_profiles);
 
   // working profile
   dt_bauhaus_combobox_clear(g->work_combobox);
 
   gboolean work_file_profile_separator_added = FALSE;
-  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
+  dt_colorprofile_desc_t *work_profiles = NULL;
+  const size_t n_work_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_WORK, &work_profiles);
+  for(size_t k = 0; k < n_work_profiles; k++)
   {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->work_pos > -1)
+    const dt_colorprofile_desc_t *const prof = &work_profiles[k];
+    if(prof->type == DT_COLORSPACE_FILE && !work_file_profile_separator_added)
     {
-      if(prof->type == DT_COLORSPACE_FILE && !work_file_profile_separator_added)
-      {
-        dt_bauhaus_combobox_add_separator(g->work_combobox);
-        work_file_profile_separator_added = TRUE;
-      }
-      if(prof->type == DT_COLORSPACE_FILE)
-        dt_bauhaus_combobox_add_with_tooltip(g->work_combobox, prof->name, prof->filename);
-      else
-        dt_bauhaus_combobox_add(g->work_combobox, prof->name);
+      dt_bauhaus_combobox_add_separator(g->work_combobox);
+      work_file_profile_separator_added = TRUE;
     }
+    if(prof->type == DT_COLORSPACE_FILE)
+      dt_bauhaus_combobox_add_with_tooltip(g->work_combobox, prof->name, prof->filename);
+    else
+      dt_bauhaus_combobox_add(g->work_combobox, prof->name);
   }
+  dt_free_align(work_profiles);
 }
 
 void gui_init(struct dt_iop_module_t *self)
