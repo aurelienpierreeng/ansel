@@ -1479,11 +1479,15 @@ static void _transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8
   __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
   {
-    const uint8_t *const restrict in = image_in + (size_t)y * width * 4u;
-    uint8_t *const restrict out = image_out + (size_t)y * width * 4u;
+    /* NOT restrict: callers pass the same buffer for both (common/mipmap_cache.c converts
+     * a thumbnail in place), so promising the compiler these do not overlap is a lie it is
+     * entitled to vectorise on. */
+    const uint8_t *const in = image_in + (size_t)y * width * 4u;
+    uint8_t *const out = image_out + (size_t)y * width * 4u;
 
     if(transform)
     {
+      // lcms2 permits in == out when the two formats have the same pixel size; both are 4 bytes.
       cmsDoTransform(transform, in, out, width);
       for(int x = 0; x < width; x++) out[4 * x + 3] = UINT8_MAX;
     }
@@ -1491,9 +1495,17 @@ static void _transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8
     {
       for(int x = 0; x < width; x++)
       {
-        out[4 * x + 0] = in[4 * x + 2];
-        out[4 * x + 1] = in[4 * x + 1];
-        out[4 * x + 2] = in[4 * x + 0];
+        /* Read the whole pixel before writing any of it. Storing straight through --
+         * out[0] = in[2]; out[1] = in[1]; out[2] = in[0]; -- loses the red channel when
+         * in == out, because the first store overwrites in[0] before the third reads it,
+         * leaving R and B both holding the original blue. */
+        const uint8_t r = in[4 * x + 0];
+        const uint8_t g = in[4 * x + 1];
+        const uint8_t b = in[4 * x + 2];
+
+        out[4 * x + 0] = b;
+        out[4 * x + 1] = g;
+        out[4 * x + 2] = r;
         out[4 * x + 3] = UINT8_MAX;
       }
     }
