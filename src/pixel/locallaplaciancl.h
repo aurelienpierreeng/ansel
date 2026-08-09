@@ -55,8 +55,8 @@ typedef struct dt_local_laplacian_cl_t
 }
 dt_local_laplacian_cl_t;
 
-dt_local_laplacian_cl_global_t *dt_local_laplacian_init_cl_global();
-void dt_local_laplacian_free_cl_global(dt_local_laplacian_cl_global_t *g);
+void dt_local_laplacian_init_cl_global(void);
+void dt_local_laplacian_free_cl_global(void);
 dt_local_laplacian_cl_t *dt_local_laplacian_init_cl(
     const int devid,
     const int width,            // width of input image

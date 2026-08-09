@@ -1059,7 +1059,14 @@ void dt_interpolation_resample_roi(const struct dt_interpolation *itor,
 }
 
 #ifdef HAVE_OPENCL
-dt_interpolation_cl_global_t *dt_interpolation_init_cl_global()
+/* The kernels this subsystem compiles, owned HERE. They used to be handed to
+ * common/opencl.c, parked on the application-wide dt_opencl_t, and read back from it --
+ * a round trip through a god-struct that added nothing but an ordering. opencl.c still
+ * calls init/free, because the kernels must be built after the devices exist, but the
+ * pointer never leaves this file. */
+static dt_interpolation_cl_global_t *_interpolation_cl_global = NULL;
+
+void dt_interpolation_init_cl_global(void)
 {
   dt_interpolation_cl_global_t *g
       = (dt_interpolation_cl_global_t *)malloc(sizeof(dt_interpolation_cl_global_t));
@@ -1067,11 +1074,13 @@ dt_interpolation_cl_global_t *dt_interpolation_init_cl_global()
   const int program = 2; // basic.cl, from programs.conf
   g->kernel_interpolation_resample =
     dt_opencl_create_kernel(program, "interpolation_resample");
-  return g;
+  _interpolation_cl_global = g;
 }
 
-void dt_interpolation_free_cl_global(dt_interpolation_cl_global_t *g)
+void dt_interpolation_free_cl_global(void)
 {
+  dt_interpolation_cl_global_t *g = _interpolation_cl_global;
+  _interpolation_cl_global = NULL;
   if(IS_NULL_PTR(g)) return;
   // destroy kernels
   dt_opencl_free_kernel(g->kernel_interpolation_resample);
@@ -1159,7 +1168,7 @@ int dt_interpolation_resample_cl(const struct dt_interpolation *itor,
   // a number of parallel work items each taking care of one horizontal convolution,
   // then sum over work items to do the vertical convolution
 
-  const int kernel = dt_opencl_get_global()->interpolation->kernel_interpolation_resample;
+  const int kernel = _interpolation_cl_global->kernel_interpolation_resample;
   const int width = roi_out->width;
   const int height = roi_out->height;
 

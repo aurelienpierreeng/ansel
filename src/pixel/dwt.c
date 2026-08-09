@@ -538,7 +538,14 @@ int dwt_denoise(float *const img, const int width, const int height, const int b
 }
 
 #ifdef HAVE_OPENCL
-dt_dwt_cl_global_t *dt_dwt_init_cl_global()
+/* The kernels this subsystem compiles, owned HERE. They used to be handed to
+ * common/opencl.c, parked on the application-wide dt_opencl_t, and read back from it --
+ * a round trip through a god-struct that added nothing but an ordering. opencl.c still
+ * calls init/free, because the kernels must be built after the devices exist, but the
+ * pointer never leaves this file. */
+static dt_dwt_cl_global_t *_dwt_cl_global = NULL;
+
+void dt_dwt_init_cl_global(void)
 {
   dt_dwt_cl_global_t *g = (dt_dwt_cl_global_t *)malloc(sizeof(dt_dwt_cl_global_t));
 
@@ -548,11 +555,13 @@ dt_dwt_cl_global_t *dt_dwt_init_cl_global()
   g->kernel_dwt_hat_transform_col = dt_opencl_create_kernel(program, "dwt_hat_transform_col");
   g->kernel_dwt_hat_transform_row = dt_opencl_create_kernel(program, "dwt_hat_transform_row");
   g->kernel_dwt_init_buffer = dt_opencl_create_kernel(program, "dwt_init_buffer");
-  return g;
+  _dwt_cl_global = g;
 }
 
-void dt_dwt_free_cl_global(dt_dwt_cl_global_t *g)
+void dt_dwt_free_cl_global(void)
 {
+  dt_dwt_cl_global_t *g = _dwt_cl_global;
+  _dwt_cl_global = NULL;
   if(IS_NULL_PTR(g)) return;
 
   // destroy kernels
@@ -572,7 +581,7 @@ dwt_params_cl_t *dt_dwt_init_cl(const int devid, cl_mem image, const int width, 
   dwt_params_cl_t *p = (dwt_params_cl_t *)malloc(sizeof(dwt_params_cl_t));
   if(IS_NULL_PTR(p)) return NULL;
 
-  p->global = dt_opencl_get_global()->dwt;
+  p->global = _dwt_cl_global;
   p->devid = devid;
   p->image = image;
   p->ch = 4;

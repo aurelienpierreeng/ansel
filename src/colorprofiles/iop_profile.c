@@ -690,7 +690,14 @@ void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_i
 }
 
 #ifdef HAVE_OPENCL
-dt_colorspaces_cl_global_t *dt_colorspaces_init_cl_global()
+/* The kernels this subsystem compiles, owned HERE. They used to be handed to
+ * common/opencl.c, parked on the application-wide dt_opencl_t, and read back from it --
+ * a round trip through a god-struct that added nothing but an ordering. opencl.c still
+ * calls init/free, because the kernels must be built after the devices exist, but the
+ * pointer never leaves this file. */
+static dt_colorspaces_cl_global_t *_colorspaces_cl_global = NULL;
+
+void dt_colorspaces_init_cl_global(void)
 {
   dt_colorspaces_cl_global_t *g = (dt_colorspaces_cl_global_t *)malloc(sizeof(dt_colorspaces_cl_global_t));
 
@@ -699,11 +706,13 @@ dt_colorspaces_cl_global_t *dt_colorspaces_init_cl_global()
   g->kernel_colorspaces_transform_rgb_matrix_to_lab = dt_opencl_create_kernel(program, "colorspaces_transform_rgb_matrix_to_lab");
   g->kernel_colorspaces_transform_rgb_matrix_to_rgb
       = dt_opencl_create_kernel(program, "colorspaces_transform_rgb_matrix_to_rgb");
-  return g;
+  _colorspaces_cl_global = g;
 }
 
-void dt_colorspaces_free_cl_global(dt_colorspaces_cl_global_t *g)
+void dt_colorspaces_free_cl_global(void)
 {
+  dt_colorspaces_cl_global_t *g = _colorspaces_cl_global;
+  _colorspaces_cl_global = NULL;
   if(IS_NULL_PTR(g)) return;
 
   // destroy kernels
@@ -890,7 +899,7 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
     size_t origin[] = { 0, 0, 0 };
     size_t region[] = { width, height, 1 };
 
-    kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_rgb;
+    kernel_transform = _colorspaces_cl_global->kernel_colorspaces_transform_rgb_matrix_to_rgb;
 
     dt_ioppr_get_profile_info_cl(profile_info_from, &profile_info_from_cl);
     lut_from_cl = dt_ioppr_get_trc_cl(profile_info_from);
@@ -1401,11 +1410,11 @@ int dt_colorspaces_apply_profile_cl(const char *const op_name, const char *const
 
     if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
     {
-      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_lab;
+      kernel_transform = _colorspaces_cl_global->kernel_colorspaces_transform_rgb_matrix_to_lab;
     }
     else if(cst_from == IOP_CS_LAB && dt_iop_colorspace_is_rgb(cst_to))
     {
-      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_lab_to_rgb_matrix;
+      kernel_transform = _colorspaces_cl_global->kernel_colorspaces_transform_lab_to_rgb_matrix;
     }
     else
     {

@@ -39,7 +39,14 @@ static inline uint64_t dl(uint64_t size, const int level)
   return size;
 }
 
-dt_local_laplacian_cl_global_t *dt_local_laplacian_init_cl_global()
+/* The kernels this subsystem compiles, owned HERE. They used to be handed to
+ * common/opencl.c, parked on the application-wide dt_opencl_t, and read back from it --
+ * a round trip through a god-struct that added nothing but an ordering. opencl.c still
+ * calls init/free, because the kernels must be built after the devices exist, but the
+ * pointer never leaves this file. */
+static dt_local_laplacian_cl_global_t *_local_laplacian_cl_global = NULL;
+
+void dt_local_laplacian_init_cl_global(void)
 {
   dt_local_laplacian_cl_global_t *g = malloc(sizeof(dt_local_laplacian_cl_global_t));
 
@@ -50,11 +57,13 @@ dt_local_laplacian_cl_global_t *dt_local_laplacian_init_cl_global()
   g->kernel_laplacian_assemble = dt_opencl_create_kernel(program, "laplacian_assemble");
   g->kernel_process_curve      = dt_opencl_create_kernel(program, "process_curve");
   g->kernel_write_back         = dt_opencl_create_kernel(program, "write_back");
-  return g;
+  _local_laplacian_cl_global = g;
 }
 
-void dt_local_laplacian_free_cl_global(dt_local_laplacian_cl_global_t *g)
+void dt_local_laplacian_free_cl_global(void)
 {
+  dt_local_laplacian_cl_global_t *g = _local_laplacian_cl_global;
+  _local_laplacian_cl_global = NULL;
   if(IS_NULL_PTR(g)) return;
 
   dt_opencl_free_kernel(g->kernel_pad_input);
@@ -100,7 +109,7 @@ dt_local_laplacian_cl_t *dt_local_laplacian_init_cl(
   dt_local_laplacian_cl_t *g = malloc(sizeof(dt_local_laplacian_cl_t));
   if(IS_NULL_PTR(g)) return NULL;
 
-  g->global = dt_opencl_get_global()->local_laplacian;
+  g->global = _local_laplacian_cl_global;
   g->devid = devid;
   g->width = width;
   g->height = height;

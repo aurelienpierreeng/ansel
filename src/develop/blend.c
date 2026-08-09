@@ -60,6 +60,18 @@
 #include <math.h>
 #include <string.h>
 
+/* The blend kernels, owned HERE. They used to be handed to common/opencl.c, parked on the
+ * application-wide dt_opencl_t, and read back from it by this file and by two IOPs -- a round
+ * trip through a god-struct that added nothing but an ordering. opencl.c still calls init and
+ * free, because the kernels must be built after the devices exist; the pointer itself no
+ * longer leaves the blend subsystem except through dt_develop_blend_get_cl_global(). */
+static dt_blendop_cl_global_t *_blendop_cl_global = NULL;
+
+dt_blendop_cl_global_t *dt_develop_blend_get_cl_global(void)
+{
+  return _blendop_cl_global;
+}
+
 typedef enum _develop_mask_post_processing
 {
   DEVELOP_MASK_POST_NONE = 0,
@@ -994,7 +1006,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = dt_opencl_get_global()->blendop->kernel_read_mask;
+    const int kernel = _blendop_cl_global->kernel_read_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &tmp);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1005,7 +1017,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_blend;
+    const int kernel = _blendop_cl_global->kernel_calc_blend;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &blur);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1024,7 +1036,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
     if(!IS_NULL_PTR(dev_blurmat))
     {
       size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-      const int clkernel = dt_opencl_get_global()->blendop->kernel_mask_blur;
+      const int clkernel = _blendop_cl_global->kernel_mask_blur;
       dt_opencl_set_kernel_arg(devid, clkernel, 0, sizeof(cl_mem), &blur);
       dt_opencl_set_kernel_arg(devid, clkernel, 1, sizeof(cl_mem), &out);
       dt_opencl_set_kernel_arg(devid, clkernel, 2, sizeof(int), &iwidth);
@@ -1043,7 +1055,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = dt_opencl_get_global()->blendop->kernel_write_mask;
+    const int kernel = _blendop_cl_global->kernel_write_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &tmp);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1184,29 +1196,29 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   switch(blend_csp)
   {
     case DEVELOP_BLEND_CS_RAW:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_RAW;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_RAW;
+      kernel = _blendop_cl_global->kernel_blendop_RAW;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_RAW;
       break;
 
     case DEVELOP_BLEND_CS_RGB_DISPLAY:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_rgb_hsl;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_rgb_hsl;
+      kernel = _blendop_cl_global->kernel_blendop_rgb_hsl;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_rgb_hsl;
       break;
 
     case DEVELOP_BLEND_CS_RGB_SCENE:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_rgb_jzczhz;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_rgb_jzczhz;
+      kernel = _blendop_cl_global->kernel_blendop_rgb_jzczhz;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_rgb_jzczhz;
       break;
 
     case DEVELOP_BLEND_CS_LAB:
     default:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_Lab;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_Lab;
+      kernel = _blendop_cl_global->kernel_blendop_Lab;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_Lab;
       break;
   }
-  int kernel_mask_tone_curve = dt_opencl_get_global()->blendop->kernel_blendop_mask_tone_curve;
-  int kernel_set_mask = dt_opencl_get_global()->blendop->kernel_blendop_set_mask;
-  int kernel_display_channel = dt_opencl_get_global()->blendop->kernel_blendop_display_channel;
+  int kernel_mask_tone_curve = _blendop_cl_global->kernel_blendop_mask_tone_curve;
+  int kernel_set_mask = _blendop_cl_global->kernel_blendop_set_mask;
+  int kernel_display_channel = _blendop_cl_global->kernel_blendop_display_channel;
 
   const int devid = pipe->devid;
   const int offs[2] = { xoffs, yoffs };
@@ -1591,7 +1603,7 @@ error:
 #endif
 
 /** global init of blendops */
-dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void)
+void dt_develop_blend_init_cl_global(void)
 {
 #ifdef HAVE_OPENCL
   dt_blendop_cl_global_t *b = (dt_blendop_cl_global_t *)calloc(1, sizeof(dt_blendop_cl_global_t));
@@ -1617,16 +1629,16 @@ dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void)
   b->kernel_calc_blend = dt_opencl_create_kernel(program_rcd, "calc_detail_blend");
   b->kernel_mask_blur  = dt_opencl_create_kernel(program_rcd, "fastblur_mask_9x9");
 
-  return b;
-#else
-  return NULL;
+  _blendop_cl_global = b;
 #endif
 }
 
 /** global cleanup of blendops */
-void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b)
+void dt_develop_blend_free_cl_global(void)
 {
 #ifdef HAVE_OPENCL
+  dt_blendop_cl_global_t *b = _blendop_cl_global;
+  _blendop_cl_global = NULL;
   if(IS_NULL_PTR(b)) return;
 
   dt_opencl_free_kernel(b->kernel_blendop_mask_Lab);

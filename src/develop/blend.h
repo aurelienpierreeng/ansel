@@ -409,9 +409,12 @@ typedef struct dt_iop_gui_blend_data_t
 
 
 /** global init of blendops */
-dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void);
+void dt_develop_blend_init_cl_global(void);
 /** global cleanup of blendops */
-void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b);
+void dt_develop_blend_free_cl_global(void);
+/** The blend OpenCL kernels, for the two IOPs that reuse them (iop/detailmask.c,
+ * iop/demosaic/dual.c). NULL when OpenCL is unavailable or not yet initialised. */
+dt_blendop_cl_global_t *dt_develop_blend_get_cl_global(void);
 
 /** apply blend. Return 0 if ok, 1 if error */
 int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,

@@ -343,7 +343,14 @@ void dt_gaussian_free(dt_gaussian_t *g)
 
 
 #ifdef HAVE_OPENCL
-dt_gaussian_cl_global_t *dt_gaussian_init_cl_global()
+/* The kernels this subsystem compiles, owned HERE. They used to be handed to
+ * common/opencl.c, parked on the application-wide dt_opencl_t, and read back from it --
+ * a round trip through a god-struct that added nothing but an ordering. opencl.c still
+ * calls init/free, because the kernels must be built after the devices exist, but the
+ * pointer never leaves this file. */
+static dt_gaussian_cl_global_t *_gaussian_cl_global = NULL;
+
+void dt_gaussian_init_cl_global(void)
 {
   dt_gaussian_cl_global_t *g = (dt_gaussian_cl_global_t *)malloc(sizeof(dt_gaussian_cl_global_t));
 
@@ -352,7 +359,7 @@ dt_gaussian_cl_global_t *dt_gaussian_init_cl_global()
   g->kernel_gaussian_transpose_1c = dt_opencl_create_kernel(program, "gaussian_transpose_1c");
   g->kernel_gaussian_column_4c = dt_opencl_create_kernel(program, "gaussian_column_4c");
   g->kernel_gaussian_transpose_4c = dt_opencl_create_kernel(program, "gaussian_transpose_4c");
-  return g;
+  _gaussian_cl_global = g;
 }
 
 void dt_gaussian_free_cl(dt_gaussian_cl_t *g)
@@ -382,7 +389,7 @@ dt_gaussian_cl_t *dt_gaussian_init_cl(const int devid,
   dt_gaussian_cl_t *g = (dt_gaussian_cl_t *)malloc(sizeof(dt_gaussian_cl_t));
   if(IS_NULL_PTR(g)) return NULL;
 
-  g->global = dt_opencl_get_global()->gaussian;
+  g->global = _gaussian_cl_global;
   g->devid = devid;
   g->width = width;
   g->height = height;
@@ -576,8 +583,10 @@ cl_int dt_gaussian_blur_cl(dt_gaussian_cl_t *g, cl_mem dev_in, cl_mem dev_out)
 }
 
 
-void dt_gaussian_free_cl_global(dt_gaussian_cl_global_t *g)
+void dt_gaussian_free_cl_global(void)
 {
+  dt_gaussian_cl_global_t *g = _gaussian_cl_global;
+  _gaussian_cl_global = NULL;
   if(IS_NULL_PTR(g)) return;
   // destroy kernels
   dt_opencl_free_kernel(g->kernel_gaussian_column_1c);
