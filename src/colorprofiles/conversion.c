@@ -57,6 +57,12 @@ struct dt_colorspaces_conversion_t
   dt_colormatrix_t matrix;      //!< source -> target, or source -> clip when clipping
   dt_colormatrix_t clip_matrix; //!< clip -> target; meaningless unless has_clipping
 
+  /* The source profile's own RGB -> XYZ, kept uncomposed so a caller can describe the space
+   * the buffer arrives in. Derived on both branches -- falling back to lcms2 says nothing
+   * about whether the SOURCE reduced to a matrix. */
+  dt_colormatrix_t source_matrix;
+  gboolean have_source_matrix;
+
   float *lut_source[3];         //!< NULL when this conversion has no source curve stage
   float coeffs_source[3][3];    //!< 9 contiguous floats: what the kernels upload verbatim
   int nonlinear_source;
@@ -233,6 +239,11 @@ dt_colorspaces_conversion_t *dt_colorspaces_prepare_conversion(const dt_colorspa
    * what they produced -- which matters, because these two modules decide the colour of every
    * exported pixel. */
   matrix_allowed = !proofing && !(flags & DT_CONVERSION_FORCE_LCMS2) && source_supported && target_supported;
+
+  conversion->have_source_matrix
+      = dt_colorspaces_get_matrix_from_input_profile(from_profile, conversion->source_matrix, NULL, NULL, NULL, 0)
+        == 0;
+  if(!conversion->have_source_matrix) conversion->source_matrix[0][0] = NAN;
 
   if(matrix_allowed && _allocate_curves(conversion->lut_source) && _allocate_curves(conversion->lut_target))
   {
@@ -579,6 +590,14 @@ gboolean dt_colorspaces_conversion_matrix(const dt_colorspaces_conversion_t *con
 {
   if(IS_NULL_PTR(conversion) || !conversion->is_matrix) return FALSE;
   memcpy(matrix, conversion->matrix, sizeof(dt_colormatrix_t));
+  return TRUE;
+}
+
+gboolean dt_colorspaces_conversion_source_matrix(const dt_colorspaces_conversion_t *const conversion,
+                                                 dt_colormatrix_t matrix)
+{
+  if(IS_NULL_PTR(conversion) || !conversion->have_source_matrix) return FALSE;
+  memcpy(matrix, conversion->source_matrix, sizeof(dt_colormatrix_t));
   return TRUE;
 }
 
