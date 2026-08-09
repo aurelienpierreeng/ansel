@@ -638,19 +638,133 @@ similar snap anywhere in this path would silently mask a regression here rather 
 
 ---
 
-## Masks / forms history
+## Colour management (`src/colorprofiles`)
+
+The module owns its state: a single `dt_colorspaces_t` is file-static in
+`colorprofiles/colorspaces.c`, built by `dt_colorprofiles_init()` and torn down by
+`dt_colorprofiles_cleanup()`. Nothing outside `src/colorprofiles/` names the profile list, its
+`xprofile_lock` or its cached LCMS transforms, and `darktable_t` does not know profiles exist.
+`tools/check_module_boundaries.sh` holds that: external `dt_colorspaces_get_global()` and
+external `xprofile_lock` acquisitions are both ratcheted at baseline **0**, and a count that
+*falls* must lower the baseline in the same commit. `src/colorprofiles/README.md` is the full map.
+
+**The standing regression check is `tools/check_export_pixels.sh <ref-a> <ref-b>`**, which decodes
+both exports and compares the pixel arrays. Do NOT sha256 the exported PNG: it carries the build's
+version string in its metadata, so two builds differ by a few bytes of compressed text with every
+pixel identical. For colour management "it still runs" is a very low bar — the actual failure mode
+is a one-LSB hue shift.
+
+`colorprofiles/colorspaces.h` drags `<lcms2.h>` and `<pthread.h>` in behind it. A translation unit
+that only needs the vocabulary — a profile type to store in its params, an intent to pass along —
+includes `colorprofiles/profile_types.h` instead, which is the reason that header exists.
+
+### The `direction` argument is load-bearing, never a formality
+
+`DT_COLORSPACE_SRGB` is registered **twice** — a v4 parametric-curve entry valid only as INPUT,
+and a v2 point-TRC entry carrying out/display/category/work — and the two are distinguished by
+nothing but which `*_pos` field is `-1`. A multi-bit direction mask resolves to the **first**
+match in registration order, which for sRGB is the v4 input entry. Resolving the *working* profile
+with `DT_PROFILE_DIRECTION_ANY` therefore hands back the input-only variant; pass
+`DT_PROFILE_DIRECTION_WORK`. The index-valued calls (`dt_colorspaces_profile_index()`,
+`dt_colorspaces_profile_at()`) require a single bit outright — an index means nothing outside the
+enumeration that produced it, and an index taken from `IN|OUT` equals neither `in_pos` nor
+`out_pos`.
+
+`DT_PROFILE_DIRECTION_ANY` silently means `IN|OUT|WORK|DISPLAY`: the lookup predicate
+(`_entry_serves()`) tests four bits and never `category_pos`, and `DT_PROFILE_DIRECTION_DISPLAY2`
+has no backing field at all.
+
+`DT_PROFILE_DIRECTION_DISPLAY` is **not a direction** — a profile is RGB→PCS or PCS→RGB, never
+"display". The bit is the curated eligibility list for the monitor-profile menu, and it diverges
+from OUT on 5 of the 21 built-in registrations (`DISPLAY`, `REC709`, `ITUR_BT1886`, `XYZ`, `LAB`).
+Substituting one for the other is a behaviour change, not a rename.
+
+**Three registered entries have `profile == NULL`.** `DT_COLORSPACE_WORK`, `_EXPORT` and
+`_SOFTPROOF` name a user *setting* rather than a colour space and exist only to occupy a combo
+row. Dozens of call sites write `dt_colorspaces_get_profile(...)->profile` with no NULL check;
+what keeps them safe is precisely that the lookup never tests `category_pos`, so a category entry
+can never be returned. Do not "fix" the predicate to consult it, and do not make
+`DT_PROFILE_DIRECTION_CATEGORY` functional, without auditing those sites first.
+
+### Lifetime is answered by a lock, not by a copy
+
+There is no `cmsDupProfile` in lcms2. The only true deep copy is serialise-and-reopen — ~0.005 ms
+for a built-in but 1.02 ms for a real colord display profile — and copying a prepared
+`cmsHTRANSFORM` means rebuilding it, 2.2–38 ms, with nothing to amortise it against. So the
+module's four prepared display transforms never leave it (`dt_colorprofiles_xyz_to_display()`,
+`dt_colorprofiles_rgba8_to_display_bgra8()`, `dt_colorprofiles_srgb_to_display_strided()` run the
+pixel loop inside), and a caller deriving from a profile handle holds
+`dt_colorspaces_lock_profiles()` / `dt_colorspaces_unlock_profiles()` across the derivation. An
+LCMS transform does not retain the profiles it was built from, so the span ends at the
+`cmsCreateTransform()` call, not at the transform's lifetime.
+
+That lock is not ceremony. The `DT_COLORSPACE_DISPLAY` entry's `cmsHPROFILE` and the four
+transforms derived from it are the only things in the list that mutate after init, and they are
+replaced on every window move or resize that lands on a different monitor — i.e. on exactly the
+events that repaint. **The display setters take `xprofile_lock` for WRITING**: never call
+`dt_colorprofiles_set_display_profile_choice()` / `dt_colorprofiles_set_display_intent()` while
+holding `dt_colorspaces_lock_profiles()`, which is a *read* lock — rebuilding the transforms
+`cmsDeleteTransform()`s four handles a legitimate reader may still be using.
+
+**Lock order where both are involved: `xprofile_lock` OUTER, the settings lock (private to
+`colorspaces.c`) INNER.** Nothing takes them the other way round.
+
+### Read the display / soft-proof settings as one snapshot, and render from the one you hashed
+
+The seven fields (colour mode, display triple, soft-proof pair) cross the module boundary only
+together, as `dt_colorprofiles_settings_t` via `dt_colorprofiles_get_settings()`, and are written
+only through the setters. Reading them one at a time lets a reader pair a new profile type with
+the previous filename, and a 512-byte filename read while `g_strlcpy()` is writing it is a **torn**
+string, not merely a stale one.
+
+A pipeline module that folds this state into its cache key must then **render from the same
+snapshot**. Snapshotting it in `commit_params()` for the hash and re-reading the live state from
+`process()`/`process_cl()` — once per tile — renders from state the cache key does not describe.
+`dt_colorprofiles_settings_t.generation` advances on every accepted change and is the cheap thing
+to hash: one number that cannot go stale field by field.
+
+Every setter returns "did it actually change", and that return value is the point. A caller that
+decides for itself, against a value it read separately, is how re-selecting the **already active**
+display profile came to reset the user to the system profile — an inherited "profile not found"
+fallback firing on the one case where nothing should happen.
+
+### The derived-profile memo is module-owned; image-derived profiles are not in it
+
+`dt_iop_order_iccprofile_info_t` (two 3×3 matrices plus six eagerly allocated 65536-float LUTs,
+~1.5 MB) is a pure function of `(type, filename)`, so `dt_colorspaces_add_profile()` memoises it
+process-wide under its own mutex — find-or-create as one critical section, because it is reached
+per tile from `process()`/`process_cl()` (`iop/lut3d.c`, `iop/tonecurve.c`) and from the GUI
+thread (`iop/colorin.c`). It returns a pointer the **module** owns, valid until
+`dt_colorspaces_flush_profile_memo()` (or, for `DT_COLORSPACE_DISPLAY`,
+`dt_colorspaces_invalidate_display_profile_memo()`).
+
+It must stay sole-owned: `develop/blend.c` shallow-`memcpy`s the struct, aliasing all six LUT
+pointers. Tear one down only through `dt_ioppr_cleanup_profile_info()`, which frees the LUTs as
+well as the struct — freeing the struct alone leaks 1.5 MB per failure.
+
+`intent` is **not** part of the memo key, so the first caller to ask for a given
+`(type, filename)` fixes the intent every later caller gets.
+
+Profiles derived from ONE IMAGE — `DT_COLORSPACE_EMBEDDED_ICC` through
+`DT_COLORSPACE_ALTERNATE_MATRIX`, enum 9..14 — are **not** registered in the profile list and
+cannot be resolved by identity: their matrices come from that image's own camera data via
+`iop/colorin.c`. They must not be memoised either, since a `(type, "")` key would be shared by
+every image of the same camera-matrix kind. The pipe that builds one owns it
+(`dt_dev_pixelpipe_t.owned_input_profile_info`, freed with the pipe).
 
 ### An embedded ICC profile belongs to its image, not to the application
 
-`dt_colorspaces_t.profiles` (`common/colorspaces.h`) is the application-wide profile list. It is
-built once by `dt_colorspaces_init()` and read from ~23 places with no lock, which is only sound
-while it is immutable after init. **It must stay that way.**
+`dt_colorspaces_t.profiles` (`colorprofiles/colorspaces.h`) is the application-wide profile list.
+It is built once by `dt_colorprofiles_init()` and **never appended to at runtime** — registration
+order is what enumeration reproduces and what every stored combo index in every preset and conf
+key refers to, and the whole CRUDE (metadata) half of the API reads the list lock-free on that
+basis. **It must stay that way.**
 
-It did not used to be. `_build_embedded_profile()`, reached from
+It did not used to be. `_build_embedded_profile()` (`imageio/imageio_profile.c`), reached from
 `dt_colorspaces_get_output_profile()`, appended a container for an image's embedded ICC to that
 list at runtime — from export jobs, which run in parallel. Three defects in one function:
 
-- an unsynchronised `g_list_append` against a list ~23 readers walk without a lock
+- an unsynchronised `g_list_append` against a list every reader walks without a lock
   (`xprofile_lock` does not cover this; it guards the *display* profile, and the readers of
   `profiles` never take it);
 - unbounded growth — one entry per exported image, held until shutdown;
@@ -660,27 +774,40 @@ list at runtime — from export jobs, which run in parallel. Three defects in on
 An embedded profile is a property of one image, so the image owns it:
 `dt_image_t.embedded_profile`, written under the image cache entry's own lock, freed by
 `dt_image_cache_deallocate()`, and reused on the next export of the same image rather than
-rebuilt. The application list is init-only again — verified by checking that every remaining
-`profiles = g_list_append` sits inside `dt_colorspaces_init()`.
+rebuilt. Its container is built with `dt_colorspaces_new_image_profile()` and released with
+`dt_colorspaces_free_image_profile()` — that pair exists so an image-owned container never touches
+the list. The list is init-only — verified by checking that every `profiles = g_list_append` sits
+inside `_colorspaces_build()`.
 
 **Two traps, both paid for once already:**
 
-*Do not "fix" such a race by locking the append alone.* With ~23 unlocked readers that relocates
-the unsynchronised write rather than removing it. Either lock every reader, or — better, and
-what was done here — stop mutating the shared structure at runtime and give the data to whatever
-actually owns it.
+*Do not "fix" such a race by locking the append alone.* With that many unlocked readers it
+relocates the unsynchronised write rather than removing it. Either lock every reader, or — better,
+and what was done here — stop mutating the shared structure at runtime and give the data to
+whatever actually owns it.
 
 *A `cmsHPROFILE` in a container is not necessarily the container's to close.* Several branches
-of `dt_image_find_best_color_profile()` return a profile **borrowed** from the application-wide
-list (`dt_colorspaces_get_profile(...)->profile`) and leave its `new_profile` out-parameter
-FALSE; only the branches that build one set it TRUE. Giving the container to the image and
-closing its profile on eviction therefore double-freed every borrowed profile — the list closes
-it again at shutdown. `dt_colorspaces_color_profile_t.owns_profile` records which case a
-container is in, and only owning containers close.
+of `dt_image_find_best_color_profile()` (`imageio/imageio_profile.c`) return a profile **borrowed**
+from the application-wide list (`dt_colorspaces_get_profile(...)->profile`) and leave its
+`new_profile` out-parameter FALSE; only the branches that build one set it TRUE. Giving the
+container to the image and closing its profile on eviction therefore double-freed every borrowed
+profile — the list closes it again at shutdown. `dt_colorspaces_color_profile_t.owns_profile`
+records which case a container is in, and only owning containers close.
 
 That second one aborted all eight CI runners with `corrupted size vs prev_size in fastbins`
 after passing four build configurations and every static gate. Nothing static can see it:
 `tools/check_it_runs.sh` runs the binary once, which does.
+
+The same "profile-creating function used as a predicate" shape is what leaked three profiles per
+resolve in `imageio/imageio_profile.c`: calling a function that *builds* a profile to ask whether
+one exists, then calling it again for the value, discards the first. And a `goto finish` that
+skips every write to an out-parameter — including the sRGB fallback — returns an **uninitialised**
+`cmsHPROFILE` straight into `cmsCreateTransform()`. Both live in the profile-for-an-image cascade;
+check the early-out paths there before adding another branch to it.
+
+---
+
+## Masks / forms history
 
 ### Brush masks rasterize as radial spokes — wedge holes across the stroke (OPEN)
 

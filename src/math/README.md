@@ -13,6 +13,9 @@ Layer **1**, alongside `common/`.
 | linear solvers | `gaussian_elimination.h`, `QR_decomp.h`, `choleski.h`, `sparse_cholesky.{h,_cl.h}`, `svd.h` |
 | decompositions & optimisation | `polar_decomposition.h`, `nelder_mead_simplex.h` |
 | geometry | `homography.{c,h}` |
+| curve interpolation | `splines.{cpp,h}` |
+| graphs | `topological_sort.{c,h}` |
+| expression evaluation | `calculator.{c,h}` |
 | archived | `attic/` |
 
 ## Rules
@@ -28,6 +31,16 @@ extend it, do not include from it.
 ## Known overlap, unresolved
 
 `system/simd.h` holds `dt_mat3x4_mul_vec4` — a matrix operation living among load/store
-primitives — while `matrices.h` and `math.h` hand-roll intrinsics instead of using those
-primitives. `common/colormatrices.c` is a third maths library still filed under `common/`.
-Unifying the three is outstanding; see `doc/include-hygiene-roadmap.md`.
+primitives — while `math.h` hand-rolls `__m128` intrinsics instead of using them, and
+`matrices.h` uses neither: the `mat3SSEinv` / `mat3SSEmul` / `transpose_3xSSE` names are
+historical, the bodies are plain loops over the padded `dt_colormatrix_t`, and its
+`dot_product` is `dt_mat3x4_mul_vec4` written a second time.
+
+The general 3×3 inverse is not here at all. `mat3inv()` / `mat3inv_float()` are exported from
+`colorprofiles/colorspaces.h`, with the same body as `matrices.h`'s `mat3SSEinv` over a
+different storage layout (9 contiguous floats, not a padded 4×4), plus a `double` variant the
+same macro generates but does not export. Only one of its two callers is colour code
+(`imageio/imageio_rgbe.c`, inverting an RGB→XYZ primaries matrix); the other, `iop/ashift.c`,
+inverts a homography. Do not add a further copy here; if you need one, move it.
+
+Unifying these is outstanding; see `doc/include-hygiene-roadmap.md`.
