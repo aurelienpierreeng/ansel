@@ -1232,8 +1232,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     g_strlcpy(d->filename_work, work_profile_info->filename, sizeof(d->filename_work));
   }
 
+  /* WORK, not ANY. DT_COLORSPACE_SRGB is registered twice -- the v4 parametric-curve
+   * profile, valid only as an input profile, and the v2 point-TRC profile, which is the one
+   * the working-profile combo actually lists. _get_profile() filters on the direction bits
+   * before matching the type and returns the first hit in registration order, and the v4
+   * entry is registered first, so ANY resolved the working profile to a variant the user
+   * was never offered. */
   const dt_colorspaces_color_profile_t *work_profile
-      = dt_colorspaces_get_profile(d->type_work, d->filename_work, DT_PROFILE_DIRECTION_ANY);
+      = dt_colorspaces_get_profile(d->type_work, d->filename_work, DT_PROFILE_DIRECTION_WORK);
   const cmsHPROFILE work = work_profile ? work_profile->profile : NULL;
   const gboolean can_use_work_matrix = (work_profile_info
                                         && !work_profile_info->nonlinearlut
