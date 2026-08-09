@@ -275,9 +275,11 @@ gboolean dt_colorspaces_conversion_clip_matrix(const dt_colorspaces_conversion_t
  * @brief One channel of the source decoding curves, ::DT_CONVERSION_LUT_SAMPLES entries.
  *
  * @param channel 0, 1 or 2.
- * @return The curve, or NULL when the conversion has no source curve stage. A returned
- *         pointer is valid for the life of the conversion; a curve whose first entry is
- *         negative marks that channel linear, which is the convention the kernels read.
+ * @return The curve, or NULL on the lcms2 branch or when ::DT_CONVERSION_SOURCE_CURVES was
+ *         not asked for. Present-but-linear is NOT reported as NULL: a curve whose first
+ *         entry is negative marks that channel linear, which is the convention both the CPU
+ *         path and the kernels read, so a caller that declared it consumes this side always
+ *         gets a buffer it can upload. Valid for the life of the conversion.
  */
 const float *dt_colorspaces_conversion_source_curve(const dt_colorspaces_conversion_t *const conversion,
                                                     const int channel);
