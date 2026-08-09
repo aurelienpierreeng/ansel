@@ -78,7 +78,9 @@ typedef struct dt_iop_order_iccprofile_info_t
 /** must be called before using profile_info, default lutsize = 0 */
 void dt_ioppr_init_profile_info(dt_iop_order_iccprofile_info_t *profile_info, const int lutsize);
 /** must be called when done with profile_info */
-void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t *profile_info);
+/** Release a profile info: its tone-curve LUTs, the struct itself, and the caller's
+ * pointer. Takes the pointer by address so it cannot be left dangling. */
+void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t **profile_info);
 /* --- APPLY: the pixel loop ------------------------------------------------
  *
  * Convert a buffer between colour spaces. Branches internally on what the profile is:
