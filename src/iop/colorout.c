@@ -511,7 +511,16 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   cmsHPROFILE softproof = NULL;
   cmsUInt32Number output_format = TYPE_RGBA_FLT;
 
-  d->mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? dt_colorspaces_get_global()->mode : DT_PROFILE_NORMAL;
+  /* One snapshot for the whole of commit_params. The display triple and the soft-proof
+   * pair were read as six separate loads spread over ~170 lines, on a pipeline thread,
+   * while the GUI thread wrote them unlocked: a resolve could see a new type with the
+   * previous filename, or build a proofing transform against a profile that had already
+   * been replaced since `mode` was read. It also makes out_filename below a copy rather
+   * than a pointer into the module's mutable state. */
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+
+  d->mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? settings.mode : DT_PROFILE_NORMAL;
 
   // Softproof and gamut check take input from GUI and don't write it in internal parameters.
   // The cacheline integrity hash will not be meaningful in this scenario,
@@ -570,14 +579,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
     out_type = DT_COLORSPACE_ADOBERGB;
     out_filename = "";
-    out_intent = dt_colorspaces_get_global()->display_intent;
+    out_intent = settings.display_intent;
   }
   else
   {
     /* we are not exporting, using display profile as output */
-    out_type = dt_colorspaces_get_global()->display_type;
-    out_filename = dt_colorspaces_get_global()->display_filename;
-    out_intent = dt_colorspaces_get_global()->display_intent;
+    out_type = settings.display_type;
+    out_filename = settings.display_filename;
+    out_intent = settings.display_intent;
   }
 
   // when the output type is Lab then process is a nop, so we can avoid creating a transform
@@ -665,8 +674,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(d->mode != DT_PROFILE_NORMAL && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     const dt_colorspaces_color_profile_t *prof = dt_colorspaces_get_profile
-      (dt_colorspaces_get_global()->softproof_type,
-       dt_colorspaces_get_global()->softproof_filename,
+      (settings.softproof_type, settings.softproof_filename,
        DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
 
     if(!IS_NULL_PTR(prof))
@@ -679,8 +687,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                       ->profile;
       dt_control_log(_("missing softproof profile has been replaced by sRGB!"));
       fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",
-              dt_colorspaces_get_name(dt_colorspaces_get_global()->softproof_type,
-                                      dt_colorspaces_get_global()->softproof_filename));
+              dt_colorspaces_get_name(settings.softproof_type, settings.softproof_filename));
     }
 
     // some of our internal profiles are what lcms considers ideal profiles as they have a parametric TRC so
