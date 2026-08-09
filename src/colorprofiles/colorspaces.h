@@ -295,6 +295,13 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
                                                   const int width, const int height,
                                                   const dt_colorspaces_color_profile_type_t src_space);
 
+/** Strided, packed-RGB(A) 8-bit buffer (GdkPixbuf shape), sRGB -> display, in place.
+ * Plain integers only: the module never sees a GdkPixbuf. Returns FALSE when no display
+ * transform is available, leaving the pixels untouched. */
+gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const int width, const int height,
+                                                  const int rowstride, const int n_channels,
+                                                  const gboolean has_alpha);
+
 
 /** return an rgb lcms2 profile from data. if data points to a grayscale profile a new rgb profile is created
  * that has the same TRC, black and white point and rec709 primaries. */
