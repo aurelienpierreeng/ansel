@@ -15,9 +15,19 @@
 # This is the standing regression check for anything touching colour management, where "it
 # still runs" is a very low bar and a one-LSB hue shift is the actual failure mode.
 #
+# PASS A RAW. The default image is data/pixmaps/ansel.png, which is convenient and in the
+# tree, and it does NOT exercise the paths colour work usually touches: colorin resolves a
+# PNG through its embedded/sRGB branch and never reaches the camera-matrix branch that every
+# raw takes. A change that moved 747159 exported pixels of a NEF by one LSB passed this
+# script twice on the PNG before anyone thought to point it at a raw.
+#
+# Each ref is exported TWICE: once letting colorout pick the output profile (which, on an
+# export naming no colour space, means the image's own input profile) and once forced to
+# sRGB. Those are different code paths through commit_params and they fail independently.
+#
 # Usage:
 #   tools/check_export_pixels.sh <ref-a> <ref-b> [image]
-#   tools/check_export_pixels.sh master HEAD
+#   tools/check_export_pixels.sh master HEAD ~/Pictures/DSC0004.NEF
 #
 # It builds each ref into its own build dir (kept between runs, so the second call is fast),
 # stages it, and exports. Needs a clean tree: it checks out other commits.
@@ -87,57 +97,76 @@ export_at() {
   local cli="${builddir}/stage/opt/ansel/bin/ansel-cli"
   [ -x "${cli}" ] || { echo "FAILED: no staged ansel-cli at ${cli}"; exit 2; }
 
-  local work
-  work="$(mktemp -d)"
-  # --configdir and --library are NOT optional: without them ansel-cli writes into the
-  # user's real configuration, which has corrupted a live collection before.
-  "${cli}" \
-    --width 2048 --height 2048 \
-    --apply-custom-presets false \
-    "${IMAGE}" "${out}" \
-    --core --disable-opencl \
-    --configdir "${work}/config" --library "${work}/config/library.db" \
-    --conf host_memory_limit=8192 --conf worker_threads=4 -t 4 \
-    --conf plugins/lighttable/export/force_lcms2=FALSE \
-    --conf plugins/lighttable/export/iccintent=0 \
-    >"${work}/log" 2>&1
-  local status=$?
-  rm -rf "${work}"
-  [ ${status} -eq 0 ] || { echo "FAILED: export at ${ref} exited ${status}"; exit 1; }
-  [ -s "${out}" ] || { echo "FAILED: export at ${ref} wrote nothing"; exit 1; }
+  # Two exports per ref: the output profile colorout picks for itself, and sRGB forced.
+  local variant
+  for variant in default srgb; do
+    local work target icc=()
+    work="$(mktemp -d)"
+    target="${out}.${variant}.png"
+    [ "${variant}" = "srgb" ] && icc=(--icc-type SRGB)
+    rm -f "${target}"
+    # --configdir and --library are NOT optional: without them ansel-cli writes into the
+    # user's real configuration, which has corrupted a live collection before.
+    "${cli}" \
+      --width 2048 --height 2048 \
+      --apply-custom-presets false \
+      "${icc[@]}" \
+      "${IMAGE}" "${target}" \
+      --core --disable-opencl \
+      --configdir "${work}/config" --library "${work}/config/library.db" \
+      --conf host_memory_limit=8192 --conf worker_threads=4 -t 4 \
+      --conf plugins/lighttable/export/force_lcms2=FALSE \
+      --conf plugins/lighttable/export/iccintent=0 \
+      >"${work}/log" 2>&1
+    local status=$?
+    rm -rf "${work}"
+    [ ${status} -eq 0 ] || { echo "FAILED: ${variant} export at ${ref} exited ${status}"; exit 1; }
+    [ -s "${target}" ] || { echo "FAILED: ${variant} export at ${ref} wrote nothing"; exit 1; }
+  done
 }
 
-export_at "${SHA_A}" "${OUT_DIR}/a.png" "build-regress-a"
-export_at "${SHA_B}" "${OUT_DIR}/b.png" "build-regress-b"
+export_at "${SHA_A}" "${OUT_DIR}/a" "build-regress-a"
+export_at "${SHA_B}" "${OUT_DIR}/b" "build-regress-b"
 
-"${PY}" - "${OUT_DIR}/a.png" "${OUT_DIR}/b.png" "${REF_A} (${SHA_A:0:10})" "${REF_B} (${SHA_B:0:10})" <<'PYEOF'
+echo "image: ${IMAGE}"
+"${PY}" - "${OUT_DIR}/a" "${OUT_DIR}/b" "${REF_A} (${SHA_A:0:10})" "${REF_B} (${SHA_B:0:10})" <<'PYEOF'
 import sys
 import numpy as np
 from PIL import Image
 
-path_a, path_b, ref_a, ref_b = sys.argv[1:5]
-a = np.asarray(Image.open(path_a).convert("RGBA")).astype(np.int32)
-b = np.asarray(Image.open(path_b).convert("RGBA")).astype(np.int32)
+stem_a, stem_b, ref_a, ref_b = sys.argv[1:5]
+failed = False
 
-if a.shape != b.shape:
-    print(f"FAILED: geometry changed, {ref_a} is {a.shape}, {ref_b} is {b.shape}")
-    sys.exit(1)
+for variant in ("default", "srgb"):
+    a = np.asarray(Image.open(f"{stem_a}.{variant}.png").convert("RGBA")).astype(np.int32)
+    b = np.asarray(Image.open(f"{stem_b}.{variant}.png").convert("RGBA")).astype(np.int32)
 
-diff = np.abs(a - b)
-n_diff = int((diff.any(axis=-1)).sum())
-total = a.shape[0] * a.shape[1]
+    label = "output profile chosen by colorout" if variant == "default" else "output profile forced to sRGB"
 
-if n_diff == 0:
-    print(f"OK: {total} pixels identical between {ref_a} and {ref_b}.")
+    if a.shape != b.shape:
+        print(f"FAILED [{label}]: geometry changed, {ref_a} is {a.shape}, {ref_b} is {b.shape}")
+        failed = True
+        continue
+
+    diff = np.abs(a - b)
+    n_diff = int((diff.any(axis=-1)).sum())
+    total = a.shape[0] * a.shape[1]
+
+    if n_diff == 0:
+        print(f"OK [{label}]: {total} pixels identical between {ref_a} and {ref_b}.")
+        continue
+
+    failed = True
+    print(f"PIXELS CHANGED [{label}] between {ref_a} and {ref_b}:")
+    print(f"  {n_diff} of {total} pixels differ ({100.0 * n_diff / total:.4f}%)")
+    print(f"  max abs delta {int(diff.max())}, mean over changed {diff[diff > 0].mean():.4f}")
+    for i, ch in enumerate("RGBA"):
+        d = diff[..., i]
+        if d.any():
+            print(f"  {ch}: {int((d > 0).sum())} changed, max {int(d.max())}")
+
+if not failed:
     sys.exit(0)
-
-print(f"PIXELS CHANGED between {ref_a} and {ref_b}:")
-print(f"  {n_diff} of {total} pixels differ ({100.0 * n_diff / total:.4f}%)")
-print(f"  max abs delta {int(diff.max())}, mean over changed {diff[diff > 0].mean():.4f}")
-for i, ch in enumerate("RGBA"):
-    d = diff[..., i]
-    if d.any():
-        print(f"  {ch}: {int((d > 0).sum())} changed, max {int(d.max())}")
 print()
 print("A one-LSB delta is still a real difference: this pipeline is deterministic, so")
 print("nothing should move unless the change intended it. Say which change caused it")
