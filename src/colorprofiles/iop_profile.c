@@ -1214,7 +1214,8 @@ static int _generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, 
 static dt_iop_order_iccprofile_info_t *
 _get_profile_info_from_list(
                                     const dt_colorspaces_color_profile_type_t profile_type,
-                                    const char *profile_filename)
+                                    const char *profile_filename,
+                                    const int intent)
 {
   dt_iop_order_iccprofile_info_t *profile_info = NULL;
 
@@ -1223,7 +1224,8 @@ _get_profile_info_from_list(
   for(GList *profiles = _profile_info_memo; profiles; profiles = g_list_next(profiles))
   {
     dt_iop_order_iccprofile_info_t *prof = (dt_iop_order_iccprofile_info_t *)(profiles->data);
-    if(prof->type == profile_type && strcmp(prof->filename, profile_filename) == 0)
+    if(prof->type == profile_type && prof->intent == intent
+       && strcmp(prof->filename, profile_filename) == 0)
     {
       profile_info = prof;
       break;
@@ -1245,7 +1247,7 @@ dt_colorspaces_add_profile(const dt_colorspaces_color_profile_type_t profile_typ
    * (1.5 MB of tone-curve LUTs apiece) and append both. */
   pthread_mutex_lock(&_profile_info_lock);
 
-  dt_iop_order_iccprofile_info_t *profile_info = _get_profile_info_from_list(profile_type, profile_filename);
+  dt_iop_order_iccprofile_info_t *profile_info = _get_profile_info_from_list(profile_type, profile_filename, intent);
   if(IS_NULL_PTR(profile_info))
   {
     profile_info = dt_alloc_align(sizeof(dt_iop_order_iccprofile_info_t));
