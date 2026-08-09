@@ -63,9 +63,13 @@ void dt_dev_draw_iso12646_border(cairo_t *cr, double width, double height, int b
 
 void dt_dev_draw_profile_mode_label(cairo_t *cri, int height)
 {
-  if(dt_colorspaces_get_global()->mode == DT_PROFILE_NORMAL) return;
+  /* One snapshot: reading mode twice could print a label for a mode that has already
+   * changed between the guard and the text. */
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+  if(settings.mode == DT_PROFILE_NORMAL) return;
 
-  gchar *label = dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK ? _("gamut check") : _("soft proof");
+  gchar *label = settings.mode == DT_PROFILE_GAMUTCHECK ? _("gamut check") : _("soft proof");
   cairo_set_source_rgba(cri, 0.5, 0.5, 0.5, 0.5);
   PangoLayout *layout;
   PangoRectangle ink;

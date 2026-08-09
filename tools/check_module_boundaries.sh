@@ -95,7 +95,7 @@ done < <(grep -Hn '^[ \t]*#[ \t]*include[ \t]*"gui/' src/widgets/*.c src/widgets
 #
 # xprofile_lock is counted separately because it is the sharper of the two: a caller that
 # holds the module's lock is a caller that can deadlock it or use a handle it frees.
-accessor_baseline=59
+accessor_baseline=37
 lock_baseline=4
 
 accessor_now=$(grep -rn 'dt_colorspaces_get_global()' src/ --include='*.c' --include='*.h' --include='*.cc' \

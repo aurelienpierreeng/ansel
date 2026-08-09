@@ -88,7 +88,7 @@ void dt_dev_get_background_color(const struct dt_develop_t *dev, dt_aligned_pixe
 void dt_dev_draw_iso12646_border(cairo_t *cr, double width, double height, int border);
 
 /** Draw the "soft proof" / "gamut check" text overlay in the bottom-left
- * corner when dt_colorspaces_get_global()->mode is not DT_PROFILE_NORMAL; a
+ * corner when the colour-profile mode is not DT_PROFILE_NORMAL; a
  * no-op otherwise. */
 void dt_dev_draw_profile_mode_label(cairo_t *cri, int height);
 #endif // DT_VIEWS_DEV_BACKBUF_H
