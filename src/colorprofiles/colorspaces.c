@@ -52,6 +52,7 @@
 
 #include "colorprofiles/colorspaces.h"
 #include "colorprofiles/colormatrices.c"
+#include "common/colorspaces_inline_conversions.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "math/matrices.h"
@@ -1185,8 +1186,10 @@ void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, co
   }
 }
 
-void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8_t *image_in, uint8_t *image_out,
-                                             const int width, const int height)
+/* Byte swap + optional colour conversion over a whole 8-bit plane. Private: the only
+ * callers are the prepared-transform entry points below, which own the locking. */
+static void _transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8_t *image_in, uint8_t *image_out,
+                                      const int width, const int height)
 {
   if(IS_NULL_PTR(image_in) || IS_NULL_PTR(image_out) || width <= 0 || height <= 0) return;
 
@@ -1214,6 +1217,129 @@ void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, cons
       }
     }
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Prepared display transforms.
+ *
+ * The four cached cmsHTRANSFORMs are rebuilt whenever the monitor profile or the
+ * display intent changes, so a handle handed to a caller can be freed under it. The
+ * functions below are therefore the only way to use them: each takes the read lock,
+ * aliases the handle to a local, runs, and releases. No cmsHTRANSFORM crosses the
+ * module boundary.
+ *
+ * Holding the read lock across the pixel work is deliberate and is what the previous
+ * caller-side code already did — it is what keeps the handle alive for the duration
+ * of the conversion.
+ * ------------------------------------------------------------------------- */
+
+void dt_colorprofiles_xyz_to_display(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t RGB)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_rdlock(&self->xprofile_lock);
+  const cmsHTRANSFORM transform = self->transform_xyz_to_display;
+  if(transform)
+    cmsDoTransform(transform, XYZ, RGB, 1);
+  pthread_rwlock_unlock(&self->xprofile_lock);
+
+  /* No display profile resolved yet (startup, or a monitor whose profile could not be
+   * read): fall back to sRGB rather than dereferencing NULL, which is what the two
+   * open-coded copies of this function did. */
+  if(IS_NULL_PTR(transform)) dt_XYZ_to_sRGB(XYZ, RGB);
+}
+
+gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_t *const out,
+                                                 const int width, const int height,
+                                                 const dt_colorspaces_color_profile_type_t src_space)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  cmsHTRANSFORM transform = NULL;
+  gboolean owned = FALSE;
+  gboolean managed = TRUE;
+
+  pthread_rwlock_rdlock(&self->xprofile_lock);
+
+  if(src_space == DT_COLORSPACE_SRGB)
+  {
+    transform = self->transform_srgb_to_display;
+  }
+  else if(src_space == DT_COLORSPACE_ADOBERGB)
+  {
+    transform = self->transform_adobe_rgb_to_display;
+  }
+  else if(src_space == DT_COLORSPACE_DISPLAY)
+  {
+    // already in display space: pass through, swapping R <-> B (transform stays NULL)
+  }
+  else
+  {
+    const dt_colorspaces_color_profile_t *const from
+        = _get_profile(self, src_space, "", DT_PROFILE_DIRECTION_DISPLAY);
+    const dt_colorspaces_color_profile_t *const to
+        = _get_profile(self, DT_COLORSPACE_DISPLAY, "", DT_PROFILE_DIRECTION_DISPLAY);
+
+    /* Not every colorspace has a profile registered for the DISPLAY direction (a thumbnail
+     * cached with an exotic tag). Fall back to the same passthrough as DT_COLORSPACE_DISPLAY
+     * instead of dereferencing NULL in cmsCreateTransform(). */
+    if(!IS_NULL_PTR(from) && !IS_NULL_PTR(to))
+    {
+      transform = cmsCreateTransform(from->profile, TYPE_RGBA_8, to->profile, TYPE_BGRA_8,
+                                     INTENT_PERCEPTUAL, 0);
+      owned = TRUE;
+    }
+  }
+
+  /* DT_COLORSPACE_DISPLAY needs no transform and is not a failure; every other space
+   * reaching the swap-only path means we could not colour-manage it. */
+  if(IS_NULL_PTR(transform) && src_space != DT_COLORSPACE_DISPLAY) managed = FALSE;
+
+  _transform_rgba8_to_bgra8(transform, in, out, width, height);
+
+  if(owned && transform) cmsDeleteTransform(transform);
+  pthread_rwlock_unlock(&self->xprofile_lock);
+
+  return managed;
+}
+
+gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8_t *const out,
+                                                  const int width, const int height,
+                                                  const dt_colorspaces_color_profile_type_t src_space)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  cmsHTRANSFORM transform = NULL;
+  gboolean owned = FALSE;
+
+  pthread_rwlock_rdlock(&self->xprofile_lock);
+
+  if(src_space == DT_COLORSPACE_DISPLAY)
+  {
+    transform = self->transform_display_to_adobe_rgb;
+  }
+  else
+  {
+    const dt_colorspaces_color_profile_t *const from
+        = _get_profile(self, src_space, "", DT_PROFILE_DIRECTION_DISPLAY);
+    const dt_colorspaces_color_profile_t *const to
+        = _get_profile(self, DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_DIRECTION_DISPLAY);
+    if(!IS_NULL_PTR(from) && !IS_NULL_PTR(to))
+    {
+      transform = cmsCreateTransform(from->profile, TYPE_BGRA_8, to->profile, TYPE_RGBA_8,
+                                     INTENT_PERCEPTUAL, 0);
+      owned = TRUE;
+    }
+  }
+
+  const gboolean managed = !IS_NULL_PTR(transform);
+
+  /* With no transform this only swaps R <-> B, which is what turns the BGRA input back
+   * into RGBA. The helper name says bgra8, but it is the same byte swap either way. */
+  _transform_rgba8_to_bgra8(transform, in, out, width, height);
+
+  if(owned && transform) cmsDeleteTransform(transform);
+  pthread_rwlock_unlock(&self->xprofile_lock);
+
+  return managed;
 }
 
 // make sure that dt_colorspaces_get_global()->xprofile_lock is held when calling this!
