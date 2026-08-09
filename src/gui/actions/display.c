@@ -285,34 +285,33 @@ static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, g
 {
   dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)get_custom_data(GTK_WIDGET(user_data));
 
-  gboolean profile_changed = FALSE;
-  if(dt_colorspaces_get_global()->display_type != pp->type
-      || (dt_colorspaces_get_global()->display_type == DT_COLORSPACE_FILE
-           && strcmp(dt_colorspaces_get_global()->display_filename, pp->filename)))
-  {
-    dt_colorspaces_get_global()->display_type = pp->type;
-    g_strlcpy(dt_colorspaces_get_global()->display_filename, pp->filename,
-              sizeof(dt_colorspaces_get_global()->display_filename));
-    profile_changed = TRUE;
-  }
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
 
-  if(!profile_changed)
-  {
-    // profile not found, fall back to system display profile. shouldn't happen
-    fprintf(stderr, "can't find display profile `%s', using system display profile instead\n", pp->filename);
-    profile_changed = dt_colorspaces_get_global()->display_type != DT_COLORSPACE_DISPLAY;
-    dt_colorspaces_get_global()->display_type = DT_COLORSPACE_DISPLAY;
-    dt_colorspaces_get_global()->display_filename[0] = '\0';
-  }
+  /* WRITE lock, not read: dt_colorspaces_update_display_transforms() cmsDeleteTransform()s all
+   * four cached display transforms and rebuilds them. A read lock does not exclude other
+   * readers, so the thumbnail fetcher job and the mipmap cache could be inside cmsDoTransform()
+   * on a handle this call is freeing. The identity writes belong inside the same critical
+   * section, so no reader can observe a new type paired with the previous filename. */
+  pthread_rwlock_wrlock(&profiles->xprofile_lock);
+
+  /* pp comes straight from the menu item, which was built from the profile list, so "not
+   * found" is not reachable here — the only question is whether the selection differs from
+   * what is already active. Re-picking the active entry is a no-op. */
+  const gboolean profile_changed =
+      profiles->display_type != pp->type
+      || (pp->type == DT_COLORSPACE_FILE && strcmp(profiles->display_filename, pp->filename));
 
   if(profile_changed)
   {
-    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
+    profiles->display_type = pp->type;
+    g_strlcpy(profiles->display_filename, pp->filename, sizeof(profiles->display_filename));
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
+  pthread_rwlock_unlock(&profiles->xprofile_lock);
+
+  if(profile_changed)
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
+
   return TRUE;
 }
 
@@ -339,17 +338,22 @@ dt_iop_color_intent_t string_to_color_intent(const char *string)
 
 static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_iop_color_intent_t old_intent = dt_colorspaces_get_global()->display_intent;
-  dt_iop_color_intent_t new_intent = string_to_color_intent(get_custom_data(GTK_WIDGET(user_data)));
-  if(new_intent != old_intent)
+  const dt_iop_color_intent_t new_intent = string_to_color_intent(get_custom_data(GTK_WIDGET(user_data)));
+  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
+
+  // write lock: see profile_callback() above.
+  pthread_rwlock_wrlock(&profiles->xprofile_lock);
+  const gboolean intent_changed = (profiles->display_intent != new_intent);
+  if(intent_changed)
   {
-    dt_colorspaces_get_global()->display_intent = new_intent;
-    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
+    profiles->display_intent = new_intent;
     dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
   }
+  pthread_rwlock_unlock(&profiles->xprofile_lock);
+
+  if(intent_changed)
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
+
   return TRUE;
 }
 
