@@ -909,11 +909,11 @@ static void _draw_color_picker(dt_iop_module_t *self, cairo_t *cr, dt_iop_colorz
           dt_ioppr_transform_image_colorspace_rgb(pick_max, pick_max, 1, 1, display_profile, work_profile,
                                                   "color zones");
 
-          dt_ioppr_transform_image_colorspace(self, pick_mean, pick_mean, 1, 1, IOP_CS_RGB, IOP_CS_LAB,
+          dt_colorspaces_apply_profile(self->op, self->multi_name, pick_mean, pick_mean, 1, 1, IOP_CS_RGB, IOP_CS_LAB,
                                               &converted_cst, work_profile);
-          dt_ioppr_transform_image_colorspace(self, pick_min, pick_min, 1, 1, IOP_CS_RGB, IOP_CS_LAB,
+          dt_colorspaces_apply_profile(self->op, self->multi_name, pick_min, pick_min, 1, 1, IOP_CS_RGB, IOP_CS_LAB,
                                               &converted_cst, work_profile);
-          dt_ioppr_transform_image_colorspace(self, pick_max, pick_max, 1, 1, IOP_CS_RGB, IOP_CS_LAB,
+          dt_colorspaces_apply_profile(self->op, self->multi_name, pick_max, pick_max, 1, 1, IOP_CS_RGB, IOP_CS_LAB,
                                               &converted_cst, work_profile);
 
           dt_Lab_2_LCH(pick_mean, pick_mean);

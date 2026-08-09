@@ -129,19 +129,11 @@ void dt_ioppr_get_export_profile_type(struct dt_develop_t *dev,
                                       const char **profile_filename);
 
 /** transforms image from cst_from to cst_to colorspace using profile_info */
-void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const float *const image_in,
-                                         float *const image_out, const int width, const int height,
-                                         const int cst_from, const int cst_to, int *converted_cst,
-                                         const dt_iop_order_iccprofile_info_t *const profile_info);
 
 #ifdef HAVE_OPENCL
 
 
 /** same as the C version */
-int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const int devid, cl_mem dev_img_in,
-                                           cl_mem dev_img_out, const int width, const int height,
-                                           const int cst_from, const int cst_to, int *converted_cst,
-                                           const dt_iop_order_iccprofile_info_t *const profile_info);
 #endif // HAVE_OPENCL
 
 #ifdef __cplusplus

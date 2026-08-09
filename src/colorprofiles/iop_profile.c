@@ -1044,3 +1044,232 @@ cleanup:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
+
+/* ---------------------------------------------------------------------------
+ * APPLY: the pixel loop.
+ *
+ * One entry point for converting a buffer between colour spaces, branching
+ * internally on what the profile actually is. A matrix-shaper profile with tone
+ * curves goes through our own vectorised matrix + LUT path; anything else -- a
+ * CLUT profile, a v4 parametric curve lcms2 will not reduce -- falls back to
+ * cmsDoTransform. Callers do not choose, and do not see either.
+ *
+ * These used to live in develop/, which is why every consumer had to know the
+ * distinction existed. The two implementations they dispatch to were already
+ * here; only the branch was upstairs.
+ *
+ * The op/instance names are for the -d perf trace only. They are plain strings
+ * rather than the dt_iop_module_t they were read from, because this module sits
+ * below develop/ and cannot name an iop.
+ * ------------------------------------------------------------------------- */
+
+void dt_colorspaces_apply_profile(const char *const op_name, const char *const instance_name, const float *const image_in,
+                                         float *const image_out, const int width, const int height,
+                                         const int cst_from, const int cst_to, int *converted_cst,
+                                         const dt_iop_order_iccprofile_info_t *const profile_info)
+{
+  if(cst_from == cst_to)
+  {
+    *converted_cst = cst_to;
+    return;
+  }
+  if(dt_iop_colorspace_is_rgb(cst_from) && dt_iop_colorspace_is_rgb(cst_to))
+  {
+    *converted_cst = cst_to;
+    return;
+  }
+  if(IS_NULL_PTR(profile_info))
+  {
+    *converted_cst = cst_from;
+    return;
+  }
+  if(profile_info->type == DT_COLORSPACE_NONE)
+  {
+    *converted_cst = cst_from;
+    return;
+  }
+
+  dt_times_t start_time = { 0 }, end_time = { 0 };
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
+
+  // matrix should be never NAN, this is only to test it against lcms2!
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
+  {
+    dt_ioppr_transform_matrix(op_name, instance_name, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);
+
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    {
+      dt_get_times(&end_time);
+      fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f CPU) [%s %s]\n",
+          dt_iop_colorspace_is_rgb(cst_from) ? "RGB" : "Lab",
+          dt_iop_colorspace_is_rgb(cst_to) ? "RGB" : "Lab",
+          end_time.clock - start_time.clock, end_time.user - start_time.user, op_name, instance_name);
+    }
+  }
+  else
+  {
+    dt_ioppr_transform_lcms2(op_name, instance_name, image_in, image_out, width, height, cst_from, cst_to, converted_cst, profile_info);
+
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    {
+      dt_get_times(&end_time);
+      fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f lcms2) [%s %s]\n",
+          dt_iop_colorspace_is_rgb(cst_from) ? "RGB" : "Lab",
+          dt_iop_colorspace_is_rgb(cst_to) ? "RGB" : "Lab",
+          end_time.clock - start_time.clock, end_time.user - start_time.user, op_name, instance_name);
+    }
+  }
+
+  if(*converted_cst == cst_from)
+    fprintf(stderr, "[dt_colorspaces_apply_profile] invalid conversion from %i to %i\n", cst_from, cst_to);
+}
+
+#ifdef HAVE_OPENCL
+int dt_colorspaces_apply_profile_cl(const char *const op_name, const char *const instance_name, const int devid, cl_mem dev_img_in,
+                                           cl_mem dev_img_out, const int width, const int height,
+                                           const int cst_from, const int cst_to, int *converted_cst,
+                                           const dt_iop_order_iccprofile_info_t *const profile_info)
+{
+  cl_int err = CL_SUCCESS;
+
+  assert(!IS_NULL_PTR(dev_img_in));
+  assert(!IS_NULL_PTR(dev_img_out));
+  assert(dev_img_in != dev_img_out);
+
+  if(cst_from == cst_to)
+  {
+    *converted_cst = cst_to;
+    return TRUE;
+  }
+  if(dt_iop_colorspace_is_rgb(cst_from) && dt_iop_colorspace_is_rgb(cst_to))
+  {
+    *converted_cst = cst_to;
+    return TRUE;
+  }
+  if(IS_NULL_PTR(profile_info))
+  {
+    *converted_cst = cst_from;
+    return FALSE;
+  }
+  if(profile_info->type == DT_COLORSPACE_NONE)
+  {
+    *converted_cst = cst_from;
+    return FALSE;
+  }
+
+  const size_t ch = 4;
+  float *src_buffer = NULL;
+
+  int kernel_transform = 0;
+  cl_mem dev_profile_info = NULL;
+  cl_mem dev_lut = NULL;
+  dt_colorspaces_iccprofile_info_cl_t profile_info_cl;
+  cl_float *lut_cl = NULL;
+
+  *converted_cst = cst_from;
+
+  // if we have a matrix use opencl
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
+  {
+    dt_times_t start_time = { 0 }, end_time = { 0 };
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
+
+    if(dt_iop_colorspace_is_rgb(cst_from) && cst_to == IOP_CS_LAB)
+    {
+      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_rgb_matrix_to_lab;
+    }
+    else if(cst_from == IOP_CS_LAB && dt_iop_colorspace_is_rgb(cst_to))
+    {
+      kernel_transform = dt_opencl_get_global()->colorspaces->kernel_colorspaces_transform_lab_to_rgb_matrix;
+    }
+    else
+    {
+      err = CL_INVALID_KERNEL;
+      *converted_cst = cst_from;
+      fprintf(stderr, "[dt_colorspaces_apply_profile_cl] invalid conversion from %i to %i\n", cst_from, cst_to);
+      goto cleanup;
+    }
+
+    dt_ioppr_get_profile_info_cl(profile_info, &profile_info_cl);
+    lut_cl = dt_ioppr_get_trc_cl(profile_info);
+
+    dev_profile_info = dt_opencl_copy_host_to_device_constant(devid, sizeof(profile_info_cl), &profile_info_cl);
+    if(IS_NULL_PTR(dev_profile_info))
+    {
+      fprintf(stderr, "[dt_colorspaces_apply_profile_cl] error allocating memory for color transformation 5\n");
+      err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+      goto cleanup;
+    }
+    dev_lut = dt_opencl_copy_host_to_device(devid, lut_cl, 256, 256 * 6, sizeof(float));
+    if(IS_NULL_PTR(dev_lut))
+    {
+      fprintf(stderr, "[dt_colorspaces_apply_profile_cl] error allocating memory for color transformation 6\n");
+      err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+      goto cleanup;
+    }
+
+    size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+
+    dt_opencl_set_kernel_arg(devid, kernel_transform, 0, sizeof(cl_mem), (void *)&dev_img_in);
+    dt_opencl_set_kernel_arg(devid, kernel_transform, 1, sizeof(cl_mem), (void *)&dev_img_out);
+    dt_opencl_set_kernel_arg(devid, kernel_transform, 2, sizeof(int), (void *)&width);
+    dt_opencl_set_kernel_arg(devid, kernel_transform, 3, sizeof(int), (void *)&height);
+    dt_opencl_set_kernel_arg(devid, kernel_transform, 4, sizeof(cl_mem), (void *)&dev_profile_info);
+    dt_opencl_set_kernel_arg(devid, kernel_transform, 5, sizeof(cl_mem), (void *)&dev_lut);
+    err = dt_opencl_enqueue_kernel_2d(devid, kernel_transform, sizes);
+    if(err != CL_SUCCESS)
+    {
+      fprintf(stderr, "[dt_colorspaces_apply_profile_cl] error %i enqueue kernel for color transformation\n", err);
+      goto cleanup;
+    }
+
+    *converted_cst = cst_to;
+
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    {
+      dt_get_times(&end_time);
+      fprintf(stderr, "image colorspace transform %s-->%s took %.3f secs (%.3f GPU) [%s %s]\n",
+          dt_iop_colorspace_is_rgb(cst_from) ? "RGB" : "Lab",
+          dt_iop_colorspace_is_rgb(cst_to) ? "RGB" : "Lab",
+          end_time.clock - start_time.clock, end_time.user - start_time.user, op_name, instance_name);
+    }
+  }
+  else
+  {
+    // no matrix, call lcms2
+    src_buffer = dt_pixelpipe_cache_alloc_align_float_cache(ch * width * height, 0);
+    if(IS_NULL_PTR(src_buffer))
+    {
+      fprintf(stderr, "[dt_colorspaces_apply_profile_cl] error allocating memory for color transformation 1\n");
+      err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+      goto cleanup;
+    }
+
+    err = dt_opencl_copy_device_to_host(devid, src_buffer, dev_img_in, width, height, ch * sizeof(float));
+    if(err != CL_SUCCESS)
+    {
+      fprintf(stderr, "[dt_colorspaces_apply_profile_cl] error allocating memory for color transformation 2\n");
+      goto cleanup;
+    }
+
+    // just call the CPU version for now
+    dt_colorspaces_apply_profile(op_name, instance_name, src_buffer, src_buffer, width, height, cst_from, cst_to,
+                                        converted_cst, profile_info);
+
+    err = dt_opencl_write_host_to_device(devid, src_buffer, dev_img_out, width, height, ch * sizeof(float));
+    if(err != CL_SUCCESS)
+    {
+      fprintf(stderr, "[dt_colorspaces_apply_profile_cl] error allocating memory for color transformation 3\n");
+      goto cleanup;
+    }
+  }
+
+cleanup:
+  dt_pixelpipe_cache_free_align(src_buffer);
+  dt_opencl_release_mem_object(dev_profile_info);
+  dt_opencl_release_mem_object(dev_lut);
+  dt_free(lut_cl);
+
+  return (err == CL_SUCCESS) ? TRUE : FALSE;
+}
+#endif
