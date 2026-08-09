@@ -19,7 +19,6 @@
 #include "system/macros.h"
 #include "common/act_on.h"
 #include "colorprofiles/colorspaces.h"   // dt_colorprofiles_srgb_to_display_strided()
-#include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
@@ -46,10 +45,6 @@
 #include "widgets/popup.h"
 #include "widgets/scroll_wrap.h"
 #include "widgets/widget_settings.h"
-
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 
 #ifdef HAVE_HTTP_SERVER
 #include <libsoup/soup.h>
