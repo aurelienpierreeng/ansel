@@ -458,7 +458,7 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
   const int pos = dt_bauhaus_combobox_get(combo);
 
   dt_colorprofile_desc_t desc;
-  if(dt_colorspaces_profile_at(DT_PROFILE_DIRECTION_OUT, pos, &desc))
+  if(dt_colorspaces_profile_at(DT_PROFILE_ROLE_OUTPUT, pos, &desc))
   {
     profile_changed = dt_colorprofiles_set_softproof_profile_choice(desc.type, desc.filename);
     goto end;
@@ -507,12 +507,12 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
 
   // the system display profile is only suitable for display purposes, hence OUT
   dt_colorprofile_desc_t *out_profiles = NULL;
-  const size_t n_out_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_OUT, &out_profiles);
+  const size_t n_out_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_OUTPUT, &out_profiles);
   for(size_t k = 0; k < n_out_profiles; k++)
     dt_bauhaus_combobox_add(softproof_profile, out_profiles[k].name);
   dt_free_align(out_profiles);
 
-  const int softproof_pos = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_OUT, settings.softproof_type,
+  const int softproof_pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, settings.softproof_type,
                                                          settings.softproof_filename);
   if(softproof_pos > -1) dt_bauhaus_combobox_set(softproof_profile, softproof_pos);
 

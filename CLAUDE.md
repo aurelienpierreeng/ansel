@@ -658,33 +658,34 @@ is a one-LSB hue shift.
 that only needs the vocabulary — a profile type to store in its params, an intent to pass along —
 includes `colorprofiles/profile_types.h` instead, which is the reason that header exists.
 
-### The `direction` argument is load-bearing, never a formality
+### The `role` argument is load-bearing, never a formality
 
 `DT_COLORSPACE_SRGB` is registered **twice** — a v4 parametric-curve entry valid only as INPUT,
-and a v2 point-TRC entry carrying out/display/category/work — and the two are distinguished by
-nothing but which `*_pos` field is `-1`. A multi-bit direction mask resolves to the **first**
-match in registration order, which for sRGB is the v4 input entry. Resolving the *working* profile
-with `DT_PROFILE_DIRECTION_ANY` therefore hands back the input-only variant; pass
-`DT_PROFILE_DIRECTION_WORK`. The index-valued calls (`dt_colorspaces_profile_index()`,
+and a v2 point-TRC entry carrying output/monitor/working — and the two are distinguished by
+nothing but which `*_pos` field is `-1`. A multi-bit role mask resolves to the **first** match in
+registration order, which for sRGB is the v4 input entry. Resolving the *working* profile with
+`DT_PROFILE_ROLE_ANY` therefore hands back the input-only variant; pass
+`DT_PROFILE_ROLE_WORKING`. The index-valued calls (`dt_colorspaces_profile_index()`,
 `dt_colorspaces_profile_at()`) require a single bit outright — an index means nothing outside the
-enumeration that produced it, and an index taken from `IN|OUT` equals neither `in_pos` nor
+enumeration that produced it, and an index taken from `INPUT|OUTPUT` equals neither `in_pos` nor
 `out_pos`.
 
-`DT_PROFILE_DIRECTION_ANY` silently means `IN|OUT|WORK|DISPLAY`: the lookup predicate
-(`_entry_serves()`) tests four bits and never `category_pos`, and `DT_PROFILE_DIRECTION_DISPLAY2`
-has no backing field at all.
-
-`DT_PROFILE_DIRECTION_DISPLAY` is **not a direction** — a profile is RGB→PCS or PCS→RGB, never
-"display". The bit is the curated eligibility list for the monitor-profile menu, and it diverges
-from OUT on 5 of the 21 built-in registrations (`DISPLAY`, `REC709`, `ITUR_BT1886`, `XYZ`, `LAB`).
-Substituting one for the other is a behaviour change, not a rename.
+**They are roles, not directions**, and the enum was renamed to say so
+(`dt_colorspaces_profile_role_t`). A profile is RGB→PCS or PCS→RGB and nothing else; what these
+bits select is which *menu* an entry appears in. The menus genuinely differ:
+`DT_PROFILE_ROLE_MONITOR` is the curated eligibility list for the monitor-profile menu and
+diverges from `DT_PROFILE_ROLE_OUTPUT` on 5 of the 21 built-in registrations (`DISPLAY`,
+`REC709`, `ITUR_BT1886`, `XYZ`, `LAB`), so substituting one for the other is a behaviour change,
+not a rename. Two further bits, `CATEGORY` and `DISPLAY2`, were declared and never tested by any
+lookup — the first had a `category_pos` no predicate consulted, the second had no backing field
+at all — so `ANY` claimed six meanings and had four. They are gone; nothing changed at runtime.
 
 **Three registered entries have `profile == NULL`.** `DT_COLORSPACE_WORK`, `_EXPORT` and
 `_SOFTPROOF` name a user *setting* rather than a colour space and exist only to occupy a combo
 row. Dozens of call sites write `dt_colorspaces_get_profile(...)->profile` with no NULL check;
 what keeps them safe is precisely that the lookup never tests `category_pos`, so a category entry
-can never be returned. Do not "fix" the predicate to consult it, and do not make
-`DT_PROFILE_DIRECTION_CATEGORY` functional, without auditing those sites first.
+can never be returned. Do not "fix" the predicate to consult it, and do not give categories a
+role of their own, without auditing those sites first.
 
 ### Lifetime is answered by a lock, not by a copy
 

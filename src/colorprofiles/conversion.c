@@ -119,7 +119,7 @@ static cmsHPROFILE _resolve_endpoint(const dt_colorspaces_endpoint_t *const endp
 
   const dt_colorspaces_color_profile_t *const found
       = dt_colorspaces_get_profile(endpoint->type, endpoint->filename ? endpoint->filename : "",
-                                   endpoint->direction);
+                                   endpoint->role);
   if(IS_NULL_PTR(found)) return NULL;
 
   *entry = found;

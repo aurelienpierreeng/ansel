@@ -217,7 +217,7 @@ static gboolean _icc_blob_from_profile_key(const char *work_profile, uint8_t **i
 
   const dt_colorspaces_color_profile_type_t type = (dt_colorspaces_color_profile_type_t)type_long;
   const char *filename = sep1 + 1;
-  const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
+  const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_profile(type, filename, DT_PROFILE_ROLE_ANY);
   if(IS_NULL_PTR(profile) || IS_NULL_PTR(profile->profile)) return FALSE;
 
   cmsUInt32Number len = 0;

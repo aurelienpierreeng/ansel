@@ -194,7 +194,7 @@ typedef struct dt_colorspaces_t
  * DT_COLORSPACE_WORK, DT_COLORSPACE_EXPORT and DT_COLORSPACE_SOFTPROOF, which name a
  * user setting rather than a colour space. Nothing NULL-checks the handle at ~40 call
  * sites that dereference `->profile`; what actually keeps them safe is that lookup never
- * tests @ref category_pos (see @ref dt_colorspaces_profile_direction_t), so a category
+ * tests @ref category_pos (see @ref dt_colorspaces_profile_role_t), so a category
  * entry can never be returned. Do not "fix" the lookup predicate to consult
  * `category_pos` without auditing those sites first.
  */
@@ -311,18 +311,15 @@ void dt_colorprofiles_cleanup(void);
  *
  * THE DIRECTION PREDICATE. `direction` is mandatory and is not a nicety.
  * DT_COLORSPACE_SRGB is registered TWICE -- a v4 parametric-curve profile valid only as
- * input, and a v2 point-TRC profile valid for out/display/category/work -- and nothing
- * else distinguishes them. A multi-bit mask resolves to the first match in registration
- * order, which for sRGB is the v4 input entry; that is what DT_PROFILE_DIRECTION_ANY does
- * today, bug included.
+ * input, and a v2 point-TRC profile valid for output/monitor/working -- and nothing else
+ * distinguishes them. A multi-bit mask resolves to the first match in registration order,
+ * which for sRGB is the v4 input entry; that is what DT_PROFILE_ROLE_ANY does.
  *
- * The predicate tests FOUR bits, not six: IN, OUT, WORK and DISPLAY. category_pos is
- * never consulted (which is what makes the three NULL-profile category entries
- * unreachable, see dt_colorspaces_color_profile_t), and DT_PROFILE_DIRECTION_DISPLAY2 has
- * no backing field at all -- so DT_PROFILE_DIRECTION_ANY effectively means
- * IN|OUT|WORK|DISPLAY. Note also that DISPLAY is not a direction in the optical sense (a
- * profile is RGB->PCS or PCS->RGB); it is the eligibility list for the monitor-profile
- * menu, and it diverges from OUT on 5 of the 21 built-in entries.
+ * The predicate tests all four roles, and `category_pos` is not one of them -- which is what
+ * makes the three NULL-profile category entries unreachable (see
+ * dt_colorspaces_color_profile_t). MONITOR is not an optical direction; it is the eligibility
+ * list for the monitor-profile menu, and it diverges from OUTPUT on 5 of the 21 built-in
+ * entries.
  *
  * The index-valued calls REQUIRE a single-bit direction and return -1 / FALSE otherwise:
  * an index means nothing outside the enumeration that produced it, and an index taken from
@@ -373,7 +370,7 @@ void dt_colorspaces_unlock_profile(const dt_colorspaces_color_profile_t *const p
  * profile set.
  *
  * @param direction which combo box to enumerate. Must be a single bit
- * (DT_PROFILE_DIRECTION_IN / _OUT / _WORK / _DISPLAY) for the index correspondence to
+ * (DT_PROFILE_ROLE_INPUT / _OUT / _WORK / _DISPLAY) for the index correspondence to
  * mean anything; a multi-bit mask enumerates the union in list order instead.
  * @param out receives a freshly allocated array of `count` descriptors, or NULL. The
  * CALLER owns it and frees it with `dt_free_align`.
@@ -382,7 +379,7 @@ void dt_colorspaces_unlock_profile(const dt_colorspaces_color_profile_t *const p
  * @note Value copies: the array stays valid across a monitor-profile change and needs no
  * lock.
  */
-size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_t direction,
+size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t direction,
                                          dt_colorprofile_desc_t **out);
 
 /**
@@ -399,7 +396,7 @@ size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_
  * @note Callers add their own offset for leading non-profile rows ("same as original",
  * "image settings", ...); this function knows nothing about them.
  */
-int dt_colorspaces_profile_index(const dt_colorspaces_profile_direction_t direction,
+int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t direction,
                                  const dt_colorspaces_color_profile_type_t type,
                                  const char *const filename);
 
@@ -415,7 +412,7 @@ int dt_colorspaces_profile_index(const dt_colorspaces_profile_direction_t direct
  * expressed as a return value rather than a diagnostic print -- handle it, do not assert
  * on it.
  */
-gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_direction_t direction,
+gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t direction,
                                    const int index,
                                    dt_colorprofile_desc_t *const out);
 
@@ -429,7 +426,7 @@ gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_direction_t dire
  * @param filename only consulted for DT_COLORSPACE_FILE.
  * @return TRUE when some entry serving `direction` matches.
  */
-gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_direction_t direction,
+gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_role_t direction,
                                        const dt_colorspaces_color_profile_type_t type,
                                        const char *const filename);
 
@@ -535,7 +532,7 @@ void dt_colorprofiles_xyz_to_display(const dt_aligned_pixel_t XYZ, dt_aligned_pi
  *
  * @details DT_COLORSPACE_SRGB and DT_COLORSPACE_ADOBERGB use the module's prepared
  * transforms; DT_COLORSPACE_DISPLAY is already in display space and passes through with
- * an R <-> B swap; anything else is resolved for DT_PROFILE_DIRECTION_DISPLAY and a
+ * an R <-> B swap; anything else is resolved for DT_PROFILE_ROLE_MONITOR and a
  * transform is built and destroyed inside the call.
  *
  * @param in source plane, `width` * `height` * 4 bytes.
@@ -562,7 +559,7 @@ gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_
  * (RGBA8), for thumbnails written to the mipmap cache.
  *
  * @details DT_COLORSPACE_DISPLAY uses the prepared display->AdobeRGB transform; anything
- * else is resolved for DT_PROFILE_DIRECTION_DISPLAY and a transform is built and
+ * else is resolved for DT_PROFILE_ROLE_MONITOR and a transform is built and
  * destroyed inside the call.
  *
  * @param in source plane, `width` * `height` * 4 bytes.
@@ -902,12 +899,12 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
  * derived from `->profile` in dt_colorspaces_lock_profiles() /
  * dt_colorspaces_unlock_profiles(): that handle is closed and replaced on monitor changes.
  * @warning A multi-bit `direction` returns the first match in registration order, which
- * for DT_COLORSPACE_SRGB is the v4 INPUT-only entry -- so DT_PROFILE_DIRECTION_ANY
+ * for DT_COLORSPACE_SRGB is the v4 INPUT-only entry -- so DT_PROFILE_ROLE_ANY
  * resolves the working profile to the wrong sRGB variant. Name the direction you mean.
  */
 const dt_colorspaces_color_profile_t *
 dt_colorspaces_get_profile(dt_colorspaces_color_profile_type_t type, const char *filename,
-                           dt_colorspaces_profile_direction_t direction);
+                           dt_colorspaces_profile_role_t direction);
 
 /**
  * @brief Do these two names refer to the same profile file?

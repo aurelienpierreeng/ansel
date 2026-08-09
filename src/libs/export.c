@@ -569,7 +569,7 @@ void gui_reset(dt_lib_module_t *self)
   if(icctype != DT_COLORSPACE_NONE)
   {
     // +1: the combo carries "same as original" ahead of the profiles.
-    const int pos = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_OUT, icctype, iccfilename);
+    const int pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, icctype, iccfilename);
     if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 
@@ -791,7 +791,7 @@ static void _profile_changed(GtkWidget *widget, dt_lib_export_t *d)
   {
     pos--;   // the combo carries "same as original" at 0
     dt_colorprofile_desc_t desc;
-    if(dt_colorspaces_profile_at(DT_PROFILE_DIRECTION_OUT, pos, &desc))
+    if(dt_colorspaces_profile_at(DT_PROFILE_ROLE_OUTPUT, pos, &desc))
     {
       dt_conf_set_int(CONFIG_PREFIX "icctype", desc.type);
       dt_conf_set_string(CONFIG_PREFIX "iccprofile",
@@ -1232,7 +1232,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), d->profile, FALSE, TRUE, 0);
   dt_bauhaus_combobox_add(d->profile, _("same as original"));
   dt_colorprofile_desc_t *out_profiles = NULL;
-  const size_t n_out_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_OUT, &out_profiles);
+  const size_t n_out_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_OUTPUT, &out_profiles);
   for(size_t k = 0; k < n_out_profiles; k++)
     dt_bauhaus_combobox_add(d->profile, out_profiles[k].name);
   dt_free_align(out_profiles);
@@ -1366,7 +1366,7 @@ void gui_init(dt_lib_module_t *self)
   if(icctype != DT_COLORSPACE_NONE)
   {
     // +1: the combo carries "same as original" ahead of the profiles.
-    const int pos = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_OUT, icctype, iccfilename);
+    const int pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, icctype, iccfilename);
     if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 
@@ -1950,7 +1950,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   if(icctype != DT_COLORSPACE_NONE)
   {
     // +1: the combo carries "same as original" ahead of the profiles.
-    const int pos = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_OUT, icctype, iccfilename);
+    const int pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, icctype, iccfilename);
     if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 

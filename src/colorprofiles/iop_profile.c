@@ -102,8 +102,8 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
    * process, its ->profile is not, so the handle is read only under the lock. */
   const dt_colorspaces_color_profile_t *profile
       = (type != DT_COLORSPACE_NONE)
-            ? dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY)
-            : dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK);
+            ? dt_colorspaces_get_profile(type, filename, DT_PROFILE_ROLE_ANY)
+            : dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_ROLE_WORKING);
 
   dt_colorspaces_lock_profile(profile);
   if(profile) rgb_profile = profile->profile;
@@ -122,11 +122,11 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   }
   if(IS_NULL_PTR(rgb_profile))
   {
-    rgb_profile = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK)->profile;
+    rgb_profile = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_ROLE_WORKING)->profile;
     fprintf(stderr, _("unsupported working profile %s has been replaced by Rec2020 RGB!\n"), filename);
   }
 
-  lab_profile = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_DIRECTION_ANY)->profile;
+  lab_profile = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_ROLE_ANY)->profile;
 
   cmsHPROFILE *input_profile = NULL;
   cmsHPROFILE *output_profile = NULL;
@@ -177,11 +177,11 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
    * them the other way round. */
   const dt_colorspaces_color_profile_t *profile_from
       = (type_from != DT_COLORSPACE_NONE)
-            ? dt_colorspaces_get_profile(type_from, filename_from, DT_PROFILE_DIRECTION_ANY)
+            ? dt_colorspaces_get_profile(type_from, filename_from, DT_PROFILE_ROLE_ANY)
             : NULL;
   const dt_colorspaces_color_profile_t *profile_to
       = (type_to != DT_COLORSPACE_NONE)
-            ? dt_colorspaces_get_profile(type_to, filename_to, DT_PROFILE_DIRECTION_ANY)
+            ? dt_colorspaces_get_profile(type_to, filename_to, DT_PROFILE_ROLE_ANY)
             : NULL;
 
   dt_colorspaces_lock_profile(profile_from);
@@ -1142,7 +1142,7 @@ static int _generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, 
    * are the parts that actually touch the handle. Inside the module the whole span is
    * covered, which is what the lock was for. */
   const dt_colorspaces_color_profile_t *profile
-      = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
+      = dt_colorspaces_get_profile(type, filename, DT_PROFILE_ROLE_ANY);
 
   dt_colorspaces_lock_profile(profile);
   if(profile) rgb_profile = profile->profile;

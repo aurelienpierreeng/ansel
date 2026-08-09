@@ -452,7 +452,7 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   static size_t n_display_profiles = 0;
 
   if(IS_NULL_PTR(display_profiles))
-    n_display_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_DISPLAY, &display_profiles);
+    n_display_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_MONITOR, &display_profiles);
 
   for(size_t k = 0; k < n_display_profiles; k++)
     add_sub_sub_menu_entry(menus, parent, lists, display_profiles[k].name, index, &display_profiles[k],
