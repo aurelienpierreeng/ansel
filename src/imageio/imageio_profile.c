@@ -61,7 +61,7 @@
 
 #include "imageio/imageio_profile.h"
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/logging.h"

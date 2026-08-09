@@ -37,8 +37,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_COLORSPACES_H
-#define DT_COMMON_COLORSPACES_H
+#ifndef DT_COLORPROFILES_COLORSPACES_H
+#define DT_COLORPROFILES_COLORSPACES_H
 
 #include "math/matrices.h"
 #include "system/simd.h"
@@ -386,7 +386,7 @@ static inline gboolean dt_colorspaces_is_embedded_or_matrix_profile_type(const d
 }
 #endif
 
-#endif // DT_COMMON_COLORSPACES_H
+#endif // DT_COLORPROFILES_COLORSPACES_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

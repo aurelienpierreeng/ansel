@@ -34,7 +34,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "imageio_tiff.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"

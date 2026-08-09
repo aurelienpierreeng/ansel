@@ -21,7 +21,7 @@
 #include "system/openmp.h"
 #include "iop/drawlayer/io.h"
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"

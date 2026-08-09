@@ -4,25 +4,33 @@ LittleCMS2 work: building, loading and describing ICC profiles. Not pixel proces
 profile is a description of a colour space, and applying one to an image is somebody else's
 job.
 
-Currently one file:
+Contents:
 
-| file          | what it does                                                |
-|---------------|-------------------------------------------------------------|
-| `printprof.c` | resolves the printer/soft-proof profile for an output device |
+| file                | what it does                                                     |
+|---------------------|------------------------------------------------------------------|
+| `colorspaces.c/h`   | the LittleCMS2 work: building, opening, naming and applying ICC profiles, and the application-wide profile list |
+| `colormatrices.c`   | 102 camera colour-matrix presets, `#include`d as data by `colorspaces.c` and `iop/colorin.c` |
+| `printprof.c`       | resolves the printer/soft-proof profile for an output device      |
 
-It is deliberately a module rather than a home for one file. Two more belong here and are not
-yet moved:
+One more belongs here and is not yet moved: `pixel/iop_profile.c`, the pixel-level half of
+profile handling — the SIMD/OpenCL transform engine. (The *pipeline*-facing half is
+`develop/iop_profile.c`, which resolves which profile a module or pipe should use; it takes
+develop/ types, stays at layer 5, and is not a candidate for this module.)
 
-- `common/colorspaces.c` — 218 LCMS2 calls, the largest of the three
-- `pixel/iop_profile.c` — 7, the pixel-level half: the transform engine. (The *pipeline*-facing
-  half is `develop/iop_profile.c`, which resolves which profile a module or pipe should use;
-  it stays at layer 5 and is not a candidate for this module.)
+**What deliberately did NOT come here.** Choosing a profile *for an image* — reading the ICC a
+JPEG embeds, mapping an AVIF's CICP block, falling back to a RAW's camera matrix — is codec
+work, not colour management, and lives in `imageio/imageio_profile.c`. It was the only reason
+this code ever included codec headers.
 
-Merging them is the point: all three wrap the same library, and the split between them today
-follows where the code happened to be written rather than what it does. That merge is a change
-of its own — `colorspaces.c` in particular carries state and a good deal of history — so it is
-not attempted alongside the module's creation.
+The module sits at **layer 1**. That is not a preference: three layer-1 headers include
+`colorspaces.h` for an enum, which caps it, while `colorspaces.c` needs `common/conf.h` and
+`common/file_location.h`, which floors it. Measured with `include_graph.py --what-if`, layer 2
+costs +2 violations and layer 0 costs +10.
 
-`printprof.c` is stateless (measured: `tools/statelessness_audit.py --dir src/colorprofiles`).
-The other two are not, so this directory will not be stateless once they arrive; that is
-expected and is why the guarantee lives in `src/system` and `src/math`, not here.
+This directory is **not** stateless and is not meant to be: `colorspaces.c` owns the
+application-wide profile list. That list is built once by `dt_colorspaces_init()` and must stay
+read-only afterwards — ~23 places walk it without a lock. A profile belonging to one image goes
+in `dt_image_t.embedded_profile`, not here; see CLAUDE.md for what happened the last time
+something appended to it at runtime.
+
+Measure with `tools/statelessness_audit.py --dir src/colorprofiles`.

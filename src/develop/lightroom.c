@@ -36,7 +36,7 @@
 
 #include "develop/lightroom.h"
 #include "common/colorlabels.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/curve_tools.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"

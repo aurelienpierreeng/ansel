@@ -49,7 +49,7 @@
 #include <glib/gstdio.h>
 #include "imageio/imageio_png.h"
 #include "common/imagebuf.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/file_location.h"
 #include "develop/iop_profile.h"
 #include "pixel/lut3d.h"

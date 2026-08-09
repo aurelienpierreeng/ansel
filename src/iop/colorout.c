@@ -63,7 +63,7 @@
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "math/matrices.h"
 #include "common/imagebuf.h"
 #include "develop/iop_profile.h"

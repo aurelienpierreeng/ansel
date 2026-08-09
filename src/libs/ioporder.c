@@ -24,7 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/database.h"
 #include "common/debug.h"
 #include "develop/iop_order.h"

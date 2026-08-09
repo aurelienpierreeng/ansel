@@ -85,7 +85,7 @@
 #include "develop/tiling.h"
 
 #include "widgets/bauhaus.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "pixel/bspline.h"
 

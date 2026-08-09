@@ -58,7 +58,7 @@
 
 #include <sqlite3.h>
 #include <inttypes.h>
-#include "common/colorspaces.h"   // dt_colorspaces_free_image_profile
+#include "colorprofiles/colorspaces.h"   // dt_colorspaces_free_image_profile
 
 static sqlite3_stmt *_image_cache_load_stmt = NULL;
 static sqlite3_stmt *_image_cache_write_history_hash_stmt = NULL;

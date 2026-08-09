@@ -68,7 +68,7 @@
 #include <string.h>
 
 #include "widgets/bauhaus.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "math/math.h"
 #include "common/opencl.h"
 #include "control/control.h"

@@ -24,7 +24,7 @@
 #ifndef DT_COMMON_CUPS_PRINT_H
 #define DT_COMMON_CUPS_PRINT_H
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 
 #define MAX_NAME 128
 

@@ -37,7 +37,7 @@
 #undef HAVE_STDLIB_H
 #undef HAVE_STDDEF_H
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/image.h"
 #include "common/mipmap_cache.h"
 

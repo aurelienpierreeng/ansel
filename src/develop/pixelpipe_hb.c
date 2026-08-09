@@ -51,7 +51,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "system/capabilities.h"
 #include "system/sys_resources.h"
 #include "common/global_mutexes.h"

@@ -39,7 +39,7 @@
 #define DT_CONTROL_JOBS_CONTROL_JOBS_H
 
 #include "control/jobs.h"
-#include "common/colorspaces.h"   // dt_colorspaces_color_profile_type_t / dt_iop_color_intent_t in the prototypes below
+#include "colorprofiles/colorspaces.h"   // dt_colorspaces_color_profile_type_t / dt_iop_color_intent_t in the prototypes below
 #include "common/variables.h"
 #include <inttypes.h>
 

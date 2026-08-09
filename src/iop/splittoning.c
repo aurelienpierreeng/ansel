@@ -62,7 +62,7 @@
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "math/math.h"
 #include "develop/develop.h"
 #include "system/openmp.h"

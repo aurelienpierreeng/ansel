@@ -35,7 +35,7 @@
  * develop/ type, which is exactly why it is here and not in pixel/iop_profile.h. */
 
 #include "pixel/iop_profile.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 
 #ifdef __cplusplus
 extern "C" {

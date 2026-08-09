@@ -76,7 +76,7 @@
 #include "gui/screen_metrics.h"
 #include "widgets/widget_settings.h"
 #include "widgets/resize_handle.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/l10n.h"
 #include "common/file_location.h"
 #include "common/utility.h"

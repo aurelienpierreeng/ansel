@@ -36,7 +36,7 @@
 #include <stdio.h>
 #include <strings.h>
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"

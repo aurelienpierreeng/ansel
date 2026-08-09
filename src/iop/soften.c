@@ -53,7 +53,7 @@
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "pixel/box_filters.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/imagebuf.h"
 #include "math/math.h"
 #include "develop/develop.h"
