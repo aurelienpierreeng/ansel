@@ -378,7 +378,7 @@ void dt_ioppr_transform_image_colorspace_rgb(const float *const image_in, float 
  *
  * @details Built from `colorspaces.cl` (program 23 in `data/kernels/programs.conf`) by
  * dt_colorspaces_init_cl_global(), reached from the pixel loops as
- * `dt_opencl_get_global()->colorspaces`. Members are kernel handles, not pointers.
+ * a file-static in colorprofiles/iop_profile.c. Members are kernel handles, not pointers.
  */
 typedef struct dt_colorspaces_cl_global_t
 {
@@ -415,9 +415,9 @@ typedef struct dt_colorspaces_iccprofile_info_cl_t
  * @brief Compile the colorspace kernels. Called once by common/opencl.c at device init.
  * @return A `malloc`ed struct the caller owns; release with dt_colorspaces_free_cl_global().
  */
-dt_colorspaces_cl_global_t *dt_colorspaces_init_cl_global(void);
+void dt_colorspaces_init_cl_global(void);
 /** @brief Release the kernels and the struct from dt_colorspaces_init_cl_global(). NULL-safe. */
-void dt_colorspaces_free_cl_global(dt_colorspaces_cl_global_t *g);
+void dt_colorspaces_free_cl_global(void);
 
 /**
  * @brief sets profile_info_cl using profile_info, to be used as a parameter when calling

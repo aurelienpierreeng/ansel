@@ -275,32 +275,12 @@ typedef struct dt_opencl_t
   dt_opencl_detected_device_t *detected_devs;
   dt_dlopencl_t *dlocl;
 
-  // global kernels for blending operations.
-  struct dt_blendop_cl_global_t *blendop;
-
-  // global kernels for bilateral filtering, to be reused by a few plugins.
-  struct dt_bilateral_cl_global_t *bilateral;
-
-  // global kernels for gaussian filtering, to be reused by a few plugins.
-  struct dt_gaussian_cl_global_t *gaussian;
-
-  // global kernels for interpolation resampling.
-  struct dt_interpolation_cl_global_t *interpolation;
-
-  // global kernels for local laplacian filter.
-  struct dt_local_laplacian_cl_global_t *local_laplacian;
-
-  // global kernels for dwt filter.
-  struct dt_dwt_cl_global_t *dwt;
-
-  // global kernels for heal filter.
-  struct dt_heal_cl_global_t *heal;
-
-  // global kernels for colorspaces filter.
-  struct dt_colorspaces_cl_global_t *colorspaces;
-
-  // global kernels for guided filter.
-  struct dt_guided_filter_cl_global_t *guided_filter;
+  /* NOTE: the per-subsystem OpenCL kernel bundles (blend, bilateral, gaussian, interpolation,
+   * local laplacian, dwt, heal, colorspaces, guided filter) used to live here. Each was built
+   * by its own subsystem, parked on this struct, and read back from it by that same
+   * subsystem -- a round trip that made nine modules' state look like the OpenCL module's.
+   * They are file-statics in their owners now; this module only orders their init and free
+   * against device setup. */
 
   // Maps every live cl_mem we allocated to the (devid, byte size) we requested,
   // so memory accounting never has to query the driver (clGetMemObjectInfo) about

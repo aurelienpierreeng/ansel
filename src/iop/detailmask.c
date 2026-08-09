@@ -201,7 +201,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(IS_NULL_PTR(mask_dev)) goto error;
 
   {
-    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_Y0_mask;
+    const int kernel = dt_develop_blend_get_cl_global()->kernel_calc_Y0_mask;
     dt_aligned_pixel_t wb = { 1.0f, 1.0f, 1.0f };
     if(piece->dsc_in.temperature.enabled)
     {
@@ -223,7 +223,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   {
-    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_scharr_mask;
+    const int kernel = dt_develop_blend_get_cl_global()->kernel_calc_scharr_mask;
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &detail);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &mask_dev);

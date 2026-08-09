@@ -1217,15 +1217,15 @@ finally:
   if(cl->inited)
   {
     dt_capabilities_add("opencl");
-    cl->blendop = dt_develop_blend_init_cl_global();
-    cl->bilateral = dt_bilateral_init_cl_global();
-    cl->gaussian = dt_gaussian_init_cl_global();
-    cl->interpolation = dt_interpolation_init_cl_global();
-    cl->local_laplacian = dt_local_laplacian_init_cl_global();
-    cl->dwt = dt_dwt_init_cl_global();
-    cl->heal = dt_heal_init_cl_global();
-    cl->colorspaces = dt_colorspaces_init_cl_global();
-    cl->guided_filter = dt_guided_filter_init_cl_global();
+    dt_develop_blend_init_cl_global();
+    dt_bilateral_init_cl_global();
+    dt_gaussian_init_cl_global();
+    dt_interpolation_init_cl_global();
+    dt_local_laplacian_init_cl_global();
+    dt_dwt_init_cl_global();
+    dt_heal_init_cl_global();
+    dt_colorspaces_init_cl_global();
+    dt_guided_filter_init_cl_global();
   }
 
   dt_opencl_apply_scheduling_profile();
@@ -1302,15 +1302,15 @@ void dt_opencl_cleanup(dt_opencl_t *cl)
 {
   if(cl->inited)
   {
-    dt_develop_blend_free_cl_global(cl->blendop);
-    dt_bilateral_free_cl_global(cl->bilateral);
-    dt_gaussian_free_cl_global(cl->gaussian);
-    dt_interpolation_free_cl_global(cl->interpolation);
-    dt_local_laplacian_free_cl_global(cl->local_laplacian);
-    dt_dwt_free_cl_global(cl->dwt);
-    dt_heal_free_cl_global(cl->heal);
-    dt_colorspaces_free_cl_global(cl->colorspaces);
-    dt_guided_filter_free_cl_global(cl->guided_filter);
+    dt_develop_blend_free_cl_global();
+    dt_bilateral_free_cl_global();
+    dt_gaussian_free_cl_global();
+    dt_interpolation_free_cl_global();
+    dt_local_laplacian_free_cl_global();
+    dt_dwt_free_cl_global();
+    dt_heal_free_cl_global();
+    dt_colorspaces_free_cl_global();
+    dt_guided_filter_free_cl_global();
 
     for(int i = 0; i < cl->num_devs; i++)
       dt_opencl_cleanup_device(cl, i);

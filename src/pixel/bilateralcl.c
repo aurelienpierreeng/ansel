@@ -36,7 +36,14 @@
 #include <glib.h>             // for MAX
 #include <stdlib.h>           // for free, malloc
 
-dt_bilateral_cl_global_t *dt_bilateral_init_cl_global()
+/* The kernels this subsystem compiles, owned HERE. They used to be handed to
+ * common/opencl.c, parked on the application-wide dt_opencl_t, and read back from it --
+ * a round trip through a god-struct that added nothing but an ordering. opencl.c still
+ * calls init/free, because the kernels must be built after the devices exist, but the
+ * pointer never leaves this file. */
+static dt_bilateral_cl_global_t *_bilateral_cl_global = NULL;
+
+void dt_bilateral_init_cl_global(void)
 {
   dt_bilateral_cl_global_t *b = (dt_bilateral_cl_global_t *)malloc(sizeof(dt_bilateral_cl_global_t));
 
@@ -47,7 +54,7 @@ dt_bilateral_cl_global_t *dt_bilateral_init_cl_global()
   b->kernel_blur_line_z = dt_opencl_create_kernel(program, "blur_line_z");
   b->kernel_slice = dt_opencl_create_kernel(program, "slice");
   b->kernel_slice2 = dt_opencl_create_kernel(program, "slice_to_output");
-  return b;
+  _bilateral_cl_global = b;
 }
 
 void dt_bilateral_free_cl(dt_bilateral_cl_t *b)
@@ -92,7 +99,7 @@ dt_bilateral_cl_t *dt_bilateral_init_cl(const int devid,
                                   .cellsize = 8 * sizeof(float) + sizeof(int), .overhead = 0,
                                   .sizex = 1 << 6, .sizey = 1 << 6 };
 
-  if(!dt_opencl_local_buffer_opt(devid, dt_opencl_get_global()->bilateral->kernel_splat, &locopt))
+  if(!dt_opencl_local_buffer_opt(devid, _bilateral_cl_global->kernel_splat, &locopt))
   {
     dt_print(DT_DEBUG_OPENCL,
              "[opencl_bilateral] can not identify resource limits for device %d in bilateral grid\n", devid);
@@ -110,7 +117,7 @@ dt_bilateral_cl_t *dt_bilateral_init_cl(const int devid,
   dt_bilateral_cl_t *b = (dt_bilateral_cl_t *)malloc(sizeof(dt_bilateral_cl_t));
   if(IS_NULL_PTR(b)) return NULL;
 
-  b->global = dt_opencl_get_global()->bilateral;
+  b->global = _bilateral_cl_global;
   b->width = width;
   b->height = height;
   b->blocksizex = locopt.sizex;
@@ -303,8 +310,10 @@ cl_int dt_bilateral_slice_cl(dt_bilateral_cl_t *b, cl_mem in, cl_mem out, const 
   return err;
 }
 
-void dt_bilateral_free_cl_global(dt_bilateral_cl_global_t *b)
+void dt_bilateral_free_cl_global(void)
 {
+  dt_bilateral_cl_global_t *b = _bilateral_cl_global;
+  _bilateral_cl_global = NULL;
   if(IS_NULL_PTR(b)) return;
   // destroy kernels
   dt_opencl_free_kernel(b->kernel_zero);

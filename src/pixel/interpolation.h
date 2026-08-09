@@ -152,9 +152,9 @@ typedef struct dt_interpolation_cl_global_t
   int kernel_interpolation_resample;
 } dt_interpolation_cl_global_t;
 
-dt_interpolation_cl_global_t *dt_interpolation_init_cl_global(void);
+void dt_interpolation_init_cl_global(void);
 
-void dt_interpolation_free_cl_global(dt_interpolation_cl_global_t *g);
+void dt_interpolation_free_cl_global(void);
 
 
 /** Image resampler OpenCL version.
