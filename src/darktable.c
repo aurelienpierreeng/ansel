@@ -682,11 +682,6 @@ struct dt_opencl_t *dt_opencl_get_global(void)
   return darktable.opencl;
 }
 
-struct dt_colorspaces_t *dt_colorspaces_get_global(void)
-{
-  return darktable.color_profiles;
-}
-
 struct dt_bauhaus_t *dt_bauhaus_get_global(void)
 {
   return darktable.bauhaus;
@@ -1246,8 +1241,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     darktable.themes = NULL;
   }
 
-  // get the list of color profiles
-  darktable.color_profiles = dt_colorspaces_init();
+  // build the colour-profile module's own list; it owns it, we do not hold it
+  dt_colorprofiles_init();
 
   // initialize datetime data
   dt_datetime_init();
@@ -1710,7 +1705,7 @@ void dt_cleanup()
   dt_image_cache_cleanup(darktable.image_cache);
   dt_free(darktable.image_cache);
 
-  dt_colorspaces_cleanup(darktable.color_profiles);
+  dt_colorprofiles_cleanup();
   dt_conf_set_int("processing/gui_throttle_runtime_us", dt_gui_throttle_get_runtime_us());
   dt_gui_throttle_cleanup();
   dt_conf_cleanup(darktable.conf);

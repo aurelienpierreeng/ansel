@@ -120,17 +120,26 @@ typedef struct dt_colorspaces_cicp_t
 int mat3inv_float(float *const dst, const float *const src);
 int mat3inv(float *const dst, const float *const src);
 
-/** populate the global color profile lists */
-dt_colorspaces_t *dt_colorspaces_init();
 
-/* Process-wide singleton with no per-call context to ride on: this accessor is the
- * intended end state (same category as dt_conf_*), implemented by the orchestrator.
- * NOTE: common/colorspaces.c keeps direct access to the global for now; relocating ownership into the
- * subsystem itself (a file-static set at init) is the follow-up, not an accessor. */
+/* --- lifecycle -------------------------------------------------------------
+ *
+ * The module owns its state. It used to hang off darktable_t as
+ * `struct dt_colorspaces_t *color_profiles`, which put the whole application one
+ * dereference away from the profile list, its rwlock and its cached transforms. The
+ * instance is file-static in colorspaces.c now; these two are the only way to bring it
+ * up and take it down, and they are called once each, by the application, with no
+ * threads running. */
+void dt_colorprofiles_init(void);
+void dt_colorprofiles_cleanup(void);
+
+/* BEING RETIRED -- do not add callers.
+ *
+ * The remaining consumers that still walk ->profiles or take ->xprofile_lock by hand
+ * (16 list walks and 2 lock regions at the time of writing, all counted by
+ * tools/check_module_boundaries.sh) need a name for the instance until the query API
+ * replaces them. This declaration disappears with the last of them, together with
+ * dt_colorspaces_t itself. */
 dt_colorspaces_t *dt_colorspaces_get_global(void);
-
-/** cleanup on shutdown */
-void dt_colorspaces_cleanup(dt_colorspaces_t *self);
 
 /** create a profile from a xyz->camera matrix. */
 cmsHPROFILE dt_colorspaces_create_xyzimatrix_profile(float cam_xyz[3][3]);
