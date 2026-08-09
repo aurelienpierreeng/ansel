@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Two module boundaries this tree relies on, made checkable rather than remembered.
+# Three module boundaries this tree relies on, made checkable rather than remembered.
+# The third is a ratchet on a migration in progress rather than a settled rule.
 #
 #   1. src/system must include nothing that could bring state with it.
 #
@@ -83,6 +84,39 @@ while IFS= read -r line; do
   findings=$((findings + 1))
 done < <(grep -Hn '^[ \t]*#[ \t]*include[ \t]*"gui/' src/widgets/*.c src/widgets/*.h 2>/dev/null)
 
+# ---------------------------------------------------------------------------------------
+# 3. src/colorprofiles is being closed: a ratchet, not a boundary yet.
+#
+# The module still publishes dt_colorspaces_get_global(), so the rest of the tree reaches
+# into dt_colorspaces_t's members directly and takes its rwlock by hand. That is being
+# retired call site by call site; the end state is no accessor at all and no
+# darktable.color_profiles. Until then these two numbers may fall and must never rise --
+# which is the only property a half-finished migration can actually be held to.
+#
+# xprofile_lock is counted separately because it is the sharper of the two: a caller that
+# holds the module's lock is a caller that can deadlock it or use a handle it frees.
+accessor_baseline=59
+lock_baseline=4
+
+accessor_now=$(grep -rn 'dt_colorspaces_get_global()' src/ --include='*.c' --include='*.h' --include='*.cc' \
+               2>/dev/null | grep -cv '^src/colorprofiles/')
+# Acquisitions, not mentions: one number per caller-held region, so it reads as
+# "4 places outside the module still take its lock" rather than counting unlocks twice.
+lock_now=$(grep -rnE 'pthread_rwlock_(rd|wr|tryrd|trywr)lock[^;]*xprofile_lock' \
+           src/ --include='*.c' --include='*.h' --include='*.cc' \
+           2>/dev/null | grep -cv '^src/colorprofiles/')
+
+echo "colorprofiles: ${accessor_now} external dt_colorspaces_get_global() (baseline ${accessor_baseline}),"
+echo "               ${lock_now} external xprofile_lock (baseline ${lock_baseline})."
+
+if [ "${accessor_now}" -gt "${accessor_baseline}" ] || [ "${lock_now}" -gt "${lock_baseline}" ]; then
+  echo "colorprofiles: a count ROSE. New code must go through the module API, not its globals."
+  findings=$((findings + 1))
+elif [ "${accessor_now}" -lt "${accessor_baseline}" ] || [ "${lock_now}" -lt "${lock_baseline}" ]; then
+  echo "colorprofiles: a count fell -- lower the baseline in this script, in the same commit."
+  findings=$((findings + 1))
+fi
+
 echo
 if [ "${findings}" -gt 0 ]; then
   cat <<'MSG'
@@ -105,5 +139,5 @@ MSG
   exit 1
 fi
 
-echo "OK: src/system is closed, and src/widgets does not reach into gui/."
+echo "OK: src/system is closed, src/widgets does not reach into gui/, colorprofiles held."
 exit 0
