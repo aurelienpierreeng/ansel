@@ -94,12 +94,11 @@ typedef struct dt_colorspaces_endpoint_t
   dt_colorspaces_color_profile_type_t type;
   /** @brief ICC file name, or "" / NULL for a built-in. Ignored when ::resolved is set. */
   const char *filename;
-  /** @brief Which registration the identity is looked up in. Load-bearing, never a
-   * formality: ::DT_COLORSPACE_SRGB is registered twice and a multi-bit mask resolves to the
-   * first match in registration order, so a working profile asked for with
-   * ::DT_PROFILE_DIRECTION_ANY comes back as the input-only v4 variant. Ignored when
-   * ::resolved is set. */
-  dt_colorspaces_profile_direction_t direction;
+  /** @brief Which role the identity is looked up under. Load-bearing, never a formality:
+   * ::DT_COLORSPACE_SRGB is registered twice and a multi-bit mask resolves to the first match
+   * in registration order, so a working profile asked for with ::DT_PROFILE_ROLE_ANY comes
+   * back as the input-only v4 variant. Ignored when ::resolved is set. */
+  dt_colorspaces_profile_role_t role;
   /** @brief An already-resolved, image-owned profile, or NULL to resolve ::type / ::filename
    * from the registered list. BORROWED, not adopted -- see the struct details. */
   const struct dt_colorspaces_color_profile_t *resolved;

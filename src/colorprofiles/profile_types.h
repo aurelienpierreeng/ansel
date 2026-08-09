@@ -168,7 +168,7 @@ typedef enum dt_colorspaces_color_profile_type_t
    * of -1 in their five position fields distinguishes them: same type, same empty filename.
    * A lookup with a multi-bit direction mask returns the FIRST match in registration order,
    * which for sRGB is the v4 input entry -- so asking for "sRGB, any direction" while meaning
-   * the working profile hands back the wrong variant. Pass DT_PROFILE_DIRECTION_WORK (or OUT,
+   * the working profile hands back the wrong variant. Pass DT_PROFILE_ROLE_WORKING (or OUT,
    * or DISPLAY) explicitly.
    */
   DT_COLORSPACE_SRGB = 1,
@@ -217,8 +217,8 @@ typedef enum dt_colorspaces_color_profile_type_t
    * resolved. `dt_colorspaces_get_profile()` returns NULL for them, but not because it knows
    * they are categories: its predicate tests in/out/work/display only, and those are all -1
    * here. That omission is the entire reason a lookup cannot hand back an entry whose
-   * `->profile` is NULL, which many call sites dereference unchecked. Making
-   * DT_PROFILE_DIRECTION_CATEGORY functional would break them all.
+   * `->profile` is NULL, which many call sites dereference unchecked. Giving categories a
+   * role of their own would break them all.
    */
   DT_COLORSPACE_EXPORT = 16,
   DT_COLORSPACE_SOFTPROOF = 17,
@@ -274,59 +274,44 @@ typedef enum dt_colorspaces_color_mode_t
  * an index means nothing outside the enumeration that produced it, and an index taken from
  * IN|OUT equals neither `in_pos` nor `out_pos`.
  *
- * @warning Only four of the six bits are backed by a position field, and only those four are
- * ever tested -- see DT_PROFILE_DIRECTION_CATEGORY, DT_PROFILE_DIRECTION_DISPLAY2 and
- * DT_PROFILE_DIRECTION_ANY.
+ * @note This used to be called a "direction", which it is not: a profile is RGB->PCS or
+ * PCS->RGB, and nothing else. What these bits select is which MENU an entry belongs to, and
+ * the menus genuinely differ from one another -- see DT_PROFILE_ROLE_MONITOR. Two further
+ * bits, CATEGORY and DISPLAY2, were declared and never tested by any lookup: one had a
+ * position field no predicate consulted, the other had no field at all. They are gone, which
+ * changes nothing at runtime and stops DT_PROFILE_ROLE_ANY claiming six meanings when it had
+ * four.
  */
-typedef enum dt_colorspaces_profile_direction_t
+typedef enum dt_colorspaces_profile_role_t
 {
   /** @brief Listed in the input-profile combo (colorin). Backed by `in_pos`. */
-  DT_PROFILE_DIRECTION_IN = 1 << 0,
+  DT_PROFILE_ROLE_INPUT = 1 << 0,
   /** @brief Listed in the output/export-profile combo (colorout, export). Backed by `out_pos`. */
-  DT_PROFILE_DIRECTION_OUT = 1 << 1,
+  DT_PROFILE_ROLE_OUTPUT = 1 << 1,
   /**
    * @brief Eligible for the monitor-profile menu. Backed by `display_pos`.
    *
-   * @details Despite the name this is not a direction -- a profile is RGB->PCS or PCS->RGB,
-   * never "display" -- it is a curated eligibility list, and it genuinely differs from OUT.
-   * Of the 21 built-in registrations, five diverge: DT_COLORSPACE_DISPLAY is display-only,
-   * DT_COLORSPACE_REC709 and DT_COLORSPACE_ITUR_BT1886 are output-only, and DT_COLORSPACE_XYZ
-   * and DT_COLORSPACE_LAB become output-only once the `allow_lab_output` conf key gives them an
-   * `out_pos`. Substituting one for the other is a behaviour change, not a rename.
+   * @details Not the same set as OUTPUT, which is why it exists. Of the 21 built-in
+   * registrations, five diverge: DT_COLORSPACE_DISPLAY is monitor-only, DT_COLORSPACE_REC709
+   * and DT_COLORSPACE_ITUR_BT1886 are output-only, and DT_COLORSPACE_XYZ and DT_COLORSPACE_LAB
+   * become output-only once the `allow_lab_output` conf key gives them an `out_pos`.
+   * Substituting one for the other is a behaviour change, not a rename.
    */
-  DT_PROFILE_DIRECTION_DISPLAY = 1 << 2,
-  /**
-   * @brief Inert. Declared, never tested by any lookup or enumeration.
-   *
-   * @details `category_pos` exists on the entries and is assigned at registration, but no
-   * predicate consults it. Wiring this bit up would make DT_COLORSPACE_EXPORT / _SOFTPROOF /
-   * _WORK resolvable, and those carry `profile == NULL` -- see DT_COLORSPACE_EXPORT for why
-   * that would break unchecked call sites rather than fix anything.
-   */
-  DT_PROFILE_DIRECTION_CATEGORY = 1 << 3,
+  DT_PROFILE_ROLE_MONITOR = 1 << 2,
   /** @brief Listed in the working-profile combo (colorin). Backed by `work_pos`. */
-  DT_PROFILE_DIRECTION_WORK = 1 << 4,
+  DT_PROFILE_ROLE_WORKING = 1 << 3,
   /**
-   * @brief Inert, and worse than CATEGORY: there is no backing field at all.
+   * @brief All four roles, in registration order.
    *
-   * @details A remnant of the removed second-display feature, like DT_COLORSPACE_DISPLAY2. No
-   * entry has a `display2_pos`, so no predicate could test this bit even if one wanted to.
+   * @details Multi-bit, so it returns the FIRST entry that serves any role -- which for
+   * DT_COLORSPACE_SRGB, registered twice, is the v4 input-only variant. Never pass it when the
+   * answer will be used as a combo index, and never pass it when the caller means one specific
+   * role. It is the right answer only for "resolve this identity to a profile handle, I do not
+   * care which menu it appears in".
    */
-  DT_PROFILE_DIRECTION_DISPLAY2 = 1 << 5,
-  /**
-   * @brief All six bits -- but only four of them do anything.
-   *
-   * @details Because CATEGORY and DISPLAY2 are never tested, ANY effectively means
-   * IN|OUT|WORK|DISPLAY. It is also multi-bit, so it returns the first entry in registration
-   * order that serves any of those four, which for DT_COLORSPACE_SRGB is the v4 INPUT variant.
-   * Never pass it when the answer will be used as a combo index, and never pass it when the
-   * caller actually means one specific use.
-   */
-  DT_PROFILE_DIRECTION_ANY = DT_PROFILE_DIRECTION_IN | DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY
-                             | DT_PROFILE_DIRECTION_CATEGORY
-                             | DT_PROFILE_DIRECTION_WORK
-                             | DT_PROFILE_DIRECTION_DISPLAY2
-} dt_colorspaces_profile_direction_t;
+  DT_PROFILE_ROLE_ANY = DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR
+                        | DT_PROFILE_ROLE_WORKING
+} dt_colorspaces_profile_role_t;
 
 /**
  * @brief CICP colour primaries, as tagged in AVIF/HEIF/JPEG XL containers.

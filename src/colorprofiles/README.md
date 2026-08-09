@@ -115,19 +115,21 @@ rather than a colour space, and exist only to occupy a combo row. Roughly 40 cal
 dereference `->profile` without a NULL check; what keeps them safe is that lookup tests
 `in_pos`/`out_pos`/`work_pos`/`display_pos` only and **never** `category_pos`, so a category
 entry can never be returned. Do not "fix" the lookup predicate to consult `category_pos`, and do
-not make `DT_PROFILE_DIRECTION_CATEGORY` functional, without auditing those sites first.
+not give categories a role of their own, without auditing those sites first.
 
 **`DT_COLORSPACE_SRGB` is registered twice** — a v4 parametric-curve entry valid only as INPUT,
-and a v2 point-TRC entry carrying out/display/category/work — and the two are distinguished by
-nothing but which `*_pos` is −1. The direction argument is what picks between them, so it can
-never be omitted or approximated: a multi-bit mask resolves to the *first* match in registration
-order, and `DT_PROFILE_DIRECTION_ANY` silently means `IN|OUT|WORK|DISPLAY` because the other two
-bits are never tested. Ask for a working profile as `DT_PROFILE_DIRECTION_WORK`, not as ANY.
+and a v2 point-TRC entry carrying output/monitor/working — and the two are distinguished by
+nothing but which `*_pos` is −1. The role argument is what picks between them, so it can never be
+omitted or approximated: a multi-bit mask resolves to the *first* match in registration order.
+Ask for a working profile as `DT_PROFILE_ROLE_WORKING`, not as `DT_PROFILE_ROLE_ANY`.
 
-**`DT_PROFILE_DIRECTION_DISPLAY` is not a direction.** A profile is RGB→PCS or PCS→RGB, never
-"display"; the bit is the curated eligibility list for the monitor-profile menu, and it diverges
-from OUT on 5 of the 21 built-ins. Substituting one for the other is a behaviour change, not a
-rename.
+**These are roles, not directions.** The enum used to be called
+`dt_colorspaces_profile_direction_t`, which it never was: a profile is RGB→PCS or PCS→RGB and
+nothing else. What the bits select is which *menu* an entry appears in, and the menus really do
+differ — `DT_PROFILE_ROLE_MONITOR` diverges from `DT_PROFILE_ROLE_OUTPUT` on 5 of the 21
+built-ins, so substituting one for the other is a behaviour change, not a rename. Two further
+bits, `CATEGORY` and `DISPLAY2`, were declared and never tested by any lookup — one had a
+position field no predicate consulted, the other had no field at all — and are gone.
 
 **Image-derived profiles are not in the list.** `DT_COLORSPACE_EMBEDDED_ICC` through
 `DT_COLORSPACE_ALTERNATE_MATRIX` (9..14) describe one image: their matrices come from that

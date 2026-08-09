@@ -224,7 +224,7 @@ generate_mat3inv_body(double, A, B)
 static const dt_colorspaces_color_profile_t *_get_profile(dt_colorspaces_t *self,
                                                           dt_colorspaces_color_profile_type_t type,
                                                           const char *filename,
-                                                          dt_colorspaces_profile_direction_t direction);
+                                                          dt_colorspaces_profile_role_t direction);
 
 __DT_CLONE_TARGETS__
 static int dt_colorspaces_get_matrix_from_profile(cmsHPROFILE prof, dt_colormatrix_t matrix, float *lutr, float *lutg,
@@ -1151,13 +1151,13 @@ static void _update_display_transforms(dt_colorspaces_t *self)
 
   const dt_colorspaces_color_profile_t *display_dt_profile = _get_profile(self, self->display_type,
                                                                           self->display_filename,
-                                                                          DT_PROFILE_DIRECTION_DISPLAY);
+                                                                          DT_PROFILE_ROLE_MONITOR);
   if(IS_NULL_PTR(display_dt_profile)) return;
   cmsHPROFILE display_profile = display_dt_profile->profile;
   if(IS_NULL_PTR(display_profile)) return;
 
   self->transform_srgb_to_display = cmsCreateTransform(_get_profile(self, DT_COLORSPACE_SRGB, "",
-                                                                    DT_PROFILE_DIRECTION_DISPLAY)->profile,
+                                                                    DT_PROFILE_ROLE_MONITOR)->profile,
                                                        TYPE_RGBA_8,
                                                        display_profile,
                                                        TYPE_BGRA_8,
@@ -1165,7 +1165,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
                                                        cmsFLAGS_NOCACHE);
 
   self->transform_xyz_to_display = cmsCreateTransform(_get_profile(self, DT_COLORSPACE_XYZ, "",
-                                                                    DT_PROFILE_DIRECTION_IN)->profile,
+                                                                    DT_PROFILE_ROLE_INPUT)->profile,
                                                        TYPE_XYZA_FLT,
                                                        display_profile,
                                                        TYPE_RGBA_FLT,
@@ -1173,7 +1173,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
                                                        cmsFLAGS_NOCACHE);
 
   self->transform_adobe_rgb_to_display = cmsCreateTransform(_get_profile(self, DT_COLORSPACE_ADOBERGB, "",
-                                                                         DT_PROFILE_DIRECTION_DISPLAY)->profile,
+                                                                         DT_PROFILE_ROLE_MONITOR)->profile,
                                                             TYPE_RGBA_8,
                                                             display_profile,
                                                             TYPE_BGRA_8,
@@ -1183,7 +1183,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
   self->transform_display_to_adobe_rgb = cmsCreateTransform(display_profile,
                                                             TYPE_BGRA_8,
                                                             _get_profile(self, DT_COLORSPACE_ADOBERGB, "",
-                                                                         DT_PROFILE_DIRECTION_DISPLAY)->profile,
+                                                                         DT_PROFILE_ROLE_MONITOR)->profile,
                                                             TYPE_RGBA_8,
                                                             self->display_intent,
                                                             cmsFLAGS_NOCACHE);
@@ -1260,14 +1260,14 @@ static void _selftest_index_matches_legacy_pos(const dt_colorspaces_t *const sel
 {
   const struct
   {
-    dt_colorspaces_profile_direction_t bit;
+    dt_colorspaces_profile_role_t bit;
     size_t offset;
     const char *name;
   } directions[] = {
-    { DT_PROFILE_DIRECTION_IN,      offsetof(dt_colorspaces_color_profile_t, in_pos),      "IN" },
-    { DT_PROFILE_DIRECTION_OUT,     offsetof(dt_colorspaces_color_profile_t, out_pos),     "OUT" },
-    { DT_PROFILE_DIRECTION_WORK,    offsetof(dt_colorspaces_color_profile_t, work_pos),    "WORK" },
-    { DT_PROFILE_DIRECTION_DISPLAY, offsetof(dt_colorspaces_color_profile_t, display_pos), "DISPLAY" },
+    { DT_PROFILE_ROLE_INPUT,      offsetof(dt_colorspaces_color_profile_t, in_pos),      "IN" },
+    { DT_PROFILE_ROLE_OUTPUT,     offsetof(dt_colorspaces_color_profile_t, out_pos),     "OUT" },
+    { DT_PROFILE_ROLE_WORKING,    offsetof(dt_colorspaces_color_profile_t, work_pos),    "WORK" },
+    { DT_PROFILE_ROLE_MONITOR, offsetof(dt_colorspaces_color_profile_t, display_pos), "DISPLAY" },
   };
 
   for(size_t d = 0; d < sizeof(directions) / sizeof(directions[0]); d++)
@@ -1593,9 +1593,9 @@ gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_
   else
   {
     const dt_colorspaces_color_profile_t *const from
-        = _get_profile(self, src_space, "", DT_PROFILE_DIRECTION_DISPLAY);
+        = _get_profile(self, src_space, "", DT_PROFILE_ROLE_MONITOR);
     const dt_colorspaces_color_profile_t *const to
-        = _get_profile(self, DT_COLORSPACE_DISPLAY, "", DT_PROFILE_DIRECTION_DISPLAY);
+        = _get_profile(self, DT_COLORSPACE_DISPLAY, "", DT_PROFILE_ROLE_MONITOR);
 
     /* Not every colorspace has a profile registered for the DISPLAY direction (a thumbnail
      * cached with an exotic tag). Fall back to the same passthrough as DT_COLORSPACE_DISPLAY
@@ -1637,9 +1637,9 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
   else
   {
     const dt_colorspaces_color_profile_t *const from
-        = _get_profile(self, src_space, "", DT_PROFILE_DIRECTION_DISPLAY);
+        = _get_profile(self, src_space, "", DT_PROFILE_ROLE_MONITOR);
     const dt_colorspaces_color_profile_t *const to
-        = _get_profile(self, DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_DIRECTION_DISPLAY);
+        = _get_profile(self, DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_ROLE_MONITOR);
     if(!IS_NULL_PTR(from) && !IS_NULL_PTR(to))
     {
       transform = cmsCreateTransform(from->profile, TYPE_BGRA_8, to->profile, TYPE_RGBA_8,
@@ -2342,15 +2342,15 @@ gboolean dt_colorspaces_is_profile_equal(const char *fullname, const char *filen
 static const dt_colorspaces_color_profile_t *_get_profile(dt_colorspaces_t *self,
                                                           dt_colorspaces_color_profile_type_t type,
                                                           const char *filename,
-                                                          dt_colorspaces_profile_direction_t direction)
+                                                          dt_colorspaces_profile_role_t direction)
 {
   for(GList *iter = self->profiles; iter; iter = g_list_next(iter))
   {
     dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
-    if(((direction & DT_PROFILE_DIRECTION_IN && p->in_pos > -1)
-        || (direction & DT_PROFILE_DIRECTION_OUT && p->out_pos > -1)
-        || (direction & DT_PROFILE_DIRECTION_WORK && p->work_pos > -1)
-        || (direction & DT_PROFILE_DIRECTION_DISPLAY && p->display_pos > -1))
+    if(((direction & DT_PROFILE_ROLE_INPUT && p->in_pos > -1)
+        || (direction & DT_PROFILE_ROLE_OUTPUT && p->out_pos > -1)
+        || (direction & DT_PROFILE_ROLE_WORKING && p->work_pos > -1)
+        || (direction & DT_PROFILE_ROLE_MONITOR && p->display_pos > -1))
        && (p->type == type
            && (type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(p->filename, filename))))
     {
@@ -2363,7 +2363,7 @@ static const dt_colorspaces_color_profile_t *_get_profile(dt_colorspaces_t *self
 
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_profile(dt_colorspaces_color_profile_type_t type,
                                                                  const char *filename,
-                                                                 dt_colorspaces_profile_direction_t direction)
+                                                                 dt_colorspaces_profile_role_t direction)
 {
   return _get_profile(dt_colorspaces_get_global(), type, filename, direction);
 }
@@ -2394,18 +2394,18 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_profile(dt_colorspaces_
 /* Exactly the predicate _get_profile() applies, so enumeration and lookup can never
  * disagree about what a direction contains. Note it tests four bits, not six:
  * category_pos and DISPLAY2 are never consulted, which is why
- * DT_PROFILE_DIRECTION_ANY effectively means IN|OUT|WORK|DISPLAY. Reproducing that
+ * DT_PROFILE_ROLE_ANY effectively means IN|OUT|WORK|DISPLAY. Reproducing that
  * exactly matters more than making it tidy. */
 static gboolean _entry_serves(const dt_colorspaces_color_profile_t *const p,
-                              const dt_colorspaces_profile_direction_t direction)
+                              const dt_colorspaces_profile_role_t direction)
 {
-  return (direction & DT_PROFILE_DIRECTION_IN && p->in_pos > -1)
-         || (direction & DT_PROFILE_DIRECTION_OUT && p->out_pos > -1)
-         || (direction & DT_PROFILE_DIRECTION_WORK && p->work_pos > -1)
-         || (direction & DT_PROFILE_DIRECTION_DISPLAY && p->display_pos > -1);
+  return (direction & DT_PROFILE_ROLE_INPUT && p->in_pos > -1)
+         || (direction & DT_PROFILE_ROLE_OUTPUT && p->out_pos > -1)
+         || (direction & DT_PROFILE_ROLE_WORKING && p->work_pos > -1)
+         || (direction & DT_PROFILE_ROLE_MONITOR && p->display_pos > -1);
 }
 
-static gboolean _is_single_direction(const dt_colorspaces_profile_direction_t direction)
+static gboolean _is_single_direction(const dt_colorspaces_profile_role_t direction)
 {
   return direction != 0 && (direction & (direction - 1)) == 0;
 }
@@ -2446,7 +2446,7 @@ void dt_colorspaces_unlock_profile(const dt_colorspaces_color_profile_t *const p
   pthread_rwlock_unlock((pthread_rwlock_t *)&profile->lock);
 }
 
-size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_t direction,
+size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t direction,
                                          dt_colorprofile_desc_t **out)
 {
   if(IS_NULL_PTR(out)) return 0;
@@ -2475,7 +2475,7 @@ size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_
   return count;
 }
 
-int dt_colorspaces_profile_index(const dt_colorspaces_profile_direction_t direction,
+int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t direction,
                                  const dt_colorspaces_color_profile_type_t type,
                                  const char *const filename)
 {
@@ -2500,7 +2500,7 @@ int dt_colorspaces_profile_index(const dt_colorspaces_profile_direction_t direct
   return -1;
 }
 
-gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_direction_t direction,
+gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t direction,
                                    const int index,
                                    dt_colorprofile_desc_t *const out)
 {
@@ -2525,7 +2525,7 @@ gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_direction_t dire
   return FALSE;
 }
 
-gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_direction_t direction,
+gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_role_t direction,
                                        const dt_colorspaces_color_profile_type_t type,
                                        const char *const filename)
 {

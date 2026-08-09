@@ -158,7 +158,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     // Monochrome RAW - colorspace doesn't matter
     color_profile = DT_COLORSPACE_LIN_REC709;
     if(!IS_NULL_PTR(output))
-      *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_DIRECTION_IN)->profile;
+      *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_ROLE_INPUT)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "Monochrome RAW\n");
   }
   else if(dt_image_is_matrix_correction_supported(img))
@@ -177,7 +177,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     // 4Bayer images have been pre-converted to rec2020
     color_profile = DT_COLORSPACE_LIN_REC2020;
     if(!IS_NULL_PTR(output))
-      *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_IN)->profile;
+      *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_ROLE_INPUT)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "4Bayer RAW\n");
   }
   else if(img->colorspace == DT_IMAGE_COLORSPACE_SRGB)
@@ -191,7 +191,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     // Images tagged explicitely with Adobe RGB flag
     color_profile = DT_COLORSPACE_ADOBERGB;
     if(!IS_NULL_PTR(output))
-      *output = dt_colorspaces_get_profile(DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_DIRECTION_IN)->profile;
+      *output = dt_colorspaces_get_profile(DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_ROLE_INPUT)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "Raster image tagged with Adobe RGB\n");
   }
   else if(!strcmp(ext, "pfm"))
@@ -200,7 +200,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     // but we can assume the are linear since it's a floating point format
     color_profile = DT_COLORSPACE_LIN_REC709;
     if(!IS_NULL_PTR(output))
-      *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_DIRECTION_IN)->profile;
+      *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_ROLE_INPUT)->profile;
     dt_print(DT_DEBUG_COLORPROFILE, "PFM untagged image\n");
   }
   else
@@ -281,7 +281,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     {
       // This happens when AVIF/HEIF found a basic color profile into CICP fields
       if(!IS_NULL_PTR(output))
-        *output = dt_colorspaces_get_profile(color_profile, "", DT_PROFILE_DIRECTION_IN)->profile;
+        *output = dt_colorspaces_get_profile(color_profile, "", DT_PROFILE_ROLE_INPUT)->profile;
       dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC (extracted)\n");
     }
 
@@ -291,7 +291,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   // Handle the fallback to sRGB space
   if(color_profile == DT_COLORSPACE_NONE) color_profile = DT_COLORSPACE_SRGB;
   if(color_profile == DT_COLORSPACE_SRGB && !IS_NULL_PTR(output))
-    *output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_IN)->profile;
+    *output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_INPUT)->profile;
 
   /* Anything built above but not handed to the caller is ours to close. This is the
    * `output == NULL` case -- a caller that wants only the resolved type -- and the branches
@@ -573,13 +573,13 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const in
   {
     // return a pointer to the profile specified in export.
     // we have that in here to get rid of the if() check in all places calling this function.
-    p = dt_colorspaces_get_profile(*over_type, over_filename, DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
+    p = dt_colorspaces_get_profile(*over_type, over_filename, DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR);
   }
 
   // if all else fails -> fall back to sRGB
   if(IS_NULL_PTR(p))
   {
-    p = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT);
+    p = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_OUTPUT);
     *over_type = DT_COLORSPACE_SRGB;
   }
 

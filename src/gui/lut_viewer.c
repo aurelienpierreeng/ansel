@@ -391,7 +391,7 @@ static inline gboolean _gamut_matches_lut_profile(const dt_lut_viewer_t *viewer,
 static int _get_xyz_to_rgb_matrix(const dt_lut_viewer_gamut_t gamut, dt_colormatrix_t xyz_to_rgb)
 {
   const dt_colorspaces_color_profile_t *profile
-      = dt_colorspaces_get_profile(_gamut_to_profile_type(gamut), "", DT_PROFILE_DIRECTION_ANY);
+      = dt_colorspaces_get_profile(_gamut_to_profile_type(gamut), "", DT_PROFILE_ROLE_ANY);
   if(IS_NULL_PTR(profile)|| IS_NULL_PTR(profile->profile)) return 1;
 
   const cmsCIEXYZ *red = cmsReadTag(profile->profile, cmsSigRedColorantTag);

@@ -499,11 +499,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
    * that case into a container the conversion can take as an endpoint, and release it after
    * the conversion is built -- an lcms2 transform does not retain the profiles it was made
    * from, so the container only has to outlive the preparation. */
-  const dt_colorspaces_profile_direction_t output_direction
-      = DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY;
+  const dt_colorspaces_profile_role_t output_role
+      = DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR;
 
   struct dt_colorspaces_color_profile_t *image_output = NULL;
-  if(!dt_colorspaces_profile_exists(output_direction, out_type, out_filename))
+  if(!dt_colorspaces_profile_exists(output_role, out_type, out_filename))
   {
     if(pipe->type == DT_DEV_PIXELPIPE_EXPORT)
       image_output = dt_image_get_embedded_output_profile(pipe->dev->image_storage.id, &out_type);
@@ -520,14 +520,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   dt_colorspaces_endpoint_t source = { .type = work_type,
                                        .filename = work_filename ? work_filename : "",
-                                       .direction = DT_PROFILE_DIRECTION_ANY };
+                                       .role = DT_PROFILE_ROLE_ANY };
   dt_colorspaces_endpoint_t target = { .type = out_type,
                                        .filename = out_filename,
-                                       .direction = output_direction,
+                                       .role = output_role,
                                        .resolved = image_output };
   dt_colorspaces_endpoint_t proof = { .type = settings.softproof_type,
                                       .filename = settings.softproof_filename,
-                                      .direction = output_direction };
+                                      .role = output_role };
 
   /* No working profile on this pipe at all: convert nothing, the buffer is taken to be in
    * the output space already. That is what "input = output" meant before. */
@@ -540,7 +540,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   const gboolean softproofing = (d->mode != DT_PROFILE_NORMAL && pipe->type == DT_DEV_PIXELPIPE_FULL);
   if(softproofing
-     && !dt_colorspaces_profile_exists(output_direction, settings.softproof_type, settings.softproof_filename))
+     && !dt_colorspaces_profile_exists(output_role, settings.softproof_type, settings.softproof_filename))
   {
     dt_control_log(_("missing softproof profile has been replaced by sRGB!"));
     fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",

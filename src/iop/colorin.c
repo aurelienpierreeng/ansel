@@ -219,7 +219,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 
 static void _resolve_work_profile(dt_colorspaces_color_profile_type_t *work_type, char *work_filename)
 {
-  if(dt_colorspaces_profile_exists(DT_PROFILE_DIRECTION_WORK, *work_type, work_filename)) return;
+  if(dt_colorspaces_profile_exists(DT_PROFILE_ROLE_WORKING, *work_type, work_filename)) return;
 
   dt_print(DT_DEBUG_COLORPROFILE,
            "[colorin] profile `%s' not suitable for work profile. it has been replaced by linear Rec2020 RGB!\n",
@@ -531,7 +531,7 @@ static void profile_changed(GtkWidget *widget, gpointer user_data)
   else
   {
     dt_colorprofile_desc_t desc;
-    if(dt_colorspaces_profile_at(DT_PROFILE_DIRECTION_IN, pos - g->n_image_profiles, &desc))
+    if(dt_colorspaces_profile_at(DT_PROFILE_ROLE_INPUT, pos - g->n_image_profiles, &desc))
     {
       p->type = desc.type;
       memcpy(p->filename, desc.filename, sizeof(p->filename));
@@ -559,7 +559,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
 
   const int pos = dt_bauhaus_combobox_get(widget);
   dt_colorprofile_desc_t work_desc;
-  if(dt_colorspaces_profile_at(DT_PROFILE_DIRECTION_WORK, pos, &work_desc))
+  if(dt_colorspaces_profile_at(DT_PROFILE_ROLE_WORKING, pos, &work_desc))
   {
     type_work = work_desc.type;
     g_strlcpy(filename_work, work_desc.filename, sizeof(filename_work));
@@ -821,7 +821,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   const dt_colorspaces_color_profile_type_t clip_type = _clipping_profile_type(p);
   dt_colorspaces_endpoint_t clip = { .type = clip_type, .filename = "",
-                                     .direction = DT_PROFILE_DIRECTION_IN };
+                                     .role = DT_PROFILE_ROLE_INPUT };
   /* WORK, not ANY. DT_COLORSPACE_SRGB is registered twice -- the v4 parametric-curve profile,
    * valid only as an input profile, and the v2 point-TRC profile, which is the one the
    * working-profile combo actually lists. The lookup filters on the direction bits before
@@ -829,9 +829,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
    * registered first, so ANY resolved the working profile to a variant the user was never
    * offered. */
   dt_colorspaces_endpoint_t target = { .type = d->type_work, .filename = d->filename_work,
-                                       .direction = DT_PROFILE_DIRECTION_WORK };
+                                       .role = DT_PROFILE_ROLE_WORKING };
   dt_colorspaces_endpoint_t source = { .type = type, .filename = p->filename,
-                                       .direction = DT_PROFILE_DIRECTION_IN,
+                                       .role = DT_PROFILE_ROLE_INPUT,
                                        .resolved = image_profile };
 
   /* This module's kernel decodes the INPUT profile's curves before the matrix and has no
@@ -917,7 +917,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->clipping_combobox, p->normalize);
 
   // working profile
-  int idx = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_WORK, p->type_work, p->filename_work);
+  int idx = dt_colorspaces_profile_index(DT_PROFILE_ROLE_WORKING, p->type_work, p->filename_work);
 
   if(idx < 0)
   {
@@ -938,7 +938,7 @@ void gui_update(struct dt_iop_module_t *self)
     }
   }
 
-  const int in_idx = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_IN, p->type, p->filename);
+  const int in_idx = dt_colorspaces_profile_index(DT_PROFILE_ROLE_INPUT, p->type, p->filename);
   if(in_idx > -1)
   {
     dt_bauhaus_combobox_set(g->profile_combobox, in_idx + g->n_image_profiles);
@@ -1079,7 +1079,7 @@ static void update_profile_list(dt_iop_module_t *self)
   gboolean input_system_profile_separator_added = FALSE;
   gboolean input_file_profile_separator_added = FALSE;
   dt_colorprofile_desc_t *in_profiles = NULL;
-  const size_t n_in_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_IN, &in_profiles);
+  const size_t n_in_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_INPUT, &in_profiles);
   for(size_t k = 0; k < n_in_profiles; k++)
   {
     const dt_colorprofile_desc_t *const prof = &in_profiles[k];
@@ -1106,7 +1106,7 @@ static void update_profile_list(dt_iop_module_t *self)
 
   gboolean work_file_profile_separator_added = FALSE;
   dt_colorprofile_desc_t *work_profiles = NULL;
-  const size_t n_work_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_WORK, &work_profiles);
+  const size_t n_work_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_WORKING, &work_profiles);
   for(size_t k = 0; k < n_work_profiles; k++)
   {
     const dt_colorprofile_desc_t *const prof = &work_profiles[k];

@@ -383,7 +383,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
   {
     const dt_colorspaces_color_profile_t *pprof =
       dt_colorspaces_get_profile(params->p_icc_type, params->p_icc_profile,
-                                 DT_PROFILE_DIRECTION_OUT);
+                                 DT_PROFILE_ROLE_OUTPUT);
     if(IS_NULL_PTR(pprof))
     {
       dt_control_log(_("cannot open printer profile `%s'"), params->p_icc_profile);
@@ -1326,7 +1326,7 @@ static GList* _get_profiles()
    * is list order, so the resulting menu is unchanged. */
   dt_colorprofile_desc_t *file_profiles = NULL;
   const size_t n_file_profiles = dt_colorspaces_enumerate_profiles(
-      DT_PROFILE_DIRECTION_IN | DT_PROFILE_DIRECTION_OUT, &file_profiles);
+      DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT, &file_profiles);
 
   for(size_t k = 0; k < n_file_profiles; k++)
   {
