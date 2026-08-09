@@ -25,6 +25,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}" || exit 2
 BASE="${1:?usage: check_conditional_includes.sh <base-ref>}"
 
+# This compares <base-ref>..HEAD, so uncommitted work is invisible to it. Running it on a dirty
+# tree and reading "OK" as approval is a trap I fell into: the check passed locally, then failed
+# on every Linux runner as soon as the same change was committed. Say so rather than answer a
+# question that was not asked.
+if [ -n "$(git status --porcelain -- 'src/*.c' 'src/*.cc' 'src/*.h' 2>/dev/null)" ]; then
+  echo "warning: uncommitted changes under src/ are NOT checked -- this compares ${BASE}..HEAD."
+  echo "         Commit first, then re-run, or the result means nothing for what you just wrote."
+  echo
+fi
+
 "${PYTHON:-python3}" - "${BASE}" <<'PYEOF'
 import os, re, subprocess, sys
 

@@ -74,16 +74,16 @@
 #include <strings.h>
 
 #ifdef HAVE_OPENJPEG
-#include "imageio/imageio_j2k.h"
+#include "imageio/imageio_j2k.h"   // conditional-ok: only the HAVE_OPENJPEG branch below reads J2K
 #endif
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_png.h"
 #include "imageio/imageio_tiff.h"
 #ifdef HAVE_LIBAVIF
-#include "imageio/imageio_avif.h"
+#include "imageio/imageio_avif.h"   // conditional-ok: only the HAVE_LIBAVIF branch below reads AVIF
 #endif
 #ifdef HAVE_LIBHEIF
-#include "imageio/imageio_heif.h"
+#include "imageio/imageio_heif.h"   // conditional-ok: only the HAVE_LIBHEIF branch below reads HEIF
 #endif
 
 dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t imgid, cmsHPROFILE *output, gboolean *new_profile)
