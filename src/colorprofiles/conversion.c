@@ -292,10 +292,13 @@ dt_colorspaces_conversion_t *dt_colorspaces_prepare_conversion(const dt_colorspa
 
   if(conversion->is_matrix)
   {
-    /* Release the side that reduced to a straight line: a linear curve set is 768 KB of
-     * ramp nobody will read. */
-    if(conversion->nonlinear_source == 0) _free_curves(conversion->lut_source);
-    if(conversion->nonlinear_target == 0) _free_curves(conversion->lut_target);
+    /* Keep exactly the sides the caller declared it consumes, whether or not they turned out
+     * to be linear. A device kernel reads `curve[0] < 0` as "this channel is linear" and
+     * needs the buffer present to read it, so handing back NULL for a linear-but-requested
+     * side would make every caller invent a ramp to upload instead. The side nobody asked
+     * for is 768 KB of table nothing will read. */
+    if(!(flags & DT_CONVERSION_SOURCE_CURVES)) _free_curves(conversion->lut_source);
+    if(!(flags & DT_CONVERSION_TARGET_CURVES)) _free_curves(conversion->lut_target);
   }
   else
   {
@@ -603,13 +606,13 @@ const float *dt_colorspaces_conversion_target_curve(const dt_colorspaces_convers
 
 const float *dt_colorspaces_conversion_source_coeffs(const dt_colorspaces_conversion_t *const conversion)
 {
-  if(IS_NULL_PTR(conversion) || conversion->nonlinear_source == 0) return NULL;
+  if(IS_NULL_PTR(conversion) || IS_NULL_PTR(conversion->lut_source[0])) return NULL;
   return &conversion->coeffs_source[0][0];
 }
 
 const float *dt_colorspaces_conversion_target_coeffs(const dt_colorspaces_conversion_t *const conversion)
 {
-  if(IS_NULL_PTR(conversion) || conversion->nonlinear_target == 0) return NULL;
+  if(IS_NULL_PTR(conversion) || IS_NULL_PTR(conversion->lut_target[0])) return NULL;
   return &conversion->coeffs_target[0][0];
 }
 
