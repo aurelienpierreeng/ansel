@@ -212,7 +212,7 @@ typedef enum dt_dev_request_colorpick_flags_t
 } dt_dev_request_colorpick_flags_t;
 
 /* dt_iop_colorspace_type_t moved to pixel/format.h: it tags a pixel buffer's colour
- * space, which is a layer-2 concept, and pixel/iop_profile.h needs it. */
+ * space, which is a layer-2 concept, and colorprofiles/iop_profile.h needs it. */
 
 
 /** part of the module which only contains the cached dlopen stuff. */

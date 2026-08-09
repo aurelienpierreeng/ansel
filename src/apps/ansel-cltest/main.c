@@ -26,6 +26,8 @@
 
 #include "darktable.h"
 #include "common/opencl.h"
+#include "system/macros.h"
+#include "system/mem_alloc.h"
 
 #ifdef __APPLE__
 #include "osx/osx.h"

@@ -27,8 +27,8 @@
     You should have received a copy of the GNU Lesser General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_PIXEL_IOP_PROFILE_H
-#define DT_PIXEL_IOP_PROFILE_H
+#ifndef DT_COLORPROFILES_IOP_PROFILE_H
+#define DT_COLORPROFILES_IOP_PROFILE_H
 
 /* The colour-profile struct and the maths over it. Layer 2: nothing here mentions
  * dt_develop_t, dt_dev_pixelpipe_t or dt_iop_module_t, and the four forward declarations that
@@ -306,7 +306,6 @@ static inline float dt_ioppr_uncompensate_middle_grey(const float x, const dt_io
  * the transform core both sides drive, not either side's private business. The two transform workers
  * take the module's name strings, not the module: naming it in a log line was the only use,
  * and a pointer would have kept this header reaching into develop/. */
-struct dt_iop_module_t;
 
 void dt_ioppr_mark_as_nonmatrix_profile(dt_iop_order_iccprofile_info_t *profile_info);
 void dt_ioppr_clear_lut_curves(dt_iop_order_iccprofile_info_t *profile_info);
