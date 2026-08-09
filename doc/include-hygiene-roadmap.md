@@ -1,13 +1,11 @@
 # Include hygiene: findings and roadmap
 
-Scope note: **nothing in this document is implemented by the `darktable.h` PR.** That PR is
-deliberately limited to removing the orchestrator umbrella and its direct ramifications
-(cycle breaking, `#pragma once` removal, the fallout repairs). This file records what the
-diagnostics found *afterwards*, so the follow-up work can be planned and split without
-re-deriving it. The tooling described here is committed; the changes it suggests are not.
+This file records what the include diagnostics measure, so follow-up work can be planned and
+split without re-deriving it. Sections headed **Done** describe work that has landed, kept
+for the traps it left behind rather than as a changelog; everything else is backlog.
 
-Measured on `refactor/strip-darktable-h` after the DAG landed: 693 files, 292 headers,
-401 translation units, 0 cycles.
+Current tree, from `tools/include_graph.py --summary`: 742 files, 318 headers, 424
+translation units, 0 cycles, 206 layering violations.
 
 ---
 
@@ -21,6 +19,10 @@ Measured on `refactor/strip-darktable-h` after the DAG landed: 693 files, 292 he
 | `tools/include_unused.py --verify` | confirms candidates by actually recompiling without them |
 | `tools/include_report.py` | one self-contained HTML page: rankings, blast radius, inversion heat-map, SVG charts, no dependencies |
 | `tools/pragma_once_to_guards.py --verify` | fails if `#pragma once` reappears |
+| `tools/symbol_coupling.py` | what actually *links* between modules, per object file — see §6 |
+| `tools/header_consumers.py` | per includer of a header: what it takes from it vs. what it only forwards |
+| `tools/decl_def_audit.py` | declarations whose definition sits outside the matching `.c` — see §16.1 |
+| `tools/misplaced_files.py` | files whose only consumers live in one other subsystem |
 | `doxygen doc/Doxyfile` | per-file include / included-by / directory graphs, interactive SVG |
 
 ### Use Doxygen for drilling in, these tools for ranking
@@ -30,12 +32,14 @@ Measured on `refactor/strip-darktable-h` after the DAG landed: 693 files, 292 he
 header pull, and who pulls it", Doxygen's output is better than anything scripted here and
 should be the first stop.
 
-**Caveat before you trust one of those pictures:** `DOT_GRAPH_MAX_NODES` is **100**. Every
-header this document ranks as a problem has a closure larger than that, so its graph renders
-*truncated* — dot silently drops nodes and marks the box red. Raise `DOT_GRAPH_MAX_NODES`
-(and consider bounding `MAX_DOT_GRAPH_DEPTH`, currently `0` = unlimited) before concluding
-anything from a god-header's graph. The scripts here do not truncate, which is exactly why
-they are complementary rather than redundant.
+**Caveat before you trust one of those pictures:** `DOT_GRAPH_MAX_NODES` is **100**. No
+header's *include* graph exceeds that any more (the largest closure in the tree is 74), but
+every *included-by* graph in §3 does — those headers are pulled in by 300–500 files — so
+that direction still renders *truncated*, with dot silently dropping nodes and marking the
+box red. Raise `DOT_GRAPH_MAX_NODES` (and consider bounding `MAX_DOT_GRAPH_DEPTH`, currently
+`0` = unlimited) before concluding anything from a god-header's included-by graph. The
+scripts here do not truncate, which is exactly why they are complementary rather than
+redundant.
 
 ---
 
@@ -44,22 +48,21 @@ they are complementary rather than redundant.
 `tools/include_unused.py` indexes every project header by the names it *declares*, then
 flags any `#include` whose declared names the including file never mentions.
 
-**Current count: 764 candidates across 316 files — 86 in headers, 678 in sources.**
+**Current count: 98 candidates across 78 files — 22 in headers, 76 in sources.**
 
-By directory: `iop` 289, `common` 172, `libs` 77, `develop` 64, `views` 43, `gui` 41,
-`dtgtk` 27, `control` 23, `imageio` 19.
+By directory: `common` 25, `imageio` 16, `gui` 12, `iop` 11, `develop` 10, `libs` 10,
+`control` 4, `colorprofiles` 2, `pixel` 2, `views` 2, `widgets` 2, `apps` 1, `system` 1.
 
 Most often included without using any of its names:
 
 | count | header |
 |---:|---|
-| 73 | `control/control.h` |
-| 66 | `common/debug.h` |
-| 44 | `control/conf.h` |
-| 43 | `common/opencl.h` |
-| 33 | `gui/gtk.h` |
-| 29 | `dtgtk/button.h` |
-| 22 | `common/colorspaces_inline_conversions.h` |
+| 11 | `control/settings.h` |
+| 11 | `develop/imageop.h` |
+| 6 | `system/dtpthread.h` |
+| 4 | `common/opencl.h` |
+| 4 | `common/colorspaces_inline_conversions.h` |
+| 4 | `common/module_versioning.h` |
 
 ### A candidate is a question, not a verdict
 
@@ -69,25 +72,28 @@ is why `--verify` exists: it comments the include out, rebuilds that one object 
 and keeps the removal only if it still compiles.
 
 **Measured precision on a verified sample: 26 of 30 candidates (~87%) genuinely removable.**
-The four rejects were transitive dependencies — e.g. `bauhaus.c` → `gui/color_picker_proxy.h`
-and `database.c` → `common/file_location.h`. Budget for roughly one in eight being wrong, and
-never remove in bulk without the verify pass.
+The four rejects were transitive dependencies — `common/database.c` → `common/file_location.h`
+is one that still stands. Budget for roughly one in eight being wrong, and never remove in
+bulk without the verify pass.
 
 ### Three traps this tool is already defended against, and one it is not
 
 1. **Side-effect headers.** `common/poison.h`, `win/win.h`, `config.h`,
    `external/ThreadSafetyAnalysis.h` and the five X-macro `*_api.h` headers declare nothing
-   and are included for what they *do*. They are excluded by name; do not "clean" them.
+   and are included for what they *do*. They are excluded by name in `SIDE_EFFECT_HEADERS`
+   (as is `darktable.h`, whose removal is its own migration); do not "clean" them.
 2. **X-macro headers.** `common/module_api.h`, `views/view_api.h`, `libs/lib_api.h` and the
    two `imageio/*_api.h` are re-included several times per TU and expanded *inside struct
    bodies*. They must have no guard and no includes of their own. This was learned the
    expensive way — see `CLAUDE.md`.
 3. **Transitive reach**, above.
-4. **NOT defended: platform-conditional use.** An include used only under `#ifdef _WIN32`
-   or `#ifdef __APPLE__` looks unused on a Linux build and compiles fine without it — then
+4. **NOT defended: platform-conditional use.** An include used only under `#ifdef _WIN32` or
+   `#ifdef __APPLE__` looks unused on a Linux build and compiles fine without it — then
    breaks that platform's CI. The tool flags files containing any conditional as
    `platform_guarded`, which is coarse. **Any removal in a file with platform conditionals
-   must be checked on all three CI targets**, not on a local Linux build.
+   must be checked on all three CI targets**, not on a local Linux build. The converse
+   mistake — adding an include *inside* such a conditional — is gated by
+   `tools/check_conditional_includes.sh` (§15).
 
    Every cross-platform breakage in this series was this shape, and none was visible on
    Linux:
@@ -99,19 +105,19 @@ never remove in bulk without the verify pass.
    | MinGW: `near` / `grp2` as identifiers | same lost shim; the `#undef` came from `darktable.h` |
    | MinGW: unrelated parse errors | `<immintrin.h>` accidentally placed inside an `extern "C"` block |
 
-   The structural fix applied: the Windows legacy-macro shim moved from `darktable.h`
-   to `common/macros.h`, so it sits at the bottom of the stack where every TU reaches it,
+   The structural fix applied: the Windows legacy-macro shim lives in `system/macros.h`
+   (which `#include`s `win/win.h`), at the bottom of the stack where every TU reaches it,
    instead of riding on the orchestrator that low-level code is supposed to stop including.
 
-### Suggested staging for the follow-up PR
+### Staging, for whatever is left
 
 Smallest blast radius first, so a mistake is cheap:
 
-1. `iop/` sources (289 candidates, leaf modules, nothing includes them).
-2. `libs/`, `views/`, `gui/`, `dtgtk/` sources (188).
-3. `common/`, `develop/`, `control/`, `imageio/` sources (278) — these are included *by*
-   things, so a removal that changes what they re-export can break consumers.
-4. **Headers last (86).** Removing an include from a header changes what every consumer
+1. Leaf sources — `iop/`, `libs/`, `views/`, `gui/`, `apps/`: nothing includes them.
+2. `common/`, `develop/`, `control/`, `imageio/`, `colorprofiles/`, `pixel/` sources — these
+   are included *by* things, so a removal that changes what they re-export can break
+   consumers.
+3. **Headers last (22).** Removing an include from a header changes what every consumer
    inherits; expect a second wave of "add the header you actually needed" fixes, exactly like
    the umbrella removal in this series.
 
@@ -121,108 +127,121 @@ Smallest blast radius first, so a mistake is cheap:
 
 Two different questions, and the answers disagree — which is the point.
 
-**By fan-in** (how many TUs rebuild when it changes) the top is now entirely the small
-extracted leaf headers, which is the healthy shape:
+**By fan-in** (how many files pull it in transitively, and so rebuild when it changes) the
+top is entirely small leaf headers from the bottom layers, which is the healthy shape:
 
-| TUs rebuilt | drags in | own lines | header |
+| files rebuilt | drags in | own lines | header |
 |---:|---:|---:|---|
-| 373 | 0 | 87 | `common/macros.h` |
-| 369 | 1 | 180 | `common/mem_alloc.h` |
-| 350 | 0 | 629 | `common/dtpthread.h` |
-| 348 | 0 | 133 | `common/openmp.h` |
-| 347 | 3 | 233 | `common/simd.h` |
-| 337 | 0 | 98 | `common/logging.h` |
+| 502 | 0 | 60 | `win/win.h` |
+| 500 | 1 | 97 | `system/macros.h` |
+| 485 | 2 | 180 | `system/mem_alloc.h` |
+| 447 | 0 | 133 | `system/openmp.h` |
+| 432 | 4 | 233 | `system/simd.h` |
+| 422 | 0 | 630 | `system/dtpthread.h` |
+| 407 | 5 | 141 | `pixel/format.h` |
+| 396 | 0 | 77 | `common/paths.h` |
 
-A header that 370 TUs depend on is not a problem if it is 87 lines and drags in nothing.
+A header that 500 files depend on is not a problem if it is 97 lines and drags in one thing.
 Touching it costs a full rebuild, but reading it costs nothing and it couples no subsystems.
 
 **Weighted by the header's own size** (fan-in × lines) the real targets appear:
 
 | cost | header |
 |---:|---|
-| 465,310 | `common/colorspaces_inline_conversions.h` |
-| 261,248 | `gui/gtk.h` |
-| 232,170 | `common/image.h` |
-| 220,150 | `common/dtpthread.h` |
-| 204,930 | `common/opencl.h` |
-| 202,725 | `develop/pixelpipe_cache.h` |
-| 171,841 | `develop/imageop.h` |
-| 168,530 | `develop/develop.h` |
-| 165,830 | `develop/masks.h` |
+| 307,238 | `colorprofiles/colorspaces.h` |
+| 281,781 | `common/image.h` |
+| 265,860 | `system/dtpthread.h` |
+| 227,048 | `common/opencl.h` |
+| 213,855 | `develop/pixelpipe_cache.h` |
+| 178,619 | `common/colorspaces_inline_conversions.h` |
+| 176,400 | `develop/imageop.h` |
+| 170,240 | `develop/develop.h` |
+| 167,580 | `colorprofiles/profile_types.h` |
+| 160,380 | `math/math.h` |
 
-`colorspaces_inline_conversions.h` is the standout: a large body of `static inline` colour
-maths preprocessed into a third of the codebase, and (see §2) included 22 times by files that
-use none of it. It is the best single candidate for splitting by colour space, so a module
-converting Lab↔XYZ does not also parse every RGB primary transform.
+`colorprofiles/colorspaces.h` tops the list because it is 1031 lines and 298 files reach it —
+and including it drags in `<lcms2.h>` and `<pthread.h>`, which is the real cost. A file that
+only names a `dt_colorspaces_color_profile_type_t` wants `colorprofiles/profile_types.h`
+instead: enums only, no lcms2, no lock.
 
-`dtgtk/button.h` deserves a look too: 29 files include it without using it, which usually
-means it was once the way to reach something else.
+`common/colorspaces_inline_conversions.h` is the largest single header in the tree (1501
+lines of `static inline` colour maths) and is still the best candidate for splitting by
+colour space, so a module converting Lab↔XYZ does not also parse every RGB primary
+transform.
 
 ---
 
 ## 4. Layering inversions and modularity
 
-`tools/include_graph.py` checks each edge against a declared layer order:
-`external`/`win` → `common` → `control` → `gui`/`dtgtk`/`bauhaus` → `develop` →
-`iop`/`imageio` → `libs`/`views`/`chart` → `cli`.
+`tools/include_graph.py` checks each edge against a declared layer order (the authoritative
+list is `LAYERS` in that file): `external`/`win`/`system` (0) → `common`/`math`/
+`colorprofiles` (1) → `pixel` (2) → `control` (3) → `gui`/`widgets` (4) → `develop` (5) →
+`iop`/`imageio` (6) → `libs`/`views`/`chart` (7) → `app` (9, files directly in `src/`) →
+`apps` (10).
 
-**Current: 372 inversions.** This number went *up* during the umbrella removal (from 331) and
-that is not a regression — the inversions always existed, `darktable.h` was hiding them behind
-one edge. They are now individually attributable.
+**Current: 206 inversions.** The number went *up* during the umbrella removal and that was
+not a regression — the inversions always existed, `darktable.h` was hiding them behind one
+edge. They are individually attributable now, which is what made them fixable.
 
 | inversion | count | what it usually is |
 |---|---:|---|
-| `common/ → develop/` | 124 | `common/` code reaching into pipeline/iop types |
-| `common/ → control/` | 104 | `common/` calling `dt_control_*` / `dt_conf_*` |
-| `common/ → gui/` | 32 | `common/` calling `dt_gui_*`, freeze guards, GTK helpers |
-| `gui/ → develop/` | 28 | GUI reaching into `develop.h` / `imageop.h` |
-| `iop/ → libs/` | 7 | modules reaching into `libs/colorpicker.h` |
-| `develop/ → libs/` | 4 | pipeline reaching into `libs/lib.h`, `libs/colorpicker.h` |
-| `common/ → iop/`, `common/ → chart/`, `develop/ → iop/` | 2 each | |
+| `gui/ → develop/` | 38 | GUI reaching into `develop.h` / `imageop.h` / `dev_history.h` |
+| `common/ → develop/` | 38 | `common/` code reaching into pipeline/iop types |
+| `common/ → control/` | 28 | `common/` calling `dt_control_*` / raising signals |
+| `gui/ → views/` | 12 | GUI reaching `views/view.h` |
+| `common/ → pixel/` | 10 | 7 of them `common/opencl.c` calling each filter's `*_init_cl_global()` |
+| `common/ → imageio/` | 8 | `image.c` / `image_cache.c` / `collection.c` → `imageio_core.h` |
+| `control/ → gui/`, `gui/ → libs/` | 7 each | |
+| `common/ → views/` | 6 | `act_on.c`, `image.c`, `collection.c` → `views/view.h` |
 
-`common/` is the base layer and accounts for **260 of the 372**. Three distinguishable causes,
-each with a different fix, and they must not be conflated:
+`common/` is the base layer and accounts for **103 of the 206**; `gui/` for 59. Two
+distinguishable causes inside `common/`, each with a different fix, and they must not be
+conflated:
 
-1. **Configuration reads.** `common/` calling `dt_conf_get_*`. Arguably `control/conf` is
-   mis-layered rather than the callers: configuration is a base-layer concern that happens to
-   live in `control/`. It is the single largest target inside `common/ → control/` —
-   measured breakdown of that edge:
+1. **Genuine upward calls.** `common/act_on.c` reaching `views/view.h` for
+   `dt_view_active_images_*`, `common/collection.c` reading `culling_mode` off the GUI
+   struct, and the whole of the `common/ → control/` edge. These are real modularity breaks:
+   base-layer code driving the GUI or the control loop. Fix by inverting the dependency
+   (callback/signal), not by moving the header — `dt_film_confirm_rmdir_handler_t`,
+   `dt_folder_survey_confirm_import_handler_t` and `dt_database_prompt_handler_t` are the
+   worked examples.
+2. **Type-only dependencies.** `common/histogram.h` → `develop/imageop.h` +
+   `develop/pixelpipe.h`, `pixel/nlmeans_core.h` → `iop/iop_api.h` + `develop/develop.h`.
+   Often satisfiable with a tag declaration — the same fix that cut
+   `iop_profile.h → develop/imageop.h` and removed a cycle as a side effect. Cheapest
+   category; do it first.
 
-   | target | count |
-   |---|---:|
-   | `control/conf.h` | 44 |
-   | `control/control.h` | 36 |
-   | `control/signal.h` | 9 |
-   | `control/jobs.h` + `control/jobs/*.h` | 11 |
-   | `control/crawler.h` | 1 |
+A third cause is settled and should not be re-opened: **configuration reads are not a
+layering problem.** `conf.{c,h}` lives in `common/`, which is where a base-layer concern
+belongs, and it used to be the largest single target of the `common/ → control/` edge. What
+is left on that edge is genuinely the control loop:
 
-   So moving `conf` to `common/` erases **44** inversions, not the whole edge — worth doing,
-   and worth deciding before touching any caller, but it does not settle `common/ → control/`
-   on its own. The `control.h` half (36) is category (2) below: base-layer code driving the
-   control loop.
-2. **Genuine upward calls.** `common/imageio_module.c` calling `dt_gui_freeze_*`,
-   `common/act_on.c` reaching `views/view.h`. These are real modularity breaks: base-layer
-   code driving the GUI. Fix by inverting the dependency (callback/signal), not by moving the
-   header.
-3. **Type-only dependencies.** `common/histogram.h` → `develop/imageop.h`,
-   `common/nlmeans_core.h` → `iop/iop_api.h`. Often satisfiable with a tag declaration —
-   the same fix that cut `common/iop_profile.h → develop/imageop.h` in this series and
-   removed a cycle as a side effect. Cheapest category; do it first.
+| target | count |
+|---|---:|
+| `control/control.h` | 16 |
+| `control/settings.h` | 4 |
+| `control/signal.h` | 3 |
+| `control/jobs.h` | 3 |
+| `control/jobs/*.h` | 2 |
+
+Confirmed at the linker level too (§6): the symbols `common/` takes from `control/` are
+`dt_control_*` / `dt_ctl_*`, with no `dt_conf_*` left among them.
 
 ### Recommended order
 
-`(3)` type-only tag declarations → decide `(1)` conf placement → `(2)` genuine inversions
-case by case. `(2)` is design work, not mechanical, and should not be batched with the rest.
+`(2)` type-only tag declarations → `(1)` genuine inversions case by case. `(1)` is design
+work, not mechanical, and should not be batched with the rest.
 
 ---
 
 ## 5. What to watch so this does not come back
 
-Add to CI once the follow-up work lands:
+`tools/check_layering.sh` runs in CI (see §15) and already enforces the cycle count as an
+absolute zero. The guard check is not wired up and is worth running by hand after any header
+churn:
 
 ```sh
 python3 tools/pragma_once_to_guards.py --verify        # no #pragma once
-python3 tools/include_graph.py --summary | grep -q '^cycles\s0$'   # still a DAG
 ```
 
 The cycle check is the important one: every cycle in this codebase was created by a trailing
@@ -257,86 +276,109 @@ to system ones; worth doing, but it is a large mechanical change of its own.
 object file, defined vs undefined symbols, resolved to the module that defines them. An
 include edge can be an accident; a symbol edge is a call that exists at runtime.
 
-Measured on the current build (721 objects, 7488 exported symbols, 1023 cross-module edges):
+Measured on the current build:
 
 | inversion | symbols |
 |---|---:|
-| `common → develop` | 95 |
-| `common → control` | 53 |
-| `gui → develop` | 45 |
-| `common → gui` | 36 |
-| `dtgtk → develop` | 12 |
-| `common → bauhaus` | 12 |
+| `gui → develop` | 74 |
+| `common → develop` | 70 |
+| `common → control` | 25 |
+| `gui → views` | 16 |
+| `common → pixel` | 15 |
+| `common → imageio` | 14 |
+| `common → gui` | 4 |
 
-`--edge common control` lists the 53, and they are overwhelmingly **`dt_conf_*`**
-(`dt_conf_get_bool`, `dt_conf_get_int`, `dt_conf_key_exists`, `dt_conf_init`, ...). That
-settles the question §4 left open: the `common/ → control/` edge is dominated by
-configuration reads, so **moving `conf` into `common/` erases most of it** — confirmed at
-the linker level, not inferred from include counts.
+`--edge common control` lists the 25, and **not one of them is `dt_conf_*`** any more: they
+are `dt_control_*`, `dt_ctl_*`, `dt_toast_log` — the control loop itself. That is the
+question §4 left open, settled by the move of `conf.{c,h}` into `common/` and confirmed at
+the linker level rather than inferred from include counts. What remains on this edge is
+design work, not a relocation.
 
-`common → develop` (95) is the larger and harder one: base-layer code reaching into
-pipeline and iop internals. That is genuine design work, not a relocation.
+`common → develop` (70) is the larger and harder one: base-layer code reaching into
+pipeline and iop internals. Also design work.
+
+**Two cautions before quoting a number from this tool.** It reads `.o` files, so a build
+directory carrying objects from a previous layout reports edges that no longer exist —
+delete stale objects, or configure a fresh build tree, before believing an edge. And its
+`module_of()` derives the subsystem from the path *after* `<target>.dir/`, which is the
+source path only for targets built from `src/` (`lib_ansel`); a module built as its own
+target (`src/widgets`, the `libs/`, `views/` and `imageio/` plugins) loses its directory and
+is attributed to a bare file name instead.
 
 ---
 
-## 7. Next: hoist the GUI out of the backend
+## 7. Hoist the GUI out of the backend
 
-Measured with `tools/symbol_coupling.py` on the current build. **94 distinct GUI symbols
-are reached from `common/` and `develop/`, across 23 backend files.**
+Measured with `tools/symbol_coupling.py` on the current build, counting references from
+`common/` and `develop/` objects to symbols defined in `gui/` or `widgets/`. (`control/`
+reaches the GUI too — 20 references, 9 of them redraw and cursor requests from `control.c` —
+but `control/` sits *below* `gui/`, so those are plain layering inversions and belong to §4.)
 
-| edge | symbols |
+`common/` is essentially done — six distinct symbols across five files, all of them narrow:
+
+| file | reaches |
+|---|---|
+| `common/sentry.c`, `common/telemetry.c`, `common/utility.c` | `gui/screen_metrics.h` (`dt_screen_dpi`, `dt_screen_ppd`, `dt_screen_metrics_probed`) |
+| `common/database.c` | `dt_gui_show_standalone_yes_no_dialog` for the schema-migration prompts |
+| `common/history.c` | `delete_underscore()` — a string helper that happens to live in `widgets/label.h` |
+
+§14 lists the same thing at *include* level, where it is seven sites rather than five. The
+two extra ones are worth understanding, because they show what this measurement cannot see:
+`collection.c` and `variables.c` include a GUI header to read one field off a GUI struct,
+through `dt_gui_get_global()` / `dt_bauhaus_get_global()` — accessors **declared** in
+`gui/application.h` and `widgets/bauhaus.h` but **defined** in `darktable.c`, so the linker
+attributes them to the orchestrator and no `common → gui` edge appears. That is the §16.1
+decl/def mismatch producing a blind spot in §6's tool. Use both views.
+
+What is left is `develop/`:
+
+| file | references |
 |---|---:|
-| `develop → gui` | 45 |
-| `develop → dtgtk` | 41 |
-| `common → gui` | 36 |
-| `common → bauhaus` | 12 |
-| `common → dtgtk` | 2 |
-
-Where the calls actually are:
-
-| file | GUI calls |
-|---|---:|
-| `develop/blend_gui.c` | 172 |
-| `develop/imageop.c` | 66 |
-| `common/lut_viewer.c` | 47 |
-| `darktable.c` | 25 |
-| `develop/imageop_gui.c` | 17 |
-| `develop/masks/masks_gui.c` | 13 |
-| `common/history_merge_gui.c` | 12 |
-| `common/import.c` | 12 |
+| `develop/blend_gui.c` | 68 |
+| `develop/imageop.c` | 51 |
+| `develop/masks/masks_gui.c` | 28 |
+| `develop/imageop_gui.c` | 12 |
+| `develop/masks/{brush,polygon,ellipse,gradient,circle}.c` | 30 |
 
 This splits into three very different jobs, and conflating them is what makes it look
 daunting:
 
-1. **Already split by filename, wrong directory.** `blend_gui.c`, `imageop_gui.c`,
-   `masks_gui.c`, `history_merge_gui.c` are GUI files sitting in backend directories —
-   214 of the calls. No splitting needed, only relocation. Simulated: moving the two
-   `common/` ones (`history_merge_gui`, `lut_viewer`) is **−5** violations.
-   `common/lut_viewer.c` is a GUI widget living in `common/` outright.
+1. **Already split by filename, wrong directory.** `blend_gui.c`, `imageop_gui.c` and
+   `masks/masks_gui.c` are GUI files sitting in backend directories — 108 of the references.
+   No splitting needed, only relocation. The pattern to follow is the one the `common/`
+   files went through: `lut_viewer.c` and `import.c` are `gui/`, `history_merge_gui.c` is
+   `gui/develop/`, and the `*_gui.c` counterparts of `common/` backends are `gui/common/`.
 
-   Caveat measured, not assumed: these files are not one-directional. `blend_gui.c` also
-   makes 308 backend calls in 5103 lines, so relocating it moves an edge rather than
-   removing it — it becomes `gui → develop`, which is only an improvement if the layer
-   model says so. Simulate each before moving.
+   Caveat measured, not assumed: these files are not one-directional. `blend_gui.c` is 5108
+   lines and makes several hundred backend calls, so relocating it moves an edge rather than
+   removing it — it becomes `gui → develop`, which is only an improvement if the layer model
+   says so. Simulate each with `include_graph.py --what-if` before moving.
 
-2. **Genuinely mixed, needs splitting.** `develop/imageop.c` makes 66 GUI calls inside
-   the module that also owns pipeline logic. This is the real work: separate the module
-   API from its widget plumbing.
+2. **Genuinely mixed, needs splitting.** `develop/imageop.c` makes 51 GUI references inside
+   the module that also owns pipeline logic, and the mask shapes (`brush.c`, `polygon.c`,
+   `ellipse.c`, `gradient.c`, `circle.c`) draw their own on-canvas handles. This is the real
+   work: separate the module API from its widget plumbing.
 
-3. **Legitimate.** `darktable.c` is the orchestrator; initialising the GUI is its
-   job. Not a defect.
+3. **Legitimate.** `darktable.c` is the orchestrator; initialising the GUI is its job, and
+   it sits at layer `app`, above everything. Not a defect.
+
+Note that `widgets/` sits at layer 4 and `develop/` at 5, so these references are not
+layering *violations* — the layer model permits them. The reason to move them anyway is
+§16: what a Qt port has to rewrite must be identifiable, and a GUI file filed under
+`develop/` is not.
 
 The pattern to apply is the one that worked for the two solvers in `math/`: the backend
 should not *decide* to show UI. `choleski.h` called `dt_control_log()` on OOM when it
-already returned an error code the caller checked — the reporting belonged to the caller.
-Most of the 94 are likely to be that shape: a toast, a redraw request, or a widget
-update issued from code whose job is to compute and return.
+already returned an error code the caller checked — the reporting belonged to the caller,
+and the call is gone. Most of what is left is likely to be that shape: a toast, a redraw
+request, or a widget update issued from code whose job is to compute and return.
 
 ---
 
 ## 8. The orchestrator lives at `src/`
 
-`darktable.c` and `darktable.h` moved out of `src/common/` to `src/`, beside `main.c`.
+`darktable.c` and `darktable.h` sit directly in `src/`, not in `src/common/`. The entry
+points live in `apps/ansel*/main.c`.
 
 They are the application root, not a common library: `darktable.h` declares the
 `darktable_t` struct that owns every subsystem, and `darktable.c` initialises them. Being
@@ -363,8 +405,8 @@ changes behaviour; all of it changes what the directory tree asserts.
 | move | why |
 |---|---|
 | `dtgtk/` -> `gui/dtgtk/` | a widget toolkit is GUI; top-level only by history |
-| `bauhaus/` -> `gui/bauhaus.{c,h}` | two files do not earn a directory |
-| `common/{lut_viewer,import,history_merge_gui}` -> `gui/` | GUI by content: 69, 243 and 281 GTK tokens |
+| `bauhaus/` -> `widgets/bauhaus.{c,h}` | two files do not earn a directory; it is a stateless widget, so `widgets/` (§16.4) |
+| `common/{lut_viewer,import}` -> `gui/`, `common/history_merge_gui` -> `gui/develop/` | GUI by content: 69, 243 and 281 GTK tokens |
 | `{cli,cltest,cmstest,generate-cache,chart}` -> `apps/ansel-*` | separate programs, separate build targets |
 | `main.c` -> `apps/ansel/main.c` | the entry point joins the other entry points |
 | hardware/platform/memory code -> `system/` | see below |
@@ -381,10 +423,11 @@ changes behaviour; all of it changes what the directory tree asserts.
 pulled into the `channelmixerrgb` IOP. Moving the directory into `apps/` wholesale would
 have made a live IOP (layer 6) depend on an app (layer 10). What that file actually held
 was 103 lines of projective geometry, so it became `math/homography.{c,h}` and the IOP now
-depends on `math/` instead of on a dead tool. The other 11 files are still built by nothing.
+depends on `math/` instead of on a dead tool. The remaining 12 files in `apps/ansel-chart/`
+are still built by nothing: that directory has no `CMakeLists.txt`.
 
 **`ppc64le/altivec.h` has zero include sites.** It is an include-PATH shim, activated by
-`include_directories(.../ppc64le)` in `src/CMakeLists.txt` on that arch, and works by
+`include_directories(.../system/ppc64le)` in `src/CMakeLists.txt` on that arch, and works by
 `#include_next`. A move that only rewrote `#include` lines would have silently disabled it,
 on an architecture with no CI job and no local cross toolchain.
 
@@ -396,14 +439,14 @@ surfaces as an undefined reference at link, or not at all.
 
 ### Known and deliberate
 
-* `system/` sits at layer 0 and has four upward includes into `common/`
-  (`dtpthread.h`, `macros.h`, `logging.h`). Pre-existing coupling that was invisible while
-  both ends lived in `common/`; the +1 in the count is visibility, not regression.
-* `common/history_actions.c` (604 lines, 17 GTK tokens) stayed put. It is genuinely mixed,
-  and wants splitting rather than relocating.
+* `system/` sits at layer 0 and has **zero** upward includes — `dtpthread.h` and `macros.h`
+  are themselves in `system/` now, and nothing there includes `common/`. Anything added here
+  must keep it that way: a `#include "common/..."` from `system/` is an inversion the ratchet
+  reports. `system/memory_arena.c` shows the technique for the awkward case — it does its own
+  diagnostics rather than reach up for `common/logging.h`.
 * `system/simd.h` overlaps conceptually with `math/matrices.h` and `math/math.h` --
-  `dt_mat3x4_mul_vec4` is a matrix op living among load/store primitives, while the matrix
-  headers hand-roll intrinsics instead of using them. Unification is outstanding.
+  `dt_mat3x4_mul_vec4` is a matrix op living among load/store primitives, while `math/math.h`
+  hand-rolls `__m128` intrinsics instead of using them. Unification is outstanding.
 
 ---
 
@@ -414,57 +457,60 @@ by how much of `common/` it removes.
 
 | # | proposed home | files | lines | status |
 |---|---|---|---:|---|
-| 1 | `src/metadata/` | tags, ratings, colorlabels, grouping, gpx, exif.cc, metadata, dng_opcode | 10091 | all present in `common/` |
-| 2 | `src/database/` | database, sqliteicu (+ the `DT_DEBUG_SQLITE3_*` macros in `common/debug.h`) | 5536 | all present |
-| 3 | `src/caches/` | cache (the core), image_cache, mipmap_cache | 3354 | core + 2 of 3; `develop/pixelpipe_cache.{c,h}` is the third and lives elsewhere |
-| 4 | `src/math/` | colormatrices.c, curve_tools (1D interpolation) | 1264 | present |
-| 5 | `src/system/` | resource_limits, dtpthread | 925 | present |
-| 6 | `src/views/` | cups_print — used only by the print view | 813 | 4 consumers, all print-related |
-| 7 | `src/pixel/` | `common/lut3d.{c,h}` (distinct from `iop/lut3d.c`) | 368 | present |
+| 1 | `src/metadata/` | tags, ratings, colorlabels, grouping, gpx, exif.cc, metadata, dng_opcode | 10097 | all still in `common/` |
+| 2 | `src/database/` | database, sqliteicu, legacy_presets (+ the `DT_DEBUG_SQLITE3_*` macros in `common/debug.h`) | 6634 | all still in `common/` |
+| 3 | `src/caches/` | cache (the core), image_cache, mipmap_cache | 3322 | core + 2 of 3 in `common/`; `develop/pixelpipe_cache.{c,h}` is the third and stays where it is |
+| 4 | `src/math/` | curve_tools (1D interpolation) | 902 | still in `common/` |
+| 5 | `src/views/` | cups_print — used by the print view | 813 | 5 include sites: `views/print.c`, `views/view.h`, `libs/print_settings.c`, `control/jobs/control_jobs.h`, `common/printing.h` |
+| — | `src/system/` | resource_limits, dtpthread | 926 | **done** for `resource_limits.{c,h}` and `dtpthread.h`; `common/dtpthread.c` has not followed |
+| — | `src/pixel/` | `lut3d.{c,h}` (distinct from `iop/lut3d.c`) | 368 | **done** — `pixel/lut3d.{c,h}` |
+| — | `src/colorprofiles/` | colorspaces, colormatrices, printprof, the transform half of iop_profile | — | **done** — see `src/colorprofiles/README.md` |
 
-Two that are analysis, not moves:
+`colormatrices.c` is not a maths library despite the name: it is 362 lines of camera
+colour-matrix presets, `#include`d **as data** by `iop/colorin.c` and
+`colorprofiles/colorspaces.c`. It went to `colorprofiles/` with the rest of them, not to
+`math/`.
 
-* **`iop_order.{c,h}` and `iop_profile.{c,h}`** belong with `develop/`, but overlap
-  `colorspaces.{c,h}`. The overlap has to be resolved before either can move cleanly.
-* **`common/colormatrices.c`** is a third maths library, colliding with `system/simd.h` and
-  `math/matrices.h`. Same unresolved overlap noted in section 9.
+`iop_profile` is deliberately **two** files with the same basename in two directories, which
+is a trap if you go looking for one of them: `colorprofiles/iop_profile.{c,h}` is the
+transform engine (applying a profile to pixels, SIMD and OpenCL, layer 1);
+`develop/iop_profile.{c,h}` resolves *which* profile a module or pipe should use and takes
+`develop/` types throughout (layer 5). Both are built. `iop_order.{c,h}` stays in `develop/`.
 
 ### Do NOT judge these by the layering counter
 
-Simulated with `--what-if` against a 224 baseline:
+Simulated with `--what-if` (which reports its own baseline — read the delta, not the
+absolute, since it classifies `src/`-level files differently from `--summary`):
 
 ```
-curve_tools + colormatrices -> math/      224 -> 224   (+0)
-resource_limits + dtpthread -> system/    224 -> 225   (+1)
-cups_print -> views/                      224 -> 225   (+1)
-common/lut3d -> pixel/                    224 -> 224   (+0)
+curve_tools     -> math/     (+0)
+cups_print      -> views/    (+1)
+dtpthread.c     -> system/   (+2)
 ```
 
-None of them helps, and two make it marginally worse -- `system/` sits BELOW `common/`, so
-moving a file down there turns its existing `common/` includes into upward edges, exactly
-as happened when `system/` was created.
+None of them helps, and two make it worse -- `system/` sits BELOW `common/`, so moving a
+file down there turns its existing `common/` includes into upward edges.
 
 That is not an argument against the moves. It means the layering metric has largely done its
-job (315 -> 224 over this series) and the remaining work is organisational legibility:
+job (315 -> 206 over this series) and the remaining work is organisational legibility:
 `common/` should stop being the drawer everything shared gets put in. Judge these by what
-leaves `common/` -- roughly 22000 lines across the seven groups -- not by the counter.
+leaves `common/` -- roughly 21800 lines across the five groups left -- not by the counter.
 
 ---
 
 ## 11. Done: the redraw throttle moved to the history commit
 
-`widgets/gui_throttle.c` currently exists to serve one caller. `bauhaus.c` defers its
-`value-changed` emission so that scrolling a slider or combobox does not trigger a pipeline
-recompute per step. Every other widget that could want the same behaviour would have to
-reimplement it.
+The throttle used to sit in the widget: `bauhaus.c` deferred its own `value-changed` emission
+so that scrolling a slider or combobox did not trigger a pipeline recompute per step, and
+every other widget wanting the same behaviour had to reimplement it.
 
-It belongs at the **history-commit bottleneck** instead, where it serves every widget without
-any of them knowing it exists.
+It belongs at the **history-commit bottleneck** instead (`develop/gui_throttle.{c,h}`), where
+it serves every widget without any of them knowing it exists.
 
 ### Confirmed enabler
 
 `dt_dev_add_history_item_ext()` **already reuses the last history entry for the same module**
-(see `add_new_pipe_node` at `dev_history.c:863` and the "history entry reused" log). Consecutive
+(see `add_new_pipe_node` in `dev_history.c` and the "history entry reused" log). Consecutive
 edits of one module therefore coalesce into a single undo step *today*. Widgets can commit on
 every step without spamming the undo stack — only the pipeline recompute needs throttling.
 
@@ -564,8 +610,8 @@ Two of the three remaining files are done (PR after #1106):
 
 * **`history_actions.c`** — a *relocation*. Three of its functions asked the user something
   (`dt_history_copy_parts`, `dt_history_paste_parts_prepare`, `delete_history_callback`) and
-  were the only reason it included `gui/hist_dialog.h`, `gui/gtk.h` and `gui/actions/menu.h`.
-  Both callers already live above this layer, so no handler slot was needed.
+  were the only reason it included any `gui/` header at all. Both callers already live above
+  this layer, so no handler slot was needed; the GUI half is `gui/common/history_actions_gui.c`.
 * **`folder_survey.c`** — one relocation and one *inversion*. The resume-at-startup prompt is
   GUI orchestration end to end and moved whole; the pending-import prompt is interleaved with
   private session state under the survey lock, so it goes through a handler registered from
@@ -586,9 +632,9 @@ question and takes back a value: `dt_database_prompt_t` in, `dt_database_respons
 Registration cannot go where the film/collection/folder-survey handlers go:
 
 ```
-darktable.c:1244   gtk_init()              <- GTK is up
-darktable.c:1259   dt_database_init()      <- the prompts happen here
-darktable.c:1402   dt_gui_gtk_init()       <- too late to register from
+darktable.c:1239   gtk_init()              <- GTK is up
+darktable.c:1260   dt_database_init()      <- the prompts happen here
+darktable.c:1403   dt_gui_gtk_init()       <- too late to register from
 ```
 
 It goes in `darktable.c` between the first two, guarded by `init_gui` — legitimate, since
@@ -600,17 +646,19 @@ closes a latent headless bug — these dialogs had **no `has_gui` guard at all**
 without a GUI reached `gtk_dialog_new_with_buttons()` on a GTK that `ansel-cli` never
 initialises. Registration is the guard now.
 
-`common/database.c` is down to zero GTK tokens. Its remaining `gui/legacy_presets.h` include
-is a different problem (preset migration, not a dialog) and is left for its own pass.
+`common/database.c` is down to zero GTK tokens. Its `legacy_presets` include was a different
+problem (preset migration, not a dialog) and got its own pass — see §14.
 
-## 13. Done: `common/history_merge.c` stops calling the GUI
+## 13. Done: `history_merge.c` stops calling the GUI
 
-This file's `#include "gui/common/history_merge_gui.h"` was two problems wearing one include.
+The pair lives at `develop/history_merge.{c,h}` (backend) and
+`gui/develop/history_merge_gui.{c,h}` (GUI). The backend's include of the GUI header was two
+problems wearing one include.
 
 **Misplaced ownership.** `_hm_make_node_id()`, `_hm_id_to_op_name()` and
 `_hm_build_last_history_by_id()` are *defined in* `history_merge.c` but were *declared in*
 the GUI header — so the backend included a GUI header to see its own functions. The
-declarations moved to `common/history_merge.h`; the GUI half includes that.
+declarations moved to `history_merge.h`; the GUI half includes that.
 
 **Four real GUI calls**, now handler slots:
 
@@ -634,8 +682,8 @@ does not silently discard the user's history.
 Two earlier attempts, and the advice written here after them, were wrong in the same way,
 and it is worth recording because the wrong answer was the plausible one.
 
-`_hm_collect_labels_from_history_map()` is defined in `gui/common/history_merge_gui.c` and
-was *called from* `history_merge.c`, so the include could not go. It contains no GTK, which
+`_hm_collect_labels_from_history_map()` is defined in the GUI half and was *called from* the
+backend, so the include could not go. It contains no GTK, which
 made it look like a backend helper stranded on the GUI side, and this section said to move
 it — with `_hm_clean_module_name()`, `_hm_module_row_label()`, `_hm_label_t` and
 `_hm_label_cmp()` behind it — down into `common/`.
@@ -658,15 +706,9 @@ parameters, and left nothing in `history_merge.c` needing anything from the GUI 
 
 The four handler slots then went in as planned — `dt_hm_set_{constraints_choice,
 missing_raster,toposort_cycle,merge_report}_handler()`, registered from
-`dt_gui_gtk_init()`, with the no-handler defaults described above — and
-`#include "gui/common/history_merge_gui.h"` left `common/history_merge.c`. The
-`dt_hm_constraint_choice_t` enum moved to `common/history_merge.h`, since the merge
+`dt_gui_gtk_init()`, with the no-handler defaults described above — and the GUI include left
+the backend. The `dt_hm_constraint_choice_t` enum moved to `history_merge.h`, since the merge
 algorithm is what branches on it.
-
-With #1108, #1109 and this one all landed, **`common/*.c` is down to a single `gui/`
-include**: `database.c`'s `gui/legacy_presets.h`. That one is preset migration rather than a
-dialog, so it is a different kind of problem and gets its own pass. Layering violations are
-at 219.
 
 ## 14. Done: the last `gui/` includes leave `common/`
 
@@ -699,9 +741,10 @@ A dead include **in a header**, so it propagated `gui/gtk.h` into all 16 of its 
 It was, however, where several of them were getting `<glib.h>` and `<stdint.h>` from —
 including `metadata.h` itself, for its own declarations. Those are declared directly now.
 
-This is the argument for the clang-tidy `misc-include-cleaner` gate in §10: nothing about
-this include was visible at the point of use, and it survived every previous audit in this
-series because the audits grepped `.c` files.
+This is the argument for the layering ratchet in §15 rather than for the unused-include gate:
+nothing about this include was visible at the point of use, it survived every previous audit
+in this series because the audits grepped `.c` files, and clang-tidy structurally cannot see
+headers (§15, "The gap, stated plainly").
 
 ### `dt_gui_gtk_t.selection_stacked` was selection state parked on the GUI struct
 
@@ -716,28 +759,43 @@ Note this also corrects the claim in #1109 that `selection.c`'s `gui/gtk.h` incl
 
 ### Where that leaves it
 
-`common/` has **one** `gui/` include: `history_merge.c`, removed by #1110. Layering
-violations 219 → 218, and 244 at the start of this series.
+`common/*.c` now reaches `gui/` and `widgets/` in seven places, and every one is narrow
+enough to name:
+
+| file | includes | for |
+|---|---|---|
+| `sentry.c`, `telemetry.c`, `utility.c` | `gui/screen_metrics.h` | screen DPI / PPD |
+| `collection.c` | `gui/application.h` | `dt_gui_get_global()->culling_mode` |
+| `database.c` | `widgets/dialog.h` | the standalone yes/no dialog for two schema-migration prompts |
+| `history.c` | `widgets/label.h` | `delete_underscore()`, a string helper that happens to live there |
+| `variables.c` | `widgets/bauhaus.h` | `dt_bauhaus_get_global()->colorlabels` |
+
+Two of those — `collection.c` and `variables.c` — are a *state* read, not a GUI call: the
+field lives on a GUI struct because that is where it was parked. Same shape as
+`selection_stacked` above, same fix. See §7 for the symbol-level view and for why those two
+are invisible to it.
+
 ## 15. CI gates: what each one can and cannot see
 
-Two checks, because neither covers the other's cases.
+Three checks, because none of them covers the others' cases.
 
 ### `tools/check_layering.sh` — a ratchet on the include graph
 
 Layering violations may fall, never rise; cycles must stay at zero. Baseline in
 `tools/include_baseline.txt`, updated with `--update` when the number improves.
 
-A ratchet rather than a threshold because the tree carries ~217 inherited violations:
-demanding zero would mean the check gets switched off. "No worse than yesterday" costs
-nothing to comply with and cannot be quietly eroded. Cycles are *not* ratcheted — the
-explicit include guards this repository uses instead of `#pragma once` exist precisely so a
-cycle is a hard error, and a baseline there would hand that back.
+A ratchet rather than a threshold because the tree still carries a couple of hundred
+inherited violations: demanding zero would mean the check gets switched off. "No worse than
+yesterday" costs nothing to comply with and cannot be quietly eroded. Cycles are *not*
+ratcheted — the explicit include guards this repository uses instead of `#pragma once` exist
+precisely so a cycle is a hard error, and a baseline there would hand that back.
 
-Verified by injecting `#include "gui/gtk.h"` into `common/image_extensions.h`: 220 → 221,
-exit 1, restored → exit 0. And again in the other direction, unplanned: rebasing this branch
-onto a master that had gained #1110 and #1111 made the check fail with *fell 220 → 217*,
-which is the ratchet working — an improvement that is not recorded is an improvement the
-next regression gets to spend.
+Verified by injecting an upward include (`#include "develop/imageop.h"`) into
+`common/image_extensions.h`: +1, exit 1, restored → exit 0. And again in the other direction,
+unplanned: rebasing onto a master that had gained two merged layering PRs made the check fail
+with *fell 220 → 217*, which is the ratchet working — an improvement that is not recorded is
+an improvement the next regression gets to spend. That is why the baseline file is committed
+and why `--update` must be run whenever the number drops.
 
 ### `tools/check_unused_includes.sh` — clang-tidy on the diff
 
@@ -754,6 +812,18 @@ umbrella and system headers for the same reason.
 several hundred tree-wide. Gating the diff means every file anyone touches comes out clean,
 with no baseline file to drift.
 
+### `tools/check_conditional_includes.sh` — includes added inside a platform `#ifdef`
+
+The §2 trap 4 case, gated. An `#include` added inside `#ifdef _WIN32` / `__APPLE__` /
+`GDK_WINDOWING_WAYLAND` compiles on whichever machine defines that macro and fails everywhere
+else, hundreds of lines from the include, and neither of the other two checks looks at
+reachability. Pull requests only, and only for includes the diff *adds* where the header is
+not already included unconditionally in the same file.
+
+**It compares `<base-ref>..HEAD`, so uncommitted work is invisible to it.** Running it on a
+dirty tree and reading "OK" as approval is the documented way to get a green local run and a
+red CI matrix.
+
 ### The gap, stated plainly
 
 **The unused-include check cannot see headers, and that is not a configuration mistake.**
@@ -763,9 +833,10 @@ are printed, not which are analysed, and reports the `.c`'s unused includes whil
 nothing about the `.h`. Compiling the header as a synthetic translation unit is worse: that
 unit references nothing, so every one of the header's includes comes out "unused".
 
-This matters because **the case that motivated both checks is exactly the case this one
-cannot see** — `common/metadata.h` including `gui/gtk.h` and using no GTK symbol (§14). The
-layering ratchet is what catches that class, which is why both exist.
+This matters because **the case that motivated these checks is exactly the case this one
+cannot see** — a header including a GUI header it uses no symbol of, and propagating it to
+every consumer (§14). The layering ratchet is what catches that class, which is why they all
+exist.
 
 ## 16. Backlog, and the end goal it serves
 
@@ -779,23 +850,25 @@ the bar for "done":
    so what has to be rewritten for Qt is a thin, identifiable layer rather than smeared
    through the application.
 
-There is a second, nearer benefit: **the blast radius of the migration cannot even be
-estimated today.** `gui/gtk.h` is a god-header and GTK calls run through `libs/`, `views/`
-and `iop/`. Layering first is what makes the question answerable.
+There is a second, nearer benefit: **estimating the blast radius of the migration.** GTK
+calls still run through `libs/`, `views/`, `iop/` and parts of `develop/`; the split of the
+old `gui/gtk.{c,h}` into `widgets/` and `gui/` (§16.4) is what makes the toolkit half
+countable. Layering is what makes the question answerable at all.
 
 ### 16.1 Definitions that live far from their declaration
 
 Find symbols declared in `example.h` but defined somewhere other than `example.c`. These are
 maintenance traps: the definition is not where anyone looks for it, and nothing warns.
 
-`common/history_merge.c` already produced two of these (§13) — `_hm_make_node_id()` and
-friends declared in the *GUI* header while defined in the backend, and
+`history_merge.c` already produced two of these (§13) — `_hm_make_node_id()` and friends
+declared in the *GUI* header while defined in the backend, and
 `_hm_collect_labels_from_history_map()` the other way round. Both were invisible until an
 include had to be removed.
 
-Mechanical to detect: for every declaration in `X.h`, locate the definition and flag anything
-not in `X.c`/`X.cc`. Worth a tool alongside `check_layering.sh`, since the answer is a list,
-not a judgement.
+`tools/decl_def_audit.py` does this: Universal Ctags rather than a regex, cross-module
+mismatches by default and `--all` for the same-directory ones, which are often deliberate.
+It is an audit that produces a list to read, not a CI gate — which is why it depends on
+`ctags` being on `PATH` and nothing breaks if it is not.
 
 ### 16.2 Split `common/` and parts of `develop/` into real modules
 
@@ -812,19 +885,30 @@ the row↔struct conversion, `metadata` owns the meaning of the fields and the s
 
 ### 16.3 More `math/` and `pixel/` candidates
 
-Sweep for code that belongs in the existing low layers rather than where history left it:
-solvers, vector algebra and interpolation to `src/math`; generic image filters to
-`src/pixel`. `math/homography.{c,h}` (extracted from `apps/ansel-chart`) is the pattern.
+Both directories exist and are populated: solvers, vector algebra and curve fitting in
+`src/math` (`choleski.h`, `QR_decomp.h`, `svd.h`, `nelder_mead_simplex.h`,
+`polar_decomposition.h`, `splines.cpp`, `topological_sort.c`, `homography.{c,h}`); resampling
+and generic image filters in `src/pixel` (`interpolation.c`, the guided/bilateral/gaussian
+filters, wavelets, `lut3d`). `math/homography.{c,h}`, extracted from what is now
+`apps/ansel-chart`, is the pattern for the remaining sweep: find code that belongs in a low
+layer rather than where history left it, and check the direction with
+`tools/misplaced_files.py` before moving it.
 
-### 16.4 Break up the `gtk.{c,h}` god-header
+Note the split between the two: `math/` is arithmetic on numbers, `pixel/` is arithmetic on
+images. Interpolation is in `pixel/` for that reason, not in `math/`.
 
-Two halves, and they belong in different directories:
+### 16.4 Done: the `gtk.{c,h}` god-header is split
+
+Two halves, in two directories:
 
 * **stateless GTK wrappers** — helpers that only wrap toolkit calls and carry no application
-  state → `src/widgets`, under the rule in its README;
+  state → `src/widgets`, under the rule in its README: no `darktable.*` globals, no
+  `dt_*_get_global()`, no `dt_conf_*`, and no include from `common/`, `develop/`, `control/`,
+  `views/`, `libs/` or `imageio/` beyond pure macro headers;
 * **implementation** — anything that knows about views, panels, config or `dt_*_get_global()`
-  → stays in `src/gui`.
+  → `src/gui` (`application.{c,h}`, `window_manager.{c,h}`, `screen_metrics.{c,h}`, …).
 
-This is 16.4 rather than 16.1 because it is the largest single lever on the goal above: the
-stateless half is roughly the part a Qt port must rewrite, and the implementation half is
-roughly the part that should survive it. Splitting them is how the estimate gets made.
+`gui/gtk.h` no longer exists; every file names what it uses. That was the largest single lever
+on the goal above: the `widgets/` half is roughly the part a Qt port must rewrite, and the
+`gui/` half is roughly the part that should survive it, so the estimate is now a matter of
+counting one directory rather than auditing the tree.
