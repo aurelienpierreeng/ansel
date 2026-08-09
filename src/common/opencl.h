@@ -618,13 +618,10 @@ gboolean dt_opencl_is_pinned_memory(cl_mem mem);
 extern "C" {
 #endif
 
-typedef struct dt_opencl_t
-{
-  int inited;
-  int enabled;
-  int stopped;
-  int error_count;
-} dt_opencl_t;
+/* Opaque here too, so the type name means the same thing in both configurations: private to
+ * common/opencl.c, and impossible to instantiate anywhere else. In this build there is no
+ * state at all -- every query below is a constant. */
+typedef struct dt_opencl_t dt_opencl_t;
 typedef struct dt_opencl_detected_device_t
 {
   int config_id;
@@ -829,14 +826,6 @@ static inline void dt_opencl_events_profiling(const int devid, const int aggrega
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Process-wide singleton with no per-call context to ride on: this accessor is the intended
- * end state (same category as dt_conf_*), implemented by the orchestrator. Declared OUTSIDE the
- * HAVE_OPENCL split on purpose: dt_opencl_t exists in both configurations and darktable.c
- * defines the accessor unconditionally, so callers that merely pass the handle around keep
- * compiling in no-OpenCL builds exactly as they did when they read the global directly.
- * NOTE: common/opencl.c keeps direct access for now; relocating ownership into the subsystem
- * itself (a file-static set at init) is the follow-up, not an accessor. */
 
 #ifdef __cplusplus
 }
