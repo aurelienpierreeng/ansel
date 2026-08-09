@@ -376,6 +376,7 @@ typedef struct dt_iop_filmicrgb_data_t
   dt_colorspaces_color_mode_t softproof_mode;
   dt_colorspaces_color_profile_type_t softproof_type;
   char softproof_filename[512];
+  dt_iop_color_intent_t softproof_intent;
 } dt_iop_filmicrgb_data_t;
 
 
@@ -2615,13 +2616,24 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
   dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read the ratios
 }
 
-static const dt_iop_order_iccprofile_info_t *_filmic_get_output_profile(const dt_dev_pixelpipe_t *pipe)
+/* Soft-proof target for gamut mapping.
+ *
+ * Reads the snapshot commit_params() took under the GUI thread, NEVER the live
+ * dt_colorspaces_get_global(). Two reasons, both load-bearing:
+ *  - process()/process_cl() run on pipeline threads while the soft-proof toggle is written
+ *    from the GUI thread with no lock at all, so a live read is a plain data race (and a
+ *    torn filename, not merely a stale one);
+ *  - runtime_data_hash() keys the pipeline cache on the snapshot. Rendering from anything
+ *    else lets a cached frame carry a hash that describes a different soft-proof state.
+ * The snapshot already folds in the "FULL pipe only" gate, so there is no pipe->type test
+ * to repeat here. */
+static const dt_iop_order_iccprofile_info_t *_filmic_get_output_profile(const dt_dev_pixelpipe_t *pipe,
+                                                                        const dt_iop_filmicrgb_data_t *const data)
 {
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL && dt_colorspaces_get_global()->mode != DT_PROFILE_NORMAL)
+  if(data->softproof_mode != DT_PROFILE_NORMAL)
   {
     const dt_iop_order_iccprofile_info_t *const softproof_profile = dt_ioppr_add_profile_info_to_list(
-        pipe->dev, dt_colorspaces_get_global()->softproof_type, dt_colorspaces_get_global()->softproof_filename,
-        dt_colorspaces_get_global()->softproof_intent);
+        pipe->dev, data->softproof_type, data->softproof_filename, data->softproof_intent);
     // LUT-only (non matrix-shaper) profiles - typical of printer/inkjet ICC profiles - are
     // flagged by NAN matrices. The gamut-mapping code below only knows how to use 3x3
     // matrices, so using a NAN one silently poisons the whole image with NaN pixels. Fall
@@ -2662,7 +2674,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_filmicrgb_data_t *const data = (dt_iop_filmicrgb_data_t *)piece->data;
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
-  const dt_iop_order_iccprofile_info_t *const export_profile = _filmic_get_output_profile(pipe);
+  const dt_iop_order_iccprofile_info_t *const export_profile = _filmic_get_output_profile(pipe, data);
 
   const size_t ch = 4;
 
@@ -3075,7 +3087,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   // fetch working color profile
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
-  const dt_iop_order_iccprofile_info_t *const export_profile = _filmic_get_output_profile(pipe);
+  const dt_iop_order_iccprofile_info_t *const export_profile = _filmic_get_output_profile(pipe, d);
   const int use_work_profile = (IS_NULL_PTR(work_profile)) ? 0 : 1;
 
   // See colorbalancergb.c for details
@@ -3993,10 +4005,12 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
     d->softproof_type = dt_colorspaces_get_global()->softproof_type;
     g_strlcpy(d->softproof_filename, dt_colorspaces_get_global()->softproof_filename,
              sizeof(d->softproof_filename));
+    d->softproof_intent = dt_colorspaces_get_global()->softproof_intent;
   }
   else
   {
     d->softproof_type = DT_COLORSPACE_NONE;
+    d->softproof_intent = DT_INTENT_PERCEPTUAL;
   }
 
   // compute the curves and their LUT
