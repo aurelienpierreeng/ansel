@@ -18,7 +18,7 @@
 
 #include "system/macros.h"
 #include "common/act_on.h"
-#include "colorprofiles/colorspaces.h"   // dt_colorspaces_get_global(), and lcms2 for cmsHTRANSFORM
+#include "colorprofiles/colorspaces.h"   // dt_colorprofiles_srgb_to_display_strided()
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
@@ -546,148 +546,19 @@ static void _setup_completion(dt_lib_module_t *self, GtkWidget *textview)
   d->completion_tree = completion_tree;
 }
 
-static gboolean _alloc_row_buffers(const int width, guchar **row_in, guchar **row_out)
-{
-  *row_in = g_malloc((size_t)width * 4);
-  *row_out = g_malloc((size_t)width * 4);
-  if(!*row_in || !*row_out)
-  {
-    dt_free(*row_in);
-    dt_free(*row_out);
-    *row_in = NULL;
-    *row_out = NULL;
-    return FALSE;
-  }
-  return TRUE;
-}
-
-static void _free_row_buffers(guchar *row_in, guchar *row_out)
-{
-  dt_free(row_in);
-  dt_free(row_out);
-}
-
-static void _colorcorrect_row(cmsHTRANSFORM transform, guchar *src, const int width,
-                              const int n_channels, const gboolean has_alpha,
-                              guchar *row_in, guchar *row_out)
-{
-  for(int x = 0; x < width; x++)
-  {
-    const int s = x * n_channels;
-    const int d = x * 4;
-    row_in[d + 0] = src[s + 0];
-    row_in[d + 1] = src[s + 1];
-    row_in[d + 2] = src[s + 2];
-    row_in[d + 3] = has_alpha ? src[s + 3] : 255;
-  }
-
-  cmsDoTransform(transform, row_in, row_out, width);
-
-  for(int x = 0; x < width; x++)
-  {
-    const int s = x * 4;
-    const int d = x * n_channels;
-    src[d + 0] = row_out[s + 2];
-    src[d + 1] = row_out[s + 1];
-    src[d + 2] = row_out[s + 0];
-    if(has_alpha)
-      src[d + 3] = row_out[s + 3];
-  }
-}
-
 static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
 {
   if(IS_NULL_PTR(pixbuf)) return;
 
-  cmsHTRANSFORM transform = NULL;
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-  pthread_rwlock_rdlock(&profiles->xprofile_lock);
-  if(dt_colorspaces_get_global()->transform_srgb_to_display)
-    transform = dt_colorspaces_get_global()->transform_srgb_to_display;
-
-  if(IS_NULL_PTR(transform))
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-  const int width = gdk_pixbuf_get_width(pixbuf);
-  const int height = gdk_pixbuf_get_height(pixbuf);
-  const int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-  const int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-  if(width <= 0 || height <= 0 || n_channels < 3)
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-  guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
-  if(IS_NULL_PTR(pixels))
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-  const gboolean has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);
-
-#ifdef _OPENMP
-  const int nthreads = omp_get_max_threads();
-  guchar **rows_in = g_malloc0((size_t)nthreads * sizeof(*rows_in));
-  guchar **rows_out = g_malloc0((size_t)nthreads * sizeof(*rows_out));
-  gboolean ok = TRUE;
-  for(int i = 0; i < nthreads; i++)
-  {
-    if(!_alloc_row_buffers(width, &rows_in[i], &rows_out[i]))
-    {
-      ok = FALSE;
-      break;
-    }
-  }
-  if(!ok)
-  {
-    for(int i = 0; i < nthreads; i++)
-      _free_row_buffers(rows_in[i], rows_out[i]);
-    dt_free(rows_in);
-    dt_free(rows_out);
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-#pragma omp parallel default(firstprivate)
-  {
-    const int tid = omp_get_thread_num();
-    guchar *row_in = rows_in[tid];
-    guchar *row_out = rows_out[tid];
-
-#pragma omp for 
-    for(int y = 0; y < height; y++)
-    {
-      guchar *src = pixels + (size_t)y * rowstride;
-      _colorcorrect_row(transform, src, width, n_channels, has_alpha, row_in, row_out);
-    }
-  }
-
-  for(int i = 0; i < nthreads; i++)
-    _free_row_buffers(rows_in[i], rows_out[i]);
-  dt_free(rows_in);
-  dt_free(rows_out);
-#else
-  guchar *row_in = NULL;
-  guchar *row_out = NULL;
-  if(!_alloc_row_buffers(width, &row_in, &row_out))
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-  for(int y = 0; y < height; y++)
-  {
-    guchar *src = pixels + (size_t)y * rowstride;
-    _colorcorrect_row(transform, src, width, n_channels, has_alpha, row_in, row_out);
-  }
-  _free_row_buffers(row_in, row_out);
-#endif
-
-  pthread_rwlock_unlock(&profiles->xprofile_lock);
+  /* The pixbuf is sRGB; bring it into display space. The transform, the lock and the
+   * row scratch all live inside colorprofiles -- this side only reads the geometry
+   * GdkPixbuf reports. */
+  dt_colorprofiles_srgb_to_display_strided(gdk_pixbuf_get_pixels(pixbuf),
+                                           gdk_pixbuf_get_width(pixbuf),
+                                           gdk_pixbuf_get_height(pixbuf),
+                                           gdk_pixbuf_get_rowstride(pixbuf),
+                                           gdk_pixbuf_get_n_channels(pixbuf),
+                                           gdk_pixbuf_get_has_alpha(pixbuf));
 }
 
 static void _toggle_mode(GtkToggleButton *button, dt_lib_module_t *self);

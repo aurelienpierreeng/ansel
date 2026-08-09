@@ -1342,6 +1342,81 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
   return managed;
 }
 
+/* One row of a strided, packed-RGB(A) buffer: widen to RGBA8, convert, write back
+ * narrowed and R <-> B swapped. `row_in`/`row_out` are width*4 scratch. */
+static void _srgb_to_display_row(const cmsHTRANSFORM transform, uint8_t *const src, const int width,
+                                 const int n_channels, const gboolean has_alpha,
+                                 uint8_t *const row_in, uint8_t *const row_out)
+{
+  for(int x = 0; x < width; x++)
+  {
+    const int s = x * n_channels;
+    const int d = x * 4;
+    row_in[d + 0] = src[s + 0];
+    row_in[d + 1] = src[s + 1];
+    row_in[d + 2] = src[s + 2];
+    row_in[d + 3] = has_alpha ? src[s + 3] : UINT8_MAX;
+  }
+
+  cmsDoTransform(transform, row_in, row_out, width);
+
+  for(int x = 0; x < width; x++)
+  {
+    const int s = x * 4;
+    const int d = x * n_channels;
+    src[d + 0] = row_out[s + 2];
+    src[d + 1] = row_out[s + 1];
+    src[d + 2] = row_out[s + 0];
+    if(has_alpha) src[d + 3] = row_out[s + 3];
+  }
+}
+
+gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const int width, const int height,
+                                                  const int rowstride, const int n_channels,
+                                                  const gboolean has_alpha)
+{
+  if(IS_NULL_PTR(pixels) || width <= 0 || height <= 0 || n_channels < 3) return FALSE;
+
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_rdlock(&self->xprofile_lock);
+  const cmsHTRANSFORM transform = self->transform_srgb_to_display;
+  if(IS_NULL_PTR(transform))
+  {
+    pthread_rwlock_unlock(&self->xprofile_lock);
+    return FALSE;
+  }
+
+  /* Two width*4 scratch rows per thread, in ONE allocation made before the parallel
+   * region: a per-thread allocation that could fail would put the worksharing loop
+   * behind a condition some threads take and others do not, which hangs. */
+  const size_t row_bytes = (size_t)width * 4u;
+  const int nthreads = MAX(dt_get_num_openmp_threads(), 1);
+  uint8_t *const scratch = g_try_malloc((size_t)nthreads * 2u * row_bytes);
+
+  if(IS_NULL_PTR(scratch))
+  {
+    pthread_rwlock_unlock(&self->xprofile_lock);
+    return FALSE;
+  }
+
+  __OMP_PARALLEL__()
+  {
+    uint8_t *const row_in = scratch + (size_t)2 * dt_get_thread_num() * row_bytes;
+    uint8_t *const row_out = row_in + row_bytes;
+
+    __OMP_FOR__()
+    for(int y = 0; y < height; y++)
+      _srgb_to_display_row(transform, pixels + (size_t)y * rowstride, width, n_channels, has_alpha,
+                           row_in, row_out);
+  }
+
+  g_free(scratch);
+  pthread_rwlock_unlock(&self->xprofile_lock);
+
+  return TRUE;
+}
+
 // make sure that dt_colorspaces_get_global()->xprofile_lock is held when calling this!
 static void _update_display_profile(guchar *tmp_data, gsize size, char *name, size_t name_size)
 {
