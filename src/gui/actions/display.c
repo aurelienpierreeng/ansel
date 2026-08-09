@@ -17,6 +17,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "colorprofiles/colorspaces.h"
 #include "common/conf.h"
 #include "common/mipmap_cache.h"
 #include "common/collection.h"
@@ -276,38 +277,22 @@ static gboolean filmstrip_checked_callback(GtkWidget *widget)
 static gboolean profile_checked_callback(GtkWidget *widget)
 {
   dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)get_custom_data(widget);
-  return (prof->type == dt_colorspaces_get_global()->display_type
-          && (prof->type != DT_COLORSPACE_FILE
-              || !strcmp(prof->filename, dt_colorspaces_get_global()->display_filename)));
+
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+
+  return (prof->type == settings.display_type
+          && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, settings.display_filename)));
 }
 
 static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)get_custom_data(GTK_WIDGET(user_data));
 
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-
-  /* WRITE lock, not read: dt_colorspaces_update_display_transforms() cmsDeleteTransform()s all
-   * four cached display transforms and rebuilds them. A read lock does not exclude other
-   * readers, so the thumbnail fetcher job and the mipmap cache could be inside cmsDoTransform()
-   * on a handle this call is freeing. The identity writes belong inside the same critical
-   * section, so no reader can observe a new type paired with the previous filename. */
-  pthread_rwlock_wrlock(&profiles->xprofile_lock);
-
-  /* pp comes straight from the menu item, which was built from the profile list, so "not
-   * found" is not reachable here — the only question is whether the selection differs from
-   * what is already active. Re-picking the active entry is a no-op. */
-  const gboolean profile_changed =
-      profiles->display_type != pp->type
-      || (pp->type == DT_COLORSPACE_FILE && strcmp(profiles->display_filename, pp->filename));
-
-  if(profile_changed)
-  {
-    profiles->display_type = pp->type;
-    g_strlcpy(profiles->display_filename, pp->filename, sizeof(profiles->display_filename));
-    dt_colorspaces_update_display_transforms();
-  }
-  pthread_rwlock_unlock(&profiles->xprofile_lock);
+  /* The setter owns the lock, the changed decision and the transform rebuild. pp comes
+   * straight from the menu item, which was built from the profile list, so "not found" is
+   * not reachable here -- re-picking the active entry is simply a no-op. */
+  const gboolean profile_changed = dt_colorprofiles_set_display_profile_choice(pp->type, pp->filename);
 
   if(profile_changed)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
@@ -339,17 +324,7 @@ dt_iop_color_intent_t string_to_color_intent(const char *string)
 static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   const dt_iop_color_intent_t new_intent = string_to_color_intent(get_custom_data(GTK_WIDGET(user_data)));
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-
-  // write lock: see profile_callback() above.
-  pthread_rwlock_wrlock(&profiles->xprofile_lock);
-  const gboolean intent_changed = (profiles->display_intent != new_intent);
-  if(intent_changed)
-  {
-    profiles->display_intent = new_intent;
-    dt_colorspaces_update_display_transforms();
-  }
-  pthread_rwlock_unlock(&profiles->xprofile_lock);
+  const gboolean intent_changed = dt_colorprofiles_set_display_intent(new_intent);
 
   if(intent_changed)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
@@ -359,7 +334,9 @@ static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, gu
 
 static gboolean intent_checked_callback(GtkWidget *widget)
 {
-  return dt_colorspaces_get_global()->display_intent == string_to_color_intent(get_custom_data(widget));
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+  return settings.display_intent == string_to_color_intent(get_custom_data(widget));
 }
 
 static gboolean always_hide_overlays_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
