@@ -1172,6 +1172,176 @@ void dt_colorspaces_update_display_transforms()
   _update_display_transforms(dt_colorspaces_get_global());
 }
 
+/* ---------------------------------------------------------------------------
+ * Display and soft-proofing settings.
+ *
+ * Seven fields the GUI writes and the pipeline reads: the display profile identity
+ * and intent, the soft-proof identity and intent, and the proofing mode. They were
+ * read and written through the global struct with no lock of any kind, one field at
+ * a time — so a reader could see a new display_type paired with the previous
+ * display_filename, and a 512-byte filename being g_strlcpy'd concurrently is a torn
+ * string rather than a merely stale one.
+ *
+ * They cross the boundary only as a whole struct now, copied under one lock, so a
+ * group can never be observed half-updated. `generation` advances on every accepted
+ * change: a pipeline module can fold that single number into its hash instead of the
+ * individual fields.
+ *
+ * LOCK ORDER, where both are involved: xprofile_lock OUTER, _settings_lock INNER.
+ * The display setters need both, because changing the display profile also rebuilds
+ * the four prepared transforms. Nothing takes them the other way round.
+ * ------------------------------------------------------------------------- */
+
+static pthread_rwlock_t _settings_lock = PTHREAD_RWLOCK_INITIALIZER;
+static uint64_t _settings_generation = 0;
+
+void dt_colorprofiles_get_settings(dt_colorprofiles_settings_t *const out)
+{
+  if(IS_NULL_PTR(out)) return;
+
+  const dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_rdlock(&_settings_lock);
+  out->mode = self->mode;
+  out->display_type = self->display_type;
+  g_strlcpy(out->display_filename, self->display_filename, sizeof(out->display_filename));
+  out->display_intent = self->display_intent;
+  out->softproof_type = self->softproof_type;
+  g_strlcpy(out->softproof_filename, self->softproof_filename, sizeof(out->softproof_filename));
+  out->softproof_intent = self->softproof_intent;
+  out->generation = _settings_generation;
+  pthread_rwlock_unlock(&_settings_lock);
+}
+
+/* Did (type, filename) differ from what is stored at (cur_type, cur_filename)?
+ * Caller holds _settings_lock. filename is only meaningful for DT_COLORSPACE_FILE. */
+static gboolean _profile_choice_differs(const dt_colorspaces_color_profile_type_t cur_type,
+                                        const char *const cur_filename,
+                                        const dt_colorspaces_color_profile_type_t type,
+                                        const char *const filename)
+{
+  if(cur_type != type) return TRUE;
+  if(type != DT_COLORSPACE_FILE) return FALSE;
+  return strcmp(cur_filename, IS_NULL_PTR(filename) ? "" : filename) != 0;
+}
+
+gboolean dt_colorprofiles_set_display_profile_choice(const dt_colorspaces_color_profile_type_t type,
+                                                     const char *const filename)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_wrlock(&self->xprofile_lock);
+  pthread_rwlock_wrlock(&_settings_lock);
+
+  const gboolean changed = _profile_choice_differs(self->display_type, self->display_filename, type, filename);
+  if(changed)
+  {
+    self->display_type = type;
+    g_strlcpy(self->display_filename, IS_NULL_PTR(filename) ? "" : filename, sizeof(self->display_filename));
+    _settings_generation++;
+  }
+  pthread_rwlock_unlock(&_settings_lock);
+
+  // Still under xprofile_lock: the new identity and the transforms built from it land together.
+  if(changed) _update_display_transforms(self);
+  pthread_rwlock_unlock(&self->xprofile_lock);
+
+  return changed;
+}
+
+gboolean dt_colorprofiles_set_display_intent(const dt_iop_color_intent_t intent)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_wrlock(&self->xprofile_lock);
+  pthread_rwlock_wrlock(&_settings_lock);
+
+  const gboolean changed = (self->display_intent != intent);
+  if(changed)
+  {
+    self->display_intent = intent;
+    _settings_generation++;
+  }
+  pthread_rwlock_unlock(&_settings_lock);
+
+  if(changed) _update_display_transforms(self);
+  pthread_rwlock_unlock(&self->xprofile_lock);
+
+  return changed;
+}
+
+/* The soft-proof settings feed transforms that iop/colorout.c builds per commit_params;
+ * nothing cached in this module derives from them, so no rebuild here. */
+gboolean dt_colorprofiles_set_softproof_profile_choice(const dt_colorspaces_color_profile_type_t type,
+                                                       const char *const filename)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_wrlock(&_settings_lock);
+  const gboolean changed = _profile_choice_differs(self->softproof_type, self->softproof_filename, type, filename);
+  if(changed)
+  {
+    self->softproof_type = type;
+    g_strlcpy(self->softproof_filename, IS_NULL_PTR(filename) ? "" : filename, sizeof(self->softproof_filename));
+    _settings_generation++;
+  }
+  pthread_rwlock_unlock(&_settings_lock);
+
+  return changed;
+}
+
+gboolean dt_colorprofiles_set_softproof_intent(const dt_iop_color_intent_t intent)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_wrlock(&_settings_lock);
+  const gboolean changed = (self->softproof_intent != intent);
+  if(changed)
+  {
+    self->softproof_intent = intent;
+    _settings_generation++;
+  }
+  pthread_rwlock_unlock(&_settings_lock);
+
+  return changed;
+}
+
+gboolean dt_colorprofiles_set_mode(const dt_colorspaces_color_mode_t mode)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  pthread_rwlock_wrlock(&_settings_lock);
+  const gboolean changed = (self->mode != mode);
+  if(changed)
+  {
+    self->mode = mode;
+    _settings_generation++;
+  }
+  pthread_rwlock_unlock(&_settings_lock);
+
+  return changed;
+}
+
+dt_colorspaces_color_mode_t dt_colorprofiles_toggle_mode(const dt_colorspaces_color_mode_t mode)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+
+  /* One locked read-modify-write. The two toggle buttons each open-coded
+   * "read mode, compare, write the opposite", which is not atomic: two accelerator
+   * presses in flight could both read DT_PROFILE_NORMAL and leave soft-proof and
+   * gamut-check disagreeing about which of them is on. */
+  pthread_rwlock_wrlock(&_settings_lock);
+  const dt_colorspaces_color_mode_t now = (self->mode == mode) ? DT_PROFILE_NORMAL : mode;
+  if(self->mode != now)
+  {
+    self->mode = now;
+    _settings_generation++;
+  }
+  pthread_rwlock_unlock(&_settings_lock);
+
+  return now;
+}
+
 void dt_colorspaces_transform_rgba_float_row(const cmsHTRANSFORM transform, const float *in, float *out,
                                              const int width)
 {

@@ -193,6 +193,50 @@ gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const i
                                                   const gboolean has_alpha);
 
 
+/* --- display and soft-proofing settings: whole struct in, whole struct out ---
+ *
+ * The seven fields cross the boundary only together. Reading them one at a time --
+ * which is what direct member access forced -- lets a reader observe a new profile
+ * type paired with the previous filename, and a 512-byte filename read while it is
+ * being g_strlcpy'd is a torn string, not a stale one. Both groups are read that way
+ * today by iop/colorout.c and iop/filmicrgb.c on pipeline threads while the GUI
+ * thread writes them. */
+typedef struct dt_colorprofiles_settings_t
+{
+  dt_colorspaces_color_mode_t mode;                    // NORMAL / SOFTPROOF / GAMUTCHECK
+  dt_colorspaces_color_profile_type_t display_type;
+  char display_filename[DT_IOP_COLOR_ICC_LEN];
+  dt_iop_color_intent_t display_intent;
+  dt_colorspaces_color_profile_type_t softproof_type;
+  char softproof_filename[DT_IOP_COLOR_ICC_LEN];
+  dt_iop_color_intent_t softproof_intent;
+
+  /** Advances on every accepted change. A pipeline module can fold this one number into
+   * its hash instead of the individual fields. */
+  uint64_t generation;
+} dt_colorprofiles_settings_t;
+
+/** Atomic snapshot into caller-provided storage. */
+void dt_colorprofiles_get_settings(dt_colorprofiles_settings_t *const out);
+
+/* Each setter returns whether anything actually changed, so callers stop deciding that
+ * for themselves against a value they read separately. The display ones also rebuild the
+ * four prepared transforms, under the same lock, so identity and transforms never
+ * disagree. `filename` is only meaningful for DT_COLORSPACE_FILE. */
+gboolean dt_colorprofiles_set_display_profile_choice(const dt_colorspaces_color_profile_type_t type,
+                                                     const char *const filename);
+gboolean dt_colorprofiles_set_display_intent(const dt_iop_color_intent_t intent);
+gboolean dt_colorprofiles_set_softproof_profile_choice(const dt_colorspaces_color_profile_type_t type,
+                                                       const char *const filename);
+gboolean dt_colorprofiles_set_softproof_intent(const dt_iop_color_intent_t intent);
+gboolean dt_colorprofiles_set_mode(const dt_colorspaces_color_mode_t mode);
+
+/** Turn `mode` on, or back to NORMAL if it is already the current mode, as one locked
+ * read-modify-write. Returns the mode now in effect. The two toggle buttons each
+ * open-coded this and were not atomic against each other. */
+dt_colorspaces_color_mode_t dt_colorprofiles_toggle_mode(const dt_colorspaces_color_mode_t mode);
+
+
 /** return an rgb lcms2 profile from data. if data points to a grayscale profile a new rgb profile is created
  * that has the same TRC, black and white point and rec709 primaries. */
 cmsHPROFILE dt_colorspaces_get_rgb_profile_from_mem(uint8_t *data, uint32_t size);
