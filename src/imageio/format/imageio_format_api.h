@@ -29,7 +29,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "colorprofiles/colorspaces.h" // because forward declaring enums doesn't work in C++ :(
+#include "colorprofiles/profile_types.h"
 
 #ifdef __cplusplus
 extern "C" {

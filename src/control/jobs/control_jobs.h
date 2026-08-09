@@ -38,8 +38,8 @@
 #ifndef DT_CONTROL_JOBS_CONTROL_JOBS_H
 #define DT_CONTROL_JOBS_CONTROL_JOBS_H
 
+#include "colorprofiles/profile_types.h"
 #include "control/jobs.h"
-#include "colorprofiles/colorspaces.h"   // dt_colorspaces_color_profile_type_t / dt_iop_color_intent_t in the prototypes below
 #include "common/variables.h"
 #include <inttypes.h>
 
