@@ -379,28 +379,21 @@ void dt_cache_gc(dt_cache_t *cache, const float fill_ratio)
 void dt_cache_release_with_caller(dt_cache_t *cache, dt_cache_entry_t *entry, const char *file, int line)
 {
 #if((__has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)) && 1)
-  // yes, this is *HIGHLY* unportable and is accessing implementation details.
-#ifdef _DEBUG
-
+  /* Yes, this is *HIGHLY* unportable and is accessing implementation details.
+   *
+   * There used to be an #ifdef _DEBUG split here, because dt_pthread_rwlock_t was a bare
+   * pthread_rwlock_t in release builds and a struct wrapping one in debug builds. It is the
+   * struct in both since the same-thread recursive-writer tracking was ported into the
+   * release path, so the non-_DEBUG arm stopped compiling -- and nobody found out, because
+   * this whole block only exists under AddressSanitizer and nothing in CI builds with it.
+   * An ASAN build of this tree has been failing here ever since. One arm now. */
 # if defined(HAVE_THREAD_RWLOCK_ARCH_T_READERS)
-  if (entry->lock.lock.__data.__readers <= 1)
+  if(entry->lock.lock.__data.__readers <= 1)
 # elif defined(HAVE_THREAD_RWLOCK_ARCH_T_NR_READERS)
-  if (entry->lock.lock.__data.__nr_readers <= 1)
+  if(entry->lock.lock.__data.__nr_readers <= 1)
 # else /* HAVE_THREAD_RWLOCK_ARCH_T_(NR_)READERS */
 #  error "No valid reader member"
 # endif /* HAVE_THREAD_RWLOCK_ARCH_T_(NR_)READERS */
-
-#else /* _DEBUG */
-
-# if defined(HAVE_THREAD_RWLOCK_ARCH_T_READERS)
-  if (entry->lock.__data.__readers <= 1)
-# elif defined(HAVE_THREAD_RWLOCK_ARCH_T_NR_READERS)
-  if(entry->lock.__data.__nr_readers <= 1)
-# else /* HAVE_THREAD_RWLOCK_ARCH_T_(NR_)READERS */
-#  error "No valid reader member"
-# endif /* HAVE_THREAD_RWLOCK_ARCH_T_(NR_)READERS */
-
-#endif /* _DEBUG */
   {
     // only if there are no other reades we may poison.
     assert(entry->data_size);
