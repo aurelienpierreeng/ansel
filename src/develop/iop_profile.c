@@ -285,7 +285,38 @@ dt_ioppr_set_pipe_input_profile_info(struct dt_develop_t *dev,
                                      const int intent,
                                      const dt_colormatrix_t matrix_in)
 {
-  dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_add_profile_info_to_list(dev, type, filename, intent);
+  dt_iop_order_iccprofile_info_t *profile_info = NULL;
+
+  /* An image-derived profile cannot be shared, and cannot be resolved by identity either:
+   * these types are not registered in the profile list, so the memo entry for them is a
+   * placeholder with NaN matrices that only becomes real when the matrix colorin computed
+   * FROM THIS IMAGE is written into it below. Keyed on (type, "") that entry is common to
+   * every image of the same camera-matrix kind. Give it storage the pipe owns instead. */
+  const gboolean image_derived = (type >= DT_COLORSPACE_EMBEDDED_ICC && type <= DT_COLORSPACE_ALTERNATE_MATRIX);
+
+  if(image_derived)
+  {
+    if(IS_NULL_PTR(pipe->owned_input_profile_info))
+    {
+      pipe->owned_input_profile_info = dt_alloc_align(sizeof(dt_iop_order_iccprofile_info_t));
+      if(!IS_NULL_PTR(pipe->owned_input_profile_info))
+        dt_ioppr_init_profile_info(pipe->owned_input_profile_info, 0);
+    }
+    profile_info = pipe->owned_input_profile_info;
+
+    if(!IS_NULL_PTR(profile_info))
+    {
+      profile_info->type = type;
+      g_strlcpy(profile_info->filename, filename, sizeof(profile_info->filename));
+      profile_info->intent = intent;
+      profile_info->nonlinearlut = 0;
+      profile_info->grey = 0.1842f;
+    }
+  }
+  else
+  {
+    profile_info = dt_ioppr_add_profile_info_to_list(dev, type, filename, intent);
+  }
 
   if(IS_NULL_PTR(profile_info))
   {
@@ -295,8 +326,7 @@ dt_ioppr_set_pipe_input_profile_info(struct dt_develop_t *dev,
             type, filename);
     profile_info = dt_ioppr_add_profile_info_to_list(dev, DT_COLORSPACE_LIN_REC2020, "", intent);
   }
-
-  if(profile_info->type >= DT_COLORSPACE_EMBEDDED_ICC && profile_info->type <= DT_COLORSPACE_ALTERNATE_MATRIX)
+  else if(image_derived)
   {
     /* We have a camera input matrix, these are not generated from files but in colorin,
     * so we need to fetch and replace them from somewhere.

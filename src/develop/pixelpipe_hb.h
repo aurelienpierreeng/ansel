@@ -242,6 +242,18 @@ typedef struct dt_dev_pixelpipe_t
   struct dt_iop_order_iccprofile_info_t *work_profile_info;
   /** input profile info **/
   struct dt_iop_order_iccprofile_info_t *input_profile_info;
+  /* Storage for an input profile DERIVED FROM THIS IMAGE, which cannot be shared.
+   *
+   * The types DT_COLORSPACE_EMBEDDED_ICC..DT_COLORSPACE_ALTERNATE_MATRIX are not
+   * registered in the profile list, so nothing can resolve them by identity: their
+   * matrices come from the image's own camera data, via colorin. They were being kept in
+   * the (type, filename) memo, where filename is "" -- so every image sharing a
+   * camera-matrix type shared one entry and overwrote its matrix in place. That was
+   * survivable only because the memo is per-dev and a dev is one image.
+   *
+   * This is per-pipe and owned by the pipe. `input_profile_info` above points either here
+   * or at a genuinely shared memo entry, and is never freed through that pointer. */
+  struct dt_iop_order_iccprofile_info_t *owned_input_profile_info;
   /** output profile info **/
   struct dt_iop_order_iccprofile_info_t *output_profile_info;
 
