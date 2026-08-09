@@ -34,9 +34,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "colorprofiles/profile_types.h"
 #include "develop/lightroom.h"
 #include "common/colorlabels.h"
-#include "colorprofiles/colorspaces.h"
 #include "common/curve_tools.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"

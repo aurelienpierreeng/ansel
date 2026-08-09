@@ -51,6 +51,15 @@
 */
 
 #include "colorprofiles/colorspaces.h"
+
+/* dt_iop_color_intent_t is spelled with literal values in profile_types.h so that header
+ * needs no <lcms2.h>. The values are fixed by the ICC specification and are serialised into
+ * iop params, so they cannot change on either side -- but this is the one place that sees
+ * both definitions, so it is the place to say so out loud. */
+_Static_assert(DT_INTENT_PERCEPTUAL == INTENT_PERCEPTUAL, "ICC intent renumbered by lcms2");
+_Static_assert(DT_INTENT_RELATIVE_COLORIMETRIC == INTENT_RELATIVE_COLORIMETRIC, "ICC intent renumbered by lcms2");
+_Static_assert(DT_INTENT_SATURATION == INTENT_SATURATION, "ICC intent renumbered by lcms2");
+_Static_assert(DT_INTENT_ABSOLUTE_COLORIMETRIC == INTENT_ABSOLUTE_COLORIMETRIC, "ICC intent renumbered by lcms2");
 #include "colorprofiles/colormatrices.c"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/debug.h"

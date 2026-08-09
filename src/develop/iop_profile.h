@@ -34,8 +34,8 @@
  * export should use, and transforming an image with it. Everything declared here takes a
  * develop/ type, which is exactly why it is here and not in colorprofiles/iop_profile.h. */
 
+#include "colorprofiles/profile_types.h"
 #include "colorprofiles/iop_profile.h"
-#include "colorprofiles/colorspaces.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -53,11 +53,11 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "colorprofiles/colorspaces.h"
 #include "common/image.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "colorprofiles/colorspaces.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"

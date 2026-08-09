@@ -35,7 +35,7 @@
 #ifndef DT_COMMON_EXIF_H
 #define DT_COMMON_EXIF_H
 
-#include "colorprofiles/colorspaces.h"
+#include "colorprofiles/profile_types.h"
 #include "common/image.h"
 
 /** wrapper around exiv2, C++ */

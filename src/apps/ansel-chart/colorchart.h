@@ -24,7 +24,7 @@
 #ifndef DT_APPS_ANSEL_CHART_COLORCHART_H
 #define DT_APPS_ANSEL_CHART_COLORCHART_H
 
-#include "colorprofiles/colorspaces.h"
+#include "colorprofiles/profile_types.h"
 #include "math/homography.h"   // point_t
 
 #include <glib.h>

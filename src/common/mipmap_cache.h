@@ -31,7 +31,7 @@
 
 #include "system/atomic.h"
 #include "common/cache.h"
-#include "colorprofiles/colorspaces.h"
+#include "colorprofiles/profile_types.h"
 #include "common/image.h"
 
 #ifdef __cplusplus
