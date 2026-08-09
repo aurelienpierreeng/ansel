@@ -456,14 +456,12 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
   dt_develop_t *dev = (dt_develop_t *)user_data;
   gboolean profile_changed = FALSE;
   const int pos = dt_bauhaus_combobox_get(combo);
-  for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
+
+  dt_colorprofile_desc_t desc;
+  if(dt_colorspaces_profile_at(DT_PROFILE_DIRECTION_OUT, pos, &desc))
   {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-    if(pp->out_pos == pos)
-    {
-      profile_changed = dt_colorprofiles_set_softproof_profile_choice(pp->type, pp->filename);
-      goto end;
-    }
+    profile_changed = dt_colorprofiles_set_softproof_profile_choice(desc.type, desc.filename);
+    goto end;
   }
 
   // profile not found, fall back to sRGB. shouldn't happen
@@ -507,18 +505,16 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
   dt_colorprofiles_settings_t settings;
   dt_colorprofiles_get_settings(&settings);
 
-  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    // the system display profile is only suitable for display purposes
-    if(prof->out_pos > -1)
-    {
-      dt_bauhaus_combobox_add(softproof_profile, prof->name);
-      if(prof->type == settings.softproof_type
-        && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, settings.softproof_filename)))
-        dt_bauhaus_combobox_set(softproof_profile, prof->out_pos);
-    }
-  }
+  // the system display profile is only suitable for display purposes, hence OUT
+  dt_colorprofile_desc_t *out_profiles = NULL;
+  const size_t n_out_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_DIRECTION_OUT, &out_profiles);
+  for(size_t k = 0; k < n_out_profiles; k++)
+    dt_bauhaus_combobox_add(softproof_profile, out_profiles[k].name);
+  dt_free_align(out_profiles);
+
+  const int softproof_pos = dt_colorspaces_profile_index(DT_PROFILE_DIRECTION_OUT, settings.softproof_type,
+                                                         settings.softproof_filename);
+  if(softproof_pos > -1) dt_bauhaus_combobox_set(softproof_profile, softproof_pos);
 
   char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);
   char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
