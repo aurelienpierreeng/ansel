@@ -262,6 +262,23 @@ gboolean dt_colorspaces_conversion_matrix(const dt_colorspaces_conversion_t *con
                                           dt_colormatrix_t matrix);
 
 /**
+ * @brief The SOURCE profile's own RGB -> XYZ (D50) matrix, before composition.
+ *
+ * @details Not for converting anything -- for describing the source space to something else.
+ * `iop/colorin.c` hands it to the pipe as part of the input-profile record, which downstream
+ * modules read to know what the buffer they receive is in.
+ *
+ * @param matrix filled with the matrix. Untouched, and FALSE returned, when the source
+ *        profile does not reduce to a colorant matrix (a CLUT profile, say), which is the
+ *        same answer as "there is no such matrix to report".
+ * @return TRUE when @p matrix was written. Available on both branches: a conversion that
+ *         runs through lcms2 can still have a perfectly good source matrix, and the reason
+ *         it fell back may have been the target profile.
+ */
+gboolean dt_colorspaces_conversion_source_matrix(const dt_colorspaces_conversion_t *const conversion,
+                                                 dt_colormatrix_t matrix);
+
+/**
  * @brief The clip-to-target matrix, the second leg of a clipping conversion.
  *
  * @param matrix filled with the matrix. Untouched, and FALSE returned, when the conversion
