@@ -1491,8 +1491,9 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
     group_form->points = g_list_append(group_form->points, group_entry);
     
     // we update module gui
-      
+
     if(IS_NULL_PTR(mask_gui)) dt_masks_iop_update(module);
+    dt_dev_add_history_item(develop, module, TRUE, TRUE);
   }
 
   if(!IS_NULL_PTR(mask_gui))
