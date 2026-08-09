@@ -125,10 +125,10 @@ extern "C" {
  * interface.
  *
  * Almost all of it is immutable after dt_colorprofiles_init(). Exactly two things mutate
- * afterwards, both guarded by @ref xprofile_lock: the DT_COLORSPACE_DISPLAY entry's
+ * afterwards, both guarded by the transforms lock: the DT_COLORSPACE_DISPLAY entry's
  * `cmsHPROFILE`, and the four prepared transforms derived from it.
  *
- * @warning LOCK ORDER, where both are involved: `xprofile_lock` OUTER, the settings lock
+ * @warning LOCK ORDER, where both are involved: `_transforms_lock` OUTER, the settings lock
  * (private to colorspaces.c) INNER. The display setters need both, because changing the
  * display profile identity also rebuilds the four transforms. Nothing takes them the
  * other way round.
@@ -146,7 +146,6 @@ typedef struct dt_colorspaces_t
    * below -- the only mutable state in the module. Do not take it by hand: use
    * dt_colorspaces_lock_profiles() / dt_colorspaces_unlock_profiles(). */
   // xatom color profile:
-  pthread_rwlock_t xprofile_lock;
   /** Path colord last reported for this window, kept so an unchanged path costs nothing. */
   gchar *colord_profile_file;
   /** Raw bytes of the monitor profile last read from the xatom or colord, and their
@@ -208,6 +207,18 @@ typedef struct dt_colorspaces_color_profile_t
    * application list are freed by dt_colorprofiles_cleanup() as they always were.
    * @warning Getting this wrong double-frees on eviction: the image cache closes the
    * handle, then the application list closes it again at shutdown. */
+  /** @brief Guards ::profile, and nothing else in this struct.
+   *
+   * @details Per ENTRY, not per module. Only the DT_COLORSPACE_DISPLAY entry's handle is
+   * actually replaced at runtime (by the monitor-profile refresh), but a caller deriving
+   * from any profile takes this rather than a module-wide lock, so a thumbnail conversion
+   * running against sRGB does not stand between a monitor change and the display entry.
+   *
+   * Take it with dt_colorspaces_lock_profile() / dt_colorspaces_unlock_profile(); do not
+   * touch it directly. The rest of the struct -- type, filename, name, the positions -- is
+   * fixed at registration and needs no lock.
+   */
+  pthread_rwlock_t lock;
   gboolean owns_profile;
   dt_colorspaces_color_profile_type_t type; ///< filename is only used for type DT_COLORSPACE_FILE
   char filename[DT_IOP_COLOR_ICC_LEN];      ///< icc file name (absolute; compare with dt_colorspaces_is_profile_equal())
@@ -336,44 +347,21 @@ typedef struct dt_colorprofile_desc_t
   char name[512];                       ///< translated, display-ready
 } dt_colorprofile_desc_t;
 
-/* --- LOCK: pin the profile handles while deriving from one ---------------- */
-
-/**
- * @brief Take the module's profile read lock: pin every `cmsHPROFILE` in the list for the
- * span of a derivation.
+/* --- LOCK: pin ONE profile's handle while deriving from it ------------------
  *
- * @details Exactly one thing in the list mutates after init: the DT_COLORSPACE_DISPLAY
- * entry's `cmsHPROFILE`, which is closed and replaced whenever the monitor profile
- * changes -- which happens on window moves and resizes that land on a different monitor,
- * i.e. during repaints. A caller that resolved that handle through
- * dt_colorspaces_get_profile() and is still deriving from it (`cmsGetColorSpace`, a
- * matrix extraction, `cmsCreateTransform`) needs it to stay alive for that span.
+ * Per profile, not per module: several pipelines and the GUI derive from profiles at the
+ * same time, and a module-wide lock would make a thumbnail conversion against sRGB stand
+ * between a monitor-profile change and the display entry.
  *
- * Callers used to reach into dt_colorspaces_t and take `xprofile_lock` themselves, which
- * meant knowing the lock existed, which member it was and which mode to take it in -- and
- * one of them took a READ lock and then wrote through it. This is the same guarantee
- * without the struct.
+ * Hold this across "resolve a profile, then derive from it" -- a matrix extraction, a
+ * cmsCreateTransform -- and release once the derived artifact no longer refers to the
+ * profile. An LCMS transform does not retain its source profiles, so that is the create
+ * call, not the transform's lifetime.
  *
- * Typical use, as iop/colorout.c and colorprofiles/iop_profile.c do it: lock only when the
- * profile being resolved can be the display one (`type == DT_COLORSPACE_DISPLAY`), resolve,
- * build, unlock.
- *
- * @note This is a READ lock: any number of callers may hold it at once, and holding it
- * does not serialise them against each other.
- * @warning The span ends at the `cmsCreateTransform()` call, NOT at the transform's
- * lifetime: an LCMS transform does not retain the profiles it was built from. Holding the
- * lock across the pixel loop as well is unnecessary for correctness here (the prepared
- * display transforms below are the separate case, and they hold it themselves).
- * @warning Do not call anything that changes the display profile
- * (dt_colorprofiles_set_display_profile_choice(), dt_colorprofiles_set_display_intent(),
- * dt_colorspaces_set_display_profile()) while holding it -- those take the same lock for
- * writing.
- */
-void dt_colorspaces_lock_profiles(void);
-
-/** @brief Release the lock taken by dt_colorspaces_lock_profiles(). Pair them on every
- * path, including early returns. @see dt_colorspaces_lock_profiles */
-void dt_colorspaces_unlock_profiles(void);
+ * Read ::dt_colorspaces_color_profile_t::profile only AFTER taking the lock: the entry
+ * pointer is stable for the life of the process, but its handle is not. */
+void dt_colorspaces_lock_profile(const dt_colorspaces_color_profile_t *const profile);
+void dt_colorspaces_unlock_profile(const dt_colorspaces_color_profile_t *const profile);
 
 /**
  * @brief Ordered snapshot of every profile registered for one direction.
@@ -662,7 +650,7 @@ void dt_colorprofiles_get_settings(dt_colorprofiles_settings_t *const out);
 /**
  * @brief Set the monitor profile identity and rebuild the four prepared transforms.
  *
- * @details Identity and transforms are written under the same `xprofile_lock` hold, so a
+ * @details Identity and transforms are written under the same `_transforms_lock` hold, so a
  * reader can never see one without the other.
  *
  * @param type new display profile type.
@@ -673,7 +661,7 @@ void dt_colorprofiles_get_settings(dt_colorprofiles_settings_t *const out);
  * themselves against a value read separately, and re-selecting the ALREADY ACTIVE display
  * profile then reset the user to the system profile through an inherited "profile not
  * found" fallback -- firing on the one case where nothing should happen.
- * @warning Takes `xprofile_lock` for WRITING. Never call it while holding
+ * @warning Takes `_transforms_lock` for WRITING. Never call it while holding
  * dt_colorspaces_lock_profiles().
  */
 gboolean dt_colorprofiles_set_display_profile_choice(const dt_colorspaces_color_profile_type_t type,
@@ -684,7 +672,7 @@ gboolean dt_colorprofiles_set_display_profile_choice(const dt_colorspaces_color_
  * transforms.
  * @param intent new display intent.
  * @return TRUE when it changed.
- * @warning Takes `xprofile_lock` for WRITING; see
+ * @warning Takes `_transforms_lock` for WRITING; see
  * dt_colorprofiles_set_display_profile_choice().
  */
 gboolean dt_colorprofiles_set_display_intent(const dt_iop_color_intent_t intent);
@@ -696,7 +684,7 @@ gboolean dt_colorprofiles_set_display_intent(const dt_iop_color_intent_t intent)
  * @return TRUE when it changed.
  * @note No transform rebuild here: the soft-proof settings feed transforms that
  * iop/colorout.c builds per `commit_params`, and nothing cached in this module derives
- * from them. It therefore takes only the settings lock, not `xprofile_lock`.
+ * from them. It therefore takes only the settings lock, not `_transforms_lock`.
  */
 gboolean dt_colorprofiles_set_softproof_profile_choice(const dt_colorspaces_color_profile_type_t type,
                                                        const char *const filename);
@@ -871,7 +859,7 @@ typedef void (*dt_colorspaces_profile_changed_handler_t)(void);
  * one. Unregistered, the notification is dropped -- correct for a headless run, where
  * nothing is watching a monitor.
  * @warning It fires from wherever the change was detected, including the colord async
- * callback, and it fires AFTER `xprofile_lock` has been released -- so a handler may take
+ * callback, and it fires AFTER `_transforms_lock` has been released -- so a handler may take
  * the lock, but must not assume it already holds it.
  */
 void dt_colorspaces_set_profile_changed_handler(dt_colorspaces_profile_changed_handler_t handler);
@@ -889,7 +877,7 @@ void dt_colorspaces_set_profile_changed_handler(dt_colorspaces_profile_changed_h
  * callback.
  * @param widget any realized widget on the monitor to inspect; NULL returns immediately.
  * The caller owns the window -- this module never asks the GUI which one to look at.
- * @warning It acquires `xprofile_lock` with `trywrlock` and RETURNS SILENTLY if that
+ * @warning It acquires `_transforms_lock` with `trywrlock` and RETURNS SILENTLY if that
  * fails, because it is called from window move/resize handlers. A refresh is therefore
  * best-effort, not guaranteed; never rely on the profile having been updated when this
  * returns.

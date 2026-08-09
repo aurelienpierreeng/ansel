@@ -1111,6 +1111,7 @@ static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_prof
 {
   dt_colorspaces_color_profile_t *prof;
   prof = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
+  pthread_rwlock_init(&prof->lock, NULL);
   prof->type = type;
   g_strlcpy(prof->name, name, sizeof(prof->name));
   prof->profile = profile;
@@ -1178,7 +1179,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
 }
 
 // update cached transforms for color management of thumbnails
-// make sure that dt_colorspaces_get_global()->xprofile_lock is held when calling this!
+// caller holds _transforms_lock for writing
 void dt_colorspaces_update_display_transforms()
 {
   _update_display_transforms(dt_colorspaces_get_global());
@@ -1199,7 +1200,7 @@ void dt_colorspaces_update_display_transforms()
  * change: a pipeline module can fold that single number into its hash instead of the
  * individual fields.
  *
- * LOCK ORDER, where both are involved: xprofile_lock OUTER, _settings_lock INNER.
+ * LOCK ORDER, where both are involved: _transforms_lock OUTER, _settings_lock INNER.
  * The display setters need both, because changing the display profile also rebuilds
  * the four prepared transforms. Nothing takes them the other way round.
  * ------------------------------------------------------------------------- */
@@ -1213,6 +1214,19 @@ void dt_colorspaces_update_display_transforms()
  * consumers are migrated to the query API; it is no longer declared in the public header
  * and will disappear with the last of them. */
 static dt_colorspaces_t *_colorprofiles = NULL;
+
+/* The four prepared display transforms, and the byte cache the monitor refresh compares
+ * against, are module-wide: they belong to no single profile, so they cannot be covered by
+ * a per-entry lock. This is that lock.
+ *
+ * Separate from the per-entry locks on purpose. A thumbnail conversion holds this for the
+ * duration of a whole image; a caller deriving from an unrelated profile must not queue
+ * behind it, and a monitor-profile change must contend only with users of the display
+ * entry and of these transforms -- not with everything that touches colour.
+ *
+ * LOCK ORDER where a writer needs both: the profile ENTRY lock first, then this one.
+ * Readers take exactly one. */
+static pthread_rwlock_t _transforms_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 static dt_colorspaces_t *_colorspaces_build(void);
 static void _colorspaces_destroy(dt_colorspaces_t *self);
@@ -1332,7 +1346,7 @@ gboolean dt_colorprofiles_set_display_profile_choice(const dt_colorspaces_color_
 {
   dt_colorspaces_t *const self = dt_colorspaces_get_global();
 
-  pthread_rwlock_wrlock(&self->xprofile_lock);
+  pthread_rwlock_wrlock(&_transforms_lock);
   pthread_rwlock_wrlock(&_settings_lock);
 
   const gboolean changed = _profile_choice_differs(self->display_type, self->display_filename, type, filename);
@@ -1344,9 +1358,9 @@ gboolean dt_colorprofiles_set_display_profile_choice(const dt_colorspaces_color_
   }
   pthread_rwlock_unlock(&_settings_lock);
 
-  // Still under xprofile_lock: the new identity and the transforms built from it land together.
+  // Still under the transforms lock: the new identity and the transforms built from it land together.
   if(changed) _update_display_transforms(self);
-  pthread_rwlock_unlock(&self->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
 
   return changed;
 }
@@ -1355,7 +1369,7 @@ gboolean dt_colorprofiles_set_display_intent(const dt_iop_color_intent_t intent)
 {
   dt_colorspaces_t *const self = dt_colorspaces_get_global();
 
-  pthread_rwlock_wrlock(&self->xprofile_lock);
+  pthread_rwlock_wrlock(&_transforms_lock);
   pthread_rwlock_wrlock(&_settings_lock);
 
   const gboolean changed = (self->display_intent != intent);
@@ -1367,7 +1381,7 @@ gboolean dt_colorprofiles_set_display_intent(const dt_iop_color_intent_t intent)
   pthread_rwlock_unlock(&_settings_lock);
 
   if(changed) _update_display_transforms(self);
-  pthread_rwlock_unlock(&self->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
 
   return changed;
 }
@@ -1530,11 +1544,11 @@ void dt_colorprofiles_xyz_to_display(const dt_aligned_pixel_t XYZ, dt_aligned_pi
 {
   dt_colorspaces_t *const self = dt_colorspaces_get_global();
 
-  pthread_rwlock_rdlock(&self->xprofile_lock);
+  pthread_rwlock_rdlock(&_transforms_lock);
   const cmsHTRANSFORM transform = self->transform_xyz_to_display;
   if(transform)
     cmsDoTransform(transform, XYZ, RGB, 1);
-  pthread_rwlock_unlock(&self->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
 
   /* No display profile resolved yet (startup, or a monitor whose profile could not be
    * read): fall back to sRGB rather than dereferencing NULL, which is what the two
@@ -1551,7 +1565,7 @@ gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_
   gboolean owned = FALSE;
   gboolean managed = TRUE;
 
-  pthread_rwlock_rdlock(&self->xprofile_lock);
+  pthread_rwlock_rdlock(&_transforms_lock);
 
   if(src_space == DT_COLORSPACE_SRGB)
   {
@@ -1590,7 +1604,7 @@ gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_
   _transform_rgba8_to_bgra8(transform, in, out, width, height);
 
   if(owned && transform) cmsDeleteTransform(transform);
-  pthread_rwlock_unlock(&self->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
 
   return managed;
 }
@@ -1603,7 +1617,7 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
   cmsHTRANSFORM transform = NULL;
   gboolean owned = FALSE;
 
-  pthread_rwlock_rdlock(&self->xprofile_lock);
+  pthread_rwlock_rdlock(&_transforms_lock);
 
   if(src_space == DT_COLORSPACE_DISPLAY)
   {
@@ -1630,7 +1644,7 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
   _transform_rgba8_to_bgra8(transform, in, out, width, height);
 
   if(owned && transform) cmsDeleteTransform(transform);
-  pthread_rwlock_unlock(&self->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
 
   return managed;
 }
@@ -1672,11 +1686,11 @@ gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const i
 
   dt_colorspaces_t *const self = dt_colorspaces_get_global();
 
-  pthread_rwlock_rdlock(&self->xprofile_lock);
+  pthread_rwlock_rdlock(&_transforms_lock);
   const cmsHTRANSFORM transform = self->transform_srgb_to_display;
   if(IS_NULL_PTR(transform))
   {
-    pthread_rwlock_unlock(&self->xprofile_lock);
+    pthread_rwlock_unlock(&_transforms_lock);
     return FALSE;
   }
 
@@ -1689,7 +1703,7 @@ gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const i
 
   if(IS_NULL_PTR(scratch))
   {
-    pthread_rwlock_unlock(&self->xprofile_lock);
+    pthread_rwlock_unlock(&_transforms_lock);
     return FALSE;
   }
 
@@ -1705,12 +1719,12 @@ gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const i
   }
 
   g_free(scratch);
-  pthread_rwlock_unlock(&self->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
 
   return TRUE;
 }
 
-// make sure that dt_colorspaces_get_global()->xprofile_lock is held when calling this!
+// caller holds _transforms_lock for writing
 static void _update_display_profile(guchar *tmp_data, gsize size, char *name, size_t name_size)
 {
   dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
@@ -1727,8 +1741,20 @@ static void _update_display_profile(guchar *tmp_data, gsize size, char *name, si
       dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
       if(p->type == DT_COLORSPACE_DISPLAY)
       {
+        /* This is the ONE handle in the list that is replaced at runtime, and the reason
+         * every entry carries a lock. Take this entry's WRITE lock across the swap, so a
+         * caller that resolved this profile and is deriving from it under the read lock
+         * cannot have the handle closed underneath it.
+         *
+         * The caller already holds _transforms_lock for writing; entry lock inside it,
+         * per the lock-order note there. */
+        pthread_rwlock_wrlock(&p->lock);
+
         if(p->profile) dt_colorspaces_cleanup_profile(p->profile);
         p->profile = profile;
+
+        pthread_rwlock_unlock(&p->lock);
+
         if(name)
           dt_colorspaces_get_profile_name(profile, "en", "US", name, name_size);
 
@@ -1836,7 +1862,6 @@ static dt_colorspaces_t *_colorspaces_build(void)
 
   _compute_prequantized_primaries(&D65xyY, &Rec709_Primaries, &Rec709_Primaries_Prequantized);
 
-  pthread_rwlock_init(&res->xprofile_lock, NULL);
 
   int in_pos = -1,
       out_pos = -1,
@@ -2045,12 +2070,15 @@ static void _colorspaces_destroy(dt_colorspaces_t *self)
   for(GList *iter = self->profiles; iter; iter = g_list_next(iter))
   {
     dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
-    if(p) dt_colorspaces_cleanup_profile(p->profile);
+    if(p)
+    {
+      dt_colorspaces_cleanup_profile(p->profile);
+      pthread_rwlock_destroy(&p->lock);
+    }
   }
   g_list_free_full(self->profiles, dt_free_gpointer);
   self->profiles = NULL;
 
-  pthread_rwlock_destroy(&self->xprofile_lock);
   dt_free(self->colord_profile_file);
   dt_free(self->xprofile_data);
 
@@ -2132,7 +2160,10 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
 {
   dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
 
-  pthread_rwlock_wrlock(&color_profiles->xprofile_lock);
+  /* Writer: takes the DISPLAY entry's own lock (its cmsHPROFILE is replaced) and then the
+   * transforms lock (all four are rebuilt from it). Entry before transforms -- see the
+   * lock-order note on _transforms_lock. */
+  pthread_rwlock_wrlock(&_transforms_lock);
 
   int profile_changed = 0;
   CdWindow *window = CD_WINDOW(source);
@@ -2174,7 +2205,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
   if(profile) g_object_unref(profile);
   g_object_unref(window);
 
-  pthread_rwlock_unlock(&color_profiles->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
 
   if(profile_changed) _notify_profile_changed();
 }
@@ -2197,7 +2228,11 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   // make sure that no one gets a broken profile
   // FIXME: benchmark if the try is really needed when moving/resizing the window. Maybe we can just lock it
   // and block
-  if(pthread_rwlock_trywrlock(&color_profiles->xprofile_lock))
+  /* trywrlock, not wrlock, and this is load-bearing: this runs from a configure-event
+   * handler, i.e. on every tick of a window drag. Blocking the GUI thread behind a
+   * thumbnail conversion would stutter the drag, so a refresh that cannot get the lock is
+   * dropped and the next event retries. */
+  if(pthread_rwlock_trywrlock(&_transforms_lock))
     return; // we are already updating the profile. Or someone is reading right now. Too bad we can't
             // distinguish that. Whatever ...
 
@@ -2255,7 +2290,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   {
     dt_free(buffer);
   }
-  pthread_rwlock_unlock(&color_profiles->xprofile_lock);
+  pthread_rwlock_unlock(&_transforms_lock);
   if(profile_changed) _notify_profile_changed();
   dt_free(profile_source);
 }
@@ -2371,32 +2406,33 @@ static void _fill_desc(const dt_colorspaces_color_profile_t *const p, dt_colorpr
   g_strlcpy(out->name, p->name, sizeof(out->name));
 }
 
-/* --- LOCK: pin the profile handles for the span of a derivation ------------
+/* --- LOCK: pin ONE profile's handle for the span of a derivation -----------
  *
- * Exactly one thing in the list mutates after init: the DT_COLORSPACE_DISPLAY entry's
- * cmsHPROFILE, which _update_display_profile() closes and replaces whenever the monitor
- * profile changes -- on every window move or resize that lands on a different monitor.
- * A caller that resolved that handle and is still deriving from it (cmsGetColorSpace, a
- * matrix extraction, cmsCreateTransform) needs it to stay alive for that span.
+ * Per profile, not per module. Only the DT_COLORSPACE_DISPLAY entry's cmsHPROFILE is
+ * actually replaced at runtime -- _update_display_profile() closes and swaps it on every
+ * window move or resize that lands on a different monitor -- but the lock lives on every
+ * entry rather than on that one, so the next entry that becomes mutable does not
+ * reintroduce the hazard by default.
  *
- * Callers used to reach into dt_colorspaces_t and take xprofile_lock themselves, which
- * meant knowing the lock existed, which member it was, and which mode to take it in --
- * and one of them took a READ lock and then wrote through it. This is the same guarantee
- * without the struct: hold it while you derive, release when the derived artifact
- * (a transform, a matrix) no longer refers to the profile.
+ * Why not one module-wide lock: several pipelines and the GUI derive from profiles
+ * concurrently. A module-wide reader held across a whole thumbnail conversion queues a
+ * monitor-profile change behind work that has nothing to do with the display profile, and
+ * a queued writer in turn blocks every unrelated reader. Per entry, a monitor change
+ * contends only with users of the display entry.
  *
- * An LCMS transform does not retain the profiles it was built from, so the span ends at
- * the cmsCreateTransform call, not at the transform's lifetime. */
-void dt_colorspaces_lock_profiles(void)
+ * The entry POINTER is stable for the process: entries are allocated at init and never
+ * freed or moved, only their ->profile is swapped. So resolving a profile and then locking
+ * it is sound -- but read ->profile only AFTER taking the lock. */
+void dt_colorspaces_lock_profile(const dt_colorspaces_color_profile_t *const profile)
 {
-  dt_colorspaces_t *const self = dt_colorspaces_get_global();
-  if(!IS_NULL_PTR(self)) pthread_rwlock_rdlock(&self->xprofile_lock);
+  if(IS_NULL_PTR(profile)) return;
+  pthread_rwlock_rdlock((pthread_rwlock_t *)&profile->lock);
 }
 
-void dt_colorspaces_unlock_profiles(void)
+void dt_colorspaces_unlock_profile(const dt_colorspaces_color_profile_t *const profile)
 {
-  dt_colorspaces_t *const self = dt_colorspaces_get_global();
-  if(!IS_NULL_PTR(self)) pthread_rwlock_unlock(&self->xprofile_lock);
+  if(IS_NULL_PTR(profile)) return;
+  pthread_rwlock_unlock((pthread_rwlock_t *)&profile->lock);
 }
 
 size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_t direction,
