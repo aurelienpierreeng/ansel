@@ -391,7 +391,7 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
     }
 
     memcpy(transformed_input, input, bytes);
-    dt_ioppr_transform_image_colorspace(module, transformed_input, transformed_input,
+    dt_colorspaces_apply_profile(module->op, module->multi_name, transformed_input, transformed_input,
                                         piece->roi_in.width, piece->roi_in.height,
                                         input_dsc.cst, piece->dsc_in.cst, &input_dsc.cst,
                                         dt_ioppr_get_pipe_work_profile_info(dev->preview_pipe));

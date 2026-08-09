@@ -79,6 +79,29 @@ typedef struct dt_iop_order_iccprofile_info_t
 void dt_ioppr_init_profile_info(dt_iop_order_iccprofile_info_t *profile_info, const int lutsize);
 /** must be called when done with profile_info */
 void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t *profile_info);
+/* --- APPLY: the pixel loop ------------------------------------------------
+ *
+ * Convert a buffer between colour spaces. Branches internally on what the profile is:
+ * a matrix-shaper with tone curves takes our own vectorised matrix + LUT path, anything
+ * else falls back to lcms2. Callers neither choose nor see which.
+ *
+ * `op_name`/`instance_name` label the -d perf trace only, and are plain strings rather
+ * than the dt_iop_module_t they come from: this module sits below develop/ and cannot
+ * name an iop. */
+void dt_colorspaces_apply_profile(const char *const op_name, const char *const instance_name,
+                                  const float *const image_in, float *const image_out,
+                                  const int width, const int height,
+                                  const int cst_from, const int cst_to, int *converted_cst,
+                                  const dt_iop_order_iccprofile_info_t *const profile_info);
+
+#ifdef HAVE_OPENCL
+int dt_colorspaces_apply_profile_cl(const char *const op_name, const char *const instance_name,
+                                    const int devid, cl_mem dev_img_in, cl_mem dev_img_out,
+                                    const int width, const int height,
+                                    const int cst_from, const int cst_to, int *converted_cst,
+                                    const dt_iop_order_iccprofile_info_t *const profile_info);
+#endif
+
 void dt_ioppr_transform_image_colorspace_rgb(const float *const image_in, float *const image_out, const int width,
                                              const int height,
                                              const dt_iop_order_iccprofile_info_t *const profile_info_from,

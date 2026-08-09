@@ -66,7 +66,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
     dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
     input_locked = TRUE;
-    dt_ioppr_transform_image_colorspace(module, input, process_input_temp, piece->roi_in.width,
+    dt_colorspaces_apply_profile(module->op, module->multi_name, input, process_input_temp, piece->roi_in.width,
                                         piece->roi_in.height, process_input_dsc.cst, piece->dsc_in.cst,
                                         &process_input_dsc.cst, work_profile);
     dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
@@ -163,7 +163,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
           return 1;
         }
 
-        dt_ioppr_transform_image_colorspace(module, process_input, blend_input_temp, piece->roi_in.width,
+        dt_colorspaces_apply_profile(module->op, module->multi_name, process_input, blend_input_temp, piece->roi_in.width,
                                             piece->roi_in.height, blend_input_dsc.cst, blend_cst,
                                             &blend_input_dsc.cst, work_profile);
         blend_input = blend_input_temp;
@@ -194,7 +194,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
           return 1;
         }
 
-        dt_ioppr_transform_image_colorspace(module, output, blend_output_temp, piece->roi_out.width,
+        dt_colorspaces_apply_profile(module->op, module->multi_name, output, blend_output_temp, piece->roi_out.width,
                                             piece->roi_out.height, blend_output_dsc.cst, blend_cst,
                                             &blend_output_dsc.cst, work_profile);
         blend_output = blend_output_temp;
@@ -220,7 +220,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       }
       else
       {
-        dt_ioppr_transform_image_colorspace(module, blend_output, output, piece->roi_out.width,
+        dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
                                             piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
                                             &blend_output_dsc.cst, work_profile);
       }
