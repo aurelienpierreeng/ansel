@@ -203,8 +203,8 @@ void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t **profile_info
  * @brief Find-or-build the derived matrix/LUT data for a profile identity, memoised.
  *
  * @details Deriving matrices and curves from a profile costs two 65536-entry extractions
- * and is a pure function of `(type, filename)`, so the result is kept in a process-wide
- * memo. The lookup and the append are ONE critical section under the module's own mutex:
+ * and is a pure function of `(type, filename, intent)`, so the result is kept in a
+ * process-wide memo. The lookup and the append are ONE critical section under the module's own mutex:
  * this is reached from the pipeline worker (iop/lut3d.c and iop/tonecurve.c call it from
  * `process()`/`process_cl()`, once per tile) and from the GUI thread (iop/colorin.c), and
  * two threads missing the same key concurrently would otherwise each build an entry --
@@ -215,9 +215,11 @@ void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t **profile_info
  *
  * @param profile_type profile identity; half of the memo key.
  * @param profile_filename ICC file name, "" for built-ins; the other half of the key.
- * @param intent rendering intent stamped onto a NEWLY built entry. NOT part of the key: ask
- *        for an already-memoised identity with a different intent and you get the entry as
- *        the first caller built it.
+ * @param intent rendering intent; the third part of the key. It is stored in the entry and
+ *        read back by the lcms2 transform path, so a memo that ignored it handed the second
+ *        caller a transform built for the first caller's intent -- silently, and depending
+ *        on which module happened to commit first. Two intents for one profile now cost two
+ *        entries, which is 1.5 MB each; that is the price of the answer being right.
  * @return A pointer the MODULE owns, valid until dt_colorspaces_flush_profile_memo() (or,
  *         for DT_COLORSPACE_DISPLAY, dt_colorspaces_invalidate_display_profile_memo()).
  *         Never free it, and never write through it -- the entry is shared by every caller
