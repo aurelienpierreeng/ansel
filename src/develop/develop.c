@@ -290,9 +290,8 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dev->iop_order_list = NULL;
   while(dev->allprofile_info)
   {
-    dt_ioppr_cleanup_profile_info((dt_iop_order_iccprofile_info_t *)dev->allprofile_info->data);
-    dt_free_align(dev->allprofile_info->data);
-    dev->allprofile_info->data = NULL;
+    dt_iop_order_iccprofile_info_t *entry = (dt_iop_order_iccprofile_info_t *)dev->allprofile_info->data;
+    dt_ioppr_cleanup_profile_info(&entry);
     dev->allprofile_info = g_list_delete_link(dev->allprofile_info, dev->allprofile_info);
   }
   // after the list it guards, not before: destroying it first leaves the free loop holding

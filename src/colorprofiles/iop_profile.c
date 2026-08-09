@@ -617,15 +617,25 @@ void dt_ioppr_init_profile_info(dt_iop_order_iccprofile_info_t *profile_info, co
 
 #undef DT_IOPPR_LUT_SAMPLES
 
-void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t *profile_info)
+void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t **profile_info)
 {
+  /* The whole teardown, not just the LUTs. A dt_iop_order_iccprofile_info_t owns six
+   * aligned float arrays, so releasing one is "free the curves, free the struct, drop the
+   * pointer" -- three steps every caller was open-coding, and three chances to free the
+   * struct while leaving 1.5 MB of curves behind. Takes the pointer by address so the
+   * caller's variable cannot be left dangling. */
+  if(IS_NULL_PTR(profile_info) || IS_NULL_PTR(*profile_info)) return;
+
   for(int i = 0; i < 3; i++)
   {
-    dt_free_align(profile_info->lut_in[i]);
-    profile_info->lut_in[i] = NULL;
-    dt_free_align(profile_info->lut_out[i]);
-    profile_info->lut_out[i] = NULL;
+    dt_free_align((*profile_info)->lut_in[i]);
+    (*profile_info)->lut_in[i] = NULL;
+    dt_free_align((*profile_info)->lut_out[i]);
+    (*profile_info)->lut_out[i] = NULL;
   }
+
+  dt_free_align(*profile_info);
+  *profile_info = NULL;
 }
 
 void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_in, float *const restrict image_out, const int width,

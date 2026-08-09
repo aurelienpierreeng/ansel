@@ -206,8 +206,9 @@ dt_ioppr_add_profile_info_to_list(struct dt_develop_t *dev,
     }
     else
     {
-      dt_free_align(profile_info);
-      profile_info = NULL;
+      /* dt_ioppr_init_profile_info() has already allocated six DT_IOPPR_LUT_SAMPLES float
+       * arrays -- 1.5 MB -- so freeing the struct alone leaked all of them on this path. */
+      dt_ioppr_cleanup_profile_info(&profile_info);
     }
   }
 
