@@ -130,6 +130,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_pthread_rwlock_set_name(&dev->history_mutex, "history_mutex"); // find_history_mutex_blocker, temporary
   dt_pthread_rwlock_init(&dev->masks_mutex, NULL);
   dt_pthread_mutex_init(&dev->transient_params_mutex, NULL);
+  dt_pthread_mutex_init(&dev->allprofile_info_mutex, NULL);
 
   dev->gui_attached = gui_attached;
   dev->roi.width = -1;
@@ -294,6 +295,9 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dev->allprofile_info->data = NULL;
     dev->allprofile_info = g_list_delete_link(dev->allprofile_info, dev->allprofile_info);
   }
+  // after the list it guards, not before: destroying it first leaves the free loop holding
+  // a dangling mutex the moment anyone gives that loop a lock of its own.
+  dt_pthread_mutex_destroy(&dev->allprofile_info_mutex);
 
   dt_free(dev->histogram_pre_tonecurve);
   dt_free(dev->histogram_pre_levels);

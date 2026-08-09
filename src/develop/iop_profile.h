@@ -49,9 +49,6 @@ struct dt_dev_pixelpipe_iop_t;
 /** returns the profile info from dev profiles info list that matches (profile_type, profile_filename)
  * NULL if not found
  */
-dt_iop_order_iccprofile_info_t *
-dt_ioppr_get_profile_info_from_list(struct dt_develop_t *dev, dt_colorspaces_color_profile_type_t profile_type,
-                                    const char *profile_filename);
 
 /** adds the profile info from (profile_type, profile_filename) to the dev profiles info list if not already exists
  * returns the generated profile or the existing one

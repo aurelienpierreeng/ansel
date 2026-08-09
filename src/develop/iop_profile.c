@@ -152,13 +152,18 @@ static int dt_ioppr_generate_profile_info(dt_iop_order_iccprofile_info_t *profil
 }
 
 __DT_CLONE_TARGETS__
-dt_iop_order_iccprofile_info_t *
-dt_ioppr_get_profile_info_from_list(struct dt_develop_t *dev,
+/* Private: the list it walks is only safe to touch under allprofile_info_mutex, and the
+ * find-or-create below is its only caller. Public, it was an invitation to walk it
+ * unlocked. */
+static dt_iop_order_iccprofile_info_t *
+_get_profile_info_from_list(struct dt_develop_t *dev,
                                     const dt_colorspaces_color_profile_type_t profile_type,
                                     const char *profile_filename)
 {
   dt_iop_order_iccprofile_info_t *profile_info = NULL;
 
+  /* Caller holds dev->allprofile_info_mutex: this walks a list the pipeline worker and the
+   * GUI thread both append to. */
   for(GList *profiles = dev->allprofile_info; profiles; profiles = g_list_next(profiles))
   {
     dt_iop_order_iccprofile_info_t *prof = (dt_iop_order_iccprofile_info_t *)(profiles->data);
@@ -178,7 +183,18 @@ dt_ioppr_add_profile_info_to_list(struct dt_develop_t *dev,
                                   const char *profile_filename,
                                   const int intent)
 {
-  dt_iop_order_iccprofile_info_t *profile_info = dt_ioppr_get_profile_info_from_list(dev, profile_type, profile_filename);
+  /* Find-or-create as ONE critical section. This is reached from the pipeline worker --
+   * iop/lut3d.c and iop/tonecurve.c call it from process()/process_cl(), once per tile --
+   * and from the GUI thread, via iop/colorin.c's working-profile signal handler, on the
+   * same dev. The list was appended to and walked with no synchronisation whatsoever.
+   *
+   * The lock has to span the lookup as well as the append: two threads missing the same
+   * key concurrently would otherwise each build an entry (1.5 MB of tone-curve LUTs
+   * apiece) and append both, leaving a duplicate that later lookups may or may not find
+   * first. */
+  dt_pthread_mutex_lock(&dev->allprofile_info_mutex);
+
+  dt_iop_order_iccprofile_info_t *profile_info = _get_profile_info_from_list(dev, profile_type, profile_filename);
   if(IS_NULL_PTR(profile_info))
   {
     profile_info = dt_alloc_align(sizeof(dt_iop_order_iccprofile_info_t));
@@ -194,6 +210,9 @@ dt_ioppr_add_profile_info_to_list(struct dt_develop_t *dev,
       profile_info = NULL;
     }
   }
+
+  dt_pthread_mutex_unlock(&dev->allprofile_info_mutex);
+
   return profile_info;
 }
 
