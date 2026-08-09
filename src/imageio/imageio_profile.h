@@ -56,7 +56,7 @@
 /* Choosing an ICC profile for an image, and reading the one its file carries. Codec work: see
  * the .c for why it is not in common/colorspaces.c. */
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 
 #include <lcms2.h>
 #include <stdint.h>

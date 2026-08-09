@@ -42,7 +42,7 @@
 #include <glib.h>
 
 #include "widgets/bauhaus.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/cups_print.h"
 #include "common/file_location.h"
 #include "common/image_cache.h"

@@ -107,7 +107,7 @@
 
 #include "common/collection.h"
 #include "gui/common/database_gui.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/colorlabels.h"
 #include "darktable.h"
 #include "common/anonymous_ids.h"

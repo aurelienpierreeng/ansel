@@ -18,7 +18,7 @@
 
 #include "system/macros.h"
 #include "common/act_on.h"
-#include "common/colorspaces.h"   // dt_colorspaces_get_global(), and lcms2 for cmsHTRANSFORM
+#include "colorprofiles/colorspaces.h"   // dt_colorspaces_get_global(), and lcms2 for cmsHTRANSFORM
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"

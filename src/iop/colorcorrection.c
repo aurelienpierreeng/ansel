@@ -53,7 +53,7 @@
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

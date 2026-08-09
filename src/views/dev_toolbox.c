@@ -16,7 +16,7 @@
 #include "views/dev_toolbox.h"
 
 #include "widgets/bauhaus.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/file_location.h"
 #include "common/usermanual_url.h"
 #include "common/conf.h"

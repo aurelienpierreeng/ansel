@@ -54,7 +54,7 @@
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "develop/develop.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"

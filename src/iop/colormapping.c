@@ -49,7 +49,7 @@
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
 #include "pixel/bilateral.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/imagebuf.h"
 #include "common/points.h"
 #include "control/control.h"

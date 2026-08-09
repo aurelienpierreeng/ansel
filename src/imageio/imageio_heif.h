@@ -23,7 +23,7 @@
 #ifndef DT_IMAGEIO_IMAGEIO_HEIF_H
 #define DT_IMAGEIO_IMAGEIO_HEIF_H
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/image.h"
 #include "common/mipmap_cache.h"
 

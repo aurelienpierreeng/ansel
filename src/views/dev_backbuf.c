@@ -24,7 +24,7 @@
 #include "common/conf.h"
 
 #include "widgets/bauhaus.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "system/macros.h"
 #include "system/simd.h"
 #include "gui/application.h"

@@ -85,7 +85,7 @@
 #include "iop/iop_api.h"
 
 // for Kelvin temperature and bogus WB
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "external/cie_colorimetric_tables.c"
 #include "widgets/collapsible_section.h"
 #include "widgets/label.h"

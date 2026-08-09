@@ -47,7 +47,7 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"

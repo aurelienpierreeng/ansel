@@ -50,8 +50,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/colorspaces.h"
-#include "common/colormatrices.c"
+#include "colorprofiles/colorspaces.h"
+#include "colorprofiles/colormatrices.c"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "math/matrices.h"

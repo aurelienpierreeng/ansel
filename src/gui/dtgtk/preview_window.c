@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/logging.h"
-#include "common/colorspaces.h"   // dt_colorspaces_get_global, and lcms2
+#include "colorprofiles/colorspaces.h"   // dt_colorspaces_get_global, and lcms2
 #include "common/colorspaces_inline_conversions.h"   // dt_Lab_to_XYZ
 #include "common/conf.h"
 #include "system/macros.h"

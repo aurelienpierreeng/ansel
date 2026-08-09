@@ -64,7 +64,7 @@ FILE(GLOB SOURCE_FILES
   "common/color_vocabulary.c"
   "common/colorlabels.c"
   "pixel/colorequal_shared.c"
-  "common/colorspaces.c"
+  "colorprofiles/colorspaces.c"
   "imageio/imageio_profile.c"
   "common/curve_tools.c"
   "math/splines.cpp"
