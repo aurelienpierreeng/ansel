@@ -534,7 +534,10 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
      && data)
   {
     dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
-    dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height, dt_colorspaces_get_global()->display_type);
+    dt_colorprofiles_settings_t settings;
+    dt_colorprofiles_get_settings(&settings);
+    dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height,
+                                 settings.display_type);
     dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
     dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
   }
