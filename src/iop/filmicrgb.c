@@ -2619,7 +2619,7 @@ static inline void restore_ratios(float *const restrict ratios, const float *con
 /* Soft-proof target for gamut mapping.
  *
  * Reads the snapshot commit_params() took under the GUI thread, NEVER the live
- * dt_colorspaces_get_global(). Two reasons, both load-bearing:
+ * live colour-profile settings. Two reasons, both load-bearing:
  *  - process()/process_cl() run on pipeline threads while the soft-proof toggle is written
  *    from the GUI thread with no lock at all, so a live read is a plain data race (and a
  *    torn filename, not merely a stale one);
@@ -3997,15 +3997,17 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   // See _filmic_get_output_profile(): soft-proofing only applies to the interactive
   // full pipe. Zero the profile identity when inactive so toggling other pipe types
   // or preferences unrelated to soft-proofing never perturbs the hash.
-  d->softproof_mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? dt_colorspaces_get_global()->mode : DT_PROFILE_NORMAL;
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+
+  d->softproof_mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? settings.mode : DT_PROFILE_NORMAL;
 
   memset(d->softproof_filename, 0, sizeof(d->softproof_filename));
   if(d->softproof_mode != DT_PROFILE_NORMAL)
   {
-    d->softproof_type = dt_colorspaces_get_global()->softproof_type;
-    g_strlcpy(d->softproof_filename, dt_colorspaces_get_global()->softproof_filename,
-             sizeof(d->softproof_filename));
-    d->softproof_intent = dt_colorspaces_get_global()->softproof_intent;
+    d->softproof_type = settings.softproof_type;
+    g_strlcpy(d->softproof_filename, settings.softproof_filename, sizeof(d->softproof_filename));
+    d->softproof_intent = settings.softproof_intent;
   }
   else
   {
