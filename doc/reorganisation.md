@@ -211,7 +211,7 @@ Layers run low to high. A file may include from its own layer or below, never ab
 | 0 | `win/`, `external/` | — | Windows shims for POSIX; vendored third-party |
 | 1 | `math/` | **no — guaranteed** | pure algorithms: splines, expression evaluation, topological sort |
 | 1 | `common/` | yes | application services: database, caches, config, logging, image metadata, styles, tags |
-| 2 | `colorprofiles/` | not yet | LittleCMS2 profile work (see the module README) |
+| 1 | `colorprofiles/` | yes | ICC profiles: the LittleCMS2 work, the camera matrices, the transform engine, and the application-wide profile list |
 | 2 | `pixel/` | no file holds its own | pixel maths: filters, wavelets, interpolation, colour transforms |
 | 3 | `control/` | yes | jobs, signals, progress, the control loop |
 | 4 | `widgets/` | two named registries only | the GTK widget set — reusable, and **may not include `gui/`** |
@@ -352,18 +352,6 @@ justify an include it has always carried is how mechanical work starts dragging 
 # What remains {#what-remains}
 
 Roughly in dependency order. Layering violations (217) fall as these land.
-
-**Merge the LittleCMS2 code.** `common/colorspaces.c` (218 LCMS2 calls) and
-`pixel/iop_profile.c` (7) belong in `colorprofiles/` alongside `printprof.c`. The split between
-them today follows where the code was written, not what it does.
-
-Measured order, once the upward clusters are gone: return the image→profile family
-(`dt_image_find_best_color_profile` and the five functions around it, ~640 lines) to
-`imageio/` — it looks like profile work but is codec work, and is the only reason
-`colorspaces.c` includes six `imageio/*` headers — then `git mv` the rest. `develop/iop_profile.c`
-does **not** move: 12 of its 15 functions take develop/ types, and it is the pipeline-facing
-half. Nor does `colorspaces_inline_conversions.h`, the tree's heaviest header at 465k
-preprocessed lines; moving it measures +6 and it needs splitting by colour space first.
 
 **Extract `database`, `caches`, `metadata` from `common/`.** `common/` is 63 translation units
 and remains the largest undifferentiated module. Database access in particular should be behind

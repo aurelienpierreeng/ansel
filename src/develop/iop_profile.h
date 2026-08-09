@@ -32,9 +32,9 @@
 
 /* The pipeline-facing half of the colour-profile module: which profile a module, pipe or
  * export should use, and transforming an image with it. Everything declared here takes a
- * develop/ type, which is exactly why it is here and not in pixel/iop_profile.h. */
+ * develop/ type, which is exactly why it is here and not in colorprofiles/iop_profile.h. */
 
-#include "pixel/iop_profile.h"
+#include "colorprofiles/iop_profile.h"
 #include "colorprofiles/colorspaces.h"
 
 #ifdef __cplusplus

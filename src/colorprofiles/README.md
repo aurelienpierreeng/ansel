@@ -10,12 +10,12 @@ Contents:
 |---------------------|------------------------------------------------------------------|
 | `colorspaces.c/h`   | the LittleCMS2 work: building, opening, naming and applying ICC profiles, and the application-wide profile list |
 | `colormatrices.c`   | 102 camera colour-matrix presets, `#include`d as data by `colorspaces.c` and `iop/colorin.c` |
+| `iop_profile.c/h`   | the transform engine: applying a profile to pixels, SIMD and OpenCL |
 | `printprof.c`       | resolves the printer/soft-proof profile for an output device      |
 
-One more belongs here and is not yet moved: `pixel/iop_profile.c`, the pixel-level half of
-profile handling — the SIMD/OpenCL transform engine. (The *pipeline*-facing half is
-`develop/iop_profile.c`, which resolves which profile a module or pipe should use; it takes
-develop/ types, stays at layer 5, and is not a candidate for this module.)
+The *pipeline*-facing half of profile handling, `develop/iop_profile.c`, deliberately stays
+where it is: it resolves which profile a module or pipe should use, takes develop/ types
+throughout, and belongs at layer 5.
 
 **What deliberately did NOT come here.** Choosing a profile *for an image* — reading the ICC a
 JPEG embeds, mapping an AVIF's CICP block, falling back to a RAW's camera matrix — is codec

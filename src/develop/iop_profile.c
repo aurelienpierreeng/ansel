@@ -41,10 +41,10 @@
  * pipe or export should use, and transforming an image with it. Everything here takes
  * dt_develop_t, dt_dev_pixelpipe_t or dt_iop_module_t, which is why it sits at layer 5.
  *
- * The profile maths it delegates to lives in pixel/iop_profile.c -- see the note there.
+ * The profile maths it delegates to lives in colorprofiles/iop_profile.c -- see the note there.
  */
 
-#include "pixel/iop_profile.h"
+#include "colorprofiles/iop_profile.h"
 #include "config.h"
 #endif
 

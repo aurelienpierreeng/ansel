@@ -30,7 +30,7 @@
 
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
-#include "pixel/iop_profile.h"
+#include "colorprofiles/iop_profile.h"
 
 /*
  * histogram region of interest

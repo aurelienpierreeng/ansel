@@ -152,7 +152,7 @@ FILE(GLOB SOURCE_FILES
   "common/usermanual_url.c"
   "develop/iop_order.c"
   "develop/iop_profile.c"
-  "pixel/iop_profile.c"
+  "colorprofiles/iop_profile.c"
   "common/dng_opcode.c"
   "common/conf.c"
   "control/control.c"
