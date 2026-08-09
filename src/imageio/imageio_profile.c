@@ -62,7 +62,6 @@
 #include "imageio/imageio_profile.h"
 
 #include "common/colorspaces.h"
-#include "common/debug.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/logging.h"
@@ -71,7 +70,6 @@
 
 #include <lcms2.h>
 #include <string.h>
-#include <strings.h>
 
 #ifdef HAVE_OPENJPEG
 #include "imageio/imageio_j2k.h"   // conditional-ok: only the HAVE_OPENJPEG branch below reads J2K
