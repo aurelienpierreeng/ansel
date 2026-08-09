@@ -81,6 +81,22 @@ void dt_ioppr_init_profile_info(dt_iop_order_iccprofile_info_t *profile_info, co
 /** Release a profile info: its tone-curve LUTs, the struct itself, and the caller's
  * pointer. Takes the pointer by address so it cannot be left dangling. */
 void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t **profile_info);
+/** Find-or-build the derived matrix/LUT data for a profile identity, memoised.
+ * Module-owned: the returned pointer is valid until dt_colorspaces_flush_profile_memo().
+ * NOT for image-derived types (DT_COLORSPACE_EMBEDDED_ICC..DT_COLORSPACE_ALTERNATE_MATRIX):
+ * those are not a function of their key and belong to whatever built them. */
+dt_iop_order_iccprofile_info_t *
+dt_colorspaces_add_profile(const dt_colorspaces_color_profile_type_t profile_type,
+                           const char *profile_filename,
+                           const int intent);
+
+/** Drop every memoised entry. Called by dt_colorprofiles_cleanup(). */
+void dt_colorspaces_flush_profile_memo(void);
+
+/** Drop the memoised DT_COLORSPACE_DISPLAY entry, whose source profile this module
+ * replaces on a monitor change. */
+void dt_colorspaces_invalidate_display_profile_memo(void);
+
 /* --- APPLY: the pixel loop ------------------------------------------------
  *
  * Convert a buffer between colour spaces. Branches internally on what the profile is:

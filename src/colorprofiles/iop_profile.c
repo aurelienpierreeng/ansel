@@ -1055,6 +1055,217 @@ cleanup:
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
 
+
+/* ---------------------------------------------------------------------------
+ * The derived-profile memo.
+ *
+ * Matrix + tone-curve LUTs extracted from a profile: expensive to build (two
+ * 65536-entry extractions) and a pure function of (type, filename), so it is
+ * memoised. This lived on dt_develop_t, which made it per-image, unsynchronised,
+ * and duplicated between concurrent exports; and it made develop/ take this
+ * module's rwlock by hand to build an entry.
+ *
+ * It is the module's now, and flushed by dt_colorprofiles_cleanup().
+ *
+ * What deliberately does NOT live here: profiles derived from one image --
+ * DT_COLORSPACE_EMBEDDED_ICC through DT_COLORSPACE_ALTERNATE_MATRIX. They are not
+ * registered in the profile list and cannot be resolved by identity at all, so
+ * they are not a function of their key and would stomp each other here. They live
+ * on the pipe that built them (dt_dev_pixelpipe_t.owned_input_profile_info).
+ * ------------------------------------------------------------------------- */
+
+static GList *_profile_info_memo = NULL;
+/* Raw pthread type, like this module's other locks: dt_pthread_mutex_t is a struct
+ * wrapper in Debug builds, so a static PTHREAD_MUTEX_INITIALIZER would be initialising
+ * a subobject -- which clang rejects under -Werror and gcc silently accepts. */
+static pthread_mutex_t _profile_info_lock = PTHREAD_MUTEX_INITIALIZER;
+
+void dt_colorspaces_flush_profile_memo(void)
+{
+  pthread_mutex_lock(&_profile_info_lock);
+  while(_profile_info_memo)
+  {
+    dt_iop_order_iccprofile_info_t *entry = (dt_iop_order_iccprofile_info_t *)_profile_info_memo->data;
+    dt_ioppr_cleanup_profile_info(&entry);
+    _profile_info_memo = g_list_delete_link(_profile_info_memo, _profile_info_memo);
+  }
+  pthread_mutex_unlock(&_profile_info_lock);
+}
+
+void dt_colorspaces_invalidate_display_profile_memo(void)
+{
+  /* The DISPLAY entry is derived from a cmsHPROFILE this module replaces whenever the
+   * monitor profile changes. Nothing invalidated it before, so a session kept the previous
+   * monitor's matrices and tone curves for as long as the memo lived. That was already
+   * wrong per-image; now that the memo is process-wide it would persist for the whole run.
+   *
+   * Dropped rather than rebuilt: the next caller that wants it will build it, and doing it
+   * here would mean building a profile under this lock from the profile-changed handler. */
+  pthread_mutex_lock(&_profile_info_lock);
+  for(GList *l = _profile_info_memo; l; )
+  {
+    GList *next = g_list_next(l);
+    dt_iop_order_iccprofile_info_t *entry = (dt_iop_order_iccprofile_info_t *)l->data;
+    if(entry && entry->type == DT_COLORSPACE_DISPLAY)
+    {
+      dt_ioppr_cleanup_profile_info(&entry);
+      _profile_info_memo = g_list_delete_link(_profile_info_memo, l);
+    }
+    l = next;
+  }
+  pthread_mutex_unlock(&_profile_info_lock);
+}
+
+static int _generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, const int type, const char *filename, const int intent)
+{
+  int err_code = 0;
+  cmsHPROFILE *rgb_profile = NULL;
+
+  dt_ioppr_mark_as_nonmatrix_profile(profile_info);
+  dt_ioppr_clear_lut_curves(profile_info);
+
+  profile_info->nonlinearlut = 0;
+  profile_info->grey = 0.1842f;
+
+  profile_info->type = type;
+  g_strlcpy(profile_info->filename, filename, sizeof(profile_info->filename));
+  profile_info->intent = intent;
+
+  /* The DISPLAY entry's cmsHPROFILE is the one thing in the list that is replaced at
+   * runtime, so resolving it and DERIVING FROM IT have to happen under the same lock.
+   * develop/ used to take this lock by hand -- and released it immediately after the
+   * lookup, before cmsGetColorSpace() and the two 65536-entry extractions below, which
+   * are the parts that actually touch the handle. Inside the module the whole span is
+   * covered, which is what the lock was for. */
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  const gboolean lock_display = (type == DT_COLORSPACE_DISPLAY);
+  if(lock_display) pthread_rwlock_rdlock(&self->xprofile_lock);
+
+  const dt_colorspaces_color_profile_t *profile
+      = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
+  if(profile) rgb_profile = profile->profile;
+
+  // we only allow rgb profiles
+  if(rgb_profile)
+  {
+    cmsColorSpaceSignature rgb_color_space = cmsGetColorSpace(rgb_profile);
+    if(rgb_color_space != cmsSigRgbData)
+    {
+      fprintf(stderr, "working profile color space `%c%c%c%c' not supported\n",
+              (char)(rgb_color_space>>24),
+              (char)(rgb_color_space>>16),
+              (char)(rgb_color_space>>8),
+              (char)(rgb_color_space));
+      rgb_profile = NULL;
+    }
+  }
+
+  // get the matrix
+  if(rgb_profile)
+  {
+    if(dt_colorspaces_get_matrix_from_input_profile(rgb_profile, profile_info->matrix_in, profile_info->lut_in[0],
+                                                    profile_info->lut_in[1], profile_info->lut_in[2],
+                                                    profile_info->lutsize)
+       || dt_colorspaces_get_matrix_from_output_profile(rgb_profile, profile_info->matrix_out,
+                                                        profile_info->lut_out[0], profile_info->lut_out[1],
+                                                        profile_info->lut_out[2], profile_info->lutsize))
+    {
+      dt_ioppr_mark_as_nonmatrix_profile(profile_info);
+      dt_ioppr_clear_lut_curves(profile_info);
+    }
+    else if(isnan(profile_info->matrix_in[0][0]) || isnan(profile_info->matrix_out[0][0]))
+    {
+      dt_ioppr_mark_as_nonmatrix_profile(profile_info);
+      dt_ioppr_clear_lut_curves(profile_info);
+    }
+    else
+    {
+      transpose_3xSSE(profile_info->matrix_in, profile_info->matrix_in_transposed);
+      transpose_3xSSE(profile_info->matrix_out, profile_info->matrix_out_transposed);
+    }
+  }
+
+  // now try to initialize unbounded mode:
+  // we do extrapolation for input values above 1.0f.
+  // unfortunately we can only do this if we got the computation
+  // in our hands, i.e. for the fast builtin-dt-matrix-profile path.
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]))
+  {
+    profile_info->nonlinearlut = dt_ioppr_init_unbounded_coeffs(profile_info->lut_in[0], profile_info->lut_in[1], profile_info->lut_in[2],
+        profile_info->unbounded_coeffs_in[0], profile_info->unbounded_coeffs_in[1], profile_info->unbounded_coeffs_in[2], profile_info->lutsize);
+    dt_ioppr_init_unbounded_coeffs(profile_info->lut_out[0], profile_info->lut_out[1], profile_info->lut_out[2],
+        profile_info->unbounded_coeffs_out[0], profile_info->unbounded_coeffs_out[1], profile_info->unbounded_coeffs_out[2], profile_info->lutsize);
+  }
+
+  if(!isnan(profile_info->matrix_in[0][0]) && !isnan(profile_info->matrix_out[0][0]) && profile_info->nonlinearlut)
+  {
+    const dt_aligned_pixel_t rgb = { 0.1842f, 0.1842f, 0.1842f };
+    profile_info->grey = dt_ioppr_get_rgb_matrix_luminance(rgb, profile_info->matrix_in, profile_info->lut_in, profile_info->unbounded_coeffs_in, profile_info->lutsize, profile_info->nonlinearlut);
+  }
+
+  if(lock_display) pthread_rwlock_unlock(&self->xprofile_lock);
+
+  return err_code;
+}
+
+/* Caller holds _profile_info_lock. */
+static dt_iop_order_iccprofile_info_t *
+_get_profile_info_from_list(
+                                    const dt_colorspaces_color_profile_type_t profile_type,
+                                    const char *profile_filename)
+{
+  dt_iop_order_iccprofile_info_t *profile_info = NULL;
+
+  /* Caller holds _profile_info_lock: this walks a list the pipeline worker and the
+   * GUI thread both append to. */
+  for(GList *profiles = _profile_info_memo; profiles; profiles = g_list_next(profiles))
+  {
+    dt_iop_order_iccprofile_info_t *prof = (dt_iop_order_iccprofile_info_t *)(profiles->data);
+    if(prof->type == profile_type && strcmp(prof->filename, profile_filename) == 0)
+    {
+      profile_info = prof;
+      break;
+    }
+  }
+
+  return profile_info;
+}
+
+dt_iop_order_iccprofile_info_t *
+dt_colorspaces_add_profile(const dt_colorspaces_color_profile_type_t profile_type,
+                           const char *profile_filename,
+                           const int intent)
+{
+  /* Find-or-create as ONE critical section. Reached from the pipeline worker -- iop/lut3d.c
+   * and iop/tonecurve.c call it from process()/process_cl(), once per tile -- and from the
+   * GUI thread via iop/colorin.c. The lock has to span the lookup as well as the append:
+   * two threads missing the same key concurrently would otherwise each build an entry
+   * (1.5 MB of tone-curve LUTs apiece) and append both. */
+  pthread_mutex_lock(&_profile_info_lock);
+
+  dt_iop_order_iccprofile_info_t *profile_info = _get_profile_info_from_list(profile_type, profile_filename);
+  if(IS_NULL_PTR(profile_info))
+  {
+    profile_info = dt_alloc_align(sizeof(dt_iop_order_iccprofile_info_t));
+    dt_ioppr_init_profile_info(profile_info, 0);
+    const int err = _generate_profile_info(profile_info, profile_type, profile_filename, intent);
+    if(err == 0)
+    {
+      _profile_info_memo = g_list_append(_profile_info_memo, profile_info);
+    }
+    else
+    {
+      /* dt_ioppr_init_profile_info() has already allocated six DT_IOPPR_LUT_SAMPLES float
+       * arrays -- 1.5 MB -- so freeing the struct alone leaked all of them on this path. */
+      dt_ioppr_cleanup_profile_info(&profile_info);
+    }
+  }
+
+  pthread_mutex_unlock(&_profile_info_lock);
+
+  return profile_info;
+}
+
 /* ---------------------------------------------------------------------------
  * APPLY: the pixel loop.
  *

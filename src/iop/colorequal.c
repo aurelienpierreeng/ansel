@@ -765,7 +765,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)p1;
   dt_iop_colorequal_data_t *d = (dt_iop_colorequal_data_t *)piece->data;
   const dt_iop_order_iccprofile_info_t *lut_profile
-      = self->dev ? dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
+      = self->dev ? dt_colorspaces_add_profile(DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
                   : NULL;
   const dt_iop_order_iccprofile_info_t *work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
@@ -964,7 +964,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   if(!g->viewer_lut_dirty && g->viewer_lut_valid && _lut_fields_equal(&g->viewer_lut_params, p)) return;
 
   const dt_iop_order_iccprofile_info_t *lut_profile
-      = self->dev ? dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
+      = self->dev ? dt_colorspaces_add_profile(DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
                   : NULL;
   const dt_iop_order_iccprofile_info_t *display_profile
       = (self->dev && self->dev->preview_pipe) ? dt_ioppr_get_pipe_output_profile_info(self->dev->preview_pipe)

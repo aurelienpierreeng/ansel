@@ -51,6 +51,7 @@
 */
 
 #include "colorprofiles/colorspaces.h"
+#include "colorprofiles/iop_profile.h"   // dt_colorspaces_invalidate_display_profile_memo()
 
 #include <stddef.h>   // offsetof(), for the startup self-test
 
@@ -165,6 +166,12 @@ void dt_colorspaces_set_profile_changed_handler(dt_colorspaces_profile_changed_h
 
 static void _notify_profile_changed(void)
 {
+  /* The monitor profile just changed, so anything derived from the old one is stale.
+   * Nothing dropped the memoised DISPLAY entry before this, so a session kept the previous
+   * monitor's matrices and tone curves indefinitely -- silently, since every hash and ROI
+   * in the chain stayed consistent. */
+  dt_colorspaces_invalidate_display_profile_memo();
+
   if(_profile_changed_handler) _profile_changed_handler();
 }
 
@@ -1269,6 +1276,10 @@ void dt_colorprofiles_init(void)
 void dt_colorprofiles_cleanup(void)
 {
   if(IS_NULL_PTR(_colorprofiles)) return;
+
+  // the derived matrix/LUT memo is built from these profiles; it goes first
+  dt_colorspaces_flush_profile_memo();
+
   _colorspaces_destroy(_colorprofiles);
   _colorprofiles = NULL;
 }

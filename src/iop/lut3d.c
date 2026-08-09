@@ -778,7 +778,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     : (d->params.colorspace == DT_IOP_ITUR_BT1886) ? DT_COLORSPACE_ITUR_BT1886
     : DT_COLORSPACE_LIN_REC2020;
   const dt_iop_order_iccprofile_info_t *const lut_profile
-    = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);
+    = dt_colorspaces_add_profile(colorspace, "", INTENT_PERCEPTUAL);
   const dt_iop_order_iccprofile_info_t *const work_profile
     = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   gboolean transform = (!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(lut_profile)) ? TRUE : FALSE;
@@ -858,7 +858,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     : (d->params.colorspace == DT_IOP_ITUR_BT1886) ? DT_COLORSPACE_ITUR_BT1886
     : DT_COLORSPACE_LIN_REC2020;
   const dt_iop_order_iccprofile_info_t *const lut_profile
-    = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);
+    = dt_colorspaces_add_profile(colorspace, "", INTENT_PERCEPTUAL);
   const dt_iop_order_iccprofile_info_t *const work_profile
     = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
   const gboolean transform = (!IS_NULL_PTR(work_profile) && !IS_NULL_PTR(lut_profile)) ? TRUE : FALSE;
