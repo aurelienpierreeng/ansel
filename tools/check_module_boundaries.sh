@@ -85,18 +85,17 @@ while IFS= read -r line; do
 done < <(grep -Hn '^[ \t]*#[ \t]*include[ \t]*"gui/' src/widgets/*.c src/widgets/*.h 2>/dev/null)
 
 # ---------------------------------------------------------------------------------------
-# 3. src/colorprofiles is being closed: a ratchet, not a boundary yet.
+# 3. src/colorprofiles is closed: nothing outside it names the module's state.
 #
-# The module still publishes dt_colorspaces_get_global(), so the rest of the tree reaches
-# into dt_colorspaces_t's members directly and takes its rwlock by hand. That is being
-# retired call site by call site; the end state is no accessor at all and no
-# darktable.color_profiles. Until then these two numbers may fall and must never rise --
-# which is the only property a half-finished migration can actually be held to.
+# This started as a ratchet on a migration -- 59 places read dt_colorspaces_t's members
+# through dt_colorspaces_get_global(), and 4 took its rwlock by hand. Both are zero now,
+# so it is a real boundary and the check is that it stays one. A new caller of either is
+# a caller that should be asking the module a question instead.
 #
 # xprofile_lock is counted separately because it is the sharper of the two: a caller that
 # holds the module's lock is a caller that can deadlock it or use a handle it frees.
-accessor_baseline=1
-lock_baseline=1
+accessor_baseline=0
+lock_baseline=0
 
 accessor_now=$(grep -rn 'dt_colorspaces_get_global()' src/ --include='*.c' --include='*.h' --include='*.cc' \
                2>/dev/null | grep -cv '^src/colorprofiles/')

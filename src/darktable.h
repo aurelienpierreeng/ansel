@@ -163,7 +163,6 @@ struct dt_points_t;
 struct dt_imageio_t;
 struct dt_bauhaus_t;
 struct dt_undo_t;
-struct dt_colorspaces_t;
 struct dt_l10n_t;
 
 

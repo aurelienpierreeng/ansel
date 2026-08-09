@@ -92,6 +92,9 @@ _Static_assert(DT_INTENT_ABSOLUTE_COLORIMETRIC == INTENT_ABSOLUTE_COLORIMETRIC, 
 #include <CoreServices/CoreServices.h>
 #endif
 
+/* The module's single instance. Private: nothing outside src/colorprofiles/ names it. */
+static dt_colorspaces_t *dt_colorspaces_get_global(void);
+
 static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_profile_type_t type,
                                                        cmsHPROFILE profile, const char *name, int in_pos,
                                                        int out_pos, int display_pos, int category_pos,
@@ -1284,10 +1287,9 @@ void dt_colorprofiles_cleanup(void)
   _colorprofiles = NULL;
 }
 
-/* Internal shorthand only -- not in the public header. Every use of this inside the module
- * is a place that still reaches the struct directly, and the count goes to zero as the
- * remaining consumers move to the query API. */
-dt_colorspaces_t *dt_colorspaces_get_global(void)
+/* Module-internal shorthand. It is static now: nothing outside this directory names the
+ * module's state, which is the whole point of the exercise. */
+static dt_colorspaces_t *dt_colorspaces_get_global(void)
 {
   return _colorprofiles;
 }
@@ -1726,6 +1728,7 @@ static void _update_display_profile(guchar *tmp_data, gsize size, char *name, si
     }
   }
 }
+
 
 static void cms_error_handler(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *text)
 {
@@ -2354,6 +2357,34 @@ static void _fill_desc(const dt_colorspaces_color_profile_t *const p, dt_colorpr
   out->type = p->type;
   g_strlcpy(out->filename, p->filename, sizeof(out->filename));
   g_strlcpy(out->name, p->name, sizeof(out->name));
+}
+
+/* --- LOCK: pin the profile handles for the span of a derivation ------------
+ *
+ * Exactly one thing in the list mutates after init: the DT_COLORSPACE_DISPLAY entry's
+ * cmsHPROFILE, which _update_display_profile() closes and replaces whenever the monitor
+ * profile changes -- on every window move or resize that lands on a different monitor.
+ * A caller that resolved that handle and is still deriving from it (cmsGetColorSpace, a
+ * matrix extraction, cmsCreateTransform) needs it to stay alive for that span.
+ *
+ * Callers used to reach into dt_colorspaces_t and take xprofile_lock themselves, which
+ * meant knowing the lock existed, which member it was, and which mode to take it in --
+ * and one of them took a READ lock and then wrote through it. This is the same guarantee
+ * without the struct: hold it while you derive, release when the derived artifact
+ * (a transform, a matrix) no longer refers to the profile.
+ *
+ * An LCMS transform does not retain the profiles it was built from, so the span ends at
+ * the cmsCreateTransform call, not at the transform's lifetime. */
+void dt_colorspaces_lock_profiles(void)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  if(!IS_NULL_PTR(self)) pthread_rwlock_rdlock(&self->xprofile_lock);
+}
+
+void dt_colorspaces_unlock_profiles(void)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  if(!IS_NULL_PTR(self)) pthread_rwlock_unlock(&self->xprofile_lock);
 }
 
 size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_t direction,
