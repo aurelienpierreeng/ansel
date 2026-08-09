@@ -96,9 +96,8 @@ _Static_assert(DT_INTENT_ABSOLUTE_COLORIMETRIC == INTENT_ABSOLUTE_COLORIMETRIC, 
 static dt_colorspaces_t *dt_colorspaces_get_global(void);
 
 static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_profile_type_t type,
-                                                       cmsHPROFILE profile, const char *name, int in_pos,
-                                                       int out_pos, int display_pos, int category_pos,
-                                                       int work_pos);
+                                                       cmsHPROFILE profile, const char *name,
+                                                       dt_colorspaces_profile_role_t roles);
 
 static const cmsCIEXYZ d65 = {0.95045471, 1.00000000, 1.08905029};
 
@@ -224,7 +223,7 @@ generate_mat3inv_body(double, A, B)
 static const dt_colorspaces_color_profile_t *_get_profile(dt_colorspaces_t *self,
                                                           dt_colorspaces_color_profile_type_t type,
                                                           const char *filename,
-                                                          dt_colorspaces_profile_role_t direction);
+                                                          dt_colorspaces_profile_role_t role);
 
 __DT_CLONE_TARGETS__
 static int dt_colorspaces_get_matrix_from_profile(cmsHPROFILE prof, dt_colormatrix_t matrix, float *lutr, float *lutg,
@@ -855,8 +854,9 @@ static cmsHPROFILE dt_colorspaces_create_linear_infrared_profile(void)
 struct dt_colorspaces_color_profile_t *dt_colorspaces_new_image_profile(
     dt_colorspaces_color_profile_type_t type, cmsHPROFILE profile, gboolean owns_profile)
 {
-  // -1 everywhere: a profile belonging to one image has no place in any combo box.
-  dt_colorspaces_color_profile_t *container = _create_profile(type, profile, "", -1, -1, -1, -1, -1);
+  // No role: a profile belonging to one image has no place in any combo box, so no
+  // enumeration and no lookup can ever reach it.
+  dt_colorspaces_color_profile_t *container = _create_profile(type, profile, "", 0);
   if(container) container->owns_profile = owns_profile;
   return container;
 }
@@ -1105,9 +1105,8 @@ void hsl2rgb(dt_aligned_pixel_t rgb, float h, float s, float l)
 }
 
 static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_profile_type_t type,
-                                                       cmsHPROFILE profile, const char *name, int in_pos,
-                                                       int out_pos, int display_pos, int category_pos,
-                                                       int work_pos)
+                                                       cmsHPROFILE profile, const char *name,
+                                                       dt_colorspaces_profile_role_t roles)
 {
   dt_colorspaces_color_profile_t *prof;
   prof = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
@@ -1115,11 +1114,7 @@ static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_prof
   prof->type = type;
   g_strlcpy(prof->name, name, sizeof(prof->name));
   prof->profile = profile;
-  prof->in_pos = in_pos;
-  prof->out_pos = out_pos;
-  prof->display_pos = display_pos;
-  prof->category_pos = category_pos;
-  prof->work_pos = work_pos;
+  prof->roles = roles;
   return prof;
 }
 
@@ -1242,63 +1237,10 @@ static pthread_rwlock_t _transforms_lock = PTHREAD_RWLOCK_INITIALIZER;
 static dt_colorspaces_t *_colorspaces_build(void);
 static void _colorspaces_destroy(dt_colorspaces_t *self);
 
-#ifndef NDEBUG
-/* The equivalence proof for deleting the five *_pos ints.
- *
- * dt_colorspaces_enumerate_profiles() promises out[k] is the entry whose legacy X_pos was
- * k, for a single-bit direction X. That holds by construction -- every ++counter in
- * _colorspaces_build() is evaluated as an argument to the append that registers the entry,
- * and each directory batch is sorted before any number is handed out -- but "by
- * construction" is exactly the kind of claim that stops being true when someone appends an
- * entry in the wrong place, and the symptom would be every stored combo index in every
- * preset silently shifting.
- *
- * So it is checked, once, at startup, against the real installed profile set rather than a
- * synthetic one. Debug builds only: it is O(entries x directions) and proves a property of
- * the data, not of the machine. */
-static void _selftest_index_matches_legacy_pos(const dt_colorspaces_t *const self)
-{
-  const struct
-  {
-    dt_colorspaces_profile_role_t bit;
-    size_t offset;
-    const char *name;
-  } directions[] = {
-    { DT_PROFILE_ROLE_INPUT,      offsetof(dt_colorspaces_color_profile_t, in_pos),      "IN" },
-    { DT_PROFILE_ROLE_OUTPUT,     offsetof(dt_colorspaces_color_profile_t, out_pos),     "OUT" },
-    { DT_PROFILE_ROLE_WORKING,    offsetof(dt_colorspaces_color_profile_t, work_pos),    "WORK" },
-    { DT_PROFILE_ROLE_MONITOR, offsetof(dt_colorspaces_color_profile_t, display_pos), "DISPLAY" },
-  };
-
-  for(size_t d = 0; d < sizeof(directions) / sizeof(directions[0]); d++)
-  {
-    int index = 0;
-    for(const GList *l = self->profiles; l; l = g_list_next(l))
-    {
-      const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
-      const int legacy = *(const int *)((const char *)p + directions[d].offset);
-      if(legacy <= -1) continue;
-
-      if(legacy != index)
-        fprintf(stderr,
-                "[colorspaces selftest] %s: entry `%s' has legacy pos %d but enumerates at %d --\n"
-                "  the profile list is no longer in registration order, and every stored combo\n"
-                "  index in every preset and conf key now points at the wrong profile.\n",
-                directions[d].name, p->name, legacy, index);
-      index++;
-    }
-  }
-}
-#endif /* NDEBUG */
-
 void dt_colorprofiles_init(void)
 {
   if(!IS_NULL_PTR(_colorprofiles)) return;
   _colorprofiles = _colorspaces_build();
-
-#ifndef NDEBUG
-  if(!IS_NULL_PTR(_colorprofiles)) _selftest_index_matches_legacy_pos(_colorprofiles);
-#endif
 }
 
 void dt_colorprofiles_cleanup(void)
@@ -1597,7 +1539,7 @@ gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_
     const dt_colorspaces_color_profile_t *const to
         = _get_profile(self, DT_COLORSPACE_DISPLAY, "", DT_PROFILE_ROLE_MONITOR);
 
-    /* Not every colorspace has a profile registered for the DISPLAY direction (a thumbnail
+    /* Not every colorspace has a profile registered for the MONITOR role (a thumbnail
      * cached with an exotic tag). Fall back to the same passthrough as DT_COLORSPACE_DISPLAY
      * instead of dereferencing NULL in cmsCreateTransform(). */
     if(!IS_NULL_PTR(from) && !IS_NULL_PTR(to))
@@ -1844,12 +1786,8 @@ static GList *load_profile_from_dir(const char *subdir)
           g_strlcpy(prof->filename, filename, sizeof(prof->filename));
           prof->type = DT_COLORSPACE_FILE;
           prof->profile = tmpprof;
-          // these will be set after sorting!
-          prof->in_pos = -1;
-          prof->out_pos = -1;
-          prof->display_pos = -1;
-          prof->category_pos = -1;
-          prof->work_pos = -1;
+          // roles are assigned by the caller, after sorting, from the directory it came from
+          prof->roles = 0;
           temp_profiles = g_list_prepend(temp_profiles, prof);
         }
 
@@ -1874,110 +1812,88 @@ static dt_colorspaces_t *_colorspaces_build(void)
   _compute_prequantized_primaries(&D65xyY, &Rec709_Primaries, &Rec709_Primaries_Prequantized);
 
 
-  int in_pos = -1,
-      out_pos = -1,
-      display_pos = -1,
-      category_pos = -1,
-      work_pos = -1;
-
   // init the category profile with NULL profile, the actual profile must be retrieved dynamically by the caller
-  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_WORK, NULL, _("work profile"), -1, -1,
-                                                               -1, ++category_pos, -1));
+  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_WORK, NULL, _("work profile"), 0));
 
-  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_EXPORT, NULL, _("export profile"), -1,
-                                                               -1, -1, ++category_pos, -1));
+  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_EXPORT, NULL, _("export profile"), 0));
 
   res->profiles
-      = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_SOFTPROOF, NULL, _("softproof profile"), -1, -1,
-                                                     -1, ++category_pos, -1));
+      = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_SOFTPROOF, NULL, _("softproof profile"), 0));
 
   // init the display profile with srgb so some stupid code that runs before the real profile could be fetched has something to work with
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_DISPLAY, dt_colorspaces_create_srgb_profile(),
-                                     _("System display profile (recommended)"), -1, -1, ++display_pos, ++category_pos, -1));
+                                     _("System display profile (recommended)"), DT_PROFILE_ROLE_MONITOR));
 
   // we want a v4 with parametric curve for input and a v2 with point trc for output
   // see http://ninedegreesbelow.com/photography/lcms-make-icc-profiles.html#profile-variants-and-versions
   // TODO: what about display?
   res->profiles
       = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_SRGB, dt_colorspaces_create_srgb_profile_v4(),
-                                                     _("sRGB (e.g. JPG)"), ++in_pos, -1, -1, -1, -1));
+                                                     _("sRGB (e.g. JPG)"), DT_PROFILE_ROLE_INPUT));
 
   res->profiles
       = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_SRGB, dt_colorspaces_create_srgb_profile(),
-                                                     _("sRGB"), -1, ++out_pos, ++display_pos,
-                                                     ++category_pos, ++work_pos));
+                                                     _("sRGB"), DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(res->profiles,
                                 _create_profile(DT_COLORSPACE_ADOBERGB, dt_colorspaces_create_adobergb_profile(),
-                                                _("Adobe RGB (compatible)"), ++in_pos, ++out_pos, ++display_pos,
-                                                ++category_pos, ++work_pos));
+                                                _("Adobe RGB (compatible)"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_LIN_REC709, dt_colorspaces_create_linear_rec709_rgb_profile(),
-                                     _("linear Rec709 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                     ++work_pos));
+                                     _("linear Rec709 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_REC709, dt_colorspaces_create_gamma_rec709_rgb_profile(),
-                                     _("gamma Rec709 RGB"), ++in_pos, ++out_pos, -1, -1,
-                                     ++work_pos));
+                                     _("gamma Rec709 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_ITUR_BT1886, dt_colorspaces_create_itur_bt1886_rgb_profile(),
-                                     _("ITU-R BT.1886 (gamma 2.4 Rec709)"), ++in_pos, ++out_pos, -1, -1,
-                                     ++work_pos));
+                                     _("ITU-R BT.1886 (gamma 2.4 Rec709)"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_LIN_REC2020, dt_colorspaces_create_linear_rec2020_rgb_profile(),
-                                     _("linear Rec2020 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                     ++work_pos));
+                                     _("linear Rec2020 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_PQ_REC2020, dt_colorspaces_create_pq_rec2020_rgb_profile(),
-                                     _("PQ Rec2020 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                     ++work_pos));
+                                     _("PQ Rec2020 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_HLG_REC2020, dt_colorspaces_create_hlg_rec2020_rgb_profile(),
-                                     _("HLG Rec2020 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                     ++work_pos));
+                                     _("HLG Rec2020 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_PQ_P3, dt_colorspaces_create_pq_p3_rgb_profile(),
-                                     _("PQ P3 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                     ++work_pos));
+                                     _("PQ P3 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_HLG_P3, dt_colorspaces_create_hlg_p3_rgb_profile(),
-                                     _("HLG P3 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                     ++work_pos));
+                                     _("HLG P3 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_DISPLAY_P3, dt_colorspaces_create_display_p3_rgb_profile(),
-                                     _("Display P3 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                     ++work_pos));
+                                     _("Display P3 RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
      res->profiles, _create_profile(DT_COLORSPACE_PROPHOTO_RGB, dt_colorspaces_create_linear_prophoto_rgb_profile(),
-                                    _("linear ProPhoto RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
-                                    ++work_pos));
+                                    _("linear ProPhoto RGB"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR | DT_PROFILE_ROLE_WORKING));
 
   res->profiles = g_list_append(
       res->profiles,
-      _create_profile(DT_COLORSPACE_XYZ, dt_colorspaces_create_xyz_profile(), _("linear XYZ"), ++in_pos,
-                      dt_conf_get_bool("allow_lab_output") ? ++out_pos : -1, -1, -1, -1));
+      _create_profile(DT_COLORSPACE_XYZ, dt_colorspaces_create_xyz_profile(), _("linear XYZ"),
+                      DT_PROFILE_ROLE_INPUT | (dt_conf_get_bool("allow_lab_output") ? DT_PROFILE_ROLE_OUTPUT : 0)));
 
   res->profiles = g_list_append(
-      res->profiles, _create_profile(DT_COLORSPACE_LAB, dt_colorspaces_create_lab_profile(), _("Lab"), ++in_pos,
-                                     dt_conf_get_bool("allow_lab_output") ? ++out_pos : -1, -1, -1, -1));
+      res->profiles, _create_profile(DT_COLORSPACE_LAB, dt_colorspaces_create_lab_profile(), _("Lab"),
+                                     DT_PROFILE_ROLE_INPUT | (dt_conf_get_bool("allow_lab_output") ? DT_PROFILE_ROLE_OUTPUT : 0)));
 
   res->profiles = g_list_append(
       res->profiles, _create_profile(DT_COLORSPACE_INFRARED, dt_colorspaces_create_linear_infrared_profile(),
-                                     _("linear infrared BGR"), ++in_pos, -1, -1, -1, -1));
+                                     _("linear infrared BGR"), DT_PROFILE_ROLE_INPUT));
 
   res->profiles
       = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_BRG, dt_colorspaces_create_brg_profile(),
-                                                     _("BRG (for testing)"), ++in_pos, ++out_pos, ++display_pos,
-                                                     -1, -1));
+                                                     _("BRG (for testing)"), DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR));
 
   // init display profile and softproof/gama checking from conf
   res->display_type = dt_conf_get_int("ui_last/color/display_type");
@@ -2010,7 +1926,7 @@ static dt_colorspaces_t *_colorspaces_build(void)
   for(GList *iter = temp_profiles; iter; iter = g_list_next(iter))
   {
     dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)iter->data;
-    prof->in_pos = ++in_pos;
+    prof->roles = DT_PROFILE_ROLE_INPUT;
   }
   res->profiles = g_list_concat(res->profiles, temp_profiles);
 
@@ -2030,12 +1946,10 @@ static dt_colorspaces_t *_colorspaces_build(void)
     const gboolean is_valid_matrix_profile
         = dt_colorspaces_get_matrix_from_output_profile(prof->profile, NULL, NULL, NULL, NULL, 0) == 0
           && dt_colorspaces_get_matrix_from_input_profile(prof->profile, NULL, NULL, NULL, NULL, 0) == 0;
-    prof->out_pos = ++out_pos;
-    prof->display_pos = ++display_pos;
+    prof->roles = DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR;
     if(is_valid_matrix_profile)
     {
-      prof->category_pos = ++category_pos;
-      prof->work_pos = ++work_pos;
+      prof->roles |= DT_PROFILE_ROLE_WORKING;
     }
     else
     {
@@ -2342,15 +2256,12 @@ gboolean dt_colorspaces_is_profile_equal(const char *fullname, const char *filen
 static const dt_colorspaces_color_profile_t *_get_profile(dt_colorspaces_t *self,
                                                           dt_colorspaces_color_profile_type_t type,
                                                           const char *filename,
-                                                          dt_colorspaces_profile_role_t direction)
+                                                          dt_colorspaces_profile_role_t role)
 {
   for(GList *iter = self->profiles; iter; iter = g_list_next(iter))
   {
     dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
-    if(((direction & DT_PROFILE_ROLE_INPUT && p->in_pos > -1)
-        || (direction & DT_PROFILE_ROLE_OUTPUT && p->out_pos > -1)
-        || (direction & DT_PROFILE_ROLE_WORKING && p->work_pos > -1)
-        || (direction & DT_PROFILE_ROLE_MONITOR && p->display_pos > -1))
+    if((p->roles & role)
        && (p->type == type
            && (type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(p->filename, filename))))
     {
@@ -2363,9 +2274,9 @@ static const dt_colorspaces_color_profile_t *_get_profile(dt_colorspaces_t *self
 
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_profile(dt_colorspaces_color_profile_type_t type,
                                                                  const char *filename,
-                                                                 dt_colorspaces_profile_role_t direction)
+                                                                 dt_colorspaces_profile_role_t role)
 {
-  return _get_profile(dt_colorspaces_get_global(), type, filename, direction);
+  return _get_profile(dt_colorspaces_get_global(), type, filename, role);
 }
 
 
@@ -2382,32 +2293,27 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_profile(dt_colorspaces_
  * here reads. Adding a lock around these would put one on 39 call sites that are
  * lock-free today, to protect fields nobody writes.
  *
- * THE DIRECTION PREDICATE. `direction` is mandatory and is not a nicety:
+ * THE ROLE PREDICATE. `role` is mandatory and is not a nicety:
  * DT_COLORSPACE_SRGB is registered twice -- a v4 parametric-curve profile valid only
  * as input, and a v2 point-TRC profile valid for out/display/category/work -- and the
  * two are distinguished by nothing else. A multi-bit mask resolves to the first match
  * in registration order, which for sRGB is the v4 input entry. The index-valued calls
  * therefore REQUIRE a single bit: an index means nothing outside the enumeration that
- * produced it, and an index taken from IN|OUT equals neither in_pos nor out_pos.
+ * produced it, and an index taken from INPUT|OUTPUT equals neither menu's row number.
  * ------------------------------------------------------------------------- */
 
-/* Exactly the predicate _get_profile() applies, so enumeration and lookup can never
- * disagree about what a direction contains. Note it tests four bits, not six:
- * category_pos and DISPLAY2 are never consulted, which is why
- * DT_PROFILE_ROLE_ANY effectively means IN|OUT|WORK|DISPLAY. Reproducing that
- * exactly matters more than making it tidy. */
+/* Exactly the predicate _get_profile() applies, so enumeration and lookup can never disagree
+ * about what a role contains. An entry with an empty mask -- the three category entries, and
+ * every per-image container -- is unreachable by either. */
 static gboolean _entry_serves(const dt_colorspaces_color_profile_t *const p,
-                              const dt_colorspaces_profile_role_t direction)
+                              const dt_colorspaces_profile_role_t role)
 {
-  return (direction & DT_PROFILE_ROLE_INPUT && p->in_pos > -1)
-         || (direction & DT_PROFILE_ROLE_OUTPUT && p->out_pos > -1)
-         || (direction & DT_PROFILE_ROLE_WORKING && p->work_pos > -1)
-         || (direction & DT_PROFILE_ROLE_MONITOR && p->display_pos > -1);
+  return (p->roles & role) != 0;
 }
 
-static gboolean _is_single_direction(const dt_colorspaces_profile_role_t direction)
+static gboolean _is_single_role(const dt_colorspaces_profile_role_t role)
 {
-  return direction != 0 && (direction & (direction - 1)) == 0;
+  return role != 0 && (role & (role - 1)) == 0;
 }
 
 static void _fill_desc(const dt_colorspaces_color_profile_t *const p, dt_colorprofile_desc_t *const out)
@@ -2446,7 +2352,7 @@ void dt_colorspaces_unlock_profile(const dt_colorspaces_color_profile_t *const p
   pthread_rwlock_unlock((pthread_rwlock_t *)&profile->lock);
 }
 
-size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t direction,
+size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t role,
                                          dt_colorprofile_desc_t **out)
 {
   if(IS_NULL_PTR(out)) return 0;
@@ -2457,7 +2363,7 @@ size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t dir
 
   size_t count = 0;
   for(const GList *l = self->profiles; l; l = g_list_next(l))
-    if(_entry_serves((const dt_colorspaces_color_profile_t *)l->data, direction)) count++;
+    if(_entry_serves((const dt_colorspaces_color_profile_t *)l->data, role)) count++;
 
   if(count == 0) return 0;
 
@@ -2468,18 +2374,18 @@ size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t dir
   for(const GList *l = self->profiles; l; l = g_list_next(l))
   {
     const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
-    if(_entry_serves(p, direction)) _fill_desc(p, &list[k++]);
+    if(_entry_serves(p, role)) _fill_desc(p, &list[k++]);
   }
 
   *out = list;
   return count;
 }
 
-int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t direction,
+int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t role,
                                  const dt_colorspaces_color_profile_type_t type,
                                  const char *const filename)
 {
-  if(!_is_single_direction(direction)) return -1;
+  if(!_is_single_role(role)) return -1;
 
   dt_colorspaces_t *const self = dt_colorspaces_get_global();
   if(IS_NULL_PTR(self)) return -1;
@@ -2488,7 +2394,7 @@ int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t direction,
   for(const GList *l = self->profiles; l; l = g_list_next(l))
   {
     const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
-    if(!_entry_serves(p, direction)) continue;
+    if(!_entry_serves(p, role)) continue;
 
     if(p->type == type
        && (type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(p->filename, filename)))
@@ -2500,11 +2406,11 @@ int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t direction,
   return -1;
 }
 
-gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t direction,
+gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t role,
                                    const int index,
                                    dt_colorprofile_desc_t *const out)
 {
-  if(!_is_single_direction(direction) || index < 0 || IS_NULL_PTR(out)) return FALSE;
+  if(!_is_single_role(role) || index < 0 || IS_NULL_PTR(out)) return FALSE;
 
   dt_colorspaces_t *const self = dt_colorspaces_get_global();
   if(IS_NULL_PTR(self)) return FALSE;
@@ -2513,7 +2419,7 @@ gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t direction
   for(const GList *l = self->profiles; l; l = g_list_next(l))
   {
     const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
-    if(!_entry_serves(p, direction)) continue;
+    if(!_entry_serves(p, role)) continue;
     if(k == index)
     {
       _fill_desc(p, out);
@@ -2525,7 +2431,7 @@ gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t direction
   return FALSE;
 }
 
-gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_role_t direction,
+gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_role_t role,
                                        const dt_colorspaces_color_profile_type_t type,
                                        const char *const filename)
 {
@@ -2535,7 +2441,7 @@ gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_role_t direc
   for(const GList *l = self->profiles; l; l = g_list_next(l))
   {
     const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
-    if(!_entry_serves(p, direction)) continue;
+    if(!_entry_serves(p, role)) continue;
     if(p->type == type
        && (type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(p->filename, filename)))
       return TRUE;

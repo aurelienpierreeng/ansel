@@ -53,7 +53,7 @@
  * The API is split in two halves, which is the whole design:
  *
  * - **CRUDE (metadata).** add/remove/fetch/enumerate answer questions ABOUT a profile
- *   -- `{type, filename, name}` for a `direction` -- and answer them with VALUE copies.
+ *   -- `{type, filename, name}` for a `role` -- and answer them with VALUE copies.
  *   No lcms2 type crosses this boundary and no caller walks the list. No lock is taken:
  *   the list is built once at init and never appended to again.
  * - **Lock and Apply (data).** dt_colorspaces_lock_profiles() /
@@ -194,9 +194,9 @@ typedef struct dt_colorspaces_t
  * DT_COLORSPACE_WORK, DT_COLORSPACE_EXPORT and DT_COLORSPACE_SOFTPROOF, which name a
  * user setting rather than a colour space. Nothing NULL-checks the handle at ~40 call
  * sites that dereference `->profile`; what actually keeps them safe is that lookup never
- * tests @ref category_pos (see @ref dt_colorspaces_profile_role_t), so a category
+ * gives the category entries a role (see @ref roles), so a category
  * entry can never be returned. Do not "fix" the lookup predicate to consult
- * `category_pos` without auditing those sites first.
+ * them a role of their own without auditing those sites first.
  */
 typedef struct dt_colorspaces_color_profile_t
 {
@@ -224,13 +224,22 @@ typedef struct dt_colorspaces_color_profile_t
   char filename[DT_IOP_COLOR_ICC_LEN];      ///< icc file name (absolute; compare with dt_colorspaces_is_profile_equal())
   char name[512];                           ///< product name, displayed in GUI (translated for built-ins)
   cmsHPROFILE profile;                      ///< the actual profile; NULL for the three category entries
-  int in_pos;                               ///< position in input combo box, -1 if not applicable
-  int out_pos;                              ///< position in output combo box, -1 if not applicable
-  int display_pos;                          ///< position in display combo box, -1 if not applicable
-  /** Position in category combo box, -1 if not applicable.
-   * @note Never consulted by any lookup or by enumeration. It survives as data only. */
-  int category_pos;
-  int work_pos;                             ///< position in working combo box, -1 if not applicable
+  /** @brief Which menus this entry appears in, as a ::dt_colorspaces_profile_role_t mask.
+   *
+   * @details This used to be five separate `int *_pos` fields holding a combo-box row number
+   * per menu, with -1 meaning "not in this one". Nothing ever read the numbers: every lookup
+   * and every enumeration only asked whether one was >= 0. The positions were therefore a
+   * second, hand-maintained copy of a fact the list order already carries -- enumeration
+   * walks the list in registration order, so the k-th entry serving a role IS row k -- and
+   * keeping them in step meant threading five `++counter`s through twenty registration calls
+   * in the right order.
+   *
+   * Zero means no menu, which is what an image-owned container gets (see
+   * dt_colorspaces_new_image_profile()) and what makes it unreachable by any lookup. The
+   * three category entries are zero too, which is what keeps their `profile == NULL` away
+   * from the call sites that dereference it unchecked.
+   */
+  dt_colorspaces_profile_role_t roles;
 } dt_colorspaces_color_profile_t;
 
 /**
@@ -309,21 +318,21 @@ void dt_colorprofiles_cleanup(void);
  * No cmsHPROFILE crosses this boundary, and no caller iterates the list: enumeration
  * hands back a value array, everything else is a lookup.
  *
- * THE DIRECTION PREDICATE. `direction` is mandatory and is not a nicety.
+ * THE ROLE PREDICATE. `role` is mandatory and is not a nicety.
  * DT_COLORSPACE_SRGB is registered TWICE -- a v4 parametric-curve profile valid only as
  * input, and a v2 point-TRC profile valid for output/monitor/working -- and nothing else
  * distinguishes them. A multi-bit mask resolves to the first match in registration order,
  * which for sRGB is the v4 input entry; that is what DT_PROFILE_ROLE_ANY does.
  *
- * The predicate tests all four roles, and `category_pos` is not one of them -- which is what
- * makes the three NULL-profile category entries unreachable (see
- * dt_colorspaces_color_profile_t). MONITOR is not an optical direction; it is the eligibility
+ * The predicate tests the entry's role mask, and the three NULL-profile category entries
+ * have an empty one -- which is what makes them unreachable (see
+ * dt_colorspaces_color_profile_t). MONITOR is not an optical direction at all; it is the eligibility
  * list for the monitor-profile menu, and it diverges from OUTPUT on 5 of the 21 built-in
  * entries.
  *
- * The index-valued calls REQUIRE a single-bit direction and return -1 / FALSE otherwise:
+ * The index-valued calls REQUIRE a single-bit role and return -1 / FALSE otherwise:
  * an index means nothing outside the enumeration that produced it, and an index taken from
- * IN|OUT equals neither the old in_pos nor the old out_pos.
+ * INPUT|OUTPUT equals neither menu's row number.
  *
  * None of these takes a lock, deliberately: the list is built once at init and the only
  * datum that mutates afterwards is the DT_COLORSPACE_DISPLAY entry's cmsHPROFILE, which
@@ -361,31 +370,31 @@ void dt_colorspaces_lock_profile(const dt_colorspaces_color_profile_t *const pro
 void dt_colorspaces_unlock_profile(const dt_colorspaces_color_profile_t *const profile);
 
 /**
- * @brief Ordered snapshot of every profile registered for one direction.
+ * @brief Ordered snapshot of every profile registered for one role.
  *
  * @details `(*out)[k]` is exactly the entry whose legacy `X_pos` was `k` for the
- * single-bit direction `X`, so a combo box built by walking this array keeps today's
+ * single-bit role `X`, so a combo box built by walking this array keeps today's
  * ordering and stays compatible with today's stored indices in presets and conf. A
  * debug-build selftest at init asserts that equivalence against the real installed
  * profile set.
  *
- * @param direction which combo box to enumerate. Must be a single bit
+ * @param role which combo box to enumerate. Must be a single bit
  * (DT_PROFILE_ROLE_INPUT / _OUT / _WORK / _DISPLAY) for the index correspondence to
  * mean anything; a multi-bit mask enumerates the union in list order instead.
  * @param out receives a freshly allocated array of `count` descriptors, or NULL. The
  * CALLER owns it and frees it with `dt_free_align`.
  * @return the number of descriptors written. 0 with `*out == NULL` is a legal answer --
- * an empty direction, or an allocation failure.
+ * an empty role, or an allocation failure.
  * @note Value copies: the array stays valid across a monitor-profile change and needs no
  * lock.
  */
-size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t direction,
+size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t role,
                                          dt_colorprofile_desc_t **out);
 
 /**
  * @brief Combo position of `(type, filename)` within `direction`.
  *
- * @param direction MUST be a single bit; anything else returns -1 rather than a
+ * @param role MUST be a single bit; anything else returns -1 rather than a
  * meaningless number.
  * @param type profile type to find.
  * @param filename only consulted for DT_COLORSPACE_FILE, and matched with
@@ -396,14 +405,14 @@ size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_role_t dir
  * @note Callers add their own offset for leading non-profile rows ("same as original",
  * "image settings", ...); this function knows nothing about them.
  */
-int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t direction,
+int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t role,
                                  const dt_colorspaces_color_profile_type_t type,
                                  const char *const filename);
 
 /**
  * @brief Identity of the profile at `index` within `direction`.
  *
- * @param direction MUST be a single bit.
+ * @param role MUST be a single bit.
  * @param index 0-based position within that direction's enumeration.
  * @param out filled on success, left completely untouched on failure.
  * @return TRUE on success. FALSE when the index is out of range, negative, or
@@ -412,7 +421,7 @@ int dt_colorspaces_profile_index(const dt_colorspaces_profile_role_t direction,
  * expressed as a return value rather than a diagnostic print -- handle it, do not assert
  * on it.
  */
-gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t direction,
+gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t role,
                                    const int index,
                                    dt_colorprofile_desc_t *const out);
 
@@ -421,12 +430,12 @@ gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_role_t direction
  *
  * @details The one query in this group that accepts a multi-bit mask, because a yes/no
  * answer over a union is still meaningful where an index would not be.
- * @param direction one or more direction bits.
+ * @param role one or more direction bits.
  * @param type profile type to test.
  * @param filename only consulted for DT_COLORSPACE_FILE.
  * @return TRUE when some entry serving `direction` matches.
  */
-gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_role_t direction,
+gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_role_t role,
                                        const dt_colorspaces_color_profile_type_t type,
                                        const char *const filename);
 
@@ -888,7 +897,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
  * @param type profile type to find.
  * @param filename only consulted for DT_COLORSPACE_FILE, matched with
  * dt_colorspaces_is_profile_equal().
- * @param direction direction mask; the first entry in registration order that serves any
+ * @param role direction mask; the first entry in registration order that serves any
  * of its bits and matches the identity wins.
  * @return a pointer into the module's list, owned by the module and valid until
  * dt_colorprofiles_cleanup() -- do NOT close its `profile`. NULL when nothing matches.
@@ -904,7 +913,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
  */
 const dt_colorspaces_color_profile_t *
 dt_colorspaces_get_profile(dt_colorspaces_color_profile_type_t type, const char *filename,
-                           dt_colorspaces_profile_role_t direction);
+                           dt_colorspaces_profile_role_t role);
 
 /**
  * @brief Do these two names refer to the same profile file?
