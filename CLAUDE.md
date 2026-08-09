@@ -753,6 +753,54 @@ cannot be resolved by identity: their matrices come from that image's own camera
 every image of the same camera-matrix kind. The pipe that builds one owns it
 (`dt_dev_pixelpipe_t.owned_input_profile_info`, freed with the pipe).
 
+### `dev->roi.raw_width`/`raw_height` must be set for every `dev`, not just `gui_attached` ones — every drawn shape's absolute position depends on it
+
+`dev->roi.raw_width`/`raw_height` (`develop.h`, doc-commented "Dimensions of the full-resolution
+RAW image being worked on") are read by `dt_dev_coordinates_raw_norm_to_raw_abs()`
+(`develop/develop.c`) to convert a shape's normalized (0..1) center/points into absolute pixel
+coordinates — the first step of every drawn-mask shape's own area/mask function
+(`masks/circle.c`, `ellipse.c`, `brush.c`, `gradient.c`, `polygon.c`: all read
+`dev->roi.raw_width`/`raw_height` directly, several also route through the same coordinates
+helper). `_dt_dev_mipmap_prefetch_full()` (`develop/develop.c`), called from every
+`dt_dev_load_image()` through `dt_dev_ensure_image_storage()` → `_dt_dev_load_raw()`, is the only
+place that sets them — but it used to do so **only `if(dev->gui_attached)`**, left over from a
+commit that gated the surrounding GUI-viewport fields (`orig_width`, `preview_width`, ...) the
+same way without noticing `raw_width`/`raw_height` aren't GUI state — they're an objective fact
+about the loaded raw buffer, needed by any `dev`, headless or not.
+
+For a `gui_attached` dev (the live darkroom) this was invisible: `raw_width`/`raw_height` get set,
+shapes resolve correctly. For a throwaway, non-interactive `dev` — `imageio_core.c`'s export
+`dev`, `dev_snapshot.c`'s `frozen`, thumbnail generation — `dev->roi.raw_width` stays `0` (its
+calloc default), and `dt_dev_coordinates_raw_norm_to_raw_abs()` early-returns on `raw_width==0`
+**without transforming the points at all**. A shape's normalized center (e.g. `(0.85, 0.35)`) then
+masquerades as if it were already in absolute pixel coordinates, added to a radius term that
+*is* correctly scaled to pixels (`radius * MIN(pipe->iwidth, pipe->iheight)`, passed as a
+parameter, not read from `dev->roi`) — so the resulting bounding box lands within a few hundred
+pixels of the image origin, its position dominated by the (correct, large) radius term and the
+shape's own (tiny, ~0..1) normalized center contributing almost nothing. Two shapes at wildly
+different real positions on the image collapse to nearly the **same** wrong bounding box, since
+their normalized centers differ by less than 1.0 while the radius term is hundreds of pixels —
+this is the tell that distinguishes this bug from an ordinary ROI/ROI-offset mismatch. Depending
+on whether that degenerate bounding box happens to overlap the module's own `roi_in` for the
+current render, a shape's effect either gets rejected outright (empty ROI intersection, e.g.
+`iop/retouch.c`'s `rt_build_scaled_mask()`) or gets "applied" against mask values sampled from
+the wrong, mostly out-of-bounds region of the source mask buffer (silently zero-filled by
+`rt_build_scaled_mask()`'s own `dt_iop_image_fill(mask_tmp, 0.0f, ...)`), producing a real kernel
+call that visibly changes nothing. Both outcomes were observed on the same image, same run: one
+circle rejected, the other "applied" with zero measured pixel difference in the export.
+
+Fixed by setting `raw_width`/`raw_height`/`raw_inited` unconditionally in
+`_dt_dev_mipmap_prefetch_full()`. The two `dev->roi.raw_inited` checks that also gate on
+`dev->roi.gui_inited` (`dev_pixelpipe.c`'s virtual-pipe resync, `develop.c`'s own zoom-scale
+getters) stay correctly GUI-only through that second, genuinely-GUI flag — this fix doesn't
+change their behavior. This was found chasing a report that `iop/retouch.c`'s clone/heal/blur/fill
+had no visible effect at export and in the darkroom "before/after" snapshot compare: two
+narrower, real fixes were needed first (`rt_process_forms()`/`_cl()` must resolve shapes through
+`pipe->forms`, and `dev_snapshot.c`'s `history_override` path must resync `frozen->forms` — both
+documented below) before this coordinate bug became the sole remaining, and actually dominant,
+cause — restoring it alone (verified by CLI export pixel-diff against a debug build) turned two
+previously invisible edits, including one healing over a blown bokeh highlight, fully visible.
+
 ### An embedded ICC profile belongs to its image, not to the application
 
 `dt_colorspaces_t.profiles` (`colorprofiles/colorspaces.h`) is the application-wide profile list.
@@ -977,6 +1025,57 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 (full, all pipes); drawlayer heartbeat raises `TOP_CHANGED` + redraw (fast, non-geometry). The
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
+
+### retouch: the pixel-processing callback must resolve shapes through `pipe->forms`, not `self->dev->forms`
+
+`rt_process_forms()`/`rt_process_forms_cl()` (`iop/retouch.c`) are the `dwt_decompose()`/
+`dwt_decompose_cl()` callbacks that actually apply each shape's clone/heal/blur/fill at every
+wavelet scale — they run on the pipeline/worker/CL thread, not the GUI thread. They resolve the
+module's mask group and each shape by id through `dt_masks_get_from_id_ext(pipe->forms, id)` —
+the refcounted, frozen snapshot `dt_dev_pixelpipe_process()` takes once per run (see "Forms are
+refcounted, not deep-copied" above) — never through `dt_masks_get_from_id(self->dev, id)`. The
+latter reads the live, GUI-owned `dev->forms` with no lock and no reference held, which is safe
+enough while `self->dev` is the long-lived darkroom `dev` continuously driven by the same GUI
+thread, but not for a `dev` that is created, populated, and torn down around one pipeline run —
+`imageio_core.c`'s export `dev` and `dev_snapshot.c`'s `frozen` both fit that shape. `commit_params()`
+and `rt_resynch_params()` already followed the `pipe->forms`-first pattern (falling back to a
+lock-guarded `self->dev->forms` only when `pipe->forms` is not yet populated); the two processing
+callbacks are the only per-pixel consumers and must use the same source. `rt_masks_form_is_in_roi()`,
+`rt_masks_get_delta_to_destination()`, `dt_masks_get_area()` and `dt_masks_get_mask()` all take an
+already-resolved `dt_masks_form_t*` and don't re-lookup by id, so they need no equivalent change.
+
+### dev_snapshot.c: the `history_override` path must resync `frozen->forms` too, not just `frozen->history`
+
+The darkroom "Snapshot" feature (`libs/snapshots.c`'s `_lib_snapshot_capture_state()`) captures the
+**live, possibly-uncommitted** `dev->history` — a duplicate taken under `history_mutex` — and hands
+it to `dt_dev_snapshot_capture()` as `history_override`, precisely so a shape drawn a second ago,
+before any history commit, still shows up in the frozen comparison. `dt_dev_snapshot_capture()`
+splices that duplicate straight into a fresh `frozen` dev's `frozen->history`/`iop_order_list`, and
+resolves each `hist->module` — but never touches `frozen->forms`. It stays at whatever
+`dt_dev_load_image(frozen, imgid)` read a few lines earlier from the image's *saved*
+`main.masks_history` — the on-disk state as of the last commit, not the override's live one.
+
+Module params/blend_params don't have this problem: `dt_dev_pixelpipe_synch_all()` →
+`_sync_pipe_nodes_from_history()` (`dev_pixelpipe.c`) walks `pipe->dev->history` itself and commits
+`hist->params`/`hist->blend_params` per node independently of `dt_dev_load_image()`'s earlier read,
+so a module's own param blob — retouch's `rt_forms[]` array included, with the freshly-drawn shape's
+`formid`/`scale`/`algorithm` — is correctly the override's. But that blob only names the shape by
+id; the geometry lives in `dev->forms`/`pipe->forms` (see the entry above), and a module needing mask
+history resolves `blend_params->mask_id` against a group that `pipe->forms` (snapshotted from
+`frozen->forms` at `dt_dev_pixelpipe_process()` start) doesn't contain. The shape's params exist,
+its parent group doesn't — `dt_masks_get_from_id_ext(pipe->forms, mask_id)` returns `NULL`, and
+`rt_process_forms()`/`_cl()` return early with no shapes applied, no error printed either (a
+`grp == NULL` group lookup is a silent no-op by design, not a logged failure).
+
+Fixed by re-deriving `frozen->forms` inside the `history_override` block with the same accumulation
+rule `dt_dev_pop_history_items_ext()` uses elsewhere: walk the (just-spliced) `frozen->history` up to
+`history_end_override`, keep the last non-`NULL` `hist->forms`, and call
+`dt_masks_replace_current_forms(frozen, forms)` before `dt_dev_set_history_end_ext()`. `hist->forms`
+is already a per-commit snapshot (refcounted, shared by reference — see "Forms are refcounted, not
+deep-copied"), so this is a cheap re-point, not a copy. `duplicate.c`'s call site
+(`dt_dev_snapshot_capture(&d->preview, dev, imgid, NULL, NULL, -1)`) passes no override and never
+enters this block — it already gets correct forms from `dt_dev_load_image()`'s normal DB read, since
+it is snapshotting an already-saved image, not a live in-progress edit.
 
 ### retouch: combining the mask/wavelet-scale/suppress preview toggles
 

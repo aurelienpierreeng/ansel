@@ -24,6 +24,7 @@
 #include "control/jobs.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
+#include "develop/masks/masks_history.h"
 #include "develop/pixelpipe_hb.h"
 #include "views/dev_backbuf.h"
 
@@ -389,6 +390,26 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
         goto fail;
       }
     }
+
+    // Forms (mask geometry) aren't part of a history item's own params blob -- they're
+    // snapshotted per-commit as hist->forms (see dt_dev_pop_history_items_ext() and
+    // doc/masks_history_dedup.md). Replacing frozen->history above left frozen->forms
+    // untouched, still holding whatever dt_dev_load_image() read from this image's *saved*
+    // main.masks_history a few lines up -- not this override's live, possibly-uncommitted
+    // shapes. Re-derive it with the same accumulation rule dt_dev_pop_history_items_ext()
+    // uses: walk up to history_end_override, keep the last non-NULL hist->forms. Without
+    // this, a module needing mask history (retouch, drawn-mask blending) resolves its
+    // blend_params->mask_id against a group that pipe->forms doesn't contain, and its
+    // shapes silently fail to render in the snapshot.
+    GList *forms = NULL;
+    int hist_pos = 0;
+    for(GList *history = g_list_first(frozen->history); history && hist_pos < history_end_override;
+        history = g_list_next(history), hist_pos++)
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+      if(hist->forms) forms = hist->forms;
+    }
+    dt_masks_replace_current_forms(frozen, forms);
 
     dt_dev_set_history_end_ext(frozen, history_end_override);
     dt_dev_set_history_hash(frozen, dt_dev_history_compute_hash(frozen));

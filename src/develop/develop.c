@@ -876,12 +876,22 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
 
   const gboolean ok = (!IS_NULL_PTR(buf.buf)) && buf.width != 0 && buf.height != 0;
 
-  if(dev->gui_attached)
-  {
-    dev->roi.raw_height = buf.height;
-    dev->roi.raw_width = buf.width;
-    dev->roi.raw_inited = TRUE;
-  }
+  // dev->roi.raw_width/height are the raw image's own pixel dimensions -- an objective fact
+  // about the loaded buffer, not GUI viewport state -- and must be set for every dev, not just
+  // gui_attached ones. dt_dev_coordinates_raw_norm_to_raw_abs() (develop.c) and every drawn-mask
+  // shape's own geometry function (masks/circle.c, ellipse.c, brush.c, gradient.c, polygon.c) read
+  // dev->roi.raw_width/height to convert a form's normalized center/points into absolute pixel
+  // coordinates; with raw_width/height left at 0 (their calloc default), that conversion silently
+  // no-ops (dt_dev_coordinates_raw_norm_to_raw_abs() early-returns on raw_width==0), leaving the
+  // shape's normalized (0..1) coordinates masquerading as pixel coordinates -- collapsing every
+  // shape's computed position to somewhere near the image origin regardless of where it was
+  // actually drawn. That made every drawn mask on any non-GUI dev (export, thumbnail generation,
+  // dev_snapshot.c's frozen dev) resolve to the wrong location, so a module needing mask history
+  // (retouch's clone/heal/blur/fill, or any masked blend) either processes empty geometry or
+  // silently produces zero visible effect outside the live darkroom.
+  dev->roi.raw_height = buf.height;
+  dev->roi.raw_width = buf.width;
+  dev->roi.raw_inited = TRUE;
 
   dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
