@@ -141,6 +141,62 @@ void dt_colorprofiles_cleanup(void);
  * dt_colorspaces_t itself. */
 dt_colorspaces_t *dt_colorspaces_get_global(void);
 
+
+/* --- CRUDE: the metadata half ------------------------------------------------
+ *
+ * Everything here answers a question ABOUT a profile and answers it with plain values.
+ * No cmsHPROFILE crosses this boundary, and no caller iterates the list: enumeration
+ * hands back a value array, everything else is a lookup.
+ *
+ * `direction` is mandatory and is not a nicety. DT_COLORSPACE_SRGB is registered TWICE --
+ * a v4 parametric-curve profile valid only as input, and a v2 point-TRC profile valid for
+ * out/display/category/work -- and nothing else distinguishes them. A multi-bit mask
+ * resolves to the first match in registration order, which for sRGB is the v4 input entry;
+ * that is what DT_PROFILE_DIRECTION_ANY does today, bug included.
+ *
+ * The index-valued calls REQUIRE a single-bit direction and return -1 / FALSE otherwise:
+ * an index means nothing outside the enumeration that produced it, and an index taken from
+ * IN|OUT equals neither the old in_pos nor the old out_pos.
+ *
+ * None of these takes a lock, deliberately: the list is built once at init and the only
+ * datum that mutates afterwards is the DT_COLORSPACE_DISPLAY entry's cmsHPROFILE, which
+ * none of them reads. */
+
+/** A profile's public identity: what the GUI displays and stores, and nothing else.
+ * A plain value -- copy it, put it in GTK object data, outlive anything with it. */
+typedef struct dt_colorprofile_desc_t
+{
+  dt_colorspaces_color_profile_type_t type;
+  char filename[DT_IOP_COLOR_ICC_LEN];  // "" unless type == DT_COLORSPACE_FILE
+  char name[512];                       // translated, display-ready
+} dt_colorprofile_desc_t;
+
+/** Ordered snapshot of one direction. out[k] is exactly the entry whose legacy X_pos was
+ * k for the single-bit direction X, so a combo built from it keeps today's ordering and
+ * today's stored indices. Caller owns *out and frees it with dt_free_align.
+ * Returns the count; 0 with *out == NULL is a legal answer. */
+size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_t direction,
+                                         dt_colorprofile_desc_t **out);
+
+/** Combo position of (type, filename) within `direction`, or -1 when absent or when
+ * `direction` has more than one bit set. Callers add their own offset for leading
+ * non-profile entries ("same as original", "image settings", ...). */
+int dt_colorspaces_profile_index(const dt_colorspaces_profile_direction_t direction,
+                                 const dt_colorspaces_color_profile_type_t type,
+                                 const char *const filename);
+
+/** Identity at `index` within `direction`. FALSE, leaving *out untouched, when the index
+ * is out of range or `direction` is not a single bit -- which is the "stored choice is no
+ * longer installed, fall back" branch as a return value rather than a diagnostic print. */
+gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_direction_t direction,
+                                   const int index,
+                                   dt_colorprofile_desc_t *const out);
+
+/** Is this identity registered for this direction? Valid for a multi-bit mask too. */
+gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_direction_t direction,
+                                       const dt_colorspaces_color_profile_type_t type,
+                                       const char *const filename);
+
 /** create a profile from a xyz->camera matrix. */
 cmsHPROFILE dt_colorspaces_create_xyzimatrix_profile(float cam_xyz[3][3]);
 

@@ -52,6 +52,8 @@
 
 #include "colorprofiles/colorspaces.h"
 
+#include <stddef.h>   // offsetof(), for the startup self-test
+
 /* dt_iop_color_intent_t is spelled with literal values in profile_types.h so that header
  * needs no <lcms2.h>. The values are fixed by the ICC specification and are serialised into
  * iop params, so they cannot change on either side -- but this is the one place that sees
@@ -1205,10 +1207,63 @@ static dt_colorspaces_t *_colorprofiles = NULL;
 static dt_colorspaces_t *_colorspaces_build(void);
 static void _colorspaces_destroy(dt_colorspaces_t *self);
 
+#ifndef NDEBUG
+/* The equivalence proof for deleting the five *_pos ints.
+ *
+ * dt_colorspaces_enumerate_profiles() promises out[k] is the entry whose legacy X_pos was
+ * k, for a single-bit direction X. That holds by construction -- every ++counter in
+ * _colorspaces_build() is evaluated as an argument to the append that registers the entry,
+ * and each directory batch is sorted before any number is handed out -- but "by
+ * construction" is exactly the kind of claim that stops being true when someone appends an
+ * entry in the wrong place, and the symptom would be every stored combo index in every
+ * preset silently shifting.
+ *
+ * So it is checked, once, at startup, against the real installed profile set rather than a
+ * synthetic one. Debug builds only: it is O(entries x directions) and proves a property of
+ * the data, not of the machine. */
+static void _selftest_index_matches_legacy_pos(const dt_colorspaces_t *const self)
+{
+  const struct
+  {
+    dt_colorspaces_profile_direction_t bit;
+    size_t offset;
+    const char *name;
+  } directions[] = {
+    { DT_PROFILE_DIRECTION_IN,      offsetof(dt_colorspaces_color_profile_t, in_pos),      "IN" },
+    { DT_PROFILE_DIRECTION_OUT,     offsetof(dt_colorspaces_color_profile_t, out_pos),     "OUT" },
+    { DT_PROFILE_DIRECTION_WORK,    offsetof(dt_colorspaces_color_profile_t, work_pos),    "WORK" },
+    { DT_PROFILE_DIRECTION_DISPLAY, offsetof(dt_colorspaces_color_profile_t, display_pos), "DISPLAY" },
+  };
+
+  for(size_t d = 0; d < sizeof(directions) / sizeof(directions[0]); d++)
+  {
+    int index = 0;
+    for(const GList *l = self->profiles; l; l = g_list_next(l))
+    {
+      const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
+      const int legacy = *(const int *)((const char *)p + directions[d].offset);
+      if(legacy <= -1) continue;
+
+      if(legacy != index)
+        fprintf(stderr,
+                "[colorspaces selftest] %s: entry `%s' has legacy pos %d but enumerates at %d --\n"
+                "  the profile list is no longer in registration order, and every stored combo\n"
+                "  index in every preset and conf key now points at the wrong profile.\n",
+                directions[d].name, p->name, legacy, index);
+      index++;
+    }
+  }
+}
+#endif /* NDEBUG */
+
 void dt_colorprofiles_init(void)
 {
   if(!IS_NULL_PTR(_colorprofiles)) return;
   _colorprofiles = _colorspaces_build();
+
+#ifndef NDEBUG
+  if(!IS_NULL_PTR(_colorprofiles)) _selftest_index_matches_legacy_pos(_colorprofiles);
+#endif
 }
 
 void dt_colorprofiles_cleanup(void)
@@ -2239,6 +2294,153 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_profile(dt_colorspaces_
                                                                  dt_colorspaces_profile_direction_t direction)
 {
   return _get_profile(dt_colorspaces_get_global(), type, filename, direction);
+}
+
+
+/* ---------------------------------------------------------------------------
+ * CRUDE: the metadata half of the module interface.
+ *
+ * Everything here answers a question ABOUT a profile -- which ones exist for a use,
+ * what is this one called, where does it sit in a combo box -- and answers it with
+ * plain values. No cmsHPROFILE crosses this boundary and no caller iterates the list.
+ *
+ * These deliberately take no lock. The list is built once by init and never appended
+ * to again; the ONE datum that mutates at runtime is the DT_COLORSPACE_DISPLAY entry's
+ * cmsHPROFILE, which _update_display_profile() replaces in place and which nothing
+ * here reads. Adding a lock around these would put one on 39 call sites that are
+ * lock-free today, to protect fields nobody writes.
+ *
+ * THE DIRECTION PREDICATE. `direction` is mandatory and is not a nicety:
+ * DT_COLORSPACE_SRGB is registered twice -- a v4 parametric-curve profile valid only
+ * as input, and a v2 point-TRC profile valid for out/display/category/work -- and the
+ * two are distinguished by nothing else. A multi-bit mask resolves to the first match
+ * in registration order, which for sRGB is the v4 input entry. The index-valued calls
+ * therefore REQUIRE a single bit: an index means nothing outside the enumeration that
+ * produced it, and an index taken from IN|OUT equals neither in_pos nor out_pos.
+ * ------------------------------------------------------------------------- */
+
+/* Exactly the predicate _get_profile() applies, so enumeration and lookup can never
+ * disagree about what a direction contains. Note it tests four bits, not six:
+ * category_pos and DISPLAY2 are never consulted, which is why
+ * DT_PROFILE_DIRECTION_ANY effectively means IN|OUT|WORK|DISPLAY. Reproducing that
+ * exactly matters more than making it tidy. */
+static gboolean _entry_serves(const dt_colorspaces_color_profile_t *const p,
+                              const dt_colorspaces_profile_direction_t direction)
+{
+  return (direction & DT_PROFILE_DIRECTION_IN && p->in_pos > -1)
+         || (direction & DT_PROFILE_DIRECTION_OUT && p->out_pos > -1)
+         || (direction & DT_PROFILE_DIRECTION_WORK && p->work_pos > -1)
+         || (direction & DT_PROFILE_DIRECTION_DISPLAY && p->display_pos > -1);
+}
+
+static gboolean _is_single_direction(const dt_colorspaces_profile_direction_t direction)
+{
+  return direction != 0 && (direction & (direction - 1)) == 0;
+}
+
+static void _fill_desc(const dt_colorspaces_color_profile_t *const p, dt_colorprofile_desc_t *const out)
+{
+  out->type = p->type;
+  g_strlcpy(out->filename, p->filename, sizeof(out->filename));
+  g_strlcpy(out->name, p->name, sizeof(out->name));
+}
+
+size_t dt_colorspaces_enumerate_profiles(const dt_colorspaces_profile_direction_t direction,
+                                         dt_colorprofile_desc_t **out)
+{
+  if(IS_NULL_PTR(out)) return 0;
+  *out = NULL;
+
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  if(IS_NULL_PTR(self)) return 0;
+
+  size_t count = 0;
+  for(const GList *l = self->profiles; l; l = g_list_next(l))
+    if(_entry_serves((const dt_colorspaces_color_profile_t *)l->data, direction)) count++;
+
+  if(count == 0) return 0;
+
+  dt_colorprofile_desc_t *list = dt_alloc_align(count * sizeof(dt_colorprofile_desc_t));
+  if(IS_NULL_PTR(list)) return 0;
+
+  size_t k = 0;
+  for(const GList *l = self->profiles; l; l = g_list_next(l))
+  {
+    const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
+    if(_entry_serves(p, direction)) _fill_desc(p, &list[k++]);
+  }
+
+  *out = list;
+  return count;
+}
+
+int dt_colorspaces_profile_index(const dt_colorspaces_profile_direction_t direction,
+                                 const dt_colorspaces_color_profile_type_t type,
+                                 const char *const filename)
+{
+  if(!_is_single_direction(direction)) return -1;
+
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  if(IS_NULL_PTR(self)) return -1;
+
+  int index = 0;
+  for(const GList *l = self->profiles; l; l = g_list_next(l))
+  {
+    const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
+    if(!_entry_serves(p, direction)) continue;
+
+    if(p->type == type
+       && (type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(p->filename, filename)))
+      return index;
+
+    index++;
+  }
+
+  return -1;
+}
+
+gboolean dt_colorspaces_profile_at(const dt_colorspaces_profile_direction_t direction,
+                                   const int index,
+                                   dt_colorprofile_desc_t *const out)
+{
+  if(!_is_single_direction(direction) || index < 0 || IS_NULL_PTR(out)) return FALSE;
+
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  if(IS_NULL_PTR(self)) return FALSE;
+
+  int k = 0;
+  for(const GList *l = self->profiles; l; l = g_list_next(l))
+  {
+    const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
+    if(!_entry_serves(p, direction)) continue;
+    if(k == index)
+    {
+      _fill_desc(p, out);
+      return TRUE;
+    }
+    k++;
+  }
+
+  return FALSE;
+}
+
+gboolean dt_colorspaces_profile_exists(const dt_colorspaces_profile_direction_t direction,
+                                       const dt_colorspaces_color_profile_type_t type,
+                                       const char *const filename)
+{
+  dt_colorspaces_t *const self = dt_colorspaces_get_global();
+  if(IS_NULL_PTR(self)) return FALSE;
+
+  for(const GList *l = self->profiles; l; l = g_list_next(l))
+  {
+    const dt_colorspaces_color_profile_t *const p = (const dt_colorspaces_color_profile_t *)l->data;
+    if(!_entry_serves(p, direction)) continue;
+    if(p->type == type
+       && (type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(p->filename, filename)))
+      return TRUE;
+  }
+
+  return FALSE;
 }
 
 // Copied from dcraw's pseudoinverse()
