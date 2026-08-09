@@ -199,7 +199,6 @@ typedef struct darktable_t
   struct dt_opencl_t *opencl;
   struct dt_dbus_t *dbus;
   struct dt_undo_t *undo;
-  struct dt_colorspaces_t *color_profiles;
   struct dt_l10n_t *l10n;
   struct dt_dev_pixelpipe_cache_t *pixelpipe_cache;
 

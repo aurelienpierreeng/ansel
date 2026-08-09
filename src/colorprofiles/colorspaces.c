@@ -1192,6 +1192,40 @@ void dt_colorspaces_update_display_transforms()
  * the four prepared transforms. Nothing takes them the other way round.
  * ------------------------------------------------------------------------- */
 
+/* The module's single instance. It used to hang off darktable_t, which meant the whole
+ * application could reach in and read, write and lock what is this module's private
+ * business. It is file-static now: dt_colorprofiles_init() builds it, dt_colorprofiles_
+ * cleanup() destroys it, and nothing outside this file has a way to name it.
+ *
+ * dt_colorspaces_get_global() survives ONLY as an internal shorthand while the remaining
+ * consumers are migrated to the query API; it is no longer declared in the public header
+ * and will disappear with the last of them. */
+static dt_colorspaces_t *_colorprofiles = NULL;
+
+static dt_colorspaces_t *_colorspaces_build(void);
+static void _colorspaces_destroy(dt_colorspaces_t *self);
+
+void dt_colorprofiles_init(void)
+{
+  if(!IS_NULL_PTR(_colorprofiles)) return;
+  _colorprofiles = _colorspaces_build();
+}
+
+void dt_colorprofiles_cleanup(void)
+{
+  if(IS_NULL_PTR(_colorprofiles)) return;
+  _colorspaces_destroy(_colorprofiles);
+  _colorprofiles = NULL;
+}
+
+/* Internal shorthand only -- not in the public header. Every use of this inside the module
+ * is a place that still reaches the struct directly, and the count goes to zero as the
+ * remaining consumers move to the query API. */
+dt_colorspaces_t *dt_colorspaces_get_global(void)
+{
+  return _colorprofiles;
+}
+
 static pthread_rwlock_t _settings_lock = PTHREAD_RWLOCK_INITIALIZER;
 static uint64_t _settings_generation = 0;
 
@@ -1713,7 +1747,7 @@ icc_loading_done:
   return temp_profiles;
 }
 
-dt_colorspaces_t *dt_colorspaces_init()
+static dt_colorspaces_t *_colorspaces_build(void)
 {
   cmsSetLogErrorHandler(cms_error_handler);
 
@@ -1904,7 +1938,7 @@ dt_colorspaces_t *dt_colorspaces_init()
   return res;
 }
 
-void dt_colorspaces_cleanup(dt_colorspaces_t *self)
+static void _colorspaces_destroy(dt_colorspaces_t *self)
 {
   // remember display profile and softproof/gama checking from conf
   dt_conf_set_int("ui_last/color/display_type", self->display_type);
