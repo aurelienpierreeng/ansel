@@ -514,18 +514,16 @@ static void profile_changed(GtkWidget *widget, gpointer user_data)
    * profiles. */
   if(pos < g->n_image_profiles)
   {
-    for(const GList *prof = g->image_profiles; prof; prof = g_list_next(prof))
+    /* The combo lists these first and in order, so the row IS the list position. */
+    const dt_colorprofile_desc_t *pp = (const dt_colorprofile_desc_t *)g_list_nth_data(g->image_profiles, pos);
+    if(!IS_NULL_PTR(pp))
     {
-      const dt_colorspaces_color_profile_t *pp = (const dt_colorspaces_color_profile_t *)prof->data;
-      if(pp->in_pos == pos)
-      {
-        p->type = pp->type;
-        memcpy(p->filename, pp->filename, sizeof(p->filename));
-        dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+      p->type = pp->type;
+      memcpy(p->filename, pp->filename, sizeof(p->filename));
+      dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_INPUT);
-        return;
-      }
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_INPUT);
+      return;
     }
   }
   else
@@ -927,13 +925,14 @@ void gui_update(struct dt_iop_module_t *self)
   }
   dt_bauhaus_combobox_set(g->work_combobox, idx);
 
-  for(const GList *prof = g->image_profiles; prof; prof = g_list_next(prof))
+  int image_row = 0;
+  for(const GList *prof = g->image_profiles; prof; prof = g_list_next(prof), image_row++)
   {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)prof->data;
+    const dt_colorprofile_desc_t *pp = (const dt_colorprofile_desc_t *)prof->data;
     if(pp->type == p->type
        && (pp->type != DT_COLORSPACE_FILE || dt_colorspaces_is_profile_equal(pp->filename, p->filename)))
     {
-      dt_bauhaus_combobox_set(g->profile_combobox, pp->in_pos);
+      dt_bauhaus_combobox_set(g->profile_combobox, image_row);
       return;
     }
   }
@@ -991,34 +990,31 @@ static void update_profile_list(dt_iop_module_t *self)
   const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'r');
   if(cimg->profile)
   {
-    dt_colorspaces_color_profile_t *prof
-        = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
+    dt_colorprofile_desc_t *prof = (dt_colorprofile_desc_t *)calloc(1, sizeof(dt_colorprofile_desc_t));
     g_strlcpy(prof->name, dt_colorspaces_get_name(DT_COLORSPACE_EMBEDDED_ICC, ""), sizeof(prof->name));
     prof->type = DT_COLORSPACE_EMBEDDED_ICC;
     g->image_profiles = g_list_append(g->image_profiles, prof);
-    prof->in_pos = ++pos;
+      pos++;
   }
   dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
   // use the matrix embedded in some DNGs and EXRs
   if(!isnan(self->dev->image_storage.d65_color_matrix[0]))
   {
-    dt_colorspaces_color_profile_t *prof
-        = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
+    dt_colorprofile_desc_t *prof = (dt_colorprofile_desc_t *)calloc(1, sizeof(dt_colorprofile_desc_t));
     g_strlcpy(prof->name, dt_colorspaces_get_name(DT_COLORSPACE_EMBEDDED_MATRIX, ""), sizeof(prof->name));
     prof->type = DT_COLORSPACE_EMBEDDED_MATRIX;
     g->image_profiles = g_list_append(g->image_profiles, prof);
-    prof->in_pos = ++pos;
+      pos++;
   }
 
   if(dt_image_is_matrix_correction_supported(&self->dev->image_storage)
      && !(self->dev->image_storage.flags & DT_IMAGE_4BAYER))
   {
-    dt_colorspaces_color_profile_t *prof
-        = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
+    dt_colorprofile_desc_t *prof = (dt_colorprofile_desc_t *)calloc(1, sizeof(dt_colorprofile_desc_t));
     g_strlcpy(prof->name, dt_colorspaces_get_name(DT_COLORSPACE_STANDARD_MATRIX, ""), sizeof(prof->name));
     prof->type = DT_COLORSPACE_STANDARD_MATRIX;
     g->image_profiles = g_list_append(g->image_profiles, prof);
-    prof->in_pos = ++pos;
+      pos++;
   }
 
   // darktable built-in, if applicable
@@ -1026,12 +1022,11 @@ static void update_profile_list(dt_iop_module_t *self)
   {
     if(!strcasecmp(self->dev->image_storage.camera_makermodel, dt_profiled_colormatrices[k].makermodel))
     {
-      dt_colorspaces_color_profile_t *prof
-          = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
+      dt_colorprofile_desc_t *prof = (dt_colorprofile_desc_t *)calloc(1, sizeof(dt_colorprofile_desc_t));
       g_strlcpy(prof->name, dt_colorspaces_get_name(DT_COLORSPACE_ENHANCED_MATRIX, ""), sizeof(prof->name));
       prof->type = DT_COLORSPACE_ENHANCED_MATRIX;
       g->image_profiles = g_list_append(g->image_profiles, prof);
-      prof->in_pos = ++pos;
+      pos++;
       break;
     }
   }
@@ -1041,12 +1036,11 @@ static void update_profile_list(dt_iop_module_t *self)
   {
     if(!strcmp(self->dev->image_storage.camera_makermodel, dt_vendor_colormatrices[k].makermodel))
     {
-      dt_colorspaces_color_profile_t *prof
-          = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
+      dt_colorprofile_desc_t *prof = (dt_colorprofile_desc_t *)calloc(1, sizeof(dt_colorprofile_desc_t));
       g_strlcpy(prof->name, dt_colorspaces_get_name(DT_COLORSPACE_VENDOR_MATRIX, ""), sizeof(prof->name));
       prof->type = DT_COLORSPACE_VENDOR_MATRIX;
       g->image_profiles = g_list_append(g->image_profiles, prof);
-      prof->in_pos = ++pos;
+      pos++;
       break;
     }
   }
@@ -1056,12 +1050,11 @@ static void update_profile_list(dt_iop_module_t *self)
   {
     if(!strcmp(self->dev->image_storage.camera_makermodel, dt_alternate_colormatrices[k].makermodel))
     {
-      dt_colorspaces_color_profile_t *prof
-          = (dt_colorspaces_color_profile_t *)calloc(1, sizeof(dt_colorspaces_color_profile_t));
+      dt_colorprofile_desc_t *prof = (dt_colorprofile_desc_t *)calloc(1, sizeof(dt_colorprofile_desc_t));
       g_strlcpy(prof->name, dt_colorspaces_get_name(DT_COLORSPACE_ALTERNATE_MATRIX, ""), sizeof(prof->name));
       prof->type = DT_COLORSPACE_ALTERNATE_MATRIX;
       g->image_profiles = g_list_append(g->image_profiles, prof);
-      prof->in_pos = ++pos;
+      pos++;
       break;
     }
   }
@@ -1073,7 +1066,7 @@ static void update_profile_list(dt_iop_module_t *self)
 
   for(GList *l = g->image_profiles; l; l = g_list_next(l))
   {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
+    const dt_colorprofile_desc_t *prof = (const dt_colorprofile_desc_t *)l->data;
     dt_bauhaus_combobox_add(g->profile_combobox, prof->name);
   }
   gboolean input_system_profile_separator_added = FALSE;

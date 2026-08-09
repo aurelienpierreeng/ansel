@@ -1321,7 +1321,7 @@ static GList* _get_profiles()
 
   /* Every on-disk profile, from color/in/ as well as color/out/ -- this list applies no
    * direction predicate, only a type filter, which IN|OUT reproduces exactly: a
-   * DT_COLORSPACE_FILE entry gets in_pos from the in/ batch or out_pos from the out/
+   * DT_COLORSPACE_FILE entry gets the INPUT role from the in/ batch or OUTPUT from the out/
    * batch, never neither, and no built-in has type DT_COLORSPACE_FILE. Enumeration order
    * is list order, so the resulting menu is unchanged. */
   dt_colorprofile_desc_t *file_profiles = NULL;

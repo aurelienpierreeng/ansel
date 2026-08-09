@@ -114,7 +114,7 @@ typedef enum dt_iop_color_intent_t
 /**
  * @brief Which of the five user-visible profile SLOTS a notification concerns.
  *
- * @details Not a colour space and not a direction: it names a role in the UI. Its only use is
+ * @details Not a colour space: it names a role in the UI. Its only use is
  * as the payload of DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, raised by colorin (input, working),
  * the display actions (display) and the darkroom toolbox (softproof), and read back by
  * listeners such as basicadj and the thumbtable. The signal bus carries it as a `uint8_t`.
@@ -144,9 +144,9 @@ typedef enum dt_colorspaces_profile_type_t
  * It holds 21 built-in entries in a fixed registration order, then the user's own ICC files
  * (type DT_COLORSPACE_FILE) read from `color/in` and then `color/out` under the user config
  * dir, falling back to the data dir, sorted by name within each batch. Registration order IS
- * the combo-box order for every direction, which is why a debug-build selftest re-derives each
- * entry's index at startup and complains if it no longer equals the `*_pos` recorded at
- * registration.
+ * the combo-box order for every role: the k-th entry serving a role IS row k of that menu,
+ * which is what every stored combo index in every preset and conf key refers to. Appending an
+ * entry anywhere but the end therefore shifts other people's saved settings.
  */
 typedef enum dt_colorspaces_color_profile_type_t
 {
@@ -166,8 +166,8 @@ typedef enum dt_colorspaces_color_profile_type_t
    * @details A v4 profile with parametric curves is registered for INPUT, and a v2 profile
    * with a point TRC is registered for output/display/category/work. Nothing but the pattern
    * of -1 in their five position fields distinguishes them: same type, same empty filename.
-   * A lookup with a multi-bit direction mask returns the FIRST match in registration order,
-   * which for sRGB is the v4 input entry -- so asking for "sRGB, any direction" while meaning
+   * A lookup with a multi-bit role mask returns the FIRST match in registration order,
+   * which for sRGB is the v4 input entry -- so asking for "sRGB, any role" while meaning
    * the working profile hands back the wrong variant. Pass DT_PROFILE_ROLE_WORKING (or OUT,
    * or DISPLAY) explicitly.
    */
@@ -212,11 +212,10 @@ typedef enum dt_colorspaces_color_profile_type_t
   /**
    * @brief Category placeholders: "whatever the export/softproof/work setting currently says".
    *
-   * @details These three ARE registered, with `profile == NULL` and with `category_pos` as
-   * their only non-negative position -- they exist to occupy a row in a combo box, not to be
-   * resolved. `dt_colorspaces_get_profile()` returns NULL for them, but not because it knows
-   * they are categories: its predicate tests in/out/work/display only, and those are all -1
-   * here. That omission is the entire reason a lookup cannot hand back an entry whose
+   * @details These three ARE registered, with `profile == NULL` and with an EMPTY role mask
+   * -- they exist to occupy a row in a combo box, not to be resolved.
+   * `dt_colorspaces_get_profile()` returns NULL for them, but not because it knows they are
+   * categories: its predicate tests the role mask, and theirs selects nothing. That omission is the entire reason a lookup cannot hand back an entry whose
    * `->profile` is NULL, which many call sites dereference unchecked. Giving categories a
    * role of their own would break them all.
    */
@@ -266,13 +265,13 @@ typedef enum dt_colorspaces_color_mode_t
  *
  * @details A bitmask, but read it as "which combo box would list this profile", not as a
  * colour-management direction. That distinction matters because the module has two entries for
- * DT_COLORSPACE_SRGB distinguished by nothing else (see DT_COLORSPACE_SRGB): the direction is
+ * DT_COLORSPACE_SRGB distinguished by nothing else (see DT_COLORSPACE_SRGB): the role is
  * what picks between them, so it cannot be omitted or approximated.
  *
  * @details A multi-bit mask resolves to the FIRST entry in registration order that serves any
  * of its bits. Calls that return or consume a combo-box INDEX therefore require a single bit:
  * an index means nothing outside the enumeration that produced it, and an index taken from
- * IN|OUT equals neither `in_pos` nor `out_pos`.
+ * INPUT|OUTPUT equals neither menu's row number.
  *
  * @note This used to be called a "direction", which it is not: a profile is RGB->PCS or
  * PCS->RGB, and nothing else. What these bits select is which MENU an entry belongs to, and
@@ -284,21 +283,21 @@ typedef enum dt_colorspaces_color_mode_t
  */
 typedef enum dt_colorspaces_profile_role_t
 {
-  /** @brief Listed in the input-profile combo (colorin). Backed by `in_pos`. */
+  /** @brief Listed in the input-profile combo (colorin). */
   DT_PROFILE_ROLE_INPUT = 1 << 0,
-  /** @brief Listed in the output/export-profile combo (colorout, export). Backed by `out_pos`. */
+  /** @brief Listed in the output/export-profile combo (colorout, export). */
   DT_PROFILE_ROLE_OUTPUT = 1 << 1,
   /**
-   * @brief Eligible for the monitor-profile menu. Backed by `display_pos`.
+   * @brief Eligible for the monitor-profile menu.
    *
    * @details Not the same set as OUTPUT, which is why it exists. Of the 21 built-in
    * registrations, five diverge: DT_COLORSPACE_DISPLAY is monitor-only, DT_COLORSPACE_REC709
    * and DT_COLORSPACE_ITUR_BT1886 are output-only, and DT_COLORSPACE_XYZ and DT_COLORSPACE_LAB
-   * become output-only once the `allow_lab_output` conf key gives them an `out_pos`.
+   * become output-only once the `allow_lab_output` conf key gives them the OUTPUT role.
    * Substituting one for the other is a behaviour change, not a rename.
    */
   DT_PROFILE_ROLE_MONITOR = 1 << 2,
-  /** @brief Listed in the working-profile combo (colorin). Backed by `work_pos`. */
+  /** @brief Listed in the working-profile combo (colorin). */
   DT_PROFILE_ROLE_WORKING = 1 << 3,
   /**
    * @brief All four roles, in registration order.
