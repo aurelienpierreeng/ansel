@@ -45,8 +45,28 @@ PY="$(command -v python3.12 || command -v python3)"
 }
 
 ORIGINAL_REF="$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)"
+
+# Resolve BOTH refs to concrete SHAs before touching HEAD. Passing the literal "HEAD" as
+# the second ref is the obvious thing to type and is silently wrong: by the time it is
+# used, HEAD has already been moved to the first ref, so the script compares that ref with
+# itself and reports "identical" -- which is exactly what happened the first time this ran.
+SHA_A="$(git rev-parse --verify --quiet "${REF_A}^{commit}")" || true
+SHA_B="$(git rev-parse --verify --quiet "${REF_B}^{commit}")" || true
+if [ -z "${SHA_A}" ] || [ -z "${SHA_B}" ]; then
+  echo "FAILED: cannot resolve ${REF_A} and/or ${REF_B} to commits."
+  exit 2
+fi
+if [ "${SHA_A}" = "${SHA_B}" ]; then
+  echo "FAILED: ${REF_A} and ${REF_B} are the same commit (${SHA_A}); nothing to compare."
+  exit 2
+fi
 OUT_DIR="$(mktemp -d)"
-restore() { git checkout --quiet "${ORIGINAL_REF}" 2>/dev/null; rm -rf "${OUT_DIR}"; }
+restore() {
+  # Loud on failure: leaving the tree on someone else's commit and saying nothing is how a
+  # later command silently operates on the wrong source.
+  git checkout --quiet "${ORIGINAL_REF}" || echo "WARNING: could not restore ${ORIGINAL_REF}; tree is on $(git rev-parse --short HEAD)"
+  rm -rf "${OUT_DIR}"
+}
 trap restore EXIT
 
 export_at() {
@@ -87,10 +107,10 @@ export_at() {
   [ -s "${out}" ] || { echo "FAILED: export at ${ref} wrote nothing"; exit 1; }
 }
 
-export_at "${REF_A}" "${OUT_DIR}/a.png" "build-regress-a"
-export_at "${REF_B}" "${OUT_DIR}/b.png" "build-regress-b"
+export_at "${SHA_A}" "${OUT_DIR}/a.png" "build-regress-a"
+export_at "${SHA_B}" "${OUT_DIR}/b.png" "build-regress-b"
 
-"${PY}" - "${OUT_DIR}/a.png" "${OUT_DIR}/b.png" "${REF_A}" "${REF_B}" <<'PYEOF'
+"${PY}" - "${OUT_DIR}/a.png" "${OUT_DIR}/b.png" "${REF_A} (${SHA_A:0:10})" "${REF_B} (${SHA_B:0:10})" <<'PYEOF'
 import sys
 import numpy as np
 from PIL import Image
