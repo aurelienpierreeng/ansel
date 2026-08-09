@@ -318,17 +318,6 @@ typedef struct dt_develop_t
   } transient_params;
   dt_pthread_mutex_t transient_params_mutex;
 
-  /* Memoised dt_iop_order_iccprofile_info_t, keyed on (type, filename).
-   *
-   * Reached from BOTH the pipeline worker and the GUI thread on the same dev:
-   * iop/lut3d.c and iop/tonecurve.c call dt_ioppr_add_profile_info_to_list() from
-   * process()/process_cl() -- i.e. once per tile -- and iop/colorin.c calls it from a GTK
-   * signal handler. The list was appended to and walked with no synchronisation at all.
-   *
-   * The mutex covers the whole find-or-create, not just the append: two threads that miss
-   * the same key concurrently would otherwise both build a 1.5 MB entry and append both. */
-  GList *allprofile_info;
-  dt_pthread_mutex_t allprofile_info_mutex;
 
   // histogram for display.
   uint32_t *histogram_pre_tonecurve, *histogram_pre_levels;

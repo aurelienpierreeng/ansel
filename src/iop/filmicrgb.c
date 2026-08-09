@@ -2632,8 +2632,7 @@ static const dt_iop_order_iccprofile_info_t *_filmic_get_output_profile(const dt
 {
   if(data->softproof_mode != DT_PROFILE_NORMAL)
   {
-    const dt_iop_order_iccprofile_info_t *const softproof_profile = dt_ioppr_add_profile_info_to_list(
-        pipe->dev, data->softproof_type, data->softproof_filename, data->softproof_intent);
+    const dt_iop_order_iccprofile_info_t *const softproof_profile = dt_colorspaces_add_profile(data->softproof_type, data->softproof_filename, data->softproof_intent);
     // LUT-only (non matrix-shaper) profiles - typical of printer/inkjet ICC profiles - are
     // flagged by NAN matrices. The gamut-mapping code below only knows how to use 3x3
     // matrices, so using a NAN one silently poisons the whole image with NaN pixels. Fall

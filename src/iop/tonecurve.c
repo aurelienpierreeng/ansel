@@ -339,7 +339,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   const dt_iop_tonecurve_data_t *const restrict d = (dt_iop_tonecurve_data_t *)(piece->data);
   const dt_iop_order_iccprofile_info_t *const work_profile
-    = dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_PROPHOTO_RGB, "", INTENT_PERCEPTUAL);
+    = dt_colorspaces_add_profile(DT_COLORSPACE_PROPHOTO_RGB, "", INTENT_PERCEPTUAL);
   const float xm_L = 1.0f / d->unbounded_coeffs_L[0];
   const float xm_ar = 1.0f / d->unbounded_coeffs_ab[0];
   const float xm_al = 1.0f - 1.0f / d->unbounded_coeffs_ab[3];

@@ -572,7 +572,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
     p->type_work = type_work;
     g_strlcpy(p->filename_work, filename_work, sizeof(p->filename_work));
 
-    const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_add_profile_info_to_list(self->dev, p->type_work, p->filename_work, DT_INTENT_PERCEPTUAL);
+    const dt_iop_order_iccprofile_info_t *const work_profile = dt_colorspaces_add_profile(p->type_work, p->filename_work, DT_INTENT_PERCEPTUAL);
     if(IS_NULL_PTR(work_profile) || isnan(work_profile->matrix_in[0][0]) || isnan(work_profile->matrix_out[0][0]))
     {
       dt_print(DT_DEBUG_COLORPROFILE,

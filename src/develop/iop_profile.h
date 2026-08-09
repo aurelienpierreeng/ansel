@@ -53,11 +53,6 @@ struct dt_dev_pixelpipe_iop_t;
 /** adds the profile info from (profile_type, profile_filename) to the dev profiles info list if not already exists
  * returns the generated profile or the existing one
  */
-dt_iop_order_iccprofile_info_t *
-dt_ioppr_add_profile_info_to_list(struct dt_develop_t *dev,
-                                  const dt_colorspaces_color_profile_type_t profile_type,
-                                  const char *profile_filename,
-                                  const int intent);
 
 /** returns a reference to the work profile info as set on colorin iop
  * only if module is between colorin and colorout, otherwise returns NULL
