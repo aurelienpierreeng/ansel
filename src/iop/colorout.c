@@ -623,16 +623,17 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   uint32_t transformFlags = 0;
 
   /* creating output profile */
-  /* The output profile may be the monitor's, whose handle this module replaces on a
-   * monitor change; pin it for the span between resolving it and building the transform
-   * from it, some 140 lines below. */
-  const gboolean lock_profiles = (out_type == DT_COLORSPACE_DISPLAY);
-  if(lock_profiles) dt_colorspaces_lock_profiles();
-
+  /* Resolve, THEN pin. The output profile may be the monitor's, whose handle the colour
+   * module replaces on a monitor change, so it has to stay put for the span between
+   * reading it and building the transform from it some 140 lines below. The lock is on
+   * that one profile, not on the module, so a thumbnail conversion against an unrelated
+   * profile neither waits for this nor makes a monitor change wait. */
   const dt_colorspaces_color_profile_t *out_profile
       = dt_colorspaces_get_profile(out_type, out_filename,
                                    DT_PROFILE_DIRECTION_OUT
                                    | DT_PROFILE_DIRECTION_DISPLAY);
+  dt_colorspaces_lock_profile(out_profile);
+
   if(!IS_NULL_PTR(out_profile))
   {
     // Path for internal profile or external ICC file
@@ -769,11 +770,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     }
   }
 
-  /* Balanced against the acquire by the same boolean, NOT by re-testing out_type: the
-   * embedded-profile branch above writes out_type through a pointer, so re-testing it
-   * here can skip an unlock that was taken -- leaving the read lock held for the life of
-   * the process and every later monitor-profile change blocked behind it. */
-  if(lock_profiles) dt_colorspaces_unlock_profiles();
+  /* Released against the pointer it was taken on, NOT against a re-test of out_type: the
+   * embedded-profile branch above writes out_type through a pointer, so re-deriving the
+   * condition here could skip an unlock that was taken -- leaving a read lock held for the
+   * life of the process with every later monitor-profile change blocked behind it. */
+  dt_colorspaces_unlock_profile(out_profile);
 
   // now try to initialize unbounded mode:
   // we do extrapolation for input values above 1.0f.

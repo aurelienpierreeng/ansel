@@ -98,16 +98,15 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   cmsHPROFILE *rgb_profile = NULL;
   cmsHPROFILE *lab_profile = NULL;
 
-  const gboolean lock_profiles = (type == DT_COLORSPACE_DISPLAY);
-  if(lock_profiles) dt_colorspaces_lock_profiles();
+  /* Resolve first, then lock the entry we resolved: the entry pointer is stable for the
+   * process, its ->profile is not, so the handle is read only under the lock. */
+  const dt_colorspaces_color_profile_t *profile
+      = (type != DT_COLORSPACE_NONE)
+            ? dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY)
+            : dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK);
 
-  if(type != DT_COLORSPACE_NONE)
-  {
-    const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
-    if(profile) rgb_profile = profile->profile;
-  }
-  else
-    rgb_profile = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_WORK)->profile;
+  dt_colorspaces_lock_profile(profile);
+  if(profile) rgb_profile = profile->profile;
   if(rgb_profile)
   {
     cmsColorSpaceSignature rgb_color_space = cmsGetColorSpace(rgb_profile);
@@ -151,7 +150,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
 
   xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
-  if(lock_profiles) dt_colorspaces_unlock_profiles();
+  dt_colorspaces_unlock_profile(profile);
 
   if(xform)
   {
@@ -173,13 +172,23 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
   cmsHPROFILE *from_rgb_profile = NULL;
   cmsHPROFILE *to_rgb_profile = NULL;
 
-  const gboolean lock_profiles = (type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY);
-  if(lock_profiles) dt_colorspaces_lock_profiles();
+  /* Resolve both, then lock both, then read the handles. Two read locks in a fixed order;
+   * readers do not exclude readers, so the pair cannot deadlock against a caller taking
+   * them the other way round. */
+  const dt_colorspaces_color_profile_t *profile_from
+      = (type_from != DT_COLORSPACE_NONE)
+            ? dt_colorspaces_get_profile(type_from, filename_from, DT_PROFILE_DIRECTION_ANY)
+            : NULL;
+  const dt_colorspaces_color_profile_t *profile_to
+      = (type_to != DT_COLORSPACE_NONE)
+            ? dt_colorspaces_get_profile(type_to, filename_to, DT_PROFILE_DIRECTION_ANY)
+            : NULL;
+
+  dt_colorspaces_lock_profile(profile_from);
+  dt_colorspaces_lock_profile(profile_to);
 
   if(type_from != DT_COLORSPACE_NONE)
   {
-    const dt_colorspaces_color_profile_t *profile_from
-        = dt_colorspaces_get_profile(type_from, filename_from, DT_PROFILE_DIRECTION_ANY);
     if(profile_from) from_rgb_profile = profile_from->profile;
   }
   else
@@ -189,8 +198,6 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
 
   if(type_to != DT_COLORSPACE_NONE)
   {
-    const dt_colorspaces_color_profile_t *profile_to
-        = dt_colorspaces_get_profile(type_to, filename_to, DT_PROFILE_DIRECTION_ANY);
     if(profile_to) to_rgb_profile = profile_to->profile;
   }
   else
@@ -234,7 +241,8 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
   if(input_profile && output_profile)
     xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
-  if(lock_profiles) dt_colorspaces_unlock_profiles();
+  dt_colorspaces_unlock_profile(profile_to);
+  dt_colorspaces_unlock_profile(profile_from);
 
   if(xform)
   {
@@ -1133,11 +1141,10 @@ static int _generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, 
    * lookup, before cmsGetColorSpace() and the two 65536-entry extractions below, which
    * are the parts that actually touch the handle. Inside the module the whole span is
    * covered, which is what the lock was for. */
-  const gboolean lock_display = (type == DT_COLORSPACE_DISPLAY);
-  if(lock_display) dt_colorspaces_lock_profiles();
-
   const dt_colorspaces_color_profile_t *profile
       = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
+
+  dt_colorspaces_lock_profile(profile);
   if(profile) rgb_profile = profile->profile;
 
   // we only allow rgb profiles
@@ -1198,7 +1205,7 @@ static int _generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, 
     profile_info->grey = dt_ioppr_get_rgb_matrix_luminance(rgb, profile_info->matrix_in, profile_info->lut_in, profile_info->unbounded_coeffs_in, profile_info->lutsize, profile_info->nonlinearlut);
   }
 
-  if(lock_display) dt_colorspaces_unlock_profiles();
+  dt_colorspaces_unlock_profile(profile);
 
   return err_code;
 }
