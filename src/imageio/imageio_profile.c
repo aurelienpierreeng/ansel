@@ -93,6 +93,12 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   dt_colorspaces_color_profile_type_t color_profile = DT_COLORSPACE_SRGB;
   *new_profile = FALSE;
 
+  /* The `goto finish` below (invalid imgid -> no cache entry) skips every assignment to
+   * *output, including the sRGB fallback at the end, so the caller was left returning an
+   * indeterminate pointer that reached cmsCreateTransform. Establish the contract here:
+   * *output is always written. */
+  if(!IS_NULL_PTR(output)) *output = NULL;
+
   // Fetch filename for extension retrieval
   char filename[PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
@@ -111,26 +117,38 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
 
   dt_print(DT_DEBUG_COLORPROFILE, "Color profile type for %s: \n", filename);
 
-  if(img->profile && img->profile_size > 0
-     && dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size))
+  /* Both of these CREATE a profile. Calling them once in the condition and again in the
+   * body -- which is what this cascade did -- leaked the first one every time the branch
+   * was taken. Create once, here, and hand the same object out below. The second is built
+   * only if the first failed, which is what the else-if short-circuit used to express. */
+  cmsHPROFILE embedded_icc = NULL;
+  if(img->profile && img->profile_size > 0)
+    embedded_icc = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
+
+  cmsHPROFILE exif_matrix = NULL;
+  if(IS_NULL_PTR(embedded_icc) && !isnan(img->d65_color_matrix[0]))
+    exif_matrix = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix);
+
+  if(!IS_NULL_PTR(embedded_icc))
   {
     // Fast path : we already extracted ICC before. ICC profile is already inside.
     color_profile = DT_COLORSPACE_EMBEDDED_ICC;
     if(!IS_NULL_PTR(output))
     {
-      *output = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
+      *output = embedded_icc;
+      embedded_icc = NULL;   // handed over
       *new_profile = TRUE;
     }
     dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC profile (inline)\n");
   }
-  else if(!isnan(img->d65_color_matrix[0])
-           && dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix))
+  else if(!IS_NULL_PTR(exif_matrix))
   {
     // DNG and others : matrix inside EXIF
     color_profile = DT_COLORSPACE_EMBEDDED_MATRIX;
     if(!IS_NULL_PTR(output))
     {
-      *output = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix);
+      *output = exif_matrix;
+      exif_matrix = NULL;    // handed over
       *new_profile = TRUE;
     }
     dt_print(DT_DEBUG_COLORPROFILE, "Embedded EXIF matrix\n");
@@ -243,13 +261,18 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
 #endif
 
     // Finally, read the prepared embedded profile
-    if(!already_set && img->profile && img->profile_size > 0
-       && dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size))
+    /* Same double-create as above: build it once. */
+    cmsHPROFILE extracted_icc = NULL;
+    if(!already_set && img->profile && img->profile_size > 0)
+      extracted_icc = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
+
+    if(!IS_NULL_PTR(extracted_icc))
     {
       color_profile = DT_COLORSPACE_EMBEDDED_ICC;
       if(!IS_NULL_PTR(output))
       {
-        *output = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
+        *output = extracted_icc;
+        extracted_icc = NULL;   // handed over
         *new_profile = TRUE;
       }
       dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC (extracted)\n");
@@ -261,12 +284,21 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
         *output = dt_colorspaces_get_profile(color_profile, "", DT_PROFILE_DIRECTION_IN)->profile;
       dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC (extracted)\n");
     }
+
+    if(!IS_NULL_PTR(extracted_icc)) dt_colorspaces_cleanup_profile(extracted_icc);
   }
 
   // Handle the fallback to sRGB space
   if(color_profile == DT_COLORSPACE_NONE) color_profile = DT_COLORSPACE_SRGB;
   if(color_profile == DT_COLORSPACE_SRGB && !IS_NULL_PTR(output))
     *output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_IN)->profile;
+
+  /* Anything built above but not handed to the caller is ours to close. This is the
+   * `output == NULL` case -- a caller that wants only the resolved type -- and the branches
+   * where a later one in the cascade won. Deliberately before the label: the `goto finish`
+   * path runs before either is created. */
+  if(!IS_NULL_PTR(embedded_icc)) dt_colorspaces_cleanup_profile(embedded_icc);
+  if(!IS_NULL_PTR(exif_matrix)) dt_colorspaces_cleanup_profile(exif_matrix);
 
 finish:
   dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
@@ -378,7 +410,7 @@ finish:
 }
 const cmsHPROFILE dt_colorspaces_get_embedded_profile(const int32_t imgid, dt_colorspaces_color_profile_type_t *type, gboolean *new_profile)
 {
-  cmsHPROFILE output;
+  cmsHPROFILE output = NULL;
   *type = dt_image_find_best_color_profile(imgid, &output, new_profile);
   return output;
 }
