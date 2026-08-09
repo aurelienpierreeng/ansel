@@ -545,6 +545,16 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   pipe->icc_type = DT_COLORSPACE_NONE;
   dt_free(pipe->icc_filename);
 
+  /* Image-derived input profile, if this pipe built one. input_profile_info may point at
+   * it or at a shared memo entry, so free through the owning pointer only. */
+  if(pipe->owned_input_profile_info)
+  {
+    dt_ioppr_cleanup_profile_info(pipe->owned_input_profile_info);
+    dt_free_align(pipe->owned_input_profile_info);
+    pipe->owned_input_profile_info = NULL;
+  }
+  pipe->input_profile_info = NULL;
+
   pipe->output_imgid = UNKNOWN_IMAGE;
 
   dt_dev_clear_rawdetail_mask(pipe);
