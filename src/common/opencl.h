@@ -251,43 +251,18 @@ struct dt_colorspaces_cl_global_t; // colorspaces transform
 struct dt_guided_filter_cl_global_t;
 
 /**
- * main struct, stored in dt_opencl_get_global().
+ * main struct, private to common/opencl.c.
  * holds pointers to all
  */
-typedef struct dt_opencl_t
-{
-  dt_pthread_mutex_t lock;
-  int inited;
-  int print_statistics;
-  int enabled;
-  int stopped;
-  int num_devs;
-  int num_detected_devs;
-  int error_count;
-  int opencl_synchronization_timeout;
-  uint32_t crc;
-  int mandatory[5];
-  int *dev_priority_image;
-  int *dev_priority_preview;
-  int *dev_priority_export;
-  int *dev_priority_thumbnail;
-  dt_opencl_device_t *dev;
-  dt_opencl_detected_device_t *detected_devs;
-  dt_dlopencl_t *dlocl;
-
-  /* NOTE: the per-subsystem OpenCL kernel bundles (blend, bilateral, gaussian, interpolation,
-   * local laplacian, dwt, heal, colorspaces, guided filter) used to live here. Each was built
-   * by its own subsystem, parked on this struct, and read back from it by that same
-   * subsystem -- a round trip that made nine modules' state look like the OpenCL module's.
-   * They are file-statics in their owners now; this module only orders their init and free
-   * against device setup. */
-
-  // Maps every live cl_mem we allocated to the (devid, byte size) we requested,
-  // so memory accounting never has to query the driver (clGetMemObjectInfo) about
-  // a freshly-created object -- some drivers fault on that under vRAM pressure.
-  GHashTable *mem_sizes;
-  dt_pthread_mutex_t mem_sizes_lock;
-} dt_opencl_t;
+/* dt_opencl_t is PRIVATE to common/opencl.c.
+ *
+ * It used to be defined here and instantiated on the application god-struct, so its device
+ * array, its lock and nine other subsystems' kernel bundles were reachable from any file that
+ * included darktable.h. Callers ask questions now -- dt_opencl_get_num_devices(),
+ * dt_opencl_get_device_name(), dt_opencl_get_device_max_image_size() -- and reserve devices
+ * through dt_opencl_reserve_device_for_pipe() / _by_id(). Nothing outside the module needs
+ * the layout, so nothing outside the module has it. */
+typedef struct dt_opencl_t dt_opencl_t;
 
 /** description of memory requirements of local buffer
   * local buffer size will be calculated as:
@@ -307,17 +282,16 @@ typedef struct dt_opencl_local_buffer_t
 /** internally calls dt_clGetDeviceInfo, and takes care of memory allocation
  * afterwards, *param_value will point to memory block of size at least *param_value
  * which needs to be g_free()'d manually */
-int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_info param_name, void **param_value,
-                              size_t *param_value_size);
+
 
 /** inits the opencl subsystem. */
-void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics);
+void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statistics);
 
 /** cleans up the opencl subsystem. */
-void dt_opencl_cleanup(dt_opencl_t *cl);
+void dt_opencl_cleanup(void);
 
 /** cleans up the i-th device in the cl->dev list */
-void dt_opencl_cleanup_device(dt_opencl_t *cl, int i);
+
 
 /** both finish functions return TRUE in case of success */
 /** cleans up command queue. */
@@ -327,10 +301,77 @@ int dt_opencl_finish(const int devid);
 int dt_opencl_enqueue_barrier(const int devid);
 
 /** locks a device for your thread's exclusive use */
-int dt_opencl_lock_device(const int pipetype);
+/**
+ * @brief Reserve a device for a pipe run: choose a free one by the pipe's priority list and
+ * take its lock. Blocks or gives up per the `opencl_mandatory_timeout` conf key.
+ *
+ * @param pipetype a ::dt_dev_pixelpipe_type_t; selects which priority list applies.
+ * @return the reserved device id, or -1 if none could be had. Release with
+ *         dt_opencl_release_device().
+ *
+ * @note There is ONE lock per device and this is it -- reserving a device and locking it are
+ * the same act. dt_opencl_reserve_device_by_id() takes the same lock when the caller already
+ * knows which device it needs. This used to be called `dt_opencl_lock_device()`, which took a
+ * PIPE TYPE while its `dt_opencl_unlock_device()` counterpart took a DEVICE ID -- two
+ * different ints, one of them silently wrong if the pair were ever read as symmetric. The old
+ * names are gone rather than redefined, so a stale caller fails to compile.
+ */
+int dt_opencl_reserve_device_for_pipe(const int pipetype);
+
+/**
+ * @brief Reserve a device the caller has already identified, blocking until it is free.
+ * @param devid device id; out-of-range ids are ignored.
+ */
+void dt_opencl_reserve_device_by_id(const int devid);
+
+/**
+ * @brief Reserve a device only if it is free right now.
+ * @param devid device id.
+ * @return 0 when the device was reserved (pthread convention), non-zero when it was busy or
+ *         the id was out of range. Never waits -- callers use this on paths that must not
+ *         block behind a pipe that is mid-run.
+ */
+int dt_opencl_try_reserve_device_by_id(const int devid);
+
+/** @brief Number of usable OpenCL devices; 0 when OpenCL is unavailable. */
+int dt_opencl_get_num_devices(void);
+
+/**
+ * @brief Human-readable device name, owned by the OpenCL module.
+ * @param devid device id.
+ * @return the name, or NULL for an out-of-range id or a device with no name. Valid until
+ *         cleanup; do not free.
+ */
+const char *dt_opencl_get_device_name(const int devid);
+
+/**
+ * @brief Largest 2D image the device will accept, which is what bounds tile size.
+ * @param devid device id.
+ * @param width receives the maximum width. Not written for an out-of-range id.
+ * @param height receives the maximum height. Same.
+ * @return TRUE when both were written.
+ */
+gboolean dt_opencl_get_device_max_image_size(const int devid, int *width, int *height);
+
+/** @brief Total device memory in bytes, or 0 for an out-of-range id. */
+size_t dt_opencl_get_device_max_global_mem(const int devid);
+
+/**
+ * @brief Record that a pipe run failed on OpenCL, and decide whether to give up on it.
+ *
+ * @details The count and the give-up threshold belong to the OpenCL module, not to the
+ * pipeline: the pipeline's job is to report the failure and be told what to do next. Crossing
+ * the threshold also drops the "opencl" capability, so this is the one place that decides
+ * OpenCL is finished for the session.
+ *
+ * @return 1 for "this run failed, retry on CPU", 2 for "too many failures, OpenCL is off for
+ *         the rest of the session".
+ */
+int dt_opencl_report_pipe_error(void);
 
 /** done with your command queue. */
-void dt_opencl_unlock_device(const int dev);
+/** @brief Release a device reserved by either reserve function. */
+void dt_opencl_release_device(const int devid);
 
 /** calculates md5sums for a list of CL include files. */
 void dt_opencl_md5sum(const char **files, char **md5sums);
@@ -597,16 +638,13 @@ typedef struct dt_opencl_detected_device_t
   // headroom setting accurately for integrated GPUs without reaching into the live device array.
   gboolean host_unified_memory;
 } dt_opencl_detected_device_t;
-static inline void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics)
+static inline void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statistics)
 {
-  cl->inited = 0;
-  cl->enabled = 0;
-  cl->stopped = 0;
-  cl->error_count = 0;
+  /* There is no state to initialise in this build: the queries below are constants. */
   dt_conf_set_bool("opencl", FALSE);
   dt_print(DT_DEBUG_OPENCL, "[opencl_init] this version of darktable was built without opencl support\n");
 }
-static inline void dt_opencl_cleanup(dt_opencl_t *cl)
+static inline void dt_opencl_cleanup(void)
 {
 }
 static inline gboolean dt_opencl_finish(const int devid)
@@ -617,12 +655,39 @@ static inline int dt_opencl_enqueue_barrier(const int devid)
 {
   return -1;
 }
-static inline int dt_opencl_lock_device(const int dev)
+static inline int dt_opencl_reserve_device_for_pipe(const int pipetype)
 {
   return -1;
 }
-static inline void dt_opencl_unlock_device(const int dev)
+static inline void dt_opencl_reserve_device_by_id(const int devid)
 {
+}
+static inline int dt_opencl_try_reserve_device_by_id(const int devid)
+{
+  return 1; // never free: there are no devices
+}
+static inline void dt_opencl_release_device(const int devid)
+{
+}
+static inline int dt_opencl_get_num_devices(void)
+{
+  return 0;
+}
+static inline const char *dt_opencl_get_device_name(const int devid)
+{
+  return NULL;
+}
+static inline gboolean dt_opencl_get_device_max_image_size(const int devid, int *width, int *height)
+{
+  return FALSE;
+}
+static inline size_t dt_opencl_get_device_max_global_mem(const int devid)
+{
+  return 0;
+}
+static inline int dt_opencl_report_pipe_error(void)
+{
+  return 2;
 }
 static inline int dt_opencl_load_program(const int dev, const char *filename)
 {
@@ -772,7 +837,6 @@ extern "C" {
  * compiling in no-OpenCL builds exactly as they did when they read the global directly.
  * NOTE: common/opencl.c keeps direct access for now; relocating ownership into the subsystem
  * itself (a file-static set at init) is the follow-up, not an accessor. */
-struct dt_opencl_t *dt_opencl_get_global(void);
 
 #ifdef __cplusplus
 }

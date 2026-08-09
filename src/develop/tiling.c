@@ -870,8 +870,10 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   const float singlebuffer = fminf(fmaxf((available - tiling.overhead) / factor, 0.0f),
                                    (float)(dt_opencl_get_device_memalloc(devid)));
   const float maxbuf = fmaxf(tiling.maxbuf_cl, 1.0f);
-  int width = _min(roi_in->width, dt_opencl_get_global()->dev[devid].max_image_width);
-  int height = _min(roi_in->height, dt_opencl_get_global()->dev[devid].max_image_height);
+  int max_width = 0, max_height = 0;
+  dt_opencl_get_device_max_image_size(devid, &max_width, &max_height);
+  int width = _min(roi_in->width, max_width);
+  int height = _min(roi_in->height, max_height);
 
   /* shrink tile size in case it would exceed singlebuffer size */
   if((float)width * height * max_bpp * maxbuf > singlebuffer)
@@ -1104,8 +1106,10 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
                                    (float)(dt_opencl_get_device_memalloc(devid)));
   const float maxbuf = fmaxf(tiling.maxbuf_cl, 1.0f);
 
-  int width = _min(_max(roi_in->width, roi_out->width), dt_opencl_get_global()->dev[devid].max_image_width);
-  int height = _min(_max(roi_in->height, roi_out->height), dt_opencl_get_global()->dev[devid].max_image_height);
+  int max_width = 0, max_height = 0;
+  dt_opencl_get_device_max_image_size(devid, &max_width, &max_height);
+  int width = _min(_max(roi_in->width, roi_out->width), max_width);
+  int height = _min(_max(roi_in->height, roi_out->height), max_height);
 
   /* Alignment rules: we need to make sure that alignment requirements of module are fulfilled.
      Modules will report alignment requirements via xalign and yalign within tiling_callback().

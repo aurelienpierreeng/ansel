@@ -495,9 +495,9 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
   // cl_mem objects at application exit, when nothing else is running.
   if(devid < 0) return;
 
-  // NOTE: the caller must hold dt_opencl_get_global()->dev[devid].lock -- either
+  // NOTE: the caller must hold the device lock (dt_opencl_reserve_device_by_id()) -- either
   // because it IS the pixelpipe currently running on that device (the lock
-  // dt_opencl_lock_device() handed it for the duration of its run), or because
+  // dt_opencl_reserve_device_for_pipe() handed it for the duration of its run), or because
   // it explicitly took that lock to safely flush this device's cache entries
   // after its own run finished (see dt_dev_pixelpipe_cache_flush_clmem_for_pipe()).
   dt_opencl_events_wait_for(devid);
@@ -551,15 +551,15 @@ void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const i
 void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
 {
   // Like dt_dev_pixelpipe_cache_flush_clmem(), but for callers that do NOT
-  // currently hold dt_opencl_get_global()->dev[devid].lock -- typically a pipe's own
+  // currently hold the device lock (dt_opencl_reserve_device_by_id()) -- typically a pipe's own
   // cleanup, running after dt_dev_pixelpipe_process() already released that
   // lock. Taking it here ensures we can't race the eventlist/cl_mem bookkeeping
   // of whichever OTHER pixelpipe is now running on that device.
-  if(devid < 0 || IS_NULL_PTR(dt_opencl_get_global()) || !dt_opencl_is_inited()) return;
+  if(devid < 0 || !dt_opencl_is_inited()) return;
 
-  dt_pthread_mutex_lock(&dt_opencl_get_global()->dev[devid].lock);
+  dt_opencl_reserve_device_by_id(devid);
   dt_dev_pixelpipe_cache_flush_clmem(cache, devid);
-  dt_pthread_mutex_unlock(&dt_opencl_get_global()->dev[devid].lock);
+  dt_opencl_release_device(devid);
 }
 #else
 void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_dev_pixelpipe_cache_t *cache, const int devid)
@@ -1994,7 +1994,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
         * is still reading the previous pixels.
         *
         * dt_opencl_finish() flushes that device's event list, which is only thread-safe while we hold
-        * dt_opencl_get_global()->dev[devid].lock. Touching it without that lock races the eventlist/cl_mem
+        * the device lock (dt_opencl_reserve_device_by_id()). Touching it without that lock races the eventlist/cl_mem
         * bookkeeping of whichever pixelpipe is currently running on that device and crashes inside
         * clWaitForEvents (issues #859, #864, #131742439 -- the 3-min GUI garbage collection timeout
         * dt_dev_pixelpipe_cache_flush_old() owns no device lock). _free_cache_entry() also runs from LRU
@@ -2003,11 +2003,11 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
         * the owner is draining it itself at the end of its run and this refcount==0 entry is not one of its
         * live borrows, so skipping the finish is safe. */
       const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
-      if(mem_devid >= 0 && !IS_NULL_PTR(dt_opencl_get_global()) && dt_opencl_is_inited()
-         && !dt_pthread_mutex_BAD_trylock(&dt_opencl_get_global()->dev[mem_devid].lock))
+      if(mem_devid >= 0 && dt_opencl_is_inited()
+         && !dt_opencl_try_reserve_device_by_id(mem_devid))
       {
         dt_opencl_finish(mem_devid);
-        dt_pthread_mutex_BAD_unlock(&dt_opencl_get_global()->dev[mem_devid].lock);
+        dt_opencl_release_device(mem_devid);
       }
     }
     dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
@@ -2929,10 +2929,10 @@ GArray *dt_dev_pixelpipe_cache_get_entries_stats(dt_dev_pixelpipe_cache_t *cache
 size_t dt_dev_pixelpipe_cache_get_vram_total(void)
 {
 #ifdef HAVE_OPENCL
-  if(!dt_opencl_is_enabled() || IS_NULL_PTR(dt_opencl_get_global())) return 0;
+  if(!dt_opencl_is_enabled()) return 0;
   size_t total = 0;
-  for(int i = 0; i < dt_opencl_get_global()->num_devs; i++)
-    total += (size_t)dt_opencl_get_global()->dev[i].max_global_mem;
+  for(int i = 0; i < dt_opencl_get_num_devices(); i++)
+    total += dt_opencl_get_device_max_global_mem(i);
   return total;
 #else
   return 0;

@@ -195,7 +195,6 @@ typedef struct darktable_t
   struct dt_selection_t *selection;
   struct dt_points_t *points;
   struct dt_imageio_t *imageio;
-  struct dt_opencl_t *opencl;
   struct dt_dbus_t *dbus;
   struct dt_undo_t *undo;
   struct dt_l10n_t *l10n;
