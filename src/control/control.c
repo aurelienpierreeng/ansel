@@ -65,7 +65,6 @@
 #include <assert.h>
 #include <gdk/gdkkeysyms.h>
 #include <glib/gstdio.h>
-#include <lcms2.h>
 #include <stdlib.h>
 #include <string.h>
 #include "gui/screen_metrics.h"

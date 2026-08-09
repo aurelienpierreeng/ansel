@@ -82,6 +82,17 @@ them honest: they are a deliberate performance trade, not a convenience.
 `tools/header_consumers.py` reports what each includer of a header actually takes from it,
 separating a header's own symbols from what it merely forwards.
 
+**`header_consumers.py`'s "files using nothing from it" bucket does NOT mean the file can
+drop the include.** It means *this include is redundant — the file reaches those symbols
+through one of its other includes*. Those are exactly the files that are relying on the
+supply line described above, so under this tree's rule they need the include **added
+explicitly**, not removed. Deleting all seven such includes when `colorprofiles/colorspaces.h`
+was split still compiled in Release *and* Debug, and broke `build-nofeatures`, where
+`control/jobs/control_jobs.h` lost the two types `dt_control_export()` is declared with — the
+other supplier only existed in the feature-full configurations. Confirm against the symbols
+the file actually names (`grep` for the header's types and functions) before removing
+anything, and never trust one build configuration to prove an include is unnecessary.
+
 ### No SQL in GUI modules
 
 `src/libs/` and `src/views/` modules must contain no raw SQL. Database access belongs behind
