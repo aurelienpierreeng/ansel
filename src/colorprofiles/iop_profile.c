@@ -98,9 +98,8 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
   cmsHPROFILE *rgb_profile = NULL;
   cmsHPROFILE *lab_profile = NULL;
 
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-  if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
+  const gboolean lock_profiles = (type == DT_COLORSPACE_DISPLAY);
+  if(lock_profiles) dt_colorspaces_lock_profiles();
 
   if(type != DT_COLORSPACE_NONE)
   {
@@ -152,8 +151,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
 
   xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
-  if(type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
+  if(lock_profiles) dt_colorspaces_unlock_profiles();
 
   if(xform)
   {
@@ -175,9 +173,8 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
   cmsHPROFILE *from_rgb_profile = NULL;
   cmsHPROFILE *to_rgb_profile = NULL;
 
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-  if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
+  const gboolean lock_profiles = (type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY);
+  if(lock_profiles) dt_colorspaces_lock_profiles();
 
   if(type_from != DT_COLORSPACE_NONE)
   {
@@ -237,8 +234,7 @@ static inline __attribute__((always_inline)) void _transform_rgb_to_rgb_lcms2(co
   if(input_profile && output_profile)
     xform = cmsCreateTransform(input_profile, input_format, output_profile, output_format, intent, 0);
 
-  if(type_from == DT_COLORSPACE_DISPLAY || type_to == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
+  if(lock_profiles) dt_colorspaces_unlock_profiles();
 
   if(xform)
   {
@@ -1137,9 +1133,8 @@ static int _generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, 
    * lookup, before cmsGetColorSpace() and the two 65536-entry extractions below, which
    * are the parts that actually touch the handle. Inside the module the whole span is
    * covered, which is what the lock was for. */
-  dt_colorspaces_t *const self = dt_colorspaces_get_global();
   const gboolean lock_display = (type == DT_COLORSPACE_DISPLAY);
-  if(lock_display) pthread_rwlock_rdlock(&self->xprofile_lock);
+  if(lock_display) dt_colorspaces_lock_profiles();
 
   const dt_colorspaces_color_profile_t *profile
       = dt_colorspaces_get_profile(type, filename, DT_PROFILE_DIRECTION_ANY);
@@ -1203,7 +1198,7 @@ static int _generate_profile_info(dt_iop_order_iccprofile_info_t *profile_info, 
     profile_info->grey = dt_ioppr_get_rgb_matrix_luminance(rgb, profile_info->matrix_in, profile_info->lut_in, profile_info->unbounded_coeffs_in, profile_info->lutsize, profile_info->nonlinearlut);
   }
 
-  if(lock_display) pthread_rwlock_unlock(&self->xprofile_lock);
+  if(lock_display) dt_colorspaces_unlock_profiles();
 
   return err_code;
 }

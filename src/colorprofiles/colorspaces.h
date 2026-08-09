@@ -132,14 +132,6 @@ int mat3inv(float *const dst, const float *const src);
 void dt_colorprofiles_init(void);
 void dt_colorprofiles_cleanup(void);
 
-/* BEING RETIRED -- do not add callers.
- *
- * The remaining consumers that still walk ->profiles or take ->xprofile_lock by hand
- * (16 list walks and 2 lock regions at the time of writing, all counted by
- * tools/check_module_boundaries.sh) need a name for the instance until the query API
- * replaces them. This declaration disappears with the last of them, together with
- * dt_colorspaces_t itself. */
-dt_colorspaces_t *dt_colorspaces_get_global(void);
 
 
 /* --- CRUDE: the metadata half ------------------------------------------------
@@ -170,6 +162,19 @@ typedef struct dt_colorprofile_desc_t
   char filename[DT_IOP_COLOR_ICC_LEN];  // "" unless type == DT_COLORSPACE_FILE
   char name[512];                       // translated, display-ready
 } dt_colorprofile_desc_t;
+
+/* --- LOCK: pin the profile handles while deriving from one ------------------
+ *
+ * The DT_COLORSPACE_DISPLAY entry's profile is closed and replaced whenever the monitor
+ * profile changes. Hold this across "resolve a profile, then derive from it" -- a matrix
+ * extraction, a cmsCreateTransform -- and release once the derived artifact no longer
+ * refers to the profile. An LCMS transform does not retain its source profiles, so that
+ * is the create call, not the transform's lifetime.
+ *
+ * Read locks: any number of callers may hold this at once. Do not call anything that
+ * changes the display profile while holding it. */
+void dt_colorspaces_lock_profiles(void);
+void dt_colorspaces_unlock_profiles(void);
 
 /** Ordered snapshot of one direction. out[k] is exactly the entry whose legacy X_pos was
  * k for the single-bit direction X, so a combo built from it keeps today's ordering and

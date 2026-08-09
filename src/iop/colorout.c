@@ -623,9 +623,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   uint32_t transformFlags = 0;
 
   /* creating output profile */
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-  if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
+  /* The output profile may be the monitor's, whose handle this module replaces on a
+   * monitor change; pin it for the span between resolving it and building the transform
+   * from it, some 140 lines below. */
+  const gboolean lock_profiles = (out_type == DT_COLORSPACE_DISPLAY);
+  if(lock_profiles) dt_colorspaces_lock_profiles();
 
   const dt_colorspaces_color_profile_t *out_profile
       = dt_colorspaces_get_profile(out_type, out_filename,
@@ -767,8 +769,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     }
   }
 
-  if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
+  /* Balanced against the acquire by the same boolean, NOT by re-testing out_type: the
+   * embedded-profile branch above writes out_type through a pointer, so re-testing it
+   * here can skip an unlock that was taken -- leaving the read lock held for the life of
+   * the process and every later monitor-profile change blocked behind it. */
+  if(lock_profiles) dt_colorspaces_unlock_profiles();
 
   // now try to initialize unbounded mode:
   // we do extrapolation for input values above 1.0f.
