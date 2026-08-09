@@ -1124,6 +1124,17 @@ static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_prof
 }
 
 // this function is basically thread safe, at least when not called on the global color profiles
+/* cmsFLAGS_NOCACHE on every transform built here, and it is not an optimisation choice.
+ *
+ * lcms2 gives each transform a 1-pixel memoisation cache, ENABLED when flags are 0. That
+ * cache is mutable state inside the transform, and lcms2 only sanctions sharing a
+ * transform between threads when it is inhibited. These four are built once and then
+ * driven by several threads at a time from the __OMP_PARALLEL_FOR__ loops below, so with
+ * the cache left on they are a data race on lcms2's internals.
+ *
+ * iop/colorout.c already sets the flag on its proofing transform for the same reason. The
+ * cache only pays on runs of identical adjacent pixels, which photographic data does not
+ * have, so nothing is lost. */
 static void _update_display_transforms(dt_colorspaces_t *self)
 {
   if(self->transform_srgb_to_display) cmsDeleteTransform(self->transform_srgb_to_display);
@@ -1151,7 +1162,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
                                                        display_profile,
                                                        TYPE_BGRA_8,
                                                        self->display_intent,
-                                                       0);
+                                                       cmsFLAGS_NOCACHE);
 
   self->transform_xyz_to_display = cmsCreateTransform(_get_profile(self, DT_COLORSPACE_XYZ, "",
                                                                     DT_PROFILE_DIRECTION_IN)->profile,
@@ -1159,7 +1170,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
                                                        display_profile,
                                                        TYPE_RGBA_FLT,
                                                        self->display_intent,
-                                                       0);
+                                                       cmsFLAGS_NOCACHE);
 
   self->transform_adobe_rgb_to_display = cmsCreateTransform(_get_profile(self, DT_COLORSPACE_ADOBERGB, "",
                                                                          DT_PROFILE_DIRECTION_DISPLAY)->profile,
@@ -1167,7 +1178,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
                                                             display_profile,
                                                             TYPE_BGRA_8,
                                                             self->display_intent,
-                                                            0);
+                                                            cmsFLAGS_NOCACHE);
 
   self->transform_display_to_adobe_rgb = cmsCreateTransform(display_profile,
                                                             TYPE_BGRA_8,
@@ -1175,7 +1186,7 @@ static void _update_display_transforms(dt_colorspaces_t *self)
                                                                          DT_PROFILE_DIRECTION_DISPLAY)->profile,
                                                             TYPE_RGBA_8,
                                                             self->display_intent,
-                                                            0);
+                                                            cmsFLAGS_NOCACHE);
 }
 
 // update cached transforms for color management of thumbnails
@@ -1592,7 +1603,7 @@ gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_
     if(!IS_NULL_PTR(from) && !IS_NULL_PTR(to))
     {
       transform = cmsCreateTransform(from->profile, TYPE_RGBA_8, to->profile, TYPE_BGRA_8,
-                                     INTENT_PERCEPTUAL, 0);
+                                     INTENT_PERCEPTUAL, cmsFLAGS_NOCACHE);
       owned = TRUE;
     }
   }
@@ -1632,7 +1643,7 @@ gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8
     if(!IS_NULL_PTR(from) && !IS_NULL_PTR(to))
     {
       transform = cmsCreateTransform(from->profile, TYPE_BGRA_8, to->profile, TYPE_RGBA_8,
-                                     INTENT_PERCEPTUAL, 0);
+                                     INTENT_PERCEPTUAL, cmsFLAGS_NOCACHE);
       owned = TRUE;
     }
   }
