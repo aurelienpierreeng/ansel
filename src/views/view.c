@@ -1133,47 +1133,11 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
     return ret;
   }
 
-  cmsHTRANSFORM transform = NULL;
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-  pthread_rwlock_rdlock(&profiles->xprofile_lock);
-  gboolean alloc = FALSE;
-
-  // we only color manage when a thumbnail is sRGB or AdobeRGB. everything else just gets dumped to the
-  // screen
-  if(buf.color_space == DT_COLORSPACE_SRGB)
-  {
-    transform = dt_colorspaces_get_global()->transform_srgb_to_display;
-  }
-  else if(buf.color_space == DT_COLORSPACE_ADOBERGB)
-  {
-    transform = dt_colorspaces_get_global()->transform_adobe_rgb_to_display;
-  }
-  else if(buf.color_space == DT_COLORSPACE_DISPLAY)
-  {
-    // no-op, buffer is already in display space, pass pixels through
-    // and simply swap R <-> B, which happens because transform = NULL
-  }
-  else
-  {
-    const dt_colorspaces_color_profile_t *from_profile
-        = dt_colorspaces_get_profile(buf.color_space, "", DT_PROFILE_DIRECTION_DISPLAY);
-    const dt_colorspaces_color_profile_t *to_profile
-        = dt_colorspaces_get_profile(DT_COLORSPACE_DISPLAY, "", DT_PROFILE_DIRECTION_DISPLAY);
-    // Not every colorspace type has a profile registered for the DISPLAY direction (e.g. a thumbnail
-    // cached with an exotic or not-yet-color-managed tag). Fall back to the same passthrough as the
-    // DISPLAY case above instead of dereferencing NULL (was issue: SIGSEGV in cmsCreateTransform call
-    // building surfaces for the lighttable/filmstrip thumbnail fetcher).
-    if(!IS_NULL_PTR(from_profile) && !IS_NULL_PTR(to_profile))
-    {
-      alloc = TRUE;
-      transform = cmsCreateTransform(from_profile->profile, TYPE_RGBA_8, to_profile->profile, TYPE_BGRA_8,
-                                     INTENT_PERCEPTUAL, 0);
-    }
-  }
-
-  dt_colorspaces_transform_rgba8_to_bgra8(transform, buf.buf, rgbbuf, buf.width, buf.height);
-  if(alloc) cmsDeleteTransform(transform);
-  pthread_rwlock_unlock(&profiles->xprofile_lock);
+  /* Colour-manage into display space. sRGB and AdobeRGB use the module's prepared
+   * transforms, DT_COLORSPACE_DISPLAY passes through with an R <-> B swap, anything else
+   * is resolved and built inside the module. A thumbnail cached with a tag that has no
+   * DISPLAY-direction profile falls back to the plain swap rather than being dropped. */
+  dt_colorprofiles_rgba8_to_display_bgra8(buf.buf, rgbbuf, buf.width, buf.height, buf.color_space);
   dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
 
   const int32_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, buf_wd);

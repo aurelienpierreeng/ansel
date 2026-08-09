@@ -1183,36 +1183,9 @@ void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid,
     dt_iop_flip_and_zoom_8(in, width, height, buf, wd, ht,
                            ORIENTATION_NONE, &dsc->width, &dsc->height);
 
-    // Color convert
-    cmsHTRANSFORM transform = NULL;
-    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
-    gboolean alloc = FALSE;
-
-    if(profile == DT_COLORSPACE_DISPLAY)
-    { 
-      // Convert to whatever display space to save thumbnails into Adobe RGB
-      transform = dt_colorspaces_get_global()->transform_display_to_adobe_rgb;
-    }
-    else
-    {
-      const dt_colorspaces_color_profile_t *const profile_in
-          = dt_colorspaces_get_profile(profile, "", DT_PROFILE_DIRECTION_DISPLAY);
-      const dt_colorspaces_color_profile_t *const profile_out
-          = dt_colorspaces_get_profile(DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_DIRECTION_DISPLAY);
-      if(profile_in && profile_out)
-      {
-        alloc = TRUE;
-        transform = cmsCreateTransform(profile_in->profile, TYPE_BGRA_8, profile_out->profile, TYPE_RGBA_8,
-                                        INTENT_PERCEPTUAL, 0);
-      }
-    }
-
-    // Need to save BGRA back to RGBA. The function name is misleading, 
-    // it's still only swapping R <-> B.
-    dt_colorspaces_transform_rgba8_to_bgra8(transform, buf, buf, dsc->width, dsc->height);
-    if(alloc) cmsDeleteTransform(transform);
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
+    /* Thumbnails are stored in AdobeRGB. In place: the conversion also swaps BGRA back
+     * to RGBA, which is what happens even when no transform could be built. */
+    dt_colorprofiles_bgra8_to_adobergb_rgba8(buf, buf, dsc->width, dsc->height, profile);
 
     dsc->color_space = DT_COLORSPACE_ADOBERGB;
     dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;

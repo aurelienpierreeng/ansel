@@ -260,13 +260,40 @@ cmsHPROFILE dt_colorspaces_create_alternate_profile(const char *makermodel);
 /* LCMS transform handles are not safe to rediscover indirectly from mutable owner
  * structs inside OpenMP regions. Alias the cmsHTRANSFORM to a local variable before
  * entering a parallel region, declare that alias shared there, and pass only that
- * stable handle to these helpers. */
+ * stable handle to these helpers.
+ *
+ * These take a transform the CALLER built and owns (iop/colorin.c, iop/colorout.c).
+ * For the module's own prepared display transforms, use the entry points below --
+ * those handles are rebuilt on monitor-profile changes and must never be borrowed. */
 void dt_colorspaces_transform_rgba_float_row(const cmsHTRANSFORM transform, const float *in, float *out,
                                              const int width);
 void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, const float *image_in, float *image_out,
                                                const int width, const int height);
-void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8_t *image_in, uint8_t *image_out,
-                                             const int width, const int height);
+
+
+/* --- prepared display transforms: the cmsHTRANSFORM never leaves the module ---
+ *
+ * The four cached transforms are deleted and rebuilt whenever the monitor profile or
+ * the display intent changes, so a borrowed handle can be freed under its user. These
+ * functions take the read lock internally, for the whole conversion. */
+
+/** D50 XYZ -> display RGB, one pixel. Falls back to sRGB when no display profile has
+ * been resolved. */
+void dt_colorprofiles_xyz_to_display(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t RGB);
+
+/** Whole 8-bit plane, packed RGBA8 in -> BGRA8 out (cairo byte order), from `src_space`
+ * to the display profile. DT_COLORSPACE_DISPLAY passes through with an R <-> B swap.
+ * `in` and `out` may alias. Returns FALSE when the pixels could not be colour-managed
+ * and only the byte swap was applied. */
+gboolean dt_colorprofiles_rgba8_to_display_bgra8(const uint8_t *const in, uint8_t *const out,
+                                                 const int width, const int height,
+                                                 const dt_colorspaces_color_profile_type_t src_space);
+
+/** The storage leg: 8-bit plane from `src_space` (BGRA8) to AdobeRGB (RGBA8), for
+ * thumbnails written to the mipmap cache. `in` and `out` may alias. */
+gboolean dt_colorprofiles_bgra8_to_adobergb_rgba8(const uint8_t *const in, uint8_t *const out,
+                                                  const int width, const int height,
+                                                  const dt_colorspaces_color_profile_type_t src_space);
 
 
 /** return an rgb lcms2 profile from data. if data points to a grayscale profile a new rgb profile is created
