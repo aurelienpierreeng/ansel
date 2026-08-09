@@ -479,6 +479,79 @@ static const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32
 
   return result;
 }
+struct dt_colorspaces_color_profile_t *dt_image_get_input_profile(
+    const int32_t imgid,
+    const dt_colorspaces_color_profile_type_t requested,
+    const char *camera_makermodel,
+    dt_colorspaces_color_profile_type_t *resolved)
+{
+  if(resolved) *resolved = DT_COLORSPACE_NONE;
+
+  dt_colorspaces_color_profile_type_t type = requested;
+  cmsHPROFILE profile = NULL;
+  gboolean owns = FALSE;
+
+  /* The three built-from-the-camera types. Each falls over to the embedded-ICC branch when
+   * this camera is not in the corresponding table -- which is what "matrix not found" means
+   * to a user, and why the fallthrough below is a chain rather than a switch. */
+  if(type == DT_COLORSPACE_ENHANCED_MATRIX)
+  {
+    profile = camera_makermodel ? dt_colorspaces_create_darktable_profile(camera_makermodel) : NULL;
+    if(IS_NULL_PTR(profile)) type = DT_COLORSPACE_EMBEDDED_ICC;
+    else owns = TRUE;
+  }
+  if(type == DT_COLORSPACE_VENDOR_MATRIX)
+  {
+    profile = camera_makermodel ? dt_colorspaces_create_vendor_profile(camera_makermodel) : NULL;
+    if(IS_NULL_PTR(profile)) type = DT_COLORSPACE_EMBEDDED_ICC;
+    else owns = TRUE;
+  }
+  if(type == DT_COLORSPACE_ALTERNATE_MATRIX)
+  {
+    profile = camera_makermodel ? dt_colorspaces_create_alternate_profile(camera_makermodel) : NULL;
+    if(IS_NULL_PTR(profile)) type = DT_COLORSPACE_EMBEDDED_ICC;
+    else owns = TRUE;
+  }
+
+  if(IS_NULL_PTR(profile)
+     && (type == DT_COLORSPACE_EMBEDDED_ICC || type == DT_COLORSPACE_EMBEDDED_MATRIX
+         || type == DT_COLORSPACE_STANDARD_MATRIX))
+  {
+    gboolean new_profile = FALSE;
+    type = dt_colorspaces_get_input_profile_from_image(imgid, type, &profile, &new_profile);
+    owns = new_profile;
+  }
+
+  if(IS_NULL_PTR(profile)) return NULL;
+
+  struct dt_colorspaces_color_profile_t *container = dt_colorspaces_new_image_profile(type, profile, owns);
+  if(IS_NULL_PTR(container))
+  {
+    /* Do not leak the handle just because the container allocation failed: only WE know at
+     * this point whether it was created here or borrowed from the application list. */
+    if(owns) dt_colorspaces_cleanup_profile(profile);
+    return NULL;
+  }
+
+  if(resolved) *resolved = type;
+  return container;
+}
+
+struct dt_colorspaces_color_profile_t *dt_image_get_embedded_output_profile(
+    const int32_t imgid, dt_colorspaces_color_profile_type_t *type)
+{
+  if(IS_NULL_PTR(type)) return NULL;
+
+  gboolean new_profile = FALSE;
+  cmsHPROFILE profile = dt_colorspaces_get_embedded_profile(imgid, type, &new_profile);
+  if(IS_NULL_PTR(profile)) return NULL;
+
+  struct dt_colorspaces_color_profile_t *container
+      = dt_colorspaces_new_image_profile(*type, profile, new_profile);
+  if(IS_NULL_PTR(container) && new_profile) dt_colorspaces_cleanup_profile(profile);
+  return container;
+}
+
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const int32_t imgid,
                                                                         dt_colorspaces_color_profile_type_t *over_type,
                                                                         const char *over_filename)

@@ -91,6 +91,54 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
     cmsHPROFILE *output,
     gboolean *new_profile);
 
+/**
+ * @brief Resolve an image's own input profile into an opaque container, whatever kind it is.
+ *
+ * @details The six image-derived profile types (::DT_COLORSPACE_EMBEDDED_ICC through
+ * ::DT_COLORSPACE_ALTERNATE_MATRIX) are the ones that are NOT in the application profile list
+ * and cannot be resolved by identity, because their matrices come from this one image's camera
+ * data. Three of them are built from the camera model, three from the file's own contents, and
+ * `iop/colorin.c` used to open-code the cascade between them -- holding a raw `cmsHPROFILE`
+ * and a separate "did I create this one" flag it had to get right on every early return.
+ *
+ * This resolves all six and hands back a container that carries the ownership answer with it,
+ * so a caller never decides whether to close a handle. Pass it straight to
+ * dt_colorspaces_prepare_conversion() as an endpoint's `resolved` field.
+ *
+ * @param imgid image whose profile is wanted.
+ * @param requested one of the six image-derived types. Any other type returns NULL, since
+ *        those are resolvable by identity and belong to the profile list.
+ * @param camera_makermodel the image's `camera_makermodel`, needed by the three
+ *        built-from-the-camera types. May be NULL, which makes those three fail over to the
+ *        embedded-ICC branch exactly as a missing matrix does.
+ * @param resolved if not NULL, receives the type actually resolved, which may differ from
+ *        @p requested when a fallback fired (a camera with no matrix in the table, an image
+ *        with no embedded ICC). Set to ::DT_COLORSPACE_NONE when NULL is returned.
+ * @return A container to release with `dt_colorspaces_free_image_profile()`, or NULL when
+ *         nothing could be resolved. The caller owns it and must outlive anything derived
+ *         from it.
+ */
+struct dt_colorspaces_color_profile_t *dt_image_get_input_profile(
+    const int32_t imgid,
+    const dt_colorspaces_color_profile_type_t requested,
+    const char *camera_makermodel,
+    dt_colorspaces_color_profile_type_t *resolved);
+
+/**
+ * @brief Resolve the ICC profile embedded in an image's own file, into an opaque container.
+ *
+ * @details The export counterpart of dt_image_get_input_profile(): when an export names no
+ * output profile, the image's embedded one is used. Same ownership contract -- the container
+ * knows whether it created the handle, so the caller does not.
+ *
+ * @param imgid image whose embedded profile is wanted.
+ * @param type receives the profile type resolved. Must not be NULL.
+ * @return A container to release with `dt_colorspaces_free_image_profile()`, or NULL when the
+ *         image has no usable embedded profile.
+ */
+struct dt_colorspaces_color_profile_t *dt_image_get_embedded_output_profile(
+    const int32_t imgid, dt_colorspaces_color_profile_type_t *type);
+
 /** return the output profile as set in colorout, taking export override into account if passed in. */
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const int32_t imgid,
                                                                         dt_colorspaces_color_profile_type_t *over_type,
