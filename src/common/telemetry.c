@@ -346,9 +346,8 @@ static JsonObject *_telemetry_system_properties(void)
   json_object_set_boolean_member(p, "opencl", cl);
 #ifdef HAVE_OPENCL
   // Device enumeration fields (num_devs/dev) only exist in HAVE_OPENCL builds.
-  if(dt_opencl_get_global() && dt_opencl_is_inited() && dt_opencl_get_global()->num_devs > 0 && dt_opencl_get_global()->dev
-     && dt_opencl_get_global()->dev[0].name)
-    json_object_set_string_member(p, "gpu", dt_opencl_get_global()->dev[0].name);
+  if(dt_opencl_get_num_devices() > 0 && dt_opencl_get_device_name(0))
+    json_object_set_string_member(p, "gpu", dt_opencl_get_device_name(0));
 #endif
 
 #if !defined(_WIN32) && !defined(__APPLE__)
