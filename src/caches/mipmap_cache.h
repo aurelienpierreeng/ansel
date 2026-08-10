@@ -89,7 +89,15 @@ typedef struct dt_mipmap_cache_t dt_mipmap_cache_t;
 // function takes care of re-allocating, if necessary.
 void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img);
 
-void dt_mipmap_cache_init(void);
+/**
+ * @brief Initialise the cache.
+ *
+ * @param verbose whether this cache traces to the log. Read ONCE, here, from the session's
+ *        debug flags by the orchestrator -- the cache does not consult them itself, so it
+ *        neither depends on the debug machinery at runtime nor changes behaviour halfway
+ *        through a session. `-d cache` still works: darktable.c turns it into this argument.
+ */
+void dt_mipmap_cache_init(const gboolean verbose);
 void dt_mipmap_cache_cleanup(void);
 void dt_mipmap_cache_print(void);
 

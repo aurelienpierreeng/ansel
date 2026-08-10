@@ -51,6 +51,17 @@
  * file above develop/; taking a name string instead of a module would cut it. */
 #include "develop/imageop.h"
 
+/* Set once by dt_dev_pixelpipe_cache_init(); see the header for why they are not read live. */
+static gboolean _verbose = FALSE;
+static gboolean _verbose_detail = FALSE;
+
+/* Statement-safe: a bare `if(_verbose) dt_print(...)` swallows a following `else`. */
+#define _cache_print(channel, ...)                    \
+  do {                                                \
+    if(_verbose) dt_print((channel), __VA_ARGS__);     \
+  } while(0)
+
+
 
 /* PRIVATE. Nothing outside this file reads a field of it -- the header exposes the
  * type as an opaque handle so that it cannot. */
@@ -150,10 +161,10 @@ static inline const char *_cache_debug_module_name(void)
 static void _trace_exact_hit(const char *phase, const uint64_t hash, dt_pixel_cache_entry_t *cache_entry,
                              void *data, void *cl_mem_output, const int preferred_devid, const gboolean verbose)
 {
-  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
-  if(verbose && !(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
+  if(!_verbose) return;
+  if(verbose && !_verbose_detail) return;
 
-  dt_print(DT_DEBUG_PIPECACHE,
+  _cache_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] exact-hit %s req=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
            " data=%p cl=%p refs=%i auto=%i dev=%i module=%s name=%s\n",
            phase, hash, cache_entry ? cache_entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID,
@@ -288,9 +299,9 @@ static size_t _pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
 
 static void _pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *message, gboolean verbose)
 {
-  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
-  if(verbose && !(dt_get_debug_flags() & DT_DEBUG_VERBOSE)) return;
-  dt_print(DT_DEBUG_PIPECACHE,
+  if(!_verbose) return;
+  if(verbose && !_verbose_detail) return;
+  _cache_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %" G_GSIZE_FORMAT " MiB - age %" PRId64
            " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
            cache_entry->hash, cache_entry->serial,
@@ -372,7 +383,7 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const gboolea
   }
   else
   {
-    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache entry not found, will not be removed\n");
+    _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache entry not found, will not be removed\n");
   }
   return 1;
 }
@@ -614,15 +625,15 @@ void dt_dev_pixelpipe_cache_flush_clmem(const int devid)
     if(!locked) dt_pthread_rwlock_unlock(&entry->lock);
     if(used || locked)
     {
-      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-        dt_print(DT_DEBUG_OPENCL,
+      if((_verbose && _verbose_detail))
+        _cache_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] entry %" PRIu64 " is in use (refcount=%i locked=%i), "
           "keeping its vRAM\n", entry->hash, dt_atomic_get_int(&entry->refcount), locked);
       continue;
     }
 
-    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-      dt_print(DT_DEBUG_OPENCL,
+    if((_verbose && _verbose_detail))
+      _cache_print(DT_DEBUG_OPENCL,
         "[dt_dev_pixelpipe_cache_flush_clmem] trying to flush vRAM for entry %" PRIu64 " on device %d...\n",
         entry->hash, devid);
 
@@ -723,14 +734,14 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
   {
     error = _non_thread_safe_cache_remove(cache, FALSE, lru->cache_entry, cache->entries);
     if(error)
-      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU %" PRIu64 "\n", lru->hash);
+      _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU %" PRIu64 "\n", lru->hash);
     else
-      dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %" G_GSIZE_FORMAT " MiB\n",
+      _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %" G_GSIZE_FORMAT " MiB\n",
                lru->hash, cache->current_memory / (1024 * 1024));
   }
   else
   {
-    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU, %i items and all are used\n", g_hash_table_size(cache->entries));
+    _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe] couldn't remove LRU, %i items and all are used\n", g_hash_table_size(cache->entries));
     g_hash_table_foreach(cache->entries, _print_cache_lines, NULL);
   }
 
@@ -754,8 +765,8 @@ static void *_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_pt
 {
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
 
-  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-  dt_print(DT_DEBUG_OPENCL, 
+  if((_verbose && _verbose_detail))
+  _cache_print(DT_DEBUG_OPENCL, 
     "[_pixel_cache_clmem_get] %u output entries in %" PRIu64 "\n", 
     g_list_length(entry->cl_mem_list), entry->hash);
 
@@ -1002,17 +1013,17 @@ void *dt_dev_pixelpipe_cache_get_pinned_image(void *host_ptr,
       // Clean everything up on error and abort
       if(entry) _pixel_cache_clmem_remove(entry, mem);
       dt_opencl_release_mem_object(mem);
-      dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_get_pinned_image] failed to synchronize\n");
+      _cache_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_get_pinned_image] failed to synchronize\n");
       return FALSE;
     }
     else
     {
-      dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_get_pinned_image] synchronized with write_host_to_device\n");
+      _cache_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_get_pinned_image] synchronized with write_host_to_device\n");
     }
   }
   else
   {
-    dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_get_pinned_image] synchronized with mapping/unmapping\n");
+    _cache_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_get_pinned_image] synchronized with mapping/unmapping\n");
   }
 
   return mem;
@@ -1025,16 +1036,16 @@ void dt_dev_pixelpipe_cache_put_pinned_image(void *host_ptr,
   dt_pixel_cache_entry_t *entry = entry_hint;
   if(IS_NULL_PTR(entry)) 
   {
-    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-      dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] no cache entry to put the vRAM buffer\n");
+    if((_verbose && _verbose_detail))
+      _cache_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] no cache entry to put the vRAM buffer\n");
     return;
   }
 
   // FIXME: is it safe to cache non-pinned vRAM buffers (aka no CL_MEM_USE_HOST_PTR in flags) ?
   const int state = _pixel_cache_clmem_put(entry, host_ptr, (cl_mem)*mem);
   *mem = NULL;
-  if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-    dt_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] cache entry put the vRAM buffer (state=%i) in %p\n", state, entry);
+  if((_verbose && _verbose_detail))
+    _cache_print(DT_DEBUG_OPENCL, "[dt_dev_pixelpipe_cache_put_pinned_image] cache entry put the vRAM buffer (state=%i) in %p\n", state, entry);
 }
 
 gboolean dt_dev_pixelpipe_cache_flush_host_pinned_image(void *host_ptr,
@@ -1138,8 +1149,8 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
     {
       cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp,
                                                              host_ptr, flags);
-      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-        dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a pinned GPU buffer for %s %s\n", module->name(), message);
+      if((_verbose && _verbose_detail))
+        _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a pinned GPU buffer for %s %s\n", module->name(), message);
     }
   }
   else
@@ -1158,21 +1169,21 @@ void *dt_dev_pixelpipe_cache_get_cl_buffer(int devid, void *const host_ptr, cons
     {
       cl_mem_input = dt_dev_pixelpipe_cache_alloc_cl_device_buffer(devid, roi, bpp, module, message, keep);
 
-      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-        dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a device-only GPU buffer for %s %s\n", module->name(), message);
+      if((_verbose && _verbose_detail))
+        _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] allocated a device-only GPU buffer for %s %s\n", module->name(), message);
     }
   }
 
   if(IS_NULL_PTR(cl_mem_input))
   {
-    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] couldn't allocate GPU buffer for module %s %s\n", module->name(), message);
+    _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] couldn't allocate GPU buffer for module %s %s\n", module->name(), message);
   }
   else if(reused_from_cache)
   {
     const int hits = dt_atomic_add_int(&clmem_reuse_hits, 1) + 1;
     const int misses = dt_atomic_get_int(&clmem_reuse_misses);
-    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-      dt_print(DT_DEBUG_OPENCL,
+    if((_verbose && _verbose_detail))
+      _cache_print(DT_DEBUG_OPENCL,
               "[dev_pixelpipe] reused GPU buffer from cache (hits=%d, misses=%d) for module %s %s\n",
               hits, misses, module->name(), message);
   }
@@ -1269,7 +1280,7 @@ int dt_dev_pixelpipe_cache_sync_cl_buffer(const int devid, void *host_ptr, void 
     void *mapped = dt_opencl_map_image(devid, mem, TRUE, cl_mode, roi->width, roi->height, (int)bpp);
     if(dt_opencl_unmap_mem_object(devid, mem, mapped) == CL_SUCCESS)
     {
-      dt_print(DT_DEBUG_OPENCL,
+      _cache_print(DT_DEBUG_OPENCL,
                 "[dev_pixelpipe] successfully synced image %s via map/unmap for module %s (%s)\n",
                 (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
                 (module) ? module->op : "base buffer", message);
@@ -1288,13 +1299,13 @@ int dt_dev_pixelpipe_cache_sync_cl_buffer(const int devid, void *host_ptr, void 
 
   if(err != CL_SUCCESS)
   {
-    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] couldn't copy image %s for module %s (%s)\n",
+    _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] couldn't copy image %s for module %s (%s)\n",
              (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
              (module) ? module->op : "base buffer", message);
     return 1;
   }
 
-  dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] successfully copied image %s for module %s (%s)\n",
+  _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] successfully copied image %s for module %s (%s)\n",
            (cl_mode == CL_MAP_WRITE) ? "host to device" : "device to host",
            (module) ? module->op : "base buffer", message);
   return 0;
@@ -1370,7 +1381,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
     // This is fast and efficient.
     // If it's a true zero-copy pinned image, keep the input cache entry read-locked until kernels complete,
     // otherwise another thread may overwrite host memory while the GPU is still reading it.
-    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s will use its input directly from vRAM\n", module->name());
+    _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s will use its input directly from vRAM\n", module->name());
     const cl_mem mem = (cl_mem)*cl_mem_input;
     if(dt_opencl_is_pinned_memory(mem))
     {
@@ -1382,7 +1393,7 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
 
   if(IS_NULL_PTR(input))
   {
-    dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no input (cache)\n", module->name());
+    _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no input (cache)\n", module->name());
     return 1;
   }
 
@@ -1416,13 +1427,13 @@ int dt_dev_pixelpipe_cache_prepare_cl_input(dt_dev_pixelpipe_t *pipe, dt_iop_mod
                                                       (int)in_bpp);
     if(err != CL_SUCCESS)
     {
-      dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] couldn't copy image host to device for module %s (%s)\n",
+      _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] couldn't copy image host to device for module %s (%s)\n",
                (module) ? module->op : "base buffer", "cache to input");
       fail = TRUE;
     }
     else
     {
-      dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] successfully copied image host to device for module %s (%s)\n",
+      _cache_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] successfully copied image host to device for module %s (%s)\n",
                (module) ? module->op : "base buffer", "cache to input");
     }
   }
@@ -1814,8 +1825,8 @@ static gboolean _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, c
     {
       // Don't flush cachelines that don't belong to the current OpenCL device,
       // or are still borrowed by an in-flight GPU module (per-payload refs > 0).
-      if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-        dt_print(DT_DEBUG_OPENCL,
+      if((_verbose && _verbose_detail))
+        _cache_print(DT_DEBUG_OPENCL,
           "[dt_dev_pixelpipe_cache_flush_clmem] for entry %" PRIu64 ": couldn't flush %p "
           "(referenced=%i not ours=%i)\n",
           entry->hash, c->mem, referenced, not_ours);
@@ -2124,8 +2135,11 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 static int garbage_collection = 0;
 static int pressure_shedding = 0;
 
-gboolean dt_dev_pixelpipe_cache_init(size_t max_memory)
+gboolean dt_dev_pixelpipe_cache_init(size_t max_memory, const gboolean verbose,
+                                     const gboolean verbose_detail)
 {
+  _verbose = verbose;
+  _verbose_detail = verbose_detail;
   dt_dev_pixelpipe_cache_t *cache = (dt_dev_pixelpipe_cache_t *)malloc(sizeof(dt_dev_pixelpipe_cache_t));
   dt_pthread_mutex_init(&cache->lock, NULL);
   cache->entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, dt_free_gpointer, (GDestroyNotify)_free_cache_entry);
@@ -2264,7 +2278,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
 
   _observe_rekey(old_hash, new_hash);
 
-  dt_print(DT_DEBUG_PIPECACHE,
+  _cache_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] writable rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
            " refs=%i auto=%i data=%p module=%s\n",
            old_hash, new_hash, cache_entry->hash, cache_entry->serial,
@@ -2282,7 +2296,7 @@ int dt_dev_pixelpipe_cache_get(const uint64_t hash,
   dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
-    dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] refusing invalid hash allocation for %s\n",
+    _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] refusing invalid hash allocation for %s\n",
              name ? name : "unknown");
     if(data) *data = NULL;
     if(entry) *entry = NULL;
@@ -2327,7 +2341,7 @@ int dt_dev_pixelpipe_cache_get(const uint64_t hash,
   cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, name, id);
   if(IS_NULL_PTR(cache_entry))
   {
-    dt_print(DT_DEBUG_PIPECACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
+    _cache_print(DT_DEBUG_PIPECACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
     dt_pthread_mutex_unlock(&cache->lock);
     if(entry) *entry = NULL;
     return 1;
@@ -2339,7 +2353,7 @@ int dt_dev_pixelpipe_cache_get(const uint64_t hash,
   // Alloc after releasing the lock for better runtimes
   if(alloc) dt_pixel_cache_alloc(cache_entry);
 
-  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n",
+  _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n",
            hash, name);
   _pixelpipe_cache_finalize_entry(cache_entry, data, "created");
 
@@ -2576,7 +2590,7 @@ gboolean dt_dev_pixelpipe_cache_peek(const uint64_t hash, void **data,
 
   _trace_exact_hit("drop-invalid", hash, cache_entry, data ? *data : NULL,
                    cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
-  dt_print(DT_DEBUG_PIPECACHE,
+  _cache_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
            hash);
   // If the entry removal fails, flag it for auto-destroy.
@@ -2885,7 +2899,7 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
   if(IS_NULL_PTR(entry)) entry = _non_threadsafe_cache_get_entry(cache, cache->entries, old_hash);
   if(IS_NULL_PTR(entry))
   {
-    dt_print(DT_DEBUG_PIPECACHE,
+    _cache_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey miss old=%" PRIu64 " new=%" PRIu64 " module=%s\n",
              old_hash, new_hash, _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
@@ -2895,7 +2909,7 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
   dt_pixel_cache_entry_t *conflict = _non_threadsafe_cache_get_entry(cache, cache->entries, new_hash);
   if(conflict && conflict != entry)
   {
-    dt_print(DT_DEBUG_PIPECACHE,
+    _cache_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey conflict old=%" PRIu64 " new=%" PRIu64
              " entry=%" PRIu64 "/%" PRIu64 " conflict=%" PRIu64 "/%" PRIu64 " module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial, conflict->hash, conflict->serial,
@@ -2908,7 +2922,7 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
   gpointer stolen_value = NULL;
   if(!g_hash_table_steal_extended(cache->entries, &old_hash, &stolen_key, &stolen_value))
   {
-    dt_print(DT_DEBUG_PIPECACHE,
+    _cache_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey steal-miss old=%" PRIu64 " new=%" PRIu64
              " entry=%" PRIu64 "/%" PRIu64 " module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial, _cache_debug_module_name());
@@ -2918,7 +2932,7 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
 
   if(stolen_value != entry)
   {
-    dt_print(DT_DEBUG_PIPECACHE,
+    _cache_print(DT_DEBUG_PIPECACHE,
              "[pixelpipe_cache] rekey stolen-entry mismatch old=%" PRIu64 " new=%" PRIu64
              " expected=%" PRIu64 "/%" PRIu64 " got=%" PRIu64 "/%" PRIu64 " module=%s\n",
              old_hash, new_hash, entry->hash, entry->serial,
@@ -2950,7 +2964,7 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
   *(uint64_t *)stolen_key = new_hash;
   entry->hash = new_hash;
   g_hash_table_insert(cache->entries, stolen_key, stolen_value);
-  dt_print(DT_DEBUG_PIPECACHE,
+  _cache_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
            " refs=%i auto=%i data=%p module=%s\n",
            old_hash, new_hash, entry->hash, entry->serial, dt_atomic_get_int(&entry->refcount),
@@ -2966,9 +2980,9 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
 void dt_dev_pixelpipe_cache_print(void)
 {
   dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
-  if(!(dt_get_debug_flags() & DT_DEBUG_PIPECACHE)) return;
+  if(!_verbose) return;
 
-  dt_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %" G_GSIZE_FORMAT " MiB over %" G_GSIZE_FORMAT " MiB - %i items\n", 
+  _cache_print(DT_DEBUG_PIPECACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %" G_GSIZE_FORMAT " MiB over %" G_GSIZE_FORMAT " MiB - %i items\n", 
     100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), 
     cache->max_memory / (1024 * 1024),
     g_hash_table_size(cache->entries));

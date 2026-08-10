@@ -72,6 +72,16 @@
 #include <strings.h>
 #include "common/database.h"
 
+/* Set once by dt_mipmap_cache_init(); see the header. */
+static gboolean _verbose = FALSE;
+
+/* Statement-safe: a bare `if(_verbose) dt_print(...)` swallows a following `else`. */
+#define _cache_print(channel, ...)                    \
+  do {                                                \
+    if(_verbose) dt_print((channel), __VA_ARGS__);     \
+  } while(0)
+
+
 /* PRIVATE. Nothing outside this file reads a field of it -- the header exposes the
  * type as an opaque handle so that it cannot. */
 typedef struct dt_mipmap_cache_one_t
@@ -568,7 +578,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     f = g_fopen(filename, "rb");
     if(IS_NULL_PTR(f))
     {
-      dt_print(DT_DEBUG_CACHE,
+      _cache_print(DT_DEBUG_CACHE,
                "[mipmap_cache] cached file for image %d at mip size %i does not exist\n",
                imgid, mip);
       goto finish; // file doesn't exist
@@ -622,7 +632,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dsc->color_space = color_space;
     dsc->flags = 0;
 
-    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d (%ix%i) loaded from disk cache\n",
+    _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d (%ix%i) loaded from disk cache\n",
               imgid, mip, jpg.width, jpg.height);
 
 finish:
@@ -658,7 +668,7 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
     char filename[PATH_MAX] = { 0 };
     dt_mipmap_get_cache_filename(filename, mip, imgid);
     g_unlink(filename);
-    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was deleted from disk cache\n", imgid, mip);
+    _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was deleted from disk cache\n", imgid, mip);
   }
 }
 
@@ -737,7 +747,7 @@ write_error:
             }
             else
             {
-              dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip, filename);
+              _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip, filename);
             }
           }
           if(f) fclose(f);
@@ -749,8 +759,9 @@ write_error:
   entry->data = NULL;
 }
 
-void dt_mipmap_cache_init(void)
+void dt_mipmap_cache_init(const gboolean verbose)
 {
+  _verbose = verbose;
   if(_mipmap_cache) return;
   _mipmap_cache = (dt_mipmap_cache_t *)calloc(1, sizeof(dt_mipmap_cache_t));
   if(IS_NULL_PTR(_mipmap_cache)) return;
@@ -832,14 +843,14 @@ void dt_mipmap_cache_cleanup(void)
 void dt_mipmap_cache_print(void)
 {
   dt_mipmap_cache_t *cache = _mipmap_cache;
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] thumbs fill %.2f/%.2f MB (%.2f%%)\n",
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] thumbs fill %.2f/%.2f MB (%.2f%%)\n",
          cache->mip_thumbs.cache.cost / (1024.0 * 1024.0),
          cache->mip_thumbs.cache.cost_quota / (1024.0 * 1024.0),
          100.0f * (float)cache->mip_thumbs.cache.cost / (float)cache->mip_thumbs.cache.cost_quota);
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] float fill %"PRIu32"/%"PRIu32" slots (%.2f%%)\n",
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] float fill %"PRIu32"/%"PRIu32" slots (%.2f%%)\n",
          (uint32_t)cache->mip_f.cache.cost, (uint32_t)cache->mip_f.cache.cost_quota,
          100.0f * (float)cache->mip_f.cache.cost / (float)cache->mip_f.cache.cost_quota);
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] full  fill %"PRIu32"/%"PRIu32" slots (%.2f%%)\n",
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] full  fill %"PRIu32"/%"PRIu32" slots (%.2f%%)\n",
          (uint32_t)cache->mip_full.cache.cost, (uint32_t)cache->mip_full.cache.cost_quota,
          100.0f * (float)cache->mip_full.cache.cost / (float)cache->mip_full.cache.cost_quota);
 
@@ -855,26 +866,26 @@ void dt_mipmap_cache_print(void)
   sum += cache->mip_full.stats_requests;
   sum_fetches += cache->mip_full.stats_fetches;
   sum_standins += cache->mip_full.stats_standin;
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] level | near match | miss | stand-in | fetches | total rq\n");
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] thumb | %6.2f%% | %6.2f%% | %6.2f%%  | %6.2f%% | %6.2f%%\n",
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] level | near match | miss | stand-in | fetches | total rq\n");
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] thumb | %6.2f%% | %6.2f%% | %6.2f%%  | %6.2f%% | %6.2f%%\n",
          100.0 * cache->mip_thumbs.stats_near_match / (float)cache->mip_thumbs.stats_requests,
          100.0 * cache->mip_thumbs.stats_misses / (float)cache->mip_thumbs.stats_requests,
          100.0 * cache->mip_thumbs.stats_standin / (float)sum_standins,
          100.0 * cache->mip_thumbs.stats_fetches / (float)sum_fetches,
          100.0 * cache->mip_thumbs.stats_requests / (float)sum);
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] float | %6.2f%% | %6.2f%% | %6.2f%%  | %6.2f%% | %6.2f%%\n",
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] float | %6.2f%% | %6.2f%% | %6.2f%%  | %6.2f%% | %6.2f%%\n",
          100.0 * cache->mip_f.stats_near_match / (float)cache->mip_f.stats_requests,
          100.0 * cache->mip_f.stats_misses / (float)cache->mip_f.stats_requests,
          100.0 * cache->mip_f.stats_standin / (float)sum_standins,
          100.0 * cache->mip_f.stats_fetches / (float)sum_fetches,
          100.0 * cache->mip_f.stats_requests / (float)sum);
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] full  | %6.2f%% | %6.2f%% | %6.2f%%  | %6.2f%% | %6.2f%%\n",
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] full  | %6.2f%% | %6.2f%% | %6.2f%%  | %6.2f%% | %6.2f%%\n",
          100.0 * cache->mip_full.stats_near_match / (float)cache->mip_full.stats_requests,
          100.0 * cache->mip_full.stats_misses / (float)cache->mip_full.stats_requests,
          100.0 * cache->mip_full.stats_standin / (float)sum_standins,
          100.0 * cache->mip_full.stats_fetches / (float)sum_fetches,
          100.0 * cache->mip_full.stats_requests / (float)sum);
-  dt_print(DT_DEBUG_CACHE, "\n\n");
+  _cache_print(DT_DEBUG_CACHE, "\n\n");
 }
 
 // Collect one sub-cache's live entries (imgid + mip + real bytes) under its lock.
@@ -944,7 +955,7 @@ static void _paint_skulls(dt_mipmap_buffer_t *buf, struct dt_mipmap_buffer_dsc *
 {
   if(dsc->width == 0 || dsc->height == 0)
   {
-    dt_print(DT_DEBUG_CACHE, "[mipmap cache get] got a zero-sized image for img %u mip %d!\n", imgid, mip);
+    _cache_print(DT_DEBUG_CACHE, "[mipmap cache get] got a zero-sized image for img %u mip %d!\n", imgid, mip);
     if(mip < DT_MIPMAP_F)
       buf->buf = dead_image_8(dsc);
     else
@@ -1002,7 +1013,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE))
   {
     // Already in cache, no I/O needed
-    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %i (%ix%i) will skip disk I/O, found in RAM cache.\n", imgid, mip,
+    _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %i (%ix%i) will skip disk I/O, found in RAM cache.\n", imgid, mip,
              dsc->width, dsc->height);
     _validate_buffer(buf, dsc, imgid, mip);
     return;
@@ -1018,7 +1029,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     dt_image_path_source_t source = dt_image_choose_input_path(&buffered_image, filename, sizeof(filename), FALSE);
     if(source == DT_IMAGE_PATH_NONE) return;
 
-    dt_print(DT_DEBUG_CACHE,
+    _cache_print(DT_DEBUG_CACHE,
       "[mipmap_cache] fetch image %i at mip size %d float32 (%ix%i) from original file I/O\n",
       imgid, mip, dsc->width, dsc->height);
 
@@ -1049,7 +1060,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   }
   else if(mip == DT_MIPMAP_F)
   {
-    dt_print(DT_DEBUG_CACHE,
+    _cache_print(DT_DEBUG_CACHE,
              "[mipmap_cache] compute mip size %d float32 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
     _init_f(buf, (float *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, imgid);
@@ -1057,7 +1068,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   else
   {
     // 8-bit thumbs
-    dt_print(DT_DEBUG_CACHE,
+    _cache_print(DT_DEBUG_CACHE,
              "[mipmap_cache] compute mip size %d uint8 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
     _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid,
@@ -1082,7 +1093,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   _paint_skulls(buf, dsc, imgid, mip);
   _validate_buffer(buf, dsc, imgid, mip);
 
-  dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d got a new cache entry (%ix%i / %ix%i) at %p\n", imgid, mip, 
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d got a new cache entry (%ix%i / %ix%i) at %p\n", imgid, mip, 
     buf->width, buf->height, dsc->width, dsc->height, buf->buf);
 }
 
@@ -1195,7 +1206,7 @@ dt_mipmap_size_t dt_mipmap_cache_get_matching_size(const int32_t width,
     // so we don't need both dimensions to be greater than requested
     if((cache->max_width[k] >= width) || (cache->max_height[k] >= height))
     {
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will load a mip size %i (%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT ")\n", imgid, k, cache->max_width[k], cache->max_height[k]);
+      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will load a mip size %i (%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT ")\n", imgid, k, cache->max_width[k], cache->max_height[k]);
       return k;
     }
   }
@@ -1210,7 +1221,7 @@ dt_mipmap_size_t dt_mipmap_cache_get_fitting_size(const int32_t width,
   {
     if((cache->max_width[k] <= width) && (cache->max_height[k] <= height))
     {
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will fit a mip size %i (%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT ")\n", imgid, k, cache->max_width[k], cache->max_height[k]);
+      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d will fit a mip size %i (%" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT ")\n", imgid, k, cache->max_width[k], cache->max_height[k]);
       return k;
     }
   }
@@ -1231,7 +1242,7 @@ void dt_mipmap_cache_swap_at_size(const int32_t imgid, const dt_mipmap_size_t mi
     // Unpoison descriptor and pixel payload before reading/writing either.
     ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
     ASAN_UNPOISON_MEMORY_REGION(_get_buffer_from_dsc(dsc), dsc->size - dt_mipmap_buffer_dsc_size);
-    dt_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d is synchronized from pipeline at size %i (%ix%i->%ix%i)\n", 
+    _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d is synchronized from pipeline at size %i (%ix%i->%ix%i)\n", 
       imgid, mip, width, height, dsc->width, dsc->height);
 
     // Downscale
@@ -1429,7 +1440,7 @@ static int _load_jpg(const char *filename, const int32_t imgid, const uint32_t w
     if(tmp && !dt_imageio_jpeg_read(&jpg, tmp))
     {
       // scale to fit
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from jpeg\n", size, imgid);
+      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from jpeg\n", size, imgid);
       dt_iop_flip_and_zoom_8(tmp, jpg.width, jpg.height, buf, wd, ht, orientation, width, height);
       res = 0;
     }
@@ -1503,7 +1514,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
       *color_space = tmp.color_space;
       // downsample
       dt_iop_flip_and_zoom_8(tmp.buf, tmp.width, tmp.height, buf, wd, ht, ORIENTATION_NONE, width, height);
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d (%ix%i->%ix%i)\n", 
+      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d (%ix%i->%ix%i)\n", 
         size, imgid, k, tmp.width, tmp.height, *width, *height);
 
       dt_mipmap_cache_release(&tmp);
@@ -1561,7 +1572,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
         // 4. but then, color/contrast/appearance unexpectedly changes and user doesn't understand WTF just happened.
         // Blurry is less bad than randomly inconsistent, plus user has a GUI way in lighttable to
         // change how thumbs are processed at runtime.
-        dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from embedded jpeg\n", size, imgid);
+        _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from embedded jpeg\n", size, imgid);
         // The camera renders its embedded previews from the full default-crop rectangle even when
         // it recorded a narrower framing, so trim them to what the photographer actually framed.
         // Only here: the two branches above read a separate JPEG file, which the camera already
@@ -1577,7 +1588,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   {
     if(embedded_jpg_mode == 2)
     {
-      dt_print(DT_DEBUG_CACHE,
+      _cache_print(DT_DEBUG_CACHE,
                "[mipmap_cache] embedded JPEG mode forbids raw processing for image %d at mip %d\n",
                imgid, size);
       *width = *height = 0;
@@ -1602,7 +1613,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
                                        NULL, 1, 1, NULL, shutdown);
     if(!res)
     {
-      dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generated mip %d for image %d from scratch\n", size, imgid);
+      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generated mip %d for image %d from scratch\n", size, imgid);
       // might be smaller, or have a different aspect than what we got as input.
       *width = dat.head.width;
       *height = dat.head.height;
