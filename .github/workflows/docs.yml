@@ -111,13 +111,14 @@ jobs:
 
       - name: Code health panel
         run: |
-          log=""
-          [ -f clang-tidy-report/clang-tidy.log ] && log="--clang-tidy-log clang-tidy-report/clang-tidy.log"
+          extra=""
+          [ -f clang-tidy-report/clang-tidy.log ] && extra="$extra --clang-tidy-log clang-tidy-report/clang-tidy.log"
+          [ -f clang-tidy-report/selfcontained.json ] && extra="$extra --selfcontained-report clang-tidy-report/selfcontained.json"
           python3 tools/code_health.py \
             --project ansel \
             --source-dir src \
             --db doc/api/sqlite3/doxygen_sqlite3.db \
-            $log
+            $extra
 
       - name: Doxygen pass 2 - full site
         run: |

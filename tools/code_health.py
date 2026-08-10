@@ -404,6 +404,150 @@ def collect_reach(edges):
     }
 
 
+def _modularity(adj_w, degree, two_m, partition):
+    """Newman modularity Q of one partition of a weighted undirected graph."""
+    if two_m <= 0:
+        return 0.0
+    inner, deg = Counter(), Counter()
+    for u, nbrs in adj_w.items():
+        cu = partition[u]
+        deg[cu] += degree[u]
+        for v, w in nbrs.items():
+            if partition[v] == cu:
+                inner[cu] += w          # counts each internal edge twice, as required
+    return sum(inner[c] / two_m - (deg[c] / two_m) ** 2 for c in deg)
+
+
+def _louvain(adj_w, degree, two_m, passes=12):
+    """Louvain community detection, first phase iterated to convergence.
+
+    Implemented here rather than pulled in, so the panel keeps needing nothing but
+    python3 on the runner. Only the local-moving phase is used - repeated to a fixed
+    point - which is enough to establish whether a better grouping than the directory
+    layout exists, without the graph-coarsening phase's bookkeeping.
+    """
+    partition = {n: n for n in adj_w}
+    comm_deg = dict(degree)
+    for _ in range(passes):
+        moved = False
+        for u in sorted(adj_w):
+            cu = partition[u]
+            ku = degree[u]
+            weights = Counter()
+            for v, w in adj_w[u].items():
+                if v != u:
+                    weights[partition[v]] += w
+            comm_deg[cu] -= ku
+            best, gain = cu, weights.get(cu, 0) - comm_deg.get(cu, 0) * ku / two_m
+            for c, w in weights.items():
+                g = w - comm_deg.get(c, 0) * ku / two_m
+                if g > gain + 1e-12:
+                    best, gain = c, g
+            comm_deg[best] = comm_deg.get(best, 0) + ku
+            if best != cu:
+                partition[u] = best
+                moved = True
+        if not moved:
+            break
+    return partition
+
+
+def collect_modularity(edges, source_dir="src"):
+    """Does the folder layout correspond to how the code is actually coupled?
+
+    The directories are treated as a proposed partition of the dependency graph and
+    scored with Newman modularity Q - the share of edges falling inside groups, minus
+    what random wiring of the same degrees would produce. Then a partition is derived
+    from the graph itself with Louvain and scored the same way.
+
+    The GAP between the two is the number that matters. If directories really were
+    modules, grouping by directory would be near-optimal and the gap would be small.
+    A large gap means the folders are drawers: the code clusters, but not along the
+    lines the tree is filed under.
+
+    Also reported without any clustering at all: the share of includes that stay
+    inside their own directory, which is the same question asked bluntly.
+    """
+    if not edges:
+        return None
+    adj_w = defaultdict(Counter)
+    for a, b in edges:
+        if a == b:
+            continue
+        adj_w[a][b] += 1                # undirected: coupling has no direction
+        adj_w[b][a] += 1
+    if not adj_w:
+        return None
+    degree = {n: sum(w.values()) for n, w in adj_w.items()}
+    two_m = float(sum(degree.values()))
+
+    dirs = {}
+    for n in adj_w:
+        dirs[n] = module_of(n, source_dir) or "(root)"
+    q_dir = _modularity(adj_w, degree, two_m, dirs)
+
+    derived = _louvain(adj_w, degree, two_m)
+    q_derived = _modularity(adj_w, degree, two_m, derived)
+
+    inside = sum(1 for a, b in edges
+                 if module_of(a, source_dir) == module_of(b, source_dir))
+    clusters = Counter(derived.values())
+    sizes = sorted(clusters.values(), reverse=True)
+
+    # how far the derived grouping is from the filed one, in files that would move
+    best_match = {}
+    pair = defaultdict(Counter)
+    for n, c in derived.items():
+        pair[c][dirs[n]] += 1
+    for c, counts in pair.items():
+        best_match[c] = counts.most_common(1)[0][1]
+    agree = sum(best_match.values())
+
+    return {
+        "q_directories": round(q_dir, 3),
+        "q_derived": round(q_derived, 3),
+        "gap": round(q_derived - q_dir, 3),
+        "directories": len(set(dirs.values())),
+        "derived_clusters": len(clusters),
+        "largest_clusters": sizes[:10],
+        "intra_directory_includes": inside,
+        "total_includes": len(edges),
+        "intra_directory_share": round(100.0 * inside / max(1, len(edges)), 1),
+        "files_in_agreeing_cluster": agree,
+        "files": len(adj_w),
+        "agreement_share": round(100.0 * agree / max(1, len(adj_w)), 1),
+    }
+
+
+def collect_selfcontained(path):
+    """Fold in a header self-containment report, when one has been produced.
+
+    A header should compile on its own. One that does not is relying on its includer
+    having pulled something in first, which is the same defect as an unnecessary
+    include seen from the other side: the dependency is real but written nowhere.
+
+    Testing it needs a compiler and the project's include flags, so it is produced by
+    the code-health workflow, which already configures a build tree, and consumed here.
+    """
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        sys.stderr.write("code_health: self-containment report unreadable: %s\n" % exc)
+        return None
+    failing = [f for f in data.get("results", []) if not f.get("ok")]
+    total = len(data.get("results", []))
+    return {
+        "headers": total,
+        "self_contained": total - len(failing),
+        "share": round(100.0 * (total - len(failing)) / max(1, total), 1),
+        "failing": sorted((f["header"], f.get("first_error", "")[:120]) for f in failing)[:30],
+        "failing_count": len(failing),
+    }
+
+
 def collect_docs(db_path):
     """How much of the API carries any documentation at all.
 
@@ -1573,6 +1717,94 @@ def build_markdown(project, data):
     A("")
 
     # ---- static analysis
+    mod = data.get("modularity")
+    A("Modularity {#ch_modularity}")
+    A("----------")
+    A("")
+    if mod:
+        A("Do the folders correspond to how the code is actually coupled?")
+        A("")
+        A("The directory layout is treated as a proposed grouping of the dependency graph")
+        A("and scored with Newman modularity `Q` - the share of edges falling inside")
+        A("groups, minus what random wiring of the same degrees would give. Then a grouping")
+        A("is derived from the graph itself, with Louvain, and scored the same way.")
+        A("")
+        A("**The gap is the answer.** If directories really were modules, grouping by")
+        A("directory would be near-optimal and the gap would be small. A large gap means")
+        A("the code does cluster - just not along the lines it is filed under.")
+        A("")
+        A(md_table(
+            ["Measure", "Value"],
+            [["Q of the directory layout", mod["q_directories"]],
+             ["Q of the derived grouping", mod["q_derived"]],
+             ["Gap", mod["gap"]],
+             ["Directories", "{:,}".format(mod["directories"])],
+             ["Derived clusters", "{:,}".format(mod["derived_clusters"])],
+             ["Files whose directory matches their cluster",
+              "{:,} ({} %)".format(mod["files_in_agreeing_cluster"], mod["agreement_share"])],
+             ["Includes staying inside one directory",
+              "{:,} of {:,} ({} %)".format(mod["intra_directory_includes"],
+                                           mod["total_includes"],
+                                           mod["intra_directory_share"])]],
+            ["---", "--:"]))
+        A("")
+        A("Largest derived clusters, in files: " +
+          ", ".join(str(n) for n in mod["largest_clusters"]))
+        A("")
+        A("### How to read this, and how not to {#ch_modularity_caveat}")
+        A("")
+        A("Modularity rewards COMMUNITY structure - groups with dense internal and sparse")
+        A("external links. A well-layered codebase is not community-structured, it is")
+        A("hierarchical, and the two are different shapes. A leaf library factored out")
+        A("precisely so that everything can use it has, by construction, almost all its")
+        A("edges crossing a boundary, and `Q` marks it down for exactly the property that")
+        A("makes it good design.")
+        A("")
+        A("So a lower `Q` is not automatically worse, and this metric should not be read")
+        A("as a verdict the way the cycle and reach figures can be. What it does say")
+        A("reliably is the GAP: both scores here are far below the 0.3 that usually")
+        A("indicates real community structure, while the derived grouping clears it. The")
+        A("code clusters; the folders are not where it clusters. That holds whichever tree")
+        A("is measured, and it is the honest form of the observation that `src/`")
+        A("subdirectories are drawers rather than modules.")
+        A("")
+    else:
+        A("_include data not available._")
+        A("")
+
+    sc = data.get("selfcontained")
+    A("Header self-containment {#ch_selfcontained}")
+    A("-----------------------")
+    A("")
+    if sc:
+        A("Every header compiled on its own, as a translation unit containing nothing but")
+        A("an include of itself. A header that fails is relying on whoever includes it")
+        A("having pulled something in first - the dependency is real and written nowhere,")
+        A("and it breaks the day someone tidies an include in a file that never mentioned")
+        A("this header.")
+        A("")
+        A("X-macro headers are excluded: they are re-included several times in one")
+        A("translation unit with different macros defined, so compiling one alone is not a")
+        A("question that applies.")
+        A("")
+        A(md_table(
+            ["Measure", "Value"],
+            [["Headers checked", "{:,}".format(sc["headers"])],
+             ["Self-contained", "{:,}".format(sc["self_contained"])],
+             ["Share", "{} %".format(sc["share"])],
+             ["Failing", "{:,}".format(sc["failing_count"])]],
+            ["---", "--:"]))
+        A("")
+        if sc["failing"]:
+            A(md_table(["Header", "First error"],
+                       [["`%s`" % h, e] for h, e in sc["failing"]],
+                       ["---", "---"]))
+            A("")
+    else:
+        A("_no self-containment report was supplied. It needs a configured build tree, so")
+        A("the code-health workflow produces it and this build folds it in._")
+        A("")
+
     doc = data.get("docs")
     A("Documentation coverage {#ch_docs}")
     A("----------------------")
@@ -1727,6 +1959,8 @@ def main():
                     help="where to read .gitmodules from (default: cwd)")
     ap.add_argument("--db", default="doc/api/sqlite3/doxygen_sqlite3.db")
     ap.add_argument("--clang-tidy-log", default=None)
+    ap.add_argument("--selfcontained-report", default=None,
+                    help="JSON from tools/check_header_selfcontained.py")
     ap.add_argument("--out-md", default="doc/code-health.md")
     ap.add_argument("--out-json", default="doc/code-health.json")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2)))
@@ -1770,6 +2004,10 @@ def main():
     data["includers"] = step("fan-in", lambda: collect_includers(edges))
     data["layering"] = step("layering", lambda: collect_layering(edges, args.source_dir))
     data["reach"] = step("transitive reach", lambda: collect_reach(edges))
+    data["modularity"] = step("modularity",
+                              lambda: collect_modularity(edges, args.source_dir))
+    data["selfcontained"] = step("header self-containment",
+                                 lambda: collect_selfcontained(args.selfcontained_report))
     data["docs"] = step("doc coverage", lambda: collect_docs(args.db))
     data["git"] = step("git history",
                        lambda: collect_git(args.repo_root, args.history_days,

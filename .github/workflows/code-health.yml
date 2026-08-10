@@ -146,6 +146,14 @@ jobs:
             > clang-tidy.log 2>/dev/null || true
           echo "findings: $(grep -cE 'warning:|error:' clang-tidy.log || true)"
 
+      # Needs the same configured build tree, so it rides along with clang-tidy
+      # rather than getting a job of its own.
+      - name: Check header self-containment
+        continue-on-error: true
+        run: |
+          python3 tools/check_header_selfcontained.py \
+            -p build -s src -o selfcontained.json
+
       - name: Summarise
         run: |
           {
@@ -160,5 +168,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: clang-tidy-report
-          path: clang-tidy.log
+          path: |
+            clang-tidy.log
+            selfcontained.json
           retention-days: 90
