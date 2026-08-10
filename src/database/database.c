@@ -68,7 +68,7 @@
 /* sqlite3IcuInit(), called by _load_icu_collation() below. This block was empty: the
  * declaration had been lost, and since HAVE_ICU is off in every local and CI build the
  * only configuration that would have caught it is one nobody runs. */
-#include "database/sqliteicu.h"
+#include "database/sqliteicu.h" // conditional-ok: sqlite3IcuInit() is only called inside this same #ifdef, and sqliteicu.c is only compiled with HAVE_ICU
 #endif
 #include "database/legacy_presets.h"
 
