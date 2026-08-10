@@ -2,8 +2,8 @@
 
 Everything that speaks SQL belongs here. Nothing else does.
 
-That is the destination, not yet the state of the tree: **287 call sites outside this
-directory still hold a raw `sqlite3 *`**, and 33 files still write queries. Both numbers
+That is the destination, not yet the state of the tree: **285 call sites outside this
+directory still hold a raw `sqlite3 *`**, and 32 files still write queries. Both numbers
 are ratcheted downwards by `tools/check_module_boundaries.sh`, and this file is the map of
 where they are going.
 
@@ -24,6 +24,7 @@ where they are going.
 | `metadata_repository.c/h` | `main.meta_data` |
 | `tag_repository.c/h` | `data.tags`, `main.tagged_images` — partial, see its file comment |
 | `location_repository.c/h` | `data.locations` |
+| `preset_repository.c/h` | `data.presets` — partial, see its file comment |
 
 `dt_database_t` is defined in `database.c` and declared nowhere. There is one connection,
 the module owns it, and no function takes it as an argument.
@@ -119,10 +120,11 @@ refcounting, or what the caller intends. `image_repository.c` is the worked exam
 came out of `caches/image_cache.c`, which was an LRU and, in 107 of its lines, also the
 only code in the tree that knew the shape of a `main.images` row.
 
-Six `common/` files are already at zero SQL and are the pattern to copy: `colorlabels.c`,
-`grouping.c`, `selection.c`, `history_snapshot.c`, `metadata.c`, `map_locations.c`.
+Seven `common/` files are already at zero SQL and are the pattern to copy: `colorlabels.c`,
+`grouping.c`, `selection.c`, `history_snapshot.c`, `metadata.c`, `map_locations.c`,
+`presets.c`.
 
-Three things that came up doing those, and will come up again:
+Four things that came up doing those, and will come up again:
 
 - **A function that dispatches on a key can span repositories.** `dt_metadata_get()` takes
   an XMP name, and three of those names are not metadata at all — the rating is in
@@ -139,6 +141,12 @@ Three things that came up doing those, and will come up again:
   `_is_point_in_polygon()` decides. Geometry is not storage. When a repository function
   returns candidates rather than answers, say so in its doc comment.
 
+- **Sometimes the right shape is a struct.** When both directions touch the whole row --
+  `presets.c` exports a preset to a file and imports one back -- a `dt_preset_t` beats a
+  set of narrow queries, and it is what deletes helpers like
+  `dt_preset_encode(sqlite3_stmt *, int)`. A domain function taking a `sqlite3_stmt` is the
+  database leaking a *type*, which is worse than it leaking a query.
+
 **Verifying a move you cannot run.** Geotagging has no headless entry point. Rather than
 claim a functional test, extract every query string from the old file and from its new
 home and diff them — nine of thirteen were byte-identical and the four that differed were
@@ -150,7 +158,7 @@ The families still to extract, by where their SQL lives today:
 | repository | tables | mostly from |
 |---|---|---|
 | `tag_repository` (extend) | `data.tags`, `main.tagged_images`, `memory.taglist` | `common/tags.c` (258) |
-| `preset_repository` | `data.presets` | `gui/presets.c` (281), `libs/lib.c` (141) |
+| `preset_repository` (extend) | `data.presets` | `gui/presets.c` (281), `libs/lib.c` (141) |
 | `history_repository` | `main.history`, `main.masks_history`, `main.module_order` | `common/history.c` (217) |
 | `style_repository` | `data.styles`, `data.style_items` | `common/styles.c` (187) |
 | `film_repository` | `main.film_rolls`, `memory.film_folder` | `common/film.c` (103) |
