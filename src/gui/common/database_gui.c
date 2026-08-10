@@ -32,10 +32,10 @@
 #include <glib/gstdio.h>
 #include <stdio.h>
 
-gboolean dt_database_show_error(struct dt_database_t *db)
+gboolean dt_database_show_error(void)
 {
   dt_database_error_t err = { 0 };
-  dt_database_take_error(db, &err);
+  dt_database_take_error(&err);
 
   gboolean error = TRUE;
 
@@ -121,20 +121,77 @@ gboolean dt_database_show_error(struct dt_database_t *db)
   return error;
 }
 
-/* The three prompts dt_database_init() puts, now that it only states them.
+/* The schema is out of date. The module states that; how long it might take and what the
+ * buttons say is ours. */
+static dt_database_response_t _prompt_upgrade(const dt_database_prompt_context_t *context)
+{
+  char *label_text = g_markup_printf_escaped(_("the database schema has to be upgraded for\n"
+                                               "\n"
+                                               "<span style='italic'>%s</span>\n"
+                                               "\nthis might take a long time in case of a large database\n\n"
+                                               "do you want to proceed or quit now to do a backup\n"),
+                                             context->dbfilename);
+
+  const gboolean proceed =
+    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema migration"), label_text,
+                                         _("close Ansel"), _("upgrade database"));
+
+  dt_free(label_text);
+  return proceed ? DT_DATABASE_RESPONSE_PROCEED : DT_DATABASE_RESPONSE_CLOSE;
+}
+
+/* A VACUUM would reclaim some space. The module hands over the byte count and when the
+ * user would next be asked; the three "click later to..." sentences are ours to pick
+ * between, because the module has no business composing translated prose. */
+static dt_database_response_t _prompt_maintenance(const dt_database_prompt_context_t *context)
+{
+  const char *later_info = "";
+  if(context->ask_on_startup)
+    later_info = _("click later to be asked on next startup");
+  else if(context->ask_on_close && !context->at_close)
+    later_info = _("click later to be asked when closing Ansel");
+  else if(context->ask_on_close)
+    later_info = _("click later to be asked next time when closing Ansel");
+
+  char *size_info = g_format_size(context->reclaimable_bytes);
+  char *label_text = g_markup_printf_escaped(_("the database could use some maintenance\n"
+                                               "\n"
+                                               "there's <span style='italic'>%s</span> to be freed"
+                                               "\n\n"
+                                               "do you want to proceed now?\n\n"
+                                               "%s\n"
+                                               "you can always change maintenance preferences in core options"),
+                                             size_info, later_info);
+
+  const gboolean proceed =
+    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema maintenance"), label_text,
+                                         _("later"), _("yes"));
+
+  dt_free(label_text);
+  dt_free(size_info);
+  return proceed ? DT_DATABASE_RESPONSE_PROCEED : DT_DATABASE_RESPONSE_CLOSE;
+}
+
+/* The prompts the database puts, now that it only states them.
  *
  * They were built inline in common/database.c with no has_gui guard at all, so a headless
  * run reached gtk_dialog_new_with_buttons() on a GTK that ansel-cli never initialises.
  * Registration is what gates them now, and darktable.c only registers when there is a GUI.
  */
-static dt_database_response_t _database_prompt(const dt_database_prompt_t prompt, const char *dbfilename,
-                                               const char *quick_check, const gboolean snapshot_available)
+static dt_database_response_t _database_prompt(const dt_database_prompt_context_t *context)
 {
+  const char *const dbfilename = context->dbfilename;
+  const char *const quick_check = context->quick_check;
+  const gboolean snapshot_available = context->snapshot_available;
+
+  if(context->prompt == DT_DATABASE_PROMPT_UPGRADE) return _prompt_upgrade(context);
+  if(context->prompt == DT_DATABASE_PROMPT_MAINTENANCE) return _prompt_maintenance(context);
+
   const GtkDialogFlags dflags = GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT;
   GtkWidget *dialog = NULL;
   char *label_text = NULL;
 
-  if(prompt == DT_DATABASE_PROMPT_READONLY)
+  if(context->prompt == DT_DATABASE_PROMPT_READONLY)
   {
     dialog = gtk_dialog_new_with_buttons(_("Ansel - Database is read-only"), NULL, dflags,
                                          _("Close Ansel"), GTK_RESPONSE_CLOSE, NULL);

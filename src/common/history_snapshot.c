@@ -56,7 +56,7 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
     *snap_id = sqlite3_column_int(stmt, 0) + 1;
   sqlite3_finalize(stmt);
 
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   if(*history_end == 0)
   {
@@ -122,10 +122,10 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   sqlite3_finalize(stmt);
 
   if(all_ok)
-    dt_database_release_transaction(dt_database_get_global());
+    dt_database_release_transaction();
   else
   {
-    dt_database_rollback_transaction(dt_database_get_global());
+    dt_database_rollback_transaction();
     fprintf(stderr, "[dt_history_snapshot_undo_create] fails to create a snapshot for %d\n", imgid);
   }
 }
@@ -136,7 +136,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   sqlite3_stmt *stmt;
   gboolean all_ok = TRUE;
 
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   dt_history_delete_on_image_ext(imgid, FALSE);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
@@ -198,10 +198,10 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   all_ok &= dt_history_set_end(imgid, history_end);
 
   if(all_ok)
-    dt_database_release_transaction(dt_database_get_global());
+    dt_database_release_transaction();
   else
   {
-    dt_database_rollback_transaction(dt_database_get_global());
+    dt_database_rollback_transaction();
     fprintf(stderr, "[_history_snapshot_undo_restore] fails to restore a snapshot for %d\n", imgid);
   }
 

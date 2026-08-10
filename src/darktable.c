@@ -594,11 +594,6 @@ dt_pthread_mutex_t *dt_readfile_mutex(void)
   return &darktable.readFile_mutex;
 }
 
-dt_pthread_rwlock_t *dt_database_threadsafe_lock(void)
-{
-  return &darktable.database_threadsafe;
-}
-
 
 
 struct dt_selection_t *dt_selection_get_global(void)
@@ -614,16 +609,6 @@ struct dt_undo_t *dt_undo_get_global(void)
 struct dt_collection_t *dt_collection_get_global(void)
 {
   return darktable.collection;
-}
-
-struct dt_database_t *dt_database_get_global(void)
-{
-  return (struct dt_database_t *)darktable.db;
-}
-
-sqlite3 *dt_database_get_sqlite3_global(void)
-{
-  return dt_database_get(darktable.db);
 }
 
 struct dt_control_signal_t *dt_control_signal_get_global(void)
@@ -713,6 +698,28 @@ static dt_mipmap_cache_settings_t _mipmap_settings_from_conf(void)
   return s;
 }
 
+/* Same arrangement for the database's maintenance and snapshot policy. These were read
+ * with dt_conf_* from five places inside database.c, several of them deep in a decision
+ * the user never sees. */
+static void _database_settings_from_conf(void)
+{
+  dt_database_settings_t s = { 0 };
+  s.maintenance_check = dt_conf_get_string("database/maintenance_check");
+  s.maintenance_freepage_ratio = dt_conf_get_int("database/maintenance_freepage_ratio");
+  s.create_snapshot = dt_conf_get_string("database/create_snapshot");
+  s.keep_snapshots = dt_conf_get_int("database/keep_snapshots");
+  dt_database_set_settings(&s);
+  dt_free(s.maintenance_check);
+  dt_free(s.create_snapshot);
+}
+
+/* The database moved the legacy pre-XDG library file and settled on a new name for it.
+ * Persisting that is ours: the module does not write conf. */
+static void _database_renamed(const char *new_library_name)
+{
+  dt_conf_set_string("database", new_library_name);
+}
+
 /* The two parameters are the GTK signal signature, not ours; neither carries anything we
  * need, since the settings are read from conf either way. */
 static void _preferences_changed(gpointer instance, gpointer user_data)
@@ -722,6 +729,7 @@ static void _preferences_changed(gpointer instance, gpointer user_data)
 
   const dt_mipmap_cache_settings_t s = _mipmap_settings_from_conf();
   dt_mipmap_cache_set_settings(&s);
+  _database_settings_from_conf();
 }
 
 /* Same "read at startup, re-read on change, never anywhere else" lifecycle as the mipmap cache
@@ -778,7 +786,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_pthread_mutex_init(&(darktable.exiv2_threadsafe), &recursive_locking);
   dt_pthread_mutex_init(&(darktable.readFile_mutex), NULL);
   dt_pthread_mutex_init(&(darktable.pipeline_threadsafe), NULL);
-  dt_pthread_rwlock_init(&(darktable.database_threadsafe), NULL);
 
   darktable.control = (dt_control_t *)calloc(1, sizeof(dt_control_t));
 
@@ -1291,23 +1298,37 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_datetime_init();
 
   // initialize the database
+  //
+  // Every user preference the database acts on is read here and handed over, so that the
+  // SQL layer never reads conf itself and "when does this take effect" has one answer.
+  _database_settings_from_conf();
+  dt_database_set_renamed_handler(_database_renamed);
+
+  gchar *configured_library = dt_conf_get_string("database");
+  const dt_database_params_t db_params = { .alternative = dbfilename_from_command,
+                                           .library = configured_library,
+                                           .load_data = load_data,
+                                           .has_gui = init_gui,
+                                           .verbose = (dt_get_debug_flags() & DT_DEBUG_SQL) != 0 };
+
   gboolean recheck_needed = TRUE;
   while (recheck_needed)
   {
-    // Before, not after: dt_database_init() can hit a read-only or corrupt database and needs
+    // Before, not after: dt_database_open() can hit a read-only or corrupt database and needs
     // to ask the user what to do about it, and dt_gui_gtk_init() -- where every other backend
     // handler is registered -- only runs much further down. This is the only place that knows
     // this early whether there will be anybody to ask.
     if(init_gui) dt_database_gui_register_handlers();
 
-    darktable.db = dt_database_init(dbfilename_from_command, load_data, init_gui);
-    if(IS_NULL_PTR(darktable.db))
+    const dt_database_open_result_t opened = dt_database_open(&db_params);
+    if(opened == DT_DATABASE_OPEN_FAILED)
     {
       printf("ERROR : cannot open database\n");
+      dt_free(configured_library);
       dt_gui_splash_close();
       return 1;
     }
-    else if(!dt_database_get_lock_acquired(darktable.db))
+    else if(opened == DT_DATABASE_OPEN_LOCKED)
     {
       gboolean error = FALSE;
 
@@ -1339,29 +1360,36 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
         }
 #endif
         if(!image_loaded_elsewhere)
-          // Reporting CONSUMES the pending error, so the API is non-const; darktable.db is
-          // declared const, hence the cast here rather than a lie in the signature.
-          error = dt_database_show_error((struct dt_database_t *)darktable.db);
+          // Reporting CONSUMES the pending error.
+          error = dt_database_show_error();
       }
       if(error)
       {
         fprintf(stderr, "ERROR: can't acquire database lock, aborting.\n");
+        dt_free(configured_library);
         dt_gui_splash_close();
         return error;
       }
       else
       {
-        // try again
+        // Close before retrying. The loop used to jump straight back to
+        // dt_database_init(), abandoning the half-open database it had just been handed
+        // -- its two filename strings and, when only one of the two lock files had been
+        // taken, that lock file too. dt_database_open() refuses to open over an open
+        // connection, so the leak is now a compile-time-visible step instead.
+        dt_database_close();
         continue;
       }
     }
     recheck_needed = FALSE;
   }
 
+  dt_free(configured_library);
+
   //db maintenance on startup (if configured to do so)
-  if(dt_database_maybe_maintenance(darktable.db, init_gui, FALSE))
+  if(dt_database_maybe_maintenance(FALSE))
   {
-    dt_database_perform_maintenance(darktable.db);
+    dt_database_perform_maintenance();
   }
 
   // init darktable tags table
@@ -1678,12 +1706,12 @@ void dt_cleanup()
 
   // last chance to ask user for any input...
 
-  const gboolean perform_maintenance = dt_database_maybe_maintenance(darktable.db, init_gui, TRUE);
-  const gboolean perform_snapshot = dt_database_maybe_snapshot(darktable.db);
+  const gboolean perform_maintenance = dt_database_maybe_maintenance(TRUE);
+  const gboolean perform_snapshot = dt_database_maybe_snapshot();
   gchar **snaps_to_remove = NULL;
   if(perform_snapshot)
   {
-    snaps_to_remove = dt_database_snaps_to_remove(darktable.db);
+    snaps_to_remove = dt_database_snaps_to_remove();
   }
 
 #ifdef HAVE_PRINT
@@ -1801,14 +1829,14 @@ void dt_cleanup()
 
   if(perform_maintenance)
   {
-    dt_database_cleanup_busy_statements(darktable.db);
-    dt_database_perform_maintenance(darktable.db);
+    dt_database_cleanup_busy_statements();
+    dt_database_perform_maintenance();
   }
 
-  dt_database_optimize(darktable.db);
+  dt_database_optimize();
   if(perform_snapshot)
   {
-    if(dt_database_snapshot(darktable.db) && snaps_to_remove)
+    if(dt_database_snapshot() && snaps_to_remove)
     {
       int i = 0;
       while(snaps_to_remove[i])
@@ -1826,7 +1854,7 @@ void dt_cleanup()
   {
     g_strfreev(snaps_to_remove);
   }
-  dt_database_destroy(darktable.db);
+  dt_database_close();
 
   if(init_gui)
   {
@@ -1861,7 +1889,6 @@ void dt_cleanup()
   dt_pthread_mutex_destroy(&(darktable.exiv2_threadsafe));
   dt_pthread_mutex_destroy(&(darktable.readFile_mutex));
   dt_pthread_mutex_destroy(&(darktable.pipeline_threadsafe));
-  dt_pthread_rwlock_destroy(&(darktable.database_threadsafe));
 
   dt_exif_cleanup();
 

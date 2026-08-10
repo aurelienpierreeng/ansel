@@ -191,8 +191,6 @@ gboolean dt_imageio_lookup_makermodel(const char *maker, const char *model,
                                       char *mk, int mk_len, char *md, int md_len,
                                       char *al, int al_len);
 
-// get the type of image from its extension
-dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension);
 
 #ifdef __cplusplus
 }

@@ -17,16 +17,20 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_LEGACY_PRESETS_H
-#define DT_COMMON_LEGACY_PRESETS_H
+#ifndef DT_DATABASE_LEGACY_PRESETS_H
+#define DT_DATABASE_LEGACY_PRESETS_H
 
-struct dt_database_t;
+#include <sqlite3.h>
 
 /** (Re)create main.legacy_presets and fill it with the presets darktable shipped before the
- *  auto-apply cleanup. Drops and re-inserts every time it is called. */
-void dt_legacy_presets_create(const struct dt_database_t *db);
+ *  auto-apply cleanup. Drops and re-inserts every time it is called.
+ *
+ *  Takes the connection rather than the database object because it runs from inside
+ *  dt_database_open(), while the schema is still being built and before the module has
+ *  published anything -- there is nothing to look up yet. */
+void dt_legacy_presets_create(sqlite3 *handle);
 
-#endif // DT_COMMON_LEGACY_PRESETS_H
+#endif // DT_DATABASE_LEGACY_PRESETS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

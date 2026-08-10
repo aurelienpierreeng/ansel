@@ -803,7 +803,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
   dt_iop_atrous_params_t p;
   p.octaves = 7;
   p.mix = 1.0f;
@@ -1070,7 +1070,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("deblur: fine blur, strength 1"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 static void reset_mix(dt_iop_module_t *self)

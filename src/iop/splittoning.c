@@ -146,7 +146,7 @@ const char **description(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   // shadows: #ED7212
   // highlights: #ECA413
@@ -184,7 +184,7 @@ void init_presets(dt_iop_module_so_t *self)
       &(dt_iop_splittoning_params_t){ 28.0 / 360.0, 39.0 / 100.0, 28.0 / 360.0, 8.0 / 100.0, 0.60, 0.0 },
       sizeof(dt_iop_splittoning_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 __DT_CLONE_TARGETS__

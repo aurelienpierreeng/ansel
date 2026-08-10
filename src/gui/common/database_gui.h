@@ -21,22 +21,20 @@
 
 #include <glib.h>
 
-struct dt_database_t;
-
-/* The GUI half of common/database.c. */
+/* The GUI half of database/database.c. */
 
 /** Report why the database would not open, and offer to quit, retry, or delete the lock
  *  files. Consumes the database's pending error.
  *
  *  Returns TRUE if the failure is fatal, FALSE if the caller should try opening again --
- *  the caller's init loop in darktable.c re-runs dt_database_init() on FALSE.
+ *  the caller's init loop in darktable.c closes and re-runs dt_database_open() on FALSE.
  *
  *  Postponed until after dbus has been tried, so another running instance gets the chance
  *  to answer first. */
-gboolean dt_database_show_error(struct dt_database_t *db);
+gboolean dt_database_show_error(void);
 
-/** Register the handler common/database.c puts its mid-init prompts through.
- *  Must be called BEFORE dt_database_init(), so darktable.c does it -- dt_gui_gtk_init()
+/** Register the handler database/database.c puts its prompts through.
+ *  Must be called BEFORE dt_database_open(), so darktable.c does it -- dt_gui_gtk_init()
  *  runs too late. See dt_database_set_prompt_handler(). */
 void dt_database_gui_register_handlers(void);
 

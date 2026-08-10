@@ -61,6 +61,16 @@ extern "C" {
     function(__VA_ARGS__);                                               \
   } while (0)
 
+// Same, for a function taking no arguments. ISO C wants at least one argument for a
+// variadic macro's `...`, so DT_DEBUG_TRACE_WRAPPER cannot be handed an empty list
+// without relying on a GNU extension.
+#define DT_DEBUG_TRACE_WRAPPER_VOID(thread, function)                    \
+  do {                                                                   \
+    dt_vprint((thread), "[debug_trace] %s is called from %s at %s:%d\n", \
+              #function, __FUNCTION__, __FILE__, __LINE__);              \
+    function();                                                          \
+  } while (0)
+
 #ifdef __cplusplus
 }
 #endif

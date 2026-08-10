@@ -184,7 +184,7 @@ const char **description(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   dt_gui_presets_add_generic(_("passthrough"), self->op, self->version(),
                              &(dt_iop_rawprepare_params_t){.x = 0,
@@ -198,7 +198,7 @@ void init_presets(dt_iop_module_so_t *self)
                                                            .raw_white_point = UINT16_MAX },
                              sizeof(dt_iop_rawprepare_params_t), 1, DEVELOP_BLEND_CS_NONE);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 static inline __attribute__((always_inline)) int compute_proper_crop(const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)

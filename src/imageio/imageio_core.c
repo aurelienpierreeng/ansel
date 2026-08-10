@@ -165,16 +165,6 @@ static const char *_preview_format_from_mime_type(const char *mime_type)
 // only the decoder can settle (TIFF, AVIF, HEIF/HEIC, DNG -- see dt_image_ext_is_ambiguous()).
 // Callers must treat 0 as "decode it"; dt_image_buffer_resolve_flags() sets the authoritative
 // LDR/HDR/MOSAIC flags once decoded.
-dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
-{
-  const char *ext = g_str_has_prefix(extension, ".") ? extension + 1 : extension;
-  if(dt_image_ext_is_ambiguous(ext)) return 0;
-  if(dt_image_ext_is_raw(ext)) return DT_IMAGE_RAW;
-  if(dt_image_ext_is_hdr(ext)) return DT_IMAGE_HDR;
-  if(dt_image_ext_is_ldr(ext)) return DT_IMAGE_LDR;
-  return 0;
-}
-
 int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *th_width, int32_t *th_height,
                                dt_colorspaces_color_profile_type_t *color_space, const int width, const int height)
 {

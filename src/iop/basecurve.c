@@ -427,13 +427,13 @@ static void set_presets(dt_iop_module_so_t *self, const basecurve_preset_t *pres
 void init_presets(dt_iop_module_so_t *self)
 {
   // sql begin
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   set_presets(self, basecurve_presets, basecurve_presets_cnt, FALSE);
   set_presets(self, basecurve_camera_presets, basecurve_camera_presets_cnt, TRUE);
 
   // sql commit
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 static inline __attribute__((always_inline)) float exposure_increment(float stops, int e, float fusion, float bias)

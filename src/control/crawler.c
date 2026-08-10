@@ -140,7 +140,7 @@ GList *dt_control_crawler_run(void)
                      &inner_stmt, NULL);
 
   // let's wrap this into a transaction, it might make it a little faster.
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -257,7 +257,7 @@ GList *dt_control_crawler_run(void)
     dt_free(extra_path);
   }
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 
   sqlite3_finalize(stmt);
   sqlite3_finalize(inner_stmt);
