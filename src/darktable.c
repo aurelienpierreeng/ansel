@@ -712,8 +712,13 @@ static dt_mipmap_cache_settings_t _mipmap_settings_from_conf(void)
   return s;
 }
 
+/* The two parameters are the GTK signal signature, not ours; neither carries anything we
+ * need, since the settings are read from conf either way. */
 static void _preferences_changed(gpointer instance, gpointer user_data)
 {
+  (void)instance;
+  (void)user_data;
+
   const dt_mipmap_cache_settings_t s = _mipmap_settings_from_conf();
   dt_mipmap_cache_set_settings(&s);
 }
@@ -2176,7 +2181,8 @@ int dt_worker_threads()
 
 size_t dt_get_available_mem()
 {
-  size_t cache_used = 0, cache_max = 0;
+  size_t cache_used = 0;
+  size_t cache_max = 0;
   dt_dev_pixelpipe_cache_get_usage(&cache_used, &cache_max);
   const size_t budget_left = cache_max - cache_used;
 

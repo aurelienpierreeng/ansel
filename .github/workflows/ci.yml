@@ -162,6 +162,10 @@ jobs:
         run: |
           "${SRC_DIR}/tools/check_layering.sh"
           "${SRC_DIR}/tools/check_module_boundaries.sh"
+          # `return FALSE` from a pointer-returning function. FALSE is 0, which is a valid
+          # null pointer constant, so this compiles silently in every configuration and
+          # only misleads the reader. Nothing else in the toolchain can see it.
+          python3 "${SRC_DIR}/tools/check_return_types.py" "${SRC_DIR}/src"
       - name: Check for includes added inside a conditional block
         # Pull requests only: it compares against the base branch. An include placed inside a
         # platform #ifdef compiles wherever that macro is set and fails everywhere else, which
