@@ -1275,7 +1275,7 @@ static void export_preset(GtkButton *button, gpointer data)
     sqlite3_stmt *stmt;
 
     // we have n+1 selects for saving presets, using single transaction for whole process saves us microlocks
-    dt_database_start_transaction(dt_database_get_global());
+    dt_database_start_transaction();
 
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "SELECT rowid, name, operation FROM data.presets WHERE writeprotect = 0",
@@ -1295,7 +1295,7 @@ static void export_preset(GtkButton *button, gpointer data)
 
     sqlite3_finalize(stmt);
 
-    dt_database_release_transaction(dt_database_get_global());
+    dt_database_release_transaction();
 
     dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
 

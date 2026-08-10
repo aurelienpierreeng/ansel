@@ -1792,7 +1792,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   flags |= DT_IMAGE_NO_LEGACY_PRESETS;
   // and we set the type of image flag (from extension for now)
   gchar *extension = g_strrstr(imgfname, ".");
-  flags |= dt_imageio_get_type_from_extension(extension);
+  flags |= dt_image_flags_from_extension(extension);
   // set the bits in flags that indicate if any of the extra files (.txt, .wav) are present
   char *extra_file = dt_image_get_audio_path_from_path(normalized_filename);
   if(extra_file)
@@ -2026,6 +2026,22 @@ int32_t dt_image_get_id(int32_t film_id, const gchar *filename)
   if(sqlite3_step(stmt) == SQLITE_ROW) id=sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
   return id;
+}
+
+/* Guess what kind of image a file holds from its extension alone.
+ *
+ * Lived in imageio/imageio_core.c, which put a six-line function over three predicates
+ * from common/image_extensions.h and one enum from this file at layer 6 -- above every
+ * one of its callers (common/image.c, common/exif.cc, caches/image_cache.c,
+ * database/database.c, gui/import.c). Nothing in imageio/ or above ever called it. */
+dt_image_flags_t dt_image_flags_from_extension(const char *extension)
+{
+  const char *ext = g_str_has_prefix(extension, ".") ? extension + 1 : extension;
+  if(dt_image_ext_is_ambiguous(ext)) return 0;
+  if(dt_image_ext_is_raw(ext)) return DT_IMAGE_RAW;
+  if(dt_image_ext_is_hdr(ext)) return DT_IMAGE_HDR;
+  if(dt_image_ext_is_ldr(ext)) return DT_IMAGE_LDR;
+  return 0;
 }
 
 int32_t dt_image_import(const int32_t film_id, const char *filename, gboolean raise_signals)

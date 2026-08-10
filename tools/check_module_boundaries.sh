@@ -192,14 +192,14 @@ fi
 # The upcall baseline is 10, not 0, and it is a RATCHET rather than a boundary: image_cache.c
 # and mipmap_cache.c arrived from common/ carrying these, and they are the next tranche --
 #
-#   image_cache.c  : imageio_core.h, control.h, signal.h, supervisor.h            (4)
+#   image_cache.c  : control.h, signal.h, supervisor.h                            (3)
 #   mipmap_cache.c : supervisor.h, imageio_core.h, imageio_jpeg.h,
 #                    imageio_module.h, control/jobs.h, develop/imageop_math.h     (6)
 #
 # The mipmap cache decoding images and scheduling jobs is a real design question, not a stray
 # include, so it gets its own pass. pixelpipe_cache.c is already at zero here.
 caches_global_baseline=0
-caches_upcall_baseline=10
+caches_upcall_baseline=9
 
 caches_global_now=$(grep -rn 'darktable\.\(image_cache\|mipmap_cache\|pixelpipe_cache\)\b' \
                     src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null | wc -l)
@@ -218,9 +218,86 @@ elif [ "${caches_global_now}" -lt "${caches_global_baseline}" ] || [ "${caches_u
   findings=$((findings + 1))
 fi
 
+
+# 6. src/database owns the connection, and hands it out to fewer people every time.
+#
+# Unlike the four checks above, the first two counts here are RATCHETS ON A LARGE NUMBER,
+# not boundaries at zero. The connection is not sealed yet and this script is what keeps
+# the sealing monotonic while it happens.
+#
+#   handle_escapes : call sites of dt_database_get_sqlite3_global() outside src/database.
+#                    Each is a translation unit holding a raw `sqlite3 *` the module cannot
+#                    account for, cannot serialise against a close, and cannot trace. They
+#                    are also exactly what makes swapping workspaces at runtime
+#                    unimplementable: nothing can wait for a connection somebody else is
+#                    still using. Every query that moves into a repository under
+#                    src/database/ takes one off this number.
+#
+#   sql_consumers  : files including database/sql_debug.h outside src/database. The header
+#                    is scaffolding and says so; at zero it is deleted and the macros
+#                    become private to the repositories.
+#
+# The last two are real boundaries and are at their floor:
+#
+#   conf_debug     : dt_conf_*/dt_get_debug_flags() calls inside src/database. Zero. The
+#                    maintenance and snapshot policy crosses as dt_database_settings_t and
+#                    the SQL trace flag is told to dt_database_open(). A module that reads
+#                    a user preference at the point of use has no answerable lifecycle.
+#
+#   upcalls        : includes from a higher layer. One, and it is named: the v1 -> v2
+#                    iop-order schema migration in database.c calls
+#                    dt_ioppr_get_iop_order_list_version() to rewrite main.history.iop_order.
+#                    That migration genuinely needs the module priority table; it is not a
+#                    stray include.
+database_handle_escapes_baseline=344
+database_sql_consumers_baseline=39
+database_conf_debug_baseline=0
+database_upcalls_baseline=1
+
+database_handle_escapes_now=$(grep -rn 'dt_database_get_sqlite3_global()' \
+                              src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
+                              | grep -cv '^src/database/')
+database_sql_consumers_now=$(grep -rln '#include "database/sql_debug.h"' \
+                             src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
+                             | grep -cv '^src/database/')
+database_conf_debug_now=$(grep -rnE 'dt_conf_(get|set)|dt_get_debug_flags\(' src/database/ \
+                          --include='*.c' --include='*.h' 2>/dev/null | wc -l)
+database_upcalls_now=$(grep -rnE '^#include "(control|gui|libs|views|iop|imageio|widgets)/' src/database/ 2>/dev/null | wc -l)
+database_upcalls_now=$((database_upcalls_now + $(grep -rcE '^#include "develop/' src/database/*.c src/database/*.h 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')))
+
+echo "database:      ${database_handle_escapes_now} sqlite3 handles handed out (ratchet, baseline ${database_handle_escapes_baseline}),"
+echo "               ${database_sql_consumers_now} files writing SQL outside the module (ratchet, baseline ${database_sql_consumers_baseline}),"
+echo "               ${database_conf_debug_now} conf/debug reads inside it (baseline ${database_conf_debug_baseline}),"
+echo "               ${database_upcalls_now} includes from a higher layer (baseline ${database_upcalls_baseline})."
+
+if [ "${database_handle_escapes_now}" -gt "${database_handle_escapes_baseline}" ] \
+   || [ "${database_sql_consumers_now}" -gt "${database_sql_consumers_baseline}" ]; then
+  echo "database: a count ROSE. New SQL belongs in a repository under src/database/, behind a"
+  echo "          named function -- not at a new call site holding the connection. See"
+  echo "          src/database/README.md."
+  findings=$((findings + 1))
+elif [ "${database_handle_escapes_now}" -lt "${database_handle_escapes_baseline}" ] \
+     || [ "${database_sql_consumers_now}" -lt "${database_sql_consumers_baseline}" ]; then
+  echo "database: a ratchet fell -- that is the point. Lower the baseline in this script, in"
+  echo "          the same commit, so the ground gained cannot be given back."
+  findings=$((findings + 1))
+fi
+
+if [ "${database_conf_debug_now}" -gt "${database_conf_debug_baseline}" ] \
+   || [ "${database_upcalls_now}" -gt "${database_upcalls_baseline}" ]; then
+  echo "database: the module started reading conf, the debug flags, or a higher layer. Session"
+  echo "          constants are told to dt_database_open(); user preferences cross as"
+  echo "          dt_database_settings_t."
+  findings=$((findings + 1))
+elif [ "${database_conf_debug_now}" -lt "${database_conf_debug_baseline}" ] \
+     || [ "${database_upcalls_now}" -lt "${database_upcalls_baseline}" ]; then
+  echo "database: a count fell -- lower the baseline in this script, in the same commit."
+  findings=$((findings + 1))
+fi
+
 if [ "${findings}" -gt 0 ]; then
   exit 1
 fi
 
-echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl and caches held."
+echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl, caches and database held."
 exit 0

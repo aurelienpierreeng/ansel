@@ -57,21 +57,20 @@
 #endif
 
 #include "system/atomic.h"
+#include "system/dtpthread.h"
+#include "common/image.h"
 #include "database/database.h"
 #include "database/sql_debug.h"
 #include "common/datetime.h"
 #include "common/file_location.h"
-#include "common/global_mutexes.h"
 #include "develop/iop_order.h"
-#include "common/styles.h"
-#include "common/history.h"
 #ifdef HAVE_ICU
 /* sqlite3IcuInit(), called by _load_icu_collation() below. This block was empty: the
  * declaration had been lost, and since HAVE_ICU is off in every local and CI build the
  * only configuration that would have caught it is one nobody runs. */
 #include "database/sqliteicu.h"
 #endif
-#include "common/legacy_presets.h"
+#include "database/legacy_presets.h"
 
 #include <gio/gio.h>
 #include <glib.h>
@@ -83,7 +82,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "common/utility.h"
-#include "widgets/dialog.h"
 
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!
@@ -115,12 +113,65 @@ typedef struct dt_database_t
   int error_other_pid;
 } dt_database_t;
 
+/* ---------------------------------------------------------------------------------------
+ *  Module state. All of it private: the connection, the policy, and the session constants
+ *  the orchestrator told us at open time.
+ * ------------------------------------------------------------------------------------- */
+
+/** The one connection. NULL when nothing is open. */
+static dt_database_t *_db = NULL;
+
+/** Serialises the module's own work against dt_database_close().
+ *
+ *  It is a reader/writer lock rather than a mutex because that is the shape the workspace
+ *  swap needs: every query takes it for reading and they proceed concurrently (sqlite is
+ *  opened SERIALIZED and does its own internal locking), while closing takes it for
+ *  writing and therefore waits for every in-flight query to finish.
+ *
+ *  @warning It does NOT yet make ::dt_database_close() safe, and the module does not
+ *  pretend otherwise. dt_database_get_sqlite3_global() hands the connection out to call
+ *  sites that keep using it long after they returned, entirely outside this lock; until
+ *  that count reaches zero the lock covers the module's own statements and nothing else.
+ *  This is exactly why there is no dt_database_swap() yet -- see src/database/README.md.
+ *
+ *  It used to live on `darktable_t` as `database_threadsafe`, reachable through
+ *  common/global_mutexes.h by anything that cared to take it. Two functions in this file
+ *  were its only users. */
+static dt_pthread_rwlock_t _db_lock;
+static gboolean _db_lock_inited = FALSE;
+
+/** Maintenance and snapshot policy, told to us by the orchestrator. Guarded by
+ *  ::_settings_lock, because the GUI thread replaces it while a maintenance decision may
+ *  be reading it. */
+static dt_database_settings_t _settings = { NULL, 0, NULL, 0 };
+static dt_pthread_mutex_t _settings_lock;
+static gboolean _settings_lock_inited = FALSE;
+
+/** Session constants, read once by the orchestrator and handed to dt_database_open(). */
+static gboolean _has_gui = FALSE;
+static gboolean _verbose = FALSE;
+
+/** Told when the XDG migration renames the library out from under the configured name. */
+static dt_database_renamed_handler_t _renamed_handler = NULL;
+
+/** Trace gate. A statement, so that a bare `if(_verbose) dt_print(...)` cannot swallow a
+ *  following `else` -- which is exactly what happened in caches/image_cache.c and was only
+ *  caught by -Wdangling-else in the Debug builds. */
+#define _db_print(...)                                  \
+  do {                                                  \
+    if(_verbose) dt_print(DT_DEBUG_SQL, __VA_ARGS__);   \
+  } while(0)
+
 
 /* migrates database from old place to new */
-static void _database_migrate_to_xdg_structure();
+static gchar *_database_migrate_to_xdg_structure(const char *configured_db);
 
 /* delete old mipmaps files */
 static void _database_delete_mipmaps_files();
+
+/* tear down one connection; used both by dt_database_close() and by the failure paths of
+ * _database_init(), which have a database to free but nothing published yet */
+static void _database_free(dt_database_t *db);
 
 #define _SQLITE3_EXEC(a, b, c, d, e)                                                                         \
   if(sqlite3_exec(a, b, c, d, e) != SQLITE_OK)                                                               \
@@ -2085,7 +2136,7 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
 
       dt_image_flags_t flags = sqlite3_column_int(stmt, 2);
       gchar *ext = g_strrstr((const char *)sqlite3_column_text(stmt, 1), ".");
-      flags |= dt_imageio_get_type_from_extension(ext);
+      flags |= dt_image_flags_from_extension(ext);
       sqlite3_bind_int(stmt2, 2, flags);
 
       TRY_STEP(stmt2, SQLITE_DONE, "[init] can't update flags\n");
@@ -2651,8 +2702,10 @@ static void _sanitize_db(dt_database_t *db)
 #undef TRY_PREPARE
 #undef FINALIZE
 
-void dt_database_take_error(dt_database_t *db, dt_database_error_t *error)
+void dt_database_take_error(dt_database_error_t *error)
 {
+  dt_database_t *const db = _db;
+  if(IS_NULL_PTR(db)) return;
   if(IS_NULL_PTR(db) || IS_NULL_PTR(error)) return;
 
   // Ownership of the strings moves to the caller; the database keeps no pending error.
@@ -2852,6 +2905,10 @@ static gboolean _lock_databases(dt_database_t *db)
   return TRUE;
 }
 
+/* Forward declaration: this asks a question, and the asking machinery is defined further
+ * down next to the handler it goes through. */
+static dt_database_response_t _ask_upgrade(const char *dbfilename);
+
 void ask_for_upgrade(const gchar *dbname, const gboolean has_gui)
 {
   // if there's no gui just leave
@@ -2861,23 +2918,10 @@ void ask_for_upgrade(const gchar *dbname, const gboolean has_gui)
     exit(1);
   }
 
-  // the database has to be upgraded, let's ask user
-
-  char *label_text = g_markup_printf_escaped(_("the database schema has to be upgraded for\n"
-                                               "\n"
-                                               "<span style='italic'>%s</span>\n"
-                                               "\nthis might take a long time in case of a large database\n\n"
-                                               "do you want to proceed or quit now to do a backup\n"),
-                                               dbname);
-
-  gboolean shall_we_update_the_db =
-    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema migration"), label_text,
-                                         _("close Ansel"), _("upgrade database"));
-
-  dt_free(label_text);
-
-  // if no upgrade, we exit now, nothing we can do more
-  if(!shall_we_update_the_db)
+  // the database has to be upgraded, let's ask user. What that looks like -- the wording,
+  // the warning that it may take a while on a large library, the button labels -- belongs
+  // to whoever renders it; this file only states that the schema is out of date.
+  if(_ask_upgrade(dbname) != DT_DATABASE_RESPONSE_PROCEED)
   {
     fprintf(stderr, "[init] we shall not update the database, aborting.\n");
     exit(1);
@@ -2976,31 +3020,76 @@ void dt_database_set_prompt_handler(dt_database_prompt_handler_t handler)
 }
 
 /* Ask, or answer CLOSE if there is nobody to ask. Deliberately not a fallback that guesses:
- * deleting or restoring a database is not something to do on nobody's authority. */
-static dt_database_response_t _ask_user(const dt_database_prompt_t prompt, const char *dbfilename,
-                                        const char *quick_check, const gboolean snapshot_available)
+ * deleting or restoring a database is not something to do on nobody's authority, and
+ * neither is spending a minute vacuuming one. */
+static dt_database_response_t _ask_user(const dt_database_prompt_context_t *context)
 {
   if(IS_NULL_PTR(_prompt_handler))
   {
-    fprintf(stderr, "[init] cannot ask the user about `%s': no prompt handler registered\n", dbfilename);
+    fprintf(stderr, "[init] cannot ask the user about `%s': no prompt handler registered\n",
+            context->dbfilename);
     return DT_DATABASE_RESPONSE_CLOSE;
   }
 
-  return _prompt_handler(prompt, dbfilename, quick_check, snapshot_available);
+  return _prompt_handler(context);
 }
 
-dt_database_t *dt_database_init(const char *alternative, const gboolean load_data, const gboolean has_gui)
+/* The questions that used to be asked with gtk_dialog calls written inline in this file --
+ * the reason `widgets/dialog.h` was included by the SQL layer at all. */
+
+static dt_database_response_t _ask_corrupted(const char *dbfilename, const char *quick_check,
+                                             const gboolean snapshot_available)
 {
+  const dt_database_prompt_context_t context = { .prompt = DT_DATABASE_PROMPT_CORRUPTED,
+                                                 .dbfilename = dbfilename,
+                                                 .quick_check = quick_check,
+                                                 .snapshot_available = snapshot_available };
+  return _ask_user(&context);
+}
+
+static dt_database_response_t _ask_readonly(const char *dbfilename)
+{
+  const dt_database_prompt_context_t context = { .prompt = DT_DATABASE_PROMPT_READONLY,
+                                                 .dbfilename = dbfilename };
+  return _ask_user(&context);
+}
+
+static dt_database_response_t _ask_upgrade(const char *dbfilename)
+{
+  const dt_database_prompt_context_t context = { .prompt = DT_DATABASE_PROMPT_UPGRADE,
+                                                 .dbfilename = dbfilename };
+  return _ask_user(&context);
+}
+
+static dt_database_t *_database_init(const dt_database_params_t *params)
+{
+  const char *const alternative = params->alternative;
+  const gboolean load_data = params->load_data;
+  const gboolean has_gui = params->has_gui;
+
   /*  set the threading mode to Serialized */
   sqlite3_config(SQLITE_CONFIG_SERIALIZED);
 
   sqlite3_initialize();
 
+  /* Declared before `start:` because the two corrupt-database paths jump back to it, and
+   * the effective name must survive the retry.
+   *
+   * `library` is what the orchestrator configured, EXCEPT when the legacy pre-XDG file
+   * under $HOME was just migrated -- then it is the name it was migrated to. Reading the
+   * conf key after the migration used to do this implicitly, and getting it wrong here
+   * means opening a path that does not exist and silently creating an empty library
+   * beside the user's real one. */
+  gchar *migrated_name = NULL;
+  const char *library = params->library;
+
 start:
   if(IS_NULL_PTR(alternative))
   {
     /* migrate default database location to new default */
-    _database_migrate_to_xdg_structure();
+    dt_free(migrated_name);
+    migrated_name = _database_migrate_to_xdg_structure(library);
+    if(!IS_NULL_PTR(migrated_name)) library = migrated_name;
   }
 
   /* delete old mipmaps files */
@@ -3015,7 +3104,8 @@ start:
 
   if(IS_NULL_PTR(alternative))
   {
-    dbname = dt_conf_get_string("database");
+    /* The configured library name, told to us rather than read from conf here. */
+    dbname = g_strdup(library);
     if(IS_NULL_PTR(dbname))
       dt_concat_path_file(dbfilename_library, datadir, "library.db");
     else if(!strcmp(dbname, ":memory:"))
@@ -3067,7 +3157,7 @@ start:
     dt_database_backup(dbfilename_library);
   }
 
-  dt_print(DT_DEBUG_SQL, "[init sql] library: %s, data: %s\n", dbfilename_library, dbfilename_data);
+  _db_print("[init sql] library: %s, data: %s\n", dbfilename_library, dbfilename_data);
 
   /* having more than one instance of darktable using the same database is a bad idea */
   /* try to get locks for the databases */
@@ -3101,7 +3191,7 @@ start:
     return NULL;
   }
 
-  dt_print(DT_DEBUG_SQL, "[sql] Opened database: '%s'\n", db->dbfilename_library);
+  _db_print("[sql] Opened database: '%s'\n", db->dbfilename_library);
 
   sqlite3_stmt *stmt;
   int rc;
@@ -3111,14 +3201,14 @@ start:
     fprintf(stderr, "%s database is read only. Abort...\n", db->dbfilename_library);
 
     // Informational: there is nothing the user can decide here, only be told.
-    _ask_user(DT_DATABASE_PROMPT_READONLY, db->dbfilename_library, NULL, FALSE);
-    dt_database_destroy(db);
+    _ask_readonly(db->dbfilename_library);
+    _database_free(db);
     dt_free(dbname);
     db = NULL;
     return NULL;
   }
 
-  dt_print(DT_DEBUG_SQL, "[sql] Checked that we can write in database: '%s'\n", db->dbfilename_library);
+  _db_print("[sql] Checked that we can write in database: '%s'\n", db->dbfilename_library);
 
   /* attach a memory database to db connection for use with temporary tables
      used during instance life time, which is discarded on exit.
@@ -3133,13 +3223,13 @@ start:
   {
     sqlite3_finalize(stmt);
     fprintf(stderr, "[init] database `%s' couldn't be opened. aborting\n", dbfilename_data);
-    dt_database_destroy(db);
+    _database_free(db);
     db = NULL;
     goto error;
   }
   sqlite3_finalize(stmt);
 
-  dt_print(DT_DEBUG_SQL, "[sql] Opened database: '%s'\n", dbfilename_data);
+  _db_print("[sql] Opened database: '%s'\n", dbfilename_data);
 
   // some sqlite3 config
   sqlite3_exec(db->handle, "PRAGMA synchronous = OFF", NULL, NULL, NULL);
@@ -3150,7 +3240,7 @@ start:
   // database rely on it.
   sqlite3_exec(db->handle, "PRAGMA foreign_keys = ON", NULL, NULL, NULL);
 
-  dt_print(DT_DEBUG_SQL, "[sql] Configured database\n");
+  _db_print("[sql] Configured database\n");
 
   /* now that we got functional databases that are locked for us we can make sure that the schema is set up */
 
@@ -3181,7 +3271,7 @@ start:
           // we couldn't upgrade the db for some reason. bail out.
           fprintf(stderr, "[init] database `%s' couldn't be upgraded from version %d to %d. aborting\n",
                   dbfilename_data, db_version, CURRENT_DATABASE_VERSION_DATA);
-          dt_database_destroy(db);
+          _database_free(db);
           db = NULL;
           goto error;
         }
@@ -3191,7 +3281,7 @@ start:
         // newer: bail out
         fprintf(stderr, "[init] database version of `%s' is too new for this build of darktable. aborting\n",
                 dbfilename_data);
-        dt_database_destroy(db);
+        _database_free(db);
         db = NULL;
         goto error;
       }
@@ -3219,11 +3309,11 @@ start:
       // come back as a value. Everything about how it is obtained -- and whether anybody can be
       // asked at all -- belongs to whoever registered the handler.
       const dt_database_response_t resp
-          = _ask_user(DT_DATABASE_PROMPT_CORRUPTED, dbfilename_data, quick_check_text, data_snap != NULL);
+          = _ask_corrupted(dbfilename_data, quick_check_text, data_snap != NULL);
 
       dt_free(quick_check_text);
 
-      dt_database_destroy(db);
+      _database_free(db);
       db = NULL;
 
       if(resp != DT_DATABASE_RESPONSE_RESTORE && resp != DT_DATABASE_RESPONSE_DELETE)
@@ -3278,7 +3368,7 @@ start:
     }
   }
 
-  dt_print(DT_DEBUG_SQL, "[sql] Checked database schema and migrated if needed\n");
+  _db_print("[sql] Checked database schema and migrated if needed\n");
 
   gchar* libdb_status = _get_pragma_string_val(db->handle, "main.quick_check");
   // next we are looking at the library database
@@ -3302,7 +3392,7 @@ start:
         // we couldn't upgrade the db for some reason. bail out.
         fprintf(stderr, "[init] database `%s' couldn't be upgraded from version %d to %d. aborting\n", dbname,
                 db_version, CURRENT_DATABASE_VERSION_LIBRARY);
-        dt_database_destroy(db);
+        _database_free(db);
         db = NULL;
         goto error;
       }
@@ -3312,7 +3402,7 @@ start:
       // newer: bail out. it's better than what we did before: delete everything
       fprintf(stderr, "[init] database version of `%s' is too new for this build of darktable. aborting\n",
               dbname);
-      dt_database_destroy(db);
+      _database_free(db);
       db = NULL;
       goto error;
     }
@@ -3340,11 +3430,11 @@ start:
     // come back as a value. Everything about how it is obtained -- and whether anybody can be
     // asked at all -- belongs to whoever registered the handler.
     const dt_database_response_t resp
-        = _ask_user(DT_DATABASE_PROMPT_CORRUPTED, dbfilename_library, quick_check_text, data_snap != NULL);
+        = _ask_corrupted(dbfilename_library, quick_check_text, data_snap != NULL);
 
     dt_free(quick_check_text);
 
-    dt_database_destroy(db);
+    _database_free(db);
     db = NULL;
 
     if(resp != DT_DATABASE_RESPONSE_RESTORE && resp != DT_DATABASE_RESPONSE_DELETE)
@@ -3413,7 +3503,7 @@ start:
         // we couldn't migrate the db for some reason. bail out.
         fprintf(stderr, "[init] database `%s' couldn't be migrated from the legacy version %d. aborting\n",
                 dbname, db_version);
-        dt_database_destroy(db);
+        _database_free(db);
         db = NULL;
         goto error;
       }
@@ -3422,7 +3512,7 @@ start:
         // we couldn't upgrade the db for some reason. bail out.
         fprintf(stderr, "[init] database `%s' couldn't be upgraded from version 1 to %d. aborting\n", dbname,
                 CURRENT_DATABASE_VERSION_LIBRARY);
-        dt_database_destroy(db);
+        _database_free(db);
         db = NULL;
         goto error;
       }
@@ -3434,17 +3524,17 @@ start:
     }
   }
 
-  dt_print(DT_DEBUG_SQL, "[sql] Checked db_info\n");
+  _db_print("[sql] Checked db_info\n");
 
   // create the in-memory tables
   _create_memory_schema(db);
 
-  dt_print(DT_DEBUG_SQL, "[sql] Created in-memory DB\n");
+  _db_print("[sql] Created in-memory DB\n");
 
   // create a table legacy_presets with all the presets from pre-auto-apply-cleanup darktable.
-  dt_legacy_presets_create(db);
+  dt_legacy_presets_create(db->handle);
 
-  dt_print(DT_DEBUG_SQL, "[sql] Loaded legacy presets\n");
+  _db_print("[sql] Loaded legacy presets\n");
 
   // drop table settings -- we don't want old versions of dt to drop our tables
   sqlite3_exec(db->handle, "drop table main.settings", NULL, NULL, NULL);
@@ -3470,12 +3560,115 @@ start:
 
 error:
   dt_free(dbname);
+  dt_free(migrated_name);
 
   return db;
 }
 
-void dt_database_destroy(const dt_database_t *db)
+void dt_database_set_renamed_handler(dt_database_renamed_handler_t handler)
 {
+  _renamed_handler = handler;
+}
+
+dt_database_open_result_t dt_database_open(const dt_database_params_t *params)
+{
+  if(IS_NULL_PTR(params)) return DT_DATABASE_OPEN_FAILED;
+
+  if(!IS_NULL_PTR(_db))
+  {
+    fprintf(stderr, "[database] a database is already open; close it first\n");
+    return DT_DATABASE_OPEN_FAILED;
+  }
+
+  if(!_db_lock_inited)
+  {
+    dt_pthread_rwlock_init(&_db_lock, NULL);
+    _db_lock_inited = TRUE;
+  }
+  if(!_settings_lock_inited)
+  {
+    dt_pthread_mutex_init(&_settings_lock, NULL);
+    _settings_lock_inited = TRUE;
+  }
+
+  /* Session constants. Read once, here -- nothing below consults the debug flags or the
+   * configuration again. */
+  _has_gui = params->has_gui;
+  _verbose = params->verbose;
+
+  _db = _database_init(params);
+
+  if(IS_NULL_PTR(_db)) return DT_DATABASE_OPEN_FAILED;
+  if(!_db->lock_acquired) return DT_DATABASE_OPEN_LOCKED;
+
+  return DT_DATABASE_OPEN_OK;
+}
+
+void dt_database_set_settings(const dt_database_settings_t *settings)
+{
+  if(IS_NULL_PTR(settings)) return;
+  if(!_settings_lock_inited)
+  {
+    dt_pthread_mutex_init(&_settings_lock, NULL);
+    _settings_lock_inited = TRUE;
+  }
+
+  dt_pthread_mutex_lock(&_settings_lock);
+  dt_free(_settings.maintenance_check);
+  dt_free(_settings.create_snapshot);
+  _settings.maintenance_check = g_strdup(settings->maintenance_check);
+  _settings.create_snapshot = g_strdup(settings->create_snapshot);
+  _settings.maintenance_freepage_ratio = settings->maintenance_freepage_ratio;
+  _settings.keep_snapshots = settings->keep_snapshots;
+  dt_pthread_mutex_unlock(&_settings_lock);
+}
+
+void dt_database_get_settings(dt_database_settings_t *settings)
+{
+  if(IS_NULL_PTR(settings)) return;
+
+  if(!_settings_lock_inited)
+  {
+    /* Nothing has been told to us yet: report the neutral policy rather than read a
+     * half-initialised struct behind an uninitialised mutex. */
+    settings->maintenance_check = NULL;
+    settings->create_snapshot = NULL;
+    settings->maintenance_freepage_ratio = 0;
+    settings->keep_snapshots = 0;
+    return;
+  }
+
+  /* One snapshot under the lock. Four fields read one at a time can be a mix of old and
+   * new -- the GUI thread replaces them from the preferences dialog while a maintenance
+   * decision may be part-way through reading them. */
+  dt_pthread_mutex_lock(&_settings_lock);
+  settings->maintenance_check = g_strdup(_settings.maintenance_check);
+  settings->create_snapshot = g_strdup(_settings.create_snapshot);
+  settings->maintenance_freepage_ratio = _settings.maintenance_freepage_ratio;
+  settings->keep_snapshots = _settings.keep_snapshots;
+  dt_pthread_mutex_unlock(&_settings_lock);
+}
+
+void dt_database_settings_free(dt_database_settings_t *settings)
+{
+  if(IS_NULL_PTR(settings)) return;
+  dt_free(settings->maintenance_check);
+  dt_free(settings->create_snapshot);
+  settings->maintenance_check = NULL;
+  settings->create_snapshot = NULL;
+}
+
+/* Close a connection and release its lock files.
+ *
+ * Separate from dt_database_close() because _database_init() calls it on a database that
+ * was never published -- it has no lock to take and nothing to unpublish. The error
+ * strings are freed here, which the old dt_database_destroy() did not do; on the ordinary
+ * shutdown path they are always NULL, but every failure path through _database_init()
+ * sets one and then tore the database down. */
+static void _database_free(dt_database_t *db)
+{
+  if(IS_NULL_PTR(db)) return;
+
   sqlite3_close(db->handle);
   if (db->lockfile_data)
   {
@@ -3489,33 +3682,62 @@ void dt_database_destroy(const dt_database_t *db)
   }
   dt_free(db->dbfilename_data);
   dt_free(db->dbfilename_library);
+  dt_free(db->error_message);
+  dt_free(db->error_dbfilename);
   dt_free(db);
-
-  sqlite3_shutdown();
 }
 
-sqlite3 *dt_database_get(const dt_database_t *db)
+void dt_database_close(void)
 {
-  return db ? db->handle : NULL;
+  /* Exclusive: wait for every query this module has in flight before the handle goes.
+   * It does NOT wait for the call sites holding a connection from
+   * dt_database_get_sqlite3_global() -- nothing can, which is the whole argument for
+   * getting rid of them. */
+  if(_db_lock_inited) dt_pthread_rwlock_wrlock(&_db_lock);
+
+  dt_database_t *const db = _db;
+  _db = NULL;
+
+  if(!IS_NULL_PTR(db))
+  {
+    _database_free(db);
+    sqlite3_shutdown();
+  }
+
+  if(_db_lock_inited) dt_pthread_rwlock_unlock(&_db_lock);
 }
 
-const gchar *dt_database_get_path(const struct dt_database_t *db)
+gboolean dt_database_is_open(void)
 {
-  return db->dbfilename_library;
+  return !IS_NULL_PTR(_db);
 }
 
-static void _database_migrate_to_xdg_structure()
+sqlite3 *dt_database_get_sqlite3_global(void)
+{
+  return _db ? _db->handle : NULL;
+}
+
+const gchar *dt_database_get_path(void)
+{
+  return _db ? _db->dbfilename_library : NULL;
+}
+
+/* @p configured_db is the library name as the orchestrator has it (the "database" conf
+ * key). When the legacy file under $HOME is moved into the XDG data directory the module
+ * does not write that key back itself -- it reports the new name through
+ * ::_renamed_handler and lets whoever owns the configuration persist it, and returns it
+ * so this run opens the file that now exists. */
+static gchar *_database_migrate_to_xdg_structure(const char *configured_db)
 {
   gchar dbfilename[PATH_MAX] = { 0 };
-  gchar *conf_db = dt_conf_get_string("database");
 
   gchar datadir[PATH_MAX] = { 0 };
   dt_loc_get_datadir(datadir, sizeof(datadir));
 
-  if(conf_db && conf_db[0] != '/')
+  if(configured_db && configured_db[0] != '/')
   {
     const char *homedir = getenv("HOME");
-    snprintf(dbfilename, sizeof(dbfilename), "%s/%s", homedir, conf_db);
+    snprintf(dbfilename, sizeof(dbfilename), "%s/%s", homedir, configured_db);
     if(g_file_test(dbfilename, G_FILE_TEST_EXISTS))
     {
       char destdbname[PATH_MAX] = { 0 };
@@ -3524,12 +3746,13 @@ static void _database_migrate_to_xdg_structure()
       {
         fprintf(stderr, "[init] moving database into new XDG directory structure\n");
         rename(dbfilename, destdbname);
-        dt_conf_set_string("database", "library.db");
+        if(!IS_NULL_PTR(_renamed_handler)) _renamed_handler("library.db");
+        return g_strdup("library.db");
       }
     }
   }
 
-  dt_free(conf_db);
+  return NULL;
 }
 
 /* delete old mipmaps files */
@@ -3552,32 +3775,35 @@ static void _database_delete_mipmaps_files()
   }
 }
 
-gboolean dt_database_get_lock_acquired(const dt_database_t *db)
-{
-  return db->lock_acquired;
-}
 
-void dt_database_cleanup_busy_statements(const struct dt_database_t *db)
+
+void dt_database_cleanup_busy_statements(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
+  if(IS_NULL_PTR(db)) return;
   sqlite3_stmt *stmt = NULL;
   while( (stmt = sqlite3_next_stmt(db->handle, NULL)) != NULL)
   {
     const char* sql = sqlite3_sql(stmt);
     if(sqlite3_stmt_busy(stmt))
     {
-      dt_print(DT_DEBUG_SQL, "[db busy stmt] non-finalized nor stepped through statement: '%s'\n",sql);
+      _db_print("[db busy stmt] non-finalized nor stepped through statement: '%s'\n",sql);
       sqlite3_reset(stmt);
     }
     else {
-      dt_print(DT_DEBUG_SQL, "[db busy stmt] non-finalized statement: '%s'\n",sql);
+      _db_print("[db busy stmt] non-finalized statement: '%s'\n",sql);
     }
     sqlite3_finalize(stmt);
   }
 }
 
-#define ERRCHECK {if (err!=NULL) {dt_print(DT_DEBUG_SQL, "[db maintenance] maintenance error: '%s'\n",err); sqlite3_free(err); err=NULL;}}
-void dt_database_perform_maintenance(const struct dt_database_t *db)
+#define ERRCHECK {if (err!=NULL) {_db_print("[db maintenance] maintenance error: '%s'\n",err); sqlite3_free(err); err=NULL;}}
+void dt_database_perform_maintenance(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
+  if(IS_NULL_PTR(db)) return;
   char* err = NULL;
 
   const int main_pre_free_count = _get_pragma_int_val(db->handle, "main.freelist_count");
@@ -3589,7 +3815,7 @@ void dt_database_perform_maintenance(const struct dt_database_t *db)
 
   if(calc_pre_size == 0)
   {
-    dt_print(DT_DEBUG_SQL, "[db maintenance] maintenance deemed unnecesary, performing only analyze.\n");
+    _db_print("[db maintenance] maintenance deemed unnecesary, performing only analyze.\n");
     DT_DEBUG_SQLITE3_EXEC(db->handle, "ANALYZE data", NULL, NULL, &err);
     ERRCHECK
     DT_DEBUG_SQLITE3_EXEC(db->handle, "ANALYZE main", NULL, NULL, &err);
@@ -3621,73 +3847,59 @@ void dt_database_perform_maintenance(const struct dt_database_t *db)
   const guint64 calc_post_size = (main_post_free_count*main_page_size) + (data_post_free_count*data_page_size);
   const gint64 bytes_freed = calc_pre_size - calc_post_size;
 
-  dt_print(DT_DEBUG_SQL, "[db maintenance] maintenance done, %" G_GINT64_FORMAT " bytes freed.\n", bytes_freed);
+  _db_print("[db maintenance] maintenance done, %" G_GINT64_FORMAT " bytes freed.\n", bytes_freed);
 
   if(calc_post_size >= calc_pre_size)
   {
-    dt_print(DT_DEBUG_SQL, "[db maintenance] maintenance problem. if no errors logged, it should work fine next time.\n");
+    _db_print("[db maintenance] maintenance problem. if no errors logged, it should work fine next time.\n");
   }
 }
 #undef ERRCHECK
 
-gboolean _ask_for_maintenance(const gboolean has_gui, const gboolean closing_time, const guint64 size)
+/* State the facts and take back an answer.
+ *
+ * The prose this used to build here -- how much would be freed, and which of three
+ * "you'll be asked again..." sentences applies -- is the handler's to write. What the
+ * module knows, and all it passes, is the byte count and the booleans that decide which
+ * sentence is true. */
+static gboolean _ask_for_maintenance(const char *maintenance_check, const gboolean closing_time,
+                                     const guint64 size)
 {
-  if(!has_gui)
-  {
-    return FALSE;
-  }
-
-  char *later_info = NULL;
-  char *size_info = g_format_size(size);
-  const char *config = dt_conf_get_string_const("database/maintenance_check");
-  if((closing_time && (!g_strcmp0(config, "on both"))) || !g_strcmp0(config, "on startup"))
-  {
-    later_info = _("click later to be asked on next startup");
-  }
-  else if (!closing_time && (!g_strcmp0(config, "on both")))
-  {
-    later_info = _("click later to be asked when closing Ansel");
-  }
-  else if (!g_strcmp0(config, "on close"))
-  {
-    later_info = _("click later to be asked next time when closing Ansel");
-  }
-
-  char *label_text = g_markup_printf_escaped(_("the database could use some maintenance\n"
-                                                 "\n"
-                                                 "there's <span style='italic'>%s</span> to be freed"
-                                                 "\n\n"
-                                                 "do you want to proceed now?\n\n"
-                                                 "%s\n"
-                                                 "you can always change maintenance preferences in core options"),
-                                                 size_info, later_info);
-
-    const gboolean shall_perform_maintenance =
-      dt_gui_show_standalone_yes_no_dialog(_("ansel - schema maintenance"), label_text,
-                                           _("later"), _("yes"));
-
-    dt_free(label_text);
-    dt_free(size_info);
-
-    return shall_perform_maintenance;
-}
-
-static inline gboolean _is_mem_db(const struct dt_database_t *db)
-{
-  return !g_strcmp0(db->dbfilename_data, ":memory:") || !g_strcmp0(db->dbfilename_library, ":memory:");
-}
-
-gboolean dt_database_maybe_maintenance(const struct dt_database_t *db, const gboolean has_gui, const gboolean closing_time)
-{
-  if(_is_mem_db(db))
+  if(!_has_gui)
     return FALSE;
 
-  const char *config = dt_conf_get_string_const("database/maintenance_check");
+  const gboolean on_both = !g_strcmp0(maintenance_check, "on both");
+
+  const dt_database_prompt_context_t context
+      = { .prompt = DT_DATABASE_PROMPT_MAINTENANCE,
+          .dbfilename = _db->dbfilename_library,
+          .reclaimable_bytes = size,
+          .at_close = closing_time,
+          .ask_on_startup = (closing_time && on_both) || !g_strcmp0(maintenance_check, "on startup"),
+          .ask_on_close = (!closing_time && on_both) || !g_strcmp0(maintenance_check, "on close") };
+
+  return _ask_user(&context) == DT_DATABASE_RESPONSE_PROCEED;
+}
+
+static inline gboolean _is_mem_db(void)
+{
+  return !g_strcmp0(_db->dbfilename_data, ":memory:") || !g_strcmp0(_db->dbfilename_library, ":memory:");
+}
+
+gboolean dt_database_maybe_maintenance(const gboolean closing_time)
+{
+  if(IS_NULL_PTR(_db) || _is_mem_db())
+    return FALSE;
+
+  dt_database_settings_t settings = { 0 };
+  dt_database_get_settings(&settings);
+  const char *config = settings.maintenance_check;
 
   if(!g_strcmp0(config, "never"))
   {
     // early bail out on "never"
-    dt_print(DT_DEBUG_SQL, "[db maintenance] please consider enabling database maintenance.\n");
+    _db_print("[db maintenance] please consider enabling database maintenance.\n");
+    dt_database_settings_free(&settings);
     return FALSE;
   }
 
@@ -3701,7 +3913,7 @@ gboolean dt_database_maybe_maintenance(const struct dt_database_t *db, const gbo
         || (!closing_time && (strstr(config, "on startup"))))
     {
       // we have "on both/on close/on startup" setting, so - checking!
-      dt_print(DT_DEBUG_SQL, "[db maintenance] checking for maintenance, due to rule: '%s'.\n", config);
+      _db_print("[db maintenance] checking for maintenance, due to rule: '%s'.\n", config);
       check_for_maintenance = TRUE;
     }
     // if the config was "never", check_for_vacuum is false.
@@ -3709,28 +3921,28 @@ gboolean dt_database_maybe_maintenance(const struct dt_database_t *db, const gbo
 
   if(!check_for_maintenance)
   {
+    dt_database_settings_free(&settings);
     return FALSE;
   }
 
   // checking free pages
-  const int main_free_count = _get_pragma_int_val(db->handle, "main.freelist_count");
-  const int main_page_count = _get_pragma_int_val(db->handle, "main.page_count");
-  const int main_page_size = _get_pragma_int_val(db->handle, "main.page_size");
+  const int main_free_count = _get_pragma_int_val(_db->handle, "main.freelist_count");
+  const int main_page_count = _get_pragma_int_val(_db->handle, "main.page_count");
+  const int main_page_size = _get_pragma_int_val(_db->handle, "main.page_size");
 
-  const int data_free_count = _get_pragma_int_val(db->handle, "data.freelist_count");
-  const int data_page_count = _get_pragma_int_val(db->handle, "data.page_count");
-  const int data_page_size = _get_pragma_int_val(db->handle, "data.page_size");
+  const int data_free_count = _get_pragma_int_val(_db->handle, "data.freelist_count");
+  const int data_page_count = _get_pragma_int_val(_db->handle, "data.page_count");
+  const int data_page_size = _get_pragma_int_val(_db->handle, "data.page_size");
 
-  dt_print(DT_DEBUG_SQL,
-      "[db maintenance] main: [%d/%d pages], data: [%d/%d pages].\n",
+  _db_print("[db maintenance] main: [%d/%d pages], data: [%d/%d pages].\n",
       main_free_count, main_page_count, data_free_count, data_page_count);
 
   if(main_page_count <= 0 || data_page_count <= 0)
   {
     //something's wrong with PRAGMA page_size returns. early bail.
-    dt_print(DT_DEBUG_SQL,
-        "[db maintenance] page_count <= 0 : main.page_count: %d, data.page_count: %d \n",
+    _db_print("[db maintenance] page_count <= 0 : main.page_count: %d, data.page_count: %d \n",
         main_page_count, data_page_count);
+    dt_database_settings_free(&settings);
     return FALSE;
   }
 
@@ -3738,25 +3950,27 @@ gboolean dt_database_maybe_maintenance(const struct dt_database_t *db, const gbo
   const int main_free_percentage = (main_free_count * 100 ) / main_page_count;
   const int data_free_percentage = (data_free_count * 100 ) / data_page_count;
 
-  const int freepage_ratio = dt_conf_get_int("database/maintenance_freepage_ratio");
+  const int freepage_ratio = settings.maintenance_freepage_ratio;
+  gboolean maintenance = FALSE;
 
   if((main_free_percentage >= freepage_ratio)
       || (data_free_percentage >= freepage_ratio))
   {
     const guint64 calc_size = (main_free_count*main_page_size) + (data_free_count*data_page_size);
-    dt_print(DT_DEBUG_SQL, "[db maintenance] maintenance suggested, %" G_GUINT64_FORMAT " bytes to free.\n", calc_size);
+    _db_print("[db maintenance] maintenance suggested, %" G_GUINT64_FORMAT " bytes to free.\n", calc_size);
 
-    if(force_maintenance || _ask_for_maintenance(has_gui, closing_time, calc_size))
-    {
-      return TRUE;
-    }
+    maintenance = force_maintenance || _ask_for_maintenance(config, closing_time, calc_size);
   }
-  return FALSE;
+
+  dt_database_settings_free(&settings);
+  return maintenance;
 }
 
-void dt_database_optimize(const struct dt_database_t *db)
+void dt_database_optimize(void)
 {
-  if(_is_mem_db(db))
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
+  if(IS_NULL_PTR(db) || _is_mem_db())
     return;
   // optimize should in most cases be no-op and have no noticeable downsides
   // this should be ran on every exit
@@ -3767,7 +3981,7 @@ void dt_database_optimize(const struct dt_database_t *db)
 static void _print_backup_progress(int remaining, int total)
 {
   // TODO if we have closing splashpage - this can be used to advance progressbar :)
-  dt_print(DT_DEBUG_SQL, "[db backup] %d out of %d done\n", total - remaining, total);
+  _db_print("[db backup] %d out of %d done\n", total - remaining, total);
 }
 
 static int _backup_db(
@@ -3789,7 +4003,7 @@ static int _backup_db(
     sb_dest = sqlite3_backup_init(dest_db, "main", src_db, src_db_name);
     if(sb_dest)
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] %s to %s\n", src_db_name, dest_filename);
+      _db_print("[db backup] %s to %s\n", src_db_name, dest_filename);
       gchar *pragma = g_strdup_printf("%s.page_count", src_db_name);
       const int spc = _get_pragma_int_val(src_db, pragma);
       dt_free(pragma);
@@ -3820,10 +4034,13 @@ static int _backup_db(
   return rc;
 }
 
-gboolean dt_database_snapshot(const struct dt_database_t *db)
+gboolean dt_database_snapshot(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
+  if(IS_NULL_PTR(db)) return FALSE;
   // backing up memory db is pointelss
-  if(_is_mem_db(db))
+  if(_is_mem_db())
     return FALSE;
   GDateTime *date_now = g_date_time_new_now_local();
   gchar *date_suffix = g_date_time_format(date_now, "%Y%m%d%H%M%S");
@@ -3870,59 +4087,88 @@ gboolean dt_database_snapshot(const struct dt_database_t *db)
   return TRUE;
 }
 
-gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
+/* Turn the "create_snapshot" policy into a snapshot interval.
+ *
+ * Returns TRUE when the policy answers the question outright -- "never", "on close", or
+ * an unrecognised value -- with the answer in @p answer. Returns FALSE when the caller
+ * has to go and look at what is on disk, with the required interval in @p interval.
+ *
+ * It exists so that the settings copy is taken and released in one small scope: the
+ * function below has a dozen early returns and no business holding a couple of strings it
+ * would have to free on each of them. */
+static gboolean _snapshot_policy_decides(GTimeSpan *interval, gboolean *answer)
 {
-  if(_is_mem_db(db))
-    return FALSE;
+  dt_database_settings_t settings = { 0 };
+  dt_database_get_settings(&settings);
+  const char *const config = settings.create_snapshot;
 
-  const char *config = dt_conf_get_string_const("database/create_snapshot");
+  gboolean decides = TRUE;
+
   if(!g_strcmp0(config, "never"))
   {
     // early bail out on "never"
-    dt_print(DT_DEBUG_SQL, "[db backup] please consider enabling database snapshots.\n");
-    return FALSE;
+    _db_print("[db backup] please consider enabling database snapshots.\n");
+    *answer = FALSE;
   }
-  if(!g_strcmp0(config, "on close"))
+  else if(!g_strcmp0(config, "on close"))
   {
     // early bail out on "on close"
-    dt_print(DT_DEBUG_SQL, "[db backup] performing unconditional snapshot.\n");
-    return TRUE;
+    _db_print("[db backup] performing unconditional snapshot.\n");
+    *answer = TRUE;
   }
-
-  GTimeSpan span_from_last_snap_required;
-
-  if(!g_strcmp0(config, "once a day"))
+  else if(!g_strcmp0(config, "once a day"))
   {
-    span_from_last_snap_required = G_TIME_SPAN_DAY;
+    *interval = G_TIME_SPAN_DAY;
+    decides = FALSE;
   }
   else if(!g_strcmp0(config, "once a week"))
   {
-    span_from_last_snap_required = G_TIME_SPAN_DAY * 7;
+    *interval = G_TIME_SPAN_DAY * 7;
+    decides = FALSE;
   }
   else if(!g_strcmp0(config, "once a month"))
   {
     //average month ;)
-    span_from_last_snap_required = G_TIME_SPAN_DAY * 30;
+    *interval = G_TIME_SPAN_DAY * 30;
+    decides = FALSE;
   }
   else
   {
     // early bail out on "invalid value"
-    dt_print(DT_DEBUG_SQL, "[db backup] invalid timespan requirement expecting never/on close/once a [day/week/month], got %s.\n", config);
-    return TRUE;
+    _db_print("[db backup] invalid timespan requirement expecting never/on close/once a [day/week/month], got %s.\n", config);
+    *answer = TRUE;
   }
+
+  dt_database_settings_free(&settings);
+  return decides;
+}
+
+gboolean dt_database_maybe_snapshot(void)
+{
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
+  if(IS_NULL_PTR(db)) return FALSE;
+  if(_is_mem_db())
+    return FALSE;
+
+  /* Resolve the policy into an interval and be done with the settings copy right here. */
+  GTimeSpan span_from_last_snap_required = 0;
+  gboolean decided_answer = FALSE;
+  if(_snapshot_policy_decides(&span_from_last_snap_required, &decided_answer))
+    return decided_answer;
 
   //we're in trouble zone - we have to determine when was the last snapshot done (including version upgrade snapshot) :/
   //this could be easy if we wrote date of last successful backup to config, but that's not really an option since
   //backup may done as last db operation, way after config file is closed. Plus we might be mixing dates of backups for
   //various library.db
 
-  dt_print(DT_DEBUG_SQL, "[db backup] checking snapshots existence.\n");
+  _db_print("[db backup] checking snapshots existence.\n");
   GFile *library = g_file_parse_name(db->dbfilename_library);
   GFile *parent = g_file_get_parent(library);
 
   if(IS_NULL_PTR(parent))
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] couldn't get library parent!.\n");
+    _db_print("[db backup] couldn't get library parent!.\n");
     g_object_unref(library);
     return FALSE;
   }
@@ -3932,7 +4178,7 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
 
   if(IS_NULL_PTR(library_dir_files))
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
+    _db_print("[db backup] couldn't enumerate library parent: %s.\n", error->message);
     g_object_unref(parent);
     g_object_unref(library);
     g_error_free(error);
@@ -3954,7 +4200,7 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
     const char* fname = g_file_info_get_name(info);
     if(g_str_has_prefix(fname, lib_snap_format) || g_str_has_prefix(fname, lib_backup_format))
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] found file: %s.\n", fname);
+      _db_print("[db backup] found file: %s.\n", fname);
       if(last_snap == 0)
       {
         last_snap = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
@@ -3975,7 +4221,7 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
 
   if(error)
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] problem enumerating library parent: %s.\n", error->message);
+    _db_print("[db backup] problem enumerating library parent: %s.\n", error->message);
     g_file_enumerator_close(library_dir_files, NULL, NULL);
     g_object_unref(library_dir_files);
     g_error_free(error);
@@ -3992,7 +4238,7 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
 
   gchar *now_txt = g_date_time_format(date_now, "%Y%m%d%H%M%S");
   gchar *ls_txt = g_date_time_format(date_last_snap, "%Y%m%d%H%M%S");
-  dt_print(DT_DEBUG_SQL, "[db backup] last snap: %s; curr date: %s.\n", ls_txt, now_txt);
+  _db_print("[db backup] last snap: %s; curr date: %s.\n", ls_txt, now_txt);
   dt_free(now_txt);
   dt_free(ls_txt);
 
@@ -4078,23 +4324,29 @@ static gint _db_snap_sort(gconstpointer a, gconstpointer b, gpointer user_data)
   return ret;
 }
 
-char **dt_database_snaps_to_remove(const struct dt_database_t *db)
+char **dt_database_snaps_to_remove(void)
 {
-  if(_is_mem_db(db))
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
+  if(IS_NULL_PTR(db)) return NULL;
+  if(_is_mem_db())
     return NULL;
 
-  const int keep_snaps = dt_conf_get_int("database/keep_snapshots");
+  dt_database_settings_t settings = { 0 };
+  dt_database_get_settings(&settings);
+  const int keep_snaps = settings.keep_snapshots;
+  dt_database_settings_free(&settings);
 
   if(keep_snaps < 0)
     return NULL;
 
-  dt_print(DT_DEBUG_SQL, "[db backup] checking snapshots existence.\n");
+  _db_print("[db backup] checking snapshots existence.\n");
   GFile *lib_file = g_file_parse_name(db->dbfilename_library);
   GFile *lib_parent = g_file_get_parent(lib_file);
 
   if(IS_NULL_PTR(lib_parent))
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] couldn't get library parent!.\n");
+    _db_print("[db backup] couldn't get library parent!.\n");
     g_object_unref(lib_file);
     return NULL;
   }
@@ -4104,7 +4356,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
 
   if(IS_NULL_PTR(dat_parent))
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] couldn't get data parent!.\n");
+    _db_print("[db backup] couldn't get data parent!.\n");
     g_object_unref(dat_file);
     g_object_unref(lib_file);
     g_object_unref(lib_parent);
@@ -4135,7 +4387,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
 
     if(IS_NULL_PTR(library_dir_files))
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
+      _db_print("[db backup] couldn't enumerate library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
       dt_free(lib_snap_format);
@@ -4157,12 +4409,12 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       const char* fname = g_file_info_get_name(info);
       if(g_str_has_prefix(fname, lib_snap_format))
       {
-        dt_print(DT_DEBUG_SQL, "[db backup] found file: %s.\n", fname);
+        _db_print("[db backup] found file: %s.\n", fname);
         g_queue_insert_sorted(lib_snaps, g_strdup(fname), _db_snap_sort, NULL);
       }
       else if(g_str_has_prefix(fname, dat_snap_format))
       {
-        dt_print(DT_DEBUG_SQL, "[db backup] found file: %s.\n", fname);
+        _db_print("[db backup] found file: %s.\n", fname);
         g_queue_insert_sorted(dat_snaps, g_strdup(fname), _db_snap_sort, NULL);
       }
       else if(g_str_has_prefix(fname, lib_tmp_format) || g_str_has_prefix(fname, dat_tmp_format))
@@ -4177,7 +4429,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
 
     if(error)
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] problem enumerating library parent: %s.\n", error->message);
+      _db_print("[db backup] problem enumerating library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
       dt_free(lib_tmp_format);
@@ -4202,7 +4454,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
     GFileEnumerator *library_dir_files = g_file_enumerate_children(lib_parent, G_FILE_ATTRIBUTE_STANDARD_NAME, G_FILE_QUERY_INFO_NONE, NULL, &error);
     if(IS_NULL_PTR(library_dir_files))
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
+      _db_print("[db backup] couldn't enumerate library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
       dt_free(lib_snap_format);
@@ -4220,7 +4472,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
     GFileEnumerator *data_dir_files = g_file_enumerate_children(dat_parent, G_FILE_ATTRIBUTE_STANDARD_NAME, G_FILE_QUERY_INFO_NONE, NULL, &error);
     if(IS_NULL_PTR(data_dir_files))
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate data parent: %s.\n", error->message);
+      _db_print("[db backup] couldn't enumerate data parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
       dt_free(lib_snap_format);
@@ -4244,7 +4496,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       const char* fname = g_file_info_get_name(info);
       if(g_str_has_prefix(fname, lib_snap_format))
       {
-        dt_print(DT_DEBUG_SQL, "[db backup] found file: %s.\n", fname);
+        _db_print("[db backup] found file: %s.\n", fname);
         g_queue_insert_sorted(lib_snaps, g_strdup(fname), _db_snap_sort, NULL);
       }
       else if(g_str_has_prefix(fname, lib_tmp_format) || g_str_has_prefix(fname, dat_tmp_format))
@@ -4258,7 +4510,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
 
     if(error)
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] problem enumerating library parent: %s.\n", error->message);
+      _db_print("[db backup] problem enumerating library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
       dt_free(lib_tmp_format);
@@ -4282,7 +4534,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       const char* fname = g_file_info_get_name(info);
       if(g_str_has_prefix(fname, dat_snap_format))
       {
-        dt_print(DT_DEBUG_SQL, "[db backup] found file: %s.\n", fname);
+        _db_print("[db backup] found file: %s.\n", fname);
         g_queue_insert_sorted(dat_snaps, g_strdup(fname), _db_snap_sort, NULL);
       }
       else if(g_str_has_prefix(fname, lib_tmp_format) || g_str_has_prefix(fname, dat_tmp_format))
@@ -4298,7 +4550,7 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
 
     if(error)
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] problem enumerating data parent: %s.\n", error->message);
+      _db_print("[db backup] problem enumerating data parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
       g_queue_free_full(lib_snaps, g_free);
@@ -4368,13 +4620,13 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
   if(!g_strcmp0(db_filename, ":memory:"))
     return NULL;
 
-  dt_print(DT_DEBUG_SQL, "[db backup] checking snapshots existence.\n");
+  _db_print("[db backup] checking snapshots existence.\n");
   GFile *db_file = g_file_parse_name(db_filename);
   GFile *parent = g_file_get_parent(db_file);
 
   if(IS_NULL_PTR(parent))
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] couldn't get database parent!.\n");
+    _db_print("[db backup] couldn't get database parent!.\n");
     g_object_unref(db_file);
     return NULL;
   }
@@ -4384,7 +4636,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 
   if(IS_NULL_PTR(db_dir_files))
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate database parent: %s.\n", error->message);
+    _db_print("[db backup] couldn't enumerate database parent: %s.\n", error->message);
     g_object_unref(parent);
     g_object_unref(db_file);
     g_error_free(error);
@@ -4407,7 +4659,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
     const char* fname = g_file_info_get_name(info);
     if(g_str_has_prefix(fname, db_snap_format) || g_str_has_prefix(fname, db_backup_format))
     {
-      dt_print(DT_DEBUG_SQL, "[db backup] found file: %s.\n", fname);
+      _db_print("[db backup] found file: %s.\n", fname);
       if(last_snap == 0)
       {
         last_snap = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
@@ -4430,7 +4682,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 
   if(error)
   {
-    dt_print(DT_DEBUG_SQL, "[db backup] problem enumerating database parent: %s.\n", error->message);
+    _db_print("[db backup] problem enumerating database parent: %s.\n", error->message);
     g_file_enumerator_close(db_dir_files, NULL, NULL);
     g_object_unref(db_dir_files);
     g_error_free(error);
@@ -4469,8 +4721,10 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 //       transaction routines. And it has been done to help further implementation for
 //       proper threading and nested transaction support.
 //
-void dt_database_start_transaction_debug(const struct dt_database_t *db)
+void dt_database_start_transaction_debug(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   const int batch_level = dt_atomic_get_int(&_trx_batch_level);
   if(batch_level > 0)
@@ -4490,7 +4744,7 @@ void dt_database_start_transaction_debug(const struct dt_database_t *db)
     return;
   }
 
-  dt_pthread_rwlock_wrlock(dt_database_threadsafe_lock());
+  dt_pthread_rwlock_wrlock(&_db_lock);
   g_atomic_pointer_set(&_trx_owner, owner);
 
   const int trxid = dt_atomic_add_int(&_trxid, 1);
@@ -4504,14 +4758,14 @@ void dt_database_start_transaction_debug(const struct dt_database_t *db)
     // "BEGIN IMMEDIATE TRANSACTION"
     // This implies "BEGIN DEFERRED TRANSACTION", which means
     // no write event is dispatched to DB until the first "COMMIT"
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "BEGIN TRANSACTION", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
   {
     char SQLTRX[32] = { 0 };
     g_snprintf(SQLTRX, sizeof(SQLTRX), "SAVEPOINT trx%d", trxid);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), SQLTRX, NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, SQLTRX, NULL, NULL, NULL);
   }
 #endif
 
@@ -4519,8 +4773,10 @@ void dt_database_start_transaction_debug(const struct dt_database_t *db)
     fprintf(stderr, "[dt_database_start_transaction] more than %d nested transaction\n", MAX_NESTED_TRANSACTIONS);
 }
 
-void dt_database_release_transaction_debug(const struct dt_database_t *db)
+void dt_database_release_transaction_debug(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   const int batch_level = dt_atomic_get_int(&_trx_batch_level);
   if(batch_level > 0)
@@ -4545,22 +4801,24 @@ void dt_database_release_transaction_debug(const struct dt_database_t *db)
 
   if(trxid == 1)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "COMMIT TRANSACTION", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL);
     g_atomic_pointer_set(&_trx_owner, NULL);
-    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
+    dt_pthread_rwlock_unlock(&_db_lock);
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
   {
     char SQLTRX[64] = { 0 };
     g_snprintf(SQLTRX, sizeof(SQLTRX), "RELEASE SAVEPOINT trx%d", trxid - 1);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), SQLTRX, NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, SQLTRX, NULL, NULL, NULL);
   }
 #endif
 }
 
-void dt_database_rollback_transaction(const struct dt_database_t *db)
+void dt_database_rollback_transaction(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   if(g_atomic_pointer_get(&_trx_owner) != owner && g_atomic_pointer_get(&_trx_batch_owner) != owner)
   {
@@ -4575,25 +4833,27 @@ void dt_database_rollback_transaction(const struct dt_database_t *db)
 
   if(trxid >= 1)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
     dt_atomic_set_int(&_trxid, 0);
     dt_atomic_set_int(&_trx_batch_level, 0);
     g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
+    dt_pthread_rwlock_unlock(&_db_lock);
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
   {
     char SQLTRX[64] = { 0 };
     g_snprintf(SQLTRX, sizeof(SQLTRX), "ROLLBACK TRANSACTION TO SAVEPOINT trx%d", trxid - 1);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), SQLTRX, NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, SQLTRX, NULL, NULL, NULL);
   }
 #endif
 }
 
-void dt_database_begin_transaction_batch(const struct dt_database_t *db)
+void dt_database_begin_transaction_batch(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
   {
@@ -4601,43 +4861,45 @@ void dt_database_begin_transaction_batch(const struct dt_database_t *db)
     return;
   }
 
-  dt_pthread_rwlock_wrlock(dt_database_threadsafe_lock());
+  dt_pthread_rwlock_wrlock(&_db_lock);
   g_atomic_pointer_set(&_trx_owner, owner);
   g_atomic_pointer_set(&_trx_batch_owner, owner);
 
   const int level = dt_atomic_add_int(&_trx_batch_level, 1);
   if(level == 0)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "BEGIN TRANSACTION", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
   }
 }
 
-void dt_database_end_transaction_batch(const struct dt_database_t *db)
+void dt_database_end_transaction_batch(void)
 {
+  /* was a parameter; the module owns the one connection now */
+  const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   if(g_atomic_pointer_get(&_trx_batch_owner) != owner)
   {
-    dt_print(DT_DEBUG_SQL, "[dt_database_end_transaction_batch] COMMIT from non-owner thread\n");
+    _db_print("[dt_database_end_transaction_batch] COMMIT from non-owner thread\n");
     return;
   }
 
   const int level = dt_atomic_sub_int(&_trx_batch_level, 1);
   if(level <= 0)
   {
-    dt_print(DT_DEBUG_SQL, "[dt_database_end_transaction_batch] COMMIT outside a batch transaction\n");
+    _db_print("[dt_database_end_transaction_batch] COMMIT outside a batch transaction\n");
     dt_atomic_set_int(&_trx_batch_level, 0);
     g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
+    dt_pthread_rwlock_unlock(&_db_lock);
     return;
   }
 
   if(level == 1)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "COMMIT TRANSACTION", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL);
     g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(dt_database_threadsafe_lock());
+    dt_pthread_rwlock_unlock(&_db_lock);
   }
 }
 

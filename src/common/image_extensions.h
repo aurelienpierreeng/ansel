@@ -32,7 +32,7 @@ extern "C" {
 
 /* Single source of truth for "what kind of image is this extension" across the whole app:
  * decoder routing (dt_imageio_open()), the provisional img->flags guess
- * (dt_imageio_get_type_from_extension()), dt_supported_image(), and the import dialog's
+ * (dt_image_flags_from_extension()), dt_supported_image(), and the import dialog's
  * Raw/Raster GUI filter. Each of raw/ldr/hdr below has exactly one list per extension --
  * mirroring the decoder-dispatch reality (dt_imageio_open_raw/_raster/_hdr are 3 distinct
  * codec chains) -- entries are gated behind the same HAVE_* macros the codecs themselves use,
@@ -53,7 +53,7 @@ gboolean dt_image_ext_is_hdr(const char *ext);
 gboolean dt_image_ext_is_supported(const char *ext); // raw || ldr || hdr
 
 /* Containers whose actual dynamic range (or, for dng, raw-vs-already-processed nature) cannot be
- * known from the extension alone -- only after decoding. dt_imageio_get_type_from_extension()
+ * known from the extension alone -- only after decoding. dt_image_flags_from_extension()
  * must return 0 (unknown) for these instead of guessing from dt_image_ext_is_raw/_ldr/_hdr, even
  * though they do route to one of the 3 decoders above. See doc/image-type-detection.md. */
 gboolean dt_image_ext_is_ambiguous(const char *ext);

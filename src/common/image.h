@@ -554,6 +554,11 @@ int32_t dt_image_get_id_full_path(const gchar *filename);
 /** get image id by film_id and filename */
 int32_t dt_image_get_id(int32_t film_id, const gchar *filename);
 /** imports a new image from raw/etc file and adds it to the data base and image cache. Use from threads other than lua.*/
+/** Guess DT_IMAGE_RAW / _HDR / _LDR from a filename extension, with or without its
+ *  leading dot. Returns 0 when the extension is ambiguous (a .dng may be either) or
+ *  unknown -- the answer then only comes from decoding the file. */
+dt_image_flags_t dt_image_flags_from_extension(const char *extension);
+
 int32_t dt_image_import(int32_t film_id, const char *filename, gboolean raise_signals);
 /** imports a new image from raw/etc file and adds it to the data base and image cache. Use from lua thread.*/
 int32_t dt_image_import_lua(int32_t film_id, const char *filename);

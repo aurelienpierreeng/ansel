@@ -26,9 +26,8 @@
  * is a database migration and nothing else. No GUI code ever included it; database.c did.
  */
 
-#include "common/legacy_presets.h"
+#include "database/legacy_presets.h"
 
-#include "database/database.h"
 
 #include <glib.h>
 #include <sqlite3.h>
@@ -1132,7 +1131,7 @@ static const char *sql_lines[] = {
   "COMMIT"
 };
 
-void dt_legacy_presets_create(const struct dt_database_t *db)
+void dt_legacy_presets_create(sqlite3 *handle)
 {
   // a bit stupid, deletes and re-inserts every time :(
   //
@@ -1142,7 +1141,7 @@ void dt_legacy_presets_create(const struct dt_database_t *db)
   // transaction opened by the leading "BEGIN TRANSACTION", which was then left dangling on
   // the connection for whatever came next to commit or roll back.
   for(size_t i = 0; i < G_N_ELEMENTS(sql_lines); i++)
-    sqlite3_exec(dt_database_get(db), sql_lines[i], NULL, NULL, NULL);
+    sqlite3_exec(handle, sql_lines[i], NULL, NULL, NULL);
 }
 
 // clang-format off

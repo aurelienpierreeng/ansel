@@ -72,7 +72,7 @@ static const char *_hdr_extensions[] = {
 
 /* Containers whose real class needs a decode to settle -- see doc/image-type-detection.md.
  * Each of these still appears in exactly one of the 3 lists above (for routing); this list only
- * suppresses guessing a flag from the extension in dt_imageio_get_type_from_extension(). */
+ * suppresses guessing a flag from the extension in dt_image_flags_from_extension(). */
 static const char *_ambiguous_extensions[] = {
   "dng", "tif", "tiff", "heif", "heic", "avif", "hif", NULL
 };

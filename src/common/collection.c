@@ -202,7 +202,7 @@ static char * or_operator(int *term)
 
 void dt_collection_memory_update()
 {
-  if(IS_NULL_PTR(dt_collection_get_global()) || IS_NULL_PTR(dt_database_get_global())) return;
+  if(IS_NULL_PTR(dt_collection_get_global()) || !dt_database_is_open()) return;
   sqlite3_stmt *stmt;
 
   /* check if we can get a query from collection */

@@ -1864,7 +1864,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
   if(!(img->flags & (DT_IMAGE_LDR | DT_IMAGE_HDR | DT_IMAGE_RAW | DT_IMAGE_S_RAW)))
   {
     const char *ext = g_strrstr(path, ".");
-    if(ext) img->flags |= dt_imageio_get_type_from_extension(ext + 1);
+    if(ext) img->flags |= dt_image_flags_from_extension(ext + 1);
   }
 
   // at least set datetime taken to something useful in case there is no exif data in this file (pfm, png,
@@ -3333,7 +3333,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     // now add all masks that are not used for cloning. keeping them might be useful.
     // TODO: make this configurable? or remove it altogether?
-    dt_database_start_transaction(dt_database_get_global());
+    dt_database_start_transaction();
 
     if(xmp_version < 3)
     {
@@ -3349,7 +3349,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       }
     }
 
-    dt_database_release_transaction(dt_database_get_global());
+    dt_database_release_transaction();
 
     // history
     int num = 0;
@@ -3372,7 +3372,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       return 1;
     }
 
-    dt_database_start_transaction(dt_database_get_global());
+    dt_database_start_transaction();
 
     if(!dt_history_db_delete_history(img->id))
     {
@@ -3571,7 +3571,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     if(all_ok)
     {
-      dt_database_release_transaction(dt_database_get_global());
+      dt_database_release_transaction();
 
       // history_hash (current only)
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history_current_hash"))) != xmpData.end())
@@ -3591,7 +3591,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     else
     {
       std::cerr << "[exif] error reading history from '" << filename << "'" << std::endl;
-      dt_database_rollback_transaction(dt_database_get_global());
+      dt_database_rollback_transaction();
       return 1;
     }
 

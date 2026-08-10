@@ -149,7 +149,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   dt_iop_dither_params_t tmp
       = (dt_iop_dither_params_t){ DITHER_FSAUTO, 0, { 0.0f, { 0.0f, 0.0f, 1.0f, 1.0f }, -200.0f } };
@@ -160,7 +160,7 @@ void init_presets(dt_iop_module_so_t *self)
   // make it auto-apply for all images:
   // dt_gui_presets_update_autoapply(_("dither"), self->op, self->version(), 1);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 

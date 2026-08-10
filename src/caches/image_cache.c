@@ -48,7 +48,6 @@
 #include "common/logging.h"
 #include "common/paths.h"
 #include "common/image.h"
-#include "imageio/imageio_core.h"
 #include "common/datetime.h"
 #include "control/control.h"
 #include "control/signal.h"
@@ -196,7 +195,7 @@ void dt_image_derive_fields(dt_image_t *img)
   // to avoid false positives. This surfaces stale/garbage flags persisted in the database.
   {
     const gchar *ext = g_strrstr(img->filename, ".");
-    const dt_image_flags_t ext_hint = ext ? dt_imageio_get_type_from_extension(ext) : 0;
+    const dt_image_flags_t ext_hint = ext ? dt_image_flags_from_extension(ext) : 0;
     const gboolean db_hdr = (img->flags & DT_IMAGE_HDR) != 0;
     const gboolean db_ldr = (img->flags & DT_IMAGE_LDR) != 0;
 

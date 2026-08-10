@@ -1579,10 +1579,10 @@ static void _init_module_so(void *m)
 void dt_iop_load_modules_so(void)
 {
   // Batch presets initialization in a single transaction to avoid per-module BEGIN/COMMIT overhead.
-  dt_database_begin_transaction_batch(dt_database_get_global());
+  dt_database_begin_transaction_batch();
   darktable.iop = dt_module_load_modules("/plugins", sizeof(dt_iop_module_so_t), dt_iop_load_module_so,
                                          _init_module_so, NULL);
-  dt_database_end_transaction_batch(dt_database_get_global());
+  dt_database_end_transaction_batch();
 }
 
 int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, dt_develop_t *dev)
@@ -3090,7 +3090,7 @@ void dt_iop_set_darktable_iop_table()
       -1, &stmt, NULL);
   if(IS_NULL_PTR(stmt)) return;
 
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
   for(GList *iop = darktable.iop; iop; iop = g_list_next(iop))
   {
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)iop->data;
@@ -3100,7 +3100,7 @@ void dt_iop_set_darktable_iop_table()
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, module->name(), -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
   }
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
   sqlite3_finalize(stmt);
 }
 

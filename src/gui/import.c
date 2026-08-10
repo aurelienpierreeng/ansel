@@ -416,7 +416,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
   int32_t th_height;
   char *mime_type = NULL;
   const char *const extension = g_strrstr(filename, ".");
-  const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
+  const dt_image_flags_t file_type = extension ? dt_image_flags_from_extension(extension + 1) : 0u;
   dt_colorspaces_color_profile_type_t color_space;
   if(!dt_image_is_hdr(img)
      && !dt_imageio_large_thumbnail(filename, &buffer, &th_width, &th_height, &color_space, width, height))
@@ -710,7 +710,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   if(have_file)
   {
     const char *const extension = g_strrstr(filename, ".");
-    const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
+    const dt_image_flags_t file_type = extension ? dt_image_flags_from_extension(extension + 1) : 0u;
 
     dt_free(d->path_file);
     d->path_file = g_strdup(filename);

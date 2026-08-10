@@ -219,7 +219,6 @@ typedef struct darktable_t
   // `BEGIN": cannot start a transaction within a transaction`
   // Also, we need to ensure that image metadata/history reads & writes
   // happen each in their all time, from all pipeline jobs/threads.
-  dt_pthread_rwlock_t database_threadsafe;
 
   char *progname;
   char *datadir;
