@@ -60,6 +60,16 @@
 #include <inttypes.h>
 #include "colorprofiles/colorspaces.h"   // dt_colorspaces_free_image_profile
 
+/* The cache instance, owned HERE. It used to be calloc'd by darktable.c and hung off the
+ * application struct, so the accessor lived in the orchestrator and the struct was reachable
+ * from anything that included darktable.h. */
+static dt_image_cache_t *_image_cache = NULL;
+
+dt_image_cache_t *dt_image_cache_get_global(void)
+{
+  return _image_cache;
+}
+
 static sqlite3_stmt *_image_cache_load_stmt = NULL;
 static sqlite3_stmt *_image_cache_write_history_hash_stmt = NULL;
 static dt_pthread_mutex_t _image_cache_stmt_mutex;
@@ -390,8 +400,12 @@ void dt_image_cache_deallocate(void *data, dt_cache_entry_t *entry)
   dt_free(img);
 }
 
-void dt_image_cache_init(dt_image_cache_t *cache)
+void dt_image_cache_init(void)
 {
+  if(_image_cache) return;
+  _image_cache = (dt_image_cache_t *)calloc(1, sizeof(dt_image_cache_t));
+  if(IS_NULL_PTR(_image_cache)) return;
+  dt_image_cache_t *cache = _image_cache;
   // the image cache does no serialization.
   // (unsafe. data should be in db/xmp, not in any other additional cache,
   // also, it should be relatively fast to get the image_t structs from sql.)
@@ -408,8 +422,10 @@ void dt_image_cache_init(dt_image_cache_t *cache)
   dt_print(DT_DEBUG_CACHE, "[image_cache] has %d entries (%u MiB)\n", num, size);
 }
 
-void dt_image_cache_cleanup(dt_image_cache_t *cache)
+void dt_image_cache_cleanup(void)
 {
+  dt_image_cache_t *cache = _image_cache;
+  if(IS_NULL_PTR(cache)) return;
   if(_image_cache_load_stmt)
   {
     sqlite3_finalize(_image_cache_load_stmt);
@@ -427,6 +443,9 @@ void dt_image_cache_cleanup(dt_image_cache_t *cache)
   }
 
   dt_cache_cleanup(&cache->cache);
+
+  dt_free(_image_cache);
+  _image_cache = NULL;
 }
 
 void dt_image_cache_print(dt_image_cache_t *cache)

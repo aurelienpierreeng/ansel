@@ -56,8 +56,8 @@ typedef enum dt_image_cache_write_mode_t
 }
 dt_image_cache_write_mode_t;
 
-void dt_image_cache_init(dt_image_cache_t *cache);
-void dt_image_cache_cleanup(dt_image_cache_t *cache);
+void dt_image_cache_init(void);
+void dt_image_cache_cleanup(void);
 void dt_image_cache_print(dt_image_cache_t *cache);
 
 // Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
