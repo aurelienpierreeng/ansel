@@ -321,6 +321,72 @@ dt_module_preset_t *dt_preset_repository_get_iop_preset(const char *operation, c
 GList *dt_preset_repository_find_autoapply(const char *operation, const int op_version,
                                            const dt_preset_match_t *match, const char *always_name);
 
+/* ---------------------------------------------------------------------------------------
+ *  The preset edit dialog
+ *
+ *  It shows and writes the whole condition set at once, so these take it as one struct
+ *  rather than sixteen parameters.
+ * ------------------------------------------------------------------------------------- */
+
+/** Everything the edit dialog shows. Strings are owned by the struct when it comes out of
+ *  dt_preset_repository_get_conditions(), and borrowed when it goes in. */
+typedef struct dt_preset_conditions_t
+{
+  gchar *name;
+  gchar *description;
+  gchar *model;
+  gchar *maker;
+  gchar *lens;
+  double iso_min, iso_max;
+  double exposure_min, exposure_max;
+  double aperture_min, aperture_max;
+  int focal_length_min, focal_length_max;
+  int autoapply;
+  int filter;
+  int format;
+} dt_preset_conditions_t;
+
+/** @brief Release the strings owned by @p c (not @p c itself). */
+void dt_preset_conditions_free(dt_preset_conditions_t *c);
+
+/**
+ * @brief Read the conditions of `(operation, op_version, name)`.
+ * @param rowid receives the row's id, or -1 when there is no such preset.
+ * @return TRUE when a row was found; @p c is only filled then.
+ */
+gboolean dt_preset_repository_get_conditions(const char *operation, const int op_version,
+                                             const char *name, dt_preset_conditions_t *c, int *rowid);
+
+/** @brief Overwrite the conditions of the row at @p rowid. */
+void dt_preset_repository_update_conditions(const int rowid, const dt_preset_conditions_t *c);
+
+/** @brief Create a preset from a full condition set plus its module payload. */
+void dt_preset_repository_insert_with_conditions(const dt_preset_conditions_t *c,
+                                                 const char *operation, const int op_version,
+                                                 const void *params, const int params_size,
+                                                 const int enabled,
+                                                 const void *blend_params, const int blend_params_size,
+                                                 const int blendop_version);
+
+/** @brief The `(operation, op_version)` a rowid belongs to. Returns FALSE if there is none;
+ *  `*operation` is newly allocated on success. */
+gboolean dt_preset_repository_get_identity(const int rowid, gchar **operation, int *op_version);
+
+/** @brief Replace the module payload of `(operation, name)`, at any version. */
+void dt_preset_repository_update_iop_params(const char *operation, const char *name,
+                                            const int op_version,
+                                            const void *params, const int params_size,
+                                            const int enabled,
+                                            const void *blend_params, const int blend_params_size,
+                                            const int blendop_version);
+
+/** @brief Delete the row at @p rowid unless it is write-protected. */
+void dt_preset_repository_delete_by_rowid_unprotected(const int rowid);
+
+/** @brief Delete every write-protected preset -- the auto-generated ones, dropped at
+ *  startup so module code can regenerate them. */
+void dt_preset_repository_delete_shipped(void);
+
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 void dt_preset_repository_cleanup(void);
 

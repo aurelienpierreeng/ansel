@@ -927,6 +927,220 @@ GList *dt_preset_repository_find_autoapply(const char *operation, const int op_v
   return g_list_reverse(names);
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ *  The preset edit dialog
+ * ------------------------------------------------------------------------------------- */
+
+void dt_preset_conditions_free(dt_preset_conditions_t *c)
+{
+  if(IS_NULL_PTR(c)) return;
+  dt_free(c->name);
+  dt_free(c->description);
+  dt_free(c->model);
+  dt_free(c->maker);
+  dt_free(c->lens);
+}
+
+gboolean dt_preset_repository_get_conditions(const char *operation, const int op_version,
+                                             const char *name, dt_preset_conditions_t *c, int *rowid)
+{
+  if(IS_NULL_PTR(c) || IS_NULL_PTR(rowid)) return FALSE;
+  *rowid = -1;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+     "SELECT rowid, description, model, maker, lens, iso_min, iso_max, "
+     "       exposure_min, exposure_max, aperture_min, aperture_max, focal_length_min, "
+     "       focal_length_max, autoapply, filter, format"
+     " FROM data.presets"
+     " WHERE name = ?1 AND operation = ?2 AND op_version = ?3",
+     -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, op_version);
+
+  gboolean found = FALSE;
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    found = TRUE;
+    *rowid = sqlite3_column_int(stmt, 0);
+    c->name = g_strdup(name);
+    c->description = _column_text(stmt, 1);
+    c->model = _column_text(stmt, 2);
+    c->maker = _column_text(stmt, 3);
+    c->lens = _column_text(stmt, 4);
+    c->iso_min = sqlite3_column_double(stmt, 5);
+    c->iso_max = sqlite3_column_double(stmt, 6);
+    c->exposure_min = sqlite3_column_double(stmt, 7);
+    c->exposure_max = sqlite3_column_double(stmt, 8);
+    c->aperture_min = sqlite3_column_double(stmt, 9);
+    c->aperture_max = sqlite3_column_double(stmt, 10);
+    c->focal_length_min = sqlite3_column_int(stmt, 11);
+    c->focal_length_max = sqlite3_column_int(stmt, 12);
+    c->autoapply = sqlite3_column_int(stmt, 13);
+    c->filter = sqlite3_column_int(stmt, 14);
+    c->format = sqlite3_column_int(stmt, 15);
+  }
+  sqlite3_finalize(stmt);
+  return found;
+}
+
+/* Bind the sixteen condition columns, which the update and the insert share in the same
+ * order. */
+static void _bind_conditions(sqlite3_stmt *stmt, const dt_preset_conditions_t *c)
+{
+  _bind_text(stmt, 1, c->name);
+  _bind_text(stmt, 2, c->description);
+  _bind_text(stmt, 3, c->model);
+  _bind_text(stmt, 4, c->maker);
+  _bind_text(stmt, 5, c->lens);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 6, c->iso_min);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 7, c->iso_max);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 8, c->exposure_min);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 9, c->exposure_max);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 10, c->aperture_min);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 11, c->aperture_max);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 12, c->focal_length_min);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 13, c->focal_length_max);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 14, c->autoapply);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 15, c->filter);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 16, c->format);
+}
+
+void dt_preset_repository_update_conditions(const int rowid, const dt_preset_conditions_t *c)
+{
+  if(IS_NULL_PTR(c)) return;
+
+  sqlite3_stmt *stmt = NULL;
+  /* rowid is bound as ?17. It used to be pasted in with g_strdup_printf("... rowid=%d"),
+   * which meant building the query text on every save for a value that is an integer from
+   * the database. */
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "UPDATE data.presets "
+                              "SET"
+                              " name=?1, description=?2,"
+                              " model=?3, maker=?4, lens=?5, iso_min=?6, iso_max=?7, exposure_min=?8,"
+                              " exposure_max=?9, aperture_min=?10,"
+                              " aperture_max=?11, focal_length_min=?12, focal_length_max=?13, autoapply=?14,"
+                              " filter=?15, format=?16 "
+                              "WHERE rowid=?17",
+                              -1, &stmt, NULL);
+  // clang-format on
+  _bind_conditions(stmt, c);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 17, rowid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+void dt_preset_repository_insert_with_conditions(const dt_preset_conditions_t *c,
+                                                 const char *operation, const int op_version,
+                                                 const void *params, const int params_size,
+                                                 const int enabled,
+                                                 const void *blend_params, const int blend_params_size,
+                                                 const int blendop_version)
+{
+  if(IS_NULL_PTR(c)) return;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "INSERT INTO data.presets"
+                              " (name, description, "
+                              "  model, maker, lens, iso_min, iso_max, exposure_min, exposure_max, aperture_min,"
+                              "  aperture_max, focal_length_min, focal_length_max, autoapply,"
+                              "  filter, format, def, writeprotect, operation, op_version, op_params, enabled,"
+                              "  blendop_params, blendop_version, multi_priority, multi_name) "
+                              "VALUES"
+                              " (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0, 0, ?17,"
+                              "  ?18, ?19, ?20, ?21, ?22, 0, '')",
+                              -1, &stmt, NULL);
+  // clang-format on
+  _bind_conditions(stmt, c);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 17, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 18, op_version);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 19, params, params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 20, enabled);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 21, blend_params, blend_params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 22, blendop_version);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+gboolean dt_preset_repository_get_identity(const int rowid, gchar **operation, int *op_version)
+{
+  if(IS_NULL_PTR(operation) || IS_NULL_PTR(op_version)) return FALSE;
+  *operation = NULL;
+  *op_version = 0;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT operation, op_version FROM data.presets WHERE rowid = ?1",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rowid);
+
+  gboolean found = FALSE;
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    found = TRUE;
+    *operation = _column_text(stmt, 0);
+    *op_version = sqlite3_column_int(stmt, 1);
+  }
+  sqlite3_finalize(stmt);
+  return found;
+}
+
+void dt_preset_repository_update_iop_params(const char *operation, const char *name,
+                                            const int op_version,
+                                            const void *params, const int params_size,
+                                            const int enabled,
+                                            const void *blend_params, const int blend_params_size,
+                                            const int blendop_version)
+{
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "UPDATE data.presets"
+                              " SET op_version=?2, op_params=?3, enabled=?4,"
+                              "     blendop_params=?5, blendop_version=?6"
+                              " WHERE name=?7 AND operation=?1",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, op_version);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 3, params, params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, enabled);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 5, blend_params, blend_params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 6, blendop_version);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 7, name, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+void dt_preset_repository_delete_by_rowid_unprotected(const int rowid)
+{
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "DELETE FROM data.presets WHERE rowid=?1 AND writeprotect=0",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rowid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+void dt_preset_repository_delete_shipped(void)
+{
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
+                        "DELETE FROM data.presets WHERE writeprotect = 1", NULL, NULL, NULL);
+}
+
 void dt_preset_repository_cleanup(void)
 {
   sqlite3_stmt **const cached[]
