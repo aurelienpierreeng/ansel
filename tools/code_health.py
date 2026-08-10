@@ -331,9 +331,17 @@ def collect_reach(edges):
     dependents = []
     for h in headers:
         n = len(closure(pred, h))
+        # What this header forces on everyone who includes it. A header should
+        # include only what its own declarations need; anything beyond that is a
+        # supply line its consumers never asked for and cannot see. Multiplying the
+        # two gives the (file, header) pairs this one header is responsible for
+        # across the whole tree - the weight it actually imposes.
+        drags = len(closure(succ, h))
         dependents.append({"file": h, "dependents": n,
-                           "share": round(100.0 * n / max(1, total), 1)})
+                           "share": round(100.0 * n / max(1, total), 1),
+                           "drags_in": drags, "burden": n * drags})
     dependents.sort(key=lambda r: -r["dependents"])
+    by_burden = sorted(dependents, key=lambda r: -r["burden"])[:30]
 
     sources = [n for n in nodes if not n.lower().endswith((".h", ".hpp", ".hxx"))]
     depth = [{"file": c, "headers_pulled": len(closure(succ, c))} for c in sources]
@@ -344,6 +352,7 @@ def collect_reach(edges):
     return {
         "files": total,
         "top_dependents": dependents[:30],
+        "top_burden": by_burden,
         "headers_over_half": sum(1 for r in dependents if r["share"] >= 50.0),
         "headers_over_quarter": sum(1 for r in dependents if r["share"] >= 25.0),
         "deepest": depth[:20],
@@ -1254,10 +1263,29 @@ def build_markdown(project, data):
         A("cycle metric: a header can sit in no cycle at all and still be here.")
         A("")
         A(md_table(
-            ["Dependents", "Share of tree", "Header"],
-            [["{:,}".format(r["dependents"]), "{} %".format(r["share"]), "`%s`" % r["file"]]
+            ["Dependents", "Share of tree", "Drags in", "Header"],
+            [["{:,}".format(r["dependents"]), "{} %".format(r["share"]),
+              "{:,}".format(r["drags_in"]), "`%s`" % r["file"]]
              for r in rch["top_dependents"]],
-            ["--:", "--:", "---"]))
+            ["--:", "--:", "--:", "---"]))
+        A("")
+        A("### Heaviest supply lines {#ch_reach_burden}")
+        A("")
+        A("A header should include only what its own declarations need. Anything beyond")
+        A("that is a supply line its consumers never asked for and cannot see: they compile")
+        A("because something upstream happened to pull in what they use, and the day anyone")
+        A("tidies that away the breakage surfaces in a file nobody touched.")
+        A("")
+        A("`Drags in` is how many headers arrive with this one. Multiplied by its")
+        A("dependents, it gives the file-header pairs this single header is responsible for")
+        A("across the tree - the weight it actually imposes, rather than how popular it is.")
+        A("")
+        A(md_table(
+            ["Burden", "Dependents", "Drags in", "Header"],
+            [["{:,}".format(r["burden"]), "{:,}".format(r["dependents"]),
+              "{:,}".format(r["drags_in"]), "`%s`" % r["file"]]
+             for r in rch["top_burden"]],
+            ["--:", "--:", "--:", "---"]))
         A("")
         A("### Translation units pulling in the most headers {#ch_reach_depth}")
         A("")
