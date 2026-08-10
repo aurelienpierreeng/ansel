@@ -241,64 +241,21 @@ def collect_includers(edges):
 # ----------------------------------------------------------------------- layering
 
 
-# Declared layer order, low to high. A module may depend on its own layer or on any
-# layer BELOW it; an include pointing the other way is a layer inversion.
+# NOTE ON UNITS. There is deliberately no hand-declared layer table here any more.
 #
-# This is a policy, not a measurement, so it is written down rather than inferred, and
-# it is the UNION of both trees' module names so the file stays byte-identical in the
-# darktable and Ansel repositories. A directory that exists in only one of them costs
-# nothing in the other, and the two projects are therefore judged against exactly the
-# same architectural expectation - which is the only way the inversion counts can be
-# compared at all.
+# It used to rank src/ subdirectories - common below control, the GUI toolkit below
+# the pipeline, and so on - and count includes pointing the wrong way against it.
+# That was wrong twice over. It encoded one person's reading of the architecture, so
+# the metric partly measured its own author; and more fundamentally darktable does
+# not use subdirectories as modules. They are drawers: groupings of convenience with
+# no ownership or interface boundary, so "common is below control" is an assertion
+# the code never made and cannot support. Ansel is moving towards real modules, but
+# a measure that is meaningful on one side and meaningless on the other cannot
+# compare them.
 #
-# The order encodes the ordinary layering of a photo editor: freestanding primitives
-# know nothing of the application, the pixel pipeline knows nothing of the GUI, and
-# entry points sit on top of everything.
-LAYERS = {
-    # 0 - freestanding primitives: allocation, maths, SIMD pixel helpers
-    "system": 0, "math": 0, "pixel": 0,
-    # 1 - shared services on top of those primitives.
-    #     "ai" is darktable 5.6's ONNX inference backend. It is placed here because
-    #     that is what it is used as - src/common/ is its main consumer, alongside
-    #     gui/ and lua/ - not because of what it currently depends on. Ansel has no
-    #     counterpart, so this rank only ever affects the darktable side.
-    "common": 1, "colorprofiles": 1, "ai": 1,
-    # 2 - GUI TOOLKIT: custom widgets and drawing primitives. These are LEAF
-    #     libraries with no application knowledge - a slider does not know what a
-    #     pixel pipeline is - so they sit LOW, next to the other shared services,
-    #     and everything with a user interface is entitled to use them. In
-    #     particular an IOP has a GUI by definition, so iop -> bauhaus, iop ->
-    #     dtgtk and iop -> widgets are ordinary downward dependencies, NOT
-    #     inversions. Ranking the toolkit above the pipeline instead (an earlier
-    #     mistake here) flagged ~60% of all "inversions" on both codebases, almost
-    #     all of them legitimate.
-    "dtgtk": 2, "bauhaus": 2, "widgets": 2,
-    # 3 - reading and writing images
-    "imageio": 3,
-    # 4 - the pixel pipeline and image development
-    "develop": 4,
-    # 5 - pipeline modules, which the pipeline dispatches to
-    "iop": 5,
-    # 6 - job system and application control
-    "control": 6,
-    # 7 - the GUI SHELL: main window, panels, accelerators. Unlike the toolkit this
-    #     does know about the application, so a module reaching up into it
-    #     (iop -> gui) IS an inversion, and a deliberate one to report.
-    "gui": 7,
-    # 8 - GUI modules and views built on the shell
-    "libs": 8, "views": 8,
-    # 9 - bindings and side tools built on everything above
-    "lua": 9, "chart": 9,
-    # 10 - platform glue and entry points
-    "apps": 10, "cli": 10, "cltest": 10, "cmstest": 10, "generate-cache": 10,
-    "osx": 10, "win": 10, "ppc64le": 10, "tests": 10,
-    # 11 - the application-global header itself, where one sits at the source root
-    "(root)": 11,
-}
-
-UNRANKED_LAYER = None    # modules with no declared rank take part in cycles, not in
-                         # the inversion count: ranking them would be inventing policy
-
+# Everything below is derived from the include graph instead, and the primary unit
+# is the FILE, which needs no notion of module at all. Directory-level figures are
+# still reported, clearly labelled as an aggregation over drawers.
 
 def module_of(path, source_dir="src"):
     """The module a file belongs to: its first path component under the source dir."""
@@ -357,124 +314,122 @@ def strongly_connected(nodes, succ):
     return comps
 
 
-def derive_layer_order(mod_edges):
-    """Derive a layer order from the include graph itself, and measure against it.
+def feedback_arc_order(edges):
+    """Order nodes so that as few weighted edges as possible point backwards.
 
-    No hand-written ranks. The order is computed, and the modules that break it are
-    whatever the computation cannot accommodate.
+    `edges` maps (a, b) -> weight, meaning "a depends on b". Returns (order, back),
+    where order[0] is the foundation and `back` lists the edges still pointing the
+    wrong way: the minimum set of dependencies that would have to go for a layering
+    to exist at all - a minimum feedback arc set.
 
-    The obvious approach - topologically sort the dependency graph - measures nothing:
-    a topological order has no backward edges by construction, so it would always
-    report zero inversions. It also does not exist here, because the module graph is
-    not acyclic (see the cycle counts above).
+    Nothing is declared. Topologically sorting instead would measure nothing (a
+    topological order has no backward edges by construction) and does not exist
+    anyway once the graph has a cycle, which is the interesting case.
 
-    So the question is posed the way it actually matters: order the modules so that as
-    FEW includes as possible point backwards. The edges still pointing backwards
-    afterwards are the minimum set of dependencies that would have to be removed for a
-    layering to exist at all - a minimum feedback arc set - and they are the inversions,
-    established without anyone declaring anything.
-
-    Computed with the Eades-Lin-Smyth greedy algorithm, weighted by include count:
-    repeatedly strip sinks to the back and sources to the front, and when neither
-    exists - which is exactly when a cycle is in the way - remove the module with the
-    largest outgoing-minus-incoming weight. It runs in linear time and guarantees at
-    most |E|/2 - |V|/6 backward edges, which is far better than anything this graph
-    needs.
-
-    What this CANNOT do, and why the declared table is still reported next to it: a
-    derived order describes the code as it is. If a questionable dependency is
-    pervasive enough, the algorithm accommodates it by ordering around it rather than
-    flagging it. The declared order describes intent, so it can object to something the
-    code does consistently. They answer different questions and disagreeing is useful.
+    Eades-Lin-Smyth greedy: strip sinks to the back and sources to the front, and
+    when neither exists - exactly when a cycle is in the way - remove the node with
+    the largest outgoing-minus-incoming weight. Linear time, and at most
+    |E|/2 - |V|/6 backward edges. Implemented with worklists rather than rescans so
+    it stays linear on the file graph, which is two orders of magnitude larger than
+    the directory graph.
     """
-    if not mod_edges:
-        return None
+    if not edges:
+        return [], []
 
     nodes = set()
-    out_w, in_w = defaultdict(int), defaultdict(int)
-    succ, pred = defaultdict(set), defaultdict(set)
-    for (a, b), n in mod_edges.items():
+    succ, pred = defaultdict(list), defaultdict(list)
+    out_w, in_w = Counter(), Counter()
+    for (a, b), n in edges.items():
         nodes.add(a)
         nodes.add(b)
+        succ[a].append((b, n))
+        pred[b].append((a, n))
         out_w[a] += n
         in_w[b] += n
-        succ[a].add(b)
-        pred[b].add(a)
+    for n in nodes:
+        out_w.setdefault(n, 0)
+        in_w.setdefault(n, 0)
 
     remaining = set(nodes)
-    o_w = dict(out_w)
-    i_w = dict(in_w)
-    o_w.update({n: o_w.get(n, 0) for n in nodes})
-    i_w.update({n: i_w.get(n, 0) for n in nodes})
+    sinks = [u for u in nodes if out_w[u] == 0]
+    sources = [u for u in nodes if in_w[u] == 0 and out_w[u] != 0]
+    head, tail = [], []
 
     def drop(u):
         remaining.discard(u)
-        for v in succ[u]:
+        for v, n in succ[u]:
             if v in remaining:
-                i_w[v] -= mod_edges.get((u, v), 0)
-        for v in pred[u]:
+                in_w[v] -= n
+                if in_w[v] == 0 and out_w[v] != 0:
+                    sources.append(v)
+        for v, n in pred[u]:
             if v in remaining:
-                o_w[v] -= mod_edges.get((v, u), 0)
+                out_w[v] -= n
+                if out_w[v] == 0:
+                    sinks.append(v)
 
-    head, tail = [], []
     while remaining:
-        moved = True
-        while moved:
-            moved = False
-            for u in sorted(remaining):
-                if o_w.get(u, 0) == 0:          # sink: nothing depends on it downward
+        progressed = True
+        while progressed:
+            progressed = False
+            while sinks:
+                u = sinks.pop()
+                if u in remaining:
                     tail.append(u)
                     drop(u)
-                    moved = True
-                    break
-            for u in sorted(remaining):
-                if u in remaining and i_w.get(u, 0) == 0:   # source: nothing needs it
+                    progressed = True
+            while sources:
+                u = sources.pop()
+                if u in remaining:
                     head.append(u)
                     drop(u)
-                    moved = True
-                    break
+                    progressed = True
         if remaining:
-            u = max(sorted(remaining), key=lambda m: o_w.get(m, 0) - i_w.get(m, 0))
+            u = max(remaining, key=lambda m: (out_w[m] - in_w[m], m))
             head.append(u)
             drop(u)
 
-    order = head + tail[::-1]
-    # A module that depends on nothing sits at the BOTTOM of a layer stack, so the
-    # sequence above - which puts the biggest dependers first - is reversed to read
-    # the way the declared table does: rank 0 is the foundation.
-    order.reverse()
+    # head holds the biggest dependers first; reverse the whole sequence so that
+    # rank 0 reads as the foundation, the way a layer stack is normally drawn.
+    order = (head + tail[::-1])[::-1]
     pos = {m: i for i, m in enumerate(order)}
-
-    back, weighted, total = [], 0, 0
-    for (a, b), n in mod_edges.items():
-        total += n
-        if pos[a] < pos[b]:                     # lower in the derived stack reaching up
+    back = []
+    for (a, b), n in edges.items():
+        if pos[a] < pos[b]:            # lower in the derived stack reaching up
             back.append({"pair": "%s -> %s" % (a, b), "includes": n,
                          "from_rank": pos[a], "to_rank": pos[b]})
-            weighted += n
-    back.sort(key=lambda v: -v["includes"])
+    back.sort(key=lambda v: (-v["includes"], v["pair"]))
+    return order, back
 
+
+def derive_layering(edges, label):
+    """Summarise a feedback-arc-set ordering of one dependency graph."""
+    if not edges:
+        return None
+    order, back = feedback_arc_order(edges)
+    total = sum(edges.values())
+    weighted = sum(v["includes"] for v in back)
     return {
-        "order": [{"rank": i, "module": m} for i, m in enumerate(order)],
+        "unit": label,
+        "nodes": len(order),
+        "edges": len(edges),
+        "includes": total,
+        "order": [{"rank": i, "name": m} for i, m in enumerate(order)],
         "back_edges": len(back),
         "back_includes": weighted,
         "back_ratio": round(100.0 * weighted / max(1, total), 1),
-        "worst": back[:20],
+        "worst": back[:25],
     }
 
 
 def compute_stability(mod_edges):
     """Robert Martin's instability metric, and the violations it implies.
 
-    This exists because LAYERS is hand-written. Someone decided that bauhaus sits
-    below iop and that gui sits above it, and a hand-written table can be wrong -
-    this one was, ranking the GUI toolkit above the pixel pipeline and flagging
-    roughly 60% of both codebases' "inversions" for dependencies that were in fact
-    perfectly ordinary. Nothing about the inversion count can catch that, because
-    it is measured against the very table in question.
+    A second graph-derived view of the same question, independent of the ordering
+    above. Two independent derivations agreeing is worth more than either alone.
 
-    So this measures the same idea with NO declared order, derived from the graph
-    alone, and the two numbers should be read together:
+    It is computed over directories, so it inherits their weakness as a unit - they
+    are drawers, not modules - and is reported for what it is:
 
         Ca (afferent)  how many modules depend on this one
         Ce (efferent)  how many modules this one depends on
@@ -529,19 +484,26 @@ def compute_stability(mod_edges):
 
 
 def collect_layering(edges, source_dir="src"):
-    """Layer inversions and dependency cycles, at module and at file level.
+    """Dependency cycles and derived layering, at file and at directory level.
 
-    Two different questions, deliberately reported side by side:
+    Everything here comes from the include graph. Nothing is declared.
 
-    - Cycles are OBJECTIVE. If module A depends on B and B depends on A, no layering
-      of the two can exist, whatever anyone declares. Counted as strongly connected
-      components of the dependency graph.
-    - Inversions are POLICY. They count include edges that point from a lower declared
-      layer to a higher one, against the LAYERS table above.
+    Cycles are the objective part: if A depends on B and B on A, no layering of the
+    two exists, whatever anyone believes. Reported as strongly connected components.
+
+    The derived ordering is the graduated part: order the units so as few includes as
+    possible point backwards, and report what still does. Those edges are the minimum
+    set of dependencies that would have to go for a layering to exist at all.
+
+    The FILE graph is the primary unit, because it presumes nothing about how the
+    tree is organised - it does not need directories to be modules, which in
+    darktable they are not. The directory graph is reported too, as an aggregation
+    over what are really drawers rather than modules.
     """
     if not edges:
         return None
 
+    file_edges = Counter()
     mod_edges = Counter()
     file_succ = defaultdict(set)
     files = set()
@@ -549,24 +511,16 @@ def collect_layering(edges, source_dir="src"):
         files.add(a)
         files.add(b)
         file_succ[a].add(b)
+        file_edges[(a, b)] += 1
         ma, mb = module_of(a, source_dir), module_of(b, source_dir)
         if ma and mb and ma != mb:
             mod_edges[(ma, mb)] += 1
 
-    # ---- inversions against the declared order
-    inversions, offenders, by_pair = 0, Counter(), Counter()
-    ranked_edges = 0
-    for (ma, mb), n in mod_edges.items():
-        la, lb = LAYERS.get(ma, UNRANKED_LAYER), LAYERS.get(mb, UNRANKED_LAYER)
-        if la is None or lb is None:
-            continue
-        ranked_edges += n
-        if la < lb:                       # a lower layer depends on a higher one
-            inversions += n
-            by_pair[("%s -> %s" % (ma, mb))] += n
-            offenders[ma] += n
+    # ---- cycles between individual files
+    file_cycles = [c for c in strongly_connected(sorted(files), file_succ) if len(c) > 1]
+    file_cycles.sort(key=len, reverse=True)
 
-    # ---- cycles between modules
+    # ---- cycles between directories
     mod_succ = defaultdict(set)
     for (ma, mb) in mod_edges:
         mod_succ[ma].add(mb)
@@ -574,24 +528,12 @@ def collect_layering(edges, source_dir="src"):
                   if len(c) > 1]
     mod_cycles.sort(key=len, reverse=True)
 
-    # ---- cycles between individual files
-    file_cycles = [c for c in strongly_connected(sorted(files), file_succ) if len(c) > 1]
-    file_cycles.sort(key=len, reverse=True)
-
-    # ---- the two policy-free views: a derived order, and stability
-    derived = derive_layer_order(mod_edges)
-    stability = compute_stability(mod_edges)
-
     return {
+        "by_file": derive_layering(file_edges, "file"),
+        "by_directory": derive_layering(mod_edges, "directory"),
+        "stability": compute_stability(mod_edges),
         "module_edges": len(mod_edges),
         "module_include_count": sum(mod_edges.values()),
-        "ranked_include_count": ranked_edges,
-        "inversions": inversions,
-        "inversion_ratio": round(100.0 * inversions / max(1, ranked_edges), 1),
-        "derived": derived,
-        "stability": stability,
-        "inverted_pairs": by_pair.most_common(25),
-        "worst_offenders": offenders.most_common(15),
         "module_cycles": mod_cycles[:15],
         "module_cycle_count": len(mod_cycles),
         "modules_in_cycles": sum(len(c) for c in mod_cycles),
@@ -991,152 +933,79 @@ def build_markdown(project, data):
     A("--------")
     A("")
     if lay:
-        A("Two different questions, reported side by side.")
+        A("Everything in this section is derived from the include graph. Nothing is")
+        A("declared by hand, and there is no table of \"which layer should sit above")
+        A("which\" - an earlier version of this panel had one, and it was wrong twice: it")
+        A("encoded one reading of the architecture, and it assumed `src/` subdirectories")
+        A("are modules. In darktable they are not. They are drawers - groupings of")
+        A("convenience with no ownership or interface boundary - so \"common sits below")
+        A("control\" is an assertion the code never made.")
         A("")
-        A("**Cycles are objective.** If module A depends on B and B depends on A, no")
-        A("layering of the two exists, whatever anyone declares. Every cycle is a set of")
-        A("modules that can only be understood, built and reasoned about as one unit.")
+        A("The primary unit here is therefore the **file**, which presumes nothing about")
+        A("how the tree is organised. Directory-level figures follow, labelled as the")
+        A("aggregation over drawers that they are.")
         A("")
-        A("**Inversions come in two flavours**, reported separately below: measured")
-        A("against an order DERIVED from the graph, and against one DECLARED by hand.")
-        A("For the declared one, an include `A -> B` counts as an inversion when")
-        A("`rank(A) < rank(B)`: something lower in the stack reaching *up*. The ranks are")
-        A("declared below, are identical in both repositories, and are the whole of the")
-        A("policy - there is nothing else to the calculation.")
+        A("Two questions, kept apart:")
         A("")
-        A("Two consequences worth stating, because they are easy to get backwards:")
+        A("- **Cycles are absolute.** If A depends on B and B on A, no layering of the two")
+        A("  exists, whatever anyone believes. Counted as strongly connected components.")
+        A("- **Backward dependencies are graduated.** Order the units so as few includes as")
+        A("  possible point backwards; what still does is the minimum set that would have")
+        A("  to go for a layering to exist at all. Computed with the Eades-Lin-Smyth")
+        A("  feedback-arc-set heuristic, weighted by include count.")
         A("")
-        A("- The GUI **toolkit** (`bauhaus`, `dtgtk`, `widgets`) sits LOW. A slider does not")
-        A("  know what a pixel pipeline is, so it is a leaf library and anything with a user")
-        A("  interface may use it. An IOP has a GUI by definition, so `iop -> bauhaus` is an")
-        A("  ordinary downward dependency and is **not** counted.")
-        A("- The GUI **shell** (`gui`) sits HIGH, because it does know about the application.")
-        A("  So `iop -> gui` **is** counted: a pipeline module reaching into the main window,")
-        A("  panels and accelerators is the coupling this metric exists to find.")
-        A("")
-        dv = lay.get("derived")
-        if dv:
-            A("### Derived layer order {#ch_layering_derived}")
-            A("")
-            A("This order is COMPUTED from the include graph, with nothing declared by hand.")
-            A("")
-            A("Topologically sorting the graph would measure nothing - a topological order has")
-            A("no backward edges by construction - and no such order exists here anyway, since")
-            A("the module graph is not acyclic. So the question is posed the way it matters:")
-            A("order the modules so that as few includes as possible point backwards. What")
-            A("still points backwards is the minimum set of dependencies that would have to")
-            A("go for a layering to exist at all, computed with the Eades-Lin-Smyth algorithm")
-            A("weighted by include count.")
-            A("")
-            A("Rank 0 is the foundation:")
-            A("")
-            A("> " + " &lt; ".join("`%s`" % m["module"] for m in dv["order"]))
-            A("")
-            A(md_table(
-                ["Measure", "Value"],
-                [["Dependencies pointing backwards", "{:,}".format(dv["back_edges"])],
-                 ["Includes on them", "{:,}".format(dv["back_includes"])],
-                 ["Share of cross-module includes", "{} %".format(dv["back_ratio"])]],
-                ["---", "--:"]))
-            A("")
-            if dv["worst"]:
-                A(md_table(
-                    ["Includes", "Points backwards", "From rank", "To rank"],
-                    [[v["includes"], "`%s`" % v["pair"], v["from_rank"], v["to_rank"]]
-                     for v in dv["worst"]],
-                    ["--:", "---", "--:", "--:"]))
-                A("")
-            A("What this cannot do, and why the declared order is still reported below: a")
-            A("derived order describes the code as it is. A questionable dependency that is")
-            A("pervasive enough gets accommodated by ordering around it rather than flagged -")
-            A("which is why the two disagree about `control` and `common` on this tree. A")
-            A("declared order describes intent, so it can object to something the code does")
-            A("consistently. They answer different questions.")
-            A("")
-        A("### Declared layer order {#ch_layering_table}")
-        A("")
-        by_rank = defaultdict(list)
-        for mod, rank in LAYERS.items():
-            by_rank[rank].append(mod)
         A(md_table(
-            ["Rank", "Modules"],
-            [[r, ", ".join("`%s`" % m for m in sorted(by_rank[r]))]
-             for r in sorted(by_rank)],
-            ["--:", "---"]))
+            ["Measure", "Files", "Directories"],
+            [["Units", "{:,}".format((lay.get("by_file") or {}).get("nodes", 0)),
+              "{:,}".format((lay.get("by_directory") or {}).get("nodes", 0))],
+             ["Dependency edges", "{:,}".format((lay.get("by_file") or {}).get("edges", 0)),
+              "{:,}".format((lay.get("by_directory") or {}).get("edges", 0))],
+             ["Cycles", "{:,}".format(lay["file_cycle_count"]),
+              "{:,}".format(lay["module_cycle_count"])],
+             ["Units caught in a cycle", "{:,}".format(lay["files_in_cycles"]),
+              "{:,}".format(lay["modules_in_cycles"])],
+             ["Backward dependencies", "{:,}".format((lay.get("by_file") or {}).get("back_edges", 0)),
+              "{:,}".format((lay.get("by_directory") or {}).get("back_edges", 0))],
+             ["Includes on them", "{:,}".format((lay.get("by_file") or {}).get("back_includes", 0)),
+              "{:,}".format((lay.get("by_directory") or {}).get("back_includes", 0))],
+             ["Share of all includes", "{} %".format((lay.get("by_file") or {}).get("back_ratio", 0)),
+              "{} %".format((lay.get("by_directory") or {}).get("back_ratio", 0))]],
+            ["---", "--:", "--:"]))
         A("")
-        A("A module with no rank - anything not listed - takes part in the cycle detection")
-        A("but is left out of the inversion count, because ranking it would be inventing")
-        A("policy rather than applying it.")
-        A("")
-        st = lay.get("stability")
-        if st:
-            A("### The same question without a declared order {#ch_layering_stability}")
+        bf = lay.get("by_file")
+        if bf and bf["worst"]:
+            A("### Backward dependencies between files {#ch_layering_files}")
             A("")
-            A("The ranks above are hand-written, and a hand-written table can be wrong: this")
-            A("one was, and the inversion count could not possibly have caught it, being")
-            A("measured against that very table. So the same defect is also measured here")
-            A("with no declared order at all, from the dependency graph alone.")
-            A("")
-            A("For each module, `Ca` counts the modules that depend on it and `Ce` the modules")
-            A("it depends on. Instability is `I = Ce / (Ca + Ce)`. `I = 0` means everyone")
-            A("depends on it and it depends on nothing - maximally stable, expensive to")
-            A("change. `I = 1` means nobody depends on it - free to change.")
-            A("")
-            A("The Stable Dependencies Principle says a module should depend only on modules")
-            A("at least as stable as itself. An edge `A -> B` with `I(A) < I(B)` breaks it:")
-            A("the harder-to-change module was made to depend on the easier-to-change one, so")
-            A("the volatile module's churn propagates into the stable one.")
+            A("Each of these is an include that could not be ordered away. Removing this set")
+            A("would leave a tree that can be laid out in strict layers.")
             A("")
             A(md_table(
-                ["Measure", "Value"],
-                [["Edges breaking the principle", "{:,}".format(st["violating_edges"])],
-                 ["Includes on those edges", "{:,}".format(st["violating_includes"])],
-                 ["Share of cross-module includes", "{} %".format(st["violation_ratio"])]],
-                ["---", "--:"]))
+                ["Include", "From rank", "To rank"],
+                [["`%s`" % v["pair"], v["from_rank"], v["to_rank"]] for v in bf["worst"]],
+                ["---", "--:", "--:"]))
             A("")
-            A("Where this and the declared order disagree is informative rather than wrong: a")
-            A("widely used module that itself reaches into a volatile one scores badly here")
-            A("even when the declared layers approve of it.")
+        bd = lay.get("by_directory")
+        if bd and bd["worst"]:
+            A("### Backward dependencies between directories {#ch_layering_dirs}")
+            A("")
+            A("Aggregated over `src/` subdirectories. Read with the caveat above: these are")
+            A("drawers, so a large number here says the include flow between two drawers is")
+            A("two-way, not that a designed boundary was broken.")
+            A("")
+            A("Derived order, rank 0 first:")
+            A("")
+            A("> " + " &lt; ".join("`%s`" % m["name"] for m in bd["order"]))
             A("")
             A(md_table(
-                ["Includes", "Stable depends on less stable", "I(from)", "I(to)"],
-                [[v["includes"], "`%s`" % v["pair"], v["from_I"], v["to_I"]]
-                 for v in st["worst"]],
+                ["Includes", "Points backwards", "From rank", "To rank"],
+                [[v["includes"], "`%s`" % v["pair"], v["from_rank"], v["to_rank"]]
+                 for v in bd["worst"]],
                 ["--:", "---", "--:", "--:"]))
             A("")
-            A("#### Module stability {#ch_layering_stability_table}")
-            A("")
-            A("Sorted most stable first. A module near the top is one the rest of the")
-            A("codebase rests on, and is the most expensive place for a defect to live.")
-            A("")
-            A(md_table(
-                ["Module", "Ca", "Ce", "I"],
-                [["`%s`" % r["module"], r["Ca"], r["Ce"], r["I"]] for r in st["modules"]],
-                ["---", "--:", "--:", "--:"]))
-            A("")
-        A(md_table(
-            ["Measure", "Value"],
-            [["Cross-module include edges", "{:,}".format(lay["module_edges"])],
-             ["Cross-module includes", "{:,}".format(lay["module_include_count"])],
-             ["Layer inversions", "{:,}".format(lay["inversions"])],
-             ["Inversion ratio", "{} %".format(lay["inversion_ratio"])],
-             ["Module dependency cycles", "{:,}".format(lay["module_cycle_count"])],
-             ["Modules caught in a cycle", "{:,}".format(lay["modules_in_cycles"])],
-             ["File include cycles", "{:,}".format(lay["file_cycle_count"])],
-             ["Files caught in a cycle", "{:,}".format(lay["files_in_cycles"])]],
-            ["---", "--:"]))
-        A("")
-        if lay["inverted_pairs"]:
-            A("### Inverted dependencies {#ch_layering_inv}")
-            A("")
-            A(md_table(["Includes", "Lower layer depends on higher"],
-                       [["{:,}".format(n), "`%s`" % p] for p, n in lay["inverted_pairs"]],
-                       ["--:", "---"]))
-            A("")
         if lay["module_cycles"]:
-            A("### Module dependency cycles {#ch_layering_cycles}")
+            A("### Directory dependency cycles {#ch_layering_cycles}")
             A("")
-            A(md_table(["Modules", "Cycle"],
+            A(md_table(["Directories", "Cycle"],
                        [[len(c), ", ".join("`%s`" % m for m in c)]
                         for c in lay["module_cycles"]],
                        ["--:", "---"]))
@@ -1149,6 +1018,33 @@ def build_markdown(project, data):
             A("")
             for f in lay["largest_file_cycle"][:40]:
                 A("- `%s`" % f)
+            A("")
+        st = lay.get("stability")
+        if st:
+            A("### Stability {#ch_layering_stability}")
+            A("")
+            A("A second graph-derived view, independent of the ordering above; two")
+            A("derivations agreeing is worth more than either alone. `Ca` counts the")
+            A("directories depending on one, `Ce` those it depends on, and instability is")
+            A("`I = Ce / (Ca + Ce)`. `I = 0` means everything depends on it and it depends")
+            A("on nothing - expensive to change. `I = 1` means nothing depends on it.")
+            A("")
+            A("The Stable Dependencies Principle says a unit should depend only on units at")
+            A("least as stable as itself; an edge with `I(from) < I(to)` breaks it, letting a")
+            A("volatile unit's churn propagate into a stable one. Computed over directories,")
+            A("so it inherits their weakness as a unit.")
+            A("")
+            A(md_table(
+                ["Measure", "Value"],
+                [["Edges breaking the principle", "{:,}".format(st["violating_edges"])],
+                 ["Includes on those edges", "{:,}".format(st["violating_includes"])],
+                 ["Share of cross-directory includes", "{} %".format(st["violation_ratio"])]],
+                ["---", "--:"]))
+            A("")
+            A(md_table(
+                ["Directory", "Ca", "Ce", "I"],
+                [["`%s`" % r["module"], r["Ca"], r["Ce"], r["I"]] for r in st["modules"]],
+                ["---", "--:", "--:", "--:"]))
             A("")
     else:
         A("_include data not available (needs Doxygen's SQLite output)._")
