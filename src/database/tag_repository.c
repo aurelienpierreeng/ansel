@@ -683,6 +683,215 @@ GList *dt_tag_repository_get_names_under(const int32_t imgid, const char *catego
   return g_list_reverse(names); // query order, which is what the caller walked
 }
 
+/* Only select tags that are equal or child to the one we are looking for once. */
+static void _fill_similar_tags(const char *keyword)
+{
+  gchar *keyword_expr = g_strdup_printf("%s|", keyword);
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "INSERT INTO memory.similar_tags (tagid)"
+                              "  SELECT id"
+                              "    FROM data.tags"
+                              "    WHERE name = ?1 OR SUBSTR(name, 1, LENGTH(?2)) = ?2",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, keyword, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, keyword_expr, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  dt_free(keyword_expr);
+}
+
+static void _clear_similar_tags(void)
+{
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.similar_tags",
+                        NULL, NULL, NULL);
+}
+
+/* Run a no-parameter query and return its first integer column. */
+static int _scalar(const char *query)
+{
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  sqlite3_step(stmt);
+  const int v = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return v;
+}
+
+void dt_tag_repository_count_similar(const char *keyword, int *tag_count, int *img_count)
+{
+  if(IS_NULL_PTR(tag_count) || IS_NULL_PTR(img_count)) return;
+  *tag_count = 0;
+  *img_count = 0;
+  if(IS_NULL_PTR(keyword)) return;
+
+  _fill_similar_tags(keyword);
+
+  *tag_count = _scalar("SELECT COUNT(DISTINCT tagid) FROM memory.similar_tags");
+  // clang-format off
+  *img_count = _scalar("SELECT COUNT(DISTINCT ti.imgid)"
+                       "  FROM main.tagged_images AS ti "
+                       "  JOIN memory.similar_tags AS st"
+                       "    ON st.tagid = ti.tagid");
+  // clang-format on
+
+  _clear_similar_tags();
+}
+
+void dt_tag_repository_get_similar(const char *keyword, GList **tags, GList **imgids)
+{
+  if(IS_NULL_PTR(keyword) || IS_NULL_PTR(tags) || IS_NULL_PTR(imgids)) return;
+
+  _fill_similar_tags(keyword);
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT ST.tagid, T.name"
+                              " FROM memory.similar_tags ST"
+                              " JOIN data.tags T"
+                              "   ON T.id = ST.tagid ",
+                              -1, &stmt, NULL);
+  // clang-format on
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_tag_t *t = g_malloc0(sizeof(dt_tag_t));
+    if(t)
+    {
+      t->id = sqlite3_column_int(stmt, 0);
+      t->tag = g_strdup((const char *)sqlite3_column_text(stmt, 1));
+      *tags = g_list_append(*tags, t);
+    }
+  }
+  sqlite3_finalize(stmt);
+
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT DISTINCT ti.imgid"
+                              " FROM main.tagged_images AS ti"
+                              " JOIN memory.similar_tags AS st"
+                              "   ON st.tagid = ti.tagid",
+                              -1, &stmt, NULL);
+  // clang-format on
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    *imgids = g_list_append(*imgids, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+  sqlite3_finalize(stmt);
+
+  _clear_similar_tags();
+}
+
+
+GList *dt_tag_repository_get_suggestions(const uint32_t nb_selected, const int confidence,
+                                         const char *recent_tags, const int nb_recent)
+{
+  sqlite3_stmt *stmt = NULL;
+
+  // get attached tags with how many times they are attached in db and on selected images
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "INSERT INTO memory.taglist (id, count, count2)"
+                              "  SELECT S.tagid, COUNT(imgid) AS count,"
+                              "    CASE WHEN count2 IS NULL THEN 0 ELSE count2 END AS count2"
+                              "  FROM main.tagged_images AS S"
+                              "  LEFT JOIN ("
+                              "    SELECT tagid, COUNT(imgid) AS count2"
+                              "    FROM main.tagged_images"
+                              "    WHERE imgid IN main.selected_images"
+                              "    GROUP BY tagid) AS at"
+                              "  ON at.tagid = S.tagid"
+                              "  WHERE S.tagid NOT IN memory.darktable_tags"
+                              "  GROUP BY S.tagid",
+                              -1, &stmt, NULL);
+  // clang-format on
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  char *query = NULL;
+  if(confidence != 100)
+    query = g_strdup_printf("SELECT td.name, tagid2, t21.count, t21.count2,"
+                            " td.flags, td.synonyms FROM ("
+                            // get tags with required confidence
+                            "  SELECT DISTINCT tagid2 FROM ("
+                            "    SELECT tagid2 FROM ("
+                            // get how many times (tag1, tag2) are attached together (c12)
+                            "      SELECT tagid1, tagid2, count(*) AS c12"
+                            "      FROM ("
+                            "        SELECT DISTINCT tagid AS tagid1, imgid FROM main.tagged_images"
+                            "        JOIN memory.taglist AS t00"
+                            "        ON t00.id = tagid1 AND t00.count2 > 0) AS t1"
+                            "      JOIN ("
+                            "        SELECT DISTINCT tagid AS tagid2, imgid FROM main.tagged_images"
+                            "        WHERE tagid NOT IN memory.darktable_tags) AS t2"
+                            "      ON t2.imgid = t1.imgid AND tagid1 != tagid2"
+                            "      GROUP BY tagid1, tagid2)"
+                            "    JOIN memory.taglist AS t01"
+                            "    ON t01.id = tagid1"
+                            "    JOIN memory.taglist AS t02"
+                            "    ON t02.id = tagid2"
+                            // filter by confidence and reject tags attached on all selected images
+                            "    WHERE (t01.count-t01.count2) != 0"
+                            "      AND (100 * c12 / (t01.count-t01.count2) >= %d)"
+                            "      AND t02.count2 != %d) "
+                            "  UNION"
+                            // get recent list tags
+                            "  SELECT * FROM ("
+                            "    SELECT tn.id AS tagid2 FROM data.tags AS tn"
+                            "    JOIN memory.taglist AS t02"
+                            "    ON t02.id = tn.id"
+                            "    WHERE tn.name IN (\'%s\')"
+                            // reject tags attached on all selected images and keep the required number
+                            "      AND t02.count2 != %d LIMIT %d)) "
+                            "LEFT JOIN memory.taglist AS t21 "
+                            "ON t21.id = tagid2 "
+                            "LEFT JOIN data.tags as td ON td.id = tagid2 ",
+                            confidence, nb_selected, recent_tags, nb_selected, nb_recent);
+    // clang-format on
+  else
+    query = g_strdup_printf("SELECT tn.name, tn.id, count, count2,"
+                            "  tn.flags, tn.synonyms "
+                            // get recent list tags
+                            "FROM data.tags AS tn "
+                            "JOIN memory.taglist AS t02 "
+                            "ON t02.id = tn.id "
+                            "WHERE tn.name IN (\'%s\')"
+                            // reject tags attached on all selected images and keep the required number
+                            "  AND t02.count2 != %d LIMIT %d",
+                            recent_tags, nb_selected, nb_recent);
+    // clang-format on
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query,
+                              -1, &stmt, NULL);
+
+  GList *tags = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_tag_t *t = g_malloc0(sizeof(dt_tag_t));
+    if(t)
+    {
+      t->tag = g_strdup((const char *)sqlite3_column_text(stmt, 0));
+      t->id = sqlite3_column_int(stmt, 1);
+      t->count = sqlite3_column_int(stmt, 2);
+      const uint32_t imgnb = sqlite3_column_int(stmt, 3);
+      t->select = (nb_selected == 0) ? DT_TS_NO_IMAGE :
+                  (imgnb == nb_selected) ? DT_TS_ALL_IMAGES :
+                  (imgnb == 0) ? DT_TS_NO_IMAGE : DT_TS_SOME_IMAGES;
+      t->flags = sqlite3_column_int(stmt, 4);
+      t->synonym = g_strdup((const char *)sqlite3_column_text(stmt, 5));
+      tags = g_list_prepend(tags, t);
+    }
+  }
+
+  sqlite3_finalize(stmt);
+
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.taglist", NULL, NULL, NULL);
+  dt_free(query);
+
+  return g_list_reverse(tags); // query order, which is what the caller appended in
+}
+
 void dt_tag_repository_cleanup(void)
 {
   for(int i = 0; i < 2; i++)
