@@ -109,9 +109,15 @@ typedef struct dt_module_preset_t
   gchar *description; /**< "" when the caller did not ask for it */
   void *op_params;
   int op_params_size;
-  int op_version;     /**< only filled by dt_preset_repository_list_all_versions() */
-  int rowid;          /**< likewise */
+  int op_version;     /**< filled by the *_all_versions() and the IOP readers */
+  int rowid;          /**< only by dt_preset_repository_list_all_versions() */
   gboolean writeprotect;
+
+  /* IOP presets only -- a lib module has no blending. NULL / 0 otherwise. */
+  void *blendop_params;
+  int blendop_params_size;
+  int blendop_version;
+  int enabled;
 } dt_module_preset_t;
 
 /** @brief Release one ::dt_module_preset_t. Suits `g_list_free_full()`. */
@@ -243,6 +249,77 @@ void dt_preset_repository_update_flag(const char *operation, const int op_versio
  */
 void dt_preset_repository_update_camera(const char *operation, const int op_version, const char *name,
                                         const char *maker, const char *model, const char *lens);
+
+/* ---------------------------------------------------------------------------------------
+ *  IOP presets
+ *
+ *  Same table again, seen by a pixel module's preset menu. Two things distinguish it from
+ *  the lib half: the rows carry blend parameters, and the menu filters by whether a preset
+ *  matches the image being edited -- so three queries share one predicate over the camera,
+ *  the exposure triangle and the file format.
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * @brief The facts about one image that decide whether a preset matches it.
+ *
+ * @details Every field is bound, never interpolated. The `_alias`/`_maker` pair exists
+ * because a preset may name either the EXIF strings or rawspeed's canonical camera names,
+ * and the query tries both.
+ */
+typedef struct dt_preset_match_t
+{
+  const char *exif_model;
+  const char *exif_maker;
+  const char *camera_alias;
+  const char *camera_maker;
+  const char *exif_lens;
+  double iso;
+  double exposure;
+  double aperture;
+  double focal_length;
+  int format;   /**< FOR_RAW / FOR_LDR / FOR_HDR of the image */
+  int excluded; /**< FOR_NOT_MONO / FOR_NOT_COLOR of the image */
+} dt_preset_match_t;
+
+/** @brief Store an IOP preset, blend parameters included, replacing any of the same name. */
+void dt_preset_repository_add_iop_preset(const char *name, const char *operation, const int op_version,
+                                         const void *params, const int params_size,
+                                         const void *blend_params, const int blend_params_size,
+                                         const int blendop_version, const int enabled);
+
+/**
+ * @brief Every preset of `(operation, op_version)`, with blend parameters.
+ *
+ * @details Ordered `writeprotect ASC` -- user presets before shipped ones. The comment at
+ * the original call site explains why that direction: with DESC, a user's copy of a
+ * write-protected preset would resolve to the protected one and could not be deleted.
+ */
+GList *dt_preset_repository_list_for_iop(const char *operation, const int op_version);
+
+/**
+ * @brief Presets of @p operation to offer in a menu, in display order.
+ *
+ * @param match the image being edited, or NULL for "no particular image, show everything".
+ *        When given, a preset with `filter = 0` is always offered and the rest must match.
+ * @param shipped_first order the read-only presets before the user's.
+ */
+GList *dt_preset_repository_list_for_menu(const char *operation, const dt_preset_match_t *match,
+                                          const gboolean shipped_first);
+
+/** @brief One IOP preset by name, blend parameters included, or NULL. */
+dt_module_preset_t *dt_preset_repository_get_iop_preset(const char *operation, const int op_version,
+                                                        const char *name);
+
+/**
+ * @brief Names of the presets that should be applied to this image automatically.
+ *
+ * @param always_name a preset name matched regardless of the conditions -- the workflow
+ *        default. Pass a string no preset can be called to disable that leg.
+ * @return a `GList` of newly allocated names, in database order. Free with
+ *         `g_list_free_full(l, g_free)`.
+ */
+GList *dt_preset_repository_find_autoapply(const char *operation, const int op_version,
+                                           const dt_preset_match_t *match, const char *always_name);
 
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 void dt_preset_repository_cleanup(void);
