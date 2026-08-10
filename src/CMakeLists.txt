@@ -105,6 +105,7 @@ FILE(GLOB SOURCE_FILES
   "database/history_snapshot_repository.c"
   "database/metadata_repository.c"
   "database/tag_repository.c"
+  "database/location_repository.c"
   "database/image_repository.c"
   "common/image_extensions.c"
   "common/imagebuf.c"
