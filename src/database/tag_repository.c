@@ -241,12 +241,20 @@ void dt_tag_repository_rebuild_internal(void)
 {
   DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.darktable_tags",
                         NULL, NULL, NULL);
+  sqlite3_stmt *stmt = NULL;
+  /* `%%` is two wildcards, not a printf escape -- this query is never format-expanded.
+   * Two consecutive `%` match exactly what one does, so it is redundant rather than
+   * wrong, and it is kept verbatim so the text is unchanged. */
   // clang-format off
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
-                        "INSERT INTO memory.darktable_tags (tagid)"
-                        " SELECT DISTINCT id FROM data.tags WHERE name LIKE 'darktable|%'",
-                        NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "INSERT INTO memory.darktable_tags (tagid)"
+                              " SELECT DISTINCT id"
+                              " FROM data.tags"
+                              " WHERE name LIKE 'darktable|%%'",
+                              -1, &stmt, NULL);
   // clang-format on
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 /* ---------------------------------------------------------------------------------------
