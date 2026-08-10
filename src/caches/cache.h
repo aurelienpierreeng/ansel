@@ -22,8 +22,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_CACHE_H
-#define DT_COMMON_CACHE_H
+#ifndef DT_CACHES_CACHE_H
+#define DT_CACHES_CACHE_H
 
 #include "system/dtpthread.h"
 #include <glib.h>
@@ -110,7 +110,7 @@ int dt_cache_for_all(dt_cache_t *cache,
     int (*process)(const uint32_t key, const void *data, void *user_data),
     void *user_data);
 
-#endif // DT_COMMON_CACHE_H
+#endif // DT_CACHES_CACHE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

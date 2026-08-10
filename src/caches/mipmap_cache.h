@@ -30,7 +30,7 @@
 #define DT_CACHES_MIPMAP_CACHE_H
 
 #include "system/atomic.h"
-#include "common/cache.h"
+#include "caches/cache.h"
 #include "colorprofiles/profile_types.h"
 #include "common/image.h"
 

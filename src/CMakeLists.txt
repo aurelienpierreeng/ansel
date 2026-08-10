@@ -57,7 +57,7 @@ FILE(GLOB SOURCE_FILES
   "pixel/bilateral.c"
   "pixel/bilateralcl.c"
   "pixel/box_filters.c"
-  "common/cache.c"
+  "caches/cache.c"
   "math/calculator.c"
   "common/collection.c"
   "common/color_picker.c"

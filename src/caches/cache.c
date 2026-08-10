@@ -29,7 +29,7 @@
 
 #include "config.h"
 
-#include "common/cache.h"
+#include "caches/cache.h"
 #include "system/dtpthread.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
