@@ -77,7 +77,7 @@
 #include "common/history_actions.h"
 #include "develop/imageop.h"
 #include "common/collection.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "system/dtpthread.h"
 #include "common/exif.h"
 #include "common/file_location.h"

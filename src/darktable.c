@@ -134,6 +134,7 @@
 #include "common/grealpath.h"
 #include "common/image.h"
 #include "caches/image_cache.h"
+#include "database/database.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_module.h"
 #include "develop/iop_order.h"

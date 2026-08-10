@@ -59,7 +59,7 @@
 #include "common/conf.h"
 #endif
 #include "widgets/bauhaus.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/presets.h"
 #include "control/control.h"
 #include "develop/blend.h"

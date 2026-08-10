@@ -42,8 +42,8 @@
 #include <string.h>  // for strcmp
 
 #include "darktable.h"    // for darktable, darktable_t, dt_cleanup, etc
-#include "common/database.h"     // for dt_database_get
-#include "common/debug.h"        // for DT_DEBUG_SQLITE3_PREPARE_V2
+#include "database/database.h"     // for dt_database_get
+#include "database/sql_debug.h"        // for DT_DEBUG_SQLITE3_PREPARE_V2
 #include "caches/mipmap_cache.h" // for dt_mipmap_size_t, etc
 #include "common/file_location.h"
 #include "config.h"              // for GETTEXT_PACKAGE, etc

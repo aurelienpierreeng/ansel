@@ -27,12 +27,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/database.h"
+#include "database/database.h"
 #include "common/grouping.h"
 #include "common/collection.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "caches/image_cache.h"
 
 int32_t dt_grouping_get_image_group(const int32_t image_id)

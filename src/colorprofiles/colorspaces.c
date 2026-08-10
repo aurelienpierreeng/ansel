@@ -65,11 +65,11 @@ _Static_assert(DT_INTENT_SATURATION == INTENT_SATURATION, "ICC intent renumbered
 _Static_assert(DT_INTENT_ABSOLUTE_COLORIMETRIC == INTENT_ABSOLUTE_COLORIMETRIC, "ICC intent renumbered by lcms2");
 #include "colorprofiles/colormatrices.c"
 #include "common/colorspaces_inline_conversions.h"
-#include "common/debug.h"
 #include "common/file_location.h"
 #include "math/matrices.h"
 #include "common/utility.h"
 #include "common/conf.h"
+#include "common/logging.h"
 
 #include <strings.h>
 

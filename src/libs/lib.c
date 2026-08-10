@@ -58,8 +58,8 @@
 #include "widgets/gdkkeys.h"
 #include "libs/lib.h"
 #include "views/view.h"
-#include "common/database.h"
-#include "common/debug.h"
+#include "database/database.h"
+#include "database/sql_debug.h"
 #include "system/macros.h"
 #include "common/module.h"
 #include "common/module_versioning.h" // dt_version(), used by libs/lib_api.h below

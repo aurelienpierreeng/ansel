@@ -47,7 +47,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "widgets/bauhaus.h"
 #include "common/variables.h"
 #include "common/colorlabels.h"

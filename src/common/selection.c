@@ -36,7 +36,8 @@
 */
 
 #include "common/utility.h"
-#include "common/database.h"
+#include "database/database.h"
+#include "database/sql_debug.h"
 #include "common/collection.h"
 #include "common/selection.h"
 #include "system/macros.h"

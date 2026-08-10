@@ -48,7 +48,7 @@
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 #include <inttypes.h>
@@ -56,7 +56,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "imageio/imageio_core.h"
 #include "common/opencl.h"
 #include "develop/develop.h"

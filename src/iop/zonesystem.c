@@ -69,6 +69,7 @@
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "database/sql_debug.h"
 #include "develop/imageop_math.h"
 #include "widgets/drawingarea.h"
 #include "iop/iop_api.h"

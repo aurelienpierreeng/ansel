@@ -82,7 +82,7 @@
 #include "common/history_actions.h"
 #include "control/control.h"
 #include "common/collection.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/exif.h"
 #include "common/film.h"
 #include "common/gpx.h"

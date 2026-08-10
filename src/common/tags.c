@@ -40,7 +40,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <glib/gstdio.h>
-#include "common/database.h"
+#include "database/database.h"
 #include "common/act_on.h"
 #include "control/settings.h"
 #include "common/metadata_export.h"
@@ -49,7 +49,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/image.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/grouping.h"
 #include "common/selection.h"
 #include "common/undo.h"

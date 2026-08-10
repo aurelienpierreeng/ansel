@@ -39,7 +39,7 @@
 
 #include "develop/iop_order.h"
 #include "common/styles.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/deprecations.h"
 #include "common/image.h"
 #include "caches/image_cache.h"

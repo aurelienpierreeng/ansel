@@ -55,7 +55,7 @@
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
 

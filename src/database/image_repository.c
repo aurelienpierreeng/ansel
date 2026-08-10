@@ -19,9 +19,9 @@
 #include "database/image_repository.h"
 
 #include "common/colorlabels.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "common/datetime.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/image.h"
 #include "common/logging.h"
 #include "system/dtpthread.h"

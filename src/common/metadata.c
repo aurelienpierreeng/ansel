@@ -34,7 +34,7 @@
 
 #include "common/metadata.h"
 #include "common/act_on.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/undo.h"
 #include "common/conf.h"
 

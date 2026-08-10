@@ -59,7 +59,7 @@
 #include "common/conf.h"
 #include "widgets/gdkkeys.h"
 #include "system/capabilities.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/file_location.h"
 #include "common/l10n.h"
 #include "common/opencl.h"

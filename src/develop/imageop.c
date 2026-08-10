@@ -71,7 +71,7 @@
 #include "develop/imageop.h"
 #include "widgets/bauhaus.h"
 #include "common/collection.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/exif.h"
 #include "common/history.h"
 #include "common/imagebuf.h"

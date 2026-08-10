@@ -62,7 +62,7 @@
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>

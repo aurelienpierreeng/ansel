@@ -46,7 +46,7 @@
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "common/imagebuf.h"
 #include "imageio/imageio_core.h"
 #include "math/math.h"

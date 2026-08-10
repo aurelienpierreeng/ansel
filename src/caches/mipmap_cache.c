@@ -69,7 +69,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include "common/database.h"
+#include "database/database.h"
 
 /* Set once by dt_mipmap_cache_init(); see the header. */
 static gboolean _verbose = FALSE;

@@ -41,7 +41,7 @@
 
 #include "common/collection.h"
 #include "common/act_on.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/gpx.h"
 #include "common/geo.h"
 #include "common/module_versioning.h"

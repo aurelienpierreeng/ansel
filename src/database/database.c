@@ -57,7 +57,8 @@
 #endif
 
 #include "system/atomic.h"
-#include "common/database.h"
+#include "database/database.h"
+#include "database/sql_debug.h"
 #include "common/datetime.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
@@ -65,6 +66,10 @@
 #include "common/styles.h"
 #include "common/history.h"
 #ifdef HAVE_ICU
+/* sqlite3IcuInit(), called by _load_icu_collation() below. This block was empty: the
+ * declaration had been lost, and since HAVE_ICU is off in every local and CI build the
+ * only configuration that would have caught it is one nobody runs. */
+#include "database/sqliteicu.h"
 #endif
 #include "common/legacy_presets.h"
 

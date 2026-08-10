@@ -71,7 +71,7 @@
 
 #include "common/collection.h"
 #include "control/settings.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/colorlabels.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"

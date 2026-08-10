@@ -73,7 +73,7 @@
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "math/math.h"
 #include "pixel/rgb_norms.h"
 #include "develop/develop.h"

@@ -32,7 +32,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/database.h"
+#include "database/database.h"
 #include "widgets/widget_settings.h"
 #include "common/image.h"
 #include "system/macros.h"
@@ -40,7 +40,7 @@
 #include "common/module_versioning.h"
 #include "common/collection.h"
 #include "common/selection.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "system/dtpthread.h"
 #include "common/conf.h"
 #include "control/control.h"
