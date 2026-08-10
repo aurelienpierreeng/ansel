@@ -1874,9 +1874,10 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
   return error;
 }
 
-void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache, size_t size, int id,
+void *dt_pixelpipe_cache_alloc_align_cache_impl(size_t size, int id,
                                                 const char *name)
 {
+  dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
   // Free up space if needed to match the max memory limit
   // If error, all entries are currently locked or in use, so we cannot free space to allocate a new entry.
   dt_pthread_mutex_lock(&cache->lock);
@@ -1922,8 +1923,9 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
   return aligned;
 }
 
-void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void **mem, const char *message)
+void dt_pixelpipe_cache_free_align_cache(void **mem, const char *message)
 {
+  dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
   if(IS_NULL_PTR(mem) || !*mem) return;
 
   dt_pthread_mutex_lock(&cache->lock);

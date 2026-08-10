@@ -30,14 +30,14 @@
 void *dt_drawlayer_cache_alloc_temp_buffer(const size_t bytes, const char *name)
 {
   if(bytes == 0) return NULL;
-  return dt_pixelpipe_cache_alloc_align_cache_impl(dt_pixelpipe_cache_get_global(), bytes, DT_DEV_PIXELPIPE_NONE, name);
+  return dt_pixelpipe_cache_alloc_align_cache_impl(bytes, DT_DEV_PIXELPIPE_NONE, name);
 }
 
 /** @brief Free temporary aligned cache buffer. */
 void dt_drawlayer_cache_free_temp_buffer(void **buffer, const char *name)
 {
   if(IS_NULL_PTR(buffer) || !*buffer) return;
-  dt_pixelpipe_cache_free_align_cache(dt_pixelpipe_cache_get_global(), buffer, name);
+  dt_pixelpipe_cache_free_align_cache(buffer, name);
 }
 
 /** @brief Ensure scratch RGBA float capacity in pixels. */
@@ -72,7 +72,7 @@ void dt_drawlayer_cache_patch_clear(dt_drawlayer_cache_patch_t *patch, const cha
     if(patch->cache_entry)
       dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, patch->cache_entry);
     void *buffer = patch->pixels;
-    dt_pixelpipe_cache_free_align_cache(dt_pixelpipe_cache_get_global(), &buffer, external_alloc_name);
+    dt_pixelpipe_cache_free_align_cache(&buffer, external_alloc_name);
   }
   else if(patch->cache_entry)
   {
