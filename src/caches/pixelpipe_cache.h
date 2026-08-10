@@ -75,7 +75,22 @@ typedef enum dt_dev_pixelpipe_cache_writable_status_t
 /** constructs a new cache with given cache line count (entries) and float buffer entry size in bytes.
   \param[out] returns 0 if fail to allocate mem cache.
 */
-gboolean dt_dev_pixelpipe_cache_init(size_t max_memory);
+/**
+ * @brief Reserve the cache's arena and start it.
+ *
+ * @param max_memory arena size in bytes. A session constant: the orchestrator decides it from
+ *        the resource plan and retries smaller on failure, which is resource policy.
+ * @param verbose whether the cache traces at all (was `-d pipecache`).
+ * @param verbose_detail whether it traces in detail (was `-d verbose`). Ignored when
+ *        @p verbose is FALSE, matching the old two-level gate.
+ *
+ * @details Both flags are read ONCE, here, from the session's debug flags by the orchestrator.
+ * The cache does not consult them at runtime: a cache that changes what it does halfway
+ * through a session because a global moved is harder to reason about than one told at startup,
+ * and it keeps the debug machinery out of a storage module.
+ */
+gboolean dt_dev_pixelpipe_cache_init(size_t max_memory, const gboolean verbose,
+                                     const gboolean verbose_detail);
 
 /** The application-wide pixelpipe cache singleton. DECLARED here because it is this
  * module's object; BOUND by the orchestrator (darktable.c), so this header

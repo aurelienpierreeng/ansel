@@ -1437,7 +1437,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // size. Rather than aborting outright, retry smaller: a shrunken cache degrades
   // performance, an abort loses the session.
   size_t pipecache_size = darktable.dtresources.pixelpipe_memory;
-  dt_dev_pixelpipe_cache_init(pipecache_size);
+  dt_dev_pixelpipe_cache_init(pipecache_size,
+                              (dt_get_debug_flags() & DT_DEBUG_PIPECACHE) != 0,
+                              (dt_get_debug_flags() & DT_DEBUG_VERBOSE) != 0);
   while(!dt_dev_pixelpipe_cache_is_ready() && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
   {
     pipecache_size /= 2;
@@ -1445,7 +1447,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
             "WARNING: can't reserve %" G_GSIZE_FORMAT " MiB of virtual memory for the pixelpipe cache, "
             "retrying with %" G_GSIZE_FORMAT " MiB. Check your memory settings.\n",
             2 * pipecache_size / (1024 * 1024), pipecache_size / (1024 * 1024));
-    dt_dev_pixelpipe_cache_init(pipecache_size);
+    dt_dev_pixelpipe_cache_init(pipecache_size,
+                              (dt_get_debug_flags() & DT_DEBUG_PIPECACHE) != 0,
+                              (dt_get_debug_flags() & DT_DEBUG_VERBOSE) != 0);
   }
   darktable.dtresources.pixelpipe_memory = pipecache_size;
 
@@ -1471,9 +1475,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // must come before mipmap_cache, because that one will need to access
   // image dimensions stored in here:
-  dt_image_cache_init();
+  dt_image_cache_init((dt_get_debug_flags() & DT_DEBUG_CACHE) != 0);
 
-  dt_mipmap_cache_init();
+  dt_mipmap_cache_init((dt_get_debug_flags() & DT_DEBUG_CACHE) != 0);
 
 #ifdef HAVE_OPENCL
   dt_opencl_init(exclude_opencl, print_statistics);

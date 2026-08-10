@@ -47,7 +47,6 @@
 #include "common/hash.h"
 #include "common/logging.h"
 #include "common/paths.h"
-#include "common/debug.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"
 #include "common/datetime.h"
@@ -57,6 +56,16 @@
 
 #include <inttypes.h>
 #include "colorprofiles/colorspaces.h"   // dt_colorspaces_free_image_profile
+
+/* Set once by dt_image_cache_init(); see the header for why it is not read live. */
+static gboolean _verbose = FALSE;
+
+/* Statement-safe: a bare `if(_verbose) dt_print(...)` swallows a following `else`. */
+#define _cache_print(channel, ...)                    \
+  do {                                                \
+    if(_verbose) dt_print((channel), __VA_ARGS__);     \
+  } while(0)
+
 
 /* PRIVATE. Nothing outside this file reads a field of it -- the header exposes the
  * type as an opaque handle so that it cannot. */
@@ -192,12 +201,12 @@ void dt_image_derive_fields(dt_image_t *img)
     const gboolean db_ldr = (img->flags & DT_IMAGE_LDR) != 0;
 
     if(ext_hint == DT_IMAGE_HDR && !db_hdr)
-      dt_print(DT_DEBUG_IMAGEIO,
+      _cache_print(DT_DEBUG_IMAGEIO,
                "[image_cache] DB flag mismatch: id=%d filename='%s' has an HDR extension but stored "
                "flags=0x%08x lack DT_IMAGE_HDR (ldr=%d hdr=%d)\n",
                img->id, img->filename, (unsigned int)img->flags, db_ldr, db_hdr);
     else if((ext_hint == DT_IMAGE_LDR || ext_hint == DT_IMAGE_RAW) && db_hdr)
-      dt_print(DT_DEBUG_IMAGEIO,
+      _cache_print(DT_DEBUG_IMAGEIO,
                "[image_cache] DB flag mismatch: id=%d filename='%s' has a %s extension but stored "
                "flags=0x%08x carry DT_IMAGE_HDR (ldr=%d hdr=%d)\n",
                img->id, img->filename, (ext_hint == DT_IMAGE_RAW) ? "RAW" : "LDR",
@@ -245,8 +254,9 @@ void dt_image_cache_deallocate(void *data, dt_cache_entry_t *entry)
   dt_free(img);
 }
 
-void dt_image_cache_init(void)
+void dt_image_cache_init(const gboolean verbose)
 {
+  _verbose = verbose;
   if(_image_cache) return;
   _image_cache = (dt_image_cache_t *)calloc(1, sizeof(dt_image_cache_t));
   if(IS_NULL_PTR(_image_cache)) return;
@@ -264,7 +274,7 @@ void dt_image_cache_init(void)
   dt_cache_set_allocate_callback(&cache->cache, &dt_image_cache_allocate, cache);
   dt_cache_set_cleanup_callback(&cache->cache, &dt_image_cache_deallocate, cache);
 
-  dt_print(DT_DEBUG_CACHE, "[image_cache] has %d entries (%u MiB)\n", num, size);
+  _cache_print(DT_DEBUG_CACHE, "[image_cache] has %d entries (%u MiB)\n", num, size);
 }
 
 void dt_image_cache_cleanup(void)
