@@ -2,8 +2,8 @@
 
 Everything that speaks SQL belongs here. Nothing else does.
 
-That is the destination, not yet the state of the tree: **285 call sites outside this
-directory still hold a raw `sqlite3 *`**, and 32 files still write queries. Both numbers
+That is the destination, not yet the state of the tree: **270 call sites outside this
+directory still hold a raw `sqlite3 *`**, and 31 files still write queries. Both numbers
 are ratcheted downwards by `tools/check_module_boundaries.sh`, and this file is the map of
 where they are going.
 
@@ -25,6 +25,7 @@ where they are going.
 | `tag_repository.c/h` | `data.tags`, `main.tagged_images` — partial, see its file comment |
 | `location_repository.c/h` | `data.locations` |
 | `preset_repository.c/h` | `data.presets` — partial, see its file comment |
+
 
 `dt_database_t` is defined in `database.c` and declared nowhere. There is one connection,
 the module owns it, and no function takes it as an argument.
@@ -120,7 +121,7 @@ refcounting, or what the caller intends. `image_repository.c` is the worked exam
 came out of `caches/image_cache.c`, which was an LRU and, in 107 of its lines, also the
 only code in the tree that knew the shape of a `main.images` row.
 
-Seven `common/` files are already at zero SQL and are the pattern to copy: `colorlabels.c`,
+Seven `common/` files, plus `libs/lib.c`, are already at zero SQL and are the pattern to copy: `colorlabels.c`,
 `grouping.c`, `selection.c`, `history_snapshot.c`, `metadata.c`, `map_locations.c`,
 `presets.c`.
 
@@ -158,15 +159,15 @@ The families still to extract, by where their SQL lives today:
 | repository | tables | mostly from |
 |---|---|---|
 | `tag_repository` (extend) | `data.tags`, `main.tagged_images`, `memory.taglist` | `common/tags.c` (258) |
-| `preset_repository` (extend) | `data.presets` | `gui/presets.c` (281), `libs/lib.c` (141) |
+| `preset_repository` (extend) | `data.presets` | `gui/presets.c` (281) |
 | `history_repository` | `main.history`, `main.masks_history`, `main.module_order` | `common/history.c` (217) |
 | `style_repository` | `data.styles`, `data.style_items` | `common/styles.c` (187) |
 | `film_repository` | `main.film_rolls`, `memory.film_folder` | `common/film.c` (103) |
 | `collection_repository` | `memory.collected_images` and the query builder | `common/collection.c` (95) |
 
-Two of those rows are also a rule violation that predates this work: CLAUDE.md says
-`src/libs/` and `src/views/` contain no raw SQL, and `gui/presets.c` and `libs/lib.c`
-between them hold 422 references.
+One of those rows is still a rule violation that predates this work: CLAUDE.md says
+`src/libs/` and `src/views/` contain no raw SQL. `libs/lib.c` is done -- it held 141
+references and holds none -- leaving `gui/presets.c`.
 
 ---
 
