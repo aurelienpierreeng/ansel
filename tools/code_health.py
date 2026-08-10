@@ -224,6 +224,54 @@ def include_edges(db_path):
     return [(a, b) for a, b in rows if not is_excluded(a) and not is_excluded(b)]
 
 
+def source_include_edges(repo_root, source_dir="src"):
+    """Build the include graph a second time, straight from the source text.
+
+    Doxygen only records an include it managed to RESOLVE, and resolution depends on
+    INCLUDE_PATH, on conditional compilation, and on which headers exist at doc-build
+    time. Measured on darktable 5.6 it missed 184 edges that plainly exist in the
+    files - platform headers behind #ifdef, mostly - while finding 133 the text does
+    not show, from generated headers. Each graph therefore contained a cyclic cluster
+    the other did not.
+
+    Neither is authoritative on its own, so the panel unions them. Resolution mirrors
+    the compiler: the including file's own directory first, then the source root.
+    """
+    root = os.path.abspath(repo_root)
+    src = os.path.join(root, source_dir)
+    if not os.path.isdir(src):
+        return []
+    known, files = set(), []
+    for dirpath, dirnames, filenames in os.walk(src):
+        rel_dir = "/" + os.path.relpath(dirpath, root).replace(os.sep, "/") + "/"
+        if any(part in rel_dir for part in EXCLUDED_DIR_PARTS):
+            dirnames[:] = []
+            continue
+        for name in filenames:
+            if name.lower().endswith(SOURCE_SUFFIXES):
+                rel = os.path.relpath(os.path.join(dirpath, name), root).replace(os.sep, "/")
+                known.add(rel)
+                files.append((rel, os.path.join(dirpath, name)))
+    pattern = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
+    edges = set()
+    for rel, full in files:
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        base = os.path.dirname(rel)
+        for m in pattern.finditer(text):
+            inc = m.group(1)
+            for cand in (os.path.normpath(os.path.join(base, inc)).replace(os.sep, "/"),
+                         os.path.normpath(os.path.join(source_dir, inc)).replace(os.sep, "/")):
+                if cand in known:
+                    if cand != rel:
+                        edges.add((rel, cand))
+                    break
+    return sorted(edges)
+
+
 def collect_includers(edges):
     """How many files include each header, directly.
 
@@ -519,6 +567,23 @@ def collect_layering(edges, source_dir="src"):
     # ---- cycles between individual files
     file_cycles = [c for c in strongly_connected(sorted(files), file_succ) if len(c) > 1]
     file_cycles.sort(key=len, reverse=True)
+    # A strongly connected component of N headers is NOT "one cycle": it is a tangle
+    # that generally contains many distinct ones, and reporting a bare count of
+    # components makes a seven-header knot look exactly like a two-header pair. So
+    # every component is reported with its size and with the number of includes that
+    # would have to be cut to break it - the feedback arcs inside that component.
+    cycle_detail = []
+    for comp in file_cycles:
+        members = set(comp)
+        inner = {(a, b): 1 for a in members for b in file_succ.get(a, ()) if b in members}
+        _o, back = feedback_arc_order(inner)
+        cycle_detail.append({
+            "size": len(comp),
+            "internal_edges": len(inner),
+            "cuts_to_break": len(back),
+            "files": sorted(comp),
+            "cut_edges": [v["pair"] for v in back],
+        })
 
     # ---- cycles between directories
     mod_succ = defaultdict(set)
@@ -538,6 +603,9 @@ def collect_layering(edges, source_dir="src"):
         "module_cycle_count": len(mod_cycles),
         "modules_in_cycles": sum(len(c) for c in mod_cycles),
         "file_cycle_count": len(file_cycles),
+        "file_cycles": cycle_detail,
+        "largest_file_cycle_size": max((len(c) for c in file_cycles), default=0),
+        "file_cycle_cuts": sum(c["cuts_to_break"] for c in cycle_detail),
         "files_in_cycles": sum(len(c) for c in file_cycles),
         "largest_file_cycle": sorted(file_cycles[0]) if file_cycles else [],
     }
@@ -1010,15 +1078,34 @@ def build_markdown(project, data):
                         for c in lay["module_cycles"]],
                        ["--:", "---"]))
             A("")
-        if lay["largest_file_cycle"]:
-            A("### Largest file include cycle {#ch_layering_filecycle}")
+        if lay.get("file_cycles"):
+            A("### Cyclic header clusters {#ch_layering_filecycle}")
             A("")
-            A("%d files that mutually include one another, directly or transitively:"
-              % len(lay["largest_file_cycle"]))
+            A("Each block below is a strongly connected component: a set of files that all")
+            A("reach one another through includes. **A component is not one cycle.** A")
+            A("seven-header component contains many distinct cycles, which is why the count")
+            A("of components is a poor headline and the size, and the number of includes that")
+            A("must be cut to break it, are given instead.")
             A("")
-            for f in lay["largest_file_cycle"][:40]:
-                A("- `%s`" % f)
+            A(md_table(
+                ["Files", "Internal includes", "Cuts to break"],
+                [[c["size"], c["internal_edges"], c["cuts_to_break"]]
+                 for c in lay["file_cycles"]],
+                ["--:", "--:", "--:"]))
             A("")
+            for i, c in enumerate(lay["file_cycles"], 1):
+                A("**Cluster %d** - %d files, %d cuts to break:"
+                  % (i, c["size"], c["cuts_to_break"]))
+                A("")
+                for f in c["files"]:
+                    A("- `%s`" % f)
+                A("")
+                if c["cut_edges"]:
+                    A("Cutting these breaks it:")
+                    A("")
+                    for e in c["cut_edges"]:
+                        A("- `%s`" % e)
+                    A("")
         st = lay.get("stability")
         if st:
             A("### Stability {#ch_layering_stability}")
@@ -1205,7 +1292,18 @@ def main():
     data["cloc"] = step("cloc", lambda: collect_cloc(args.source_dir))
     data["ccn"] = step("lizard", lambda: collect_ccn(args.source_dir))
     data["symbols"] = step("symbols", lambda: collect_symbols(args.db))
-    edges = step("includes", lambda: include_edges(args.db))
+    dox_edges = step("includes (doxygen)", lambda: include_edges(args.db))
+    src_edges = step("includes (source)",
+                     lambda: source_include_edges(args.repo_root, args.source_dir))
+    merged = sorted(set(dox_edges or []) | set(src_edges or []))
+    sys.stderr.write("code_health: include graph %d doxygen + %d source -> %d union\n"
+                     % (len(dox_edges or []), len(src_edges or []), len(merged)))
+    edges = merged or None
+    data["include_graph"] = {
+        "doxygen_edges": len(dox_edges or []),
+        "source_edges": len(src_edges or []),
+        "union_edges": len(merged),
+    }
     data["includers"] = step("fan-in", lambda: collect_includers(edges))
     data["layering"] = step("layering", lambda: collect_layering(edges, args.source_dir))
     data["god_header"] = step("global header", lambda: collect_god_header(edges))
