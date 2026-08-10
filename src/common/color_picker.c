@@ -36,7 +36,7 @@
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/times.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "colorprofiles/iop_profile.h"
 #include "pixel/format.h"
 #include "develop/imageop_math.h"

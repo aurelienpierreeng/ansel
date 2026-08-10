@@ -63,7 +63,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include <json-glib/json-glib.h>
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/nn_model.h"

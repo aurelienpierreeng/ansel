@@ -60,7 +60,7 @@
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "pixel/guided_filter.h"
 #include "control/signal.h"
 #include "develop/imageop.h"

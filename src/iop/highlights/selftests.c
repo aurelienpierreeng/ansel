@@ -21,7 +21,7 @@
 
 #include "system/macros.h"
 #include "system/simd.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/blur.h"
 #include "iop/highlights/chroma.h"

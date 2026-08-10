@@ -15,8 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_COMMON_PIXELPIPE_CACHE_ALLOC_H
-#define DT_COMMON_PIXELPIPE_CACHE_ALLOC_H
+#ifndef DT_CACHES_PIXELPIPE_CACHE_ALLOC_H
+#define DT_CACHES_PIXELPIPE_CACHE_ALLOC_H
 
 /* Convenience allocators over the pixelpipe cache, bound to the application-wide
  * cache singleton (and, for the perthread variants, to the application's OpenMP
@@ -27,6 +27,11 @@
  * and dt_get_num_openmp_threads() accessors — declared by the libs, implemented by
  * the orchestrator (darktable.c) — so including this helper does NOT drag
  * darktable.h (and with it the whole application) into the translation unit. */
+
+/* Kept SEPARATE from pixelpipe_cache.h on purpose. 94 translation units -- most of src/iop
+ * and src/pixel -- want the allocators below and nothing else; pixelpipe_cache.h is the
+ * cache's full API and pulls more than twice the transitive headers. Merging the two would
+ * hand 90 files a supply line they never asked for. */
 
 #include "system/macros.h"
 #include "system/mem_alloc.h"
@@ -158,7 +163,7 @@ static inline float *dt_pixelpipe_cache_alloc_perthread_float_impl(const size_t 
 }
 #endif
 
-#endif // DT_COMMON_PIXELPIPE_CACHE_ALLOC_H
+#endif // DT_CACHES_PIXELPIPE_CACHE_ALLOC_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

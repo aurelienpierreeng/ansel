@@ -114,7 +114,7 @@ GList dev->forms
 #include "system/macros.h"
 #include "system/simd.h"
 #include "common/times.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/develop.h"     // dt_develop_t, and dt_iop_module_t through imageop.h
 #include "develop/pixelpipe.h"
 #include "widgets/draw.h"

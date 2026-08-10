@@ -43,7 +43,7 @@
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "pixel/box_filters.h"
 #include "pixel/guided_filter.h"
 #include "common/opencl.h"

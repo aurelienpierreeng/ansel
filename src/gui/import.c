@@ -20,9 +20,8 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "caches/cache.h"
 #include "common/film.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/exif.h"
 #include "gui/import.h"
@@ -466,15 +465,12 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
 
     if(use_internal_loader)
     {
-      dt_cache_entry_t cache_entry = { 0 };
       dt_mipmap_buffer_t mipbuf = { 0 };
-      mipbuf.size = DT_MIPMAP_FULL;
-      mipbuf.cache_entry = &cache_entry;
 
       /* If embedded preview extraction failed, non-RAW files should still get a preview by
        * decoding the real image through Ansel instead of relying on the desktop pixbuf stack.
        * RAWs stay excluded here because the import dialog only wants a lightweight fallback. */
-      if(dt_imageio_open(img, filename, &mipbuf) == DT_IMAGEIO_OK
+      if(dt_imageio_open_standalone(img, filename, &mipbuf) == DT_IMAGEIO_OK
          && !IS_NULL_PTR(mipbuf.buf) && mipbuf.width > 0 && mipbuf.height > 0)
       {
         const size_t pixels = (size_t)mipbuf.width * mipbuf.height;
@@ -504,8 +500,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
         }
       }
 
-      dt_free_align(cache_entry.data);
-      cache_entry.data = NULL;
+      dt_imageio_close_standalone(&mipbuf);
     }
   }
 

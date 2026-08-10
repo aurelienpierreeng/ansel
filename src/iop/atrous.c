@@ -65,7 +65,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/database.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "widgets/bauhaus.h"
 #include "pixel/eaw.h"
 #include "common/imagebuf.h"

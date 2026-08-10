@@ -66,7 +66,7 @@
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/paths.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
 #include "caches/image_cache.h"
 #include "common/history.h"
@@ -1266,6 +1266,32 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   dt_image_buffer_resolve_flags(img);
 
   return ret;
+}
+
+dt_imageio_retval_t dt_imageio_open_standalone(dt_image_t *img, const char *filename,
+                                               dt_mipmap_buffer_t *buf)
+{
+  if(IS_NULL_PTR(buf)) return DT_IMAGEIO_LOAD_FAILED;
+
+  memset(buf, 0, sizeof(*buf));
+  buf->size = DT_MIPMAP_FULL;
+
+  /* The decoder allocates into the entry it is handed. Owning one here is what lets callers
+   * decode a file without knowing that a cache entry exists -- see the header. */
+  buf->cache_entry = dt_cache_entry_new_detached();
+  if(IS_NULL_PTR(buf->cache_entry)) return DT_IMAGEIO_CACHE_FULL;
+
+  const dt_imageio_retval_t ret = dt_imageio_open(img, filename, buf);
+  if(ret != DT_IMAGEIO_OK) dt_imageio_close_standalone(buf);
+  return ret;
+}
+
+void dt_imageio_close_standalone(dt_mipmap_buffer_t *buf)
+{
+  if(IS_NULL_PTR(buf) || IS_NULL_PTR(buf->cache_entry)) return;
+  dt_cache_entry_free_detached(buf->cache_entry);
+  buf->cache_entry = NULL;
+  buf->buf = NULL;
 }
 
 gboolean dt_imageio_lookup_makermodel(const char *maker, const char *model,

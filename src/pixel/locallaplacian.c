@@ -32,7 +32,7 @@
 #include "system/macros.h"
 #include "pixel/format.h"   // dt_iop_roi_t
 #include "system/openmp.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "pixel/locallaplacian.h"
 #include "math/math.h"
 

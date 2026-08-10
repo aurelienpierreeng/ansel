@@ -49,7 +49,7 @@
 #endif
 
 #include "colorprofiles/colorspaces.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/iop_profile.h"
 #include "math/matrices.h"
 #include "develop/imageop.h"

@@ -22,7 +22,7 @@
 #include "system/macros.h"
 #include "system/simd.h"
 #include "system/target_clones.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "math/sparse_cholesky_cl.h"
 #include "develop/imageop_math.h"
 #include "iop/highlights/knee.h"

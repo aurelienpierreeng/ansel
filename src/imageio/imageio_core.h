@@ -83,6 +83,34 @@ dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, d
 dt_imageio_retval_t dt_imageio_open_raster(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
 // try all the options in sequence
 dt_imageio_retval_t dt_imageio_open(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
+
+/**
+ * @brief Decode a file into a buffer the CALLER owns, with no cache involvement.
+ *
+ * @details dt_imageio_open() writes into a ::dt_mipmap_buffer_t whose `cache_entry` the mipmap
+ * cache supplies and owns. A caller that just wants one image decoded once -- the import
+ * dialog's preview, say -- has no cache entry to give it, and used to fabricate a zeroed
+ * `dt_cache_entry_t` on its own stack, hand over its address, and free `cache_entry.data`
+ * itself. That is a caller assembling the cache's internal bookkeeping by hand in order to
+ * borrow the decoder, and it is why gui/import.c had to include the cache's substrate header.
+ *
+ * This pair owns that bookkeeping instead. Nothing outside src/caches needs to know what a
+ * ::dt_cache_entry_t is.
+ *
+ * @param img image metadata, filled by the decoder as with dt_imageio_open().
+ * @param filename file to decode.
+ * @param buf receives the decoded image. Zeroed first; release with
+ *        dt_imageio_close_standalone() whether this succeeds or fails.
+ * @return ::DT_IMAGEIO_OK on success, otherwise whatever the decoder reported.
+ */
+dt_imageio_retval_t dt_imageio_open_standalone(dt_image_t *img, const char *filename,
+                                               dt_mipmap_buffer_t *buf);
+
+/**
+ * @brief Release a buffer from dt_imageio_open_standalone(). NULL-safe, and safe to call on a
+ * buffer whose open failed.
+ */
+void dt_imageio_close_standalone(dt_mipmap_buffer_t *buf);
 // tries to open the files not opened by the other routines using GraphicsMagick (if supported)
 dt_imageio_retval_t dt_imageio_open_exotic(dt_image_t *img, const char *filename,
                                            dt_mipmap_buffer_t *buf);

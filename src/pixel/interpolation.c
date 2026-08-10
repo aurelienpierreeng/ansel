@@ -38,7 +38,7 @@
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "math/math.h"
 #include "common/conf.h"
 

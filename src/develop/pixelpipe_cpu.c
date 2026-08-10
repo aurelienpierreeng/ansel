@@ -6,7 +6,7 @@
 #include "develop/iop_profile.h"
 #include "system/openmp.h"
 #include "common/logging.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/iop_order.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe_cpu.h"

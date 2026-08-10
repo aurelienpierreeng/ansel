@@ -116,7 +116,7 @@
 #include "common/hash.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/masks.h"
 #include "pixel/fast_guided_filter.h"
 #include "pixel/eigf.h"

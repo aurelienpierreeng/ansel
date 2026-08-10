@@ -52,7 +52,7 @@
 #include "control/signal.h"
 #include "common/database.h"
 #include "system/dtpthread.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
 #include "develop/masks.h"
 #include "develop/develop.h"

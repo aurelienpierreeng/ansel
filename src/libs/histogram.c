@@ -59,7 +59,7 @@
 #include "widgets/widget_settings.h"
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"

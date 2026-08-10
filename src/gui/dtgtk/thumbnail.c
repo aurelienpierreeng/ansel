@@ -43,7 +43,7 @@
 #include "gui/dtgtk/thumbtable_info.h"
 
 #include "widgets/bauhaus.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/debug.h"
 #include "gui/dtgtk/focus.h"
 #include "widgets/focus_peaking.h"

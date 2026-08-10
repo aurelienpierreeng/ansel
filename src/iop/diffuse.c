@@ -43,7 +43,7 @@
 #include "system/openmp.h"
 #include "system/simd.h"
 #include "system/target_clones.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "pixel/dwt.h"
 #include "develop/iop_profile.h"
 #include "common/opencl.h"

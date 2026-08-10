@@ -36,7 +36,7 @@
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/times.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
