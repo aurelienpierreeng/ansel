@@ -59,6 +59,7 @@
 #include "common/conf.h"
 #endif
 #include "widgets/bauhaus.h"
+#include "database/preset_repository.h"
 #include "database/sql_debug.h"
 #include "common/presets.h"
 #include "control/control.h"
@@ -91,14 +92,6 @@ const char *dt_gui_presets_aperture_value_str[]
         "f/11", "f/16",  "f/22",  "f/32",  "f/45",  "f/64", "f/90",  "f/128", "f/+" };
 
 static sqlite3_stmt *_gui_presets_add_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_mml_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_iso_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_av_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_tv_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_fl_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_ldr_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_autoapply_stmt = NULL;
-static sqlite3_stmt *_gui_presets_update_filter_stmt = NULL;
 static gboolean _gui_presets_autogen_enabled = TRUE;
 
 // format string and corresponding flag stored into the database
@@ -142,46 +135,9 @@ void dt_gui_presets_cleanup()
     sqlite3_finalize(_gui_presets_add_stmt);
     _gui_presets_add_stmt = NULL;
   }
-  if(_gui_presets_update_mml_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_mml_stmt);
-    _gui_presets_update_mml_stmt = NULL;
-  }
-  if(_gui_presets_update_iso_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_iso_stmt);
-    _gui_presets_update_iso_stmt = NULL;
-  }
-  if(_gui_presets_update_av_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_av_stmt);
-    _gui_presets_update_av_stmt = NULL;
-  }
-  if(_gui_presets_update_tv_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_tv_stmt);
-    _gui_presets_update_tv_stmt = NULL;
-  }
-  if(_gui_presets_update_fl_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_fl_stmt);
-    _gui_presets_update_fl_stmt = NULL;
-  }
-  if(_gui_presets_update_ldr_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_ldr_stmt);
-    _gui_presets_update_ldr_stmt = NULL;
-  }
-  if(_gui_presets_update_autoapply_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_autoapply_stmt);
-    _gui_presets_update_autoapply_stmt = NULL;
-  }
-  if(_gui_presets_update_filter_stmt)
-  {
-    sqlite3_finalize(_gui_presets_update_filter_stmt);
-    _gui_presets_update_filter_stmt = NULL;
-  }
+  /* The eight auto-apply-condition statements this used to finalise belong to
+   * database/preset_repository.c now, and are released with the rest of its cache. */
+  dt_preset_repository_cleanup();
 }
 
 void dt_gui_presets_add_generic(const char *name, dt_dev_operation_t op, const int32_t version,
@@ -1423,205 +1379,49 @@ void dt_gui_presets_popup_menu_show_for_module(dt_iop_module_t *module)
 void dt_gui_presets_update_mml(const char *name, dt_dev_operation_t op, const int32_t version,
                                const char *maker, const char *model, const char *lens)
 {
-  if(!_gui_presets_update_mml_stmt)
-  {
-    // clang-format off¨
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get_sqlite3_global(),
-        "UPDATE data.presets"
-        " SET maker='%' || ?1 || '%', model=?2, lens=?3"
-        " WHERE operation=?4 AND op_version=?5 AND name=?6", -1,
-        &_gui_presets_update_mml_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_mml_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, maker, -1, SQLITE_TRANSIENT);
-  if (*model)
-  {
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, model, -1, SQLITE_TRANSIENT);
-  }
-  else
-  {
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, "%", -1, SQLITE_TRANSIENT);
-  }
-  if (*lens)
-  {
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, lens, -1, SQLITE_TRANSIENT);
-  }
-  else
-  {
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, "%", -1, SQLITE_TRANSIENT);
-  }
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 6, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_camera(op, version, name, maker, model, lens);
 }
 
 void dt_gui_presets_update_iso(const char *name, dt_dev_operation_t op, const int32_t version,
                                const float min, const float max)
 {
-  if(!_gui_presets_update_iso_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get_sqlite3_global(),
-        "UPDATE data.presets"
-        " SET iso_min=?1, iso_max=?2"
-        " WHERE operation=?3 AND op_version=?4 AND name=?5", -1, &_gui_presets_update_iso_stmt,
-        NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_iso_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, min);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, max);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_range(op, version, name, DT_PRESET_RANGE_ISO, min, max);
 }
 
 void dt_gui_presets_update_av(const char *name, dt_dev_operation_t op, const int32_t version, const float min,
                               const float max)
 {
-  if(!_gui_presets_update_av_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get_sqlite3_global(),
-        "UPDATE data.presets"
-        " SET aperture_min=?1, aperture_max=?2"
-        " WHERE operation=?3 AND op_version=?4 AND name=?5",
-        -1, &_gui_presets_update_av_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_av_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, min);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, max);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_range(op, version, name, DT_PRESET_RANGE_APERTURE, min, max);
 }
 
 void dt_gui_presets_update_tv(const char *name, dt_dev_operation_t op, const int32_t version, const float min,
                               const float max)
 {
-  if(!_gui_presets_update_tv_stmt)
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get_sqlite3_global(),
-        "UPDATE data.presets SET exposure_min=?1, exposure_max=?2 WHERE operation=?3 AND op_version=?4 AND name=?5",
-        -1, &_gui_presets_update_tv_stmt, NULL);
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_tv_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, min);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, max);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_range(op, version, name, DT_PRESET_RANGE_EXPOSURE, min, max);
 }
 
 void dt_gui_presets_update_fl(const char *name, dt_dev_operation_t op, const int32_t version, const float min,
                               const float max)
 {
-  if(!_gui_presets_update_fl_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE data.presets"
-                                " SET focal_length_min=?1, focal_length_max=?2"
-                                " WHERE operation=?3 AND op_version=?4 AND name=?5",
-                                -1, &_gui_presets_update_fl_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_fl_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, min);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, max);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_range(op, version, name, DT_PRESET_RANGE_FOCAL_LENGTH, min, max);
 }
 
 void dt_gui_presets_update_ldr(const char *name, dt_dev_operation_t op, const int32_t version,
                                const int ldrflag)
 {
-  if(!_gui_presets_update_ldr_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE data.presets"
-                                " SET format=?1"
-                                " WHERE operation=?2 AND op_version=?3 AND name=?4",
-                                -1, &_gui_presets_update_ldr_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_ldr_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, ldrflag);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_flag(op, version, name, DT_PRESET_FLAG_FORMAT, ldrflag);
 }
 
 void dt_gui_presets_update_autoapply(const char *name, dt_dev_operation_t op, const int32_t version,
                                      const int autoapply)
 {
-  if(!_gui_presets_update_autoapply_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get_sqlite3_global(),
-        "UPDATE data.presets"
-        " SET autoapply=?1"
-        " WHERE operation=?2 AND op_version=?3 AND name=?4", -1, &_gui_presets_update_autoapply_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_autoapply_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, autoapply);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_flag(op, version, name, DT_PRESET_FLAG_AUTOAPPLY, autoapply);
 }
 
 void dt_gui_presets_update_filter(const char *name, dt_dev_operation_t op, const int32_t version,
                                   const int filter)
 {
-  if(!_gui_presets_update_filter_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE data.presets"
-                                " SET filter=?1"
-                                " WHERE operation=?2 AND op_version=?3 AND name=?4",
-                                -1, &_gui_presets_update_filter_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _gui_presets_update_filter_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filter);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
+  dt_preset_repository_update_flag(op, version, name, DT_PRESET_FLAG_FILTER, filter);
 }
 
 // clang-format off
