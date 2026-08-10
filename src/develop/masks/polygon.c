@@ -600,13 +600,14 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *intersections,
       // we check also 2 points around to be sure catching intersection
       int cell_values[3] = { 0 };
       const int idx = (grid_y - ymin) * grid_width + (grid_x - xmin);
-      // ensure idx is within [0, ss)
+      // ensure idx is within [0, ss). A gap-filled sample landing outside the grid built from
+      // the border's own extrema is a rounding artifact, not a reason to discard every
+      // intersection found so far (and, up the call chain in _polygon_get_pts_border(), the
+      // entire point/border buffer along with them, `return 1`ing the whole polygon geometry
+      // computation for what is a single stray sample). Skip it and keep going, same as the
+      // other defensive breaks in this file that fail a single check rather than the request.
       if(idx < 0 || (size_t)idx >= grid_size)
-      {
-        dt_masks_dynbuf_free(gap_points);
-        dt_pixelpipe_cache_free_align(intersection_grid);
-        return 1;
-      }
+        continue;
       cell_values[0] = intersection_grid[idx];
       if(grid_x > xmin) cell_values[1] = intersection_grid[idx - 1];
       if(grid_y > ymin) cell_values[2] = intersection_grid[idx - grid_width];
@@ -684,6 +685,21 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *intersections,
   // and we return the number of self-intersection found
   *intersection_count_out = intersection_count;
   return 0;
+}
+
+// A self-intersection skip range [v, w] in the border buffer's index space -- see the
+// sort+merge step in _polygon_get_pts_border() for why these need to be disjoint before being
+// written as NaN jump sentinels.
+typedef struct
+{
+  int v, w;
+} dt_masks_polygon_range_t;
+
+static int _polygon_range_cmp(const void *a, const void *b)
+{
+  const int va = ((const dt_masks_polygon_range_t *)a)->v;
+  const int vb = ((const dt_masks_polygon_range_t *)b)->v;
+  return (va > vb) - (va < vb);
 }
 
 /**
@@ -985,34 +1001,76 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
         // now we want to write the skipping zones
         // guard: buffer must be large enough to hold node falloff data
         const int buf_count = *border_count;
+
+        // Each (v, w) pair names two raw border-buffer indices where the offset curve crosses
+        // itself, in the order _polygon_find_self_intersection()'s *discovery* walk (which
+        // starts at a shape extremum, not at start_index) encountered them -- not necessarily
+        // v <= w in raw-index terms, and not the order dt_masks_point_in_form_exact()'s *read*
+        // walk (masks.c, which always starts at start_index) will visit them in. What must be
+        // skipped is the read-order span between the two crossing points; in raw-index terms
+        // that span is simply [min(v,w), max(v,w)] -- read order is a fixed rotation starting
+        // at start_index, so whichever of v/w has the smaller raw index is always the one the
+        // read walk reaches first, regardless of which one discovery found first. Normalizing
+        // (v > w used to instead take a separate path that redirected through a single shared
+        // slot at start_index for every such pair) removes the only source of jump-sentinel
+        // cycles here: with every pair now oriented the same way, sorting and merging
+        // overlapping/nested ranges into disjoint, non-overlapping ones guarantees every jump
+        // in the resulting chain moves strictly forward through read order, so the walk can
+        // only ever visit each border index once. Without the merge, two overlapping ranges
+        // written independently can still point the reader into each other and trap its walk
+        // retracing the same few indices forever -- caught only by its own visited_points
+        // safety cap, which then leaves it reporting a bogus, incomplete crossing count for
+        // every point tested, not just points near the overlap. A polygon with many nodes and
+        // a generous per-node border/feathering radius produces many such ranges (its offset
+        // curve self-intersects at every concave run tighter than that radius), so this isn't
+        // rare on complex hand-drawn shapes.
+        dt_masks_polygon_range_t *ranges = dt_pixelpipe_cache_alloc_align_cache(
+            sizeof(dt_masks_polygon_range_t) * MAX(inter_count, 1), 0);
+        int range_count = 0;
+
         for(int i = 0; i < inter_count; i++)
         {
           const int v = (int)(dt_masks_dynbuf_buffer(intersections))[i * 2];
           const int w = (int)(dt_masks_dynbuf_buffer(intersections))[i * 2 + 1];
           // bounds-check v and w against the allocated buffer size
           if(v < 0 || v >= buf_count || w < 0 || w >= buf_count) continue;
-          if(v <= w)
+          const int range_v = MIN(v, w);
+          const int range_w = MAX(v, w);
+          if(!IS_NULL_PTR(ranges))
           {
-            (*border_buffer)[v * 2] = NAN;
-            (*border_buffer)[v * 2 + 1] = w;
+            ranges[range_count].v = range_v;
+            ranges[range_count].w = range_w;
+            range_count++;
           }
           else
           {
-            if(w > (int)(node_count * 3) && (int)(node_count * 3) < buf_count)
-            {
-              if(isnan((*border_buffer)[node_count * 6]) && isnan((*border_buffer)[node_count * 6 + 1]))
-                (*border_buffer)[node_count * 6 + 1] = w;
-              else if(isnan((*border_buffer)[node_count * 6]))
-                (*border_buffer)[node_count * 6 + 1]
-                    = MAX((*border_buffer)[node_count * 6 + 1], w);
-              else
-                (*border_buffer)[node_count * 6 + 1] = w;
-              (*border_buffer)[node_count * 6] = NAN;
-            }
-            (*border_buffer)[v * 2] = NAN;
-            (*border_buffer)[v * 2 + 1] = NAN;
+            // allocation failed: fall back to writing this range unmerged, same as before
+            (*border_buffer)[range_v * 2] = NAN;
+            (*border_buffer)[range_v * 2 + 1] = range_w;
           }
         }
+
+        if(!IS_NULL_PTR(ranges) && range_count > 0)
+        {
+          qsort(ranges, range_count, sizeof(dt_masks_polygon_range_t), _polygon_range_cmp);
+
+          int merged_count = 1;
+          for(int i = 1; i < range_count; i++)
+          {
+            if(ranges[i].v <= ranges[merged_count - 1].w)
+              ranges[merged_count - 1].w = MAX(ranges[merged_count - 1].w, ranges[i].w);
+            else
+              ranges[merged_count++] = ranges[i];
+          }
+
+          for(int i = 0; i < merged_count; i++)
+          {
+            (*border_buffer)[ranges[i].v * 2] = NAN;
+            (*border_buffer)[ranges[i].v * 2 + 1] = ranges[i].w;
+          }
+        }
+
+        if(!IS_NULL_PTR(ranges)) dt_pixelpipe_cache_free_align(ranges);
       }
 
       if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1413,7 +1471,7 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
      || dt_masks_point_in_form_exact(pt, 1, gui_points->border, node_count * 3,
                                      gui_points->border_count) < 0)
     return;
-  
+
   // we are at least inside the border
   *inside = 1;
 
