@@ -27,7 +27,7 @@
 #ifndef DT_CACHES_IMAGE_CACHE_H
 #define DT_CACHES_IMAGE_CACHE_H
 
-#include "common/cache.h"
+#include "caches/cache.h"
 #include "common/image.h"
 
 #include <sqlite3.h>
