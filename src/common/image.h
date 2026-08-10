@@ -310,6 +310,31 @@ typedef struct dt_image_geoloc_t
 
 struct dt_cache_entry_t;
 
+/**
+ * @brief What a thumbnail shows over an image: its rating, or one of the badge states.
+ *
+ * @details Stored in dt_image_t::rating -- 0..5 stars, or DT_VIEW_REJECT for rejected -- which
+ * is why it lives here rather than in views/view.h where it was defined. It was read 8 times
+ * from common/, 3 from caches/ and 5 from gui/, against a single use in views/ itself: an
+ * enum declared at the top layer and consumed from the bottom, which is what made
+ * common/ratings.c and caches/image_cache.c include the view layer for one constant.
+ */
+typedef enum dt_view_image_over_t
+{
+  DT_VIEW_ERR     = -1,
+  DT_VIEW_DESERT  =  0,
+  DT_VIEW_STAR_1  =  1,
+  DT_VIEW_STAR_2  =  2,
+  DT_VIEW_STAR_3  =  3,
+  DT_VIEW_STAR_4  =  4,
+  DT_VIEW_STAR_5  =  5,
+  DT_VIEW_REJECT  =  6,
+  DT_VIEW_GROUP   =  7,
+  DT_VIEW_AUDIO   =  8,
+  DT_VIEW_ALTERED =  9,
+  DT_VIEW_END     = 10, // placeholder for the end of the list
+} dt_view_image_over_t;
+
 typedef struct dt_image_t
 {
   // minimal exif data here (all in multiples of 4-byte to interface nicely with c++):

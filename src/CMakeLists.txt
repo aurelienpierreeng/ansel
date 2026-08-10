@@ -100,6 +100,7 @@ FILE(GLOB SOURCE_FILES
   "common/gpx.c"
   "common/image.c"
   "caches/image_cache.c"
+  "database/image_repository.c"
   "common/image_extensions.c"
   "common/imagebuf.c"
   "imageio/imageio_core.c"

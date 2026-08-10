@@ -108,7 +108,18 @@ int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img);
 // aspect_ratio, output_width, output_height.
 //
 // IMPORTANT: this does not call dt_image_init(). Fields not present in the SQL row are left unchanged.
-void dt_image_from_stmt(dt_image_t *info, sqlite3_stmt *stmt);
+/**
+ * @brief Compute the fields the database does not store: rating, monochrome and HDR
+ * predicates, makermodel, and the extension cross-check that logs stale stored flags.
+ *
+ * @details Call this on any ::dt_image_t freshly filled from a database row --
+ * dt_image_repository_load() does it for its own callers, and gui/dtgtk/thumbtable.c must do
+ * it after dt_image_from_stmt() on each row of its bulk query. Skipping it leaves `rating`,
+ * `is_bw`, `is_hdr` and `exif_makermodel` stale from whatever the struct held before.
+ *
+ * @param img image to complete, in place. NULL is a no-op.
+ */
+void dt_image_derive_fields(dt_image_t *img);
 
 struct dt_control_signal_t;
 // Register an IMAGE_INFO_CHANGED handler that force-reloads image cache entries.

@@ -53,6 +53,7 @@
 #include "common/collection.h"
 #include "common/history.h"
 #include "caches/image_cache.h"
+#include "database/image_repository.h"
 #include "common/hash.h"
 #include "common/selection.h"
 #include "common/times.h"
@@ -1036,6 +1037,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
     dt_image_t info;
     dt_image_init(&info);
     dt_image_from_stmt(&info, stmt);
+    dt_image_derive_fields(&info);
 
 #ifndef NDEBUG
     dt_thumbtable_info_debug_assert_matches_cache(&info);

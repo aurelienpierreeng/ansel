@@ -47,6 +47,8 @@
 #ifndef DT_VIEWS_VIEW_H
 #define DT_VIEWS_VIEW_H
 
+#include "common/image.h"   // dt_view_image_over_t
+
 #include "system/atomic.h"
 
 #include "common/history.h"
@@ -160,21 +162,11 @@ typedef struct dt_view_t
   float hscroll_size, hscroll_lower, hscroll_viewport_size, hscroll_pos;
 } dt_view_t;
 
-typedef enum dt_view_image_over_t
-{
-  DT_VIEW_ERR     = -1,
-  DT_VIEW_DESERT  =  0,
-  DT_VIEW_STAR_1  =  1,
-  DT_VIEW_STAR_2  =  2,
-  DT_VIEW_STAR_3  =  3,
-  DT_VIEW_STAR_4  =  4,
-  DT_VIEW_STAR_5  =  5,
-  DT_VIEW_REJECT  =  6,
-  DT_VIEW_GROUP   =  7,
-  DT_VIEW_AUDIO   =  8,
-  DT_VIEW_ALTERED =  9,
-  DT_VIEW_END     = 10, // placeholder for the end of the list
-} dt_view_image_over_t;
+/* dt_view_image_over_t now lives in common/image.h: it is the value stored in
+ * dt_image_t.rating (0-5 stars, 6 = rejected) plus the other per-thumbnail overlay
+ * states, and it was consumed 8x from common/, 3x from caches/ and 5x from gui/ against
+ * exactly ONE use in views/ -- an enum defined at the top layer and read from the
+ * bottom. */
 
 /** returns an uppercase string of file extension **plus** some flag information **/
 char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const gboolean is_bw, const gboolean is_bw_flow);

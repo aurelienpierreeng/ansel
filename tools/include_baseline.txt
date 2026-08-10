@@ -1,4 +1,4 @@
 # Include-graph ratchet baseline. Regenerate with tools/check_layering.sh --update.
 # Lower these by fixing includes; never raise them to make CI pass.
 cycles 0
-layering_violations 206
+layering_violations 205
