@@ -100,10 +100,13 @@ jobs:
       # Configure only - nothing is compiled. All we need is compile_commands.json.
       - name: Configure build tree
         run: |
-          # Configured with the same clang the analysis runs with, so
-          # compile_commands.json carries flags clang understands. A GCC-configured
-          # tree makes clang-tidy report every GCC-only -W flag as a finding.
-          CC="clang-${LLVM_VERSION}" CXX="clang++-${LLVM_VERSION}" \
+          # Configured with the runner's default GCC, NOT with clang. Forcing clang
+          # here fails: this project's CMakeLists requires OpenMP >= 4.5, and CMake's
+          # FindOpenMP cannot locate libomp for clang-20 on the runner, while GCC
+          # carries OpenMP itself. Both repositories therefore configure the same
+          # way, which is also what makes their clang-tidy numbers comparable.
+          # clang-tidy then reads a GCC compilation database; the --extra-arg flags
+          # below stop it treating GCC-only warning flags as findings.
           cmake -B build -S . -G Ninja \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCMAKE_BUILD_TYPE=Release
@@ -136,7 +139,10 @@ jobs:
           echo "translation units to analyse: $(wc -l < files.txt)"
           checks=$(echo "$CLANG_TIDY_CHECKS" | tr -d ' \n')
           xargs -a files.txt -P "$(nproc)" -I{} \
-            "clang-tidy-${LLVM_VERSION}" -p build --quiet --config="{Checks: '$checks'}" {} \
+            "clang-tidy-${LLVM_VERSION}" -p build --quiet \
+              --extra-arg=-Wno-unknown-warning-option \
+              --extra-arg=-Wno-unknown-attributes \
+              --config="{Checks: '$checks'}" {} \
             > clang-tidy.log 2>/dev/null || true
           echo "findings: $(grep -cE 'warning:|error:' clang-tidy.log || true)"
 
