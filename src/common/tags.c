@@ -112,28 +112,12 @@ static gchar *_get_tb_added_tag_string_values(const int img, GList *before, GLis
 
 static void _bulk_remove_tags(const int img, const gchar *tag_list)
 {
-  if(img > 0 && tag_list)
-  {
-    sqlite3_stmt *stmt;
-    gchar *query = g_strdup_printf("DELETE FROM main.tagged_images WHERE imgid = %d AND tagid IN (%s)", img, tag_list);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    dt_free(query);
-  }
+  dt_tag_repository_detach_batch(img, tag_list);
 }
 
 static void _bulk_add_tags(const gchar *tag_list)
 {
-  if(tag_list)
-  {
-    sqlite3_stmt *stmt;
-    gchar *query = g_strdup_printf("INSERT INTO main.tagged_images (imgid, tagid, position) VALUES %s", tag_list);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    dt_free(query);
-  }
+  dt_tag_repository_attach_batch(tag_list);
 }
 
 static void _pop_undo_execute(const int32_t imgid, GList *before, GList *after)
@@ -531,19 +515,7 @@ gboolean dt_tag_detach_by_string(const char *name, const int32_t imgid, const gb
 
 void dt_set_darktable_tags()
 {
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.darktable_tags", NULL, NULL, NULL);
-
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO memory.darktable_tags (tagid)"
-                              " SELECT DISTINCT id"
-                              " FROM data.tags"
-                              " WHERE name LIKE 'darktable|%%'",
-                              -1, &stmt, NULL);
-  // clang-format on
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  dt_tag_repository_rebuild_internal();
 }
 
 uint32_t dt_tag_get_attached(const int32_t imgid, GList **result, const gboolean ignore_dt_tags)
@@ -1689,26 +1661,14 @@ gboolean dt_tag_get_tag_order_by_id(const uint32_t tagid, uint32_t *sort,
 {
   gboolean res = FALSE;
   if(IS_NULL_PTR(sort)  || !descending) return res;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-          "SELECT T.flags FROM data.tags AS T "
-          "WHERE T.id = ?1",
-          -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, tagid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
+
+  const uint32_t flags = dt_tag_repository_get_flags(tagid);
+  if((flags & (DT_TF_ORDER_SET)) == (DT_TF_ORDER_SET))
   {
-    const uint32_t flags = sqlite3_column_int(stmt, 0);
-    if((flags & (DT_TF_ORDER_SET)) == (DT_TF_ORDER_SET))
-    {
-      // the 16 upper bits of flags hold the order
-      *sort = (flags & ~DT_TF_DESCENDING) >> 16;
-      *descending = flags & DT_TF_DESCENDING;
-      res = TRUE;
-    }
+    *sort = (flags & ~DT_TF_DESCENDING) >> 16;
+    *descending = flags & DT_TF_DESCENDING;
+    res = TRUE;
   }
-  sqlite3_finalize(stmt);
   return res;
 }
 
@@ -1721,22 +1681,9 @@ uint32_t dt_tag_get_tag_id_by_name(const char * const name)
 void dt_tag_set_tag_order_by_id(const uint32_t tagid, const uint32_t sort,
                                 const gboolean descending)
 {
-  // use the upper 16 bits of flags to store the order
   const uint32_t flags = sort << 16 | (descending ? DT_TF_DESCENDING : 0)
                                     | DT_TF_ORDER_SET;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "UPDATE data.tags"
-                              " SET flags = (IFNULL(flags, 0) & ?3) | ?2 "
-                              "WHERE id = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, tagid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, flags);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, DT_TF_ALL);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  dt_tag_repository_update_flags(tagid, flags, DT_TF_ALL);
 }
 
 void dt_tags_cleanup(void)
