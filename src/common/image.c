@@ -596,8 +596,13 @@ void dt_image_film_roll(const dt_image_t *img, char *pathname, size_t pathname_l
 gboolean dt_image_get_xmp_mode()
 {
   // Write sidecars when the setting is absent, consistently with the default exposed in the preferences.
+  // This is called from many threads (image cache write-release, export/save-xmp jobs...) for every
+  // single image, so the value must be copied under the conf lock: dt_conf_get_string_const() hands back
+  // a pointer straight into the conf hash table with no lock held past the call, and a concurrent
+  // dt_conf_set_string() on this same key (including the sanitize write-back below, racing against
+  // itself from another thread) frees that string out from under a mid-strcmp reader.
   gboolean res = TRUE;
-  const char *config = dt_conf_get_string_const("write_sidecar_files");
+  char *config = dt_conf_get_string("write_sidecar_files");
   if(!IS_NULL_PTR(config))
   {
     res = FALSE;
@@ -610,8 +615,13 @@ gboolean dt_image_get_xmp_mode()
       res = TRUE;
   }
 
-  // sanitize keys:
-  dt_conf_set_string("write_sidecar_files", (res) ? "TRUE" : "FALSE");
+  // sanitize keys, but only if they actually need it: writing back on every call turns every read of
+  // this setting into a write, widening the race window above and risking clobbering a legitimate
+  // concurrent change (e.g. from the preferences dialog) with a stale value.
+  const char *sanitized = res ? "TRUE" : "FALSE";
+  if(IS_NULL_PTR(config) || strcmp(config, sanitized)) dt_conf_set_string("write_sidecar_files", sanitized);
+
+  dt_free(config);
 
   return res;
 }
