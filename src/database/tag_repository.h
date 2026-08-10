@@ -34,6 +34,8 @@
 #ifndef DT_DATABASE_TAG_REPOSITORY_H
 #define DT_DATABASE_TAG_REPOSITORY_H
 
+#include "common/tags.h"
+
 #include <glib.h>
 #include <stdint.h>
 
@@ -141,6 +143,38 @@ void dt_tag_repository_detach_batch(const int32_t imgid, const char *tagid_list)
 /** @brief Attach rows given as the VALUES clause of the insert -- `"(imgid,tagid,pos),…"`.
  *  The position expression is the caller's, which is why this takes text. */
 void dt_tag_repository_attach_batch(const char *values);
+
+/* ---------------------------------------------------------------------------------------
+ *  Attached-tag listings
+ *
+ *  These return `dt_tag_t` with `id`, `tag`, `flags`, `synonym` and `count` filled.
+ *  `leave` (the last path component) and `select` (how much of the selection carries the
+ *  tag) are left to the caller: the first is string handling and the second needs the
+ *  selection size, which is `common/selection.c`'s to know, not the database's.
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Tags attached to one image or to the current selection, ordered by name.
+ *
+ * @param imgid a positive image id, or <= 0 to read the selection (joining
+ *        `main.selected_images` rather than binding an id).
+ * @param ignore_internal exclude tags in `memory.darktable_tags`.
+ * @return `GList` of `dt_tag_t *`; `count` is the number of DISTINCT images each tag is on.
+ *         Free with `dt_tag_free_result()`.
+ */
+GList *dt_tag_repository_get_attached(const int32_t imgid, const gboolean ignore_internal);
+
+/**
+ * @brief Tags attached to @p imgid for export, plus every ancestor on their paths.
+ *
+ * @details The ancestors are what lets the caller check whether a node in the path is a
+ * category, so a hierarchical tag exports the right way. Internal tags are always excluded
+ * and `count` is not filled -- the export does not use it.
+ */
+GList *dt_tag_repository_get_attached_for_export(const int32_t imgid);
+
+/** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
+void dt_tag_repository_cleanup(void);
 
 /** One row of dt_tag_repository_get_by_path_with_counts(). */
 typedef struct dt_tag_count_t
