@@ -19,7 +19,7 @@
 */
 #include "colorprofiles/colorspaces.h"
 #include "common/conf.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/collection.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"

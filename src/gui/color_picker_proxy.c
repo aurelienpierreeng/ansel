@@ -36,7 +36,7 @@
 #include "control/signal.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
 

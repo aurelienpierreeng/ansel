@@ -68,7 +68,7 @@
 #include "common/paths.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/history.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_core.h"
@@ -100,7 +100,7 @@
 #include "imageio/imageio_webp.h"
 #endif
 #include "imageio/imageio_libraw.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/styles.h"
 #include "common/conf.h"
 #include "control/control.h"

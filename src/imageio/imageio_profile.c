@@ -63,7 +63,7 @@
 
 #include "colorprofiles/colorspaces.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/logging.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"

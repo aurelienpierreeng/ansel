@@ -26,7 +26,7 @@
 #include "control/signal.h"
 #include "gui/application.h"
 #include "control/control.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "views/view.h"
 
 #include <gtk/gtk.h>

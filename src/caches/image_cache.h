@@ -24,8 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_IMAGE_CACHE_H
-#define DT_COMMON_IMAGE_CACHE_H
+#ifndef DT_CACHES_IMAGE_CACHE_H
+#define DT_CACHES_IMAGE_CACHE_H
 
 #include "common/cache.h"
 #include "common/image.h"
@@ -138,7 +138,7 @@ int dt_image_invalid(const dt_image_t *img);
 }
 #endif
 
-#endif // DT_COMMON_IMAGE_CACHE_H
+#endif // DT_CACHES_IMAGE_CACHE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

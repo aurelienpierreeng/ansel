@@ -24,7 +24,7 @@
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "iop/iop_api.h"

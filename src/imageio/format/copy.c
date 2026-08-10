@@ -31,7 +31,7 @@
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/exif.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "imageio/imageio_module.h"
 #include "common/utility.h"
 #include "imageio/format/imageio_format_api.h"

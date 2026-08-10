@@ -39,7 +39,7 @@
 #include "common/collection.h"
 #include "system/macros.h"
 #include "common/debug.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/undo.h"
 #include "control/control.h"
 

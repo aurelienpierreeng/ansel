@@ -26,8 +26,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_DEVELOP_PIXELPIPE_CACHE_H
-#define DT_DEVELOP_PIXELPIPE_CACHE_H
+#ifndef DT_CACHES_PIXELPIPE_CACHE_H
+#define DT_CACHES_PIXELPIPE_CACHE_H
 
 #include "system/memory_arena.h"
 #include "system/atomic.h"
@@ -781,11 +781,54 @@ void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const ui
 int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t old_hash,
                                  const uint64_t new_hash, struct dt_pixel_cache_entry_t *entry);
 
+/* --- Telling the rest of the application things ---------------------------
+ *
+ * The cache has three reasons to speak upward: warn the user that it is full, announce that a
+ * cacheline became ready so a waiter can stop waiting, and feed the supervisor its bookkeeping.
+ * Every one of those used to be a direct call -- dt_control_log(), a raised
+ * DT_SIGNAL_CACHELINE_READY, dt_supervisor_*() -- which put control/ and develop/ headers in a
+ * module that is otherwise pure storage, and made the cache depend on the application rather
+ * than the other way round.
+ *
+ * They are handlers now, installed once by the orchestrator. Unset handlers are simply not
+ * called, so the cache works in a build or a test that installs none. Same shape as
+ * dt_colorspaces_set_profile_changed_handler().
+ */
+
+/** @brief Tell the user something went wrong. Called with an already-translated,
+ * already-formatted string; the cache does not know what a toast is. */
+typedef void (*dt_pixelpipe_cache_warn_handler_t)(const char *message);
+
+/** @brief A cacheline finished and is readable. @param hash its content hash,
+ * @param producer_node_key which node published it. Waiters key on both. */
+typedef void (*dt_pixelpipe_cache_ready_handler_t)(uint64_t hash, uint64_t producer_node_key);
+
+/** @brief The supervisor's view of the cache. All four may be NULL; ::active gates the other
+ * three so the cache pays one predicted-false branch when nobody is watching. */
+typedef struct dt_pixelpipe_cache_observer_t
+{
+  gboolean (*active)(void);
+  void (*cacheline_read)(uint64_t hash, size_t size);
+  void (*cacheline_delete)(uint64_t hash, size_t size, int owner_pipe_id, const char *name);
+  void (*rekey)(uint64_t old_hash, uint64_t new_hash);
+} dt_pixelpipe_cache_observer_t;
+
+/**
+ * @brief Install the handlers. Call once, from the orchestrator, before any pipe runs.
+ * @param warn may be NULL -- the warning is then dropped, not printed somewhere else.
+ * @param ready may be NULL.
+ * @param observer BORROWED, not copied: it must outlive the cache. Pass NULL to detach.
+ */
+void dt_dev_pixelpipe_cache_set_handlers(dt_pixelpipe_cache_warn_handler_t warn,
+                                         dt_pixelpipe_cache_ready_handler_t ready,
+                                         const dt_pixelpipe_cache_observer_t *observer);
+
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif // DT_DEVELOP_PIXELPIPE_CACHE_H
+#endif // DT_CACHES_PIXELPIPE_CACHE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

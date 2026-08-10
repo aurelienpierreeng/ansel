@@ -28,7 +28,7 @@
 #include "system/mem_alloc.h"
 #include "common/debug.h"
 #include "common/history.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "control/signal.h"
 
 dt_undo_lt_history_t *dt_history_snapshot_item_init(void)

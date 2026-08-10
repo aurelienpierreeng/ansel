@@ -41,7 +41,7 @@
  * develop/format.h. */
 #include "pixel/format.h"
 #include "develop/pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 
 
 /**

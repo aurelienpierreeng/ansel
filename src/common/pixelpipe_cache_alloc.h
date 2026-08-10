@@ -36,7 +36,7 @@
 extern "C" {
 #endif
 
-/* Deliberately does NOT include develop/pixelpipe_cache.h. This header is the
+/* Deliberately does NOT include caches/pixelpipe_cache.h. This header is the
  * ALLOCATOR INTERFACE; the cache implementation is a develop/ concern. Pulling the full
  * cache header in dragged develop/ into 96 files -- 11 in common/ and 16 in pixel/ --
  * purely to allocate a buffer, i.e. an upward dependency for something the caller never

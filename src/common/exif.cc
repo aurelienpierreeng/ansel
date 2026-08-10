@@ -111,7 +111,7 @@
 #include "common/deprecations.h"
 #include "common/debug.h"
 #include "common/dng_opcode.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "imageio/imageio_core.h"
 #include "common/exif.h"
 #include "imageio/imageio_jpeg.h"

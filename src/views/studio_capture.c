@@ -33,7 +33,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/color_picker_proxy.h"

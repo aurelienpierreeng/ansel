@@ -25,7 +25,7 @@
 
 #include "colorprofiles/colorspaces.h"
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
                                          const char *filename,

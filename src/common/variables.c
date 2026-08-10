@@ -53,7 +53,7 @@
 #include "common/colorlabels.h"
 #include "common/file_location.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/metadata.h"
 #include "common/opencl.h"
 #include "common/utility.h"

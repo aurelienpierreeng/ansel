@@ -18,7 +18,7 @@
 #include "gui/actions/menu.h"
 #include "control/control.h"
 #include "control/crawler.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/selection.h"
 #include "common/utility.h"
 #include "control/jobs.h"

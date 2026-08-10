@@ -26,7 +26,7 @@
 #include "common/datetime.h"
 #include "common/file_location.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/variables.h"
 #include "control/control.h"
 #include "control/jobs.h"

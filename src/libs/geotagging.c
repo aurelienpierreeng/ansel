@@ -51,7 +51,7 @@
 #include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/file_location.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/selection.h"
 #include "common/gpx.h"
 #include "common/geo.h"

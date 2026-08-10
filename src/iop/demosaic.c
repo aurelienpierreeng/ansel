@@ -69,7 +69,7 @@
 #include "system/fp_mode.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "pixel/interpolation.h"
 #include "math/math.h"
 #include "common/opencl.h"

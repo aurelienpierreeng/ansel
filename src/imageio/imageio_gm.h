@@ -26,7 +26,7 @@
 #define DT_IMAGEIO_IMAGEIO_GM_H
 
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 #ifdef HAVE_GRAPHICSMAGICK
 dt_imageio_retval_t dt_imageio_open_gm(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);

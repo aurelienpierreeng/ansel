@@ -20,7 +20,7 @@
 #define DT_IOP_DRAWLAYER_CACHE_H
 
 #include "develop/imageop.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "iop/drawlayer/paint.h"
 
 #include <glib.h>

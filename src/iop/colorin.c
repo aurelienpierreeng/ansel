@@ -75,7 +75,7 @@
 #include "colorprofiles/conversion.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/file_location.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"

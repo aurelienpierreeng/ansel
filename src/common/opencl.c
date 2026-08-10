@@ -69,7 +69,7 @@
 #include "common/conf.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 
 #include <assert.h>
 #include <locale.h>

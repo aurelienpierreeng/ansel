@@ -133,13 +133,13 @@
 #include "gui/common/folder_survey_gui.h"
 #include "common/grealpath.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_module.h"
 #include "develop/iop_order.h"
 #include "common/l10n.h"
 #include "common/metadata.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
 #include "common/points.h"
@@ -502,7 +502,7 @@ void *dt_alloc_align(size_t size)
 }
 
 /* Singleton accessors: the orchestrator BINDS the application-wide instances to the
- * lower-level libs that declare these symbols (develop/pixelpipe_cache.h and
+ * lower-level libs that declare these symbols (caches/pixelpipe_cache.h and
  * common/openmp.h). This keeps those libs free of darktable.h — they link
  * against two functions instead of importing the whole application struct. */
 struct dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void)
@@ -686,6 +686,28 @@ struct dt_control_t *dt_control_get_global(void)
 {
   return darktable.control;
 }
+
+
+/* --- pixelpipe cache handlers ------------------------------------------------
+ * See dt_dev_pixelpipe_cache_set_handlers(). These are the application's answers to the
+ * cache's three announcements; the cache itself names none of these subsystems. */
+static void _pixelpipe_cache_warn(const char *message)
+{
+  dt_control_log("%s", message);
+}
+
+static void _pixelpipe_cache_ready(uint64_t hash, uint64_t producer_node_key)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY, hash,
+                                producer_node_key);
+}
+
+static const dt_pixelpipe_cache_observer_t _pixelpipe_cache_observer = {
+  .active = dt_supervisor_active,
+  .cacheline_read = dt_supervisor_cacheline_read,
+  .cacheline_delete = dt_supervisor_cacheline_delete,
+  .rekey = dt_supervisor_rekey,
+};
 
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
@@ -1438,6 +1460,14 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(pipecache_size);
   }
   darktable.dtresources.pixelpipe_memory = pipecache_size;
+
+  /* The cache announces three things -- it is full, a cacheline became readable, and the
+   * supervisor's bookkeeping -- and used to do it by calling dt_control_log(), raising
+   * DT_SIGNAL_CACHELINE_READY and calling dt_supervisor_*() itself. That put control/ and
+   * develop/ inside a module that is otherwise pure storage. The orchestrator wires them
+   * here instead: the cache says what happened, the application decides who hears it. */
+  dt_dev_pixelpipe_cache_set_handlers(_pixelpipe_cache_warn, _pixelpipe_cache_ready,
+                                      &_pixelpipe_cache_observer);
   if(IS_NULL_PTR(darktable.pixelpipe_cache))
   {
     fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");

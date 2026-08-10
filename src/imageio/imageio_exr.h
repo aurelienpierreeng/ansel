@@ -25,7 +25,7 @@
 #define DT_IMAGEIO_IMAGEIO_EXR_H
 
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -20,7 +20,7 @@
 #define DT_GUI_DTGTK_THUMBTABLE_INFO_H
 
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 
 #include <glib.h>
 #include <limits.h>
