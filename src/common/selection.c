@@ -36,8 +36,7 @@
 */
 
 #include "common/utility.h"
-#include "database/database.h"
-#include "database/sql_debug.h"
+#include "database/selection_repository.h"
 #include "common/collection.h"
 #include "common/selection.h"
 #include "system/macros.h"
@@ -45,7 +44,6 @@
 #include "common/image.h"
 #include "control/signal.h"
 
-static sqlite3_stmt *_selection_database_to_glist_stmt = NULL;
 
 typedef struct dt_selection_t
 {
@@ -102,38 +100,15 @@ static void _update_last_ids(dt_selection_t *selection)
 // WARNING: that doesn't take care of visible/unvisible image group members in GUI
 static void _clean_missing_ids(dt_selection_t *selection)
 {
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
-                        "DELETE FROM main.selected_images"
-                        " WHERE imgid NOT IN"
-                        " (SELECT imgid FROM memory.collected_images)", NULL, NULL, NULL);
+  dt_selection_repository_drop_uncollected();
 }
 
 // Unroll DB imgids to GList
 static GList *_selection_database_to_glist(dt_selection_t *selection)
 {
-  GList *list = NULL;
-
-  if(!_selection_database_to_glist_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT imgid FROM main.selected_images ORDER BY imgid DESC",
-                                -1, &_selection_database_to_glist_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _selection_database_to_glist_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
-    list = g_list_prepend(list, GINT_TO_POINTER(imgid));
-  }
-
-  // Don't reverse the GList since we ordered SQL rows by descending order
-  // and prepend to the GList.
-  return list;
+  // Don't reverse the GList: the query orders SQL rows descending and the repository
+  // prepends, so what comes back is already ascending.
+  return dt_selection_repository_get_all();
 }
 
  void dt_selection_reload_from_database_real(dt_selection_t *selection)
@@ -196,18 +171,14 @@ static void _selection_select(dt_selection_t *selection, int32_t imgid)
 {
   if(imgid < 0) return;
 
-  gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.selected_images VALUES (%d)", imgid);
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
-  dt_free(query);
+  dt_selection_repository_select(imgid);
 }
 
 static void _selection_deselect(dt_selection_t *selection, int32_t imgid)
 {
   if(imgid < 0) return;
 
-  gchar *query = g_strdup_printf("DELETE FROM main.selected_images WHERE imgid = %d", imgid);
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
-  dt_free(query);
+  dt_selection_repository_deselect(imgid);
 }
 
 void dt_selection_push(dt_selection_t *selection)
@@ -215,9 +186,7 @@ void dt_selection_push(dt_selection_t *selection)
   // Backup current selection
   if(!selection->stacked)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.selected_backup", NULL, NULL, NULL);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO memory.selected_backup"
-                                                         " SELECT * FROM main.selected_images", NULL, NULL, NULL);
+    dt_selection_repository_push();
     selection->stacked = TRUE;
 
     // Commit from DB to GList of imgids
@@ -232,9 +201,7 @@ void dt_selection_pop(dt_selection_t *selection)
   // Restore current selection
   if(selection->stacked)
   {
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM main.selected_images", NULL, NULL, NULL);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "INSERT INTO main.selected_images"
-                                                         " SELECT * FROM memory.selected_backup", NULL, NULL, NULL);
+    dt_selection_repository_pop();
     selection->stacked = FALSE;
 
     // Commit from DB to GList of imgids
@@ -264,17 +231,13 @@ void dt_selection_free(dt_selection_t *selection)
                                      (gpointer)selection);
   g_list_free(selection->ids);
   selection->ids = NULL;
-  if(_selection_database_to_glist_stmt)
-  {
-    sqlite3_finalize(_selection_database_to_glist_stmt);
-    _selection_database_to_glist_stmt = NULL;
-  }
+  dt_selection_repository_cleanup();
   dt_free(selection);
 }
 
 void dt_selection_clear(dt_selection_t *selection)
 {
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM main.selected_images", NULL, NULL, NULL);
+  dt_selection_repository_clear();
   _reset_ids_list(selection);
   _update_gui();
 }
@@ -341,9 +304,9 @@ void dt_selection_select_list(struct dt_selection_t *selection, const GList *con
       int32_t imgid = _list_iterate(selection, &list, &count, TRUE);
       ids = dt_util_dstrcat(ids, (ids[0] != '\0') ? ", (%i)" : "(%i)", imgid);
     }
-    gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.selected_images VALUES %s", ids);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
-    dt_free(query);
+    dt_selection_repository_select_list(ids);
+    // its sibling below has always freed this; this one never did
+    dt_free(ids);
   }
 
   _update_gui();
@@ -364,9 +327,7 @@ void dt_selection_deselect_list(struct dt_selection_t *selection, const GList *c
       int32_t imgid = _list_iterate(selection, &list, &count, FALSE);
       ids = dt_util_dstrcat(ids, (ids[0] != '\0') ? ", %i" : "%i", imgid);
     }
-    gchar *query = g_strdup_printf("DELETE FROM main.selected_images WHERE imgid IN (%s)", ids);
-    DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL);
-    dt_free(query);
+    dt_selection_repository_deselect_list(ids);
     dt_free(ids);
   }
 

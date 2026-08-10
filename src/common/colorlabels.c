@@ -34,11 +34,10 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "database/database.h"
 #include "common/colorlabels.h"
 #include "common/collection.h"
 #include "system/macros.h"
-#include "database/sql_debug.h"
+#include "database/colorlabel_repository.h"
 #include "caches/image_cache.h"
 #include "common/undo.h"
 #include "control/control.h"
@@ -78,31 +77,9 @@ typedef struct dt_undo_colorlabels_t
   int after;
 } dt_undo_colorlabels_t;
 
-static sqlite3_stmt *_colorlabels_get_labels_stmt = NULL;
-static sqlite3_stmt *_colorlabels_remove_labels_stmt = NULL;
-static sqlite3_stmt *_colorlabels_set_label_stmt = NULL;
-static sqlite3_stmt *_colorlabels_remove_label_stmt = NULL;
-
 int dt_colorlabels_get_labels(const int32_t imgid)
 {
-  if(IS_NULL_PTR(_colorlabels_get_labels_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT color FROM main.color_labels WHERE imgid = ?1",
-                                -1, &_colorlabels_get_labels_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _colorlabels_get_labels_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  int colors = 0;
-
-  // Colors are int between 0 and 5, turn them into octal bitmask
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-    colors |= (1 << sqlite3_column_int(stmt, 0));
-  return colors;
+  return dt_colorlabel_repository_get(imgid);
 }
 
 void dt_colorlabels_set_labels(const int32_t imgid, const int colors)
@@ -164,77 +141,22 @@ static void _colorlabels_undo_data_free(gpointer data)
 
 void dt_colorlabels_remove_labels(const int32_t imgid)
 {
-  if(IS_NULL_PTR(_colorlabels_remove_labels_stmt))
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "DELETE FROM main.color_labels WHERE imgid=?1",
-                                -1, &_colorlabels_remove_labels_stmt, NULL);
-  }
-  sqlite3_stmt *stmt = _colorlabels_remove_labels_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
+  dt_colorlabel_repository_remove_all(imgid);
 }
 
 void dt_colorlabels_set_label(const int32_t imgid, const int color)
 {
-  if(IS_NULL_PTR(_colorlabels_set_label_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "INSERT OR IGNORE INTO main.color_labels (imgid, color) VALUES (?1, ?2)",
-                                -1, &_colorlabels_set_label_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _colorlabels_set_label_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, color);
-  sqlite3_step(stmt);
+  dt_colorlabel_repository_set(imgid, color);
 }
 
 void dt_colorlabels_remove_label(const int32_t imgid, const int color)
 {
-  if(IS_NULL_PTR(_colorlabels_remove_label_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "DELETE FROM main.color_labels WHERE imgid=?1 AND color=?2",
-                                -1, &_colorlabels_remove_label_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _colorlabels_remove_label_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, color);
-  sqlite3_step(stmt);
+  dt_colorlabel_repository_remove(imgid, color);
 }
 
 void dt_colorlabels_cleanup(void)
 {
-  if(_colorlabels_get_labels_stmt)
-  {
-    sqlite3_finalize(_colorlabels_get_labels_stmt);
-    _colorlabels_get_labels_stmt = NULL;
-  }
-  if(_colorlabels_remove_labels_stmt)
-  {
-    sqlite3_finalize(_colorlabels_remove_labels_stmt);
-    _colorlabels_remove_labels_stmt = NULL;
-  }
-  if(_colorlabels_set_label_stmt)
-  {
-    sqlite3_finalize(_colorlabels_set_label_stmt);
-    _colorlabels_set_label_stmt = NULL;
-  }
-  if(_colorlabels_remove_label_stmt)
-  {
-    sqlite3_finalize(_colorlabels_remove_label_stmt);
-    _colorlabels_remove_label_stmt = NULL;
-  }
+  dt_colorlabel_repository_cleanup();
 }
 
 typedef enum dt_colorlabels_actions_t
@@ -335,25 +257,7 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
 
 int dt_colorlabels_check_label(const int32_t imgid, const int color)
 {
-  if(imgid <= 0) return 0;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT * FROM main.color_labels WHERE imgid=?1 AND color=?2 LIMIT 1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, color);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    sqlite3_finalize(stmt);
-    return 1;
-  }
-  else
-  {
-    sqlite3_finalize(stmt);
-    return 0;
-  }
+  return dt_colorlabel_repository_has(imgid, color) ? 1 : 0;
 }
 
 // FIXME: XMP uses Red, Green, ... while we use red, green, ... What should this function return?

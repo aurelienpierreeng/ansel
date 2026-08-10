@@ -18,7 +18,7 @@
 
 #include "database/image_repository.h"
 
-#include "common/colorlabels.h"
+#include "database/colorlabel_repository.h"
 #include "database/database.h"
 #include "common/datetime.h"
 #include "database/sql_debug.h"
@@ -289,10 +289,79 @@ void dt_image_repository_store(const dt_image_t *img)
   if(rc != SQLITE_DONE) fprintf(stderr, "[image_cache_write_release] sqlite3 error %d\n", rc);
   sqlite3_finalize(stmt);
 
-  dt_colorlabels_set_labels(img->id, img->color_labels);
+  /* Straight to the table. This used to call dt_colorlabels_set_labels() in common/, i.e.
+   * the persistence layer reaching up into the domain to have it issue the queries the
+   * persistence layer is for -- the only edge in that direction here. */
+  for(int color = 0; color < 5; color++)
+  {
+    if(img->color_labels & (1 << color))
+      dt_colorlabel_repository_set(img->id, color);
+    else
+      dt_colorlabel_repository_remove(img->id, color);
+  }
   _image_write_history_hash(img);
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ *  Grouping
+ * ------------------------------------------------------------------------------------- */
+
+/* Collect the `id` column of a stepped statement into a list, dropping @p exclude_imgid. */
+static GList *_collect_ids(sqlite3_stmt *stmt, const int32_t exclude_imgid)
+{
+  GList *ids = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    const int32_t id = sqlite3_column_int(stmt, 0);
+    if(id != exclude_imgid) ids = g_list_prepend(ids, GINT_TO_POINTER(id));
+  }
+  sqlite3_finalize(stmt);
+  return g_list_reverse(ids);
+}
+
+GList *dt_image_repository_get_group_members(const int32_t group_id, const int32_t exclude_imgid)
+{
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT id FROM main.images WHERE group_id = ?1", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, group_id);
+  return _collect_ids(stmt, exclude_imgid);
+}
+
+GList *dt_image_repository_get_group_members_in_collection(const int32_t group_id,
+                                                           const char *collection_query,
+                                                           const int32_t exclude_imgid)
+{
+  if(IS_NULL_PTR(collection_query)) return NULL;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  gchar *query = g_strdup_printf("SELECT id"
+                                 "  FROM main.images"
+                                 "  WHERE group_id = %d AND id IN (%s)",
+                                 group_id, collection_query);
+  // clang-format on
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  dt_free(query);
+  return _collect_ids(stmt, exclude_imgid);
+}
+
+void dt_image_repository_reassign_group(const int32_t from_group_id, const int32_t to_group_id,
+                                        const int32_t exclude_imgid)
+{
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "UPDATE main.images SET group_id = ?1 WHERE group_id = ?2 AND id != ?3",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, to_group_id);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, from_group_id);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, exclude_imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
 
 void dt_image_repository_cleanup(void)
 {

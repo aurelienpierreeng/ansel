@@ -81,6 +81,41 @@ void dt_image_repository_store(const dt_image_t *img);
  */
 void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt);
 
+/* ---------------------------------------------------------------------------------------
+ *  Grouping
+ *
+ *  `main.images.group_id`. Every image belongs to exactly one group, whose id is the id of
+ *  one of its members; a lone image is its own group. These return and take plain image
+ *  ids -- `common/grouping.c` keeps the rules (who leads a group, what happens to the rest
+ *  when the leader leaves) and the image-cache updates that go with them.
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Image ids in group @p group_id.
+ *
+ * @param exclude_imgid an image to leave out, or -1 to leave nothing out.
+ * @return a `GList` of ids as `GINT_TO_POINTER`, in database order. Free with g_list_free().
+ */
+GList *dt_image_repository_get_group_members(const int32_t group_id, const int32_t exclude_imgid);
+
+/**
+ * @brief Image ids in group @p group_id that the current collection also contains.
+ *
+ * @param collection_query a SELECT yielding the collection's image ids, as
+ *        dt_collection_get_query() returns it. Interpolated into an `IN (...)`: the caller
+ *        owns whatever it puts in here, and nothing else in this file takes SQL as a
+ *        parameter. It is the one query the collection module composes and this one has to
+ *        run, and it goes away when the collection gets a repository of its own.
+ * @param exclude_imgid an image to leave out, or -1 to leave nothing out.
+ */
+GList *dt_image_repository_get_group_members_in_collection(const int32_t group_id,
+                                                           const char *collection_query,
+                                                           const int32_t exclude_imgid);
+
+/** @brief Move every member of @p from_group_id into @p to_group_id, except @p exclude_imgid. */
+void dt_image_repository_reassign_group(const int32_t from_group_id, const int32_t to_group_id,
+                                        const int32_t exclude_imgid);
+
 /**
  * @brief Finalise the prepared statements. Called at shutdown, after the last cache release
  * and before the database connection closes.
