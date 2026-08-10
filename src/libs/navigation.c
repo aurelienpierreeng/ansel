@@ -272,7 +272,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
                                         _lib_navigation_restart_cache_wait, self))
       return TRUE;
 
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, cache_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, cache_entry);
 
     wd = dev->preview_pipe->backbuf.width;
     ht = dev->preview_pipe->backbuf.height;
@@ -292,7 +292,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     cairo_surface_destroy(tmp_surface);
     cairo_destroy(cri);
 
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, cache_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, cache_entry);
 
     imgid = dev->image_storage.id;
   }

@@ -1438,7 +1438,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // performance, an abort loses the session.
   size_t pipecache_size = darktable.dtresources.pixelpipe_memory;
   dt_dev_pixelpipe_cache_init(pipecache_size);
-  while(IS_NULL_PTR(dt_pixelpipe_cache_get_global()) && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
+  while(!dt_dev_pixelpipe_cache_is_ready() && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
   {
     pipecache_size /= 2;
     fprintf(stderr,
@@ -1456,7 +1456,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
    * here instead: the cache says what happened, the application decides who hears it. */
   dt_dev_pixelpipe_cache_set_handlers(_pixelpipe_cache_warn, _pixelpipe_cache_ready,
                                       &_pixelpipe_cache_observer);
-  if(IS_NULL_PTR(dt_pixelpipe_cache_get_global()))
+  if(!dt_dev_pixelpipe_cache_is_ready())
   {
     fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");
     dt_gui_splash_close();
@@ -1727,14 +1727,14 @@ void dt_cleanup()
   darktable.iop_order_rules = NULL;
 
 #ifdef HAVE_OPENCL
-  if(dt_opencl_is_inited() && dt_pixelpipe_cache_get_global())
+  if(dt_opencl_is_inited() && dt_dev_pixelpipe_cache_is_ready())
   {
     for(int i = 0; i < dt_opencl_get_num_devices(); i++)
       dt_opencl_finish(i);
   }
 #endif
 
-  dt_dev_pixelpipe_cache_cleanup(dt_pixelpipe_cache_get_global());
+  dt_dev_pixelpipe_cache_cleanup();
   dt_supervisor_cleanup();
 
   dt_opencl_cleanup();
@@ -2147,7 +2147,7 @@ int dt_worker_threads()
 size_t dt_get_available_mem()
 {
   size_t cache_used = 0, cache_max = 0;
-  dt_dev_pixelpipe_cache_get_usage(dt_pixelpipe_cache_get_global(), &cache_used, &cache_max);
+  dt_dev_pixelpipe_cache_get_usage(&cache_used, &cache_max);
   const size_t budget_left = cache_max - cache_used;
 
   // The budget is only a startup-time plan: cap it by what the system can actually

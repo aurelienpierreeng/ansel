@@ -509,12 +509,12 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
    * They reopen the current module input/output cachelines by immutable `global_hash`, then take a temporary
    * ref plus read lock only for the duration of the sampling pass so concurrent cache recycling cannot free
    * the payload mid-read. */
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
   if(have_output)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, output_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, output_entry);
   }
 
   const gboolean sampled_input
@@ -544,11 +544,11 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   if(have_output)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, output_entry);
   }
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
 
   if(!sampled_input)
   {

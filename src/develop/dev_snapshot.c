@@ -326,7 +326,7 @@ static void _draw_preview_fallback(dt_dev_snapshot_engine_t *engine, dt_develop_
   const float tx = 0.5f * width - dev->roi.x * preview_wd * preview_scale;
   const float ty = 0.5f * height - dev->roi.y * preview_ht * preview_scale;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, engine->preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, engine->preview_locked.entry);
   cairo_surface_set_device_scale(engine->preview_locked.surface, ppd, ppd);
   cairo_save(cr);
   cairo_translate(cr, tx, ty);
@@ -335,7 +335,7 @@ static void _draw_preview_fallback(dt_dev_snapshot_engine_t *engine, dt_develop_
   cairo_set_source_surface(cr, engine->preview_locked.surface, 0, 0);
   cairo_fill(cr);
   cairo_restore(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, engine->preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, engine->preview_locked.entry);
 }
 
 gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int32_t imgid,

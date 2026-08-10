@@ -1059,19 +1059,18 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
    * returning and our ref_count_entry() call — leaving us with a dangling data pointer that
    * the OpenMP conversion threads then read → SIGSEGV.  ref_entry_by_hash() closes that
    * window by holding cache->lock across both the lookup and the increment. */
-  if(!dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_pixelpipe_cache_get_global(),
-                                               dt_dev_backbuf_get_hash(&pipe.backbuf),
+  if(!dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_backbuf_get_hash(&pipe.backbuf),
                                                &data, &cache_entry)
      || !data)
   {
     if(cache_entry)
-      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, cache_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
     goto error;
   }
 
   /* Hold a read lock for the duration of the conversion so no writer can replace the buffer
    * while the OpenMP threads are reading it. */
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, cache_entry);
 
   // Down-conversion to low-precision formats:
   const size_t pixels = pipe.backbuf.width * pipe.backbuf.height * 4;
@@ -1129,8 +1128,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   }
 
   // Decrease ref count on the cache entry and release the read lock
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, cache_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, cache_entry);
 
   if(IS_NULL_PTR(outbuf)) goto error;
 

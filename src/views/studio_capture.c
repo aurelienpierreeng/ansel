@@ -309,14 +309,13 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   // Taking each busy lock waits for the running pipe to release it.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
   dt_dev_set_backbuf(&dev->pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(),
-                                    dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
   dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
@@ -325,16 +324,15 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   {
     dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
     dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
-    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(),
-                                      dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
+    dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
     dt_dev_set_backbuf(&dev->virtual_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                        DT_PIXELPIPE_CACHE_HASH_INVALID);
     dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
   }
 
-  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->pipe->last_devid);
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->pipe->last_devid);
   if(dev->preview_pipe->last_devid != dev->pipe->last_devid)
-    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->preview_pipe->last_devid);
+    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->preview_pipe->last_devid);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
@@ -380,11 +378,11 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   dev->image_storage.id = -1;
 
   // Release the histogram backbuf cache references.
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->raw_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->raw_histogram));
   dt_dev_backbuf_set_hash(&dev->raw_histogram, -1);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->output_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->output_histogram));
   dt_dev_backbuf_set_hash(&dev->output_histogram, -1);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->display_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->display_histogram));
   dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 }
 
