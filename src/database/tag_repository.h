@@ -194,6 +194,35 @@ typedef enum dt_tag_kind_t
  */
 GList *dt_tag_repository_get_ids_for_images(const char *imgid_list, const dt_tag_kind_t kind);
 
+/**
+ * @brief Every user tag with how often it is used and how much of the selection carries it.
+ *
+ * @param nb_selected how many images are selected, which `common/selection.c` knows and
+ *        the database does not.
+ * @return `GList` of `dt_tag_t *` ordered by name, with `count` = total attachments and
+ *         `select` already folded into the tri-state. `leave` is left to the caller.
+ *
+ * @note This one fills `select` itself, where dt_tag_repository_get_attached() leaves it.
+ *       There, `count` IS the per-image number, so the caller can fold it afterwards;
+ *       here `count` is the tag's global usage and the per-selection number appears only
+ *       inside the query. Rather than hand back a second parallel list for it, or park it
+ *       in a field whose units then lie, the fold happens where the number exists.
+ */
+GList *dt_tag_repository_get_with_usage(const uint32_t nb_selected);
+
+/**
+ * @brief User tags attached to at least one image of the current collection, by name.
+ * @return `GList` of `dt_tag_t *` with `tag` and `id` set only -- the caller shows names.
+ */
+GList *dt_tag_repository_get_collection_tags(void);
+
+/**
+ * @brief Names of the tags on @p imgid that start with @p category.
+ * @return `GList` of newly allocated full tag names, in query order. The caller slices
+ *         them into path components; that is string work, not storage.
+ */
+GList *dt_tag_repository_get_names_under(const int32_t imgid, const char *category);
+
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 void dt_tag_repository_cleanup(void);
 
