@@ -554,10 +554,120 @@ void dt_preset_repository_delete_by_rowid(const int rowid)
   sqlite3_finalize(stmt);
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ *  Auto-apply conditions
+ * ------------------------------------------------------------------------------------- */
+
+/* One cached statement per column, as gui/presets.c held them. The queries are literal and
+ * indexed by the enum rather than assembled, so `grep "iso_min" src/database` still finds
+ * the one that writes it. */
+static sqlite3_stmt *_range_stmt[DT_PRESET_RANGE_LAST] = { NULL };
+static sqlite3_stmt *_flag_stmt[DT_PRESET_FLAG_LAST] = { NULL };
+static sqlite3_stmt *_camera_stmt = NULL;
+
+static const char *const _range_query[DT_PRESET_RANGE_LAST] = {
+  [DT_PRESET_RANGE_ISO] = "UPDATE data.presets"
+                          " SET iso_min=?1, iso_max=?2"
+                          " WHERE operation=?3 AND op_version=?4 AND name=?5",
+  [DT_PRESET_RANGE_APERTURE] = "UPDATE data.presets"
+                               " SET aperture_min=?1, aperture_max=?2"
+                               " WHERE operation=?3 AND op_version=?4 AND name=?5",
+  [DT_PRESET_RANGE_EXPOSURE] = "UPDATE data.presets"
+                               " SET exposure_min=?1, exposure_max=?2"
+                               " WHERE operation=?3 AND op_version=?4 AND name=?5",
+  [DT_PRESET_RANGE_FOCAL_LENGTH] = "UPDATE data.presets"
+                                   " SET focal_length_min=?1, focal_length_max=?2"
+                                   " WHERE operation=?3 AND op_version=?4 AND name=?5",
+};
+
+static const char *const _flag_query[DT_PRESET_FLAG_LAST] = {
+  [DT_PRESET_FLAG_FORMAT] = "UPDATE data.presets"
+                            " SET format=?1"
+                            " WHERE operation=?2 AND op_version=?3 AND name=?4",
+  [DT_PRESET_FLAG_AUTOAPPLY] = "UPDATE data.presets"
+                               " SET autoapply=?1"
+                               " WHERE operation=?2 AND op_version=?3 AND name=?4",
+  [DT_PRESET_FLAG_FILTER] = "UPDATE data.presets"
+                            " SET filter=?1"
+                            " WHERE operation=?2 AND op_version=?3 AND name=?4",
+};
+
+void dt_preset_repository_update_range(const char *operation, const int op_version, const char *name,
+                                       const dt_preset_range_t range,
+                                       const double min, const double max)
+{
+  if(range < 0 || range >= DT_PRESET_RANGE_LAST) return;
+
+  if(IS_NULL_PTR(_range_stmt[range]))
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _range_query[range],
+                                -1, &_range_stmt[range], NULL);
+
+  sqlite3_stmt *stmt = _range_stmt[range];
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, min);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, max);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, op_version);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, name, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+}
+
+void dt_preset_repository_update_flag(const char *operation, const int op_version, const char *name,
+                                      const dt_preset_flag_t flag, const int value)
+{
+  if(flag < 0 || flag >= DT_PRESET_FLAG_LAST) return;
+
+  if(IS_NULL_PTR(_flag_stmt[flag]))
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _flag_query[flag],
+                                -1, &_flag_stmt[flag], NULL);
+
+  sqlite3_stmt *stmt = _flag_stmt[flag];
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, value);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, op_version);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+}
+
+void dt_preset_repository_update_camera(const char *operation, const int op_version, const char *name,
+                                        const char *maker, const char *model, const char *lens)
+{
+  if(IS_NULL_PTR(_camera_stmt))
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "UPDATE data.presets"
+                                " SET maker='%' || ?1 || '%', model=?2, lens=?3"
+                                " WHERE operation=?4 AND op_version=?5 AND name=?6",
+                                -1, &_camera_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _camera_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+
+  /* An empty model or lens means "any", and the auto-apply query matches with LIKE, so it
+   * has to be stored as the wildcard rather than as "". */
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, maker, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, (model && *model) ? model : "%", -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, (lens && *lens) ? lens : "%", -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, op_version);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 6, name, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+}
+
 void dt_preset_repository_cleanup(void)
 {
   sqlite3_stmt **const cached[]
-      = { &_lib_add_stmt, &_lib_remove_stmt, &_lib_select_stmt, &_lib_delete_operation_stmt };
+      = { &_lib_add_stmt, &_lib_remove_stmt, &_lib_select_stmt, &_lib_delete_operation_stmt,
+          &_camera_stmt };
   for(size_t i = 0; i < sizeof(cached) / sizeof(cached[0]); i++)
   {
     if(*cached[i])
@@ -566,6 +676,20 @@ void dt_preset_repository_cleanup(void)
       *cached[i] = NULL;
     }
   }
+
+  for(int i = 0; i < DT_PRESET_RANGE_LAST; i++)
+    if(_range_stmt[i])
+    {
+      sqlite3_finalize(_range_stmt[i]);
+      _range_stmt[i] = NULL;
+    }
+
+  for(int i = 0; i < DT_PRESET_FLAG_LAST; i++)
+    if(_flag_stmt[i])
+    {
+      sqlite3_finalize(_flag_stmt[i]);
+      _flag_stmt[i] = NULL;
+    }
 }
 
 // clang-format off

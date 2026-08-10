@@ -198,6 +198,52 @@ void dt_preset_repository_update_params_by_rowid(const int rowid, const int op_v
 /** @brief Delete one row by rowid. */
 void dt_preset_repository_delete_by_rowid(const int rowid);
 
+/* ---------------------------------------------------------------------------------------
+ *  Auto-apply conditions
+ *
+ *  The preset edit dialog changes one condition at a time, so these are one statement per
+ *  field rather than a whole-row write. Grouped into two families by shape: a numeric
+ *  range, and a single integer. The enum picks the columns; nothing here builds SQL from a
+ *  string, so every query in this file stays greppable.
+ * ------------------------------------------------------------------------------------- */
+
+typedef enum dt_preset_range_t
+{
+  DT_PRESET_RANGE_ISO = 0,
+  DT_PRESET_RANGE_APERTURE,
+  DT_PRESET_RANGE_EXPOSURE,
+  DT_PRESET_RANGE_FOCAL_LENGTH,
+  DT_PRESET_RANGE_LAST
+} dt_preset_range_t;
+
+typedef enum dt_preset_flag_t
+{
+  DT_PRESET_FLAG_FORMAT = 0, /**< which of raw/LDR/HDR the preset applies to */
+  DT_PRESET_FLAG_AUTOAPPLY,
+  DT_PRESET_FLAG_FILTER,     /**< whether the preset is offered as a filter at all */
+  DT_PRESET_FLAG_LAST
+} dt_preset_flag_t;
+
+/** @brief Set the `<range>_min` / `<range>_max` pair of `(operation, op_version, name)`. */
+void dt_preset_repository_update_range(const char *operation, const int op_version, const char *name,
+                                       const dt_preset_range_t range,
+                                       const double min, const double max);
+
+/** @brief Set one integer condition of `(operation, op_version, name)`. */
+void dt_preset_repository_update_flag(const char *operation, const int op_version, const char *name,
+                                      const dt_preset_flag_t flag, const int value);
+
+/**
+ * @brief Set the camera match of `(operation, op_version, name)`.
+ *
+ * @param maker stored wrapped in `%` on both sides, so it matches as a substring.
+ * @param model,lens an empty string is stored as `%`, i.e. "any". That substitution is
+ *        here rather than in the caller because it is about how the row has to look for
+ *        the auto-apply query to match it.
+ */
+void dt_preset_repository_update_camera(const char *operation, const int op_version, const char *name,
+                                        const char *maker, const char *model, const char *lens);
+
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 void dt_preset_repository_cleanup(void);
 
