@@ -79,7 +79,7 @@ extern "C" {
 
 
 #ifdef _DEBUG
-#include <assert.h>
+#include <assert.h> // conditional-ok: assert() is used only in this arm; the release arm below reports and continues
 #define __DT_DEBUG_ASSERT__(xin)                                                                                  \
   {                                                                                                               \
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wshadow\"") const int x = xin;              \
