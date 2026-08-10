@@ -419,9 +419,9 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
       dt_film_open(filmid);
       // make sure buffers are loaded (load full for testing)
       dt_mipmap_buffer_t buf;
-      dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+      dt_mipmap_cache_get(&buf, id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
       gboolean loaded = (!IS_NULL_PTR(buf.buf));
-      dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+      dt_mipmap_cache_release(&buf);
       if(!loaded)
       {
         id = 0;
@@ -2146,7 +2146,9 @@ int dt_worker_threads()
 
 size_t dt_get_available_mem()
 {
-  const size_t budget_left = dt_pixelpipe_cache_get_global()->max_memory - dt_pixelpipe_cache_get_global()->current_memory;
+  size_t cache_used = 0, cache_max = 0;
+  dt_dev_pixelpipe_cache_get_usage(dt_pixelpipe_cache_get_global(), &cache_used, &cache_max);
+  const size_t budget_left = cache_max - cache_used;
 
   // The budget is only a startup-time plan: cap it by what the system can actually
   // back right now without dropping under the pressure floor (issue #1083), so
@@ -2159,7 +2161,7 @@ size_t dt_get_available_mem()
 
   const size_t pressure_floor = dt_get_memory_pressure_floor();
   const size_t sys_room = ((sys_available > pressure_floor) ? sys_available - pressure_floor : 0)
-                          + dt_pixelpipe_cache_get_global()->current_memory / 2;
+                          + cache_used / 2;
   return MIN(budget_left, sys_room);
 }
 

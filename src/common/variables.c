@@ -207,7 +207,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   }
   else if(params->imgid > UNKNOWN_IMAGE)
   {
-    img = dt_image_cache_get(dt_image_cache_get_global(), params->imgid, 'r');
+    img = dt_image_cache_get(params->imgid, 'r');
     release = IMGID;
   }
 
@@ -259,7 +259,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
     }
     case IMGID:
     {
-      dt_image_cache_read_release(dt_image_cache_get_global(), img);
+      dt_image_cache_read_release(img);
       break;
     }
   }
@@ -473,9 +473,9 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   {
     gchar buffer[1024];
     const dt_image_t *img = params->img ? (dt_image_t *)params->img
-                                        : dt_image_cache_get(dt_image_cache_get_global(), params->imgid, 'r');
+                                        : dt_image_cache_get(params->imgid, 'r');
     dt_image_print_exif(img, buffer, sizeof(buffer));
-    if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(img);
     result = g_strdup(buffer);
   }
   else if(_has_prefix(variable, "VERSION.NAME") || _has_prefix(variable, "VERSION_NAME"))

@@ -58,14 +58,23 @@
 #include <inttypes.h>
 #include "colorprofiles/colorspaces.h"   // dt_colorspaces_free_image_profile
 
+/* PRIVATE. Nothing outside this file reads a field of it -- the header exposes the
+ * type as an opaque handle so that it cannot. */
+typedef struct dt_image_cache_t
+{
+  dt_cache_t cache;
+}
+dt_image_cache_t;
+
+
 /* The cache instance, owned HERE. It used to be calloc'd by darktable.c and hung off the
  * application struct, so the accessor lived in the orchestrator and the struct was reachable
  * from anything that included darktable.h. */
 static dt_image_cache_t *_image_cache = NULL;
 
-dt_image_cache_t *dt_image_cache_get_global(void)
+gboolean dt_image_cache_is_ready(void)
 {
-  return _image_cache;
+  return !IS_NULL_PTR(_image_cache);
 }
 
 
@@ -270,15 +279,17 @@ void dt_image_cache_cleanup(void)
   _image_cache = NULL;
 }
 
-void dt_image_cache_print(dt_image_cache_t *cache)
+void dt_image_cache_print(void)
 {
+  dt_image_cache_t *cache = _image_cache;
   printf("[image cache] fill %.2f/%.2f MB (%.2f%%)\n", cache->cache.cost / (1024.0 * 1024.0),
          cache->cache.cost_quota / (1024.0 * 1024.0),
          (float)cache->cache.cost / (float)cache->cache.cost_quota);
 }
 
-void dt_image_cache_get_usage(dt_image_cache_t *cache, size_t *current, size_t *max)
+void dt_image_cache_get_usage(size_t *current, size_t *max)
 {
+  dt_image_cache_t *cache = _image_cache;
   if(current) *current = 0;
   if(max) *max = 0;
   if(IS_NULL_PTR(cache)) return;
@@ -288,8 +299,9 @@ void dt_image_cache_get_usage(dt_image_cache_t *cache, size_t *current, size_t *
   dt_pthread_mutex_unlock(&cache->cache.lock);
 }
 
-GArray *dt_image_cache_get_entries_stats(dt_image_cache_t *cache)
+GArray *dt_image_cache_get_entries_stats(void)
 {
+  dt_image_cache_t *cache = _image_cache;
   GArray *out = g_array_new(FALSE, FALSE, sizeof(dt_image_cache_stats_entry_t));
   if(IS_NULL_PTR(cache)) return out;
 
@@ -312,8 +324,9 @@ GArray *dt_image_cache_get_entries_stats(dt_image_cache_t *cache)
   return out;
 }
 
-dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, char mode)
+dt_image_t *dt_image_cache_get(const int32_t imgid, char mode)
 {
+  dt_image_cache_t *cache = _image_cache;
   if(imgid <= 0) return NULL;
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, mode);
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
@@ -330,8 +343,9 @@ dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, cha
   return img;
 }
 
-dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid, char mode)
+dt_image_t *dt_image_cache_testget(const int32_t imgid, char mode)
 {
+  dt_image_cache_t *cache = _image_cache;
   if(imgid <= 0) return NULL;
   dt_cache_entry_t *entry = dt_cache_testget(&cache->cache, (uint32_t)imgid, mode);
   if(IS_NULL_PTR(entry)) return 0;
@@ -344,8 +358,9 @@ dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid,
 
 // Always reload the cache entry from DB before returning it.
 // This is critical for IMAGE_INFO_CHANGED: other handlers will read from the cache.
-dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t imgid, char mode)
+dt_image_t *dt_image_cache_get_reload(const int32_t imgid, char mode)
 {
+  dt_image_cache_t *cache = _image_cache;
   if(imgid <= 0) return NULL;
 
   // We must take a write lock to reload in-place, then demote to read if requested.
@@ -383,8 +398,9 @@ int dt_image_invalid(const dt_image_t *img)
   return (IS_NULL_PTR(img) || img->id <= 0);
 }
 
-int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img)
+int dt_image_cache_seed(const dt_image_t *img)
 {
+  dt_image_cache_t *cache = _image_cache;
   if(IS_NULL_PTR(cache) || dt_image_invalid(img)) return -1;
 
   dt_image_t seeded = *img;
@@ -408,9 +424,9 @@ static void _image_cache_info_changed_reload_callback(gpointer instance, gpointe
     const int32_t imgid = GPOINTER_TO_INT(l->data);
     if(imgid <= 0) continue;
 
-    dt_image_t *img = dt_image_cache_get_reload(dt_image_cache_get_global(), imgid, 'r');
+    dt_image_t *img = dt_image_cache_get_reload(imgid, 'r');
     if(img)
-      dt_image_cache_read_release(dt_image_cache_get_global(), img);
+      dt_image_cache_read_release(img);
   }
 }
 
@@ -422,8 +438,9 @@ void dt_image_cache_connect_info_changed_first(const struct dt_control_signal_t 
 }
 
 // drops the read lock on an image struct
-void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
+void dt_image_cache_read_release(const dt_image_t *img)
 {
+  dt_image_cache_t *cache = _image_cache;
   if(IS_NULL_PTR(img) || img->id <= 0) return;
   const uint64_t self_hash = _image_cache_self_hash(img);
   if(self_hash != img->self_hash)
@@ -435,8 +452,9 @@ void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
 
 // drops the write privileges on an image struct.
 // this triggers a write-through to sql, and optionally queues xmp sidecar writing.
-void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_image_cache_write_mode_t mode)
+void dt_image_cache_write_release(dt_image_t *img, dt_image_cache_write_mode_t mode)
 {
+  dt_image_cache_t *cache = _image_cache;
   if(IS_NULL_PTR(img) || img->id <= 0) return;
 
   const uint64_t self_hash = _image_cache_self_hash(img);
@@ -517,27 +535,28 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
 
 
 // remove the image from the cache
-void dt_image_cache_remove(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_remove(const int32_t imgid)
 {
+  dt_image_cache_t *cache = _image_cache;
   dt_cache_remove(&cache->cache, imgid);
 }
 
-void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_set_export_timestamp(const int32_t imgid)
 {
   if(imgid <= 0) return;
-  dt_image_t *img = dt_image_cache_get(cache, imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img)) return;
   img->export_timestamp = dt_datetime_now_to_gtimespan();
-  dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
 }
 
-void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache, const int32_t imgid)
+void dt_image_cache_set_print_timestamp(const int32_t imgid)
 {
   if(imgid <= 0) return;
-  dt_image_t *img = dt_image_cache_get(cache, imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img)) return;
   img->print_timestamp = dt_datetime_now_to_gtimespan();
-  dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
 }
 
 // clang-format off

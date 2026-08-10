@@ -99,14 +99,14 @@ void dt_history_item_free(gpointer data)
 
 static void _remove_preset_flag(const int32_t imgid)
 {
-  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(image)) return;
 
   // clear flag
   image->flags &= ~DT_IMAGE_AUTO_PRESETS_APPLIED;
 
   // write through to sql+xmp
-  dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
 }
 
 void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
@@ -163,7 +163,7 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
   _remove_preset_flag(imgid);
 
   /* make sure mipmaps are recomputed */
-  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
+  dt_mipmap_cache_remove(imgid, TRUE);
 
   /* remove darktable|style|* tags */
   dt_tag_detach_by_string("darktable|style|%", imgid, FALSE, FALSE);

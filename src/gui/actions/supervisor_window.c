@@ -581,8 +581,8 @@ static void _rebuild_memory(void)
   g_array_free(pe, TRUE);
 
   // Mipmap cache
-  dt_mipmap_cache_get_usage(dt_mipmap_cache_get_global(), &cur, &max);
-  GArray *me = dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_get_global());
+  dt_mipmap_cache_get_usage(&cur, &max);
+  GArray *me = dt_mipmap_cache_get_entries_stats();
   gchar *mtitle = g_strdup_printf(_("Mipmap cache — %u items"), me->len);
   _add_usage_bar(_g.mem_box, mtitle, cur, max);
   g_free(mtitle);
@@ -600,8 +600,8 @@ static void _rebuild_memory(void)
   g_array_free(me, TRUE);
 
   // Image cache
-  dt_image_cache_get_usage(dt_image_cache_get_global(), &cur, &max);
-  GArray *ie = dt_image_cache_get_entries_stats(dt_image_cache_get_global());
+  dt_image_cache_get_usage(&cur, &max);
+  GArray *ie = dt_image_cache_get_entries_stats();
   gchar *ititle = g_strdup_printf(_("Image cache — %u items"), ie->len);
   _add_usage_bar(_g.mem_box, ititle, cur, max);
   g_free(ititle);

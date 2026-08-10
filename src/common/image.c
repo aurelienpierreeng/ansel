@@ -198,30 +198,30 @@ static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome,
   dt_image_t *img = NULL;
   gboolean changed = FALSE;
 
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  img = dt_image_cache_get(imgid, 'r');
   if(img)
   {
     const int mask_bw = dt_image_monochrome_flags(img);
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
 
     if((!monochrome) && (mask_bw & DT_IMAGE_MONOCHROME_PREVIEW))
     {
       // wanting it to be color found preview
-      img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+      img = dt_image_cache_get(imgid, 'w');
       img->flags &= ~(DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
       changed = TRUE;
     }
     if(monochrome && ((mask_bw == 0) || (mask_bw == DT_IMAGE_MONOCHROME_PREVIEW)))
     {
       // wanting monochrome and found color or just preview without workflow activation
-      img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+      img = dt_image_cache_get(imgid, 'w');
       img->flags |= (DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
       changed = TRUE;
     }
     if(changed)
     {
       const int mask = dt_image_monochrome_flags(img);
-      dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+      dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
       if(undo_on)
       {
@@ -704,7 +704,7 @@ void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
   const gboolean prefer_cache = (from_cache && *from_cache);
 
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(img)
   {
     // Preserve legacy semantics: `from_cache = TRUE` means "try local copy first, then fall back to original",
@@ -719,7 +719,7 @@ void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len
     {
       source = dt_image_choose_input_path(img, pathname, pathname_len, FALSE);
     }
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
   }
 
   if(from_cache) 
@@ -832,31 +832,31 @@ void dt_image_set_xmp_rating(dt_image_t *img, const int rating)
 
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc)
 {
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   geoloc->longitude = img->geoloc.longitude;
   geoloc->latitude = img->geoloc.latitude;
   geoloc->elevation = img->geoloc.elevation;
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 }
 
 static void _set_location(const int32_t imgid, const dt_image_geoloc_t *geoloc)
 {
   /* fetch image from cache */
-  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(imgid, 'w');
 
   memcpy(&image->geoloc, geoloc, sizeof(dt_image_geoloc_t));
 
-  dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
 }
 
 static void _set_datetime(const int32_t imgid, const char *datetime)
 {
   /* fetch image from cache */
-  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(imgid, 'w');
 
   dt_datetime_exif_to_img(image, datetime);
 
-  dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
 }
 
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs)
@@ -1033,13 +1033,13 @@ void dt_image_history_changed(const int32_t imgid, const gboolean refresh_filmst
   // image cache. history_items is the "altered" flag that the thumbnail regeneration uses to
   // pick raw processing over the (unedited) embedded JPEG, so a stale count makes edits and
   // rotations appear to have no effect on the thumbnail (issues #647, #861).
-  dt_image_t *image = dt_image_cache_get_reload(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *image = dt_image_cache_get_reload(imgid, 'w');
   if(image)
-    dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_RELAXED);
+    dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
 
   // Drop the stale rendered thumbnail. The mipmap cache regenerates purely on explicit removal,
   // never by comparing history hashes, so this is mandatory after any development change.
-  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
+  dt_mipmap_cache_remove(imgid, TRUE);
 
   // The filmstrip is best-effort: refreshing it spawns an export thread that competes with the
   // realtime darkroom main preview. Darkroom write paths pass FALSE; lighttable ops pass TRUE.
@@ -1120,17 +1120,17 @@ gboolean dt_image_resolve_usercrop(const int32_t imgid, dt_boundingbox_t box)
   box[0] = box[1] = 0.0f;
   box[2] = box[3] = 1.0f;
 
-  if(imgid < 1 || IS_NULL_PTR(dt_image_cache_get_global())) return FALSE;
+  if(imgid < 1 || !dt_image_cache_is_ready()) return FALSE;
 
   char filename[PATH_MAX] = { 0 };
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
 
   if(img->usercrop_status != DT_IMAGE_USERCROP_UNKNOWN)
   {
     // Already answered for this image, in this session.
     const gboolean valid = dt_image_get_usercrop(img, box);
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
     return valid;
   }
 
@@ -1142,13 +1142,13 @@ gboolean dt_image_resolve_usercrop(const int32_t imgid, dt_boundingbox_t box)
   {
     // Cheap enough to redo on every call -- deliberately not memoized, so that populating a whole
     // library's thumbnails does not take one image-cache write lock per image to record a "no".
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
     return FALSE;
   }
 
   const gboolean has_file
       = (dt_image_choose_input_path(img, filename, sizeof(filename), FALSE) != DT_IMAGE_PATH_NONE);
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
   if(!has_file) return FALSE;
 
   /* Parse into a throwaway image, holding no lock: the crop lives in runtime-only state, so a
@@ -1160,12 +1160,12 @@ gboolean dt_image_resolve_usercrop(const int32_t imgid, dt_boundingbox_t box)
   probe.id = imgid;
   dt_exif_read_usercrop(&probe, filename);
 
-  dt_image_t *write = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *write = dt_image_cache_get(imgid, 'w');
   if(!IS_NULL_PTR(write))
   {
     write->usercrop_status = probe.usercrop_status;
     for(int i = 0; i < 4; i++) write->usercrop[i] = probe.usercrop[i];
-    dt_image_cache_write_release(dt_image_cache_get_global(), write, DT_IMAGE_CACHE_RELAXED);
+    dt_image_cache_write_release(write, DT_IMAGE_CACHE_RELAXED);
   }
 
   return dt_image_get_usercrop(&probe, box);
@@ -1244,10 +1244,10 @@ dt_image_orientation_t dt_image_get_orientation(const int32_t imgid)
 
   if(orientation == ORIENTATION_NULL)
   {
-    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     if(IS_NULL_PTR(img)) return ORIENTATION_NONE;
     orientation = dt_image_orientation(img);
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
   }
 
   return orientation;
@@ -1469,9 +1469,9 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
        || dt_tag_detach_by_string("darktable|exported", newid, FALSE, FALSE))
       DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
-    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     const int grpid = img->group_id;
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
     dt_grouping_add_to_group(grpid, newid);
 
     // Reloading here exposes newid to the lighttable grid: it becomes eligible for thumbnail
@@ -1501,11 +1501,11 @@ void dt_image_remove(const int32_t imgid)
   if(dt_image_local_copy_reset(imgid)) return;
 
   sqlite3_stmt *stmt;
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  dt_image_cache_read_release(img);
 
   // make sure we remove from the cache first, or else the cache will look for imgid in sql
-  dt_image_cache_remove(dt_image_cache_get_global(), imgid);
+  dt_image_cache_remove(imgid);
 
   dt_grouping_remove_from_group(imgid);
   // due to foreign keys added in db version 33,
@@ -1521,7 +1521,7 @@ void dt_image_remove(const int32_t imgid)
   sqlite3_finalize(stmt);
 
   // also clear all thumbnails in mipmap_cache.
-  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
+  dt_mipmap_cache_remove(imgid, TRUE);
 }
 
 uint32_t dt_image_altered(const int32_t imgid)
@@ -1700,17 +1700,17 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
       // is using DT_IMAGE_CACHE_SAFE and so will write the .XMP. But we must avoid
       // this has the xmp for the duplicate is read just below.
       newid = _image_duplicate_with_version_ext(id, version);
-      const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), id, 'r');
+      const dt_image_t *img = dt_image_cache_get(id, 'r');
       grpid = img->group_id;
-      dt_image_cache_read_release(dt_image_cache_get_global(), img);
+      dt_image_cache_read_release(img);
     }
     // make sure newid is not selected
     if(clear_selection) dt_selection_clear(dt_selection_get_global());
 
-    dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), newid, 'w');
+    dt_image_t *img = dt_image_cache_get(newid, 'w');
     (void)dt_exif_xmp_read(img, xmpfilename, 0);
     img->version = version;
-    dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+    dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
     if(grpid != -1)
     {
@@ -1838,7 +1838,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     if(sqlite3_step(stmt2) == SQLITE_ROW)
     {
       int other_id = sqlite3_column_int(stmt2, 0);
-      dt_image_t *other_img = dt_image_cache_get(dt_image_cache_get_global(), other_id, 'w');
+      dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
       gchar *other_basename = g_strdup(other_img->filename);
       gchar *cc3 = other_basename + strlen(other_img->filename);
       for(; *cc3 != '.' && cc3 > other_basename; cc3--)
@@ -1849,7 +1849,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
       if(!strcmp(ext_lowercase, "jpg") || !strcmp(ext_lowercase, "jpeg"))
       {
         other_img->group_id = id;
-        dt_image_cache_write_release(dt_image_cache_get_global(), other_img, DT_IMAGE_CACHE_SAFE);
+        dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
         sqlite3_stmt *stmt3;
         DT_DEBUG_SQLITE3_PREPARE_V2
           (dt_database_get_sqlite3_global(),
@@ -1858,16 +1858,16 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
         while(sqlite3_step(stmt3) == SQLITE_ROW)
         {
           other_id = sqlite3_column_int(stmt3, 0);
-          dt_image_t *group_img = dt_image_cache_get(dt_image_cache_get_global(), other_id, 'w');
+          dt_image_t *group_img = dt_image_cache_get(other_id, 'w');
           group_img->group_id = id;
-          dt_image_cache_write_release(dt_image_cache_get_global(), group_img, DT_IMAGE_CACHE_SAFE);
+          dt_image_cache_write_release(group_img, DT_IMAGE_CACHE_SAFE);
         }
         group_id = id;
         sqlite3_finalize(stmt3);
       }
       else
       {
-        dt_image_cache_write_release(dt_image_cache_get_global(), other_img, DT_IMAGE_CACHE_RELAXED);
+        dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_RELAXED);
         group_id = other_id;
       }
       dt_free(ext_lowercase);
@@ -1910,7 +1910,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   // printf("[image_import] importing `%s' to img id %d\n", imgfname, id);
 
   // lock as shortly as possible:
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), id, 'w');
+  dt_image_t *img = dt_image_cache_get(id, 'w');
   img->group_id = group_id;
 
   // read dttags and exif for database queries!
@@ -1923,7 +1923,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   const int res = dt_exif_xmp_read(img, dtfilename, 0);
 
   // write through to db, but not to xmp.
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
   // read all sidecar files
   const int nb_xmp = dt_image_read_duplicates(id, normalized_filename, raise_signals);
@@ -1943,7 +1943,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   dt_tag_attach(tagid, id, FALSE, FALSE);
 
   // make sure that there are no stale thumbnails left
-  dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), id, TRUE);
+  dt_mipmap_cache_remove(id, TRUE);
 
   //synch database entries to xmp
   if(dt_image_get_xmp_mode()) dt_image_synch_all_xmp(normalized_filename);
@@ -2173,11 +2173,11 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
   if(new)
   {
     // get current local copy if any
-    dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    dt_image_t *img = dt_image_cache_get(imgid, 'r');
     if(img)
     {
       dt_image_choose_input_path(img, copysrcpath, sizeof(copysrcpath), TRUE);
-      dt_image_cache_read_release(dt_image_cache_get_global(), img);
+      dt_image_cache_read_release(img);
     }
 
     // move image
@@ -2233,11 +2233,11 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
       while(dup_list)
       {
         const int id = GPOINTER_TO_INT(dup_list->data);
-        img = dt_image_cache_get(dt_image_cache_get_global(), id, 'w');
+        img = dt_image_cache_get(id, 'w');
         img->film_id = filmid;
         if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
         // write through to db and queue xmp write
-        dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_SAFE);
+        dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
         dup_list = g_list_delete_link(dup_list, dup_list);
       }
       g_list_free(dup_list);
@@ -2247,11 +2247,11 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
       if(g_file_test(copysrcpath, G_FILE_TEST_EXISTS))
       {
         // get new name
-        img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+        img = dt_image_cache_get(imgid, 'r');
         if(img)
         {
           dt_image_choose_input_path(img, copydestpath, sizeof(copydestpath), TRUE);
-          dt_image_cache_read_release(dt_image_cache_get_global(), img);
+          dt_image_cache_read_release(img);
         }
 
         GFile *cold = g_file_new_for_path(copysrcpath);
@@ -2448,7 +2448,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
       if(newid != -1)
       {
         // also copy over on-disk thumbnails, if any
-        dt_mipmap_cache_copy_thumbnails(dt_mipmap_cache_get_global(), newid, imgid);
+        dt_mipmap_cache_copy_thumbnails(newid, imgid);
         // clang-format off
         DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                     "INSERT INTO main.color_labels (imgid, color)"
@@ -2598,7 +2598,7 @@ int dt_image_local_copy_set(const int32_t imgid)
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
   char local_copy_path[PATH_MAX] = { 0 };
   char local_copy_legacy_path[PATH_MAX] = { 0 };
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(img)
   {
     g_strlcpy(srcpath, img->fullpath, PATH_MAX);
@@ -2610,7 +2610,7 @@ int dt_image_local_copy_set(const int32_t imgid)
       g_strlcpy(destpath, existing, sizeof(destpath));
     else
       g_strlcpy(destpath, local_copy_path, sizeof(destpath));
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
   }
   else
   {
@@ -2648,9 +2648,9 @@ int dt_image_local_copy_set(const int32_t imgid)
 
   // update cache local copy flags, do this even if the local copy already exists as we need to set the flags
   // for duplicate
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  img = dt_image_cache_get(imgid, 'w');
   img->flags |= DT_IMAGE_LOCAL_COPY;
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
   dt_control_queue_redraw_center();
   return 0;
@@ -2689,10 +2689,10 @@ int dt_image_local_copy_reset(const int32_t imgid)
   gchar cachedir[PATH_MAX] = { 0 };
 
   // check that a local copy exists, otherwise there is nothing to do
-  dt_image_t *imgr = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  dt_image_t *imgr = dt_image_cache_get(imgid, 'r');
   if(!imgr) return 0;
   const gboolean local_copy_exists = (imgr->flags & DT_IMAGE_LOCAL_COPY) == DT_IMAGE_LOCAL_COPY ? TRUE : FALSE;
-  dt_image_cache_read_release(dt_image_cache_get_global(), imgr);
+  dt_image_cache_read_release(imgr);
 
   if(!local_copy_exists)
     return 0;
@@ -2718,11 +2718,11 @@ int dt_image_local_copy_reset(const int32_t imgid)
   // get name of local copy
 
   locppath[0] = '\0';
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(img)
   {
     dt_image_choose_input_path(img, locppath, sizeof(locppath), TRUE);
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
   }
 
   // remove cached file, but double check that this is really into the cache. We really want to avoid deleting
@@ -2762,9 +2762,9 @@ int dt_image_local_copy_reset(const int32_t imgid)
   // reach this point the local-copy flag is present and the file has been either removed
   // or is not present.
 
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  img = dt_image_cache_get(imgid, 'w');
   img->flags &= ~DT_IMAGE_LOCAL_COPY;
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
   dt_control_queue_redraw_center();
 
@@ -2898,7 +2898,7 @@ int dt_image_write_sidecar_file(const int32_t imgid)
   if(imgid <= 0 || !dt_image_get_xmp_mode()) return 1;
 
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d write start\n", imgid);
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img))
   {
     dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock failed\n", imgid);
@@ -2907,7 +2907,7 @@ int dt_image_write_sidecar_file(const int32_t imgid)
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock acquired (write)\n", imgid);
 
   const int res = _write_sidecar_file_from_image_locked(img);
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_MINIMAL);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_MINIMAL);
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock released (write minimal)\n", imgid);
   return res;
 }
@@ -2995,10 +2995,10 @@ void dt_image_get_datetime(const int32_t imgid, char *datetime)
 {
   if(IS_NULL_PTR(datetime)) return;
   datetime[0] = '\0';
-  const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *cimg = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(cimg)) return;
   dt_datetime_img_to_exif(datetime, DT_DATETIME_LENGTH, cimg);
-  dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
+  dt_image_cache_read_release(cimg);
 }
 
 static void _datetime_undo_data_free(gpointer data)

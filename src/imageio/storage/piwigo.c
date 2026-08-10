@@ -1007,7 +1007,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   if((metadata->flags & DT_META_METADATA) && !(metadata->flags & DT_META_CALCULATED))
   {
-    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   // If title is not existing, then use the filename without extension. If not, then use title instead
     GList *title = dt_metadata_get(img->id, "Xmp.dc.title", NULL);
     if(!IS_NULL_PTR(title))
@@ -1030,7 +1030,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
       g_list_free_full(desc, dt_free_gpointer);
       desc = NULL;
     }
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
 
     GList *auth = dt_metadata_get(img->id, "Xmp.dc.creator", NULL);
     if(!IS_NULL_PTR(auth))

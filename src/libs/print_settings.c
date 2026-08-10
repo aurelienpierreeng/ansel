@@ -589,7 +589,7 @@ static int _print_job_run(dt_job_t *job)
         DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
     /* register print timestamp in cache */
-    dt_image_cache_set_print_timestamp(dt_image_cache_get_global(), params->imgs.box[k].imgid);
+    dt_image_cache_set_print_timestamp(params->imgs.box[k].imgid);
   }
 
   return 0;
@@ -723,7 +723,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   }
   else
   {
-    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     if(IS_NULL_PTR(img))
     {
       // in this case no need to release from cache what we couldn't get
@@ -732,7 +732,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
       return;
     }
     params->job_title = g_strdup(img->filename);
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
   }
   // FIXME: ellipsize title/printer as the export completed message is ellipsized
   gchar *message = g_strdup_printf(_("processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
@@ -1261,7 +1261,7 @@ _intent_callback(GtkWidget *widget, dt_lib_module_t *self)
 static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf,
+  dt_mipmap_cache_get(&buf,
                       imgid, DT_MIPMAP_0, DT_MIPMAP_BLOCKING, 'r');
 
   // If there's a mipmap available, figure out orientation based upon
@@ -1274,7 +1274,7 @@ static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
     dt_bauhaus_combobox_set(ps->orientation, ps->prt.page.landscape == TRUE ? 1 : 0);
   }
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
   dt_control_queue_redraw_center();
 }
 

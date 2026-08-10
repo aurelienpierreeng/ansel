@@ -64,7 +64,7 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
   for(dt_mipmap_size_t k = min_mip; k <= max_mip; k++)
   {
     char dirname[PATH_MAX] = { 0 };
-    dt_mipmap_get_cache_dir(dirname, dt_mipmap_cache_get_global(), k);
+    dt_mipmap_get_cache_dir(dirname, k);
 
     fprintf(stderr, _("creating cache directory '%s'\n"), dirname);
     if(g_mkdir_with_parents(dirname, 0750))
@@ -116,19 +116,19 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
     for(int k = max_mip; k >= min_mip && k >= 0; k--)
     {
       char filename[PATH_MAX] = { 0 };
-      dt_mipmap_get_cache_filename(filename, dt_mipmap_cache_get_global(), k, imgid);
+      dt_mipmap_get_cache_filename(filename, k, imgid);
 
       // if a valid thumbnail file is already on disc - do nothing
       if(dt_util_test_image_file(filename)) continue;
 
       // else, generate thumbnail and store in mipmap cache.
       dt_mipmap_buffer_t buf;
-      dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
-      dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+      dt_mipmap_cache_get(&buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
+      dt_mipmap_cache_release(&buf);
     }
 
     // and immediately write thumbs to disc and remove from mipmap cache.
-    dt_mimap_cache_evict(dt_mipmap_cache_get_global(), imgid);
+    dt_mimap_cache_evict(imgid);
     // thumbnail in sync with image
   }
 
