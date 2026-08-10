@@ -23,6 +23,8 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
+#include <float.h>
+#include <math.h>
 #include <sqlite3.h>
 #include <string.h>
 
@@ -565,6 +567,7 @@ void dt_preset_repository_delete_by_rowid(const int rowid)
 static sqlite3_stmt *_range_stmt[DT_PRESET_RANGE_LAST] = { NULL };
 static sqlite3_stmt *_flag_stmt[DT_PRESET_FLAG_LAST] = { NULL };
 static sqlite3_stmt *_camera_stmt = NULL;
+static sqlite3_stmt *_iop_add_stmt = NULL;
 
 static const char *const _range_query[DT_PRESET_RANGE_LAST] = {
   [DT_PRESET_RANGE_ISO] = "UPDATE data.presets"
@@ -663,11 +666,272 @@ void dt_preset_repository_update_camera(const char *operation, const int op_vers
   sqlite3_step(stmt);
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ *  IOP presets
+ * ------------------------------------------------------------------------------------- */
+
+/* The predicate shared by the menu and the auto-apply query: does this preset's stored
+ * camera/exposure/format match the image? Bound parameters ?2..?12 throughout, so the
+ * three call sites bind identically. */
+#define _PRESET_MATCH_PREDICATE                                                    \
+  "((?2 LIKE model AND ?3 LIKE maker) OR (?4 LIKE model AND ?5 LIKE maker))"       \
+  " AND ?6 LIKE lens"                                                              \
+  " AND ?7 BETWEEN iso_min AND iso_max"                                            \
+  " AND ?8 BETWEEN exposure_min AND exposure_max"                                  \
+  " AND ?9 BETWEEN aperture_min AND aperture_max"                                  \
+  " AND ?10 BETWEEN focal_length_min AND focal_length_max"                         \
+  " AND (format = 0 OR (format&?11 != 0 AND ~format&?12 != 0))"
+
+static void _bind_match(sqlite3_stmt *stmt, const dt_preset_match_t *m, const gboolean clamp)
+{
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, m->exif_model, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, m->exif_maker, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, m->camera_alias, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, m->camera_maker, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 6, m->exif_lens, -1, SQLITE_TRANSIENT);
+
+  /* The auto-apply path clamps these and the menu path does not. That difference is
+   * inherited and kept: a NaN or an infinity from a broken EXIF block makes every BETWEEN
+   * false, which silently applies nothing -- so the path that decides an image's initial
+   * history guards against it and the one that only draws a menu never bothered. */
+  if(clamp)
+  {
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 7, fmax(0.0, fmin(FLT_MAX, m->iso)));
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 8, fmax(0.0, fmin(1000000.0, m->exposure)));
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 9, fmax(0.0, fmin(1000000.0, m->aperture)));
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 10, fmax(0.0, fmin(1000000.0, m->focal_length)));
+  }
+  else
+  {
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 7, m->iso);
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 8, m->exposure);
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 9, m->aperture);
+    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 10, m->focal_length);
+  }
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 11, m->format);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 12, m->excluded);
+}
+
+/* Read the seven-column menu row, or the five-column list row when `description` and the
+ * trailing columns are absent. */
+static dt_module_preset_t *_iop_row(sqlite3_stmt *stmt, const gboolean with_description)
+{
+  dt_module_preset_t *p = g_malloc0(sizeof(dt_module_preset_t));
+  if(IS_NULL_PTR(p)) return NULL;
+
+  p->rowid = -1;
+  p->name = _column_text(stmt, 0);
+  p->op_params = _column_blob(stmt, 1, &p->op_params_size);
+  p->writeprotect = sqlite3_column_int(stmt, 2) != 0;
+
+  if(with_description)
+  {
+    p->description = _column_text(stmt, 3);
+    p->blendop_params = _column_blob(stmt, 4, &p->blendop_params_size);
+    p->op_version = sqlite3_column_int(stmt, 5);
+    p->enabled = sqlite3_column_int(stmt, 6);
+  }
+  else
+  {
+    p->description = g_strdup("");
+    p->blendop_params = _column_blob(stmt, 3, &p->blendop_params_size);
+    p->enabled = sqlite3_column_int(stmt, 4);
+  }
+  return p;
+}
+
+void dt_preset_repository_add_iop_preset(const char *name, const char *operation, const int op_version,
+                                         const void *params, const int params_size,
+                                         const void *blend_params, const int blend_params_size,
+                                         const int blendop_version, const int enabled)
+{
+  if(IS_NULL_PTR(_iop_add_stmt))
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+        "INSERT OR REPLACE"
+        " INTO data.presets (name, description, operation, op_version, op_params, enabled,"
+        "                    blendop_params, blendop_version, multi_priority, multi_name,"
+        "                    model, maker, lens, iso_min, iso_max, exposure_min, exposure_max,"
+        "                    aperture_min, aperture_max, focal_length_min, focal_length_max,"
+        "                    writeprotect, autoapply, filter, def, format)"
+        " VALUES (?1, '', ?2, ?3, ?4, ?5, ?6, ?7, 0, '', '%', '%', '%', 0,"
+        "         340282346638528859812000000000000000000, 0, 10000000, 0, 100000000, 0,"
+        "         1000, 1, 0, 0, 0, 0)",
+        -1, &_iop_add_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _iop_add_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, op_version);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, params, params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, enabled);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, blend_params, blend_params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, blendop_version);
+  sqlite3_step(stmt);
+}
+
+GList *dt_preset_repository_list_for_iop(const char *operation, const int op_version)
+{
+  sqlite3_stmt *stmt = NULL;
+  /* writeprotect ASC, not DESC: a user's copy of a shipped preset must resolve to the
+   * copy, otherwise the name that comes back is the write-protected one and the caller
+   * cannot delete it. */
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+      "SELECT name, op_params, writeprotect, blendop_params, enabled"
+      " FROM data.presets"
+      " WHERE operation=?1 AND op_version=?2"
+      " ORDER BY writeprotect ASC, LOWER(name), rowid",
+      -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, op_version);
+
+  GList *presets = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_module_preset_t *p = _iop_row(stmt, FALSE);
+    if(p)
+    {
+      p->op_version = op_version;
+      presets = g_list_prepend(presets, p);
+    }
+  }
+  sqlite3_finalize(stmt);
+  return g_list_reverse(presets);
+}
+
+GList *dt_preset_repository_list_for_menu(const char *operation, const dt_preset_match_t *match,
+                                          const gboolean shipped_first)
+{
+  sqlite3_stmt *stmt = NULL;
+  gchar *query = NULL;
+
+  if(match)
+  {
+    // clang-format off
+    query = g_strdup_printf(
+        "SELECT name, op_params, writeprotect, description, blendop_params, "
+        "  op_version, enabled"
+        " FROM data.presets"
+        " WHERE operation=?1"
+        "   AND (filter=0"
+        "          OR"
+        "       (" _PRESET_MATCH_PREDICATE "))"
+        " ORDER BY writeprotect %s, LOWER(name), rowid",
+        shipped_first ? "DESC" : "ASC");
+    // clang-format on
+  }
+  else
+  {
+    // don't know for which image. show all we got:
+    // clang-format off
+    query = g_strdup_printf(
+        "SELECT name, op_params, writeprotect, "
+        "       description, blendop_params, op_version, enabled"
+        " FROM data.presets"
+        " WHERE operation=?1"
+        " ORDER BY writeprotect %s, LOWER(name), rowid",
+        shipped_first ? "DESC" : "ASC");
+    // clang-format on
+  }
+
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+  if(match) _bind_match(stmt, match, FALSE);
+  dt_free(query);
+
+  GList *presets = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_module_preset_t *p = _iop_row(stmt, TRUE);
+    if(p) presets = g_list_prepend(presets, p);
+  }
+  sqlite3_finalize(stmt);
+  return g_list_reverse(presets);
+}
+
+dt_module_preset_t *dt_preset_repository_get_iop_preset(const char *operation, const int op_version,
+                                                        const char *name)
+{
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+     "SELECT op_params, enabled, blendop_params, blendop_version, writeprotect"
+     " FROM data.presets"
+     " WHERE operation = ?1 AND op_version = ?2 AND name = ?3",
+     -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, op_version);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, name, -1, SQLITE_TRANSIENT);
+
+  dt_module_preset_t *p = NULL;
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    p = g_malloc0(sizeof(dt_module_preset_t));
+    if(p)
+    {
+      p->rowid = -1;
+      p->name = g_strdup(name);
+      p->description = g_strdup("");
+      p->op_version = op_version;
+      p->op_params = _column_blob(stmt, 0, &p->op_params_size);
+      p->enabled = sqlite3_column_int(stmt, 1);
+      p->blendop_params = _column_blob(stmt, 2, &p->blendop_params_size);
+      p->blendop_version = sqlite3_column_int(stmt, 3);
+      p->writeprotect = sqlite3_column_int(stmt, 4) != 0;
+    }
+  }
+  sqlite3_finalize(stmt);
+  return p;
+}
+
+GList *dt_preset_repository_find_autoapply(const char *operation, const int op_version,
+                                           const dt_preset_match_t *match, const char *always_name)
+{
+  if(IS_NULL_PTR(match)) return NULL;
+
+  sqlite3_stmt *stmt = NULL;
+  /* A plain literal. This was assembled with snprintf() into a 2024-byte buffer despite
+   * having no format specifier in it -- a copy that did nothing, and a `%` away from being
+   * a bug. */
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+     "SELECT name"
+     " FROM data.presets"
+     " WHERE operation = ?1"
+     "        AND ((autoapply=1"
+     "           AND " _PRESET_MATCH_PREDICATE
+     "           AND operation NOT IN"
+     "               ('ioporder', 'metadata', 'export', 'tagging', 'collect', 'basecurve'))"
+     "  OR (name = ?13)) AND op_version = ?14",
+     -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+  _bind_match(stmt, match, TRUE);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 13, always_name, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 14, op_version);
+
+  GList *names = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    names = g_list_prepend(names, g_strdup((const char *)sqlite3_column_text(stmt, 0)));
+  sqlite3_finalize(stmt);
+  return g_list_reverse(names);
+}
+
 void dt_preset_repository_cleanup(void)
 {
   sqlite3_stmt **const cached[]
       = { &_lib_add_stmt, &_lib_remove_stmt, &_lib_select_stmt, &_lib_delete_operation_stmt,
-          &_camera_stmt };
+          &_camera_stmt, &_iop_add_stmt };
   for(size_t i = 0; i < sizeof(cached) / sizeof(cached[0]); i++)
   {
     if(*cached[i])
