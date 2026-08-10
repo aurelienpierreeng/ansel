@@ -173,6 +173,27 @@ GList *dt_tag_repository_get_attached(const int32_t imgid, const gboolean ignore
  */
 GList *dt_tag_repository_get_attached_for_export(const int32_t imgid);
 
+/** Which tags a listing should include. Its own enum rather than `common/tags.c`'s
+ *  `dt_tag_type_t`, which is private to that file -- a repository borrowing a caller's
+ *  private type would make the caller impossible to move. */
+typedef enum dt_tag_kind_t
+{
+  DT_TAG_KIND_ANY = 0,  /**< every tag */
+  DT_TAG_KIND_INTERNAL, /**< only `darktable|…`, i.e. those in `memory.darktable_tags` */
+  DT_TAG_KIND_USER      /**< everything that is not internal */
+} dt_tag_kind_t;
+
+/**
+ * @brief Ids of the tags on a set of images, optionally restricted by kind.
+ *
+ * @param imgid_list a comma-separated list of decimal image ids, composed by the caller --
+ *        one id for a single image, or the selection's, which `common/selection.c` already
+ *        knows how to spell.
+ * @param kind all tags, only the internal `darktable|…` ones, or only the others.
+ * @return `GList` of tag ids as `GINT_TO_POINTER`. Free with g_list_free().
+ */
+GList *dt_tag_repository_get_ids_for_images(const char *imgid_list, const dt_tag_kind_t kind);
+
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 void dt_tag_repository_cleanup(void);
 
