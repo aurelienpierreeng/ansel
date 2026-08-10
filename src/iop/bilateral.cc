@@ -47,7 +47,7 @@
 #define __STDC_FORMAT_MACROS
 
 #include "glib.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"

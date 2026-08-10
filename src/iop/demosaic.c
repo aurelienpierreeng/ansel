@@ -67,7 +67,7 @@
 #include "common/times.h"
 #include "common/module_versioning.h"
 #include "system/fp_mode.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "caches/image_cache.h"
 #include "pixel/interpolation.h"

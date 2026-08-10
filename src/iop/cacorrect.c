@@ -54,7 +54,7 @@
 #include "common/module_versioning.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "pixel/gaussian.h"
 #include "develop/imageop.h"

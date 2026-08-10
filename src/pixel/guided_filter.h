@@ -33,7 +33,7 @@
 
 #include "system/macros.h"
 #include "common/opencl.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 
 #include <string.h>
 

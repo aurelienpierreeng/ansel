@@ -24,7 +24,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
 #include "system/macros.h"
 #include "system/openmp.h"

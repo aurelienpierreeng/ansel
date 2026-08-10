@@ -45,6 +45,24 @@ dt_cache_entry_t;
 typedef void((*dt_cache_allocate_t)(void *userdata, dt_cache_entry_t *entry));
 typedef void((*dt_cache_cleanup_t)(void *userdata, dt_cache_entry_t *entry));
 
+/**
+ * @brief Allocate a cache entry that belongs to NO cache, for a one-shot decode.
+ *
+ * @details The decoders write into whatever ::dt_cache_entry_t they are handed, which is
+ * normally one the mipmap cache owns. A caller that just wants a file decoded once has no
+ * cache to get one from, and used to declare a zeroed entry on its own stack -- assembling
+ * this module's bookkeeping by hand to borrow a decoder. These two exist so nothing outside
+ * src/caches needs the layout.
+ *
+ * @return An entry whose `data` is NULL, or NULL on allocation failure. Release it with
+ *         dt_cache_entry_free_detached(), which frees `data` too.
+ * @see dt_imageio_open_standalone(), its only caller.
+ */
+dt_cache_entry_t *dt_cache_entry_new_detached(void);
+
+/** @brief Release an entry from dt_cache_entry_new_detached(), and its `data`. NULL-safe. */
+void dt_cache_entry_free_detached(dt_cache_entry_t *entry);
+
 typedef struct dt_cache_t
 {
   dt_pthread_mutex_t lock; // big fat lock. we're only expecting a couple hand full of cpu threads to use this concurrently.

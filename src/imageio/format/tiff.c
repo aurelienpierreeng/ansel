@@ -44,7 +44,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/exif.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"

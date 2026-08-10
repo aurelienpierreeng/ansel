@@ -29,7 +29,7 @@
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/imageop.h"
 #include "math/openmp_maths.h"
 #include "heal.h"

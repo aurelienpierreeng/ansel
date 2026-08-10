@@ -36,7 +36,7 @@
 
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "imageio_png.h"
 #include "common/exif.h"
 #include "develop/develop.h"

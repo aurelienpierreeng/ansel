@@ -24,7 +24,7 @@
 #include "system/openmp.h"
 #include "system/simd.h"
 #include "system/target_clones.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "pixel/distance_transform.h"
 #include "math/sparse_cholesky_cl.h"
 #include "iop/highlights/blur.h"

@@ -33,7 +33,7 @@
 
 
 #include "system/sys_resources.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/tiling.h"
 #include "common/opencl.h"
 #include "control/control.h"

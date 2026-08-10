@@ -24,7 +24,7 @@
 #define DT_COMMON_IMAGEBUF_H
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
 
 #include "system/openmp.h"

@@ -44,7 +44,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
 #include "config.h"
 #endif

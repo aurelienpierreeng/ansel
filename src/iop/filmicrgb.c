@@ -59,7 +59,7 @@
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "pixel/bspline.h"
 #include "common/image.h"
 #include "develop/iop_profile.h"
