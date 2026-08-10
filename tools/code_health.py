@@ -27,6 +27,7 @@ Usage:
 """
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -256,8 +257,14 @@ def collect_includers(edges):
 LAYERS = {
     # 0 - freestanding primitives: allocation, maths, SIMD pixel helpers
     "system": 0, "math": 0, "pixel": 0,
-    # 1 - shared services on top of those primitives
-    "common": 1, "colorprofiles": 1,
+    # 1 - shared services on top of those primitives.
+    #     "ai" is darktable 5.6's ONNX inference backend. It is placed here because
+    #     that is what it is used as - src/common/ is its main consumer, alongside
+    #     gui/ and lua/ - not because of what it currently depends on. Ansel has no
+    #     counterpart, so this rank only ever affects the darktable side; it makes
+    #     ai -> control an inversion (3 includes), which is a real observation about
+    #     an inference backend reaching into the application's job system.
+    "common": 1, "colorprofiles": 1, "ai": 1,
     # 2 - reading and writing images
     "imageio": 2,
     # 3 - the pixel pipeline and image development
@@ -458,9 +465,14 @@ def collect_ccn(source_dir):
         return None
 
     funcs = []
-    for line in out.splitlines():
+    # Parsed with the csv module, NOT by splitting on commas: lizard quotes the
+    # location, file, name and long_name fields, and long_name holds the parameter
+    # list, which is full of commas. A naive split also leaves the surrounding
+    # quotation marks on the path, so "src/foo.c" no longer ends in .c and every
+    # function silently fails the production-file allowlist - which is exactly how
+    # this whole section once vanished from the panel without any error.
+    for parts in csv.reader(out.splitlines()):
         # nloc,ccn,token,param,length,location,file,name,long_name,start,end
-        parts = line.split(",")
         if len(parts) < 8:
             continue
         try:
