@@ -723,6 +723,17 @@ static void _preferences_changed(gpointer instance, gpointer user_data)
   dt_mipmap_cache_set_settings(&s);
 }
 
+/* Same "read at startup, re-read on change, never anywhere else" lifecycle as the mipmap cache
+ * settings above, for the "write_sidecar_files" preference: dt_image_get_xmp_mode() is on the
+ * per-image hot path and reads a cache instead of conf directly. */
+static void _xmp_mode_preferences_changed(gpointer instance, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
+
+  dt_image_xmp_mode_refresh_from_conf();
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();
@@ -1509,6 +1520,10 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   /* Re-tell the cache whenever the user changes one of its four settings. */
   dt_control_signal_connect(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
                             G_CALLBACK(_preferences_changed), NULL);
+
+  dt_image_xmp_mode_refresh_from_conf();
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+                            G_CALLBACK(_xmp_mode_preferences_changed), NULL);
 
 #ifdef HAVE_OPENCL
   dt_opencl_init(exclude_opencl, print_statistics);

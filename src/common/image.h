@@ -700,8 +700,12 @@ int dt_image_write_sidecar_file(const int32_t imgid);
 void dt_image_synch_xmp(const int selected);
 void dt_image_synch_xmps(const GList *img);
 void dt_image_synch_all_xmp(const gchar *pathname);
-/** get the mode xmp sidecars are written */
+/** get the mode xmp sidecars are written. Lock-free: reads a cached value, refreshed only at
+ * startup and on DT_SIGNAL_PREFERENCES_CHANGE. */
 gboolean dt_image_get_xmp_mode();
+/** re-read the "write_sidecar_files" preference from conf and update the cache dt_image_get_xmp_mode()
+ * reads. Call once at startup, and wire to DT_SIGNAL_PREFERENCES_CHANGE -- never call from a hot path. */
+void dt_image_xmp_mode_refresh_from_conf(void);
 
 // set datetime to exif_datetime_taken field
 void dt_image_set_datetime(const GList *imgs, const char *datetime, const gboolean undo_on);

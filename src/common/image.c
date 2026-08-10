@@ -96,6 +96,7 @@
 #include "common/datetime.h"
 #include "common/conf.h"
 #include "control/control.h"
+#include "system/atomic.h"
 #include "develop/lightroom.h"
 #include "develop/develop.h"
 #include "views/view.h"
@@ -593,14 +594,25 @@ void dt_image_film_roll(const dt_image_t *img, char *pathname, size_t pathname_l
   pathname[pathname_len - 1] = '\0';
 }
 
+// dt_image_get_xmp_mode() is on the hot path: called from many threads (image cache
+// write-release, export/save-xmp jobs...) for every single image. Re-parsing the conf string on
+// every call meant every reader raced every writer on the same key -- a torn read could
+// masquerade as an unrecognized/disabled value and silently skip writing a sidecar. The setting
+// itself changes only when the user acts (preferences dialog) or once at startup, so it is read
+// from conf exactly those two times and cached here the rest of the time -- same lifecycle as
+// dt_mipmap_cache_settings_t in darktable.c: "read at startup, re-read when the user changes it,
+// never anywhere else". dt_image_xmp_mode_refresh_from_conf() does the actual conf read+sanitize
+// and is wired to DT_SIGNAL_PREFERENCES_CHANGE in dt_init().
+static dt_atomic_int _xmp_mode_cache = 1; // matches the confgen default (TRUE) until first refresh
+
 gboolean dt_image_get_xmp_mode()
 {
+  return dt_atomic_get_int(&_xmp_mode_cache) != 0;
+}
+
+void dt_image_xmp_mode_refresh_from_conf(void)
+{
   // Write sidecars when the setting is absent, consistently with the default exposed in the preferences.
-  // This is called from many threads (image cache write-release, export/save-xmp jobs...) for every
-  // single image, so the value must be copied under the conf lock: dt_conf_get_string_const() hands back
-  // a pointer straight into the conf hash table with no lock held past the call, and a concurrent
-  // dt_conf_set_string() on this same key (including the sanitize write-back below, racing against
-  // itself from another thread) frees that string out from under a mid-strcmp reader.
   gboolean res = TRUE;
   char *config = dt_conf_get_string("write_sidecar_files");
   if(!IS_NULL_PTR(config))
@@ -615,15 +627,15 @@ gboolean dt_image_get_xmp_mode()
       res = TRUE;
   }
 
-  // sanitize keys, but only if they actually need it: writing back on every call turns every read of
-  // this setting into a write, widening the race window above and risking clobbering a legitimate
-  // concurrent change (e.g. from the preferences dialog) with a stale value.
+  // sanitize keys, but only if they actually need it -- this now only ever runs at startup and
+  // on user-initiated preference changes, so there is no concurrent reader/writer race left to
+  // worry about; the guard is just to avoid rewriting an already-canonical value.
   const char *sanitized = res ? "TRUE" : "FALSE";
   if(IS_NULL_PTR(config) || strcmp(config, sanitized)) dt_conf_set_string("write_sidecar_files", sanitized);
 
   dt_free(config);
 
-  return res;
+  dt_atomic_set_int(&_xmp_mode_cache, res ? 1 : 0);
 }
 
 gboolean dt_image_safe_remove(const int32_t imgid)

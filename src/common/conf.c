@@ -77,18 +77,21 @@ static void _free_confgen_value(void *value)
   dt_free(s);
 }
 
-/** return slot for this variable or newly allocated slot. */
-static inline char *dt_conf_get_var(const char *name)
+/** same as dt_conf_get_var(), but the caller must already hold darktable.conf->mutex.
+ * The returned pointer is only valid for as long as that lock stays held: a concurrent
+ * dt_conf_set_*() on the same key can free it (g_hash_table_insert() destroys the old
+ * value it replaces) the instant the lock is released. Callers that need the value to
+ * survive past the lock (e.g. to compare or duplicate it) must do so before unlocking --
+ * see dt_conf_get_string() below for the pattern. */
+static inline char *_dt_conf_get_var_locked(const char *name)
 {
   char *str;
 
-  dt_pthread_mutex_lock(&darktable.conf->mutex);
-
   str = (char *)g_hash_table_lookup(darktable.conf->override_entries, name);
-  if(!IS_NULL_PTR(str)) goto fin;
+  if(!IS_NULL_PTR(str)) return str;
 
   str = (char *)g_hash_table_lookup(darktable.conf->table, name);
-  if(!IS_NULL_PTR(str)) goto fin;
+  if(!IS_NULL_PTR(str)) return str;
 
   // not found, try defaults
   str = (char *)dt_confgen_get(name, DT_DEFAULT);
@@ -96,16 +99,21 @@ static inline char *dt_conf_get_var(const char *name)
   {
     char *str_new = g_strdup(str);
     g_hash_table_insert(darktable.conf->table, g_strdup(name), str_new);
-    str = str_new;
-    goto fin;
+    return str_new;
   }
 
   // FIXME: why insert garbage?
   // still no luck? insert garbage:
   str = (char *)g_malloc0(sizeof(int32_t));
   g_hash_table_insert(darktable.conf->table, g_strdup(name), str);
+  return str;
+}
 
-fin:
+/** return slot for this variable or newly allocated slot. */
+static inline char *dt_conf_get_var(const char *name)
+{
+  dt_pthread_mutex_lock(&darktable.conf->mutex);
+  char *str = _dt_conf_get_var_locked(name);
   dt_pthread_mutex_unlock(&darktable.conf->mutex);
   return str;
 }
@@ -371,8 +379,17 @@ int dt_conf_get_bool(const char *name)
 
 gchar *dt_conf_get_string(const char *name)
 {
-  const char *str = dt_conf_get_var(name);
-  return g_strdup(str);
+  // Copy the value before releasing the lock: dt_conf_get_var() hands back a pointer straight
+  // into the conf hash table, and a concurrent dt_conf_set_*() on the same key can free it
+  // (g_hash_table_insert() destroys the value it replaces) the moment the lock is released --
+  // a caller strdup'ing that pointer afterwards races the free. This was the mechanism behind a
+  // "write_sidecar_files silently flips to FALSE" report: dt_image_get_xmp_mode() reads this key
+  // from many threads per image, and a torn read masqueraded as an unrecognized/disabled value.
+  dt_pthread_mutex_lock(&darktable.conf->mutex);
+  const char *str = _dt_conf_get_var_locked(name);
+  gchar *result = g_strdup(str);
+  dt_pthread_mutex_unlock(&darktable.conf->mutex);
+  return result;
 }
 
 const char *dt_conf_get_string_const(const char *name)
