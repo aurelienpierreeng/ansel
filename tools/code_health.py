@@ -559,13 +559,18 @@ def collect_clang_tidy(log_path):
 
 
 def collect_cloc(source_dir):
+    """Lines of code, counted per file and filtered with this module's own predicate.
+
+    cloc's --not-match-d is NOT used to drop vendored code: depending on the cloc
+    version it matches a single path component rather than a subtree, so
+    src/external/rawspeed/src/... survives a --not-match-d on "external". That went
+    unnoticed locally and inflated the published figures to 1,012,392 lines against
+    the real 331,243. Counting --by-file and filtering through is_excluded() is the
+    only way this section agrees with every other section of the panel.
+    """
     if not shutil.which("cloc"):
         return None
-    ok, out = run([
-        "cloc", "--quiet", "--json",
-        "--not-match-d", "(external|integration|doxygen-awesome-css)",
-        source_dir,
-    ])
+    ok, out = run(["cloc", "--quiet", "--json", "--by-file", source_dir])
     if not ok or not out.strip():
         return None
     try:
@@ -573,12 +578,27 @@ def collect_cloc(source_dir):
     except ValueError:
         return None
     data.pop("header", None)
-    summary = data.pop("SUM", None)
+    data.pop("SUM", None)
+
+    totals = Counter()
+    per_lang = defaultdict(Counter)
+    for path, v in data.items():
+        if is_excluded(path):
+            continue
+        lang = v.get("language", "unknown")
+        for key in ("blank", "comment", "code"):
+            totals[key] += v.get(key, 0)
+            per_lang[lang][key] += v.get(key, 0)
+        totals["nFiles"] += 1
+        per_lang[lang]["nFiles"] += 1
+    if not totals:
+        return None
+
     langs = sorted(
-        ({"language": k, **v} for k, v in data.items()),
+        ({"language": k, **dict(v)} for k, v in per_lang.items()),
         key=lambda d: -d.get("code", 0),
     )[:12]
-    return {"sum": summary, "languages": langs}
+    return {"sum": dict(totals), "languages": langs}
 
 
 # --------------------------------------------------------------------------- report
