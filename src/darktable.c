@@ -697,6 +697,27 @@ static const dt_pixelpipe_cache_observer_t _pixelpipe_cache_observer = {
   .rekey = dt_supervisor_rekey,
 };
 
+
+/* The mipmap cache's user-facing settings live in conf; the cache does not read conf. The
+ * application owns that translation, here and in the preference-change handler below, which is
+ * what makes the lifecycle of these four visible: read at startup, re-read when the user
+ * changes one, never anywhere else. */
+static dt_mipmap_cache_settings_t _mipmap_settings_from_conf(void)
+{
+  dt_mipmap_cache_settings_t s = { 0 };
+  s.max_memory = darktable.dtresources.mipmap_memory;
+  s.disk_backend = dt_conf_get_bool("cache_disk_backend");
+  s.embedded_jpg = dt_conf_get_int("lighttable/embedded_jpg");
+  s.cache_quality = dt_conf_get_int("database_cache_quality");
+  return s;
+}
+
+static void _preferences_changed(gpointer instance, gpointer user_data)
+{
+  const dt_mipmap_cache_settings_t s = _mipmap_settings_from_conf();
+  dt_mipmap_cache_set_settings(&s);
+}
+
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
 {
   double start_wtime = dt_get_wtime();
@@ -1477,7 +1498,12 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // image dimensions stored in here:
   dt_image_cache_init((dt_get_debug_flags() & DT_DEBUG_CACHE) != 0);
 
-  dt_mipmap_cache_init((dt_get_debug_flags() & DT_DEBUG_CACHE) != 0);
+  const dt_mipmap_cache_settings_t mipmap_settings = _mipmap_settings_from_conf();
+  dt_mipmap_cache_init(&mipmap_settings, (dt_get_debug_flags() & DT_DEBUG_CACHE) != 0);
+
+  /* Re-tell the cache whenever the user changes one of its four settings. */
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+                            G_CALLBACK(_preferences_changed), NULL);
 
 #ifdef HAVE_OPENCL
   dt_opencl_init(exclude_opencl, print_statistics);
