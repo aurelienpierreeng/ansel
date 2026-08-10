@@ -1582,6 +1582,29 @@ GdkModifierType dt_masks_get_accel_mods(dt_masks_interaction_t interaction);
 GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const dt_masks_form_group_t *fpt,
                                 const float pzx, const float pzy);
 
+/**
+ * @brief Append a bauhaus-slider menu item to a mask context menu, bound to one shape
+ * interaction (size, fading/hardness, rotation, opacity). Shared by the darkroom
+ * canvas context menu (dt_masks_create_menu) and the blend module's own shape-list
+ * context menus, so both stay in sync.
+ */
+GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_masks_form_group_t *form_group,
+                                               dt_masks_interaction_t interaction, dt_masks_increment_t increment,
+                                               float min, float max, float step, float value, int digits,
+                                               const char *format, float factor,
+                                               dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
+
+/**
+ * @brief Append the full set of shape-parameter sliders (size/fading/rotation or
+ * curvature/fade/rotation depending on shape type, plus opacity) for `form`/`op_form` to
+ * `menu`. `op_form` is the group-membership entry the sliders read/write (see
+ * dt_masks_form_group_t) and must already be a live, COW-safe pointer into the owning
+ * group's `points` list.
+ */
+void dt_masks_gui_populate_interaction_sliders(GtkWidget *menu, dt_develop_t *dev, dt_masks_form_t *form,
+                                               dt_masks_form_group_t *op_form,
+                                               dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
+
 /** Dialogs */
 
 int dt_masks_gui_confirm_delete_form_dialog(const char *form_name);

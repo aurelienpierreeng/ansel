@@ -383,11 +383,11 @@ static void _masks_gui_interaction_slider_changed(GtkWidget *widget, gpointer us
   _masks_gui_interaction_apply_value(data, dt_bauhaus_slider_get(widget));
 }
 
-static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_masks_form_group_t *form_group,
-                                                    dt_masks_interaction_t interaction, dt_masks_increment_t increment,
-                                                    float min, float max, float step, float value, int digits,
-                                                    const char *format, float factor,
-                                                    dt_masks_form_gui_t *gui, dt_iop_module_t *module)
+GtkWidget *dt_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_masks_form_group_t *form_group,
+                                               dt_masks_interaction_t interaction, dt_masks_increment_t increment,
+                                               float min, float max, float step, float value, int digits,
+                                               const char *format, float factor,
+                                               dt_masks_form_gui_t *gui, dt_iop_module_t *module)
 {
   GtkWidget *menu_item = gtk_menu_item_new();
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -657,6 +657,70 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 }
 
 
+// Shared by the darkroom canvas context menu (dt_masks_create_menu) and the blend module's
+// own shape-list context menus (develop/blend_gui.c), so both offer the same shape parameters.
+void dt_masks_gui_populate_interaction_sliders(GtkWidget *menu, dt_develop_t *dev, dt_masks_form_t *form,
+                                               dt_masks_form_group_t *op_form,
+                                               dt_masks_form_gui_t *gui, dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(menu) || IS_NULL_PTR(form) || IS_NULL_PTR(op_form)) return;
+
+  const float opacity = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_OPACITY);
+
+  if(form->type & DT_MASKS_GRADIENT)
+  {
+    // For gradients, DT_MASKS_INTERACTION_HARDNESS is the shape curvature and
+    // DT_MASKS_INTERACTION_SIZE is the fade extent -- expose them under their actual names.
+    const float curvature = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
+    const float fade = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_SIZE);
+    float rotation = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_ROTATION);
+    if(!isfinite(rotation)) rotation = 0.0f;
+    if(rotation > 180.0f) rotation -= 360.0f;
+
+    dt_masks_gui_add_interaction_slider(menu, _("Curvature"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+                                      DT_MASKS_INCREMENT_ABSOLUTE, -2.0f, 2.0f, 0.01f,
+                                      isfinite(curvature) ? curvature : 0.0f, 3, "%", 50.0f,
+                                      gui, module);
+    dt_masks_gui_add_interaction_slider(menu, _("Fade"), op_form, DT_MASKS_INTERACTION_SIZE,
+                                      DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.001f,
+                                      isfinite(fade) ? fade : 1.0f, 3, "%", 100.0f,
+                                      gui, module);
+    dt_masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
+                                      DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
+                                      rotation, 1, "\302\260", 1.0f,
+                                      gui, module);
+  }
+  else
+  {
+    const float hardness = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
+
+    dt_masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
+                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
+                                      gui, module);
+    dt_masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+                                      DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
+                                      isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
+                                      gui, module);
+
+    if(form->type & DT_MASKS_ELLIPSE)
+    {
+      float rotation = dt_masks_form_get_interaction_value(dev, op_form, DT_MASKS_INTERACTION_ROTATION);
+      if(!isfinite(rotation)) rotation = 0.0f;
+      if(rotation > 180.0f) rotation -= 360.0f;
+
+      dt_masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
+                                        rotation, 1, "\302\260", 1.0f,
+                                        gui, module);
+    }
+  }
+
+  dt_masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
+                                    DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
+                                    isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
+                                    gui, module);
+}
+
 GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const dt_masks_form_group_t *formgroup,
                                 const float pzx, const float pzy)
 {
@@ -797,61 +861,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     // Common menu items
   if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
   {
-    const float opacity = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_OPACITY);
-
-    if(form->type & DT_MASKS_GRADIENT)
-    {
-      // For gradients, DT_MASKS_INTERACTION_HARDNESS is the shape curvature and
-      // DT_MASKS_INTERACTION_SIZE is the fade extent -- expose them under their actual names.
-      const float curvature = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
-      const float fade = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_SIZE);
-      float rotation = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_ROTATION);
-      if(!isfinite(rotation)) rotation = 0.0f;
-      if(rotation > 180.0f) rotation -= 360.0f;
-
-      _masks_gui_add_interaction_slider(menu, _("Curvature"), op_form, DT_MASKS_INTERACTION_HARDNESS,
-                                        DT_MASKS_INCREMENT_ABSOLUTE, -2.0f, 2.0f, 0.01f,
-                                        isfinite(curvature) ? curvature : 0.0f, 3, "%", 50.0f,
-                                        gui, gui->dev->gui_module);
-      _masks_gui_add_interaction_slider(menu, _("Fade"), op_form, DT_MASKS_INTERACTION_SIZE,
-                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.001f,
-                                        isfinite(fade) ? fade : 1.0f, 3, "%", 100.0f,
-                                        gui, gui->dev->gui_module);
-      _masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
-                                        DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
-                                        rotation, 1, "\302\260", 1.0f,
-                                        gui, gui->dev->gui_module);
-    }
-    else
-    {
-      const float hardness = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_HARDNESS);
-
-      _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
-                                        DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
-                                        gui, gui->dev->gui_module);
-      _masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
-                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
-                                        isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
-                                        gui, gui->dev->gui_module);
-
-      if(form->type & DT_MASKS_ELLIPSE)
-      {
-        float rotation = dt_masks_form_get_interaction_value(gui->dev, op_form, DT_MASKS_INTERACTION_ROTATION);
-        if(!isfinite(rotation)) rotation = 0.0f;
-        if(rotation > 180.0f) rotation -= 360.0f;
-
-        _masks_gui_add_interaction_slider(menu, _("Rotation"), op_form, DT_MASKS_INTERACTION_ROTATION,
-                                          DT_MASKS_INCREMENT_ABSOLUTE, -180.0f, 180.0f, 1.0f,
-                                          rotation, 1, "\302\260", 1.0f,
-                                          gui, gui->dev->gui_module);
-      }
-    }
-
-    _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
-                                      DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
-                                      isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
-                                      gui, gui->dev->gui_module);
-
+    dt_masks_gui_populate_interaction_sliders(menu, gui->dev, form, op_form, gui, gui->dev->gui_module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
   }
 
