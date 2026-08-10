@@ -689,7 +689,6 @@ GList *dt_tag_get_hierarchical(int32_t imgid)
 
 static GList *_tag_get_tags(const int32_t imgid, const dt_tag_type_t type)
 {
-  GList *tags = NULL;
   char *images = NULL;
   if(imgid > 0)
     images = g_strdup_printf("%d", imgid);
@@ -699,25 +698,10 @@ static GList *_tag_get_tags(const int32_t imgid, const dt_tag_type_t type)
     images = dt_selection_ids_to_string(dt_selection_get_global());
   }
 
-  sqlite3_stmt *stmt;
-  char query[256] = { 0 };
-  // clang-format off
-  snprintf(query, sizeof(query), "SELECT DISTINCT T.id"
-                                 "  FROM main.tagged_images AS I"
-                                 "  JOIN data.tags T on T.id = I.tagid"
-                                 "  WHERE I.imgid IN (%s) %s",
-           images, type == DT_TAG_TYPE_ALL ? "" :
-                   type == DT_TAG_TYPE_DT ? "AND T.id IN memory.darktable_tags" :
-                                            "AND NOT T.id IN memory.darktable_tags");
-  // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    tags = g_list_prepend(tags, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
-  }
-
-  sqlite3_finalize(stmt);
+  const dt_tag_kind_t kind = (type == DT_TAG_TYPE_ALL) ? DT_TAG_KIND_ANY
+                           : (type == DT_TAG_TYPE_DT)  ? DT_TAG_KIND_INTERNAL
+                                                       : DT_TAG_KIND_USER;
+  GList *tags = dt_tag_repository_get_ids_for_images(images, kind);
   dt_free(images);
   return tags;
 }
@@ -851,36 +835,20 @@ GList *dt_tag_get_images(const gint tagid)
 
 GList *dt_tag_get_images_from_list(const GList *img, const gint tagid)
 {
-  GList *result = NULL;
   char *images = NULL;
   for(GList *imgs = (GList *)img; imgs; imgs = g_list_next(imgs))
   {
     images = dt_util_dstrcat(images, "%d,",GPOINTER_TO_INT(imgs->data));
   }
+
+  GList *result = NULL;
   if(images)
   {
     images[strlen(images) - 1] = '\0';
-
-    sqlite3_stmt *stmt;
-    // clang-format off
-    gchar *query = g_strdup_printf(
-                            "SELECT imgid FROM main.tagged_images"
-                            " WHERE tagid = %d AND imgid IN (%s)",
-                            tagid, images);
-    // clang-format on
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-
-    while(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      int id = sqlite3_column_int(stmt, 0);
-      result = g_list_prepend(result, GINT_TO_POINTER(id));
-    }
-
-    sqlite3_finalize(stmt);
-    dt_free(query);
+    result = dt_tag_repository_get_images_in_list(tagid, images);
     dt_free(images);
   }
-  return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
+  return result;  // the repository returns them in row order
 }
 
 uint32_t dt_tag_get_suggestions(GList **result)

@@ -542,6 +542,34 @@ GList *dt_tag_repository_get_attached_for_export(const int32_t imgid)
   return g_list_reverse(tags);
 }
 
+GList *dt_tag_repository_get_ids_for_images(const char *imgid_list, const dt_tag_kind_t kind)
+{
+  if(IS_NULL_PTR(imgid_list)) return NULL;
+
+  sqlite3_stmt *stmt = NULL;
+  char query[256] = { 0 };
+  /* The `IN (%s)` is the caller's id list and the trailing fragment selects the kind.
+   * Both are composed here rather than bound because neither is a value: one is a list of
+   * unknown length, the other a clause. */
+  // clang-format off
+  snprintf(query, sizeof(query), "SELECT DISTINCT T.id"
+                                 "  FROM main.tagged_images AS I"
+                                 "  JOIN data.tags T on T.id = I.tagid"
+                                 "  WHERE I.imgid IN (%s) %s",
+           imgid_list, kind == DT_TAG_KIND_ANY ? "" :
+                       kind == DT_TAG_KIND_INTERNAL ? "AND T.id IN memory.darktable_tags" :
+                                                      "AND NOT T.id IN memory.darktable_tags");
+  // clang-format on
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+
+  GList *tags = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    tags = g_list_prepend(tags, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+  sqlite3_finalize(stmt);
+
+  return tags; // prepend-only, as before
+}
+
 void dt_tag_repository_cleanup(void)
 {
   for(int i = 0; i < 2; i++)
