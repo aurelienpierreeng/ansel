@@ -26,7 +26,7 @@
 #include "database/database.h"
 #include "common/history_snapshot.h"
 #include "system/mem_alloc.h"
-#include "database/sql_debug.h"
+#include "database/history_snapshot_repository.h"
 #include "common/history.h"
 #include "caches/image_cache.h"
 #include "control/signal.h"
@@ -39,101 +39,16 @@ dt_undo_lt_history_t *dt_history_snapshot_item_init(void)
 void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *history_end)
 {
   // create history & mask snapshots for imgid, return the snapshot id
-  sqlite3_stmt *stmt;
-  gboolean all_ok = TRUE;
-
-  // get current history end
   *history_end = dt_history_get_end(imgid);
+  *snap_id = dt_history_snapshot_repository_next_id(imgid);
 
-  // get max snapshot
-
-  *snap_id = 0;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT MAX(id) FROM memory.undo_history WHERE imgid=?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  if (sqlite3_step(stmt) == SQLITE_ROW)
-    *snap_id = sqlite3_column_int(stmt, 0) + 1;
-  sqlite3_finalize(stmt);
-
-  dt_database_start_transaction();
-
-  if(*history_end == 0)
-  {
-    // insert a dummy undo_histroy to ensure proper snap_id later
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "INSERT INTO memory.undo_history"
-                                "  VALUES (?1, ?2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
-                                , -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, *snap_id);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-    all_ok = all_ok && (sqlite3_step(stmt) == SQLITE_DONE);
-
-    goto end_create;
-  }
-
-  // copy current state into undo_history
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO memory.undo_history"
-                              "  SELECT ?1, imgid, num, module, operation, op_params, enabled, "
-                              "         blendop_params, blendop_version, multi_priority, multi_name "
-                              "  FROM main.history"
-                              "  WHERE imgid=?2", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, *snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  all_ok = all_ok && (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
-
-  // copy current state into undo_masks_history
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO memory.undo_masks_history"
-                              "  SELECT ?1, imgid, num, formid, form, name, version,"
-                              "         points, points_count, source"
-                              "  FROM main.masks_history"
-                              "  WHERE imgid=?2", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, *snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  all_ok = all_ok && (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
-
-  // copy the module order
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO memory.undo_module_order"
-                              "  SELECT ?1, imgid, version, iop_list"
-                              "  FROM main.module_order"
-                              "  WHERE imgid=?2", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, *snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  all_ok = all_ok && (sqlite3_step(stmt) == SQLITE_DONE);
-
- end_create:
-
-  sqlite3_finalize(stmt);
-
-  if(all_ok)
-    dt_database_release_transaction();
-  else
-  {
-    dt_database_rollback_transaction();
+  if(!dt_history_snapshot_repository_create(*snap_id, imgid, *history_end == 0))
     fprintf(stderr, "[dt_history_snapshot_undo_create] fails to create a snapshot for %d\n", imgid);
-  }
 }
 
 static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_id, const int history_end)
 {
   // restore the given snapshot for imgid
-  sqlite3_stmt *stmt;
   gboolean all_ok = TRUE;
 
   dt_database_start_transaction();
@@ -142,57 +57,8 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
   // if no history end it means the image history was discarded, nothing more to restore
-  if(history_end == 0)
-  {
-    goto end_restore;
-  }
-
-  // copy undo_history snapshot back as current history state
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO main.history"
-                              "  SELECT imgid, num, module, operation, op_params, enabled, "
-                              "         blendop_params, blendop_version, multi_priority, multi_name "
-                              "  FROM memory.undo_history"
-                              "  WHERE imgid=?2 AND id=?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  all_ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
-
-  // copy undo_masks_history snapshot back as current masks_history state
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO main.masks_history"
-                              "  SELECT imgid, num, formid, form, name, version, "
-                              "         points, points_count, source"
-                              "  FROM memory.undo_masks_history"
-                              "  WHERE imgid=?2 AND id=?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  all_ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
-
-  // restore module order
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO main.module_order"
-                              "  SELECT imgid, version, iop_list"
-                              "  FROM memory.undo_module_order"
-                              "  WHERE imgid=?2 AND id=?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  all_ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
-
- end_restore:
+  if(history_end != 0)
+    all_ok = dt_history_snapshot_repository_restore(snap_id, imgid);
 
   // set history end
   all_ok &= dt_history_set_end(imgid, history_end);
@@ -216,28 +82,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
 
 static void _clear_undo_snapshot(const int32_t imgid, const int snap_id)
 {
-  sqlite3_stmt *stmt;
-
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM memory.undo_history WHERE id=?1 AND imgid=?2", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM memory.undo_masks_history WHERE id=?1 AND imgid=?2", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM memory.undo_module_order WHERE id=?1 AND imgid=?2", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, snap_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  dt_history_snapshot_repository_clear(snap_id, imgid);
 }
 
 void dt_history_snapshot_undo_lt_history_data_free(gpointer data)

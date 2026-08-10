@@ -102,6 +102,7 @@ FILE(GLOB SOURCE_FILES
   "caches/image_cache.c"
   "database/colorlabel_repository.c"
   "database/selection_repository.c"
+  "database/history_snapshot_repository.c"
   "database/image_repository.c"
   "common/image_extensions.c"
   "common/imagebuf.c"
