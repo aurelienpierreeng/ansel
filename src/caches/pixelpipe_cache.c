@@ -51,6 +51,16 @@
  * file above develop/; taking a name string instead of a module would cut it. */
 #include "develop/imageop.h"
 
+/* The cache instance, owned HERE. darktable.c used to hold it on the application struct and
+ * implement the accessor; it still decides HOW BIG the cache is and still retries smaller on
+ * failure -- that is resource policy, not a cache decision -- but the pointer lives here. */
+static dt_dev_pixelpipe_cache_t *_pixelpipe_cache = NULL;
+
+dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void)
+{
+  return _pixelpipe_cache;
+}
+
 /* Installed by the orchestrator; see dt_dev_pixelpipe_cache_set_handlers(). NULL means
  * nobody is listening, which is a working configuration, not an error. */
 static dt_pixelpipe_cache_warn_handler_t _warn_handler = NULL;
@@ -2120,6 +2130,7 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
   // toward memory starvation while we sit idle (the alloc-time pressure valve only
   // runs when we allocate). No-ops when the system has RAM to spare.
   pressure_shedding = g_timeout_add_seconds(5, (GSourceFunc)_memory_pressure_shedder, cache);
+  _pixelpipe_cache = cache;
   return cache;
 }
 
@@ -2144,6 +2155,8 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache)
     g_source_remove(pressure_shedding);
     pressure_shedding = 0;
   }
+
+  if(_pixelpipe_cache == cache) _pixelpipe_cache = NULL;
 }
 
 static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,

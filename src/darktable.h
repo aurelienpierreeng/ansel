@@ -155,8 +155,6 @@ extern "C" {
 struct dt_gui_gtk_t;
 struct dt_control_t;
 struct dt_develop_t;
-struct dt_mipmap_cache_t;
-struct dt_image_cache_t;
 struct dt_lib_t;
 struct dt_conf_t;
 struct dt_points_t;
@@ -186,8 +184,6 @@ typedef struct darktable_t
   struct dt_control_t *control;
   struct dt_control_signal_t *signals;
   struct dt_gui_gtk_t *gui;
-  struct dt_mipmap_cache_t *mipmap_cache;
-  struct dt_image_cache_t *image_cache;
   struct dt_bauhaus_t *bauhaus;
   const struct dt_database_t *db;
   const struct dt_pwstorage_t *pwstorage;
@@ -198,7 +194,6 @@ typedef struct darktable_t
   struct dt_dbus_t *dbus;
   struct dt_undo_t *undo;
   struct dt_l10n_t *l10n;
-  struct dt_dev_pixelpipe_cache_t *pixelpipe_cache;
 
   // Protects from concurrent writing at export time
   dt_pthread_mutex_t plugin_threadsafe;

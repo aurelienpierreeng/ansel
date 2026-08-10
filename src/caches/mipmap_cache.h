@@ -112,8 +112,8 @@ typedef struct dt_mipmap_cache_t
 // function takes care of re-allocating, if necessary.
 void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img);
 
-void dt_mipmap_cache_init(dt_mipmap_cache_t *cache);
-void dt_mipmap_cache_cleanup(dt_mipmap_cache_t *cache);
+void dt_mipmap_cache_init(void);
+void dt_mipmap_cache_cleanup(void);
 void dt_mipmap_cache_print(dt_mipmap_cache_t *cache);
 
 // Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).

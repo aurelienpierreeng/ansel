@@ -79,6 +79,16 @@
 #include "win/statvfs.h"
 #endif
 
+/* The cache instance, owned HERE. It used to be calloc'd by darktable.c and hung off the
+ * application struct, so the accessor lived in the orchestrator and the struct was reachable
+ * from anything that included darktable.h. */
+static dt_mipmap_cache_t *_mipmap_cache = NULL;
+
+dt_mipmap_cache_t *dt_mipmap_cache_get_global(void)
+{
+  return _mipmap_cache;
+}
+
 #define DT_MIPMAP_CACHE_FILE_MAGIC 0xD71337
 #define DT_MIPMAP_CACHE_FILE_VERSION 23
 #define DT_MIPMAP_CACHE_DEFAULT_FILE_NAME "mipmaps"
@@ -707,8 +717,12 @@ write_error:
   entry->data = NULL;
 }
 
-void dt_mipmap_cache_init(dt_mipmap_cache_t *cache)
+void dt_mipmap_cache_init(void)
 {
+  if(_mipmap_cache) return;
+  _mipmap_cache = (dt_mipmap_cache_t *)calloc(1, sizeof(dt_mipmap_cache_t));
+  if(IS_NULL_PTR(_mipmap_cache)) return;
+  dt_mipmap_cache_t *cache = _mipmap_cache;
   dt_mipmap_cache_get_filename(cache->cachedir, sizeof(cache->cachedir));
 
   // Fixed sizes for the thumbnail mip levels, selected for coverage of most screen sizes
@@ -770,12 +784,17 @@ void dt_mipmap_cache_init(dt_mipmap_cache_t *cache)
       = _get_entry_size(4 * sizeof(float) * cache->max_width[DT_MIPMAP_F] * cache->max_height[DT_MIPMAP_F]);
 }
 
-void dt_mipmap_cache_cleanup(dt_mipmap_cache_t *cache)
+void dt_mipmap_cache_cleanup(void)
 {
+  dt_mipmap_cache_t *cache = _mipmap_cache;
+  if(IS_NULL_PTR(cache)) return;
   dt_mipmap_cache_print(cache);
   dt_cache_cleanup(&cache->mip_thumbs.cache);
   dt_cache_cleanup(&cache->mip_full.cache);
   dt_cache_cleanup(&cache->mip_f.cache);
+
+  dt_free(_mipmap_cache);
+  _mipmap_cache = NULL;
 }
 
 void dt_mipmap_cache_print(dt_mipmap_cache_t *cache)

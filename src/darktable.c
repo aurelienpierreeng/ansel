@@ -419,9 +419,9 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
       dt_film_open(filmid);
       // make sure buffers are loaded (load full for testing)
       dt_mipmap_buffer_t buf;
-      dt_mipmap_cache_get(darktable.mipmap_cache, &buf, id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+      dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
       gboolean loaded = (!IS_NULL_PTR(buf.buf));
-      dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+      dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
       if(!loaded)
       {
         id = 0;
@@ -505,10 +505,6 @@ void *dt_alloc_align(size_t size)
  * lower-level libs that declare these symbols (caches/pixelpipe_cache.h and
  * common/openmp.h). This keeps those libs free of darktable.h — they link
  * against two functions instead of importing the whole application struct. */
-struct dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void)
-{
-  return darktable.pixelpipe_cache;
-}
 
 int dt_get_num_openmp_threads(void)
 {
@@ -602,15 +598,7 @@ dt_pthread_rwlock_t *dt_database_threadsafe_lock(void)
   return &darktable.database_threadsafe;
 }
 
-struct dt_image_cache_t *dt_image_cache_get_global(void)
-{
-  return darktable.image_cache;
-}
 
-struct dt_mipmap_cache_t *dt_mipmap_cache_get_global(void)
-{
-  return darktable.mipmap_cache;
-}
 
 struct dt_selection_t *dt_selection_get_global(void)
 {
@@ -1449,15 +1437,15 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // size. Rather than aborting outright, retry smaller: a shrunken cache degrades
   // performance, an abort loses the session.
   size_t pipecache_size = darktable.dtresources.pixelpipe_memory;
-  darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(pipecache_size);
-  while(IS_NULL_PTR(darktable.pixelpipe_cache) && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
+  dt_dev_pixelpipe_cache_init(pipecache_size);
+  while(IS_NULL_PTR(dt_pixelpipe_cache_get_global()) && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
   {
     pipecache_size /= 2;
     fprintf(stderr,
             "WARNING: can't reserve %" G_GSIZE_FORMAT " MiB of virtual memory for the pixelpipe cache, "
             "retrying with %" G_GSIZE_FORMAT " MiB. Check your memory settings.\n",
             2 * pipecache_size / (1024 * 1024), pipecache_size / (1024 * 1024));
-    darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(pipecache_size);
+    dt_dev_pixelpipe_cache_init(pipecache_size);
   }
   darktable.dtresources.pixelpipe_memory = pipecache_size;
 
@@ -1468,7 +1456,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
    * here instead: the cache says what happened, the application decides who hears it. */
   dt_dev_pixelpipe_cache_set_handlers(_pixelpipe_cache_warn, _pixelpipe_cache_ready,
                                       &_pixelpipe_cache_observer);
-  if(IS_NULL_PTR(darktable.pixelpipe_cache))
+  if(IS_NULL_PTR(dt_pixelpipe_cache_get_global()))
   {
     fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");
     dt_gui_splash_close();
@@ -1483,11 +1471,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // must come before mipmap_cache, because that one will need to access
   // image dimensions stored in here:
-  darktable.image_cache = (dt_image_cache_t *)calloc(1, sizeof(dt_image_cache_t));
-  dt_image_cache_init(darktable.image_cache);
+  dt_image_cache_init();
 
-  darktable.mipmap_cache = (dt_mipmap_cache_t *)calloc(1, sizeof(dt_mipmap_cache_t));
-  dt_mipmap_cache_init(darktable.mipmap_cache);
+  dt_mipmap_cache_init();
 
 #ifdef HAVE_OPENCL
   dt_opencl_init(exclude_opencl, print_statistics);
@@ -1724,10 +1710,8 @@ void dt_cleanup()
   dt_selection_free(darktable.selection);
 
   // Mipmap cleanup may still consult the image cache for paths.
-  dt_mipmap_cache_cleanup(darktable.mipmap_cache);
-  dt_free(darktable.mipmap_cache);
-  dt_image_cache_cleanup(darktable.image_cache);
-  dt_free(darktable.image_cache);
+  dt_mipmap_cache_cleanup();
+  dt_image_cache_cleanup();
 
   dt_colorprofiles_cleanup();
   dt_conf_set_int("processing/gui_throttle_runtime_us", dt_gui_throttle_get_runtime_us());
@@ -1743,14 +1727,14 @@ void dt_cleanup()
   darktable.iop_order_rules = NULL;
 
 #ifdef HAVE_OPENCL
-  if(dt_opencl_is_inited() && darktable.pixelpipe_cache)
+  if(dt_opencl_is_inited() && dt_pixelpipe_cache_get_global())
   {
     for(int i = 0; i < dt_opencl_get_num_devices(); i++)
       dt_opencl_finish(i);
   }
 #endif
 
-  dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
+  dt_dev_pixelpipe_cache_cleanup(dt_pixelpipe_cache_get_global());
   dt_supervisor_cleanup();
 
   dt_opencl_cleanup();
@@ -2162,7 +2146,7 @@ int dt_worker_threads()
 
 size_t dt_get_available_mem()
 {
-  const size_t budget_left = darktable.pixelpipe_cache->max_memory - darktable.pixelpipe_cache->current_memory;
+  const size_t budget_left = dt_pixelpipe_cache_get_global()->max_memory - dt_pixelpipe_cache_get_global()->current_memory;
 
   // The budget is only a startup-time plan: cap it by what the system can actually
   // back right now without dropping under the pressure floor (issue #1083), so
@@ -2175,7 +2159,7 @@ size_t dt_get_available_mem()
 
   const size_t pressure_floor = dt_get_memory_pressure_floor();
   const size_t sys_room = ((sys_available > pressure_floor) ? sys_available - pressure_floor : 0)
-                          + darktable.pixelpipe_cache->current_memory / 2;
+                          + dt_pixelpipe_cache_get_global()->current_memory / 2;
   return MIN(budget_left, sys_room);
 }
 

@@ -175,9 +175,52 @@ elif [ "${opencl_state_now}" -lt "${opencl_state_baseline}" ] || [ "${opencl_par
   findings=$((findings + 1))
 fi
 
+
+# 5. src/caches owns its instances, and does not call back up the stack.
+#
+# The three caches (image, mipmap, pixelpipe) used to hang off darktable_t, so their structs
+# were reachable from anything that included darktable.h. Each owns its instance now and
+# implements its own accessor.
+#
+# The second count is the one that matters structurally: a cache is storage, and storage that
+# calls dt_control_log() or raises a signal has the dependency backwards. Those go through the
+# handlers dt_dev_pixelpipe_cache_set_handlers() installs, so the count is zero and staying
+# there is the check. develop/imageop.h and develop/pixelpipe_hb.h are excluded by name: the
+# pixelpipe cache genuinely needs both (it reads `module->op`, calls `module->name()`, and keys
+# entries on pipe hashes), so counting them would only ever read as noise.
+#
+# The upcall baseline is 10, not 0, and it is a RATCHET rather than a boundary: image_cache.c
+# and mipmap_cache.c arrived from common/ carrying these, and they are the next tranche --
+#
+#   image_cache.c  : imageio_core.h, control.h, signal.h, supervisor.h            (4)
+#   mipmap_cache.c : supervisor.h, imageio_core.h, imageio_jpeg.h,
+#                    imageio_module.h, control/jobs.h, develop/imageop_math.h     (6)
+#
+# The mipmap cache decoding images and scheduling jobs is a real design question, not a stray
+# include, so it gets its own pass. pixelpipe_cache.c is already at zero here.
+caches_global_baseline=0
+caches_upcall_baseline=10
+
+caches_global_now=$(grep -rn 'darktable\.\(image_cache\|mipmap_cache\|pixelpipe_cache\)\b' \
+                    src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null | wc -l)
+caches_upcall_now=$(grep -rnE '^#include "(control|develop|gui|libs|views|iop|imageio)/' src/caches/ \
+                    2>/dev/null | grep -cv 'develop/imageop\.h\|develop/pixelpipe_hb\.h')
+
+echo "caches:        ${caches_global_now} references to the caches on darktable_t (baseline ${caches_global_baseline}),"
+echo "               ${caches_upcall_now} includes from a higher layer (baseline ${caches_upcall_baseline})."
+
+if [ "${caches_global_now}" -gt "${caches_global_baseline}" ] || [ "${caches_upcall_now}" -gt "${caches_upcall_baseline}" ]; then
+  echo "caches: a count ROSE. A cache owns its instance and announces through the handlers"
+  echo "        (dt_dev_pixelpipe_cache_set_handlers()); it does not call the control loop."
+  findings=$((findings + 1))
+elif [ "${caches_global_now}" -lt "${caches_global_baseline}" ] || [ "${caches_upcall_now}" -lt "${caches_upcall_baseline}" ]; then
+  echo "caches: a count fell -- lower the baseline in this script, in the same commit."
+  findings=$((findings + 1))
+fi
+
 if [ "${findings}" -gt 0 ]; then
   exit 1
 fi
 
-echo "OK: src/system is closed, src/widgets does not reach into gui/, colorprofiles and opencl held."
+echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl and caches held."
 exit 0
