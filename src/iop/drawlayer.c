@@ -44,6 +44,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
+#include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
 #include "pixel/interpolation.h"
 #include "gui/color_picker_proxy.h"
@@ -3928,6 +3929,11 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
 int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
   if(IS_NULL_PTR(self->dev) || self->dev->gui_module != self) return 0;
+
+  // A drawn blend mask being edited (this module's own blending options, not its own painting
+  // state below, which never goes through dev->forms) must not leak scroll into the brush-size
+  // change here.
+  if(self->dev->form_gui && dt_masks_get_visible_form(self->dev)) return 0;
 
   const gboolean increase = dt_mask_scroll_increases(up);
   const float factor = increase ? 1.1f : 0.9f;

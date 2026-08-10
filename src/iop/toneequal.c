@@ -2046,7 +2046,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   if(dt_gui_widgets_suppressed()) return 1;
   if(IS_NULL_PTR(g)) return 0;
   if(!self->expanded) return 0;
-  if(dt_iop_color_picker_is_visible(dev)) return 0;
+  if(in_mask_editing(self) || dt_iop_color_picker_is_visible(dev)) return 0;
 
   // turn-on the module if off
   if(!self->enabled)

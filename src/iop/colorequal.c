@@ -46,6 +46,7 @@
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
+#include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
 #include "gui/color_picker_proxy.h"
 #include "widgets/draw.h"
@@ -1793,7 +1794,11 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
   dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  if(!g->has_focus || !g->cursor_valid || !g->cursor_sample_valid || dt_iop_color_picker_is_visible(self->dev))
+  // A drawn mask being edited (anywhere on canvas, not just hovered directly -- that case
+  // already wins via dt_masks_events_mouse_scrolled in views/darkroom.c) must not leak scroll
+  // input into this module's own hue/chroma curve adjustment.
+  if(!g->has_focus || !g->cursor_valid || !g->cursor_sample_valid || dt_iop_color_picker_is_visible(self->dev)
+     || (self->dev->form_gui && dt_masks_get_visible_form(self->dev)))
     return 0;
 
   if(!self->enabled)

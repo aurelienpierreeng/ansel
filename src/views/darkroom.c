@@ -2884,8 +2884,12 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
     return TRUE;
   }
 
-  // module
-  if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->scrolled && dev->gui_module->scrolled(dev->gui_module, x, y, up, state))
+  // module -- skip while the color picker overlay is active, consistent with button_pressed/
+  // button_released/mouse_moved above, which all give the picker priority over the module.
+  // Unlike those three, a module's own scrolled() has no reliable way to know the picker is
+  // showing unless it checks dt_iop_color_picker_is_visible() itself, and not every module does.
+  if(!dt_iop_color_picker_is_visible(dev)
+     && dev->gui_module && dev->gui_module->enabled && dev->gui_module->scrolled && dev->gui_module->scrolled(dev->gui_module, x, y, up, state))
   {
     // Scroll in modules should handle history changes internally.
     return TRUE;

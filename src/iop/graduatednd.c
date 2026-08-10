@@ -76,6 +76,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/masks.h"
 
 #include "gui/color_picker_proxy.h"
 #include "widgets/draw.h"
@@ -621,6 +622,12 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
+
+  // A drawn mask being edited (anywhere on canvas, not just hovered directly -- that case
+  // already wins via dt_masks_events_mouse_scrolled in views/darkroom.c) must not leak
+  // Ctrl/Shift+scroll into this module's density/hardness adjustment.
+  if(self->dev->form_gui && dt_masks_get_visible_form(self->dev)) return 0;
+
   if(dt_modifier_is(state, GDK_CONTROL_MASK))
   {
     float dens;
