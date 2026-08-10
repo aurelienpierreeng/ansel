@@ -57,7 +57,6 @@
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_module.h"
-#include "common/conf.h"
 #include "control/jobs.h"
 #include "develop/imageop_math.h"
 
@@ -74,6 +73,7 @@
 
 /* Set once by dt_mipmap_cache_init(); see the header. */
 static gboolean _verbose = FALSE;
+
 
 /* Statement-safe: a bare `if(_verbose) dt_print(...)` swallows a following `else`. */
 #define _cache_print(channel, ...)                    \
@@ -129,6 +129,51 @@ typedef struct dt_mipmap_cache_t
  * application struct, so the accessor lived in the orchestrator and the struct was reachable
  * from anything that included darktable.h. */
 static dt_mipmap_cache_t *_mipmap_cache = NULL;
+
+/* The user's choices, told to us by the application. Guarded because the GUI thread can
+ * replace them while worker threads are mid-decode, and four fields read one at a time can be
+ * a mix of old and new -- the same torn-read hazard the colour module documents. */
+static dt_mipmap_cache_settings_t _settings = { 0 };
+static dt_pthread_mutex_t _settings_lock;
+static gsize _settings_lock_inited = 0;
+
+static inline void _settings_lock_ensure(void)
+{
+  if(g_once_init_enter(&_settings_lock_inited))
+  {
+    dt_pthread_mutex_init(&_settings_lock, NULL);
+    g_once_init_leave(&_settings_lock_inited, 1);
+  }
+}
+
+static inline dt_mipmap_cache_settings_t _settings_get(void)
+{
+  _settings_lock_ensure();
+  dt_pthread_mutex_lock(&_settings_lock);
+  const dt_mipmap_cache_settings_t s = _settings;
+  dt_pthread_mutex_unlock(&_settings_lock);
+  return s;
+}
+
+void dt_mipmap_cache_get_settings(dt_mipmap_cache_settings_t *settings)
+{
+  if(!IS_NULL_PTR(settings)) *settings = _settings_get();
+}
+
+void dt_mipmap_cache_set_settings(const dt_mipmap_cache_settings_t *settings)
+{
+  if(IS_NULL_PTR(settings)) return;
+  _settings_lock_ensure();
+  dt_pthread_mutex_lock(&_settings_lock);
+  _settings = *settings;
+  dt_pthread_mutex_unlock(&_settings_lock);
+
+  /* The LRU quota is a live field and the limit is soft: lowering it makes the next
+   * insertions evict harder rather than freeing anything now. */
+  if(!IS_NULL_PTR(_mipmap_cache))
+    _mipmap_cache->mip_thumbs.cache.cost_quota = settings->max_memory;
+}
+
 
 #define DT_MIPMAP_CACHE_FILE_MAGIC 0xD71337
 #define DT_MIPMAP_CACHE_FILE_VERSION 23
@@ -320,7 +365,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   // 0 = never use embedded thumbnail
   // 1 = only on unedited pics,
   // 2 = always use embedded thumbnail
-  int mode = dt_conf_get_int("lighttable/embedded_jpg");
+  int mode = _settings_get().embedded_jpg;
   gboolean altered = FALSE;
   if(mode == 1)
   {
@@ -336,7 +381,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   // This allows fast toggling between JPEG and processed RAW thumbnail from GUI.
   if(write_to_disk)
   {
-    *write_to_disk = dt_conf_get_bool("cache_disk_backend");
+    *write_to_disk = _settings_get().disk_backend;
   }
 
   if(img)
@@ -662,7 +707,7 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
 
   // also remove jpg backing (always try to do that, in case user just temporarily switched it off,
   // to avoid inconsistencies.
-  // if(dt_conf_get_bool("cache_disk_backend"))
+  // if(_settings_get().disk_backend)
   if(cache->cachedir[0])
   {
     char filename[PATH_MAX] = { 0 };
@@ -726,7 +771,7 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
               goto write_error;
             }
 
-            const int cache_quality = dt_conf_get_int("database_cache_quality");
+            const int cache_quality = _settings_get().cache_quality;
             const uint8_t *exif = NULL;
             int exif_len = 0;
             if(dsc->color_space == DT_COLORSPACE_SRGB)
@@ -759,9 +804,10 @@ write_error:
   entry->data = NULL;
 }
 
-void dt_mipmap_cache_init(const gboolean verbose)
+void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboolean verbose)
 {
   _verbose = verbose;
+  if(!IS_NULL_PTR(settings)) dt_mipmap_cache_set_settings(settings);
   if(_mipmap_cache) return;
   _mipmap_cache = (dt_mipmap_cache_t *)calloc(1, sizeof(dt_mipmap_cache_t));
   if(IS_NULL_PTR(_mipmap_cache)) return;
@@ -811,7 +857,7 @@ void dt_mipmap_cache_init(const gboolean verbose)
   cache->mip_full.stats_fetches = 0;
   cache->mip_full.stats_standin = 0;
 
-  dt_cache_init(&cache->mip_thumbs.cache, 0, dt_get_mipmap_mem());
+  dt_cache_init(&cache->mip_thumbs.cache, 0, _settings_get().max_memory);
   dt_cache_set_allocate_callback(&cache->mip_thumbs.cache, dt_mipmap_cache_allocate_dynamic, cache);
   dt_cache_set_cleanup_callback(&cache->mip_thumbs.cache, dt_mipmap_cache_deallocate_dynamic, cache);
 
@@ -923,7 +969,7 @@ void dt_mipmap_cache_get_usage(size_t *current, size_t *max)
   g_array_free(entries, TRUE);
 
   if(current) *current = used;
-  if(max) *max = dt_get_mipmap_mem(); // user-specified mipmap RAM budget
+  if(max) *max = _settings_get().max_memory; // user-specified mipmap RAM budget
 }
 
 GArray *dt_mipmap_cache_get_entries_stats(void)
@@ -1486,7 +1532,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   char filename[PATH_MAX] = { 0 };
   char ext[6] = { 0 };
   gboolean input_exists, is_jpg_input, use_embedded_jpg;
-  const int embedded_jpg_mode = dt_conf_get_int("lighttable/embedded_jpg");
+  const int embedded_jpg_mode = _settings_get().embedded_jpg;
   _write_mipmap_to_disk(imgid, filename, ext, &input_exists, &is_jpg_input, &use_embedded_jpg, NULL);
 
   /* do not even try to process file if it isn't available */

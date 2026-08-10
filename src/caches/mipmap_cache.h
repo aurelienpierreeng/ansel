@@ -90,14 +90,55 @@ typedef struct dt_mipmap_cache_t dt_mipmap_cache_t;
 void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img);
 
 /**
+ * @brief Everything about the mipmap cache that the USER decides.
+ *
+ * @details These four were read from conf at the point of use, so the cache depended on the
+ * configuration system and its behaviour could change under it mid-decode. They cross the
+ * boundary as one value now: the application reads conf, the cache is told. That also makes
+ * the lifecycle visible -- set once at startup, set again when the user changes a preference,
+ * and never anywhere else.
+ */
+typedef struct dt_mipmap_cache_settings_t
+{
+  /** @brief RAM budget for the thumbnail LRU, in bytes. A soft quota, not a hard limit. */
+  size_t max_memory;
+  /** @brief Write generated thumbnails to the on-disk cache (`cache_disk_backend`). */
+  gboolean disk_backend;
+  /** @brief Whether to prefer the embedded JPEG over decoding (`lighttable/embedded_jpg`). */
+  int embedded_jpg;
+  /** @brief JPEG quality for thumbnails written to disk (`database_cache_quality`). */
+  int cache_quality;
+} dt_mipmap_cache_settings_t;
+
+/**
+ * @brief Apply new settings to a running cache.
+ *
+ * @details Every field takes effect immediately, including ::max_memory -- the LRU quota is
+ * soft, so lowering it makes the next insertions evict harder rather than freeing anything
+ * synchronously. Call it whenever the user changes one of the four; the application does that
+ * from its DT_SIGNAL_PREFERENCES_CHANGE handler.
+ *
+ * @param settings the new values. NULL is a no-op.
+ */
+void dt_mipmap_cache_set_settings(const dt_mipmap_cache_settings_t *settings);
+
+/**
+ * @brief Read back the settings in force. Snapshot, taken under the same lock the setter
+ * takes, so the four fields are always consistent with each other.
+ */
+void dt_mipmap_cache_get_settings(dt_mipmap_cache_settings_t *settings);
+
+/**
  * @brief Initialise the cache.
  *
  * @param verbose whether this cache traces to the log. Read ONCE, here, from the session's
  *        debug flags by the orchestrator -- the cache does not consult them itself, so it
  *        neither depends on the debug machinery at runtime nor changes behaviour halfway
  *        through a session. `-d cache` still works: darktable.c turns it into this argument.
+ * @param settings the user's choices; see ::dt_mipmap_cache_settings_t. NULL uses zeroes,
+ *        which is only sensible in a test.
  */
-void dt_mipmap_cache_init(const gboolean verbose);
+void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboolean verbose);
 void dt_mipmap_cache_cleanup(void);
 void dt_mipmap_cache_print(void);
 
