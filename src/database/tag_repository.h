@@ -223,6 +223,44 @@ GList *dt_tag_repository_get_collection_tags(void);
  */
 GList *dt_tag_repository_get_names_under(const int32_t imgid, const char *category);
 
+/* ---------------------------------------------------------------------------------------
+ *  Keyword search -- a tag and everything under it
+ *
+ *  Both of these first fill `memory.similar_tags` with the tag whose name equals the
+ *  keyword plus every tag whose name starts with `keyword|`, then read from that. The
+ *  scratch table is emptied on the way out, as it always was.
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief How many tags match @p keyword, and how many images carry any of them. */
+void dt_tag_repository_count_similar(const char *keyword, int *tag_count, int *img_count);
+
+/**
+ * @brief The tags matching @p keyword and the images carrying any of them.
+ *
+ * @param tags receives `dt_tag_t *` with `id` and `tag` set; appended, not replaced.
+ * @param imgids receives image ids as `GINT_TO_POINTER`; appended, not replaced.
+ */
+void dt_tag_repository_get_similar(const char *keyword, GList **tags, GList **imgids);
+
+/**
+ * @brief Tags worth suggesting for the current selection.
+ *
+ * @details Two sources unioned: tags that co-occur with the selection's tags often enough
+ * to clear @p confidence, and the user's recent-tag list. Tags already on every selected
+ * image are rejected from both -- suggesting one would be a no-op.
+ *
+ * @param nb_selected how many images are selected. Also used to fold `select`, for the
+ *        same reason as dt_tag_repository_get_with_usage().
+ * @param confidence percentage, 0..100. At 100 the co-occurrence half is skipped entirely
+ *        and only the recent list is returned -- a different query, not a stricter filter.
+ * @param recent_tags the recent-tag names, already quoted and comma-separated by the
+ *        caller, dropped into an `IN (…)`. It comes from the user's own configuration.
+ * @param nb_recent how many of them to keep.
+ * @return `GList` of `dt_tag_t *`; `leave` is left to the caller.
+ */
+GList *dt_tag_repository_get_suggestions(const uint32_t nb_selected, const int confidence,
+                                         const char *recent_tags, const int nb_recent);
+
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 void dt_tag_repository_cleanup(void);
 
