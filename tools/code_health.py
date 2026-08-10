@@ -44,23 +44,84 @@ from collections import Counter, defaultdict
 # byte-identical in both repositories and "are the two panels measuring the same thing?"
 # is answerable with cmp(1). A path that exists in only one tree costs nothing in the
 # other.
-EXCLUDED_DIR_PARTS = (
-    "/external/",              # both: vendored rawspeed, LibRaw, lua, sentry-native, ...
-    "/tests/integration/",     # darktable: darktable-tests submodule
-    "/image_test/samples/",    # Ansel: test-image bank submodule
+EXCLUDED_DIR_PARTS = [
+    "/external/",              # both: vendored code that is NOT a submodule either
+                               # (lua/, LuaAutoC/, cie_colorimetric_tables.c, ...)
     "/apps/ansel-chart/",      # Ansel: dead code, no build target compiles it
-    "/doxygen-awesome-css/",   # both: Doxygen theme submodule
-)
+]
 
-# Shell-glob form of the same list, for tools that filter by pattern rather than
-# by substring. Derived, never written out twice.
-EXCLUDED_GLOBS = tuple("*%s*" % part for part in EXCLUDED_DIR_PARTS)
+# Every git submodule is added to that list at startup, read from .gitmodules rather
+# than hardcoded. A submodule is an upstream project pinned at a commit: its
+# complexity, its defects and its size belong to whoever wrote it, and counting them
+# describes someone else's codebase. Reading the list means it cannot drift when a
+# release adds, drops or moves one - which is exactly what happens across a version
+# upgrade of the reference tree.
 
-SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".mm")
+
+def load_submodule_exclusions(repo_root="."):
+    """Extend EXCLUDED_DIR_PARTS with every path declared in .gitmodules."""
+    path = os.path.join(repo_root, ".gitmodules")
+    found = []
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line.startswith("path"):
+                    continue
+                _key, _sep, value = line.partition("=")
+                value = value.strip().strip("/")
+                if value:
+                    found.append(value)
+    except OSError:
+        return []
+    added = []
+    for sub in found:
+        part = "/" + sub.replace(os.sep, "/").strip("/") + "/"
+        if part not in EXCLUDED_DIR_PARTS:
+            EXCLUDED_DIR_PARTS.append(part)
+            added.append(sub)
+    return added
+
+
+def excluded_globs():
+    """Shell-glob form of the exclusion list, for tools that filter by pattern.
+
+    Derived on demand, never written out twice, so it always reflects the submodule
+    paths loaded from .gitmodules.
+    """
+    return tuple("*%s*" % part for part in EXCLUDED_DIR_PARTS)
+
+# What counts as production code: an ALLOWLIST, not a list of things to skip.
+#
+# Only these are compiled into the application and run on a user's machine. Everything
+# else in either repository - Python and shell helpers under tools/, YAML workflows,
+# CMake and build glue, Markdown documentation, XML and JSON resources - is developer
+# or build material. Measuring it reports the health of the toolbox rather than of the
+# software, and the two projects keep very differently sized toolboxes, so counting it
+# actively distorts the comparison.
+#
+# An allowlist is deliberate: anything new that appears in either tree is excluded
+# until someone decides it ships, rather than silently joining the measurements.
+SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hxx", ".m", ".mm")
+
+# cloc identifies languages by content, not only by extension, so a helper script with
+# no suffix and a #!/usr/bin/python3 line is still reported as Python. The size section
+# therefore filters on cloc's own language name, using the same allowlist idea.
+PRODUCTION_LANGUAGES = frozenset((
+    "C", "C/C++ Header", "C++", "Objective-C", "Objective-C++",
+))
+
+
+def is_production_file(path):
+    """True for a file that is compiled into the shipped application."""
+    return path.lower().endswith(SOURCE_SUFFIXES)
 
 
 def is_excluded(path):
+    """True for anything that must not be measured: vendored, dead, or not shipped."""
     p = "/" + path.replace(os.sep, "/").lstrip("/")
+    if not is_production_file(p):
+        return True
     return any(part in p for part in EXCLUDED_DIR_PARTS)
 
 
@@ -388,7 +449,7 @@ def collect_ccn(source_dir):
     if not shutil.which("lizard"):
         return None
     cmd = ["lizard", "--csv", "-l", "c", "-l", "cpp"]
-    for glob in EXCLUDED_GLOBS:
+    for glob in excluded_globs():
         cmd += ["-x", glob]
     cmd.append(source_dir)
     ok, out = run(cmd)
@@ -470,10 +531,13 @@ def collect_cppcheck(source_dir, jobs):
         "-j", str(jobs),
         source_dir,
     ]
-    # cppcheck filters by path prefix; a directory that does not exist in this tree is
-    # simply ignored, which is what keeps this list shared between both repositories.
-    for rel in ("external", "tests/integration", "apps/ansel-chart"):
-        cmd[-1:-1] = ["-i", os.path.join(source_dir, *rel.split("/"))]
+    # cppcheck filters by path prefix. Feed it every excluded directory - submodules
+    # included - that actually exists, so no vendored translation unit is analysed.
+    for part in EXCLUDED_DIR_PARTS:
+        rel = part.strip("/")
+        for candidate in (rel, os.path.join(source_dir, os.path.basename(rel))):
+            if os.path.isdir(candidate):
+                cmd[-1:-1] = ["-i", candidate]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
     except (OSError, subprocess.SubprocessError) as exc:
@@ -583,9 +647,13 @@ def collect_cloc(source_dir):
     totals = Counter()
     per_lang = defaultdict(Counter)
     for path, v in data.items():
-        if is_excluded(path):
-            continue
         lang = v.get("language", "unknown")
+        # Two independent gates. is_excluded() drops vendored and non-shipping paths;
+        # the language allowlist additionally catches files cloc classifies by content
+        # rather than by extension - a suffixless helper with a python shebang, for
+        # instance - which no path rule can see.
+        if lang not in PRODUCTION_LANGUAGES or is_excluded(path):
+            continue
         for key in ("blank", "comment", "code"):
             totals[key] += v.get(key, 0)
             per_lang[lang][key] += v.get(key, 0)
@@ -902,6 +970,8 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", default="project")
     ap.add_argument("--source-dir", default="src")
+    ap.add_argument("--repo-root", default=".",
+                    help="where to read .gitmodules from (default: cwd)")
     ap.add_argument("--db", default="doc/api/sqlite3/doxygen_sqlite3.db")
     ap.add_argument("--clang-tidy-log", default=None)
     ap.add_argument("--out-md", default="doc/code-health.md")
@@ -910,7 +980,11 @@ def main():
     ap.add_argument("--skip-cppcheck", action="store_true")
     args = ap.parse_args()
 
-    data = {"project": args.project}
+    added = load_submodule_exclusions(args.repo_root)
+    sys.stderr.write("code_health: excluding %d submodule(s): %s\n"
+                     % (len(added), ", ".join(added) or "none"))
+
+    data = {"project": args.project, "excluded_submodules": added}
 
     def step(name, fn):
         sys.stderr.write("code_health: %s ... " % name)
