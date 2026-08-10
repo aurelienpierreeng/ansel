@@ -21,12 +21,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "database/database.h"
 #include "common/geo.h"
 #include "common/map_locations.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "database/sql_debug.h"
+#include "database/location_repository.h"
+#include "database/tag_repository.h"
 #include "common/tags.h"
 
 // root for location geotagging
@@ -52,13 +52,7 @@ void dt_map_location_delete(const guint locid)
   {
     if(g_str_has_prefix(name, location_tag_prefix))
     {
-      sqlite3_stmt *stmt;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "DELETE FROM data.locations WHERE tagid=?1",
-                                  -1, &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, locid);
-      sqlite3_step(stmt);
-      sqlite3_finalize(stmt);
+      dt_location_repository_delete(locid);
       dt_tag_remove(locid, TRUE);
     }
   dt_free(name);
@@ -94,20 +88,7 @@ gboolean dt_map_location_name_exists(const char *const name)
 // gets location's images number
 int dt_map_location_get_images_count(const guint locid)
 {
-  int count = 0;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT COUNT (*)"
-                              "  FROM main.tagged_images"
-                              "  WHERE tagid = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, locid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-    count = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
-  return count;
+  return dt_tag_repository_count_images(locid);
 }
 
 // retrieve list of tags which are on that path
@@ -127,41 +108,29 @@ GList *dt_map_location_get_locations_by_path(const gchar *path,
     path1 = g_strconcat(location_tag_prefix, path, NULL);
     path2 = g_strdup_printf("%s|", path1);
   }
-  GList *locs = NULL;
 
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT t.id, t.name, ti.count"
-                              "  FROM data.tags AS t"
-                              "  LEFT JOIN (SELECT tagid,"
-                              "               COUNT(DISTINCT imgid) AS count"
-                              "             FROM main.tagged_images"
-                              "             GROUP BY tagid) AS ti"
-                              "  ON ti.tagid = t.id"
-                              "  WHERE name = ?1 OR SUBSTR(name, 1, LENGTH(?2)) = ?2",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, path1, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, path2, -1, SQLITE_TRANSIENT);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  GList *tags = dt_tag_repository_get_by_path_with_counts(path1, path2);
+
+  /* The repository hands back full tag names; what a location is CALLED is this module's
+   * definition, so the trimming stays here. */
+  GList *locs = NULL;
+  for(GList *l = tags; l; l = g_list_next(l))
   {
-    const char *name = (const char *)sqlite3_column_text(stmt, 1);
+    const dt_tag_count_t *tc = (const dt_tag_count_t *)l->data;
     const int lgth = remove_root ? strlen(path1) + 1 : strlen(location_tag_prefix);
-    if(name && strlen(name) > lgth)
+    if(tc->name && strlen(tc->name) > lgth)
     {
       dt_map_location_t *t = g_malloc0(sizeof(dt_map_location_t));
       if(t)
       {
-        name += lgth;
-        t->tag = g_strdup(name);
-        t->id = sqlite3_column_int(stmt, 0);
-        t->count = sqlite3_column_int(stmt, 2);
+        t->tag = g_strdup(tc->name + lgth);
+        t->id = tc->id;
+        t->count = tc->count;
         locs = g_list_prepend(locs, t);
       }
     }
   }
-  sqlite3_finalize(stmt);
+  g_list_free_full(tags, dt_tag_count_free);
 
   dt_free(path1);
   dt_free(path2);
@@ -170,72 +139,26 @@ GList *dt_map_location_get_locations_by_path(const gchar *path,
 
 GList *dt_map_location_get_locations_on_map(const dt_map_box_t *const bbox)
 {
-  GList *locs = NULL;
-
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT *"
-                              "  FROM data.locations AS t"
-                              "  WHERE latitude IS NOT NULL"
-                              "    AND (latitude + delta2) > ?2"
-                              "    AND (latitude - delta2) < ?1"
-                              "    AND (longitude + delta1) > ?3"
-                              "    AND (longitude - delta1) < ?4",
-                              -1, &stmt, NULL);
-  // clang-format on
-
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, bbox->lat1);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, bbox->lat2);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 3, bbox->lon1);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 4, bbox->lon2);
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    dt_location_draw_t *t = g_malloc0(sizeof(dt_location_draw_t));
-    if(t)
-    {
-      t->id = sqlite3_column_int(stmt, 0);
-      t->data.shape = sqlite3_column_int(stmt, 1);
-      t->data.lon = sqlite3_column_double(stmt, 2);
-      t->data.lat = sqlite3_column_double(stmt, 3);
-      t->data.delta1 = sqlite3_column_double(stmt, 4);
-      t->data.delta2 = sqlite3_column_double(stmt, 5);
-      t->data.ratio = sqlite3_column_double(stmt, 6);
-      locs = g_list_prepend(locs, t);
-    }
-  }
-  sqlite3_finalize(stmt);
-
-  return locs;
+  return dt_location_repository_get_in_bbox(bbox);
 }
 
 void dt_map_location_get_polygons(dt_location_draw_t *ld)
 {
   if(ld->data.shape != MAP_LOCATION_SHAPE_POLYGONS)
     return;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT polygons FROM data.locations AS t"
-                              "  WHERE tagid = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
 
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, ld->id);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    ld->data.plg_pts = sqlite3_column_bytes(stmt, 0);
-    dt_geo_map_display_point_t *p = malloc(ld->data.plg_pts);
-    memcpy(p, sqlite3_column_blob(stmt, 0), ld->data.plg_pts);
-    ld->data.plg_pts /= sizeof(dt_geo_map_display_point_t);
-    GList *pol = NULL;
-    for(int i = 0; i < ld->data.plg_pts; i++, p++)
-      pol = g_list_prepend(pol, p);
-    pol = g_list_reverse(pol);
-    ld->data.polygons = pol;
-  }
-  sqlite3_finalize(stmt);
+  void *blob = NULL;
+  gint bytes = 0;
+  if(!dt_location_repository_get_polygon(ld->id, &blob, &bytes))
+    return;
+
+  dt_geo_map_display_point_t *p = (dt_geo_map_display_point_t *)blob;
+  ld->data.plg_pts = bytes / (gint)sizeof(dt_geo_map_display_point_t);
+
+  GList *pol = NULL;
+  for(int i = 0; i < ld->data.plg_pts; i++, p++)
+    pol = g_list_prepend(pol, p);
+  ld->data.polygons = g_list_reverse(pol);
 }
 
 void dt_map_location_free_polygons(dt_location_draw_t *ld)
@@ -333,189 +256,69 @@ GList *dt_map_location_sort(GList *tags)
 dt_map_location_data_t *dt_map_location_get_data(const guint locid)
 {
   if(locid == -1) return NULL;
-  dt_map_location_data_t *g = NULL;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT type, longitude, latitude, delta1, delta2, ratio"
-                              "  FROM data.locations"
-                              "  JOIN data.tags ON id = tagid"
-                              "  WHERE tagid = ?1 AND longitude IS NOT NULL"
-                              "    AND SUBSTR(name, 1, LENGTH(?2)) = ?2",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, locid);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, location_tag_prefix, -1, SQLITE_STATIC);
-
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    g = (dt_map_location_data_t *)g_malloc0(sizeof(dt_map_location_data_t));
-    g->shape = sqlite3_column_int(stmt, 0);
-    g->lon = sqlite3_column_double(stmt, 1);
-    g->lat = sqlite3_column_double(stmt, 2);
-    g->delta1 = sqlite3_column_double(stmt, 3);
-    g->delta2 = sqlite3_column_double(stmt, 4);
-    g->ratio = sqlite3_column_double(stmt, 5);
-  }
-  sqlite3_finalize(stmt);
-  return g;
+  return dt_location_repository_get_data(locid, location_tag_prefix);
 }
 
 // set locations's data
 void dt_map_location_set_data(const guint locid, const dt_map_location_data_t *g)
 {
   if(locid == -1) return;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT OR REPLACE INTO data.locations"
-                              "  (tagid, type, longitude, latitude, delta1, delta2, ratio, polygons)"
-                              "  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, locid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, g->shape);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 3, g->lon);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 4, g->lat);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 5, g->delta1);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 6, g->delta2);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 7, g->ratio);
-  if(g->shape != MAP_LOCATION_SHAPE_POLYGONS)
-  {
-    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 8, NULL, 0, SQLITE_STATIC);
-  }
-  else
-  {
-    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 8, g->polygons->data,
-                               g->plg_pts * (int)sizeof(dt_geo_map_display_point_t), SQLITE_STATIC);
-  }
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  dt_location_repository_set_data(locid, g);
 }
 
 // find locations which match with that image
 GList *dt_map_location_find_locations(const int32_t imgid)
 {
-  GList *tags = NULL;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT l.tagid, l.type, i.longitude, i.latitude FROM main.images AS i"
-                              "  JOIN data.locations AS l"
-                              "  ON (l.type = ?2"
-                              "      AND ((((i.longitude-l.longitude)*(i.longitude-l.longitude))/"
-                                            "(delta1*delta1) +"
-                              "            ((i.latitude-l.latitude)*(i.latitude-l.latitude))/"
-                                            "(delta2*delta2)) <= 1)"
-                              "    OR ((l.type = ?3 OR l.type = ?4)"
-                              "        AND i.longitude>=(l.longitude-delta1)"
-                              "        AND i.longitude<=(l.longitude+delta1)"
-                              "        AND i.latitude>=(l.latitude-delta2)"
-                              "        AND i.latitude<=(l.latitude+delta2)))"
-                              " WHERE i.id = ?1 "
-                              "       AND i.latitude IS NOT NULL AND i.longitude IS NOT NULL",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, MAP_LOCATION_SHAPE_ELLIPSE);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, MAP_LOCATION_SHAPE_RECTANGLE);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, MAP_LOCATION_SHAPE_POLYGONS);
+  /* The SQL bounds a polygon location by its box; whether the image is actually inside
+   * the polygon is geometry, so it is decided here. */
+  GList *candidates = dt_location_repository_find_locations_for_image(imgid);
 
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  GList *tags = NULL;
+  for(GList *c = candidates; c; c = g_list_next(c))
   {
-    const int id = sqlite3_column_int(stmt, 0);
-    if(sqlite3_column_int(stmt, 1) == MAP_LOCATION_SHAPE_POLYGONS)
+    const dt_location_candidate_t *cand = (const dt_location_candidate_t *)c->data;
+    gboolean inside = TRUE;
+
+    if(cand->shape == MAP_LOCATION_SHAPE_POLYGONS)
     {
-      dt_geo_map_display_point_t pt;
-      pt.lon = sqlite3_column_double(stmt, 2);
-      pt.lat = sqlite3_column_double(stmt, 3);
-      sqlite3_stmt *stmt2;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "SELECT polygons FROM data.locations "
-                                  " WHERE tagid = ?1",
-                                  -1, &stmt2, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, id);
-      if(sqlite3_step(stmt2) == SQLITE_ROW)
+      void *blob = NULL;
+      gint bytes = 0;
+      inside = FALSE;
+      if(dt_location_repository_get_polygon(cand->id, &blob, &bytes))
       {
-        const gint plg_pts = sqlite3_column_bytes(stmt2, 0) / sizeof(dt_geo_map_display_point_t);
-        if(_is_point_in_polygon(&pt, plg_pts, sqlite3_column_blob(stmt2, 0)))
-        {
-          tags = g_list_prepend(tags, GINT_TO_POINTER(id));
-        }
+        const dt_geo_map_display_point_t pt = { .lon = cand->lon, .lat = cand->lat };
+        inside = _is_point_in_polygon(&pt, bytes / (gint)sizeof(dt_geo_map_display_point_t), blob);
+        dt_free(blob);
       }
-      sqlite3_finalize(stmt2);
     }
-    else
-    {
-      tags = g_list_prepend(tags, GINT_TO_POINTER(id));
-    }
+
+    if(inside) tags = g_list_prepend(tags, GINT_TO_POINTER(cand->id));
   }
-  sqlite3_finalize(stmt);
+  g_list_free_full(candidates, g_free);
+
   return tags;
 }
 
 // find images which match with that location
 GList *_map_location_find_images(dt_location_draw_t *ld)
 {
-  GList *imgs = NULL;
-  sqlite3_stmt *stmt;
-  if(ld->data.shape == MAP_LOCATION_SHAPE_ELLIPSE)
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT i.id FROM main.images AS i"
-                                "  JOIN data.locations AS l"
-                                "  ON (l.type = ?2"
-                                "      AND ((((i.longitude-l.longitude)*(i.longitude-l.longitude))/"
-                                              "(delta1*delta1) +"
-                                "            ((i.latitude-l.latitude)*(i.latitude-l.latitude))/"
-                                              "(delta2*delta2)) <= 1))"
-                                "  WHERE l.tagid = ?1 ",
-                                -1, &stmt, NULL);
-  // clang-format on
-  else if(ld->data.shape == MAP_LOCATION_SHAPE_RECTANGLE)
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT i.id FROM main.images AS i"
-                                "  JOIN data.locations AS l"
-                                "  ON (l.type = ?2"
-                                "       AND i.longitude>=(l.longitude-delta1)"
-                                "       AND i.longitude<=(l.longitude+delta1)"
-                                "       AND i.latitude>=(l.latitude-delta2)"
-                                "       AND i.latitude<=(l.latitude+delta2))"
-                                "  WHERE l.tagid = ?1 ",
-                                -1, &stmt, NULL);
-  // clang-format on
-  else // MAP_LOCATION_SHAPE_POLYGONS
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT i.id, i.longitude, i.latitude FROM main.images AS i"
-                                "  JOIN data.locations AS l"
-                                "  ON (l.type = ?2"
-                                "       AND i.longitude>=(l.longitude-delta1)"
-                                "       AND i.longitude<=(l.longitude+delta1)"
-                                "       AND i.latitude>=(l.latitude-delta2)"
-                                "       AND i.latitude<=(l.latitude+delta2))"
-                                "  WHERE l.tagid = ?1 ",
-                                -1, &stmt, NULL);
-    // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, ld->id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, ld->data.shape);
+  GList *candidates = dt_location_repository_find_images_for_location(ld->id, ld->data.shape);
 
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  GList *imgs = NULL;
+  for(GList *c = candidates; c; c = g_list_next(c))
   {
-    const int id = sqlite3_column_int(stmt, 0);
+    const dt_location_candidate_t *cand = (const dt_location_candidate_t *)c->data;
     if(ld->data.shape == MAP_LOCATION_SHAPE_POLYGONS)
     {
-      dt_geo_map_display_point_t pt;
-      pt.lon = sqlite3_column_double(stmt, 1);
-      pt.lat = sqlite3_column_double(stmt, 2);
+      const dt_geo_map_display_point_t pt = { .lon = cand->lon, .lat = cand->lat };
       if(_is_point_in_polygon(&pt, ld->data.plg_pts, ld->data.polygons->data))
-        imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
+        imgs = g_list_prepend(imgs, GINT_TO_POINTER(cand->id));
     }
     else
-      imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
+      imgs = g_list_prepend(imgs, GINT_TO_POINTER(cand->id));
   }
-  sqlite3_finalize(stmt);
+  g_list_free_full(candidates, g_free);
+
   return imgs;
 }
 
@@ -523,24 +326,7 @@ GList *_map_location_find_images(dt_location_draw_t *ld)
 void dt_map_location_update_locations(const int32_t imgid, const GList *tags)
 {
   // get current locations
-  GList *old_tags = NULL;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT t.id FROM main.tagged_images ti"
-                              "  JOIN data.tags AS t ON t.id = ti.tagid"
-                              "  JOIN data.locations AS l ON l.tagid = t.id"
-                              "  WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int id = sqlite3_column_int(stmt, 0);
-    old_tags = g_list_prepend(old_tags, GINT_TO_POINTER(id));
-  }
-  sqlite3_finalize(stmt);
+  GList *old_tags = dt_location_repository_get_image_locations(imgid);
 
   // clean up locations which are not valid anymore
   for(GList *tag = old_tags; tag; tag = g_list_next(tag))

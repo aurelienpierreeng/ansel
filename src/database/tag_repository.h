@@ -47,6 +47,31 @@ G_BEGIN_DECLS
  */
 GList *dt_tag_repository_get_attached_names(const int32_t imgid);
 
+/** @brief How many images carry tag @p tagid. */
+int dt_tag_repository_count_images(const guint tagid);
+
+/** One row of dt_tag_repository_get_by_path_with_counts(). */
+typedef struct dt_tag_count_t
+{
+  guint id;
+  gchar *name; /**< the FULL name, root included; trimming it is the caller's business */
+  guint count;
+} dt_tag_count_t;
+
+/** @brief Release one ::dt_tag_count_t, name included. Suits `g_list_free_full()`. */
+void dt_tag_count_free(gpointer data);
+
+/**
+ * @brief Tags at @p path or below it, each with the number of distinct images carrying it.
+ *
+ * @param path exact name to match.
+ * @param path_prefix names starting with this also match; normally `path` plus a `|`.
+ * @return a `GList` of newly allocated ::dt_tag_count_t. Free with
+ *         `g_list_free_full(l, dt_tag_count_free)`.
+ */
+GList *dt_tag_repository_get_by_path_with_counts(const char *path, const char *path_prefix);
+
+
 G_END_DECLS
 
 #endif // DT_DATABASE_TAG_REPOSITORY_H
