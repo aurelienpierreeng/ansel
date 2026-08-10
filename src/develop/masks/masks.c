@@ -2405,20 +2405,38 @@ static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
 {
   if(IS_NULL_PTR(mask_gui)) return;
 
+  if(mask_gui->creation)
+  {
+    dt_masks_form_t *creation_form = dt_masks_get_visible_form(mask_gui->dev);
+    if(!IS_NULL_PTR(creation_form) && (creation_form->type & DT_MASKS_BRUSH))
+    {
+      // The brush tool draws its own filled size/hardness preview circle at the cursor
+      // position (_brush_events_post_expose) -- a system cursor on top of it is redundant.
+      dt_control_set_cursor_visible(FALSE);
+      return;
+    }
+  }
+
+  // Any other case un-hides the cursor: it may have been hidden by a brush creation that
+  // just ended or was switched away from.
+  dt_control_set_cursor_visible(TRUE);
+
   // circular arrows
   if(mask_gui->pivot_selected)
     dt_control_queue_cursor(GDK_EXCHANGE);
   // pointing hand
   else if(mask_gui->creation_closing_form)
     dt_control_queue_cursor(GDK_HAND2);
+  // precise-placement cursor while drawing a new shape -- distinct from darkroom's own
+  // default "dot"/"crosshair" cursors (views/darkroom.c's _darkroom_set_default_cursor)
+  else if(mask_gui->creation)
+    dt_control_queue_cursor_by_name("cell");
 
   /*else if(gui->handle_dragging >= 0)
     dt_control_set_cursor(GDK_HAND1);*/
 
   // crosshair
-  else if(!mask_gui->creation
-          && (dt_masks_is_anything_selected(mask_gui)
-              || dt_masks_is_anything_hovered(mask_gui)))
+  else if(dt_masks_is_anything_selected(mask_gui) || dt_masks_is_anything_hovered(mask_gui))
     dt_control_queue_cursor(GDK_FLEUR);
 }
 
@@ -2647,6 +2665,16 @@ int dt_masks_events_button_pressed(dt_develop_t *dev, struct dt_iop_module_t *mo
                                           ? (prev_group_selected >= 0 && prev_group_selected == form_index)
                                           : prev_any_selected;
   _apply_gui_button_pressed_state(mask_gui, button, state, shape_was_selected);
+
+  // Refresh hover/highlight state, the hint message and the cursor shape now that the click
+  // has been dispatched: button_pressed above may have changed geometry (e.g. a new node in
+  // creation mode) or the active selection, neither of which the pre-dispatch hover computed
+  // at the top of this function accounts for. Without this, the display only catches up with
+  // what the click just did on the next physical mouse move -- same class of staleness as
+  // mouse_moved()/button_released(), which already refresh all three at their own tail.
+  _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
+  _set_hinter_message(mask_gui, mask_form);
+  _set_cursor_shape(mask_gui);
 
   if(button == 3 && !return_val)
   {

@@ -2339,9 +2339,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   }
   else
   {
-    // fall back to default cursor
+    // Un-hide the cursor (it may have been hidden by the branch above) and leave it at
+    // darkroom's own default (dot/crosshair/left_ptr, already queued per position by
+    // _darkroom_set_default_cursor before this handler runs) instead of forcing "default".
     dt_control_set_cursor_visible(TRUE);
-    dt_control_queue_cursor_by_name("default");
   }
 
   dt_control_queue_redraw_center();

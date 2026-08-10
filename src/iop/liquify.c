@@ -2970,7 +2970,11 @@ int mouse_moved(struct dt_iop_module_t *module,
   if(!is_dragging(g))
   {
     dt_liquify_hit_t hit = _hit_test_paths(module, &g->params, pt);
-    dt_control_queue_cursor_by_name(_is_movable_layer(hit.layer) ? "move" : "default");
+    // Only override the cursor for a movable layer -- otherwise leave darkroom's own default
+    // cursor (dot/crosshair/left_ptr, already queued per position by
+    // _darkroom_set_default_cursor before this handler runs) instead of forcing "default".
+    if(_is_movable_layer(hit.layer))
+      dt_control_queue_cursor_by_name("move");
     dt_liquify_path_data_t *last_hovered = find_hovered(&g->params);
     if(hit.elem != last_hovered
        || (!IS_NULL_PTR(last_hovered) && !IS_NULL_PTR(hit.elem)

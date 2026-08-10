@@ -1825,11 +1825,12 @@ static void _switch_cursors(struct dt_iop_module_t *self)
   }
   else if(!sanity_check(self) || in_mask_editing(self) || dt_iop_color_picker_is_visible(self->dev))
   {
-    // if we are editing masks or using colour-pickers, do not display controls
-    
-    // display default cursor
+    // if we are editing masks or using colour-pickers, do not display our own custom cursor,
+    // but do not force a specific shape either: the mouse can still be over the image here,
+    // and darkroom's own default cursor logic (dot/crosshair/left_ptr, picked per position in
+    // _darkroom_set_default_cursor) already queued the right one before this module's
+    // mouse_moved ran. Un-hide it (it may have been hidden by the branch below) and leave it.
     dt_control_set_cursor_visible(TRUE);
-    dt_control_queue_cursor_by_name("default");
     return;
   }
   else if((self->dev->pipe->processing || self->dev->preview_pipe->processing) && g->cursor_valid)
@@ -1853,21 +1854,12 @@ static void _switch_cursors(struct dt_iop_module_t *self)
 
     dt_control_queue_redraw_center();
   }
-  else if(!g->cursor_valid)
-  {
-    // if module is active and opened but cursor is out of the preview,
-    // display default cursor
-    dt_control_set_cursor_visible(TRUE);
-    dt_control_queue_cursor_by_name("default");
-
-    dt_control_queue_redraw_center();
-  }
   else
   {
-    // in any other situation where module has focus,
-    // reset the cursor but don't launch a redraw
+    // Cursor is out of the preview (off the image entirely): same reasoning as above, let
+    // darkroom's own default cursor stand instead of forcing a specific shape.
     dt_control_set_cursor_visible(TRUE);
-    dt_control_queue_cursor_by_name("default");
+    dt_control_queue_redraw_center();
   }
 }
 
