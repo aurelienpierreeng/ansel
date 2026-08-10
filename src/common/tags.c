@@ -846,8 +846,7 @@ gboolean dt_is_tag_attached(const guint tagid, const int32_t imgid)
 
 GList *dt_tag_get_images(const gint tagid)
 {
-  // the repository builds it in reverse and un-reverses it
-  return dt_tag_repository_get_images(tagid);
+  return dt_tag_repository_get_images(tagid);  // in row order, as before
 }
 
 GList *dt_tag_get_images_from_list(const GList *img, const gint tagid)
