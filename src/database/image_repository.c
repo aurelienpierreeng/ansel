@@ -363,6 +363,39 @@ void dt_image_repository_reassign_group(const int32_t from_group_id, const int32
   sqlite3_finalize(stmt);
 }
 
+GList *dt_image_repository_get_ratings(const int32_t imgid)
+{
+  sqlite3_stmt *stmt = NULL;
+
+  if(imgid < 0)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT flags FROM main.images WHERE id IN "
+                                "(SELECT imgid FROM main.selected_images)",
+                                -1, &stmt, NULL);
+    // clang-format on
+  }
+  else
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT flags FROM main.images WHERE id = ?1", -1, &stmt, NULL);
+    // clang-format on
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  }
+
+  GList *result = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    const int stars = (sqlite3_column_int(stmt, 0) & 0x7) - 1;
+    result = g_list_prepend(result, GINT_TO_POINTER(stars));
+  }
+  sqlite3_finalize(stmt);
+
+  return g_list_reverse(result);
+}
+
 void dt_image_repository_cleanup(void)
 {
   if(_image_load_stmt)

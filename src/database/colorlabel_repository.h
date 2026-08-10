@@ -54,6 +54,17 @@ void dt_colorlabel_repository_remove_all(const int32_t imgid);
 gboolean dt_colorlabel_repository_has(const int32_t imgid, const int color);
 
 /**
+ * @brief The colours set on @p imgid, as a list rather than a bitmask.
+ *
+ * @param imgid the image, or a negative value for every selected image -- the convention
+ *        dt_metadata_get() uses, which is this function's only caller.
+ * @return a `GList` of colour indices as `GINT_TO_POINTER`. Sorted for a single image,
+ *         in table order across a selection (where duplicates are expected and kept:
+ *         the caller counts them). Free with g_list_free().
+ */
+GList *dt_colorlabel_repository_get_list(const int32_t imgid);
+
+/**
  * @brief Finalise the prepared statements.
  *
  * @details Every repository has one of these, and they are not optional: a connection
