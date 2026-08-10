@@ -183,11 +183,11 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
   // could evict this intermediate module-input cacheline — which has refcount 0
   // between renders — during the autoset() sampling call, freeing the buffer under us.
   dt_iop_gui_enter_critical_section(module);
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
   module->autoset(module, pipe, piece, input);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
   dt_dev_add_history_item(dev, module, FALSE, FALSE);
   dt_iop_gui_leave_critical_section(module);
 

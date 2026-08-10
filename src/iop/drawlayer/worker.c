@@ -964,7 +964,7 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
       _copy_mask_damage_to_locked_patch(heartbeat_mask, &batch_damage, &g->process.stroke_mask);
       _clear_rgba_damage_in_patch(heartbeat_patch, &batch_damage);
       _clear_mask_damage_in_patch(heartbeat_mask, &batch_damage);
-      dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_pixelpipe_cache_get_global(), g->process.base_patch.pixels,
+      dt_dev_pixelpipe_cache_flush_host_pinned_image(g->process.base_patch.pixels,
                                                      g->process.base_patch.cache_entry, -1);
       dt_drawlayer_cache_patch_wrunlock(&g->process.stroke_mask);
       dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);

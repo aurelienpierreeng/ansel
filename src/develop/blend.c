@@ -905,18 +905,18 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * buffsize,
+        mask_hash, sizeof(float) * buffsize,
         "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
         if(created)
-          dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
+          dt_dev_pixelpipe_cache_remove(TRUE, mask_entry);
       }
       dt_pixelpipe_cache_free_align(_mask);
       return 1;
@@ -927,7 +927,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
     if(created)
     {
       memcpy(cache_data, _mask, sizeof(float) * buffsize);
-      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
     }
     // Transfer cache_get()'s reference to the pipe. It keeps this side-band
     // output alive until the next graph state is prepared or the pipe closes.
@@ -1522,18 +1522,18 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * buffsize,
+        mask_hash, sizeof(float) * buffsize,
         "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
         if(created)
-          dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
+          dt_dev_pixelpipe_cache_remove(TRUE, mask_entry);
       }
       goto error;
     }
@@ -1543,7 +1543,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     if(created)
     {
       memcpy(cache_data, _mask, sizeof(float) * buffsize);
-      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
     }
     // Transfer cache_get()'s reference to the pipe. It keeps this side-band
     // output alive until the next graph state is prepared or the pipe closes.

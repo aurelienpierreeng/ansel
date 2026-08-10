@@ -291,7 +291,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
    * run, so a plan that exceeds it is guaranteed to fail at runtime no
    * matter how much total memory is nominally free. */
   const float largest_run
-      = (float)dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+      = (float)dt_pixelpipe_cache_get_largest_free_run();
   available = fminf(available, 0.9f * largest_run);
 
   /* Size the tile from the memory left in the host cache.
@@ -551,7 +551,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
    * run, so a plan that exceeds it is guaranteed to fail at runtime no
    * matter how much total memory is nominally free. */
   const float largest_run
-      = (float)dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+      = (float)dt_pixelpipe_cache_get_largest_free_run();
   available = fminf(available, 0.9f * largest_run);
 
   /* Size the tile from the memory left in the host cache.
@@ -1455,7 +1455,7 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
    * the largest run, evicting to make room — eviction merges adjacent free
    * runs, but cannot merge across entries pinned by the pipe recursion. */
   size_t available = dt_get_available_mem();
-  size_t largest_run = dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+  size_t largest_run = dt_pixelpipe_cache_get_largest_free_run();
 
   int error = 0;
   while(!error && (available < total || (size_t)(0.9f * largest_run) < total))
@@ -1467,12 +1467,12 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
      * cache would not change the answer; the caller tiles instead. */
     size_t cache_current = 0;
     size_t cache_max = 0;
-    dt_dev_pixelpipe_cache_get_usage(dt_pixelpipe_cache_get_global(), &cache_current, &cache_max);
+    dt_dev_pixelpipe_cache_get_usage(&cache_current, &cache_max);
     if(cache_max - cache_current >= total && (size_t)(0.9f * largest_run) >= total) break;
 
-    error = dt_dev_pixel_pipe_cache_remove_lru(dt_pixelpipe_cache_get_global());
+    error = dt_dev_pixel_pipe_cache_remove_lru();
     available = dt_get_available_mem();
-    largest_run = dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+    largest_run = dt_pixelpipe_cache_get_largest_free_run();
   }
 
   return total <= available && total <= (size_t)(0.9f * largest_run);

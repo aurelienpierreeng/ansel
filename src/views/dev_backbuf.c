@@ -226,12 +226,12 @@ gboolean dt_dev_render_locked_surface(cairo_t *cr, const dt_develop_t *dev, dt_d
 
   if(dev->iso_12646.enabled) dt_dev_draw_iso12646_border(cr, wd, ht, border);
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, locked->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, locked->entry);
   cairo_surface_set_device_scale(locked->surface, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, locked->surface, 0, 0);
   cairo_fill(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, locked->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, locked->entry);
 
   return TRUE;
 }

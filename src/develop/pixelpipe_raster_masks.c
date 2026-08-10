@@ -142,7 +142,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     dt_pixel_cache_entry_t *raster_entry = NULL;
     void *cache_data = NULL;
     const gboolean found = dt_dev_pixelpipe_cache_ref_entry_by_hash(
-        dt_pixelpipe_cache_get_global(), raster_hash, &cache_data, &raster_entry);
+        raster_hash, &cache_data, &raster_entry);
 
     gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
     if(found && !IS_NULL_PTR(cache_data) && !IS_NULL_PTR(raster_entry))
@@ -154,7 +154,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       if(IS_NULL_PTR(raster_mask))
       {
         dt_dev_pixelpipe_cache_ref_count_entry(
-            dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+            FALSE, raster_entry);
         if(!IS_NULL_PTR(error)) *error = 1;
         dt_free(clean_source_name);
         dt_free(source_name);
@@ -166,12 +166,12 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       // The cache owns the canonical mask. Copy it under a read lock so the
       // caller can freely distort and release its private working buffer.
       dt_dev_pixelpipe_cache_rdlock_entry(
-          dt_pixelpipe_cache_get_global(), TRUE, raster_entry);
+          TRUE, raster_entry);
       memcpy(raster_mask, cache_data, mask_size);
       dt_dev_pixelpipe_cache_rdlock_entry(
-          dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+          FALSE, raster_entry);
       dt_dev_pixelpipe_cache_ref_count_entry(
-          dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+          FALSE, raster_entry);
 
       dt_print(DT_DEBUG_MASKS,
                "[raster masks] found cached mask id %i from %s for module %s"
@@ -183,7 +183,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     {
       if(!IS_NULL_PTR(raster_entry))
         dt_dev_pixelpipe_cache_ref_count_entry(
-            dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+            FALSE, raster_entry);
 
       dt_print(DT_DEBUG_DEV,
                "[raster masks] missing source=%s instance=%d target=%s instance=%d"

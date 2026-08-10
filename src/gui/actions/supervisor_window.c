@@ -544,8 +544,8 @@ static void _rebuild_memory(void)
 
   // Pipeline cache
   size_t cur = 0, max = 0;
-  dt_dev_pixelpipe_cache_get_usage(dt_pixelpipe_cache_get_global(), &cur, &max);
-  GArray *pe = dt_dev_pixelpipe_cache_get_entries_stats(dt_pixelpipe_cache_get_global());
+  dt_dev_pixelpipe_cache_get_usage(&cur, &max);
+  GArray *pe = dt_dev_pixelpipe_cache_get_entries_stats();
 
   const gboolean gpu = dt_opencl_is_enabled();
   size_t vram_used = 0;

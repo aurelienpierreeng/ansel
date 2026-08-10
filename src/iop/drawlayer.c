@@ -435,7 +435,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry) || IS_NULL_PTR(params)) return FALSE;
   const uint64_t new_hash = _drawlayer_params_cache_hash(imgid, params, patch->width, patch->height);
   if(new_hash == patch->cache_hash) return TRUE;
-  if(dt_dev_pixelpipe_cache_rekey(dt_pixelpipe_cache_get_global(), patch->cache_hash, new_hash, patch->cache_entry) == 0)
+  if(dt_dev_pixelpipe_cache_rekey(patch->cache_hash, new_hash, patch->cache_entry) == 0)
   {
     patch->cache_hash = new_hash;
     return TRUE;
@@ -462,7 +462,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   memcpy(published.pixels, patch->pixels, (size_t)patch->width * patch->height * 4 * sizeof(float));
   dt_drawlayer_cache_patch_rdunlock(patch);
 #ifdef HAVE_OPENCL
-  dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_pixelpipe_cache_get_global(), published.pixels,
+  dt_dev_pixelpipe_cache_flush_host_pinned_image(published.pixels,
                                                  published.cache_entry, -1);
 #endif
   dt_drawlayer_cache_patch_clear(&published, "drawlayer patch");
@@ -476,14 +476,14 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
 static void _retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry) || g->process.base_patch_loaded_ref) return;
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, g->process.base_patch.cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_loaded_ref = TRUE;
 }
 
 static void _retain_base_patch_stroke_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry)) return;
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, g->process.base_patch.cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, g->process.base_patch.cache_entry);
   g->process.base_patch_stroke_refs++;
 }
 
@@ -502,13 +502,13 @@ void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t 
 
   if(g->process.base_patch_loaded_ref)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, g->process.base_patch.cache_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, g->process.base_patch.cache_entry);
     g->process.base_patch_loaded_ref = FALSE;
   }
 
   while(g->process.base_patch_stroke_refs > 0)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, g->process.base_patch.cache_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, g->process.base_patch.cache_entry);
     g->process.base_patch_stroke_refs--;
   }
 }
@@ -772,7 +772,7 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
   }
 
   source->mem = dt_dev_pixelpipe_cache_get_pinned_image(
-      dt_pixelpipe_cache_get_global(), (void *)layer_pixels, resolved_entry, devid, source_w, source_h,
+      (void *)layer_pixels, resolved_entry, devid, source_w, source_h,
       4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
   if(source->mem)
   {
@@ -957,7 +957,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   if(realtime_reuse && !resolved_entry)
   {
     resolved_entry
-        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_pixelpipe_cache_get_global(), (void *)layer_pixels);
+        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr((void *)layer_pixels);
     resolved_entry_ref = (!IS_NULL_PTR(resolved_entry));
   }
 
@@ -1071,7 +1071,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
       pixel[3] = 1.0f;
     }
     dev_background = dt_dev_pixelpipe_cache_get_pinned_image(
-        dt_pixelpipe_cache_get_global(), background, NULL, devid, target_roi->width, target_roi->height,
+        background, NULL, devid, target_roi->width, target_roi->height,
         4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
     if(IS_NULL_PTR(dev_background)) goto cleanup;
   }
@@ -1102,7 +1102,7 @@ cleanup:
   if(dev_bg_partial) dt_opencl_release_mem_object(dev_bg_partial);
   if(dev_out_partial) dt_opencl_release_mem_object(dev_out_partial);
   if(use_preview_bg)
-    dt_dev_pixelpipe_cache_put_pinned_image(dt_pixelpipe_cache_get_global(), scratch->cl_background_rgba, NULL,
+    dt_dev_pixelpipe_cache_put_pinned_image(scratch->cl_background_rgba, NULL,
                                             (void **)&dev_background);
   if(layer.mem && layer.mem != source.mem)
   {
@@ -1112,14 +1112,14 @@ cleanup:
       dt_opencl_release_mem_object(layer.mem);
   }
   if(!source_mem_override && source.is_pinned)
-    dt_dev_pixelpipe_cache_put_pinned_image(dt_pixelpipe_cache_get_global(), (void *)layer_pixels, resolved_entry,
+    dt_dev_pixelpipe_cache_put_pinned_image((void *)layer_pixels, resolved_entry,
                                             (void **)&source.mem);
   else if(!source_mem_override && source.is_cached_device && resolved_entry)
     dt_dev_pixelpipe_cache_release_cl_buffer((void **)&source.mem, resolved_entry, NULL, TRUE);
   else if(!source_mem_override && source.mem)
     dt_opencl_release_mem_object(source.mem);
   if(resolved_entry_ref)
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, resolved_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, resolved_entry);
 
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[drawlayer] process_cl blend path failed: %d\n\n", err);
 

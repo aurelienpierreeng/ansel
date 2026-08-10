@@ -507,13 +507,13 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
                                       _darkroom_debug_restart_cache_wait, dev))
     return FALSE;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
 
   const int bw = (int)dev->pipe->backbuf.width;
   const int bh = (int)dev->pipe->backbuf.height;
   if(bw <= 0 || bh <= 0)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return FALSE;
   }
 
@@ -522,7 +522,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
   if(entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return FALSE;
   }
 
@@ -531,7 +531,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   if(IS_NULL_PTR(surface) || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     if(surface) cairo_surface_destroy(surface);
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return FALSE;
   }
 
@@ -547,7 +547,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   cairo_fill(cr);
 
   cairo_surface_destroy(surface);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
   return TRUE;
 }
 #endif
@@ -636,7 +636,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
     }
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, _darkroom_preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, _darkroom_preview_locked.entry);
   cairo_surface_set_device_scale(_darkroom_preview_locked.surface, ppd, ppd);
 
   // The preview surface already embeds the fit-to-window scale. To emulate the
@@ -658,7 +658,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   cairo_rectangle(cr, 0, 0, preview_wd, preview_ht);
   cairo_set_source_surface(cr, _darkroom_preview_locked.surface, 0, 0);
   cairo_fill(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, _darkroom_preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, _darkroom_preview_locked.entry);
   cairo_destroy(cr);
 
   _darkroom_preview_fallback_imgid = dev->image_storage.id;
@@ -1962,20 +1962,20 @@ void leave(dt_view_t *self)
   // before destroying the actual modules being referenced.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
   dt_dev_set_backbuf(&dev->pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
   dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
   dt_dev_set_backbuf(&dev->virtual_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
@@ -1985,9 +1985,9 @@ void leave(dt_view_t *self)
    * device(s) they themselves last ran on, so we never touch cache entries
    * another, still-running pipe (e.g. a background thumbnail export) holds on
    * its own OpenCL device. */
-  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->pipe->last_devid);
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->pipe->last_devid);
   if(dev->preview_pipe->last_devid != dev->pipe->last_devid)
-    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->preview_pipe->last_devid);
+    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->preview_pipe->last_devid);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
@@ -2033,13 +2033,13 @@ void leave(dt_view_t *self)
   dt_dev_get_global()->image_storage.id = -1;
 
   // Release the cache entries for histogram buffers
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->raw_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->raw_histogram));
   dt_dev_backbuf_set_hash(&dev->raw_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->output_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->output_histogram));
   dt_dev_backbuf_set_hash(&dev->output_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->display_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->display_histogram));
   dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 
   /* GUI backbuffers were already released when each pipeline was quiesced above. Keep the view-side teardown
