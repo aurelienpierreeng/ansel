@@ -261,21 +261,29 @@ LAYERS = {
     #     "ai" is darktable 5.6's ONNX inference backend. It is placed here because
     #     that is what it is used as - src/common/ is its main consumer, alongside
     #     gui/ and lua/ - not because of what it currently depends on. Ansel has no
-    #     counterpart, so this rank only ever affects the darktable side; it makes
-    #     ai -> control an inversion (3 includes), which is a real observation about
-    #     an inference backend reaching into the application's job system.
+    #     counterpart, so this rank only ever affects the darktable side.
     "common": 1, "colorprofiles": 1, "ai": 1,
-    # 2 - reading and writing images
-    "imageio": 2,
-    # 3 - the pixel pipeline and image development
-    "develop": 3,
-    # 4 - pipeline modules, which the pipeline dispatches to
-    "iop": 4,
-    # 5 - job system and application control
-    "control": 5,
-    # 6 - GUI toolkit: custom widgets, no application knowledge
-    "dtgtk": 6, "bauhaus": 6, "widgets": 6,
-    # 7 - the GUI shell
+    # 2 - GUI TOOLKIT: custom widgets and drawing primitives. These are LEAF
+    #     libraries with no application knowledge - a slider does not know what a
+    #     pixel pipeline is - so they sit LOW, next to the other shared services,
+    #     and everything with a user interface is entitled to use them. In
+    #     particular an IOP has a GUI by definition, so iop -> bauhaus, iop ->
+    #     dtgtk and iop -> widgets are ordinary downward dependencies, NOT
+    #     inversions. Ranking the toolkit above the pipeline instead (an earlier
+    #     mistake here) flagged ~60% of all "inversions" on both codebases, almost
+    #     all of them legitimate.
+    "dtgtk": 2, "bauhaus": 2, "widgets": 2,
+    # 3 - reading and writing images
+    "imageio": 3,
+    # 4 - the pixel pipeline and image development
+    "develop": 4,
+    # 5 - pipeline modules, which the pipeline dispatches to
+    "iop": 5,
+    # 6 - job system and application control
+    "control": 6,
+    # 7 - the GUI SHELL: main window, panels, accelerators. Unlike the toolkit this
+    #     does know about the application, so a module reaching up into it
+    #     (iop -> gui) IS an inversion, and a deliberate one to report.
     "gui": 7,
     # 8 - GUI modules and views built on the shell
     "libs": 8, "views": 8,
@@ -812,10 +820,35 @@ def build_markdown(project, data):
         A("layering of the two exists, whatever anyone declares. Every cycle is a set of")
         A("modules that can only be understood, built and reasoned about as one unit.")
         A("")
-        A("**Inversions are policy.** They count include edges pointing from a lower")
-        A("declared layer to a higher one, against the layer order written down in")
-        A("`tools/code_health.py`. That table is identical in both repositories, so the")
-        A("two codebases are judged against the same expectation.")
+        A("**Inversions are policy.** An include `A -> B` counts as an inversion when")
+        A("`rank(A) < rank(B)`: something lower in the stack reaching *up*. The ranks are")
+        A("declared below, are identical in both repositories, and are the whole of the")
+        A("policy - there is nothing else to the calculation.")
+        A("")
+        A("Two consequences worth stating, because they are easy to get backwards:")
+        A("")
+        A("- The GUI **toolkit** (`bauhaus`, `dtgtk`, `widgets`) sits LOW. A slider does not")
+        A("  know what a pixel pipeline is, so it is a leaf library and anything with a user")
+        A("  interface may use it. An IOP has a GUI by definition, so `iop -> bauhaus` is an")
+        A("  ordinary downward dependency and is **not** counted.")
+        A("- The GUI **shell** (`gui`) sits HIGH, because it does know about the application.")
+        A("  So `iop -> gui` **is** counted: a pipeline module reaching into the main window,")
+        A("  panels and accelerators is the coupling this metric exists to find.")
+        A("")
+        A("### Declared layer order {#ch_layering_table}")
+        A("")
+        by_rank = defaultdict(list)
+        for mod, rank in LAYERS.items():
+            by_rank[rank].append(mod)
+        A(md_table(
+            ["Rank", "Modules"],
+            [[r, ", ".join("`%s`" % m for m in sorted(by_rank[r]))]
+             for r in sorted(by_rank)],
+            ["--:", "---"]))
+        A("")
+        A("A module with no rank - anything not listed - takes part in the cycle detection")
+        A("but is left out of the inversion count, because ranking it would be inventing")
+        A("policy rather than applying it.")
         A("")
         A(md_table(
             ["Measure", "Value"],
