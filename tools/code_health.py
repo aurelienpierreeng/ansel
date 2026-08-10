@@ -286,6 +286,73 @@ def collect_includers(edges):
     return [{"file": f, "included_by": n} for f, n in fan_in.most_common()]
 
 
+def collect_reach(edges):
+    """Transitive reach, in both directions. This is where a god header shows up.
+
+    Cycle counts cannot express the damage darktable.h does, and this was measured
+    before the section was written: darktable.h reaches only 14 files downstream, so
+    at most 14 could ever cycle with it and exactly 3 do. Its 4-file cluster is
+    correct and says almost nothing.
+
+    The number that matters is the other direction. 552 of 741 files reach it, so
+    three quarters of the codebase depends on that one header, transitively. Editing
+    it rebuilds and re-reviews nearly everything, and no cycle metric will say so.
+
+      dependents   how many files end up depending on this header, directly or not.
+                   High means expensive to change and hard to reason about.
+      depth        how many headers a translation unit drags in transitively. High
+                   means slow builds and a file whose real interface is unknowable
+                   from its own include list.
+    """
+    if not edges:
+        return None
+    succ, pred = defaultdict(set), defaultdict(set)
+    nodes = set()
+    for a, b in edges:
+        succ[a].add(b)
+        pred[b].add(a)
+        nodes.add(a)
+        nodes.add(b)
+
+    def closure(adj, start):
+        seen = set()
+        stack = [start]
+        while stack:
+            u = stack.pop()
+            for v in adj.get(u, ()):
+                if v not in seen:
+                    seen.add(v)
+                    stack.append(v)
+        seen.discard(start)
+        return seen
+
+    total = len(nodes)
+    headers = [n for n in nodes if n.lower().endswith((".h", ".hpp", ".hxx"))]
+    dependents = []
+    for h in headers:
+        n = len(closure(pred, h))
+        dependents.append({"file": h, "dependents": n,
+                           "share": round(100.0 * n / max(1, total), 1)})
+    dependents.sort(key=lambda r: -r["dependents"])
+
+    sources = [n for n in nodes if not n.lower().endswith((".h", ".hpp", ".hxx"))]
+    depth = [{"file": c, "headers_pulled": len(closure(succ, c))} for c in sources]
+    depth.sort(key=lambda r: -r["headers_pulled"])
+    counts = sorted(r["headers_pulled"] for r in depth)
+    mean = sum(counts) / float(len(counts)) if counts else 0
+
+    return {
+        "files": total,
+        "top_dependents": dependents[:30],
+        "headers_over_half": sum(1 for r in dependents if r["share"] >= 50.0),
+        "headers_over_quarter": sum(1 for r in dependents if r["share"] >= 25.0),
+        "deepest": depth[:20],
+        "mean_headers_pulled": round(mean, 1),
+        "median_headers_pulled": counts[len(counts) // 2] if counts else 0,
+        "max_headers_pulled": counts[-1] if counts else 0,
+    }
+
+
 # ----------------------------------------------------------------------- layering
 
 
@@ -1159,6 +1226,47 @@ def build_markdown(project, data):
                 A("- `%s`" % h)
             A("")
 
+    # ---- transitive reach
+    rch = data.get("reach")
+    if rch:
+        A("Transitive reach {#ch_reach}")
+        A("----------------")
+        A("")
+        A("Direct fan-in undercounts, and cycle counts miss this entirely. A header that")
+        A("only 40 files include, but which those 40 pass on, can still end up under most")
+        A("of the codebase. What follows is the transitive answer: how much of the tree")
+        A("depends on each header, and how much each translation unit drags in.")
+        A("")
+        A(md_table(
+            ["Measure", "Value"],
+            [["Files in the graph", "{:,}".format(rch["files"])],
+             ["Headers reaching over half the tree", "{:,}".format(rch["headers_over_half"])],
+             ["Headers reaching over a quarter", "{:,}".format(rch["headers_over_quarter"])],
+             ["Headers pulled in per source file, median", "{:,}".format(rch["median_headers_pulled"])],
+             ["Headers pulled in per source file, mean", rch["mean_headers_pulled"]],
+             ["Worst", "{:,}".format(rch["max_headers_pulled"])]],
+            ["---", "--:"]))
+        A("")
+        A("### Headers most of the codebase depends on {#ch_reach_dependents}")
+        A("")
+        A("Changing one of these means rebuilding, and re-reviewing, that share of the")
+        A("tree. This is the cost a god header imposes, and it is invisible to every")
+        A("cycle metric: a header can sit in no cycle at all and still be here.")
+        A("")
+        A(md_table(
+            ["Dependents", "Share of tree", "Header"],
+            [["{:,}".format(r["dependents"]), "{} %".format(r["share"]), "`%s`" % r["file"]]
+             for r in rch["top_dependents"]],
+            ["--:", "--:", "---"]))
+        A("")
+        A("### Translation units pulling in the most headers {#ch_reach_depth}")
+        A("")
+        A(md_table(
+            ["Headers pulled", "File"],
+            [["{:,}".format(r["headers_pulled"]), "`%s`" % r["file"]] for r in rch["deepest"]],
+            ["--:", "---"]))
+        A("")
+
     # ---- coupling
     inc = data.get("includers")
     A("Header coupling {#ch_coupling}")
@@ -1306,6 +1414,7 @@ def main():
     }
     data["includers"] = step("fan-in", lambda: collect_includers(edges))
     data["layering"] = step("layering", lambda: collect_layering(edges, args.source_dir))
+    data["reach"] = step("transitive reach", lambda: collect_reach(edges))
     data["god_header"] = step("global header", lambda: collect_god_header(edges))
     if not args.skip_cppcheck:
         data["cppcheck"] = step("cppcheck",
