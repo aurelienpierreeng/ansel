@@ -60,7 +60,7 @@
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "widgets/gradientslider.h"

@@ -35,7 +35,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/history.h"
 #include "common/styles.h"
 #include "control/control.h"

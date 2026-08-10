@@ -23,7 +23,7 @@
 
 #include "gui/common/database_gui.h"
 
-#include "common/database.h"
+#include "database/database.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "widgets/dialog.h"

@@ -44,7 +44,7 @@
 #include "control/settings.h"
 #include "common/collection.h"
 #include "caches/mipmap_cache.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "system/dtpthread.h"
 #include "caches/image_cache.h"
 #include "common/tags.h"

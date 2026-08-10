@@ -39,13 +39,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/database.h"
+#include "database/database.h"
 #include "common/thumbnail_notify.h"
 #include "common/history.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "system/dtpthread.h"
 #include "common/history_snapshot.h"
 #include "caches/image_cache.h"

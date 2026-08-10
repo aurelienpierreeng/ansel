@@ -21,12 +21,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/database.h"
+#include "database/database.h"
 #include "common/geo.h"
 #include "common/map_locations.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/tags.h"
 
 // root for location geotagging

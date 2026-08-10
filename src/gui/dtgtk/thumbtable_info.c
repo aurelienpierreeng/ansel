@@ -18,8 +18,8 @@
 
 #include "gui/dtgtk/thumbtable_info.h"
 
-#include "common/database.h"
-#include "common/debug.h"
+#include "database/database.h"
+#include "database/sql_debug.h"
 #include "common/image.h"
 #include "caches/image_cache.h"
 #include "system/macros.h"

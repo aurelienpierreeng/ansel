@@ -71,7 +71,7 @@ FILE(GLOB SOURCE_FILES
   "math/splines.cpp"
   "common/curl_tools.c"
   "darktable.c"
-  "common/database.c"
+  "database/database.c"
   "common/datetime.c"
   "common/dbus.c"
   "common/dtpthread.c"
@@ -589,7 +589,7 @@ if(USE_ICU)
   if(TARGET ICU::uc)
     target_link_libraries(ansel_deps INTERFACE ICU::uc ICU::i18n ICU::data)
     add_definitions(-DHAVE_ICU=1 -DSQLITE_CORE -DSQLITE_ENABLE_ICU)
-    list(APPEND SOURCES common/sqliteicu.c)
+    list(APPEND SOURCES database/sqliteicu.c)
   endif()
 endif()
 

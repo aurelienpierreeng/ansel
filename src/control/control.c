@@ -57,6 +57,7 @@
 #include "widgets/bauhaus.h"
 #include "darktable.h"
 #include "control/control.h"
+#include "database/sql_debug.h"
 #include "develop/develop.h"
 
 #include "gui/application.h"

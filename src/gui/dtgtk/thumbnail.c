@@ -44,11 +44,11 @@
 
 #include "widgets/bauhaus.h"
 #include "caches/pixelpipe_cache_alloc.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "gui/dtgtk/focus.h"
 #include "widgets/focus_peaking.h"
 #include "common/grouping.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "common/ratings.h"
 #include "common/selection.h"
 #include "common/utility.h"

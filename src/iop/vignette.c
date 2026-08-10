@@ -57,7 +57,7 @@
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include <stdlib.h>
 #include <string.h>
 

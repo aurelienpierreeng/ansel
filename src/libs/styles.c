@@ -53,7 +53,7 @@
 #include "common/glib_utils.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "common/conf.h"
 #include "control/control.h"
 

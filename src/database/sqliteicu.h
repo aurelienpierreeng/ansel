@@ -17,8 +17,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_SQLITEICU_H
-#define DT_COMMON_SQLITEICU_H
+#ifndef DT_DATABASE_SQLITEICU_H
+#define DT_DATABASE_SQLITEICU_H
 /*
 ** 2008 May 26
 **
@@ -46,7 +46,7 @@ int sqlite3IcuInit(sqlite3 *db);
 }  /* extern "C" */
 #endif  /* __cplusplus */
 
-#endif // DT_COMMON_SQLITEICU_H
+#endif // DT_DATABASE_SQLITEICU_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

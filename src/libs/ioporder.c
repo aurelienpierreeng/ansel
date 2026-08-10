@@ -25,8 +25,8 @@
 */
 
 #include "colorprofiles/colorspaces.h"
-#include "common/database.h"
-#include "common/debug.h"
+#include "database/database.h"
+#include "database/sql_debug.h"
 #include "develop/iop_order.h"
 #include "system/macros.h"
 #include "common/module_versioning.h"

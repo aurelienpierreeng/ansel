@@ -61,7 +61,7 @@
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "math/openmp_maths.h"

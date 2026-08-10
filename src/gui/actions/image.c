@@ -19,7 +19,7 @@
 #include "gui/actions/menu.h"
 #include "common/act_on.h"
 #include "control/jobs/control_jobs.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "common/image.h"
 #include "system/macros.h"
 #include "common/grouping.h"
@@ -27,7 +27,7 @@
 #include "common/ratings.h"
 #include "control/control.h"
 #include "common/collection.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 
 static gboolean rotate_counterclockwise_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {

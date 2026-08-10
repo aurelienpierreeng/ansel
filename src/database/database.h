@@ -27,8 +27,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_DATABASE_H
-#define DT_COMMON_DATABASE_H
+#ifndef DT_DATABASE_DATABASE_H
+#define DT_DATABASE_DATABASE_H
+
+/* DT_DEBUG_TRACE_WRAPPER, used by the transaction macros at the bottom of this file. It
+ * used to arrive the other way round -- common/debug.h included this header, so anything
+ * that reached here through it already had the wrapper. */
+#include "common/debug.h"
 
 #include <glib.h>
 #include <sqlite3.h>
@@ -157,7 +162,7 @@ void dt_database_end_transaction_batch(const struct dt_database_t *db);
 }
 #endif
 
-#endif // DT_COMMON_DATABASE_H
+#endif // DT_DATABASE_DATABASE_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

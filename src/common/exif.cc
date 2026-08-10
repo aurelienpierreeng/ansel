@@ -109,7 +109,7 @@
 #include "common/colorlabels.h"
 #include "darktable.h"
 #include "common/deprecations.h"
-#include "common/debug.h"
+#include "database/sql_debug.h"
 #include "common/dng_opcode.h"
 #include "caches/image_cache.h"
 #include "imageio/imageio_core.h"

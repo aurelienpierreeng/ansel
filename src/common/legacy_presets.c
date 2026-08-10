@@ -28,7 +28,7 @@
 
 #include "common/legacy_presets.h"
 
-#include "common/database.h"
+#include "database/database.h"
 
 #include <glib.h>
 #include <sqlite3.h>
