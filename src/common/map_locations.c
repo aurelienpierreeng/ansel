@@ -88,7 +88,7 @@ gboolean dt_map_location_name_exists(const char *const name)
 // gets location's images number
 int dt_map_location_get_images_count(const guint locid)
 {
-  return dt_tag_repository_count_images(locid);
+  return dt_tag_repository_count_attachments(locid);
 }
 
 // retrieve list of tags which are on that path

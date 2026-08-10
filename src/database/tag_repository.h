@@ -20,12 +20,15 @@
  *
  * @brief `data.tags` and `main.tagged_images`.
  *
- * @warning **This repository is a seed, not the finished thing.** `common/tags.c` still
- * holds 258 SQL references across 31 functions, and they belong here. What is here now is
- * the one query that had to move because `dt_metadata_get()` -- which dispatches on an XMP
- * key and therefore reads four different tables -- could not be split without it.
+ * @details A tag is a row in `data.tags` (id, name, flags, synonyms) and an attachment is
+ * a row in `main.tagged_images` (imgid, tagid, position). `memory.darktable_tags` caches
+ * which tags are internal (`darktable|…`), so the collection query can exclude them
+ * cheaply.
  *
- * Extend this file when `common/tags.c` is done; do not start a second tag repository.
+ * @warning **Partial.** `common/tags.c` still holds the tag *listing* machinery -- the
+ * suggestion, usage-count and similar-tag queries, several of which are multi-level
+ * SELECTs assembled from conditional fragments. Those belong here too. Extend this file;
+ * do not start a second tag repository.
  */
 
 #ifndef DT_DATABASE_TAG_REPOSITORY_H
@@ -47,8 +50,97 @@ G_BEGIN_DECLS
  */
 GList *dt_tag_repository_get_attached_names(const int32_t imgid);
 
-/** @brief How many images carry tag @p tagid. */
-int dt_tag_repository_count_images(const guint tagid);
+/* ---------------------------------------------------------------------------------------
+ *  Identity and lifecycle -- `data.tags`
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief The id of the tag named @p name, or 0 when there is none. */
+guint dt_tag_repository_find_by_name(const char *name);
+
+/** @brief The id of the tag whose name matches @p name case-INSENSITIVELY, or 0. */
+guint dt_tag_repository_find_by_name_nocase(const char *name);
+
+/** @brief Insert a tag named @p name and return its new id, or 0 on failure. */
+guint dt_tag_repository_insert(const char *name);
+
+/** @brief The name of @p tagid, newly allocated, or NULL. */
+gchar *dt_tag_repository_get_name(const guint tagid);
+
+/** @brief Rename @p tagid. The caller checks first that the new name is free. */
+void dt_tag_repository_rename(const guint tagid, const char *new_name);
+
+/** @brief How many attachment ROWS @p tagid has, or -1 if the count could not be read.
+ *  See dt_tag_repository_count_distinct_images() for the other question. */
+int dt_tag_repository_count_attachments(const guint tagid);
+
+/** @brief Delete @p tagid, its attachments, and its `memory.darktable_tags` entry. */
+void dt_tag_repository_delete(const guint tagid);
+
+/** @brief Delete every tag in @p id_list and its attachments.
+ *  @param id_list a comma-separated list of decimal tag ids, composed by the caller. */
+void dt_tag_repository_delete_batch(const char *id_list);
+
+/* ---------------------------------------------------------------------------------------
+ *  `memory.darktable_tags` -- the cache of which tags are internal
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief Record @p tagid as an internal tag. */
+void dt_tag_repository_mark_internal(const guint tagid);
+
+/** @brief Rebuild the whole internal-tag cache from `data.tags`. */
+void dt_tag_repository_rebuild_internal(void);
+
+/* ---------------------------------------------------------------------------------------
+ *  Flags and synonyms
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief The flags word of @p tagid, or 0. */
+gint dt_tag_repository_get_flags(const guint tagid);
+
+/** @brief Replace the flags word of @p tagid. */
+void dt_tag_repository_set_flags(const guint tagid, const gint flags);
+
+/** @brief Set the bits in @p set and clear those absent from @p keep_mask:
+ *  `flags = (IFNULL(flags,0) & keep_mask) | set`. */
+void dt_tag_repository_update_flags(const guint tagid, const gint set, const gint keep_mask);
+
+/** @brief The synonyms of @p tagid, newly allocated, or NULL. */
+gchar *dt_tag_repository_get_synonyms(const guint tagid);
+
+/** @brief Replace the synonyms of @p tagid. */
+void dt_tag_repository_set_synonyms(const guint tagid, const char *synonyms);
+
+/* ---------------------------------------------------------------------------------------
+ *  Attachments -- `main.tagged_images`
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief TRUE when @p tagid is attached to @p imgid. */
+gboolean dt_tag_repository_is_attached(const guint tagid, const int32_t imgid);
+
+/** @brief Images carrying @p tagid, `GINT_TO_POINTER`. Free with g_list_free(). */
+GList *dt_tag_repository_get_images(const guint tagid);
+
+/** @brief Images carrying @p tagid, restricted to @p imgid_list -- a comma-separated list
+ *  of decimal image ids composed by the caller. */
+GList *dt_tag_repository_get_images_in_list(const guint tagid, const char *imgid_list);
+
+/**
+ * @brief Distinct images carrying @p tagid.
+ *
+ * @warning Not the same question as dt_tag_repository_count_attachments(), which counts
+ * ROWS. They differ if an image ever gets the same tag twice, and the two callers ask for
+ * different reasons -- one for "is this tag still in use", one to show a number to the
+ * user.
+ */
+uint32_t dt_tag_repository_count_distinct_images(const guint tagid);
+
+/** @brief Detach every tag in @p tagid_list from @p imgid.
+ *  @param tagid_list comma-separated decimal tag ids. Does nothing when NULL. */
+void dt_tag_repository_detach_batch(const int32_t imgid, const char *tagid_list);
+
+/** @brief Attach rows given as the VALUES clause of the insert -- `"(imgid,tagid,pos),…"`.
+ *  The position expression is the caller's, which is why this takes text. */
+void dt_tag_repository_attach_batch(const char *values);
 
 /** One row of dt_tag_repository_get_by_path_with_counts(). */
 typedef struct dt_tag_count_t
