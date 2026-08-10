@@ -1076,92 +1076,38 @@ uint32_t dt_tag_images_count(gint tagid)
 
 uint32_t dt_tag_get_with_usage(GList **result)
 {
-  sqlite3_stmt *stmt;
-
-  /* Select tags that are similar to the keyword and are actually used to tag images*/
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO memory.taglist (id, count)"
-                              "  SELECT tagid, COUNT(*)"
-                              "  FROM main.tagged_images"
-                              "  GROUP BY tagid",
-                              -1, &stmt, NULL);
-  // clang-format on
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
   const uint32_t nb_selected = dt_selection_get_length(dt_selection_get_global());
-
-  /* Now put all the bits together */
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT T.name, T.id, MT.count, CT.imgnb, T.flags, T.synonyms"
-                              "  FROM data.tags T "
-                              "  LEFT JOIN memory.taglist MT ON MT.id = T.id "
-                              "  LEFT JOIN (SELECT tagid, COUNT(DISTINCT imgid) AS imgnb"
-                              "             FROM main.tagged_images "
-                              "             WHERE imgid IN (SELECT imgid FROM main.selected_images) GROUP BY tagid) AS CT "
-                              "    ON CT.tagid = T.id"
-                              "  WHERE T.id NOT IN memory.darktable_tags "
-                              "  ORDER BY T.name ",
-                              -1, &stmt, NULL);
-  // clang-format on
+  GList *tags = dt_tag_repository_get_with_usage(nb_selected);
 
   /* ... and create the result list to send upwards */
   uint32_t count = 0;
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = tags; l; l = g_list_next(l))
   {
-    dt_tag_t *t = g_malloc0(sizeof(dt_tag_t));
-    t->tag = g_strdup((char *)sqlite3_column_text(stmt, 0));
+    dt_tag_t *t = (dt_tag_t *)l->data;
     t->leave = g_strrstr(t->tag, "|");
     t->leave = t->leave ? t->leave + 1 : t->tag;
-    t->id = sqlite3_column_int(stmt, 1);
-    t->count = sqlite3_column_int(stmt, 2);
-    const uint32_t imgnb = sqlite3_column_int(stmt, 3);
-    t->select = (nb_selected == 0) ? DT_TS_NO_IMAGE :
-                (imgnb == nb_selected) ? DT_TS_ALL_IMAGES :
-                (imgnb == 0) ? DT_TS_NO_IMAGE : DT_TS_SOME_IMAGES;
-    t->flags = sqlite3_column_int(stmt, 4);
-    t->synonym = g_strdup((char *)sqlite3_column_text(stmt, 5));
     *result = g_list_append(*result, t);
     count++;
   }
-
-  sqlite3_finalize(stmt);
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "DELETE FROM memory.taglist", NULL, NULL, NULL);
+  g_list_free(tags); // the elements moved into *result
 
   return count;
 }
 
 uint32_t dt_tag_get_collection_tags(GList **result)
 {
-  sqlite3_stmt *stmt;
-
-  /* Tags attached to at least one image of the current collection */
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT DISTINCT T.name, T.id"
-                              "  FROM data.tags T"
-                              "  JOIN main.tagged_images TI ON TI.tagid = T.id"
-                              "  WHERE TI.imgid IN (SELECT imgid FROM memory.collected_images)"
-                              "    AND T.id NOT IN memory.darktable_tags"
-                              "  ORDER BY T.name",
-                              -1, &stmt, NULL);
-  // clang-format on
+  GList *tags = dt_tag_repository_get_collection_tags();
 
   uint32_t count = 0;
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = tags; l; l = g_list_next(l))
   {
-    dt_tag_t *t = g_malloc0(sizeof(dt_tag_t));
-    t->tag = g_strdup((char *)sqlite3_column_text(stmt, 0));
+    dt_tag_t *t = (dt_tag_t *)l->data;
     t->leave = g_strrstr(t->tag, "|");
     t->leave = t->leave ? t->leave + 1 : t->tag;
-    t->id = sqlite3_column_int(stmt, 1);
     *result = g_list_append(*result, t);
     count++;
   }
-
-  sqlite3_finalize(stmt);
+  g_list_free(tags); // the elements moved into *result
 
   return count;
 }
@@ -1475,20 +1421,11 @@ char *dt_tag_get_subtags(const int32_t imgid, const char *category, const int le
   if (IS_NULL_PTR(category)) return NULL;
   const guint rootnb = dt_util_string_count_char(category, '|');
   char *tags = NULL;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-          "SELECT DISTINCT T.name FROM main.tagged_images AS I "
-          "INNER JOIN data.tags AS T "
-          "ON T.id = I.tagid AND SUBSTR(T.name, 1, LENGTH(?2)) = ?2 "
-          "WHERE I.imgid = ?1",
-          -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, category, -1, SQLITE_TRANSIENT);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+
+  GList *names = dt_tag_repository_get_names_under(imgid, category);
+  for(GList *l = names; l; l = g_list_next(l))
   {
-    char *tag = (char *)sqlite3_column_text(stmt, 0);
+    const char *tag = (const char *)l->data;
     const guint tagnb = dt_util_string_count_char(tag, '|');
     if (tagnb >= rootnb + level)
     {
@@ -1507,8 +1444,9 @@ char *dt_tag_get_subtags(const int32_t imgid, const char *category, const int le
       g_strfreev(pch);
     }
   }
+  g_list_free_full(names, g_free);
+
   if(tags) tags[strlen(tags) - 1] = '\0'; // remove the last comma
-  sqlite3_finalize(stmt);
   return tags;
 }
 
