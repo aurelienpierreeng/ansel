@@ -351,7 +351,9 @@ static GList *_collect_imgids(sqlite3_stmt *stmt)
   while(sqlite3_step(stmt) == SQLITE_ROW)
     ids = g_list_prepend(ids, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
   sqlite3_finalize(stmt);
-  return ids;
+  // built in reverse order by prepending, so un-reverse it -- both callers returned
+  // row order and their consumers walk the list in it
+  return g_list_reverse(ids);
 }
 
 GList *dt_tag_repository_get_images(const guint tagid)
