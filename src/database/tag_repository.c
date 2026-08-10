@@ -423,6 +423,134 @@ void dt_tag_repository_attach_batch(const char *values)
   dt_free(query);
 }
 
+
+/* ---------------------------------------------------------------------------------------
+ *  Attached-tag listings
+ * ------------------------------------------------------------------------------------- */
+
+/* Four statements for one question, because the SQL genuinely differs on two axes: one
+ * image (bind an id) versus the selection (join `main.selected_images`), and whether
+ * internal tags are excluded. Indexed [selection][ignore_internal] so the pair of booleans
+ * picks the query rather than four copies of the surrounding code doing it. */
+static sqlite3_stmt *_attached_stmt[2][2] = { { NULL, NULL }, { NULL, NULL } };
+
+static const char *const _attached_query[2][2] = {
+  /* one image */
+  { "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+    " COUNT(DISTINCT I.imgid) AS inb"
+    " FROM main.tagged_images AS I"
+    " JOIN data.tags AS T ON T.id = I.tagid"
+    " WHERE I.imgid = ?1"
+    " GROUP BY I.tagid "
+    " ORDER by T.name",
+    "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+    " COUNT(DISTINCT I.imgid) AS inb"
+    " FROM main.tagged_images AS I"
+    " JOIN data.tags AS T ON T.id = I.tagid"
+    " WHERE I.imgid = ?1 AND T.id NOT IN memory.darktable_tags"
+    " GROUP BY I.tagid "
+    " ORDER by T.name" },
+  /* the selection */
+  { "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+    " COUNT(DISTINCT I.imgid) AS inb"
+    " FROM main.tagged_images AS I"
+    " JOIN data.tags AS T ON T.id = I.tagid"
+    " JOIN main.selected_images AS S ON S.imgid = I.imgid"
+    " GROUP BY I.tagid "
+    " ORDER by T.name",
+    "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+    " COUNT(DISTINCT I.imgid) AS inb"
+    " FROM main.tagged_images AS I"
+    " JOIN data.tags AS T ON T.id = I.tagid"
+    " JOIN main.selected_images AS S ON S.imgid = I.imgid"
+    " WHERE T.id NOT IN memory.darktable_tags"
+    " GROUP BY I.tagid "
+    " ORDER by T.name" },
+};
+
+/* Fill the fields that come from a row. `leave` and `select` are the caller's. */
+static dt_tag_t *_tag_from_row(sqlite3_stmt *stmt, const gboolean with_count)
+{
+  dt_tag_t *t = g_malloc0(sizeof(dt_tag_t));
+  if(IS_NULL_PTR(t)) return NULL;
+
+  t->id = sqlite3_column_int(stmt, 0);
+  t->tag = g_strdup((const char *)sqlite3_column_text(stmt, 1));
+  t->flags = sqlite3_column_int(stmt, 2);
+  t->synonym = g_strdup((const char *)sqlite3_column_text(stmt, 3));
+  if(with_count) t->count = sqlite3_column_int(stmt, 4);
+  return t;
+}
+
+GList *dt_tag_repository_get_attached(const int32_t imgid, const gboolean ignore_internal)
+{
+  const int sel = (imgid > 0) ? 0 : 1;
+  const int ign = ignore_internal ? 1 : 0;
+
+  if(IS_NULL_PTR(_attached_stmt[sel][ign]))
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _attached_query[sel][ign],
+                                -1, &_attached_stmt[sel][ign], NULL);
+
+  sqlite3_stmt *stmt = _attached_stmt[sel][ign];
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  if(sel == 0) DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+
+  GList *tags = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_tag_t *t = _tag_from_row(stmt, TRUE);
+    if(t) tags = g_list_prepend(tags, t);
+  }
+
+  return g_list_reverse(tags); // the ORDER BY is the point
+}
+
+GList *dt_tag_repository_get_attached_for_export(const int32_t imgid)
+{
+  if(!(imgid > 0)) return NULL;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT DISTINCT T.id, T.name, T.flags, T.synonyms"
+                              " FROM data.tags AS T"
+                              // tags attached to image(s), not dt tag, ordered by name
+                              " JOIN (SELECT DISTINCT I.tagid, T.name"
+                              "       FROM main.tagged_images AS I"
+                              "       JOIN data.tags AS T ON T.id = I.tagid"
+                              "       WHERE I.imgid = ?1 AND T.id NOT IN memory.darktable_tags"
+                              "       ORDER by T.name) AS T1"
+                              // keep also tags in the path to be able to check category in path
+                              " ON T.id = T1.tagid"
+                              "    OR (T.name = SUBSTR(T1.name, 1, LENGTH(T.name))"
+                              "       AND SUBSTR(T1.name, LENGTH(T.name) + 1, 1) = '|')",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+
+  GList *tags = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_tag_t *t = _tag_from_row(stmt, FALSE);
+    if(t) tags = g_list_prepend(tags, t);
+  }
+  sqlite3_finalize(stmt);
+
+  return g_list_reverse(tags);
+}
+
+void dt_tag_repository_cleanup(void)
+{
+  for(int i = 0; i < 2; i++)
+    for(int j = 0; j < 2; j++)
+      if(_attached_stmt[i][j])
+      {
+        sqlite3_finalize(_attached_stmt[i][j]);
+        _attached_stmt[i][j] = NULL;
+      }
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
