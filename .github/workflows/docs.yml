@@ -65,11 +65,14 @@ jobs:
             cloc \
             cppcheck;
           pipx install lizard
+      # fetch-depth: 0 - the health panel's evolution metrics (hotspots, change
+      # coupling, ownership) read git log. A shallow clone has no history, so they
+      # would silently report nothing.
       - name: Checkout
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v2

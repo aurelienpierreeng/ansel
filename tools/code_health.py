@@ -327,6 +327,43 @@ def collect_reach(edges):
         return seen
 
     total = len(nodes)
+
+    # ---- propagation cost and core/periphery (MacCormack, Baldwin & Rusnak)
+    #
+    # Visibility fan-out is everything a file can reach, fan-in everything that can
+    # reach it. Propagation cost is the mean fan-out as a share of the system: the
+    # probability that a change to a random file can, in principle, reach a random
+    # other one. It is the single number this whole section is circling.
+    #
+    # The CORE is the largest group of files that all reach one another - a cyclic
+    # group, so by definition it has no internal layering. Everything else is
+    # classified against the core's thresholds: SHARED files are depended on as
+    # widely as the core but depend on less, PERIPHERAL files are on neither end,
+    # and CONTROL files reach as widely as the core without being depended upon.
+    # A healthy system has a small core and a large periphery.
+    vfo = {n: len(closure(succ, n)) for n in nodes}
+    vfi = {n: len(closure(pred, n)) for n in nodes}
+    propagation = round(100.0 * sum(vfo.values()) / float(max(1, total * total)), 2)
+
+    cyclic = defaultdict(list)
+    for n in nodes:
+        both = closure(succ, n) & closure(pred, n)
+        if both:
+            cyclic[frozenset(both | {n})].append(n)
+    core_set = max(cyclic, key=len) if cyclic else frozenset()
+    core_vfi = max((vfi[n] for n in core_set), default=0)
+    core_vfo = max((vfo[n] for n in core_set), default=0)
+    buckets = Counter()
+    for n in nodes:
+        if n in core_set:
+            buckets["core"] += 1
+        elif vfi[n] >= core_vfi and vfo[n] < core_vfo:
+            buckets["shared"] += 1
+        elif vfi[n] < core_vfi and vfo[n] >= core_vfo:
+            buckets["control"] += 1
+        else:
+            buckets["peripheral"] += 1
+
     headers = [n for n in nodes if n.lower().endswith((".h", ".hpp", ".hxx"))]
     dependents = []
     for h in headers:
@@ -351,6 +388,11 @@ def collect_reach(edges):
 
     return {
         "files": total,
+        "propagation_cost": propagation,
+        "core_size": len(core_set),
+        "core_share": round(100.0 * len(core_set) / max(1, total), 1),
+        "core_files": sorted(core_set)[:30],
+        "buckets": dict(buckets),
         "top_dependents": dependents[:30],
         "top_burden": by_burden,
         "headers_over_half": sum(1 for r in dependents if r["share"] >= 50.0),
@@ -359,6 +401,160 @@ def collect_reach(edges):
         "mean_headers_pulled": round(mean, 1),
         "median_headers_pulled": counts[len(counts) // 2] if counts else 0,
         "max_headers_pulled": counts[-1] if counts else 0,
+    }
+
+
+def collect_docs(db_path):
+    """How much of the API carries any documentation at all.
+
+    Doxygen records a brief and a detailed description per symbol, so the tree's own
+    documentation coverage is a query rather than an estimate. Counted over the same
+    production files as everything else.
+    """
+    if not db_path or not os.path.exists(db_path):
+        return None
+    con = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True)
+    try:
+        rows = con.execute(
+            "SELECT p.name, m.kind, "
+            "  TRIM(COALESCE(m.briefdescription,'')) || TRIM(COALESCE(m.detaileddescription,'')) "
+            "FROM memberdef m JOIN path p ON p.rowid = m.file_id"
+        ).fetchall()
+    except sqlite3.Error as exc:
+        sys.stderr.write("code_health: doc query failed: %s\n" % exc)
+        return None
+    finally:
+        con.close()
+
+    total, documented = Counter(), Counter()
+    per_file = defaultdict(lambda: [0, 0])
+    for path, kind, text in rows:
+        if is_excluded(path):
+            continue
+        total[kind] += 1
+        per_file[path][0] += 1
+        if (text or "").strip():
+            documented[kind] += 1
+            per_file[path][1] += 1
+    if not total:
+        return None
+
+    n, d = sum(total.values()), sum(documented.values())
+    by_kind = [{"kind": k, "symbols": total[k], "documented": documented[k],
+                "share": round(100.0 * documented[k] / max(1, total[k]), 1)}
+               for k in sorted(total, key=lambda k: -total[k])]
+    undoc = sorted(((p, v[0] - v[1], v[0]) for p, v in per_file.items() if v[0] - v[1] > 0),
+                   key=lambda r: -r[1])[:25]
+    return {
+        "symbols": n,
+        "documented": d,
+        "share": round(100.0 * d / max(1, n), 1),
+        "by_kind": by_kind,
+        "worst_files": [{"file": f, "undocumented": u, "symbols": t} for f, u, t in undoc],
+    }
+
+
+def collect_git(repo_root, days, per_file_ccn, max_files_per_commit=20):
+    """Evolution metrics: churn, hotspots, change coupling and ownership.
+
+    Process metrics predict defects better than static complexity does - complex code
+    nobody touches is harmless, complex code changed weekly is where the bugs are - and
+    none of the rest of this panel can see them, because they are not a property of the
+    code as it stands but of how it got there.
+
+      hotspot          revisions x cyclomatic complexity. The prioritisation metric:
+                       what to refactor first, rather than what is merely large.
+      change coupling  files that keep changing together in the same commit. Some of
+                       those pairs have no include edge between them at all, which is
+                       coupling no static analysis can find.
+      ownership        authors per file. Concentration is not automatically good or
+                       bad - one author means fast decisions and a bus factor of one.
+
+    Commits touching more than max_files_per_commit production files are excluded from
+    the coupling counts only: a sweeping rename couples everything it touches to
+    everything else, which is an artefact of the commit rather than of the code. They
+    still count towards churn and ownership.
+    """
+    if not shutil.which("git"):
+        return None
+    fmt = "__COMMIT__%H\x1f%an"
+    ok, out = run(["git", "-C", repo_root, "log", "--since=%d.days.ago" % days,
+                   "--no-merges", "--numstat", "--format=" + fmt])
+    if not out.strip():
+        sys.stderr.write("code_health: git log empty (shallow clone?)\n")
+        return None
+
+    revisions, churn = Counter(), Counter()
+    authors = defaultdict(set)
+    cochange = Counter()
+    commits = 0
+    current, author = [], None
+
+    def flush():
+        if not current:
+            return
+        for f in current:
+            revisions[f] += 1
+            authors[f].add(author)
+        if len(current) <= max_files_per_commit:
+            uniq = sorted(set(current))
+            for i in range(len(uniq)):
+                for j in range(i + 1, len(uniq)):
+                    cochange[(uniq[i], uniq[j])] += 1
+
+    for line in out.splitlines():
+        if line.startswith("__COMMIT__"):
+            flush()
+            current = []
+            commits += 1
+            _h, _sep, author = line[len("__COMMIT__"):].partition("\x1f")
+            continue
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        added, deleted, path = parts
+        if is_excluded(path):
+            continue
+        try:
+            churn[path] += int(added) + int(deleted)
+        except ValueError:
+            pass                       # binary file, recorded as "-"
+        current.append(path)
+    flush()
+    if not revisions:
+        return None
+
+    hotspots = []
+    for f, revs in revisions.items():
+        cx = per_file_ccn.get(f, 0)
+        if cx:
+            hotspots.append({"file": f, "revisions": revs, "ccn": cx,
+                             "churn": churn.get(f, 0), "score": revs * cx})
+    hotspots.sort(key=lambda r: -r["score"])
+
+    coupled = []
+    for (a, b), n in cochange.items():
+        ra, rb = revisions[a], revisions[b]
+        conf = 100.0 * n / max(1, min(ra, rb))
+        if n >= 5 and conf >= 40.0:
+            coupled.append({"pair": "%s <-> %s" % (a, b), "together": n,
+                            "confidence": round(conf, 0)})
+    coupled.sort(key=lambda r: (-r["together"], -r["confidence"]))
+
+    author_counts = sorted(len(v) for v in authors.values())
+    return {
+        "days": days,
+        "commits": commits,
+        "files_touched": len(revisions),
+        "total_churn": sum(churn.values()),
+        "hotspots": hotspots[:25],
+        "coupled": coupled[:25],
+        "coupled_total": len(coupled),
+        "single_author_files": sum(1 for c in author_counts if c == 1),
+        "mean_authors": round(sum(author_counts) / float(len(author_counts)), 2),
+        "max_authors": author_counts[-1] if author_counts else 0,
+        "most_revised": [{"file": f, "revisions": n, "churn": churn.get(f, 0)}
+                         for f, n in revisions.most_common(15)],
     }
 
 
@@ -769,6 +965,9 @@ def collect_ccn(source_dir):
         idx = min(len(ccns) - 1, max(0, int(round((p / 100.0) * (len(ccns) - 1)))))
         return ccns[idx]
 
+    per_file = Counter()
+    for f in funcs:
+        per_file[f["file"]] += f["ccn"]
     worst = sorted(funcs, key=lambda f: (-f["ccn"], -f["nloc"]))[:40]
     longest = sorted(funcs, key=lambda f: -f["nloc"])[:20]
     return {
@@ -790,6 +989,7 @@ def collect_ccn(source_dir):
         "params_over_7": sum(1 for f in funcs if f["params"] > 7),
         "worst": worst,
         "longest": longest,
+        "per_file_ccn": dict(per_file),
     }
 
 
@@ -1246,6 +1446,32 @@ def build_markdown(project, data):
         A("of the codebase. What follows is the transitive answer: how much of the tree")
         A("depends on each header, and how much each translation unit drags in.")
         A("")
+        A("### Propagation cost {#ch_reach_prop}")
+        A("")
+        A("Propagation cost is the mean share of the system a file can reach: the")
+        A("probability that a change to a random file can, in principle, reach a random")
+        A("other one. It is the standard summary of architectural coupling")
+        A("(MacCormack, Baldwin & Rusnak), and the single number this section is circling.")
+        A("")
+        A("The **core** is the largest group of files that all reach one another. Being a")
+        A("cyclic group it has no internal layering by definition, so it can only be")
+        A("understood as a unit. Everything else is classified against the core's")
+        A("thresholds. A healthy system has a small core and a large periphery.")
+        A("")
+        A(md_table(
+            ["Measure", "Value"],
+            [["Propagation cost", "{} %".format(rch["propagation_cost"])],
+             ["Core size", "{:,} files ({} %)".format(rch["core_size"], rch["core_share"])]]
+            + [[k.capitalize(), "{:,}".format(v)]
+               for k, v in sorted(rch.get("buckets", {}).items(), key=lambda kv: -kv[1])],
+            ["---", "--:"]))
+        A("")
+        if rch.get("core_files"):
+            A("Files in the core:")
+            A("")
+            for f in rch["core_files"]:
+                A("- `%s`" % f)
+            A("")
         A(md_table(
             ["Measure", "Value"],
             [["Files in the graph", "{:,}".format(rch["files"])],
@@ -1347,6 +1573,105 @@ def build_markdown(project, data):
     A("")
 
     # ---- static analysis
+    doc = data.get("docs")
+    A("Documentation coverage {#ch_docs}")
+    A("----------------------")
+    A("")
+    if doc:
+        A("Symbols carrying a brief or detailed description, from Doxygen's own record.")
+        A("A low figure is not automatically bad - self-explanatory code needs no prose -")
+        A("but it bounds how much of the API can be understood without reading its")
+        A("implementation.")
+        A("")
+        A(md_table(
+            ["Measure", "Value"],
+            [["Symbols", "{:,}".format(doc["symbols"])],
+             ["Documented", "{:,}".format(doc["documented"])],
+             ["Coverage", "{} %".format(doc["share"])]],
+            ["---", "--:"]))
+        A("")
+        A(md_table(
+            ["Kind", "Symbols", "Documented", "Coverage"],
+            [[k["kind"], "{:,}".format(k["symbols"]), "{:,}".format(k["documented"]),
+              "{} %".format(k["share"])] for k in doc["by_kind"]],
+            ["---", "--:", "--:", "--:"]))
+        A("")
+        A("Files with the most undocumented symbols:")
+        A("")
+        A(md_table(
+            ["Undocumented", "of", "File"],
+            [["{:,}".format(w["undocumented"]), "{:,}".format(w["symbols"]), "`%s`" % w["file"]]
+             for w in doc["worst_files"]],
+            ["--:", "--:", "---"]))
+    else:
+        A("_symbol data not available (needs Doxygen's SQLite output)._")
+    A("")
+
+    g = data.get("git")
+    A("Change history {#ch_git}")
+    A("--------------")
+    A("")
+    if g:
+        A("Process metrics, over the last %d days. These predict defects better than" % g["days"])
+        A("static complexity does, and nothing else in this panel can see them: they are")
+        A("not a property of the code as it stands but of how it got there. Complex code")
+        A("nobody touches is harmless; complex code changed weekly is where bugs live.")
+        A("")
+        A(md_table(
+            ["Measure", "Value"],
+            [["Commits", "{:,}".format(g["commits"])],
+             ["Files touched", "{:,}".format(g["files_touched"])],
+             ["Lines added + deleted", "{:,}".format(g["total_churn"])],
+             ["Authors per file, mean", g["mean_authors"]],
+             ["Authors per file, most", "{:,}".format(g["max_authors"])],
+             ["Files with a single author", "{:,}".format(g["single_author_files"])]],
+            ["---", "--:"]))
+        A("")
+        A("### Hotspots {#ch_git_hotspots}")
+        A("")
+        A("Revisions multiplied by cyclomatic complexity. This is the prioritisation")
+        A("metric: what to refactor first, rather than what is merely large. A file high")
+        A("on this list is both hard to reason about and constantly being reasoned about.")
+        A("")
+        A(md_table(
+            ["Score", "Revisions", "CCN", "Churn", "File"],
+            [["{:,}".format(h["score"]), h["revisions"], "{:,}".format(h["ccn"]),
+              "{:,}".format(h["churn"]), "`%s`" % h["file"]] for h in g["hotspots"]],
+            ["--:", "--:", "--:", "--:", "---"]))
+        A("")
+        A("### Change coupling {#ch_git_coupling}")
+        A("")
+        A("Files that keep being changed together. Some of these pairs have no include")
+        A("edge between them at all, which is coupling no static analysis can find -")
+        A("a shared assumption, a duplicated constant, two halves of one idea kept in")
+        A("step by hand. `Confidence` is how often the rarer of the two changes brings")
+        A("the other with it.")
+        A("")
+        A("Commits touching more than 20 files are left out of these counts: a sweeping")
+        A("rename couples everything it touches to everything else, which says nothing")
+        A("about the code.")
+        A("")
+        A("%d pairs meet the threshold (5+ shared commits, 40%%+ confidence)."
+          % g["coupled_total"])
+        A("")
+        A(md_table(
+            ["Together", "Confidence", "Pair"],
+            [[c["together"], "{:.0f} %".format(c["confidence"]), "`%s`" % c["pair"]]
+             for c in g["coupled"]],
+            ["--:", "--:", "---"]))
+        A("")
+        A("### Most revised files {#ch_git_revised}")
+        A("")
+        A(md_table(
+            ["Revisions", "Churn", "File"],
+            [[m["revisions"], "{:,}".format(m["churn"]), "`%s`" % m["file"]]
+             for m in g["most_revised"]],
+            ["--:", "--:", "---"]))
+    else:
+        A("_no git history available. The documentation job must check out with")
+        A("`fetch-depth: 0`; a shallow clone has nothing to measure._")
+    A("")
+
     A("Static analysis {#ch_static}")
     A("---------------")
     A("")
@@ -1405,6 +1730,8 @@ def main():
     ap.add_argument("--out-md", default="doc/code-health.md")
     ap.add_argument("--out-json", default="doc/code-health.json")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2)))
+    ap.add_argument("--history-days", type=int, default=365,
+                    help="window for the git evolution metrics (default: one year)")
     ap.add_argument("--skip-cppcheck", action="store_true")
     args = ap.parse_args()
 
@@ -1443,6 +1770,10 @@ def main():
     data["includers"] = step("fan-in", lambda: collect_includers(edges))
     data["layering"] = step("layering", lambda: collect_layering(edges, args.source_dir))
     data["reach"] = step("transitive reach", lambda: collect_reach(edges))
+    data["docs"] = step("doc coverage", lambda: collect_docs(args.db))
+    data["git"] = step("git history",
+                       lambda: collect_git(args.repo_root, args.history_days,
+                                           (data.get("ccn") or {}).get("per_file_ccn", {})))
     data["god_header"] = step("global header", lambda: collect_god_header(edges))
     if not args.skip_cppcheck:
         data["cppcheck"] = step("cppcheck",
