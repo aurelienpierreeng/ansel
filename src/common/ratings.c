@@ -40,7 +40,6 @@
 #include "common/ratings.h"
 #include "common/undo.h"
 #include "common/grouping.h"
-#include "views/view.h"
 #include "control/control.h"
 
 
