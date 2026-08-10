@@ -321,7 +321,7 @@ GDateTime *dt_datetime_img_to_gdatetime(const dt_image_t *img, const GTimeZone *
 GDateTime *dt_string_to_datetime(const char *string)
 {
   if(g_utf8_strlen(string, -1) > DT_DATETIME_LENGTH - 1)
-    return FALSE;
+    return NULL;
 
   char idt[DT_DATETIME_LENGTH];
   g_strlcpy(idt, DT_DATETIME_ORIGIN, sizeof(idt));

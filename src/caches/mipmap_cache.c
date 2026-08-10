@@ -106,7 +106,8 @@ typedef struct dt_mipmap_cache_t
   // real width and height are stored per element
   // (could be smaller than the max for this mip level,
   // due to aspect ratio)
-  size_t max_width[DT_MIPMAP_NONE], max_height[DT_MIPMAP_NONE];
+  size_t max_width[DT_MIPMAP_NONE];
+  size_t max_height[DT_MIPMAP_NONE];
   // size of an element inside buf
   size_t buffer_size[DT_MIPMAP_NONE];
 
