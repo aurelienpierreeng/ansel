@@ -1137,6 +1137,16 @@ void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_
 int dt_masks_form_change_opacity(dt_develop_t *dev, dt_masks_form_t *form, int parentid, int up, const int flow);
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up);
 int dt_masks_form_duplicate(dt_develop_t *dev, int formid);
+/**
+ * @brief Duplicate a shape (dt_masks_form_duplicate) and, if `group_id` names a valid
+ * group, attach the duplicate as a new member of that group right away, inheriting the
+ * source form's group-entry state (operation) and opacity. If `group_id` is not a group
+ * (e.g. <= 0), the duplicate is left unattached in dev->forms, same as
+ * dt_masks_form_duplicate alone. Shared by every "Duplicate shape" UI entry point so the
+ * attach-and-inherit behavior does not get re-implemented per caller.
+ * @return the new form's id, or <= 0 on failure.
+ */
+int dt_masks_form_duplicate_in_group(dt_develop_t *dev, int group_id, int form_id);
 /* returns a duplicate tof form, including the formid */
 dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form);
 

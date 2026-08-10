@@ -872,35 +872,14 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
     int id = -1;
     _lib_masks_get_values(model, &iter, &module, &grid, &id);
 
-    const int nid = dt_masks_form_duplicate(dt_dev_get_global(), id);
+    // dt_masks_form_duplicate_in_group also attaches the duplicate to the source shape's
+    // group (grid), inheriting its state/opacity -- without that, the duplicate would be an
+    // orphan: invisible on canvas and useless to the module, since nothing outside a group
+    // ever gets rendered.
+    const int nid = dt_masks_form_duplicate_in_group(dt_dev_get_global(), grid, id);
     if(nid > 0)
     {
-      // If the source shape was a member of a group (grid != 0, i.e. not itself a top-level
-      // group node), dt_masks_form_duplicate only cloned the shape into dev->forms -- it does
-      // NOT add it to that group. Without this, the duplicate is an orphan: invisible on
-      // canvas and useless to the module, since nothing outside a group ever gets rendered.
-      dt_masks_form_t *grp = (grid > 0) ? dt_masks_get_from_id(dt_dev_get_global(), grid) : NULL;
-      if(grp && (grp->type & DT_MASKS_GROUP))
-      {
-        grp = dt_masks_cow_touch(dt_dev_get_global(), grp);
-
-        dt_masks_form_group_t *orig_entry = NULL;
-        for(GList *pts = grp->points; pts; pts = g_list_next(pts))
-        {
-          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-          if(pt->formid == id) { orig_entry = pt; break; }
-        }
-
-        dt_masks_form_t *dup_form = dt_masks_get_from_id(dt_dev_get_global(), nid);
-        dt_masks_form_group_t *new_entry = dup_form ? dt_masks_group_add_form(dt_dev_get_global(), grp, dup_form) : NULL;
-        if(new_entry && orig_entry)
-        {
-          new_entry->state = orig_entry->state;
-          new_entry->opacity = orig_entry->opacity;
-        }
-
-        if(module) dt_masks_iop_update(module);
-      }
+      if(module) dt_masks_iop_update(module);
 
       dt_dev_masks_selection_change(dt_dev_get_global(), NULL, nid, TRUE);
 

@@ -1562,6 +1562,34 @@ int dt_masks_form_duplicate(dt_develop_t *develop, int form_id)
   return dest_form->formid;
 }
 
+int dt_masks_form_duplicate_in_group(dt_develop_t *develop, int group_id, int form_id)
+{
+  const int nid = dt_masks_form_duplicate(develop, form_id);
+  if(nid <= 0) return nid;
+
+  dt_masks_form_t *grp = (group_id > 0) ? dt_masks_get_from_id(develop, group_id) : NULL;
+  if(IS_NULL_PTR(grp) || !(grp->type & DT_MASKS_GROUP)) return nid;
+
+  grp = dt_masks_cow_touch(develop, grp);
+
+  dt_masks_form_group_t *orig_entry = NULL;
+  for(GList *pts = grp->points; pts; pts = g_list_next(pts))
+  {
+    dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
+    if(pt->formid == form_id) { orig_entry = pt; break; }
+  }
+
+  dt_masks_form_t *dup_form = dt_masks_get_from_id(develop, nid);
+  dt_masks_form_group_t *new_entry = dup_form ? dt_masks_group_add_form(develop, grp, dup_form) : NULL;
+  if(new_entry && orig_entry)
+  {
+    new_entry->state = orig_entry->state;
+    new_entry->opacity = orig_entry->opacity;
+  }
+
+  return nid;
+}
+
 int dt_masks_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                float **point_buffer, int *point_count,
                                float **border_buffer, int *border_count,

@@ -2023,8 +2023,8 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
                                 active ? DT_MASKS_EVENT_REMOVE : DT_MASKS_EVENT_ADD);
 }
 
-// Permanently delete a shape from the "all shapes" list: shared by the row's trash icon and
-// the right-click "Delete" context menu entry, both gated by dt_masks_gui_confirm_permanent_delete().
+// Permanently delete a shape from the "all shapes" list: the row's trash icon is the only
+// entry point, gated by dt_masks_gui_confirm_permanent_delete().
 static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
 {
   if(IS_NULL_PTR(module)) return;
@@ -2038,14 +2038,6 @@ static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
   dt_masks_form_delete(module->dev, module, NULL, mask_form);
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
-}
-
-static void _blendop_masks_all_delete_callback(GtkWidget *menu_item, dt_iop_module_t *module)
-{
-  if(IS_NULL_PTR(module)) return;
-
-  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
-  _blendop_masks_all_delete(module, formid);
 }
 
 static void _blendop_masks_all_duplicate_callback(GtkWidget *menu_item, dt_iop_module_t *module)
@@ -2170,12 +2162,7 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
   if(formid <= 0) return TRUE;
 
   GtkWidget *menu = gtk_menu_new();
-  GtkWidget *item = gtk_menu_item_new_with_label(_("Delete"));
-  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
-  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_delete_callback), module);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-
-  item = gtk_menu_item_new_with_label(_("Duplicate"));
+  GtkWidget *item = gtk_menu_item_new_with_label(_("Duplicate"));
   g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_duplicate_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
@@ -2329,6 +2316,24 @@ static void _blendop_masks_group_move_callback(GtkWidget *menu_item, dt_iop_modu
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, parentid, DT_MASKS_EVENT_UPDATE);
 }
 
+static void _blendop_masks_group_duplicate_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module)) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
+
+  // dt_masks_form_duplicate_in_group also attaches the duplicate to the group right away,
+  // inheriting the source entry's state/opacity -- same helper used by the mask manager's
+  // own "Duplicate shape" action (libs/masks.c).
+  const int nid = dt_masks_form_duplicate_in_group(module->dev, parentid, formid);
+  if(nid <= 0) return;
+
+  _blendop_masks_apply_and_commit(module);
+  _blendop_masks_refresh_lists(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, nid, parentid, DT_MASKS_EVENT_ADD);
+}
+
 static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
@@ -2471,6 +2476,14 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
   g_object_set_data(G_OBJECT(item), "blend-index", GINT_TO_POINTER(index));
   g_object_set_data(G_OBJECT(item), "blend-move-up", GINT_TO_POINTER(FALSE));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_move_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+  item = gtk_menu_item_new_with_label(_("Duplicate shape"));
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_duplicate_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
   return menu;
