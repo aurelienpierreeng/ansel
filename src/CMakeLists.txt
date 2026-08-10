@@ -103,6 +103,8 @@ FILE(GLOB SOURCE_FILES
   "database/colorlabel_repository.c"
   "database/selection_repository.c"
   "database/history_snapshot_repository.c"
+  "database/metadata_repository.c"
+  "database/tag_repository.c"
   "database/image_repository.c"
   "common/image_extensions.c"
   "common/imagebuf.c"

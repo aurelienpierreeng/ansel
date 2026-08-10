@@ -34,7 +34,10 @@
 
 #include "common/metadata.h"
 #include "common/act_on.h"
-#include "database/sql_debug.h"
+#include "database/colorlabel_repository.h"
+#include "database/image_repository.h"
+#include "database/metadata_repository.h"
+#include "database/tag_repository.h"
 #include "common/undo.h"
 #include "common/conf.h"
 
@@ -47,8 +50,6 @@
 
 // this array should contain all dt metadata
 
-static sqlite3_stmt *_metadata_get_selected_stmt = NULL;
-static sqlite3_stmt *_metadata_get_single_stmt = NULL;
 // add the new metadata at the end when needed
 // Dependencies
 //    Must match with dt_metadata_t in metadata.h.
@@ -263,11 +264,17 @@ static gchar *_get_tb_removed_metadata_string_values(GList *before, GList *after
   return metadata_list;
 }
 
-static gchar *_get_tb_added_metadata_string_values(const int img, GList *before, GList *after)
+/* The rows that are in `after` but not in `before`, or whose value changed.
+ *
+ * Returns a GArray of dt_metadata_row_t whose `value` pointers borrow from `after`, so it
+ * must not outlive it. This used to build the insert's VALUES clause directly and escape
+ * each value for SQL itself, which was the only reason this file linked against sqlite at
+ * all. The escaping is the repository's now. */
+static GArray *_get_tb_added_metadata_rows(const int img, GList *before, GList *after)
 {
   GList *b = before;
   GList *a = after;
-  gchar *metadata_list = NULL;
+  GArray *rows = g_array_new(FALSE, FALSE, sizeof(dt_metadata_row_t));
 
   while(a)
   {
@@ -282,53 +289,37 @@ static gchar *_get_tb_added_metadata_string_values(const int img, GList *before,
     }
     if((!same_key || different_value) && value[0])
     {
-      char *escaped_text = sqlite3_mprintf("%q", value);
-      metadata_list = dt_util_dstrcat(metadata_list, "(%d,%d,'%s'),", GPOINTER_TO_INT(img), atoi(a->data), escaped_text);
-      sqlite3_free(escaped_text);
+      const dt_metadata_row_t row = { .imgid = GPOINTER_TO_INT(img),
+                                      .keyid = atoi(a->data),
+                                      .value = value };
+      g_array_append_val(rows, row);
     }
     a = g_list_next(a);
     a = g_list_next(a);
   }
-  if(metadata_list) metadata_list[strlen(metadata_list) - 1] = '\0';
-  return metadata_list;
+  return rows;
 }
 
 static void _bulk_remove_metadata(const int img, const gchar *metadata_list)
 {
-  if(img > 0 && metadata_list)
-  {
-    sqlite3_stmt *stmt;
-    gchar *query = g_strdup_printf("DELETE FROM main.meta_data WHERE id = %d AND key IN (%s)", img, metadata_list);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    dt_free(query);
-  }
+  dt_metadata_repository_remove(img, metadata_list);
 }
 
-static void _bulk_add_metadata(gchar *metadata_list)
+static void _bulk_add_metadata(GArray *rows)
 {
-  if(metadata_list)
-  {
-    sqlite3_stmt *stmt;
-    gchar *query = g_strdup_printf("INSERT INTO main.meta_data (id, key, value) VALUES %s", metadata_list);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    dt_free(query);
-  }
+  dt_metadata_repository_add((const dt_metadata_row_t *)rows->data, rows->len);
 }
 
 static void _pop_undo_execute(const int32_t imgid, GList *before, GList *after)
 {
   gchar *tobe_removed_list = _get_tb_removed_metadata_string_values(before, after);
-  gchar *tobe_added_list = _get_tb_added_metadata_string_values(imgid, before, after);
+  GArray *tobe_added_rows = _get_tb_added_metadata_rows(imgid, before, after);
 
   _bulk_remove_metadata(imgid, tobe_removed_list);
-  _bulk_add_metadata(tobe_added_list);
+  _bulk_add_metadata(tobe_added_rows);
 
   dt_free(tobe_removed_list);
-  dt_free(tobe_added_list);
+  g_array_free(tobe_added_rows, TRUE);
 }
 
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs)
@@ -349,21 +340,7 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
 
 GList *dt_metadata_get_list_id(const int id)
 {
-  GList *metadata = NULL;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT key, value FROM main.meta_data WHERE id=?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const gchar *value = (const char *)sqlite3_column_text(stmt, 1);
-    gchar *ckey = g_strdup_printf("%d", sqlite3_column_int(stmt, 0));
-    gchar *cvalue = g_strdup(value ? value : ""); // to avoid NULL value
-    metadata = g_list_append(metadata, (gpointer)ckey);
-    metadata = g_list_append(metadata, (gpointer)cvalue);
-  }
-  sqlite3_finalize(stmt);
-  return metadata;
+  return dt_metadata_repository_get_all(id);
 }
 
 static void _undo_metadata_free(gpointer data)
@@ -402,150 +379,41 @@ gchar *_cleanup_metadata_value(const gchar *value)
 
 GList *dt_metadata_get(const int id, const char *key, uint32_t *count)
 {
-  GList *result = NULL;
-  sqlite3_stmt *stmt;
-  uint32_t local_count = 0;
-
+  /* Four tables behind one function, because `key` is an XMP name and three XMP names are
+   * not metadata at all: the rating lives in main.images.flags, the subject in
+   * data.tags/main.tagged_images, the colour labels in main.color_labels. Each read goes
+   * to the repository that owns its table -- there is no "metadata" table that could
+   * answer all four.
+   *
+   * `id < 0` means "every selected image" rather than "no image", throughout. That is the
+   * convention the GUI callers pass in and it is preserved. */
   const int keyid = dt_metadata_get_keyid(key);
+
+  GList *result = NULL;
+
   // key not found in db. Maybe it's one of our "special" keys (rating, tags and colorlabels)?
   if(keyid == -1)
   {
     if(strncmp(key, "Xmp.xmp.Rating", 14) == 0)
-    {
-      if(id == -1)
-      {
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT flags FROM main.images WHERE id IN "
-                                                                   "(SELECT imgid FROM main.selected_images)",
-                                    -1, &stmt, NULL);
-        // clang-format on
-      }
-      else // single image under mouse cursor
-      {
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT flags FROM main.images WHERE id = ?1",
-                                    -1, &stmt, NULL);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-      }
-      while(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        local_count++;
-        int stars = sqlite3_column_int(stmt, 0);
-        stars = (stars & 0x7) - 1;
-        result = g_list_prepend(result, GINT_TO_POINTER(stars));
-      }
-      sqlite3_finalize(stmt);
-    }
+      result = dt_image_repository_get_ratings(id);
     else if(strncmp(key, "Xmp.dc.subject", 14) == 0)
-    {
-      if(id == -1)
-      {
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "SELECT name FROM data.tags t JOIN main.tagged_images i ON "
-                                    "i.tagid = t.id WHERE imgid IN "
-                                    "(SELECT imgid FROM main.selected_images)",
-                                    -1, &stmt, NULL);
-        // clang-format on
-      }
-      else // single image under mouse cursor
-      {
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "SELECT name FROM data.tags t JOIN main.tagged_images i ON "
-                                    "i.tagid = t.id WHERE imgid = ?1",
-                                    -1, &stmt, NULL);
-        // clang-format on
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-      }
-      while(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        local_count++;
-        result = g_list_prepend(result, g_strdup((char *)sqlite3_column_text(stmt, 0)));
-      }
-      sqlite3_finalize(stmt);
-    }
+      result = dt_tag_repository_get_attached_names(id);
     else if(strncmp(key, "Xmp.darktable.colorlabels", 25) == 0)
-    {
-      if(id == -1)
-      {
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "SELECT color FROM main.color_labels WHERE imgid IN "
-                                    "(SELECT imgid FROM main.selected_images)",
-                                    -1, &stmt, NULL);
-        // clang-format on
-      }
-      else // single image under mouse cursor
-      {
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "SELECT color FROM main.color_labels WHERE imgid=?1 ORDER BY color",
-                                    -1, &stmt, NULL);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-      }
-      while(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        local_count++;
-        result = g_list_prepend(result, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
-      }
-      sqlite3_finalize(stmt);
-    }
-    if(!IS_NULL_PTR(count)) *count = local_count;
-    return g_list_reverse(result);
+      result = dt_colorlabel_repository_get_list(id);
+  }
+  else
+  {
+    // So we got this far -- it has to be a generic key-value entry from meta_data
+    result = dt_metadata_repository_get_values(id, keyid);
   }
 
-  // So we got this far -- it has to be a generic key-value entry from meta_data
-  if(id == -1)
-  {
-    // clang-format off
-    if(IS_NULL_PTR(_metadata_get_selected_stmt))
-    {
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "SELECT value FROM main.meta_data WHERE id IN "
-                                  "(SELECT imgid FROM main.selected_images) AND key = ?1 ORDER BY value",
-                                  -1, &_metadata_get_selected_stmt, NULL);
-    }
-    // clang-format on
-    stmt = _metadata_get_selected_stmt;
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, keyid);
-  }
-  else // single image under mouse cursor
-  {
-    if(IS_NULL_PTR(_metadata_get_single_stmt))
-    {
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "SELECT value FROM main.meta_data WHERE id = ?1 AND key = ?2 ORDER BY value", -1,
-                                  &_metadata_get_single_stmt, NULL);
-    }
-    stmt = _metadata_get_single_stmt;
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, keyid);
-  }
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    local_count++;
-    char *value = (char *)sqlite3_column_text(stmt, 0);
-    result = g_list_prepend(result, g_strdup(value ? value : "")); // to avoid NULL value
-  }
-  if(!IS_NULL_PTR(count)) *count = local_count;
-  return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
+  if(!IS_NULL_PTR(count)) *count = g_list_length(result);
+  return result;
 }
 
 void dt_metadata_cleanup(void)
 {
-  if(_metadata_get_selected_stmt)
-  {
-    sqlite3_finalize(_metadata_get_selected_stmt);
-    _metadata_get_selected_stmt = NULL;
-  }
-  if(_metadata_get_single_stmt)
-  {
-    sqlite3_finalize(_metadata_get_single_stmt);
-    _metadata_get_single_stmt = NULL;
-  }
+  dt_metadata_repository_cleanup();
 }
 
 static void _metadata_add_metadata_to_list(GList **list, const GList *metadata)
@@ -828,15 +696,8 @@ int dt_metadata_already_imported(const char *filename, const char *datetime)
   if(!filename || IS_NULL_PTR(datetime))
     return FALSE;
   char *id = g_strconcat(filename, "-", datetime, NULL);
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id FROM main.meta_data WHERE value=?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, id, -1, SQLITE_TRANSIENT);
   int32_t imgid = UNKNOWN_IMAGE;
-  if(sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 0) > -1)
-    imgid = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
+  imgid = dt_metadata_repository_find_image_by_value(id);
   dt_free(id);
   return imgid;
 }

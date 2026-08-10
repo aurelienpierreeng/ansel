@@ -104,6 +104,40 @@ gboolean dt_colorlabel_repository_has(const int32_t imgid, const int color)
   return found;
 }
 
+GList *dt_colorlabel_repository_get_list(const int32_t imgid)
+{
+  sqlite3_stmt *stmt = NULL;
+
+  if(imgid < 0)
+  {
+    /* No ORDER BY on this branch and ORDER BY color on the other. That asymmetry is
+     * inherited from dt_metadata_get(); ordering a selection by colour would group the
+     * same colour from different images together, which is not what the caller counts. */
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT color FROM main.color_labels WHERE imgid IN "
+                                "(SELECT imgid FROM main.selected_images)",
+                                -1, &stmt, NULL);
+    // clang-format on
+  }
+  else
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT color FROM main.color_labels WHERE imgid=?1 ORDER BY color",
+                                -1, &stmt, NULL);
+    // clang-format on
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  }
+
+  GList *result = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    result = g_list_prepend(result, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+  sqlite3_finalize(stmt);
+
+  return g_list_reverse(result);
+}
+
 void dt_colorlabel_repository_cleanup(void)
 {
   sqlite3_stmt **const cached[] = { &_get_stmt, &_set_stmt, &_remove_stmt, &_remove_all_stmt };

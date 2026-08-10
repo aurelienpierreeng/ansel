@@ -2,8 +2,8 @@
 
 Everything that speaks SQL belongs here. Nothing else does.
 
-That is the destination, not yet the state of the tree: **344 call sites outside this
-directory still hold a raw `sqlite3 *`**, and 39 files still write queries. Both numbers
+That is the destination, not yet the state of the tree: **300 call sites outside this
+directory still hold a raw `sqlite3 *`**, and 34 files still write queries. Both numbers
 are ratcheted downwards by `tools/check_module_boundaries.sh`, and this file is the map of
 where they are going.
 
@@ -17,7 +17,12 @@ where they are going.
 | `sql_debug.h` | the checked `DT_DEBUG_SQLITE3_*` wrappers — **scaffolding, counted, deleted at zero** |
 | `legacy_presets.c/h` | 1100 lines of pre-auto-apply darktable presets, inserted into `main.legacy_presets` at schema build time |
 | `sqliteicu.c/h` | the vendored ICU collation extension, built only when `HAVE_ICU` |
-| `image_repository.c/h` | reads and writes one `dt_image_t` to `main.images` — the first repository |
+| `image_repository.c/h` | one `dt_image_t` to and from `main.images`; grouping; ratings |
+| `colorlabel_repository.c/h` | `main.color_labels` |
+| `selection_repository.c/h` | `main.selected_images`, `memory.selected_backup` |
+| `history_snapshot_repository.c/h` | the three `memory.undo_*` tables |
+| `metadata_repository.c/h` | `main.meta_data` |
+| `tag_repository.c/h` | `data.tags`, `main.tagged_images` — **a seed**, see its file comment |
 
 `dt_database_t` is defined in `database.c` and declared nowhere. There is one connection,
 the module owns it, and no function takes it as an argument.
@@ -113,22 +118,32 @@ refcounting, or what the caller intends. `image_repository.c` is the worked exam
 came out of `caches/image_cache.c`, which was an LRU and, in 107 of its lines, also the
 only code in the tree that knew the shape of a `main.images` row.
 
+Five `common/` files are already at zero SQL and are the pattern to copy: `colorlabels.c`,
+`grouping.c`, `selection.c`, `history_snapshot.c`, `metadata.c`.
+
+Two things that came up doing those, and will come up again:
+
+- **A function that dispatches on a key can span repositories.** `dt_metadata_get()` takes
+  an XMP name, and three of those names are not metadata at all — the rating is in
+  `main.images.flags`, the subject in `data.tags`, the colour labels in
+  `main.color_labels`. Each read went to the repository owning its table; there is no
+  repository that could have answered all four.
+- **Escaping is this side of the boundary.** `common/metadata.c` built its insert's VALUES
+  clause and quoted each value with `sqlite3_mprintf("%q", …)`. A module that escapes its
+  own strings for SQL is still writing SQL, so `dt_metadata_repository_add()` takes rows
+  and does the quoting.
+
 The families still to extract, by where their SQL lives today:
 
 | repository | tables | mostly from |
 |---|---|---|
-| `tag_repository` | `data.tags`, `main.tagged_images`, `memory.taglist` | `common/tags.c` (258) |
+| `tag_repository` (extend) | `data.tags`, `main.tagged_images`, `memory.taglist` | `common/tags.c` (258) |
 | `preset_repository` | `data.presets` | `gui/presets.c` (281), `libs/lib.c` (141) |
 | `history_repository` | `main.history`, `main.masks_history`, `main.module_order` | `common/history.c` (217) |
 | `style_repository` | `data.styles`, `data.style_items` | `common/styles.c` (187) |
 | `film_repository` | `main.film_rolls`, `memory.film_folder` | `common/film.c` (103) |
 | `location_repository` | `data.locations` | `common/map_locations.c` (103) |
 | `collection_repository` | `memory.collected_images` and the query builder | `common/collection.c` (95) |
-| `metadata_repository` | `main.meta_data` | `common/metadata.c` (57) |
-| `snapshot_repository` | `memory.undo_*` | `common/history_snapshot.c` (57) |
-| `colorlabel_repository` | `main.color_labels` | `common/colorlabels.c` (42) |
-| `grouping_repository` | `main.images` grouping columns | `common/grouping.c` (30) |
-| `selection_repository` | `main.selected_images` | `common/selection.c` (18) |
 
 Two of those rows are also a rule violation that predates this work: CLAUDE.md says
 `src/libs/` and `src/views/` contain no raw SQL, and `gui/presets.c` and `libs/lib.c`

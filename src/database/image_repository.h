@@ -117,6 +117,15 @@ void dt_image_repository_reassign_group(const int32_t from_group_id, const int32
                                         const int32_t exclude_imgid);
 
 /**
+ * @brief Star ratings, as `main.images.flags` encodes them: the low three bits, minus one.
+ *
+ * @param imgid the image, or a negative value for every selected image -- the convention
+ *        dt_metadata_get() uses, which is this function's only caller.
+ * @return a `GList` of ratings as `GINT_TO_POINTER`, one per image. Free with g_list_free().
+ */
+GList *dt_image_repository_get_ratings(const int32_t imgid);
+
+/**
  * @brief Finalise the prepared statements. Called at shutdown, after the last cache release
  * and before the database connection closes.
  */
