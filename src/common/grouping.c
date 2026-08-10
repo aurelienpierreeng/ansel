@@ -27,12 +27,11 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "database/database.h"
 #include "common/grouping.h"
 #include "common/collection.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "database/sql_debug.h"
+#include "database/image_repository.h"
 #include "caches/image_cache.h"
 
 int32_t dt_grouping_get_image_group(const int32_t image_id)
@@ -57,7 +56,6 @@ void dt_grouping_add_to_group(const int32_t group_id, const int32_t image_id)
 /** remove an image from a group */
 int dt_grouping_remove_from_group(const int32_t image_id)
 {
-  sqlite3_stmt *stmt;
   int new_group_id = -1;
   GList *imgs = NULL;
 
@@ -68,30 +66,21 @@ int dt_grouping_remove_from_group(const int32_t image_id)
   if(img_group_id == image_id)
   {
     // get a new group_id for all the others in the group. also write it to the dt_image_t struct.
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT id FROM main.images WHERE group_id = ?1 AND id != ?2", -1, &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img_group_id);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, image_id);
-    while(sqlite3_step(stmt) == SQLITE_ROW)
+    GList *others = dt_image_repository_get_group_members(img_group_id, image_id);
+    for(GList *o = others; o; o = g_list_next(o))
     {
-      int other_id = sqlite3_column_int(stmt, 0);
+      const int other_id = GPOINTER_TO_INT(o->data);
       if(new_group_id == -1) new_group_id = other_id;
       dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
       other_img->group_id = new_group_id;
       dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
       imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
     }
-    sqlite3_finalize(stmt);
+    g_list_free(others);
+
     if(new_group_id != -1)
     {
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "UPDATE main.images SET group_id = ?1 WHERE group_id = ?2 AND id != ?3", -1, &stmt,
-                                  NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, new_group_id);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, img_group_id);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, image_id);
-      sqlite3_step(stmt);
-      sqlite3_finalize(stmt);
+      dt_image_repository_reassign_group(img_group_id, new_group_id, image_id);
     }
     else
     {
@@ -117,25 +106,21 @@ int dt_grouping_remove_from_group(const int32_t image_id)
 /** make an image the representative of the group it is in */
 int dt_grouping_change_representative(const int32_t image_id)
 {
-  sqlite3_stmt *stmt;
-
   dt_image_t *img = dt_image_cache_get(image_id, 'r');
   const int group_id = img->group_id;
   dt_image_cache_read_release(img);
 
   GList *imgs = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT id FROM main.images WHERE group_id = ?1", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, group_id);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  GList *members = dt_image_repository_get_group_members(group_id, -1);
+  for(GList *m = members; m; m = g_list_next(m))
   {
-    const int other_id = sqlite3_column_int(stmt, 0);
+    const int other_id = GPOINTER_TO_INT(m->data);
     dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
     other_img->group_id = image_id;
     dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
   }
-  sqlite3_finalize(stmt);
+  g_list_free(members);
 
   return image_id;
 }
@@ -150,18 +135,10 @@ GList *dt_grouping_get_group_images(const int32_t imgid)
     const int img_group_id = image->group_id;
     dt_image_cache_read_release(image);
 
-    sqlite3_stmt *stmt;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT id FROM main.images WHERE group_id = ?1", -1, &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img_group_id);
-
-    while(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      const int32_t image_id = sqlite3_column_int(stmt, 0);
-      imgs = g_list_prepend(imgs, GINT_TO_POINTER(image_id));
-    }
-    sqlite3_finalize(stmt);
-
+    GList *members = dt_image_repository_get_group_members(img_group_id, -1);
+    for(GList *m = members; m; m = g_list_next(m))
+      imgs = g_list_prepend(imgs, m->data);
+    g_list_free(members);
   }
   return g_list_reverse(imgs);
 }
@@ -180,24 +157,12 @@ void dt_grouping_add_grouped_images(GList **images)
       dt_image_cache_read_release(image);
       if(!IS_NULL_PTR(dt_collection_get_global()))
       {
-        sqlite3_stmt *stmt;
-        // clang-format off
-        gchar *query = g_strdup_printf(
-            "SELECT id"
-            "  FROM main.images"
-            "  WHERE group_id = %d AND id IN (%s)",
-            img_group_id, dt_collection_get_query(dt_collection_get_global()));
-        // clang-format on
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-
-        while(sqlite3_step(stmt) == SQLITE_ROW)
-        {
-          const int32_t image_id = sqlite3_column_int(stmt, 0);
-          if(image_id != GPOINTER_TO_INT(imgs->data))
-            gimgs = g_list_prepend(gimgs, GINT_TO_POINTER(image_id));
-        }
-        sqlite3_finalize(stmt);
-        dt_free(query);
+        GList *members = dt_image_repository_get_group_members_in_collection(
+            img_group_id, dt_collection_get_query(dt_collection_get_global()),
+            GPOINTER_TO_INT(imgs->data));
+        for(GList *m = members; m; m = g_list_next(m))
+          gimgs = g_list_prepend(gimgs, m->data);
+        g_list_free(members);
       }
     }
   }
