@@ -297,10 +297,25 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
   for(GList *t = params->index; t; t = g_list_next(t))
   {
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    if(dt_image_write_sidecar_file(imgid))
-      fprintf(stdout,
-              "cannot write XMP file for image %i. The target storage may be unavailable or read-only.\n",
-              imgid);
+    switch(dt_image_write_sidecar_file(imgid))
+    {
+      case DT_IMAGE_WRITE_SIDECAR_OK:
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_DISABLED:
+        // xmp writing is off, or the setting changed mid-batch: nothing was attempted, nothing to report
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY:
+        fprintf(stdout, "cannot write XMP file for image %i: the image cache entry is busy, try again.\n", imgid);
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH:
+        fprintf(stdout, "cannot write XMP file for image %i: the original file could not be found.\n", imgid);
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_IO_ERROR:
+        fprintf(stdout,
+                "cannot write XMP file for image %i: the target storage may be unavailable or read-only.\n",
+                imgid);
+        break;
+    }
   }
   return 0;
 }

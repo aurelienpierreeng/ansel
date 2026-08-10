@@ -696,7 +696,18 @@ gboolean dt_image_safe_remove(const int32_t imgid);
 /* try to sync .xmp for all local copies */
 void dt_image_local_copy_synch();
 // xmp functions:
-int dt_image_write_sidecar_file(const int32_t imgid);
+/** why dt_image_write_sidecar_file() did not write a sidecar. Distinct causes get distinct
+ * values so callers can report something more useful than a generic "storage unavailable" --
+ * DISABLED and CACHE_BUSY in particular are not I/O problems at all. */
+typedef enum dt_image_write_sidecar_result_t
+{
+  DT_IMAGE_WRITE_SIDECAR_OK = 0,
+  DT_IMAGE_WRITE_SIDECAR_DISABLED,       // xmp writing is off (or an invalid imgid was passed)
+  DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY,     // could not acquire the image cache entry
+  DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH, // the original file / local copy could not be located
+  DT_IMAGE_WRITE_SIDECAR_IO_ERROR,       // the write to storage itself failed
+} dt_image_write_sidecar_result_t;
+dt_image_write_sidecar_result_t dt_image_write_sidecar_file(const int32_t imgid);
 void dt_image_synch_xmp(const int selected);
 void dt_image_synch_xmps(const GList *img);
 void dt_image_synch_all_xmp(const gchar *pathname);
