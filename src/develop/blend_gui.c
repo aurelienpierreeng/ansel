@@ -1512,27 +1512,6 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
   return group_form;
 }
 
-static dt_masks_form_group_t *_blendop_masks_find_group_entry(dt_masks_form_t *group_form, const int formid, int *index)
-{
-  if(!IS_NULL_PTR(index)) *index = -1;
-  if(IS_NULL_PTR(group_form)) return NULL;
-  if(!(group_form->type & DT_MASKS_GROUP)) return NULL;
-
-  int group_index = 0;
-  for(GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
-  {
-    dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
-    if(group_entry->formid == formid)
-    {
-      if(index) *index = group_index;
-      return group_entry;
-    }
-    group_index++;
-  }
-
-  return NULL;
-}
-
 static void _blendop_masks_init_icons(dt_iop_gui_blend_data_t *bd)
 {
   if(IS_NULL_PTR(bd)) return;
@@ -1760,7 +1739,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     // Skip groups containing only a single group
     if(_blendop_masks_is_single_group_wrapper(module->dev, mask_form)) continue;
 
-    const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
+    const gboolean active = dt_masks_form_group_find_entry(group_form, mask_form->formid, NULL) != NULL;
     GtkTreeIter iter;
     gtk_list_store_append(GTK_LIST_STORE(all_model), &iter);
     gchar *display_markup = g_markup_printf_escaped("%s", mask_form->name);
@@ -1782,7 +1761,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     if(!IS_NULL_PTR(group_form) && mask_form->formid == group_form->formid) continue;
     if(_blendop_masks_is_group_with_shapes(module->dev, mask_form)) continue;
 
-    const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
+    const gboolean active = dt_masks_form_group_find_entry(group_form, mask_form->formid, NULL) != NULL;
     gboolean sensitive = TRUE;
     const gchar *locked_group_name = NULL;
     
@@ -1792,8 +1771,8 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
       dt_masks_form_t *parent_form = (dt_masks_form_t *)parent_node->data;
       if(IS_NULL_PTR(parent_form) || !_blendop_masks_is_group_with_shapes(module->dev, parent_form)) continue;
       
-      const gboolean parent_active = _blendop_masks_find_group_entry(group_form, parent_form->formid, NULL) != NULL;
-      if(parent_active && _blendop_masks_find_group_entry(parent_form, mask_form->formid, NULL))
+      const gboolean parent_active = dt_masks_form_group_find_entry(group_form, parent_form->formid, NULL) != NULL;
+      if(parent_active && dt_masks_form_group_find_entry(parent_form, mask_form->formid, NULL))
       {
         sensitive = FALSE;
         locked_group_name = parent_form->name;
@@ -1983,7 +1962,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
       group_form = _blendop_masks_group_create(module);
     if(IS_NULL_PTR(group_form)) return;
 
-    if(!_blendop_masks_find_group_entry(group_form, mask_form->formid, NULL))
+    if(!dt_masks_form_group_find_entry(group_form, mask_form->formid, NULL))
     {
       group_form = dt_masks_cow_touch(module->dev, group_form);
       dt_masks_group_add_form(module->dev, group_form, mask_form);
@@ -2004,7 +1983,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
       gtk_tree_model_get(model, &search_iter, BLENDOP_MASKS_ALL_COL_FORMID, &child_formid, -1);
       
       // Check if this child belongs to the toggled group
-      if(_blendop_masks_find_group_entry(mask_form, child_formid, NULL))
+      if(dt_masks_form_group_find_entry(mask_form, child_formid, NULL))
       {
         // Lock (gray out) if group is being activated, unlock if deactivated
         gtk_list_store_set(GTK_LIST_STORE(model), &search_iter, 
@@ -2402,7 +2381,7 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
   if(!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
     parent_group = dt_masks_cow_touch(module->dev, parent_group);
   dt_masks_form_group_t *op_form = (!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
-                                       ? _blendop_masks_find_group_entry(parent_group, formid, NULL)
+                                       ? dt_masks_form_group_find_entry(parent_group, formid, NULL)
                                        : NULL;
   dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
 
@@ -2685,7 +2664,7 @@ static void _blendop_masks_group_update_row(dt_iop_module_t *module, const int f
   dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
   dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
   int index = -1;
-  dt_masks_form_group_t *entry = _blendop_masks_find_group_entry(parent_group, formid, &index);
+  dt_masks_form_group_t *entry = dt_masks_form_group_find_entry(parent_group, formid, &index);
   if(IS_NULL_PTR(form) || IS_NULL_PTR(entry)) return;
 
   char display_name[256] = "";

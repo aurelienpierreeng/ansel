@@ -1185,6 +1185,21 @@ float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], cons
 
 /** Getters and setters for direct GUI interaction */
 dt_masks_form_group_t *dt_masks_form_group_from_parentid(dt_develop_t *dev, int parentid, int formid);
+/**
+ * @brief Find the group-membership entry for `formid` inside `group_form`'s own `points` list
+ * (not recursive into subgroups) -- the shared primitive behind every "find this shape's row
+ * within its parent group" call site.
+ * @param out_index if non-NULL, receives the entry's position in the list (-1 if not found).
+ */
+dt_masks_form_group_t *dt_masks_form_group_find_entry(dt_masks_form_t *group_form, int formid, int *out_index);
+/**
+ * @brief Find any group that currently references `formid`, searching every top-level group
+ * in dev->forms and their nested subgroups (first match wins -- a shape used by more than one
+ * module has no single "correct" answer). Meant for UI listings that show a shape without
+ * already knowing which group (if any) it belongs to, e.g. a flat "all shapes" row.
+ * @param out_parentid if non-NULL, receives the owning group's formid (0 if none found).
+ */
+dt_masks_form_group_t *dt_masks_form_group_find_any(dt_develop_t *dev, int formid, int *out_parentid);
 int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int formid);
 dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_form_t *form,
                                                         const struct dt_masks_form_gui_t *gui);

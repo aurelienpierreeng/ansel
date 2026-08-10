@@ -1011,6 +1011,7 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   int from_group = 0;
 
   int grpid = 0;
+  int parentid = 0;
   int depth = 0;
 
   if(nb > 0)
@@ -1023,7 +1024,7 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
       // before freeing the list of selected rows, we check if the form is a group or not
       if(gtk_tree_model_get_iter(model, &iter, it0))
       {
-        _lib_masks_get_values(model, &iter, NULL, NULL, &grpid);
+        _lib_masks_get_values(model, &iter, NULL, &parentid, &grpid);
       }
     }
     g_list_free_full(selected, (GDestroyNotify)gtk_tree_path_free);
@@ -1127,28 +1128,69 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     gtk_menu_shell_append(menu, item);
   }
 
+  dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grpid);
+
+  // Same shape-parameter sliders (size/fading/rotation/opacity) as the darkroom canvas's and
+  // the blend module's own shape context menus. Available for any single selected shape, not
+  // just one nested under a group in the tree: _lib_masks_list_recurs also lists every shape
+  // at top level regardless of group membership (TREE_GROUPID == 0 there), so when the tree
+  // doesn't hand us the parent directly, look up whichever group actually references it.
+  // Touch the parent group before resolving the entry, same rule as elsewhere: the sliders
+  // mutate this entry in place across the whole drag/scroll interaction.
+  if(nb == 1 && !IS_NULL_PTR(grp) && !(grp->type & DT_MASKS_GROUP))
+  {
+    dt_masks_form_group_t *op_form = NULL;
+    if(from_group)
+    {
+      dt_masks_form_t *parent_group = dt_masks_get_from_id(dt_dev_get_global(), parentid);
+      if(!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
+        parent_group = dt_masks_cow_touch(dt_dev_get_global(), parent_group);
+      op_form = dt_masks_form_group_find_entry(parent_group, grpid, NULL);
+    }
+    else
+    {
+      op_form = dt_masks_form_group_find_any(dt_dev_get_global(), grpid, NULL);
+    }
+
+    if(!IS_NULL_PTR(op_form))
+    {
+      dt_masks_gui_populate_interaction_sliders(GTK_WIDGET(menu), dt_dev_get_global(), grp, op_form,
+                                                dt_dev_get_global()->form_gui, module);
+      gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+    }
+  }
+
   if(from_group && depth < 3)
   {
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+
+    // Same "Operation" submenu grouping (Invert/Union/Intersection/Difference/Exclusion) as
+    // the darkroom canvas's and the blend module's own shape context menus.
+    item = gtk_menu_item_new_with_label(_("Operation"));
+    GtkWidget *op_submenu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), op_submenu);
+    gtk_menu_shell_append(menu, item);
+
     item = gtk_menu_item_new_with_label(_("Invert shape"));
     g_signal_connect(item, "activate", (GCallback)_tree_inverse, self);
-    gtk_menu_shell_append(menu, item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
     if(nb == 1)
     {
-      gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), gtk_separator_menu_item_new());
       item = gtk_menu_item_new_with_label(_("Union"));
       g_signal_connect(item, "activate", (GCallback)_tree_union, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Intersection"));
       g_signal_connect(item, "activate", (GCallback)_tree_intersection, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Difference"));
       g_signal_connect(item, "activate", (GCallback)_tree_difference, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Exclusion"));
       g_signal_connect(item, "activate", (GCallback)_tree_exclusion, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
     }
+
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
     item = gtk_menu_item_new_with_label(_("Move up"));
     g_signal_connect(item, "activate", (GCallback)_tree_moveup, self);
@@ -1159,7 +1201,6 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
   }
 
-  dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grpid);
   if(!from_group && !(grp && (grp->type & DT_MASKS_GROUP)) && nb == 1)
   {
     item = gtk_menu_item_new_with_label(_("Duplicate shape"));
