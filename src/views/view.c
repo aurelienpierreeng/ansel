@@ -1051,24 +1051,23 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   *surface = NULL;
 
   // get mipmap cache image
-  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   dt_mipmap_size_t mip = DT_MIPMAP_NONE;
 
   if(zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    mip = dt_mipmap_cache_get_matching_size(cache, ceilf(width * dt_gui_get_global()->ppd), ceilf(height * dt_gui_get_global()->ppd), imgid);
+    mip = dt_mipmap_cache_get_matching_size(ceilf(width * dt_gui_get_global()->ppd), ceilf(height * dt_gui_get_global()->ppd), imgid);
   }
   else
   {
-    const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *image = dt_image_cache_get(imgid, 'r');
     const int full_width = image->width;
     const int full_height = image->height;
-    dt_image_cache_read_release(dt_image_cache_get_global(), image);
+    dt_image_cache_read_release(image);
 
     if(zoom == DT_THUMBTABLE_ZOOM_HALF)
-      mip = dt_mipmap_cache_get_matching_size(cache, ceilf(full_width / 2.f ), ceilf(full_height / 2.f), imgid);
+      mip = dt_mipmap_cache_get_matching_size(ceilf(full_width / 2.f ), ceilf(full_height / 2.f), imgid);
     else if(zoom >= DT_THUMBTABLE_ZOOM_FULL)
-      mip = dt_mipmap_cache_get_matching_size(cache, full_width, full_height, imgid);
+      mip = dt_mipmap_cache_get_matching_size(full_width, full_height, imgid);
   }
 
   // Thumbnail generation: mipmap fetch (and, on a miss, the pipeline render
@@ -1087,14 +1086,14 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   // if needed, we load the mimap buffer
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get_with_shutdown(cache, &buf, imgid, mip, DT_MIPMAP_BLOCKING, 'r', shutdown);
+  dt_mipmap_cache_get_with_shutdown(&buf, imgid, mip, DT_MIPMAP_BLOCKING, 'r', shutdown);
   const int buf_wd = buf.width;
   const int buf_ht = buf.height;
 
   // if we don't get buffer, no image is available at the moment
   if(IS_NULL_PTR(buf.buf))
   {
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     if(dt_supervisor_active())
       dt_supervisor_thumbnail(DT_SV_UPDATE, imgid, width, height, mip, FALSE);
     return DT_VIEW_SURFACE_KO;
@@ -1129,7 +1128,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   uint8_t *rgbbuf = (uint8_t *)calloc((size_t)buf_wd * buf_ht * 4, sizeof(uint8_t));
   if(IS_NULL_PTR(rgbbuf))
   {
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     return ret;
   }
 
@@ -1138,7 +1137,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
    * is resolved and built inside the module. A thumbnail cached with a tag that has no
    * DISPLAY-direction profile falls back to the plain swap rather than being dropped. */
   dt_colorprofiles_rgba8_to_display_bgra8(buf.buf, rgbbuf, buf.width, buf.height, buf.color_space);
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   const int32_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, buf_wd);
   cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(rgbbuf, CAIRO_FORMAT_RGB24, buf_wd, buf_ht, stride);

@@ -109,7 +109,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   gchar *ext = g_ascii_strdown(cc + 1, -1);
 
   // Fetch actual image
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img)) goto finish;
 
   // Image codecs doing their own colorspace detection should set this to TRUE
@@ -301,7 +301,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   if(!IS_NULL_PTR(exif_matrix)) dt_colorspaces_cleanup_profile(exif_matrix);
 
 finish:
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
   dt_free(ext);
   return color_profile;
 }
@@ -322,17 +322,17 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
      && requested != DT_COLORSPACE_STANDARD_MATRIX)
     return DT_COLORSPACE_NONE;
 
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return DT_COLORSPACE_NONE;
 
   if(!dt_image_is_matrix_correction_supported(img))
   {
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
     return dt_image_find_best_color_profile(imgid, output, new_profile);
   }
 
   gboolean have_embedded_icc = (img->profile && img->profile_size > 0);
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   if(requested == DT_COLORSPACE_EMBEDDED_ICC && !have_embedded_icc)
   {
@@ -341,7 +341,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
     dt_image_find_best_color_profile(imgid, NULL, &dummy_new_profile);
   }
 
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return DT_COLORSPACE_NONE;
 
   cmsHPROFILE profile = NULL;
@@ -391,7 +391,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
   type = DT_COLORSPACE_LIN_REC709;
 
 finish:
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   if(profile)
   {
@@ -452,7 +452,7 @@ static const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32
     dt_colorspaces_get_profile_name(profile, lang, lang + 3, container->name, sizeof(container->name));
   }
 
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img))
   {
     // No image to hand it to. Better to leak nothing and let the caller fall back than to put
@@ -475,7 +475,7 @@ static const dt_colorspaces_color_profile_t *_build_embedded_profile(const int32
     result = container;
   }
   // Nothing persistent changed: this is a cached derivation of bytes already in the image.
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
   return result;
 }

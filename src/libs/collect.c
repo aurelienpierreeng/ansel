@@ -2027,16 +2027,16 @@ static int32_t _prerender_job(dt_job_t *job)
     for(int k = max; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
       char filename[PATH_MAX] = { 0 };
-      dt_mipmap_get_cache_filename(filename, dt_mipmap_cache_get_global(), k, imgid);
+      dt_mipmap_get_cache_filename(filename, k, imgid);
       if(!dt_util_test_image_file(filename)) // skip thumbnails already on disc
       {
         dt_mipmap_buffer_t buf;
-        dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
-        dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+        dt_mipmap_cache_get(&buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
+        dt_mipmap_cache_release(&buf);
       }
       dt_control_job_set_progress(job, (float)(++done) / total);
     }
-    dt_mimap_cache_evict(dt_mipmap_cache_get_global(), imgid); // flush to disc, free RAM
+    dt_mimap_cache_evict(imgid); // flush to disc, free RAM
   }
   return 0;
 }

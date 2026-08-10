@@ -302,7 +302,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
   {
     //single image to load xmp to, assume we want to load from same dir
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
-    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     if(img && img->film_id != -1)
     {
       char pathname[PATH_MAX] = { 0 };
@@ -315,7 +315,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
       // i guess that's impossible, but better safe than sorry ;)
       dt_conf_get_folder_to_file_chooser("ui_last/import_path", GTK_FILE_CHOOSER(filechooser));
     }
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
   }
   else
   {

@@ -61,27 +61,7 @@ struct dt_iop_roi_t;
  * protects the whole recursive pixelpipe, so no internal locking is needed nor implemented here.
  */
 
-typedef struct dt_dev_pixelpipe_cache_t
-{
-  GHashTable *entries;
-  // External (temporary) buffers keyed by address hash, separate from pipeline cache entries.
-  GHashTable *external_entries;
-  uint64_t next_serial;
-  uint64_t queries;
-  uint64_t hits;
-  size_t max_memory;
-  size_t current_memory;
-  // System memory-pressure probe cache, guarded by `lock` (see the pressure valve
-  // in pixelpipe_cache.c): last probed system-wide available RAM, decremented by
-  // our own allocations between two rate-limited probes. The estimate legitimately
-  // reaches 0 under pressure, so whether the platform answers at all is a separate
-  // flag rather than an `est == 0` sentinel.
-  gint64 sys_probe_time_us;
-  size_t sys_available_est;
-  gboolean sys_probe_valid;
-  dt_pthread_mutex_t lock; // mutex to protect the cache entries
-  dt_cache_arena_t arena;
-} dt_dev_pixelpipe_cache_t;
+typedef struct dt_dev_pixelpipe_cache_t dt_dev_pixelpipe_cache_t;
 
 typedef enum dt_dev_pixelpipe_cache_writable_status_t
 {
@@ -133,6 +113,10 @@ GArray *dt_dev_pixelpipe_cache_get_entries_stats(dt_dev_pixelpipe_cache_t *cache
 /* Public for by-value snapshots in pipeline pieces (for example realtime
  * output cacheline reuse/rekey). Ownership still belongs to pixelpipe_cache.
  * External code must treat this as metadata only and never free internals. */
+/* PUBLIC, and staying that way: develop/pixelpipe_hb.h embeds one BY VALUE in
+ * dt_dev_pixelpipe_iop_t, as a snapshot of the last reusable cacheline's metadata. That makes
+ * it a value type the pipeline carries, like dt_mipmap_buffer_t -- not the cache's internal
+ * bookkeeping, which is dt_cache_entry_t and is private to this module. */
 typedef struct dt_pixel_cache_entry_t
 {
   uint64_t hash;            // unique identifier of the entry

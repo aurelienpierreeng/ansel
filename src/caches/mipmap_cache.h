@@ -77,35 +77,12 @@ typedef struct dt_mipmap_buffer_t
   dt_cache_entry_t *cache_entry;
 } dt_mipmap_buffer_t;
 
-typedef struct dt_mipmap_cache_one_t
-{
-  // one cache per mipmap scale!
-  dt_cache_t cache;
+typedef struct dt_mipmap_cache_one_t dt_mipmap_cache_one_t;
 
-  // a few stats on usage in this run.
-  // long int to give 32-bits on old archs, so __sync* calls will work.
-  long int stats_requests;   // number of total requests
-  long int stats_near_match; // served with smaller mip res
-  long int stats_misses;     // nothing returned at all.
-  long int stats_fetches;    // texture was fetched (either as a stand-in or as per request)
-  long int stats_standin;    // texture used as stand-in
-} dt_mipmap_cache_one_t;
-
-typedef struct dt_mipmap_cache_t
-{
-  // real width and height are stored per element
-  // (could be smaller than the max for this mip level,
-  // due to aspect ratio)
-  size_t max_width[DT_MIPMAP_NONE], max_height[DT_MIPMAP_NONE];
-  // size of an element inside buf
-  size_t buffer_size[DT_MIPMAP_NONE];
-
-  // one cache per mipmap level
-  dt_mipmap_cache_one_t mip_thumbs;
-  dt_mipmap_cache_one_t mip_f;
-  dt_mipmap_cache_one_t mip_full;
-  char cachedir[PATH_MAX]; // cached sha1sum filename for faster access
-} dt_mipmap_cache_t;
+/* The cache instance is a file-static in mipmap_cache.c and there is no accessor for it: no
+ * function below takes one, so nothing outside needs the handle. The type survives only
+ * because dt_mipmap_cache_one_t names it; both are opaque. */
+typedef struct dt_mipmap_cache_t dt_mipmap_cache_t;
 
 // dynamic memory allocation interface for imageio backend: a write locked
 // mipmap buffer is passed in, it might already contain a valid buffer. this
@@ -114,10 +91,9 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img);
 
 void dt_mipmap_cache_init(void);
 void dt_mipmap_cache_cleanup(void);
-void dt_mipmap_cache_print(dt_mipmap_cache_t *cache);
+void dt_mipmap_cache_print(void);
 
 // Interim accessor (Strategy B, doc/globals-migration.md): implemented by the orchestrator; long-term the handle should be carried on the job/view context (Strategy C).
-struct dt_mipmap_cache_t *dt_mipmap_cache_get_global(void);
 
 // One cached mipmap buffer, for the GUI memory view.
 typedef struct dt_mipmap_cache_stats_entry_t
@@ -128,18 +104,17 @@ typedef struct dt_mipmap_cache_stats_entry_t
 } dt_mipmap_cache_stats_entry_t;
 
 // Current/max bytes used across all mipmap sub-caches.
-void dt_mipmap_cache_get_usage(dt_mipmap_cache_t *cache, size_t *current, size_t *max);
+void dt_mipmap_cache_get_usage(size_t *current, size_t *max);
 
 // Snapshot of all cached buffers (newly-allocated GArray of
 // dt_mipmap_cache_stats_entry_t; free with g_array_free()).
-GArray *dt_mipmap_cache_get_entries_stats(dt_mipmap_cache_t *cache);
+GArray *dt_mipmap_cache_get_entries_stats(void);
 
 // get a buffer and lock according to mode ('r' or 'w').
 // see dt_mipmap_get_flags_t for explanation of the exact
 // behaviour. pass 0 as flags for the default (best effort)
-#define dt_mipmap_cache_get(A,B,C,D,E,F) dt_mipmap_cache_get_with_caller(A,B,C,D,E,F,__FILE__,__LINE__)
+#define dt_mipmap_cache_get(B,C,D,E,F) dt_mipmap_cache_get_with_caller(B,C,D,E,F,__FILE__,__LINE__)
 void dt_mipmap_cache_get_with_caller(
-    dt_mipmap_cache_t *cache,
     dt_mipmap_buffer_t *buf,
     const int32_t imgid,
     const dt_mipmap_size_t mip,
@@ -148,10 +123,9 @@ void dt_mipmap_cache_get_with_caller(
     const char *file,
     int line);
 
-#define dt_mipmap_cache_get_with_shutdown(A,B,C,D,E,F,G) \
-  dt_mipmap_cache_get_with_caller_and_shutdown(A,B,C,D,E,F,G,__FILE__,__LINE__)
+#define dt_mipmap_cache_get_with_shutdown(B,C,D,E,F,G) \
+  dt_mipmap_cache_get_with_caller_and_shutdown(B,C,D,E,F,G,__FILE__,__LINE__)
 void dt_mipmap_cache_get_with_caller_and_shutdown(
-    dt_mipmap_cache_t *cache,
     dt_mipmap_buffer_t *buf,
     const int32_t imgid,
     const dt_mipmap_size_t mip,
@@ -162,9 +136,8 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(
     int line);
 
 // convenience function with fewer params
-#define dt_mipmap_cache_write_get(A,B,C,D) dt_mipmap_cache_write_get_with_caller(A,B,C,D,__FILE__,__LINE__)
+#define dt_mipmap_cache_write_get(B,C,D) dt_mipmap_cache_write_get_with_caller(B,C,D,__FILE__,__LINE__)
 void dt_mipmap_cache_write_get_with_caller(
-    dt_mipmap_cache_t *cache,
     dt_mipmap_buffer_t *buf,
     const int32_t imgid,
     const int mip,
@@ -172,16 +145,16 @@ void dt_mipmap_cache_write_get_with_caller(
     int line);
 
 // drop a lock
-#define dt_mipmap_cache_release(A, B) dt_mipmap_cache_release_with_caller(A, B, __FILE__, __LINE__)
-void dt_mipmap_cache_release_with_caller(dt_mipmap_cache_t *cache, dt_mipmap_buffer_t *buf, const char *file,
+#define dt_mipmap_cache_release(B) dt_mipmap_cache_release_with_caller(B, __FILE__, __LINE__)
+void dt_mipmap_cache_release_with_caller(dt_mipmap_buffer_t *buf, const char *file,
                                          int line);
 
 // remove thumbnails, so they will be regenerated:
-void dt_mipmap_cache_remove(dt_mipmap_cache_t *cache, const int32_t imgid, const gboolean flush_disk);
-void dt_mipmap_cache_remove_at_size(dt_mipmap_cache_t *cache, const int32_t imgid, const dt_mipmap_size_t mip, const gboolean flush_disk);
+void dt_mipmap_cache_remove(const int32_t imgid, const gboolean flush_disk);
+void dt_mipmap_cache_remove_at_size(const int32_t imgid, const dt_mipmap_size_t mip, const gboolean flush_disk);
 
 // evict thumbnails from cache. They will be written to disc if not existing
-void dt_mimap_cache_evict(dt_mipmap_cache_t *cache, const int32_t imgid);
+void dt_mimap_cache_evict(const int32_t imgid);
 
 // return the closest mipmap size
 // for the given window you wish to draw.
@@ -189,28 +162,27 @@ void dt_mimap_cache_evict(dt_mipmap_cache_t *cache, const int32_t imgid);
 // depending on the user parameter for the maximum thumbnail dimensions.
 // actual resolution depends on the image and is only known after
 // the thumbnail is loaded.
-dt_mipmap_size_t dt_mipmap_cache_get_matching_size( const dt_mipmap_cache_t *cache,
-    const int32_t width, const int32_t height, const uint32_t imgid);
+dt_mipmap_size_t dt_mipmap_cache_get_matching_size( const int32_t width, const int32_t height, const uint32_t imgid);
 
 // return the closest mipmap size fitting within the width × height boundary box.
 // Use that to flush a darkroom pipeline output into a cache line
-dt_mipmap_size_t dt_mipmap_cache_get_fitting_size(const dt_mipmap_cache_t *cache, const int32_t width,
+dt_mipmap_size_t dt_mipmap_cache_get_fitting_size(const int32_t width,
                                                    const int32_t height, const uint32_t imgid);
 
 // Manually swap the image buffer of a mipmap cacheline from an existing uint8_t image
-void dt_mipmap_cache_swap_at_size(dt_mipmap_cache_t *cache, const int32_t imgid, 
+void dt_mipmap_cache_swap_at_size(const int32_t imgid, 
                                   const dt_mipmap_size_t mip, const uint8_t *const buffer, 
                                   const int32_t width, const int32_t height, dt_colorspaces_color_profile_type_t profile);
 
 // copy over thumbnails. used by file operation that copies raw files, to speed up thumbnail generation.
 // only copies over the jpg backend on disk, doesn't directly affect the in-memory cache.
-void dt_mipmap_cache_copy_thumbnails(const dt_mipmap_cache_t *cache, const uint32_t dst_imgid, const uint32_t src_imgid);
+void dt_mipmap_cache_copy_thumbnails(const uint32_t dst_imgid, const uint32_t src_imgid);
 
 // get the full path of a cached thumbnail
-void dt_mipmap_get_cache_filename(char path[PATH_MAX], const dt_mipmap_cache_t *cache, dt_mipmap_size_t mip, const int32_t imgid);
+void dt_mipmap_get_cache_filename(char path[PATH_MAX], dt_mipmap_size_t mip, const int32_t imgid);
 
 // get just the dir
-void dt_mipmap_get_cache_dir(char path[PATH_MAX], const dt_mipmap_cache_t *cache, dt_mipmap_size_t mip);
+void dt_mipmap_get_cache_dir(char path[PATH_MAX], dt_mipmap_size_t mip);
 
 
 #ifdef __cplusplus

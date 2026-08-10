@@ -384,11 +384,11 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
      * after a history deletion: the first-run defaults, auto-presets, image
      * flags and resulting module order must exist before paste/style merging.
      */
-    dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), dest_imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(dest_imgid, 'w');
     if(!IS_NULL_PTR(image))
     {
       *image = dev_dest.image_storage;
-      dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
+      dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
     }
 
     dt_dev_write_history_ext(&dev_dest, dest_imgid);
@@ -1207,11 +1207,11 @@ static void _commit_history_item_now(dt_develop_t *dev, dt_iop_module_t *module,
   dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
   if(dev->image_storage.id > 0)
   {
-    dt_image_t *cache_img = dt_image_cache_get(dt_image_cache_get_global(), dev->image_storage.id, 'w');
+    dt_image_t *cache_img = dt_image_cache_get(dev->image_storage.id, 'w');
     if(cache_img)
     {
       cache_img->history_hash = dt_dev_get_history_hash(dev);
-      dt_image_cache_write_release(dt_image_cache_get_global(), cache_img, DT_IMAGE_CACHE_RELAXED);
+      dt_image_cache_write_release(cache_img, DT_IMAGE_CACHE_RELAXED);
     }
   }
 
@@ -1709,7 +1709,7 @@ void dt_dev_history_cleanup(void)
 
 void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
-  dt_image_t *cache_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *cache_img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(cache_img)) return;
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
@@ -1734,7 +1734,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   cache_img->history_hash = dt_dev_get_history_hash(dev);
 
-  dt_image_cache_write_release(dt_image_cache_get_global(), cache_img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(cache_img, DT_IMAGE_CACHE_SAFE);
 }
 
 // Schedule history write as a background job to avoid blocking the GUI.
@@ -2366,7 +2366,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   // Protect history DB reads with a cache read lock.
   // Release it before applying history to modules to avoid deadlocks.
-  dt_image_t *read_lock_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  dt_image_t *read_lock_img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(read_lock_img)) return FALSE;
 
   // Load DB history into dev->history
@@ -2409,7 +2409,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
   // but should live in its own branch. See `dt_dev_pop_history_items_ext()`
   dt_masks_read_masks_history(dev, imgid);
 
-  dt_image_cache_read_release(dt_image_cache_get_global(), read_lock_img);
+  dt_image_cache_read_release(read_lock_img);
   read_lock_img = NULL;
 
   // Now we have fully-populated history items:

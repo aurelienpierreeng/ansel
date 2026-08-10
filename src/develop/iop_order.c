@@ -825,13 +825,13 @@ dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid)
   }
   sqlite3_finalize(stmt);
 
-  if(!has_stored_order && imgid > 0 && !IS_NULL_PTR(dt_image_cache_get_global()))
+  if(!has_stored_order && imgid > 0 && !!dt_image_cache_is_ready())
   {
-    const dt_image_t *image = dt_image_cache_testget(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *image = dt_image_cache_testget(imgid, 'r');
     if(!IS_NULL_PTR(image))
     {
       iop_order_version = dt_image_needs_rawprepare(image) ? DT_IOP_ORDER_ANSEL_RAW : DT_IOP_ORDER_ANSEL_JPG;
-      dt_image_cache_read_release(dt_image_cache_get_global(), image);
+      dt_image_cache_read_release(image);
     }
   }
 
@@ -1232,13 +1232,13 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
   if(!iop_order_list)
   {
     dt_iop_order_t default_order = DT_IOP_ORDER_ANSEL_RAW;
-    if(imgid > 0 && !IS_NULL_PTR(dt_image_cache_get_global()))
+    if(imgid > 0 && !!dt_image_cache_is_ready())
     {
-      const dt_image_t *image = dt_image_cache_testget(dt_image_cache_get_global(), imgid, 'r');
+      const dt_image_t *image = dt_image_cache_testget(imgid, 'r');
       if(!IS_NULL_PTR(image))
       {
         default_order = dt_image_needs_rawprepare(image) ? DT_IOP_ORDER_ANSEL_RAW : DT_IOP_ORDER_ANSEL_JPG;
-        dt_image_cache_read_release(dt_image_cache_get_global(), image);
+        dt_image_cache_read_release(image);
       }
     }
 

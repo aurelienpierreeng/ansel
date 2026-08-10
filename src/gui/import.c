@@ -773,11 +773,11 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   char path[512] = { 0 };
   if(imgid > UNKNOWN_IMAGE)
   {
-    dt_image_t *lib_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    dt_image_t *lib_img = dt_image_cache_get(imgid, 'r');
     if(lib_img)
     {
       dt_image_film_roll_directory(lib_img, path, sizeof(path));
-      dt_image_cache_read_release(dt_image_cache_get_global(), lib_img);
+      dt_image_cache_read_release(lib_img);
     }
   }
 

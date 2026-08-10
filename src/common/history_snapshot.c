@@ -205,12 +205,12 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
     fprintf(stderr, "[_history_snapshot_undo_restore] fails to restore a snapshot for %d\n", imgid);
   }
 
-  dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *image = dt_image_cache_get(imgid, 'w');
   if(image)
   {
     // FIXME: this might be wrong or need more accurate handling
     image->history_hash = UINT64_MAX;
-    dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_RELAXED);
+    dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
   }
 }
 

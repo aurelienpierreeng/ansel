@@ -339,19 +339,19 @@ void init_presets (dt_iop_module_so_t *self)
 static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histogram,
                                          dt_dev_histogram_stats_t *histogram_stats)
 {
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'r');
+  const dt_image_t *img = dt_image_cache_get(self->dev->image_storage.id, 'r');
   dt_image_t image = *img;
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   if(image.dsc.channels != 1 || image.dsc.datatype != TYPE_UINT16) return;
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, self->dev->image_storage.id, DT_MIPMAP_FULL,
+  dt_mipmap_cache_get(&buf, self->dev->image_storage.id, DT_MIPMAP_FULL,
                       DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image.filename);
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     return;
   }
 
@@ -373,7 +373,7 @@ static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histo
                       dt_histogram_helper_cs_RAW_uint16, NULL);
   histogram_stats->ch = 1u;
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 }
 
 /* input: 0 - 65535 (valid range: from black level to white level) */

@@ -2283,7 +2283,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
 
       // GPS data
       dt_remove_exif_geotag(exifData);
-      const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+      const dt_image_t *cimg = dt_image_cache_get(imgid, 'r');
       if(!isnan(cimg->geoloc.longitude) && !isnan(cimg->geoloc.latitude))
       {
         exifData["Exif.GPSInfo.GPSVersionID"] = "02 02 00 00";
@@ -2327,7 +2327,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       if(g_strcmp0(&datetime[DT_DATETIME_EXIF_LENGTH], "000"))
         exifData["Exif.Photo.SubSecTimeOriginal"] = &datetime[DT_DATETIME_EXIF_LENGTH];
 
-      dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
+      dt_image_cache_read_release(cimg);
     }
 
     Exiv2::Blob blob;
@@ -3924,7 +3924,7 @@ static void _exif_xmp_append_history_hash(Exiv2::XmpData &xmpData, const int32_t
 {
   const dt_image_t *cached = image;
   if(IS_NULL_PTR(cached))
-    cached = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    cached = dt_image_cache_get(imgid, 'r');
 
   if(cached)
   {
@@ -3939,7 +3939,7 @@ static void _exif_xmp_append_history_hash(Exiv2::XmpData &xmpData, const int32_t
       }
     }
     if(IS_NULL_PTR(image))
-      dt_image_cache_read_release(dt_image_cache_get_global(), cached);
+      dt_image_cache_read_release(cached);
   }
 }
 

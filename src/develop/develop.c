@@ -512,11 +512,10 @@ gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev)
 
 static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 {
-  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   const int32_t imgid = pipe->dev->image_storage.id;
 
   // Get the mip size that is at most as big as our pipeline backbuf
-  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
+  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(pipe->backbuf.width, pipe->backbuf.height, imgid);
   
   // Flush backup to mipmap_cache. This runs after dt_dev_pixelpipe_process() released the OpenCL device
   // lock, so we must NOT pass pipe->devid (now stale/unlocked): a device-only payload would otherwise be
@@ -530,7 +529,7 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
     dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
     dt_colorprofiles_settings_t settings;
     dt_colorprofiles_get_settings(&settings);
-    dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height,
+    dt_mipmap_cache_swap_at_size(imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height,
                                  settings.display_type);
     dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
     dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
@@ -872,7 +871,7 @@ void dt_dev_start_all_pipelines(dt_develop_t *dev)
 static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   const gboolean ok = (!IS_NULL_PTR(buf.buf)) && buf.width != 0 && buf.height != 0;
 
@@ -893,24 +892,24 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
   dev->roi.raw_width = buf.width;
   dev->roi.raw_inited = TRUE;
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   return ok;
 }
 
 static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *image = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(image)) return FALSE;
   dev->image_storage = *image;
-  dt_image_cache_read_release(dt_image_cache_get_global(), image);
+  dt_image_cache_read_release(image);
   dt_iop_buffer_dsc_update_bpp(&dev->image_storage.dsc);
   return TRUE;
 }
 
 dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  if(IS_NULL_PTR(dev) || imgid <= 0 || IS_NULL_PTR(dt_image_cache_get_global()))
+  if(IS_NULL_PTR(dev) || imgid <= 0 || !dt_image_cache_is_ready())
     return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
 
   if(!_dt_dev_mipmap_prefetch_full(dev, imgid))
@@ -962,11 +961,11 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   {
     // Resync our private copy of image image with DB,
     // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag.
-    dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(imgid, 'w');
     if(!IS_NULL_PTR(image))
     {
       *image = dev->image_storage;
-      dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
+      dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
     }
 
     dt_dev_write_history_ext(dev, imgid);

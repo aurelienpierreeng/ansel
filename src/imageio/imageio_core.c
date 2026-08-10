@@ -943,7 +943,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_get_times(&start);
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   void *outbuf = NULL;
 
   // Get the history, aka sequence of editing changes
@@ -985,17 +984,17 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_mipmap_size_t size = DT_MIPMAP_FULL;
 
   // Take a local copy of the input buffer so we can release the mipmap cache lock immediately
-  dt_mipmap_cache_get(cache, &buf, imgid, size, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, imgid, size, DT_MIPMAP_BLOCKING, 'r');
 
   if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
   {
-    dt_mipmap_cache_release(cache, &buf);
+    dt_mipmap_cache_release(&buf);
     goto error;
   }
 
   const size_t buf_width = buf.width;
   const size_t buf_height = buf.height;
-  dt_mipmap_cache_release(cache, &buf);
+  dt_mipmap_cache_release(&buf);
 
   // Update size with actual input and resync nodes
   dt_dev_pixelpipe_set_input(&pipe, imgid, buf_width, buf_height, buf.iscale, size);

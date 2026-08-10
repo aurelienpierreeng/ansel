@@ -2331,14 +2331,14 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   gtk_widget_set_visible(g->dual_thrs, isdual);
   gtk_widget_set_visible(g->lmmse_refine, islmmse);
 
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'w');
+  dt_image_t *img = dt_image_cache_get(self->dev->image_storage.id, 'w');
   if(!img) return;
   if((p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
      (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX))
     img->flags |= DT_IMAGE_MONOCHROME_BAYER;
   else
     img->flags &= ~DT_IMAGE_MONOCHROME_BAYER;
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 }
 void gui_update(struct dt_iop_module_t *self)
 {

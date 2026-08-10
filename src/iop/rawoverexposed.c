@@ -156,11 +156,11 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image->filename);
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     return 0;
   }
 
@@ -185,7 +185,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   float *const restrict coordbuf = dt_pixelpipe_cache_alloc_perthread_float(2*roi_out->width, &coordbufsize);
   if(IS_NULL_PTR(coordbuf))
   {
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     return 1;
   }
   __OMP_PARALLEL_FOR_SIMD__(firstprivate(dt_iop_rawoverexposed_colors))
@@ -247,7 +247,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   dt_pixelpipe_cache_free_align(coordbuf);
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
@@ -274,11 +274,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_image_t *const image = &(dev->image_storage);
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image->filename);
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     goto error;
   }
 
@@ -395,7 +395,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_release_mem_object(dev_coord);
   dt_pixelpipe_cache_free_align(coordbuf);
   dt_opencl_release_mem_object(dev_raw);
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   return TRUE;
 
@@ -406,7 +406,7 @@ error:
   dt_opencl_release_mem_object(dev_coord);
   dt_pixelpipe_cache_free_align(coordbuf);
   dt_opencl_release_mem_object(dev_raw);
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
   dt_print(DT_DEBUG_OPENCL, "[opencl_rawoverexposed] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }
@@ -424,7 +424,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   int raw_width = 0;
   int raw_height = 0;
 
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   if(buf.buf)
   {
@@ -432,7 +432,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     raw_height = buf.height;
   }
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   tiling->factor = 2.5f;  // in + out + coordinates
   tiling->maxbuf = 1.0f;

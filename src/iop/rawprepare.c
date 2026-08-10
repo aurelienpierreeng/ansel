@@ -744,19 +744,19 @@ static gboolean image_set_rawcrops(const int32_t imgid, int dx, int dy)
   if(imgid <= 0) return FALSE;
 
   dt_image_t *img = NULL;
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
   const gboolean test = (img->p_width == img->width - dx)
                      && (img->p_height == img->height - dy);
 
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
   if(test) return FALSE;
 
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img)) return FALSE;
   img->p_width = img->width - dx;
   img->p_height = img->height - dy;
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
   return TRUE;
 }
 

@@ -1726,23 +1726,23 @@ static void _ensure_has_txt_flag(const int32_t imgid)
 {
   if(imgid <= 0) return;
 
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img)) return;
 
   if(!(img->flags & DT_IMAGE_HAS_TXT))
     img->flags |= DT_IMAGE_HAS_TXT;
 
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
 }
 
 static gboolean _image_has_txt_flag(const int32_t imgid)
 {
   if(imgid <= 0) return FALSE;
 
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
   const gboolean has_txt = (img->flags & DT_IMAGE_HAS_TXT);
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
   return has_txt;
 }
 
