@@ -62,7 +62,7 @@
 #include "common/database.h"
 #include "common/utility.h"
 #include "common/debug.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/metadata.h"
 #include "common/tags.h"
 #include "common/datetime.h"

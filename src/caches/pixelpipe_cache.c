@@ -35,20 +35,71 @@
 */
 
 #include <inttypes.h>
+#include <stdarg.h>
 #include <glib.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 
-#include "control/control.h"
 #include "system/sys_resources.h"
-#include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
-#include "control/signal.h"
-#include "develop/pixelpipe_cache.h"
-#include "develop/supervisor.h"
+#include "caches/pixelpipe_cache.h"
 #include "common/opencl.h"
 #include "pixel/format.h"
+/* For dt_iop_module_t: the cache reads `module->op` to special-case the gamma module
+ * and calls `module->name()` for its diagnostics. That is the last edge keeping this
+ * file above develop/; taking a name string instead of a module would cut it. */
+#include "develop/imageop.h"
+
+/* Installed by the orchestrator; see dt_dev_pixelpipe_cache_set_handlers(). NULL means
+ * nobody is listening, which is a working configuration, not an error. */
+static dt_pixelpipe_cache_warn_handler_t _warn_handler = NULL;
+static dt_pixelpipe_cache_ready_handler_t _ready_handler = NULL;
+static const dt_pixelpipe_cache_observer_t *_observer = NULL;
+
+void dt_dev_pixelpipe_cache_set_handlers(dt_pixelpipe_cache_warn_handler_t warn,
+                                         dt_pixelpipe_cache_ready_handler_t ready,
+                                         const dt_pixelpipe_cache_observer_t *observer)
+{
+  _warn_handler = warn;
+  _ready_handler = ready;
+  _observer = observer;
+}
+
+/* printf-style, so the call sites keep reading as they did; the formatting happens here and
+ * the handler receives a finished string. */
+static void _warn_user(const char *format, ...) __attribute__((format(printf, 1, 2)));
+static void _warn_user(const char *format, ...)
+{
+  if(!_warn_handler) return;
+  va_list ap;
+  va_start(ap, format);
+  char *message = g_strdup_vprintf(format, ap);
+  va_end(ap);
+  if(message) _warn_handler(message);
+  g_free(message);
+}
+
+static inline gboolean _observed(void)
+{
+  return _observer && _observer->active && _observer->active();
+}
+
+/* Each member is checked at its own call: `active` returning TRUE says the supervisor is
+ * watching, not that it implements every hook. */
+static inline void _observe_read(uint64_t hash, size_t size)
+{
+  if(_observed() && _observer->cacheline_read) _observer->cacheline_read(hash, size);
+}
+static inline void _observe_delete(uint64_t hash, size_t size, int owner_pipe_id, const char *name)
+{
+  if(_observed() && _observer->cacheline_delete) _observer->cacheline_delete(hash, size, owner_pipe_id, name);
+}
+static inline void _observe_rekey(uint64_t old_hash, uint64_t new_hash)
+{
+  if(_observed() && _observer->rekey) _observer->rekey(old_hash, new_hash);
+}
+
 
 static __thread const char *dt_pixelpipe_cache_current_module = NULL;
 
@@ -246,8 +297,7 @@ gboolean dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_cache_t *cach
   const size_t found_size = found ? cache_entry->size : 0;
   dt_pthread_mutex_unlock(&cache->lock);
 
-  if(found && dt_supervisor_active()) 
-    dt_supervisor_cacheline_read(hash, found_size);
+  if(found ) _observe_read(hash, found_size);
     
   return found;
 }
@@ -1584,7 +1634,7 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
     if(now - last_warning_us > 10000000)
     {
       last_warning_us = now;
-      dt_control_log(_("Your system is running out of memory. "
+      _warn_user(_("Your system is running out of memory. "
                        "Close other applications or add more RAM to your system."));
     }
     fprintf(stdout,
@@ -1677,16 +1727,16 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
 
   if(!IS_NULL_PTR(entry_name) && !IS_NULL_PTR(module))
-    dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."),
+    _warn_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."),
                    entry_name, module);
   else if(!IS_NULL_PTR(entry_name))
-    dt_control_log(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."),
+    _warn_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."),
                    entry_name);
   else if(!IS_NULL_PTR(module))
-    dt_control_log(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."),
+    _warn_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."),
                    module);
   else
-    dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+    _warn_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
 
   (void)name_is_file; // kept for signature symmetry if future callers need it.
 }
@@ -1802,13 +1852,13 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
     else
       fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry (%s)\n", name);
     if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module) && name_is_file)
-      dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
+      _warn_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
     else if(!IS_NULL_PTR(name))
-      dt_control_log(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."), name);
+      _warn_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."), name);
     else if(!IS_NULL_PTR(module))
-      dt_control_log(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."), module);
+      _warn_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."), module);
     else
-      dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+      _warn_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
   }
 
   return error;
@@ -1960,8 +2010,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 
   _pixel_cache_message(cache_entry, "freed", FALSE);
 
-  if(dt_supervisor_active())
-    dt_supervisor_cacheline_delete(cache_entry->hash, cache_entry->size, cache_entry->id,
+  _observe_delete(cache_entry->hash, cache_entry->size, cache_entry->id,
                                    cache_entry->name);
 
   /* Every live entry belongs to the one and only global pixelpipe cache, so its back-reference
@@ -2166,7 +2215,7 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
   cache_entry->hash = new_hash;
   g_hash_table_insert(cache->entries, stolen_key, cache_entry);
 
-  if(dt_supervisor_active()) dt_supervisor_rekey(old_hash, new_hash);
+  _observe_rekey(old_hash, new_hash);
 
   dt_print(DT_DEBUG_PIPECACHE,
            "[pixelpipe_cache] writable rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
@@ -2222,8 +2271,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     _pixelpipe_cache_finalize_entry(cache_entry, data, "found");
     if(entry) *entry = cache_entry;
     // existing output reused: a cache hit (entry pinned by the ref above, safe to read)
-    if(dt_supervisor_active()) 
-      dt_supervisor_cacheline_read(hash, cache_entry->size);
+    _observe_read(hash, cache_entry->size);
       
     return 0;
   }
@@ -2333,8 +2381,7 @@ static dt_pixel_cache_entry_t *_cache_lookup_existing(dt_dev_pixelpipe_cache_t *
 
   dt_pthread_mutex_unlock(&cache->lock);
 
-  if(hit && dt_supervisor_active()) 
-    dt_supervisor_cacheline_read(hash, hit_size);
+  if(hit ) _observe_read(hash, hit_size);
 
   return cache_entry;
 }
@@ -2681,8 +2728,7 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, gboole
     // never-served case, doc/pipeline-cache.md §8). INVALID for non-module outputs
     // (raster masks, republished inputs): waiters simply fall back to hash match.
     if(cache_entry && cache_entry->hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY, cache_entry->hash,
-                                    cache_entry->producer_node_key);
+      if(_ready_handler) _ready_handler(cache_entry->hash, cache_entry->producer_node_key);
   }
 }
 
@@ -2858,7 +2904,7 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
 
   dt_pthread_mutex_unlock(&cache->lock);
 
-  if(dt_supervisor_active()) dt_supervisor_rekey(old_hash, new_hash);
+  _observe_rekey(old_hash, new_hash);
   return 0;
 }
 

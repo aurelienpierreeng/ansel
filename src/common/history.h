@@ -38,7 +38,7 @@
 #include <inttypes.h>
 #include <sqlite3.h>
 
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 
 #ifdef __cplusplus
 extern "C" {

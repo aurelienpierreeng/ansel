@@ -9,7 +9,7 @@
 #include "develop/iop_order.h"
 #include "common/opencl.h"
 #include "develop/blend.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/pixelpipe_cpu.h"
 #include "develop/pixelpipe_gpu.h"
 

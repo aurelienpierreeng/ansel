@@ -39,7 +39,7 @@
 
 #include "colorprofiles/profile_types.h"
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 #ifdef __cplusplus
 extern "C" {

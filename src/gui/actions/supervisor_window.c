@@ -17,10 +17,10 @@
 */
 
 #include "gui/actions/supervisor_window.h"
-#include "common/image_cache.h"
-#include "common/mipmap_cache.h"
+#include "caches/image_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/opencl.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/supervisor.h"
 #include "gui/application.h"
 

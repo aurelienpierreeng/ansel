@@ -28,7 +28,7 @@
 #include "system/dtpthread.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/supervisor.h"
 #include "develop/blend.h"
 #include "gui/color_picker_proxy.h"

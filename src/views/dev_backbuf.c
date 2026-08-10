@@ -30,7 +30,7 @@
 #include "gui/application.h"
 #include "control/control.h"
 #include "develop/develop.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 

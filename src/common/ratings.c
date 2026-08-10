@@ -36,7 +36,7 @@
 */
 #include "common/collection.h"
 #include "common/glib_utils.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/ratings.h"
 #include "common/undo.h"
 #include "common/grouping.h"

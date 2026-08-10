@@ -62,7 +62,7 @@
 #include "common/history.h"
 
 #include "common/undo.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "develop/history_merge.h"
 #include "develop/iop_order.h"
 #include "develop/dev_history.h"

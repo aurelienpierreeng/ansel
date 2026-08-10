@@ -55,7 +55,7 @@
 #include "common/file_location.h"
 #include "common/history.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "imageio/imageio_module.h"
 #include "common/l10n.h"
 

@@ -23,7 +23,7 @@
 #include "common/history.h"
 #include "common/history_snapshot.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/styles.h"
 #include "common/undo.h"
 #include "common/conf.h"

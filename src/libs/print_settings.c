@@ -38,14 +38,14 @@
 */
 
 #include "common/conf.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include <glib.h>
 
 #include "widgets/bauhaus.h"
 #include "colorprofiles/colorspaces.h"
 #include "common/cups_print.h"
 #include "common/file_location.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/logging.h"
 #include "system/macros.h"
 #include "common/metadata.h"

@@ -27,7 +27,7 @@
 #include "common/exif.h"
 #include "gui/import.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_core.h"
 #include "common/metadata.h"

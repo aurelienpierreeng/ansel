@@ -42,7 +42,7 @@
 #include "common/debug.h"
 #include "common/deprecations.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 

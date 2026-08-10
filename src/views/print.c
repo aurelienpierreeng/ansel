@@ -31,7 +31,7 @@
 /** this is the view for the print module.  */
 #include "common/cups_print.h"
 #include "common/printing.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
 #include "control/control.h"

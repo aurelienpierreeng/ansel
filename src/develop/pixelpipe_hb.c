@@ -70,7 +70,7 @@
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "develop/pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/supervisor.h"
 #include "develop/pixelpipe_cpu.h"
 #include "develop/pixelpipe_gpu.h"

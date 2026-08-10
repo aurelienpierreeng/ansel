@@ -25,7 +25,7 @@
 #include "develop/imageop.h"         // dt_iop_module_t (introspection accessors)
 #include "develop/blend.h"           // dt_develop_blend_params_t + name tables
 #include "develop/masks.h"           // dt_masks_form_t + group members
-#include "develop/pixelpipe_cache.h" // DT_PIXELPIPE_CACHE_HASH_INVALID
+#include "caches/pixelpipe_cache.h" // DT_PIXELPIPE_CACHE_HASH_INVALID
 #include "develop/pixelpipe_hb.h"    // dt_pixelpipe_get_pipe_name
 
 #include <json-glib/json-glib.h>

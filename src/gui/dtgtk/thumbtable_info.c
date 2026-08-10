@@ -21,7 +21,7 @@
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "system/macros.h"
 
 #include <glib.h>

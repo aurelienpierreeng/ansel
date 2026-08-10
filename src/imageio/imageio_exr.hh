@@ -26,7 +26,7 @@
 #pragma once
 
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 #include <ciso646>
 

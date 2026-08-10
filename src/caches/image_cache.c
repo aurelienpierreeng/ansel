@@ -41,7 +41,7 @@
 */
 
 #include "common/database.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/colorlabels.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"

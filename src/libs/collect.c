@@ -131,7 +131,7 @@
 #include "common/image.h"
 #include "system/macros.h"
 #include "common/metadata.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
 #include "common/selection.h"

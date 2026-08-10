@@ -32,6 +32,7 @@ LAYERS = [
     # pixel/: image-processing primitives (wavelets, guided filters, colour adaptation,
     # interpolation). Above common/ because they are a domain library rather than
     # infrastructure, below control/ because they must never reach the control loop.
+    ('caches', 1),
     ('pixel', 2),
     ('control', 3),
     ('gui', 4), ('widgets', 4),   # widgets/ = reusable GTK widgets, no app state

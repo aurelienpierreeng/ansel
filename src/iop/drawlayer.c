@@ -45,7 +45,7 @@
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/masks.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "pixel/interpolation.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/application.h"

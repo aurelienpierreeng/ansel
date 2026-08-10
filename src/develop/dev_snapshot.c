@@ -19,7 +19,7 @@
 #include "develop/dev_snapshot.h"
 
 #include "develop/iop_order.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/dev_history.h"

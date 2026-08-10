@@ -89,7 +89,7 @@
 #include "common/history.h"
 #include "develop/history_merge.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_dng.h"
 #include "imageio/imageio_module.h"

@@ -36,7 +36,7 @@
 #include "system/atomic.h"
 #include "common/image.h"
 #include "imageio/imageio_module.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include <glib.h>
 #include <stdio.h>
 #include <inttypes.h>

@@ -33,7 +33,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/debug.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 
 int32_t dt_grouping_get_image_group(const int32_t image_id)
 {

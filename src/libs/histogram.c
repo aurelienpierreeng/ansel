@@ -77,7 +77,7 @@
 #include "control/signal.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "widgets/button.h"
 #include "gui/color_picker_proxy.h"
 #include "widgets/draw.h"

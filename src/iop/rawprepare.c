@@ -51,7 +51,7 @@
 #include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 
 #include "gui/presets.h"
 #include "iop/iop_api.h"

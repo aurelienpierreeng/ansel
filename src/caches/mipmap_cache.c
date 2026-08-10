@@ -46,12 +46,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "system/sys_resources.h"
 #include "common/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 #include "imageio/imageio_core.h"

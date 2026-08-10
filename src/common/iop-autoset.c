@@ -20,7 +20,7 @@
 #include "system/macros.h"
 #include "develop/develop.h"
 #include "develop/pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "common/conf.h"
