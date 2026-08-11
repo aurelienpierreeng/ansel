@@ -30,6 +30,7 @@
 */
 
 #include "widgets/bauhaus.h"
+#include "caches/image_cache.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
 #include "imageio/imageio_core.h"

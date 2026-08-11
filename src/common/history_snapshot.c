@@ -28,6 +28,7 @@
 #include "system/mem_alloc.h"
 #include "database/history_snapshot_repository.h"
 #include "common/history.h"
+#include "database/history_repository.h"
 #include "caches/image_cache.h"
 #include "control/signal.h"
 
@@ -39,7 +40,7 @@ dt_undo_lt_history_t *dt_history_snapshot_item_init(void)
 void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *history_end)
 {
   // create history & mask snapshots for imgid, return the snapshot id
-  *history_end = dt_history_get_end(imgid);
+  *history_end = dt_history_repository_get_end(imgid);
   *snap_id = dt_history_snapshot_repository_next_id(imgid);
 
   if(!dt_history_snapshot_repository_create(*snap_id, imgid, *history_end == 0))
@@ -61,7 +62,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
     all_ok = dt_history_snapshot_repository_restore(snap_id, imgid);
 
   // set history end
-  all_ok &= dt_history_set_end(imgid, history_end);
+  all_ok &= dt_history_repository_set_end(imgid, history_end);
 
   if(all_ok)
     dt_database_release_transaction();
