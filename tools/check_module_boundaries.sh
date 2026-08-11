@@ -221,9 +221,11 @@ fi
 
 # 6. src/database owns the connection, and hands it out to fewer people every time.
 #
-# Unlike the four checks above, the first two counts here are RATCHETS ON A LARGE NUMBER,
-# not boundaries at zero. The connection is not sealed yet and this script is what keeps
-# the sealing monotonic while it happens.
+# The first two counts here BEGAN as ratchets on a large number -- 353 handles across 42
+# files -- rather than boundaries at zero, because the connection could not be sealed in one
+# change and this script is what kept the sealing monotonic while it happened. They are now
+# both at ZERO. Treat them as boundaries: nothing outside src/database holds the connection,
+# and the ratchet has become a wall.
 #
 #   handle_escapes : call sites of dt_database_get_sqlite3_global() outside src/database.
 #                    Each is a translation unit holding a raw `sqlite3 *` the module cannot
@@ -234,8 +236,9 @@ fi
 #                    src/database/ takes one off this number.
 #
 #   sql_consumers  : files including database/sql_debug.h outside src/database. The header
-#                    is scaffolding and says so; at zero it is deleted and the macros
-#                    become private to the repositories.
+#                    is scaffolding and says so. Now zero, so it can be moved out of the
+#                    public include path and its macros made private to the repositories --
+#                    a separate change, since it touches every repository.
 #
 # The last two are real boundaries and are at their floor:
 #
@@ -249,8 +252,8 @@ fi
 #                    dt_ioppr_get_iop_order_list_version() to rewrite main.history.iop_order.
 #                    That migration genuinely needs the module priority table; it is not a
 #                    stray include.
-database_handle_escapes_baseline=6
-database_sql_consumers_baseline=1
+database_handle_escapes_baseline=0
+database_sql_consumers_baseline=0
 database_conf_debug_baseline=0
 database_upcalls_baseline=1
 

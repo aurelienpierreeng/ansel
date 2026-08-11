@@ -187,6 +187,38 @@ void dt_preset_repository_update_module_params(const char *operation, const char
                                                const int op_version, const void *params,
                                                const int params_size);
 
+/**
+ * @brief Set ONLY the version of `(operation, name)`, leaving the parameters alone.
+ *
+ * @warning Not a special case of dt_preset_repository_update_module_params(): that one also
+ * writes `op_params`. The startup upgrade pass uses this to stamp a version onto a preset
+ * whose blob is already correct, and writing the blob there would be wrong.
+ *
+ * Like every `(operation, name)` predicate in this file, this can match more than one row --
+ * `data.presets` is UNIQUE on `(name, operation, op_version)`, so the same name may exist at
+ * several versions. That is what the caller this replaced did, and it is preserved.
+ */
+void dt_preset_repository_set_module_version(const char *operation, const char *name,
+                                             const int op_version);
+
+/** @brief Replace the blend parameters (and blend version) of `(operation, name)`, at any
+ *  version. The op_params side is dt_preset_repository_update_module_params(). */
+void dt_preset_repository_set_blend_params(const char *operation, const char *name,
+                                           const int blendop_version, const void *blend_params,
+                                           const int blend_params_size);
+
+/**
+ * @brief Every preset of @p operation at any version, with both parameter blobs.
+ *
+ * @details For the startup legacy-upgrade pass, which reads a preset, converts it and writes
+ * it straight back. It is the only reader that wants the blend blob alongside the op blob,
+ * and the only one that must not be holding a cursor on `data.presets` while it writes to it
+ * -- so this materialises the rows and the caller's loop touches no statement.
+ *
+ * Unordered, as that pass has always been: it acts on each row independently.
+ */
+GList *dt_preset_repository_list_for_upgrade(const char *operation);
+
 /** @brief Replace name, description and parameters of `(operation, op_version, old_name)`. */
 void dt_preset_repository_rename_module_preset(const char *operation, const int op_version,
                                                const char *old_name, const char *new_name,

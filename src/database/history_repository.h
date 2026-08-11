@@ -188,6 +188,19 @@ typedef void (*dt_history_repository_mask_cb)(void *user_data, const int num, co
 void dt_history_repository_foreach_mask_item(const int32_t imgid,
                                              dt_history_repository_mask_cb cb, void *user_data);
 
+/**
+ * @brief The module version some image's history recorded for this exact parameter blob.
+ *
+ * @details A preset with no version of its own can be dated by finding a history entry
+ * anywhere in the library that carries byte-identical parameters -- that entry knows which
+ * version wrote them. Searches every image, so the first match wins arbitrarily; the blobs
+ * are equal, which is what makes that acceptable.
+ *
+ * @return the version, or 0 when no history entry matches.
+ */
+int dt_history_repository_find_version_for_params(const char *operation, const void *op_params,
+                                                  const int op_params_size);
+
 /** one enabled module of an image, as a reader wants to see it listed */
 typedef void (*dt_history_repository_active_module_cb)(void *user_data, const int num,
                                                        const char *operation, const char *multi_name);

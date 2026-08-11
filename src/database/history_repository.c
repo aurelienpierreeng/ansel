@@ -733,6 +733,24 @@ void dt_history_repository_foreach_mask_item(const int32_t imgid,
   sqlite3_finalize(stmt);
 }
 
+int dt_history_repository_find_version_for_params(const char *operation, const void *op_params,
+                                                  const int op_params_size)
+{
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT module FROM main.history WHERE operation = ?1 AND op_params = ?2",
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return 0;
+
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 2, op_params, op_params_size, SQLITE_TRANSIENT);
+
+  const int version = (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : 0;
+  sqlite3_finalize(stmt);
+
+  return version;
+}
+
 void dt_history_repository_foreach_active_module(const int32_t imgid,
                                                  dt_history_repository_active_module_cb cb,
                                                  void *user_data)
