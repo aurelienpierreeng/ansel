@@ -77,6 +77,16 @@ void dt_selection_repository_push(void);
 void dt_selection_repository_pop(void);
 
 /** @brief Finalise the prepared statements. See dt_colorlabel_repository_cleanup(). */
+/**
+ * @brief The lowest selected image id, or UNKNOWN_IMAGE when nothing is selected.
+ *
+ * @details The caller this replaced took the first row of an unordered
+ * `SELECT imgid FROM main.selected_images`. That is not arbitrary: `imgid` is that table's
+ * INTEGER PRIMARY KEY, so a full scan yields ascending ids and the first row is always the
+ * lowest. Same query, and the name now says which image you get.
+ */
+int32_t dt_selection_repository_get_lowest_id(void);
+
 void dt_selection_repository_cleanup(void);
 
 G_END_DECLS

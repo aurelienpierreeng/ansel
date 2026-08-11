@@ -59,9 +59,10 @@
 #include "common/module_versioning.h"
 #include "common/image.h"
 #include "control/signal.h"
-#include "database/database.h"
 #include "common/utility.h"
-#include "database/sql_debug.h"
+#include "database/image_repository.h"
+#include "database/selection_repository.h"
+#include "database/tag_repository.h"
 #include "caches/image_cache.h"
 #include "common/metadata.h"
 #include "common/tags.h"
@@ -523,94 +524,30 @@ static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *i
   return FALSE;
 }
 
-static void _concatenate_multiple_images(gboolean skip[md_size], int count)
+static void _concatenate_multiple_images(gboolean skip[md_size])
 {
-  gchar *images = dt_selection_ids_to_string(dt_selection_get_global());
-  sqlite3_stmt *stmt = NULL;
-  // clang-format off
-  gchar *query = g_strdup_printf("SELECT COUNT(DISTINCT film_id), "
-                                        "COUNT(DISTINCT film_id), "
-                                        "2, " // imgid always different
-                                        "COUNT(DISTINCT group_id), "
-                                        "COUNT(DISTINCT filename), "
-                                        "COUNT(DISTINCT version), "
-                                        "COUNT(DISTINCT film_id || '/' || filename), " //path
-                                        "COUNT(DISTINCT flags & 2048), " //local copy
-                                        "COUNT(DISTINCT import_timestamp), "
-                                        "COUNT(DISTINCT change_timestamp), "
-                                        "COUNT(DISTINCT export_timestamp), "
-                                        "COUNT(DISTINCT print_timestamp), "
-                                        "COUNT(DISTINCT flags), "
-                                        "COUNT(DISTINCT model), "
-                                        "COUNT(DISTINCT maker), "
-                                        "COUNT(DISTINCT lens), "
-                                        "COUNT(DISTINCT aperture), "
-                                        "COUNT(DISTINCT exposure), "
-                                        "COUNT(DISTINCT IFNULL(exposure_bias, '')), "
-                                        "COUNT(DISTINCT focal_length), "
-                                        "COUNT(DISTINCT focus_distance), "
-                                        "COUNT(DISTINCT iso), "
-                                        "COUNT(DISTINCT datetime_taken), "
-                                        "COUNT(DISTINCT width), "
-                                        "COUNT(DISTINCT height), "
-                                        "COUNT(DISTINCT IFNULL(output_width, '')), " //exported width
-                                        "COUNT(DISTINCT IFNULL(output_height, '')), " //exported height
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 2 WHERE images.id in (%s)), " //title
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 3 WHERE images.id in (%s)), " //description
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 0 WHERE images.id in (%s)), " //creator
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 1 WHERE images.id in (%s)), " //publisher
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 4 WHERE images.id in (%s)), " //rights
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 5 WHERE images.id in (%s)), " //notes
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 6 WHERE images.id in (%s)), " //version name
-                                        "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 7 WHERE images.id in (%s)), " //image id
-                                        "COUNT(DISTINCT IFNULL(latitude, '')), "
-                                        "COUNT(DISTINCT IFNULL(longitude, '')), "
-                                        "COUNT(DISTINCT IFNULL(altitude, '')) "
-                                        "FROM main.images "
-                                        "WHERE id IN (%s)",
-                                  images, images, images, images, images, images, images, images, images);
-  // clang-format on
+  GList *imgids = dt_selection_get_list(dt_selection_get_global());
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-
-  sqlite3_stmt *stmt_tags = NULL;
-  // clang-format off
-  gchar *tag_query = g_strdup_printf("SELECT flags, COUNT(DISTINCT imgid) "
-                                      "FROM main.tagged_images "
-                                      "JOIN data.tags "
-                                      "ON data.tags.id = main.tagged_images.tagid AND name NOT LIKE 'darktable|%%' "
-                                      "WHERE imgid in (%s) GROUP BY tagid", images);
-  // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), tag_query, -1, &stmt_tags, NULL);
-  dt_free(tag_query);
-  dt_free(query);
-
-  if(sqlite3_step(stmt) == SQLITE_ROW)
+  // Which fields do the selected images disagree on? The repository reports one count per
+  // dt_image_field_t, in that enumeration's order, which is this panel's own row order up to
+  // md_tag_names -- checked here rather than assumed.
+  int *counts = dt_image_repository_count_distinct_fields(imgids);
+  if(counts)
   {
-    const int col_count = sqlite3_column_count(stmt);
-    for(int32_t md = 0; md < md_tag_names && md < col_count; md++)
-      skip[md] = (sqlite3_column_int(stmt, md) > 1);
+    for(int32_t md = 0; md < md_tag_names && md < DT_IMAGE_FIELD_COUNT; md++)
+      skip[md] = (counts[md] > 1);
+    dt_free(counts);
   }
 
-  sqlite3_finalize(stmt);
-
-  // Tags and categories management
+  // Tags and categories are their own two rows: shared only when every image carries them.
   gboolean same_tags = TRUE;
   gboolean same_categories = TRUE;
-
-  while(sqlite3_step(stmt_tags) == SQLITE_ROW)
-  {
-    if(sqlite3_column_int(stmt_tags, 0) & DT_TF_CATEGORY)
-      same_categories &= (sqlite3_column_int(stmt_tags, 1) == count);
-    else
-      same_tags &= (sqlite3_column_int(stmt_tags, 1) == count);
-  }
+  dt_tag_repository_get_agreement(imgids, &same_tags, &same_categories);
 
   skip[md_tag_names] = !same_tags;
   skip[md_categories] = !same_categories;
 
-  sqlite3_finalize(stmt_tags);
-  dt_free(images);
+  g_list_free(imgids);
 }
 
 
@@ -638,7 +575,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
     img_id = dt_act_on_get_first_image();
   }
 
-  if(count > 1) _concatenate_multiple_images(skip, count);
+  if(count > 1) _concatenate_multiple_images(skip);
 
   dt_image_t tinfo = {0};
   const gboolean have_thumb_info = _metadata_view_get_thumb_info(img_id, &tinfo);
@@ -1002,16 +939,7 @@ fill_minuses:
 static void _jump_to()
 {
   int32_t imgid = dt_control_get_mouse_over_id();
-  if(imgid == UNKNOWN_IMAGE)
-  {
-    sqlite3_stmt *stmt;
-
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
-                                NULL);
-
-    if(sqlite3_step(stmt) == SQLITE_ROW) imgid = sqlite3_column_int(stmt, 0);
-    sqlite3_finalize(stmt);
-  }
+  if(imgid == UNKNOWN_IMAGE) imgid = dt_selection_repository_get_lowest_id();
   if(imgid != UNKNOWN_IMAGE)
   {
     char path[512];

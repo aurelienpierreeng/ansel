@@ -18,6 +18,7 @@
 
 #include "database/selection_repository.h"
 
+#include "common/image.h"   // for UNKNOWN_IMAGE
 #include "database/database.h"
 #include "database/sql_debug.h"
 #include "system/macros.h"
@@ -127,6 +128,20 @@ void dt_selection_repository_pop(void)
                         "INSERT INTO main.selected_images"
                         " SELECT * FROM memory.selected_backup", NULL, NULL, NULL);
   // clang-format on
+}
+
+int32_t dt_selection_repository_get_lowest_id(void)
+{
+  int32_t imgid = UNKNOWN_IMAGE;
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT imgid FROM main.selected_images", -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return imgid;
+
+  if(sqlite3_step(stmt) == SQLITE_ROW) imgid = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+
+  return imgid;
 }
 
 void dt_selection_repository_cleanup(void)

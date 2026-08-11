@@ -748,6 +748,78 @@ void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, v
   sqlite3_finalize(stmt);
 }
 
+int *dt_image_repository_count_distinct_fields(GList *imgids)
+{
+  char *set = _id_set(imgids);
+  if(IS_NULL_PTR(set)) return NULL;
+
+  // One subquery per metadata key, each needing the id set again -- nine occurrences in all.
+  // clang-format off
+  char *query = g_strdup_printf("SELECT COUNT(DISTINCT film_id), "
+                                       "COUNT(DISTINCT film_id), "
+                                       "2, " // imgid always different
+                                       "COUNT(DISTINCT group_id), "
+                                       "COUNT(DISTINCT filename), "
+                                       "COUNT(DISTINCT version), "
+                                       "COUNT(DISTINCT film_id || '/' || filename), " //path
+                                       "COUNT(DISTINCT flags & 2048), " //local copy
+                                       "COUNT(DISTINCT import_timestamp), "
+                                       "COUNT(DISTINCT change_timestamp), "
+                                       "COUNT(DISTINCT export_timestamp), "
+                                       "COUNT(DISTINCT print_timestamp), "
+                                       "COUNT(DISTINCT flags), "
+                                       "COUNT(DISTINCT model), "
+                                       "COUNT(DISTINCT maker), "
+                                       "COUNT(DISTINCT lens), "
+                                       "COUNT(DISTINCT aperture), "
+                                       "COUNT(DISTINCT exposure), "
+                                       "COUNT(DISTINCT IFNULL(exposure_bias, '')), "
+                                       "COUNT(DISTINCT focal_length), "
+                                       "COUNT(DISTINCT focus_distance), "
+                                       "COUNT(DISTINCT iso), "
+                                       "COUNT(DISTINCT datetime_taken), "
+                                       "COUNT(DISTINCT width), "
+                                       "COUNT(DISTINCT height), "
+                                       "COUNT(DISTINCT IFNULL(output_width, '')), " //exported width
+                                       "COUNT(DISTINCT IFNULL(output_height, '')), " //exported height
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 2 WHERE images.id in (%s)), " //title
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 3 WHERE images.id in (%s)), " //description
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 0 WHERE images.id in (%s)), " //creator
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 1 WHERE images.id in (%s)), " //publisher
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 4 WHERE images.id in (%s)), " //rights
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 5 WHERE images.id in (%s)), " //notes
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 6 WHERE images.id in (%s)), " //version name
+                                       "(SELECT COUNT(DISTINCT IFNULL(value,'')) FROM images LEFT JOIN meta_data ON meta_data.id = images.id AND key = 7 WHERE images.id in (%s)), " //image id
+                                       "COUNT(DISTINCT IFNULL(latitude, '')), "
+                                       "COUNT(DISTINCT IFNULL(longitude, '')), "
+                                       "COUNT(DISTINCT IFNULL(altitude, '')) "
+                                       "FROM main.images "
+                                       "WHERE id IN (%s)",
+                                 set, set, set, set, set, set, set, set, set);
+  // clang-format on
+
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  dt_free(query);
+  dt_free(set);
+  if(IS_NULL_PTR(stmt)) return NULL;
+
+  int *counts = NULL;
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    const int col_count = sqlite3_column_count(stmt);
+    counts = (int *)calloc(DT_IMAGE_FIELD_COUNT, sizeof(int));
+    if(counts)
+    {
+      for(int i = 0; i < DT_IMAGE_FIELD_COUNT && i < col_count; i++)
+        counts[i] = sqlite3_column_int(stmt, i);
+    }
+  }
+  sqlite3_finalize(stmt);
+
+  return counts;
+}
+
 gboolean dt_image_repository_get_collected_geo_bounds(dt_image_geo_bounds_t *bounds)
 {
   if(IS_NULL_PTR(bounds)) return FALSE;

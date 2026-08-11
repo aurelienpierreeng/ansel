@@ -913,6 +913,55 @@ gboolean dt_tag_repository_attach(const guint tagid, const int32_t imgid)
   return ok;
 }
 
+void dt_tag_repository_get_agreement(GList *imgids, gboolean *same_tags, gboolean *same_categories)
+{
+  gboolean tags_agree = TRUE;
+  gboolean categories_agree = TRUE;
+
+  const int count = (int)g_list_length(imgids);
+  char *set = NULL;
+  if(count > 0)
+  {
+    GString *ids = g_string_new(NULL);
+    for(GList *l = imgids; l; l = g_list_next(l))
+    {
+      if(l != imgids) g_string_append_c(ids, ',');
+      g_string_append_printf(ids, "%d", GPOINTER_TO_INT(l->data));
+    }
+    set = g_string_free(ids, FALSE);
+  }
+
+  if(set)
+  {
+    // clang-format off
+    char *query = g_strdup_printf("SELECT flags, COUNT(DISTINCT imgid) "
+                                  "FROM main.tagged_images "
+                                  "JOIN data.tags "
+                                  "ON data.tags.id = main.tagged_images.tagid AND name NOT LIKE 'darktable|%%' "
+                                  "WHERE imgid in (%s) GROUP BY tagid", set);
+    // clang-format on
+    sqlite3_stmt *stmt = NULL;
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+    dt_free(query);
+
+    if(stmt)
+    {
+      while(sqlite3_step(stmt) == SQLITE_ROW)
+      {
+        if(sqlite3_column_int(stmt, 0) & DT_TF_CATEGORY)
+          categories_agree &= (sqlite3_column_int(stmt, 1) == count);
+        else
+          tags_agree &= (sqlite3_column_int(stmt, 1) == count);
+      }
+      sqlite3_finalize(stmt);
+    }
+    dt_free(set);
+  }
+
+  if(same_tags) *same_tags = tags_agree;
+  if(same_categories) *same_categories = categories_agree;
+}
+
 void dt_tag_repository_cleanup(void)
 {
   for(int i = 0; i < 2; i++)
