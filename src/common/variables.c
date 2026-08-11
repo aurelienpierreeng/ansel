@@ -47,8 +47,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "database/sql_debug.h"
 #include "widgets/bauhaus.h"
+#include "database/image_repository.h"
 #include "common/variables.h"
 #include "common/colorlabels.h"
 #include "common/file_location.h"
@@ -490,29 +490,15 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   }
   else if(_has_prefix(variable, "VERSION.IF_MULTI") || _has_prefix(variable, "VERSION_IF_MULTI"))
   {
-    sqlite3_stmt *stmt;
+    // Same row set the duplicate list returns -- every image sharing this one's film roll and
+    // filename, itself included -- so this asks it rather than counting the rows twice over.
+    GList *versions = dt_image_repository_get_duplicate_ids(params->imgid);
+    const guint count = g_list_length(versions);
+    g_list_free(versions);
 
-    // count duplicates
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT COUNT(1)"
-                                " FROM images AS i1"
-                                " WHERE EXISTS (SELECT 'y' FROM images AS i2"
-                                "               WHERE  i2.id = ?1"
-                                "               AND    i1.film_id = i2.film_id"
-                                "               AND    i1.filename = i2.filename)",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, params->imgid);
-
-    if(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      const int count = sqlite3_column_int(stmt, 0);
-      //only return data if more than one matching image
-      if(count > 1)
-        result = g_strdup_printf("%d", params->data->version);
-    }
-    sqlite3_finalize (stmt);
+    //only return data if more than one matching image
+    if(count > 1)
+      result = g_strdup_printf("%d", params->data->version);
   }
   else if(_has_prefix(variable, "VERSION"))
     result = g_strdup_printf("%d", params->data->version);
