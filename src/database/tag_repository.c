@@ -99,7 +99,10 @@ GList *dt_tag_repository_get_by_path_with_counts(const char *path, const char *p
   }
   sqlite3_finalize(stmt);
 
-  return tags; // not reversed: matches the previous prepend-only order
+  // Row order, NOT reverse-row: dt_map_location_get_locations_by_path() walks this list and
+  // prepends into its own, and that second prepend is what reproduces the single prepend the
+  // original did straight off the cursor. Returning reverse-row here would flip the result.
+  return g_list_reverse(tags);
 }
 
 

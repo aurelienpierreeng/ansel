@@ -292,7 +292,10 @@ GList *dt_location_repository_find_images_for_location(const guint locid, const 
   }
   sqlite3_finalize(stmt);
 
-  return candidates; // not reversed: matches the previous prepend-only order
+  // Row order, NOT reverse-row: _map_location_find_images() filters this list and prepends into
+  // its own, and that second prepend is what reproduces the original's single prepend off the
+  // cursor. Returning reverse-row here would flip the imgid list.
+  return g_list_reverse(candidates);
 }
 
 GList *dt_location_repository_get_image_locations(const int32_t imgid)

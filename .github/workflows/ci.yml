@@ -166,6 +166,10 @@ jobs:
           # null pointer constant, so this compiles silently in every configuration and
           # only misleads the reader. Nothing else in the toolchain can see it.
           python3 "${SRC_DIR}/tools/check_return_types.py" "${SRC_DIR}/src"
+          # A list built with g_list_prepend on BOTH sides of a repository boundary. The two
+          # prepends cancel, so the public function returns the opposite order to the single
+          # loop it replaced -- with identical SQL, a clean build and green CI. Twice now.
+          python3 "${SRC_DIR}/tools/check_list_order.py" "${SRC_DIR}/src"
       - name: Check for includes added inside a conditional block
         # Pull requests only: it compares against the base branch. An include placed inside a
         # platform #ifdef compiles wherever that macro is set and fails everywhere else, which
