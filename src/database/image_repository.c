@@ -16,6 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <string.h>
+
 #include "database/image_repository.h"
 
 #include "database/colorlabel_repository.h"
@@ -1034,6 +1036,105 @@ gboolean dt_image_repository_set_group(const int32_t imgid, const int32_t group_
   const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
   sqlite3_finalize(stmt);
   return ok;
+}
+
+gboolean dt_image_repository_get_xmp_row(const int32_t imgid, dt_image_xmp_row_t *row)
+{
+  if(IS_NULL_PTR(row)) return FALSE;
+  memset(row, 0, sizeof(*row));
+
+  gboolean found = FALSE;
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT filename, flags, raw_parameters, "
+                              "       longitude, latitude, altitude, history_end, datetime_taken"
+                              " FROM main.images"
+                              " WHERE id = ?1",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    // copied, not borrowed: the caller used to read it before finalising the statement, and
+    // owning it removes the constraint rather than moving it across a module boundary
+    const char *f = (const char *)sqlite3_column_text(stmt, 0);
+    row->filename = f ? g_strdup(f) : NULL;
+    row->flags = sqlite3_column_int(stmt, 1);
+    row->raw_parameters = sqlite3_column_int(stmt, 2);
+    if(sqlite3_column_type(stmt, 3) == SQLITE_FLOAT)
+    {
+      row->longitude = sqlite3_column_double(stmt, 3);
+      row->has_longitude = TRUE;
+    }
+    if(sqlite3_column_type(stmt, 4) == SQLITE_FLOAT)
+    {
+      row->latitude = sqlite3_column_double(stmt, 4);
+      row->has_latitude = TRUE;
+    }
+    if(sqlite3_column_type(stmt, 5) == SQLITE_FLOAT)
+    {
+      row->altitude = sqlite3_column_double(stmt, 5);
+      row->has_altitude = TRUE;
+    }
+    row->history_end = sqlite3_column_int(stmt, 6);
+    row->datetime_taken = sqlite3_column_int64(stmt, 7);
+    found = TRUE;
+  }
+  sqlite3_finalize(stmt);
+  return found;
+}
+
+void dt_image_repository_xmp_row_cleanup(dt_image_xmp_row_t *row)
+{
+  if(IS_NULL_PTR(row)) return;
+  dt_free(row->filename);
+  row->filename = NULL;
+}
+
+gboolean dt_image_repository_get_timestamps(const int32_t imgid, dt_image_timestamps_t *ts)
+{
+  if(IS_NULL_PTR(ts)) return FALSE;
+  memset(ts, 0, sizeof(*ts));
+
+  gboolean found = FALSE;
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get_sqlite3_global(),
+      "SELECT import_timestamp, change_timestamp, export_timestamp, print_timestamp"
+      " FROM main.images"
+      " WHERE id = ?1",
+      -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  // clang-format on
+
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    if(sqlite3_column_type(stmt, 0) != SQLITE_NULL)
+    {
+      ts->import_timestamp = sqlite3_column_int64(stmt, 0);
+      ts->has_import = TRUE;
+    }
+    if(sqlite3_column_type(stmt, 1) != SQLITE_NULL)
+    {
+      ts->change_timestamp = sqlite3_column_int64(stmt, 1);
+      ts->has_change = TRUE;
+    }
+    if(sqlite3_column_type(stmt, 2) != SQLITE_NULL)
+    {
+      ts->export_timestamp = sqlite3_column_int64(stmt, 2);
+      ts->has_export = TRUE;
+    }
+    if(sqlite3_column_type(stmt, 3) != SQLITE_NULL)
+    {
+      ts->print_timestamp = sqlite3_column_int64(stmt, 3);
+      ts->has_print = TRUE;
+    }
+    found = TRUE;
+  }
+  sqlite3_finalize(stmt);
+  return found;
 }
 
 void dt_image_repository_cleanup(void)

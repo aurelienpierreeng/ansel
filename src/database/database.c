@@ -3712,6 +3712,12 @@ gboolean dt_database_is_open(void)
   return !IS_NULL_PTR(_db);
 }
 
+const char *dt_database_get_last_error(void)
+{
+  if(IS_NULL_PTR(_db) || IS_NULL_PTR(_db->handle)) return "no database connection";
+  return sqlite3_errmsg(_db->handle);
+}
+
 sqlite3 *dt_database_get_sqlite3_global(void)
 {
   return _db ? _db->handle : NULL;

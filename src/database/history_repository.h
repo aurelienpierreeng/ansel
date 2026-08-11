@@ -156,6 +156,38 @@ void dt_history_repository_foreach_last_item(const int32_t imgid, const gboolean
 void dt_history_repository_foreach_item(const int32_t imgid, dt_history_repository_item_cb cb,
                                         void *user_data);
 
+/* ---------------------------------------------------------------------------------------------
+ * main.masks_history
+ *
+ * The drawn shapes a development refers to, one row per (history step, form). Persisted beside
+ * main.history and read back with it, so it lives in the same repository.
+ * ------------------------------------------------------------------------------------------ */
+
+/** append one mask row. TRUE when the INSERT ran to completion.
+ *
+ *  @warning its one caller does NOT act on this. See the note beside the call in
+ *  common/exif.cc: that code tests for a value sqlite3_step() cannot return on an INSERT, so
+ *  its "insert this entry only once" guard has never fired. Preserved, not fixed here. */
+gboolean dt_history_repository_write_mask_item(const int32_t imgid, const int num, const int formid,
+                                               const int form, const char *name, const int version,
+                                               const void *points, const int points_len,
+                                               const int points_count, const void *source,
+                                               const int source_len);
+
+/** how many mask rows an image has */
+int dt_history_repository_count_mask_items(const int32_t imgid);
+
+/** one main.masks_history row. The two blobs point INTO the statement -- copy them here. */
+typedef void (*dt_history_repository_mask_cb)(void *user_data, const int num, const int formid,
+                                              const int form, const char *name, const int version,
+                                              const void *points, const int points_len,
+                                              const int points_count, const void *source,
+                                              const int source_len);
+
+/** every mask row of an image, in num order */
+void dt_history_repository_foreach_mask_item(const int32_t imgid,
+                                             dt_history_repository_mask_cb cb, void *user_data);
+
 /** finalise every cached statement. Must run before the connection closes. */
 void dt_history_repository_cleanup(void);
 
