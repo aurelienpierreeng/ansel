@@ -724,6 +724,51 @@ int32_t dt_image_repository_duplicate(const int32_t imgid, const int32_t newvers
   return newid;
 }
 
+void dt_image_version_free(gpointer data)
+{
+  dt_image_version_t *v = (dt_image_version_t *)data;
+  if(IS_NULL_PTR(v)) return;
+  dt_free(v->version_name);
+  dt_free(v);
+}
+
+GList *dt_image_repository_get_versions(const int32_t film_id, const char *filename,
+                                        const int name_keyid)
+{
+  if(IS_NULL_PTR(filename)) return NULL;
+
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT i.version, i.id, m.value"
+                              " FROM images AS i"
+                              " LEFT JOIN meta_data AS m ON m.id = i.id AND m.key = ?3"
+                              " WHERE film_id = ?1 AND filename = ?2"
+                              " ORDER BY i.version",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film_id);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, filename, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, name_keyid);
+
+  GList *versions = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_image_version_t *v = g_malloc0(sizeof(dt_image_version_t));
+    if(v)
+    {
+      v->version = sqlite3_column_int(stmt, 0);
+      v->imgid = sqlite3_column_int(stmt, 1);
+      const char *name = (const char *)sqlite3_column_text(stmt, 2);
+      v->version_name = name ? g_strdup(name) : NULL;
+      versions = g_list_prepend(versions, v);
+    }
+  }
+  sqlite3_finalize(stmt);
+
+  return g_list_reverse(versions);   // version order, as the query returns it
+}
+
 GList *dt_image_repository_get_duplicate_ids(const int32_t imgid)
 {
   GList *ids = NULL;
