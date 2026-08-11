@@ -16,11 +16,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "common/database.h"
+#include "darktable.h"
+#include "database/database.h"
 #include "common/film.h"
 #include "common/history_actions.h"
-#include "common/history_merge.h"
 #include "common/image.h"
 #include "common/styles.h"
 
@@ -98,7 +97,7 @@ static char *scenario_name_from_style_file(const char *filename)
 static int sql_int_for_bound_images(const char *query, const int32_t imgid_a, const int32_t imgid_b)
 {
   sqlite3_stmt *stmt = NULL;
-  sqlite3_prepare_v2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
   sqlite3_bind_int(stmt, 1, imgid_a);
   sqlite3_bind_int(stmt, 2, imgid_b);
   const int value = (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : -1;
@@ -109,7 +108,7 @@ static int sql_int_for_bound_images(const char *query, const int32_t imgid_a, co
 static int max_style_id(void)
 {
   sqlite3_stmt *stmt = NULL;
-  sqlite3_prepare_v2(dt_database_get(darktable.db), "SELECT COALESCE(MAX(id), 0) FROM data.styles", -1,
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(), "SELECT COALESCE(MAX(id), 0) FROM data.styles", -1,
                      &stmt, NULL);
   const int value = (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : 0;
   sqlite3_finalize(stmt);
@@ -119,7 +118,7 @@ static int max_style_id(void)
 static char *imported_style_name(const int before_import_style_id)
 {
   sqlite3_stmt *stmt = NULL;
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
                      "SELECT name FROM data.styles WHERE id > ?1 ORDER BY id DESC LIMIT 1", -1, &stmt,
                      NULL);
   sqlite3_bind_int(stmt, 1, before_import_style_id);
@@ -197,7 +196,7 @@ static int load_start_history(const char *scenario, const int32_t imgid, const c
 static void print_module_order_summary(const char *label, const int32_t imgid)
 {
   sqlite3_stmt *stmt = NULL;
-  sqlite3_prepare_v2(dt_database_get(darktable.db),
+  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
                      "SELECT version, iop_list FROM main.module_order WHERE imgid=?1", -1, &stmt, NULL);
   sqlite3_bind_int(stmt, 1, imgid);
 
@@ -246,7 +245,7 @@ static void print_enabled_state_summary(const char *label, const int32_t imgid)
 
   sqlite3_stmt *stmt = NULL;
   sqlite3_prepare_v2(
-      dt_database_get(darktable.db),
+      dt_database_get_sqlite3_global(),
       "SELECT h.operation, h.multi_priority, IFNULL(h.multi_name, ''), h.enabled"
       " FROM main.history h"
       " WHERE h.imgid=?1"

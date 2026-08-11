@@ -18,7 +18,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "system/mem_alloc.h" // dt_free
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -263,7 +263,7 @@ Testimg *testimg_gen_grey_max_dr_neg()
   float *p = get_pixel(ti, ti->width - 1, 0);
   p[0] = p[1] = p[2] = -0.0f;
 
-  testimdt_free(tmp);
+  testimg_free(tmp);
   return ti;
 }
 

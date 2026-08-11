@@ -688,6 +688,14 @@ if(NOT SOURCE_PACKAGE AND NOT (CMAKE_VERSION VERSION_LESS 3.3) AND DEFINED ENV{_
   endif()
 endif()
 
+# Debug builds carry the unit tests by default; any configuration can opt in or out
+# explicitly with -DBUILD_TESTING=ON/OFF. An EMPTY value counts as undecided -- existing
+# build trees carry an empty BUILD_TESTING:BOOL in their cache, which is defined but
+# answers no question. Not cached on purpose: flipping the build type flips the default.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND "${BUILD_TESTING}" STREQUAL "")
+  set(BUILD_TESTING ON)
+endif()
+
 if(BUILD_TESTING)
   find_package(cmocka 1.1.0 CONFIG REQUIRED)
   include(AddCMockaTest)

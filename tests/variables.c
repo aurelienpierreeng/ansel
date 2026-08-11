@@ -19,7 +19,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "darktable.h"
 #include "common/variables.h"
 
 #include <stdio.h>
@@ -220,7 +220,16 @@ static const test_t test_real_paths = {
 
 int main(int argc, char* argv[])
 {
-  char *argv_override[] = {"ansel-test-variables", "--library", ":memory:", "--conf", "write_sidecar_files=FALSE", NULL};
+  // A scratch configdir is NOT optional: without --configdir, dt_init() adopts the user's
+  // real ~/.config/ansel and rewrites their anselrc at shutdown. Same isolation rule as
+  // ansel-cli in scripts, and as ansel-test-styles below in this directory.
+  char config_dir_tmpl[] = "/tmp/ansel-test-variables-XXXXXX";
+  char *config_dir = g_mkdtemp(config_dir_tmpl);
+  if(config_dir == NULL) exit(1);
+
+  char *argv_override[] = {"ansel-test-variables", "--library", ":memory:",
+                           "--configdir", config_dir,
+                           "--conf", "write_sidecar_files=FALSE", NULL};
   int argc_override = sizeof(argv_override) / sizeof(*argv_override) - 1;
 
   // init dt without gui and without data.db:
