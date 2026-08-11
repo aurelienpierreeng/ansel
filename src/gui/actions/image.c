@@ -23,8 +23,8 @@
 #include "common/image.h"
 #include "system/macros.h"
 #include "common/grouping.h"
-#include "common/colorlabels.h"
-#include "common/ratings.h"
+#include "metadata/colorlabels.h"
+#include "metadata/ratings.h"
 #include "control/control.h"
 #include "common/collection.h"
 

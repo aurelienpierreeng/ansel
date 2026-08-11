@@ -108,7 +108,7 @@
 #include "common/collection.h"
 #include "gui/common/database_gui.h"
 #include "colorprofiles/colorspaces.h"
-#include "common/colorlabels.h"
+#include "metadata/colorlabels.h"
 #include "darktable.h"
 #include "common/anonymous_ids.h"
 #include "system/capabilities.h"
@@ -140,13 +140,14 @@
 #include "imageio/imageio_module.h"
 #include "develop/iop_order.h"
 #include "common/l10n.h"
-#include "common/metadata.h"
+#include "metadata/metadata.h"
+#include "metadata/notify.h"
 #include "caches/mipmap_cache.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
 #include "common/points.h"
 #include "system/resource_limits.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/styles.h"
 #include "common/undo.h"
 #include "system/fp_mode.h"
@@ -719,6 +720,22 @@ static void _database_settings_from_conf(void)
 static void _database_renamed(const char *new_library_name)
 {
   dt_conf_set_string("database", new_library_name);
+}
+
+static void _metadata_tags_changed(void)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+}
+
+/* src/metadata states what it did; where that appears is ours to decide. Installed
+ * unconditionally: dt_control_log()/dt_toast_log() are themselves no-ops without a GUI, so
+ * this keeps the headless behaviour the direct calls had. */
+static void _metadata_notify(const dt_metadata_notice_t kind, const char *message)
+{
+  if(kind == DT_METADATA_NOTICE_TOAST)
+    dt_toast_log("%s", message);
+  else
+    dt_control_log("%s", message);
 }
 
 /* The two parameters are the GTK signal signature, not ours; neither carries anything we
@@ -1304,6 +1321,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // SQL layer never reads conf itself and "when does this take effect" has one answer.
   _database_settings_from_conf();
   dt_database_set_renamed_handler(_database_renamed);
+  dt_metadata_set_notify_handler(_metadata_notify);
 
   gchar *configured_library = dt_conf_get_string("database");
   const dt_database_params_t db_params = { .alternative = dbfilename_from_command,
@@ -1398,6 +1416,12 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // Initialize the signal system
   darktable.signals = dt_control_signal_init();
+
+  /* src/metadata reports that the tag vocabulary changed; turning that into the GTK signal
+   * its consumers already listen for is ours. Installed HERE, not with the other handlers
+   * further up: the signal system does not exist until the line above, and nothing can
+   * edit a tag before it does. */
+  dt_metadata_set_tags_changed_handler(_metadata_tags_changed);
   // Critical: ensure image cache gets refreshed BEFORE any other IMAGE_INFO_CHANGED handlers.
   // This handler reloads dt_image_t from DB so all downstream callbacks see fresh metadata.
   dt_image_cache_connect_info_changed_first(darktable.signals);

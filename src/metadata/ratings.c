@@ -37,10 +37,10 @@
 #include "common/collection.h"
 #include "common/glib_utils.h"
 #include "caches/image_cache.h"
-#include "common/ratings.h"
+#include "metadata/ratings.h"
+#include "metadata/notify.h"
 #include "common/undo.h"
 #include "common/grouping.h"
-#include "control/control.h"
 
 
 #define DT_RATINGS_UPGRADE -1
@@ -208,7 +208,8 @@ void dt_ratings_apply_on_list(GList *img, const int rating, const gboolean undo_
       dt_undo_end_group(dt_undo_get_global());
     }
     dt_collection_hint_message(dt_collection_get_global());
-    dt_toast_log(_("Rating set to %s for %i image(s)"), dt_ratings_get_name(rating), g_list_length(img));
+    dt_metadata_notify(DT_METADATA_NOTICE_TOAST, _("Rating set to %s for %i image(s)"),
+                       dt_ratings_get_name(rating), g_list_length(img));
   }
 }
 
@@ -230,10 +231,12 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
     {
       const guint count = g_list_length(imgs);
       if(new_rating == DT_VIEW_REJECT)
-        dt_control_log(ngettext("rejecting %d image", "rejecting %d images", count), count);
+        dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE,
+                           ngettext("rejecting %d image", "rejecting %d images", count), count);
       else
-        dt_control_log(ngettext("applying rating %d to %d image", "applying rating %d to %d images", count),
-                       new_rating, count);
+        dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE,
+                           ngettext("applying rating %d to %d image", "applying rating %d to %d images", count),
+                           new_rating, count);
     }
 
     _ratings_apply(imgs, new_rating, &undo, undo_on);
@@ -247,7 +250,7 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
     imgs = NULL;
   }
   else
-    dt_control_log(_("no images selected to apply rating"));
+    dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE, _("no images selected to apply rating"));
 }
 
 // clang-format off

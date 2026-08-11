@@ -20,10 +20,10 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_MAP_LOCATIONS_H
-#define DT_COMMON_MAP_LOCATIONS_H
+#ifndef DT_METADATA_MAP_LOCATIONS_H
+#define DT_METADATA_MAP_LOCATIONS_H
 
-#include "common/geo.h"
+#include "metadata/geo.h"
 #include <glib.h>
 #include <sqlite3.h>
 #include <stdint.h>
@@ -126,7 +126,7 @@ void dt_map_location_get_polygons(dt_location_draw_t *ld);
 // free flat polygons
 void dt_map_location_free_polygons(dt_location_draw_t *ld);
 
-#endif // DT_COMMON_MAP_LOCATIONS_H
+#endif // DT_METADATA_MAP_LOCATIONS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

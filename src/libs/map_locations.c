@@ -24,7 +24,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "control/settings.h"
 #include "widgets/togglebutton.h"
 #include "widgets/paint.h"
@@ -32,7 +32,7 @@
 #include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"
-#include "common/map_locations.h"
+#include "metadata/map_locations.h"
 #include "common/conf.h"
 #include "control/control.h"
 

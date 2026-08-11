@@ -36,7 +36,7 @@
 
 #include "colorprofiles/profile_types.h"
 #include "develop/lightroom.h"
-#include "common/colorlabels.h"
+#include "metadata/colorlabels.h"
 #include "common/curve_tools.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
@@ -45,9 +45,9 @@
 #include "common/utility.h"
 #include "common/history.h"
 #include "database/history_repository.h"
-#include "common/ratings.h"
-#include "common/tags.h"
-#include "common/metadata.h"
+#include "metadata/ratings.h"
+#include "metadata/tags.h"
+#include "metadata/metadata.h"
 #include "control/control.h"
 #include "develop/develop.h"
 

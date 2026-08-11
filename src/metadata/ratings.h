@@ -29,8 +29,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_RATINGS_H
-#define DT_COMMON_RATINGS_H
+#ifndef DT_METADATA_RATINGS_H
+#define DT_METADATA_RATINGS_H
 
 #include <gtk/gtk.h>
 #include <stdint.h>
@@ -56,7 +56,7 @@ void dt_ratings_apply_on_list(GList *list, const int rating, const gboolean undo
 }
 #endif
 
-#endif // DT_COMMON_RATINGS_H
+#endif // DT_METADATA_RATINGS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

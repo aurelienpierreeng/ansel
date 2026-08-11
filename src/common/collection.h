@@ -49,7 +49,7 @@
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <inttypes.h>
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 
 #define NUM_LAST_COLLECTIONS 10
 

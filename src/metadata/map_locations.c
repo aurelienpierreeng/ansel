@@ -21,13 +21,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/geo.h"
-#include "common/map_locations.h"
+#include "metadata/geo.h"
+#include "metadata/map_locations.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "database/location_repository.h"
 #include "database/tag_repository.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 
 // root for location geotagging
 const char *location_tag = "darktable|locations";

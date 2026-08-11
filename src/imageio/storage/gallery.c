@@ -57,7 +57,7 @@
 #include "common/image.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 #include "common/utility.h"
 #include "common/variables.h"
 #include "common/conf.h"

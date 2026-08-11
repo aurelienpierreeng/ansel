@@ -72,7 +72,7 @@
 #include "common/history.h"
 #include "caches/image_cache.h"
 #include "caches/mipmap_cache.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"

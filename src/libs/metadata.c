@@ -44,7 +44,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 #include "common/act_on.h"
 #include "common/selection.h"
 #include "system/macros.h"

@@ -19,8 +19,8 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DT_COMMON_GEO_H
-#define DT_COMMON_GEO_H
+#ifndef DT_METADATA_GEO_H
+#define DT_METADATA_GEO_H
 
 typedef enum dt_geo_map_display_t
 {
@@ -44,7 +44,7 @@ typedef struct dt_map_box_t
   float lat2;
 } dt_map_box_t;
 
-#endif // DT_COMMON_GEO_H
+#endif // DT_METADATA_GEO_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -46,7 +46,7 @@
 */
 
 #include "common/collection.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/selection.h"
 #include "system/mem_alloc.h"
 #include "common/times.h"

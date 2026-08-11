@@ -56,7 +56,7 @@
 #include "control/signal.h"
 #include "common/utility.h"
 #include "widgets/gdkkeys.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "widgets/bauhaus.h"

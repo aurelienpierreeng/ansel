@@ -23,8 +23,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_GPX_H
-#define DT_COMMON_GPX_H
+#ifndef DT_METADATA_GPX_H
+#define DT_METADATA_GPX_H
 
 #include <glib.h>
 #include "common/image.h"
@@ -85,7 +85,7 @@ void dt_gpx_geodesic_intermediate_point(const double lat1, const double lon1,
                                         double f,
                                         double *lat, double *lon);
 
-#endif // DT_COMMON_GPX_H
+#endif // DT_METADATA_GPX_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
