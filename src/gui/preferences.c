@@ -59,7 +59,8 @@
 #include "common/conf.h"
 #include "widgets/gdkkeys.h"
 #include "system/capabilities.h"
-#include "database/sql_debug.h"
+#include "database/database.h"
+#include "database/preset_repository.h"
 #include "common/file_location.h"
 #include "common/l10n.h"
 #include "common/opencl.h"
@@ -798,7 +799,6 @@ static void cairo_destroy_from_pixbuf(guchar *pixels, gpointer data)
 static void tree_insert_presets(GtkTreeStore *tree_model)
 {
   GtkTreeIter iter, parent;
-  sqlite3_stmt *stmt;
   gchar *last_module = NULL;
 
   // Create a GdkPixbuf with a cairo drawing.
@@ -829,32 +829,26 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
                                                      DT_PIXEL_APPLY_DPI(ICON_SIZE), DT_PIXEL_APPLY_DPI(ICON_SIZE),
                                                      cairo_image_surface_get_stride(check_cst),
                                                      cairo_destroy_from_pixbuf, check_cr);
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT rowid, name, operation, autoapply, model, maker, lens, iso_min, "
-                              "iso_max, exposure_min, exposure_max, aperture_min, aperture_max, "
-                              "focal_length_min, focal_length_max, writeprotect FROM data.presets ORDER BY "
-                              "operation, name",
-                              -1, &stmt, NULL);
-  // clang-format on
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  GList *presets = dt_preset_repository_list_all();
+  for(GList *p = presets; p; p = g_list_next(p))
   {
-    const gint rowid = sqlite3_column_int(stmt, 0);
-    const gchar *name = (gchar *)sqlite3_column_text(stmt, 1);
-    const gchar *operation = (gchar *)sqlite3_column_text(stmt, 2);
-    const gboolean autoapply = (sqlite3_column_int(stmt, 3) == 0 ? FALSE : TRUE);
-    const gchar *model = (gchar *)sqlite3_column_text(stmt, 4);
-    const gchar *maker = (gchar *)sqlite3_column_text(stmt, 5);
-    const gchar *lens = (gchar *)sqlite3_column_text(stmt, 6);
-    const float iso_min = sqlite3_column_double(stmt, 7);
-    const float iso_max = sqlite3_column_double(stmt, 8);
-    const float exposure_min = sqlite3_column_double(stmt, 9);
-    const float exposure_max = sqlite3_column_double(stmt, 10);
-    const float aperture_min = sqlite3_column_double(stmt, 11);
-    const float aperture_max = sqlite3_column_double(stmt, 12);
-    const int focal_length_min = sqlite3_column_double(stmt, 13);
-    const int focal_length_max = sqlite3_column_double(stmt, 14);
-    const gboolean writeprotect = (sqlite3_column_int(stmt, 15) == 0 ? FALSE : TRUE);
+    const dt_preset_row_t *preset = (const dt_preset_row_t *)p->data;
+    const gint rowid = preset->rowid;
+    const gchar *name = preset->name;
+    const gchar *operation = preset->operation;
+    const gboolean autoapply = preset->autoapply;
+    const gchar *model = preset->model;
+    const gchar *maker = preset->maker;
+    const gchar *lens = preset->lens;
+    const float iso_min = preset->iso_min;
+    const float iso_max = preset->iso_max;
+    const float exposure_min = preset->exposure_min;
+    const float exposure_max = preset->exposure_max;
+    const float aperture_min = preset->aperture_min;
+    const float aperture_max = preset->aperture_max;
+    const int focal_length_min = preset->focal_length_min;
+    const int focal_length_max = preset->focal_length_max;
+    const gboolean writeprotect = preset->writeprotect;
 
     gchar *iso = NULL, *exposure = NULL, *aperture = NULL, *focal_length = NULL, *smaker = NULL, *smodel = NULL, *slens = NULL;
     int min, max;
@@ -940,7 +934,7 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
     dt_free(slens);
   }
   dt_free(last_module);
-  sqlite3_finalize(stmt);
+  g_list_free_full(presets, dt_preset_row_free);
 
   g_object_unref(lock_pixbuf);
   cairo_surface_destroy(lock_cst);
@@ -1173,18 +1167,10 @@ static gboolean tree_key_press_presets(GtkWidget *widget, GdkEventKey *event, gp
                        P_EDITABLE_COLUMN, &editable, -1);
     if(IS_NULL_PTR(editable))
     {
-      sqlite3_stmt *stmt;
-      gchar* operation = NULL;
-
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT name, operation FROM data.presets WHERE rowid = ?1",
-                              -1, &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rowid);
-      if(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        operation = g_strdup( (const char*)sqlite3_column_text(stmt,1));
-      }
-      sqlite3_finalize(stmt);
+      // the row's name is already in the tree model; only its operation is missing
+      gchar *operation = NULL;
+      int op_version = 0;
+      dt_preset_repository_get_identity(rowid, &operation, &op_version);
 
       dt_gui_presets_confirm_and_delete(_preferences_dialog, name, operation, rowid);
 
@@ -1272,28 +1258,21 @@ static void export_preset(GtkButton *button, gpointer data)
   if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
   {
     gchar *filedir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
-    sqlite3_stmt *stmt;
 
     // we have n+1 selects for saving presets, using single transaction for whole process saves us microlocks
     dt_database_start_transaction();
 
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT rowid, name, operation FROM data.presets WHERE writeprotect = 0",
-                                -1, &stmt, NULL);
-
-    while(sqlite3_step(stmt) == SQLITE_ROW)
+    GList *presets = dt_preset_repository_list_editable();
+    for(GList *p = presets; p; p = g_list_next(p))
     {
-      const gint rowid = sqlite3_column_int(stmt, 0);
-      const gchar *name = (gchar *)sqlite3_column_text(stmt, 1);
-      const gchar *operation = (gchar *)sqlite3_column_text(stmt, 2);
-      gchar* preset_name = g_strdup_printf("%s_%s", operation, name);
+      const dt_preset_identity_t *preset = (const dt_preset_identity_t *)p->data;
+      gchar *preset_name = g_strdup_printf("%s_%s", preset->operation, preset->name);
 
-      dt_presets_save_to_file(rowid, preset_name, filedir);
+      dt_presets_save_to_file(preset->rowid, preset_name, filedir);
 
       dt_free(preset_name);
     }
-
-    sqlite3_finalize(stmt);
+    g_list_free_full(presets, dt_preset_identity_free);
 
     dt_database_release_transaction();
 

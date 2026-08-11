@@ -394,6 +394,53 @@ void dt_preset_repository_delete_by_rowid_unprotected(const int rowid);
  *  startup so module code can regenerate them. */
 void dt_preset_repository_delete_shipped(void);
 
+/* ---------------------------------------------------------------------------------------
+ *  Listing presets for the Preferences dialog
+ *
+ *  The preferences tree shows every preset in the database, grouped by module, with the
+ *  auto-apply conditions rendered as ranges. These two return whole rows rather than a
+ *  cursor, because the caller builds GTK widgets from them and must not be stepping a
+ *  statement while it does.
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief One row of the Preferences preset tree, with its auto-apply conditions. */
+typedef struct dt_preset_row_t
+{
+  int rowid;
+  char *name;
+  char *operation;
+  gboolean autoapply;
+  char *model;
+  char *maker;
+  char *lens;
+  float iso_min, iso_max;
+  float exposure_min, exposure_max;
+  float aperture_min, aperture_max;
+  int focal_length_min, focal_length_max;  /**< stored as REAL, read as int, as the tree shows them */
+  gboolean writeprotect;
+} dt_preset_row_t;
+
+/** @brief Free one dt_preset_row_t. Suits g_list_free_full(). */
+void dt_preset_row_free(gpointer data);
+
+/** @brief Every preset, ordered by (operation, name) -- the grouping the tree relies on to
+ *  start a new module node whenever `operation` changes. */
+GList *dt_preset_repository_list_all(void);
+
+/** @brief Identity of one preset, for callers listing rather than loading. */
+typedef struct dt_preset_identity_t
+{
+  int rowid;
+  char *name;
+  char *operation;
+} dt_preset_identity_t;
+
+/** @brief Free one dt_preset_identity_t. Suits g_list_free_full(). */
+void dt_preset_identity_free(gpointer data);
+
+/** @brief Every preset the user may edit (`writeprotect = 0`), in row order. */
+GList *dt_preset_repository_list_editable(void);
+
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 void dt_preset_repository_cleanup(void);
 
