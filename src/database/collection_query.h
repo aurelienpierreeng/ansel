@@ -87,6 +87,22 @@ uint32_t dt_collection_query_count(void);
  *  query string, which required the text to leave the module. */
 uint64_t dt_collection_query_get_generation(void);
 
+/** @brief One module's identity, for the rule that searches by module name. */
+typedef struct dt_iop_name_row_t
+{
+  const char *operation;  /**< borrowed for the duration of the call */
+  const char *name;       /**< its localised display name */
+} dt_iop_name_row_t;
+
+/**
+ * @brief Fill `memory.darktable_iop_names`, the table the module-name rules join against.
+ *
+ * @details Must run before any collection query naming a module. The table lives here
+ * because these queries are its only readers; the localised names come from the module
+ * objects, which the caller owns.
+ */
+void dt_collection_query_set_iop_names(const dt_iop_name_row_t *rows, const size_t count);
+
 /** The first `limit` image ids of the collection, in collection order (-1 for all of them). */
 GList *dt_collection_query_get_images(const uint32_t limit);
 

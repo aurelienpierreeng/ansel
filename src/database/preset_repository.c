@@ -489,6 +489,74 @@ void dt_preset_repository_update_module_params(const char *operation, const char
   sqlite3_finalize(stmt);
 }
 
+void dt_preset_repository_set_module_version(const char *operation, const char *name,
+                                             const int op_version)
+{
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "UPDATE data.presets SET op_version=?1 WHERE operation=?2 AND name=?3",
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return;
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, op_version);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, name, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+void dt_preset_repository_set_blend_params(const char *operation, const char *name,
+                                           const int blendop_version, const void *blend_params,
+                                           const int blend_params_size)
+{
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "UPDATE data.presets "
+                                                                "SET blendop_version=?1, blendop_params=?2 "
+                                                                "WHERE operation=?3 AND name=?4",
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, blendop_version);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 2, blend_params, blend_params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+GList *dt_preset_repository_list_for_upgrade(const char *operation)
+{
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get_sqlite3_global(),
+      "SELECT name, op_version, op_params, blendop_version, blendop_params FROM data.presets WHERE operation = ?1",
+      -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return NULL;
+
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+
+  GList *presets = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_module_preset_t *p = g_malloc0(sizeof(dt_module_preset_t));
+    if(IS_NULL_PTR(p)) break;
+    p->name = _column_text(stmt, 0);
+    p->op_version = sqlite3_column_int(stmt, 1);
+    p->op_params = _column_blob(stmt, 2, &p->op_params_size);
+    p->blendop_version = sqlite3_column_int(stmt, 3);
+    p->blendop_params = _column_blob(stmt, 4, &p->blendop_params_size);
+    p->description = g_strdup("");
+    presets = g_list_prepend(presets, p);
+  }
+  sqlite3_finalize(stmt);
+
+  return g_list_reverse(presets);  // row order, as the cursor loop this replaced saw it
+}
+
 void dt_preset_repository_rename_module_preset(const char *operation, const int op_version,
                                                const char *old_name, const char *new_name,
                                                const char *description, const void *params,

@@ -1133,6 +1133,30 @@ uint32_t dt_collection_query_count(void)
   return _count;
 }
 
+void dt_collection_query_set_iop_names(const dt_iop_name_row_t *rows, const size_t count)
+{
+  if(IS_NULL_PTR(rows) || count == 0) return;
+
+  // Faster than building a huge VALUES string: reuse a prepared statement and bind per module.
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "INSERT INTO memory.darktable_iop_names (operation, name) VALUES (?1, ?2)",
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return;
+
+  dt_database_start_transaction();
+  for(size_t i = 0; i < count; i++)
+  {
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, rows[i].operation, -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, rows[i].name, -1, SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
+  }
+  dt_database_release_transaction();
+  sqlite3_finalize(stmt);
+}
+
 uint64_t dt_collection_query_get_generation(void)
 {
   // Bumped by every accepted recomposition. Callers that used to hash the query text to notice a
