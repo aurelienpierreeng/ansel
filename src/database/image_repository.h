@@ -264,19 +264,6 @@ int32_t dt_image_repository_find_group_for_pattern(const int32_t film_id,
 /** @brief Set @p imgid's `group_id`. */
 gboolean dt_image_repository_set_group(const int32_t imgid, const int32_t group_id);
 
-/**
- * @brief Image ids in group @p group_id that the current collection also contains.
- *
- * @param collection_query a SELECT yielding the collection's image ids, as
- *        dt_collection_get_query() returns it. Interpolated into an `IN (...)`: the caller
- *        owns whatever it puts in here, and nothing else in this file takes SQL as a
- *        parameter. It is the one query the collection module composes and this one has to
- *        run, and it goes away when the collection gets a repository of its own.
- * @param exclude_imgid an image to leave out, or -1 to leave nothing out.
- */
-GList *dt_image_repository_get_group_members_in_collection(const int32_t group_id,
-                                                           const char *collection_query,
-                                                           const int32_t exclude_imgid);
 
 /** @brief Move every member of @p from_group_id into @p to_group_id, except @p exclude_imgid. */
 void dt_image_repository_reassign_group(const int32_t from_group_id, const int32_t to_group_id,

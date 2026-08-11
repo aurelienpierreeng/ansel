@@ -41,6 +41,7 @@
 /** a class to manage a table of thumbnail for lighttable and filmstrip.  */
 
 #include "common/image_extensions.h"
+#include "database/collection_query.h"
 #include "common/act_on.h"
 #include "control/settings.h"
 #include "common/conf.h"
@@ -1092,10 +1093,11 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
 
 static gboolean _dt_collection_get_hash(dt_thumbtable_t *table)
 {
-  // Hash the collection query string
-  const char *const query = dt_collection_get_query(dt_collection_get_global());
-  size_t len = strlen(query);
-  uint64_t hash = dt_hash(5384, query, len);
+  // The collection query's generation stands in for the query text, which no longer leaves the
+  // database module. It advances on every recomposition, so it changes exactly when the text
+  // would have.
+  const uint64_t generation = dt_collection_query_get_generation();
+  uint64_t hash = dt_hash(5384, (char *)&generation, sizeof(uint64_t));
 
   // Factor in the number of images in the collection result
   uint32_t num_pics = dt_collection_get_count(dt_collection_get_global());
