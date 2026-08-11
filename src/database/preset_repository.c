@@ -51,6 +51,14 @@ static gchar *_column_text(sqlite3_stmt *stmt, const int col)
   return g_strdup(v ? v : "");
 }
 
+/* Unlike _column_text(), a NULL column comes back as NULL. For callers that pass the value
+ * on to something which distinguishes "no value" from "the empty string". */
+static gchar *_column_text_or_null(sqlite3_stmt *stmt, const int col)
+{
+  const char *v = (const char *)sqlite3_column_text(stmt, col);
+  return v ? g_strdup(v) : NULL;
+}
+
 static void *_column_blob(sqlite3_stmt *stmt, const int col, int *size)
 {
   const int n = sqlite3_column_bytes(stmt, col);
@@ -1177,6 +1185,96 @@ void dt_preset_repository_delete_shipped(void)
 {
   DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(),
                         "DELETE FROM data.presets WHERE writeprotect = 1", NULL, NULL, NULL);
+}
+
+void dt_preset_row_free(gpointer data)
+{
+  dt_preset_row_t *row = (dt_preset_row_t *)data;
+  if(IS_NULL_PTR(row)) return;
+  dt_free(row->name);
+  dt_free(row->operation);
+  dt_free(row->model);
+  dt_free(row->maker);
+  dt_free(row->lens);
+  dt_free(row);
+}
+
+GList *dt_preset_repository_list_all(void)
+{
+  GList *rows = NULL;
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT rowid, name, operation, autoapply, model, maker, lens, iso_min, "
+                              "iso_max, exposure_min, exposure_max, aperture_min, aperture_max, "
+                              "focal_length_min, focal_length_max, writeprotect FROM data.presets ORDER BY "
+                              "operation, name",
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return NULL;
+
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_preset_row_t *row = (dt_preset_row_t *)calloc(1, sizeof(dt_preset_row_t));
+    if(IS_NULL_PTR(row)) break;
+    row->rowid = sqlite3_column_int(stmt, 0);
+    // NULL is preserved rather than normalised to "" by _column_text(): the caller passes
+    // these straight to g_strcmp0()/g_strdup() and into a GtkTreeStore, all of which treat
+    // the two differently, and the loop this replaced handed them the raw column.
+    row->name = _column_text_or_null(stmt, 1);
+    row->operation = _column_text_or_null(stmt, 2);
+    row->autoapply = (sqlite3_column_int(stmt, 3) == 0 ? FALSE : TRUE);
+    row->model = _column_text_or_null(stmt, 4);
+    row->maker = _column_text_or_null(stmt, 5);
+    row->lens = _column_text_or_null(stmt, 6);
+    row->iso_min = sqlite3_column_double(stmt, 7);
+    row->iso_max = sqlite3_column_double(stmt, 8);
+    row->exposure_min = sqlite3_column_double(stmt, 9);
+    row->exposure_max = sqlite3_column_double(stmt, 10);
+    row->aperture_min = sqlite3_column_double(stmt, 11);
+    row->aperture_max = sqlite3_column_double(stmt, 12);
+    row->focal_length_min = sqlite3_column_double(stmt, 13);
+    row->focal_length_max = sqlite3_column_double(stmt, 14);
+    row->writeprotect = (sqlite3_column_int(stmt, 15) == 0 ? FALSE : TRUE);
+    rows = g_list_prepend(rows, row);
+  }
+  sqlite3_finalize(stmt);
+
+  // Row order, not reverse-row: the caller walks it once and starts a new module node every
+  // time `operation` changes, which only works in the ORDER BY's own order.
+  return g_list_reverse(rows);
+}
+
+void dt_preset_identity_free(gpointer data)
+{
+  dt_preset_identity_t *row = (dt_preset_identity_t *)data;
+  if(IS_NULL_PTR(row)) return;
+  dt_free(row->name);
+  dt_free(row->operation);
+  dt_free(row);
+}
+
+GList *dt_preset_repository_list_editable(void)
+{
+  GList *rows = NULL;
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT rowid, name, operation FROM data.presets WHERE writeprotect = 0",
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return NULL;
+
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_preset_identity_t *row = (dt_preset_identity_t *)calloc(1, sizeof(dt_preset_identity_t));
+    if(IS_NULL_PTR(row)) break;
+    row->rowid = sqlite3_column_int(stmt, 0);
+    row->name = _column_text_or_null(stmt, 1);
+    row->operation = _column_text_or_null(stmt, 2);
+    rows = g_list_prepend(rows, row);
+  }
+  sqlite3_finalize(stmt);
+
+  return g_list_reverse(rows);  // row order: the caller writes one file per row, in order
 }
 
 void dt_preset_repository_cleanup(void)
