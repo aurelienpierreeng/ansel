@@ -42,9 +42,9 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 #include "database/database.h"
 #include "database/history_repository.h"
-#endif
 #include <assert.h>
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
