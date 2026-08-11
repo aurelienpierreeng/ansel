@@ -25,8 +25,7 @@
 */
 
 #include "colorprofiles/colorspaces.h"
-#include "database/database.h"
-#include "database/sql_debug.h"
+#include "database/preset_repository.h"
 #include "develop/iop_order.h"
 #include "system/macros.h"
 #include "common/module_versioning.h"
@@ -510,23 +509,18 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
   gchar *iop_order_list = dt_ioppr_serialize_text_iop_order_list(dt_dev_get_global()->iop_order_list);
   gchar *name = NULL;
   int index = 0;
-  sqlite3_stmt *stmt;
 
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT op_params, name"
-                              " FROM data.presets"
-                              " WHERE operation='ioporder'"
-                              " ORDER BY writeprotect DESC, LOWER(name), rowid",
-                              -1, &stmt, NULL);
-  // clang-format on
+  // Shipped presets first, so two presets with identical content resolve to the shipped one --
+  // the loop below stops at the first match.
+  GList *presets = dt_preset_repository_list_all_versions("ioporder");
 
   /* Compare the current order text against every saved preset serialization. */
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = presets; l; l = g_list_next(l))
   {
-    const char *params = (const char *)sqlite3_column_blob(stmt, 0);
-    const int32_t params_len = sqlite3_column_bytes(stmt, 0);
-    const char *preset_name = (const char *)sqlite3_column_text(stmt, 1);
+    const dt_module_preset_t *pr = (const dt_module_preset_t *)l->data;
+    const char *params = (const char *)pr->op_params;
+    const int32_t params_len = pr->op_params_size;
+    const char *preset_name = pr->name;
     GList *preset_list = dt_ioppr_deserialize_iop_order_list(params, params_len);
     gchar *preset_text = dt_ioppr_serialize_text_iop_order_list(preset_list);
     g_list_free_full(preset_list, dt_free_gpointer);
@@ -543,8 +537,7 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
 
     dt_free(preset_text);
   }
-
-  sqlite3_finalize(stmt);
+  g_list_free_full(presets, dt_module_preset_free);
   dt_free(iop_order_list);
 
   if(name) return name;
@@ -576,21 +569,14 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->preset_combo), "__custom__", _("custom order"));
 
   gchar *active_id = g_strdup("__custom__");
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT name"
-                              " FROM data.presets"
-                              " WHERE operation='ioporder' AND op_version=?1"
-                              " ORDER BY writeprotect DESC, LOWER(name), rowid",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, self->version());
+
+  GList *presets = dt_preset_repository_list_for_version("ioporder", self->version());
 
   /* Rebuild the preset list in DB order and keep the current one selected. */
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = presets; l; l = g_list_next(l))
   {
-    const char *preset_name = (const char *)sqlite3_column_text(stmt, 0);
+    const dt_module_preset_t *pr = (const dt_module_preset_t *)l->data;
+    const char *preset_name = pr->name;
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->preset_combo), preset_name, preset_name);
     if(!g_strcmp0(current_name, preset_name))
     {
@@ -598,7 +584,7 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
       active_id = g_strdup(preset_name);
     }
   }
-  sqlite3_finalize(stmt);
+  g_list_free_full(presets, dt_module_preset_free);
 
   gtk_combo_box_set_active_id(GTK_COMBO_BOX(d->preset_combo), active_id);
   d->refreshing_toolbar = FALSE;

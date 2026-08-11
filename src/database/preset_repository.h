@@ -136,8 +136,15 @@ GList *dt_preset_repository_list_for_module(const char *operation, const int op_
                                             const gboolean shipped_first);
 
 /** @brief Every preset of @p operation at ANY version, with `rowid` and `op_version`
- *  filled in. Used by the startup pass that upgrades presets to the current version. */
+ *  filled in, SHIPPED FIRST then by name then by rowid.
+ *
+ *  The order is part of the contract: libs/ioporder.c takes the FIRST preset whose serialised
+ *  module order matches the current one, so two presets with identical content must resolve to
+ *  the shipped one. The startup upgrade pass acts per row by rowid and does not care. */
 GList *dt_preset_repository_list_all_versions(const char *operation);
+
+/** @brief As above, restricted to one @p op_version. Same columns, same order. */
+GList *dt_preset_repository_list_for_version(const char *operation, const int op_version);
 
 /** @brief TRUE when `(operation, op_version, name)` exists. */
 gboolean dt_preset_repository_module_preset_exists(const char *operation, const int op_version,
