@@ -100,6 +100,7 @@ FILE(GLOB SOURCE_FILES
   "common/gpx.c"
   "common/image.c"
   "caches/image_cache.c"
+  "database/collection_query.c"
   "database/colorlabel_repository.c"
   "database/selection_repository.c"
   "database/history_snapshot_repository.c"

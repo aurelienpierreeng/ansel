@@ -333,23 +333,6 @@ GList *dt_image_repository_get_group_members(const int32_t group_id, const int32
   return _collect_ids(stmt, exclude_imgid);
 }
 
-GList *dt_image_repository_get_group_members_in_collection(const int32_t group_id,
-                                                           const char *collection_query,
-                                                           const int32_t exclude_imgid)
-{
-  if(IS_NULL_PTR(collection_query)) return NULL;
-
-  sqlite3_stmt *stmt = NULL;
-  // clang-format off
-  gchar *query = g_strdup_printf("SELECT id"
-                                 "  FROM main.images"
-                                 "  WHERE group_id = %d AND id IN (%s)",
-                                 group_id, collection_query);
-  // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-  dt_free(query);
-  return _collect_ids(stmt, exclude_imgid);
-}
 
 void dt_image_repository_reassign_group(const int32_t from_group_id, const int32_t to_group_id,
                                         const int32_t exclude_imgid)

@@ -31,6 +31,7 @@
 #include "common/collection.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "database/collection_query.h"
 #include "database/image_repository.h"
 #include "caches/image_cache.h"
 
@@ -157,9 +158,8 @@ void dt_grouping_add_grouped_images(GList **images)
       dt_image_cache_read_release(image);
       if(!IS_NULL_PTR(dt_collection_get_global()))
       {
-        GList *members = dt_image_repository_get_group_members_in_collection(
-            img_group_id, dt_collection_get_query(dt_collection_get_global()),
-            GPOINTER_TO_INT(imgs->data));
+        GList *members = dt_collection_query_get_group_members(img_group_id,
+                                                               GPOINTER_TO_INT(imgs->data));
         for(GList *m = members; m; m = g_list_next(m))
           gimgs = g_list_prepend(gimgs, m->data);
         g_list_free(members);

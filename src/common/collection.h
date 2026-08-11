@@ -207,8 +207,6 @@ const dt_collection_params_t *dt_collection_params(const dt_collection_t *collec
 void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList **exif);
 /** get the sanitized makermodel for exif maker/model **/
 gchar *dt_collection_get_makermodel(const char *exif_maker, const char *exif_model);
-/** get the generated query for collection */
-const gchar *dt_collection_get_query(const dt_collection_t *collection);
 /** updates sql query for a collection. @return 1 if query changed. */
 int dt_collection_update(const dt_collection_t *collection);
 /** reset collection to default dummy selection */
