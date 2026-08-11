@@ -249,8 +249,8 @@ fi
 #                    dt_ioppr_get_iop_order_list_version() to rewrite main.history.iop_order.
 #                    That migration genuinely needs the module priority table; it is not a
 #                    stray include.
-database_handle_escapes_baseline=37
-database_sql_consumers_baseline=13
+database_handle_escapes_baseline=32
+database_sql_consumers_baseline=12
 database_conf_debug_baseline=0
 database_upcalls_baseline=1
 
