@@ -18943,10 +18943,10 @@ msgstr ""
 "Ctrl+click per includere solo le sotto località (suffisso `|%')"
 
 #: ../src/libs/collect.c:2233
-#, c-format
+#, no-c-format
 msgid "use `%' as wildcard and append `*' to match sub-folders"
 msgstr ""
-"Utilizzare `%‘ come carattere jolly e aggiungere `*’ per includere le sottocar"
+"Utilizzare `%' come carattere jolly e aggiungere `*' per includere le sottocar"
 "telle"
 
 #: ../src/libs/collect.c:2236
@@ -21231,10 +21231,10 @@ msgid_plural ""
 "do you really want to delete %d tags?\n"
 "%d images are assigned these tags!"
 msgstr[0] ""
-"Vuoi veramente eliminare l'etichetta '%s'?\n"
+"Vuoi veramente eliminare %d etichetta?\n"
 "A %d immagine è assegnata questa etichetta!"
 msgstr[1] ""
-"Vuoi veramente eliminare le etichetta '%s'?\n"
+"Vuoi veramente eliminare %d etichette?\n"
 "A %d immagini sono assegnate queste etichette!"
 
 #: ../src/libs/tagging.c:2117
@@ -21428,7 +21428,7 @@ msgid "suggestion"
 msgstr "Suggerimento"
 
 #: ../src/libs/tagging.c:3373
-#, c-format
+#, no-c-format
 msgid ""
 "level of confidence to include a tag in the suggestions list:\n"
 "0: all associated tags, 99: 99% matching tags,\n"
@@ -22498,7 +22498,7 @@ msgstr ""
 "su ciascun livello"
 
 #: ../src/iop/crystgrain.c:1467
-#, c-format
+#, no-c-format
 msgid ""
 "average crystal footprint at 100% zoom, clamped so zooming in does not "
 "enlarge it further"
