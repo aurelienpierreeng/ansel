@@ -602,8 +602,6 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc,
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc);
 /** returns the number of history entries in library for this image */
 uint32_t dt_image_altered(const int32_t imgid);
-/** cleanup cached statements */
-void dt_image_cleanup(void);
 
 /** Orientation every module after `flip` sees, for an image we already hold.
  *

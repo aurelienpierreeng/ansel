@@ -1782,7 +1782,6 @@ void dt_cleanup()
   dt_history_repository_cleanup();
   dt_dev_history_cleanup();
   dt_metadata_cleanup();
-  dt_image_cleanup();
   dt_tags_cleanup();
   dt_styles_cleanup();
 

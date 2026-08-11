@@ -90,6 +90,72 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt);
  *  when the leader leaves) and the image-cache updates that go with them.
  * ------------------------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------------------------
+ *  Identity lookups
+ *
+ *  Finding the row for a file on disk. Both of these answer -1 for "no such image", which is
+ *  what dt_image_invalid() tests.
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * @brief The image id for @p filename inside film roll @p film_id, or -1.
+ */
+int32_t dt_image_repository_find_by_film_and_filename(const int32_t film_id, const char *filename);
+
+/**
+ * @brief The image id for a full path, split into its @p folder and @p filename, or -1.
+ *
+ * @details Joins `main.film_rolls` on its folder rather than taking a film id, because the
+ * caller has a path and not a roll.
+ */
+int32_t dt_image_repository_find_by_folder_and_filename(const char *folder, const char *filename);
+
+/**
+ * @brief The `folder` of film roll @p film_id, or NULL. Caller owns it.
+ *
+ * @details Lives here rather than in a film repository because its callers start from an image
+ * and only ever want the roll behind it. When `common/film.c` is extracted, `main.film_rolls`
+ * gains an owner and this should become a call into it.
+ */
+char *dt_image_repository_get_film_folder(const int32_t film_id);
+
+/* ---------------------------------------------------------------------------------------
+ *  Versions, flags and the write timestamp
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief The duplicate version number of @p imgid, or 0. */
+int dt_image_repository_get_version(const int32_t imgid);
+
+/** @brief Set both `version` and `max_version` of @p imgid to @p version. */
+gboolean dt_image_repository_set_version(const int32_t imgid, const int version);
+
+/**
+ * @brief How many OTHER images share this image's film roll and filename and carry @p flag.
+ *
+ * @details Used to decide whether removing one local copy would orphan the others. Counts
+ * rows other than @p imgid itself; answers 1 when the query cannot be read, which is the
+ * conservative "assume someone else has one" the caller relied on.
+ */
+int dt_image_repository_count_others_with_flag(const int32_t imgid, const int flag);
+
+/** @brief Every image id whose `flags` carry @p flag, in row order. */
+GList *dt_image_repository_get_ids_with_flag(const int flag);
+
+/** @brief `main.images.write_timestamp` for @p imgid, or 0. */
+int64_t dt_image_repository_get_write_timestamp(const int32_t imgid);
+
+/** @brief Set `write_timestamp` of @p imgid to now. */
+void dt_image_repository_touch_write_timestamp(const int32_t imgid);
+
+/**
+ * @brief Delete @p imgid from `main.images` and `main.meta_data`.
+ *
+ * @details Foreign keys added in schema version 33 cascade the delete to every other table
+ * referencing the image, so these two statements are the whole removal. `main.meta_data` is
+ * listed explicitly because it predates the constraint.
+ */
+gboolean dt_image_repository_delete(const int32_t imgid);
+
 /**
  * @brief Image ids in group @p group_id.
  *
