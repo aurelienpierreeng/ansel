@@ -104,6 +104,7 @@ FILE(GLOB SOURCE_FILES
   "database/selection_repository.c"
   "database/history_snapshot_repository.c"
   "database/metadata_repository.c"
+  "database/film_repository.c"
   "database/history_repository.c"
   "database/style_repository.c"
   "database/tag_repository.c"

@@ -443,18 +443,6 @@ int32_t dt_image_repository_find_by_folder_and_filename(const char *folder, cons
   return id;
 }
 
-char *dt_image_repository_get_film_folder(const int32_t film_id)
-{
-  char *folder = NULL;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT folder FROM main.film_rolls WHERE id = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film_id);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-    folder = g_strdup((const char *)sqlite3_column_text(stmt, 0));
-  sqlite3_finalize(stmt);
-  return folder;
-}
 
 /* ---------------------------------------------------------------------------------------------
  * Versions, flags and the write timestamp

@@ -83,6 +83,7 @@
 #include "common/grouping.h"
 #include "common/history.h"
 #include "database/history_repository.h"
+#include "database/film_repository.h"
 #include "database/image_repository.h"
 #include "develop/history_merge.h"
 #include "common/history_snapshot.h"
@@ -541,7 +542,7 @@ const char *dt_image_film_roll_name(const char *path)
 
 void dt_image_film_roll_directory(const dt_image_t *img, char *pathname, size_t pathname_len)
 {
-  char *folder = dt_image_repository_get_film_folder(img->film_id);
+  char *folder = dt_film_repository_get_folder(img->film_id);
   if(folder)
   {
     g_strlcpy(pathname, folder, pathname_len);
@@ -558,7 +559,7 @@ void dt_image_film_roll(const dt_image_t *img, char *pathname, size_t pathname_l
     return;
   }
 
-  char *folder = dt_image_repository_get_film_folder(img->film_id);
+  char *folder = dt_film_repository_get_folder(img->film_id);
   if(folder)
   {
     g_strlcpy(pathname, dt_image_film_roll_name(folder), pathname_len);
@@ -1847,7 +1848,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
   dt_image_full_path(imgid,  oldimg,  sizeof(oldimg),  &from_cache, __FUNCTION__);
   gchar *newdir = NULL;
 
-  newdir = dt_image_repository_get_film_folder(filmid);
+  newdir = dt_film_repository_get_folder(filmid);
 
   gchar copysrcpath[PATH_MAX] = { 0 };
   gchar copydestpath[PATH_MAX] = { 0 };
@@ -2031,7 +2032,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
   gchar *oldFilename = NULL;
   gchar *newFilename = NULL;
 
-  newdir = dt_image_repository_get_film_folder(filmid);
+  newdir = dt_film_repository_get_folder(filmid);
 
   GFile *src = NULL, *dest = NULL;
   if(newdir)
