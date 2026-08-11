@@ -50,15 +50,12 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "database/database.h"
 #include "widgets/gdkkeys.h"
-#include "database/sql_debug.h"
+#include "database/metadata_repository.h"
 #include "common/conf.h"
 #include "widgets/label.h"
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
-
-static sqlite3_stmt *_metadata_update_stmt = NULL;
 #include "control/signal.h"
 
 #include "gui/application.h"
@@ -169,6 +166,29 @@ static void _fill_text_view(const uint32_t i, const uint32_t count, dt_lib_modul
   _text_set_italic(d->textview[i], multi);
 }
 
+/* The two per-key arrays _update() is filling, plus the selection size the row count is
+ * compared against. */
+typedef struct _selected_metadata_ctx_t
+{
+  GList **metadata;
+  uint32_t *metadata_count;
+  uint32_t imgs_count;
+} _selected_metadata_ctx_t;
+
+static void _selected_metadata_row(void *user_data, const int keyid, const char *value,
+                                   const uint32_t count)
+{
+  _selected_metadata_ctx_t *ctx = (_selected_metadata_ctx_t *)user_data;
+
+  // an empty or absent value is not a value: the panel would show a blank entry for it
+  if(IS_NULL_PTR(value) || value[0] == '\0') return;
+  if(keyid < 0 || (uint32_t)keyid >= DT_METADATA_NUMBER) return;
+
+  // count == imgs_count means every selected image agrees on this one value
+  ctx->metadata_count[keyid] = (count == ctx->imgs_count) ? 2 : 1;
+  ctx->metadata[keyid] = g_list_append(ctx->metadata[keyid], g_strdup(value));
+}
+
 static void _update(dt_lib_module_t *self)
 {
   dt_lib_cancel_postponed_update(self);
@@ -220,34 +240,9 @@ static void _update(dt_lib_module_t *self)
 
   if(imgs_count > 0)
   {
-    if(!_metadata_update_stmt)
-    {
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "SELECT m.key, m.value, COUNT(m.id) AS ct"
-                                  " FROM main.meta_data AS m"
-                                  " JOIN main.selected_images AS s ON s.imgid = m.id"
-                                  " GROUP BY m.key, m.value ORDER BY m.value",
-                                  -1, &_metadata_update_stmt, NULL);
-      // clang-format on
-    }
-    sqlite3_stmt *stmt = _metadata_update_stmt;
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
-
-    while(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      if(sqlite3_column_bytes(stmt, 1))
-      {
-        const uint32_t key = (uint32_t)sqlite3_column_int(stmt, 0);
-        if(key >= DT_METADATA_NUMBER)
-          continue;
-        char *value = g_strdup((char *)sqlite3_column_text(stmt, 1));
-        const uint32_t count = (uint32_t)sqlite3_column_int(stmt, 2);
-        metadata_count[key] = (count == imgs_count) ? 2 : 1;  // if = all images have the same metadata
-        metadata[key] = g_list_append(metadata[key], value);
-      }
-    }
+    _selected_metadata_ctx_t ctx = { .metadata = metadata, .metadata_count = metadata_count,
+                                     .imgs_count = imgs_count };
+    dt_metadata_repository_foreach_selected(_selected_metadata_row, &ctx);
   }
 
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
@@ -793,12 +788,6 @@ void gui_cleanup(dt_lib_module_t *self)
     g_list_free_full(d->metadata_list[i], dt_free_gpointer);
     d->metadata_list[i] = NULL;
   }
-  if(_metadata_update_stmt)
-  {
-    sqlite3_finalize(_metadata_update_stmt);
-    _metadata_update_stmt = NULL;
-  }
-
   g_list_free(d->last_act_on);
   d->last_act_on = NULL;
 
