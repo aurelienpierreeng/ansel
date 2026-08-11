@@ -483,6 +483,78 @@ int dt_image_repository_count_others_with_flag(const int32_t imgid, const int fl
   return result;
 }
 
+/** "1,2,3" for a list of image ids, or NULL when the list is empty.
+ *
+ *  Built from ints, so there is nothing to escape and nothing to bind: an id set cannot be a
+ *  bound parameter in SQLite, which is the trap the callers of these three fell into. */
+static char *_id_set(GList *imgids)
+{
+  if(IS_NULL_PTR(imgids)) return NULL;
+
+  GString *set = g_string_new(NULL);
+  for(GList *l = imgids; l; l = g_list_next(l))
+  {
+    if(l != imgids) g_string_append_c(set, ',');
+    g_string_append_printf(set, "%d", GPOINTER_TO_INT(l->data));
+  }
+  return g_string_free(set, FALSE);
+}
+
+GList *dt_image_repository_get_ids_with_flag_among(GList *imgids, const int flag)
+{
+  char *set = _id_set(imgids);
+  if(IS_NULL_PTR(set)) return NULL;
+
+  GList *ids = NULL;
+  sqlite3_stmt *stmt;
+  char *query = g_strdup_printf("SELECT id FROM main.images WHERE id IN (%s) AND flags&?1=?1", set);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, flag);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    ids = g_list_prepend(ids, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+  sqlite3_finalize(stmt);
+  dt_free(query);
+  dt_free(set);
+  return g_list_reverse(ids);   // row order
+}
+
+gboolean dt_image_repository_set_flag_among(GList *imgids, const int flag)
+{
+  char *set = _id_set(imgids);
+  if(IS_NULL_PTR(set)) return FALSE;
+
+  sqlite3_stmt *stmt;
+  char *query = g_strdup_printf("UPDATE main.images SET flags = (flags|?1) WHERE id IN (%s)", set);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, flag);
+  const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  dt_free(query);
+  dt_free(set);
+  return ok;
+}
+
+GList *dt_image_repository_get_full_paths(GList *imgids)
+{
+  char *set = _id_set(imgids);
+  if(IS_NULL_PTR(set)) return NULL;
+
+  GList *list = NULL;
+  sqlite3_stmt *stmt;
+  // clang-format off
+  char *query = g_strdup_printf("SELECT DISTINCT folder || '" G_DIR_SEPARATOR_S "' || filename FROM "
+                                "main.images i, main.film_rolls f "
+                                "ON i.film_id = f.id WHERE i.id IN (%s)", set);
+  // clang-format on
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    list = g_list_prepend(list, g_strdup((const gchar *)sqlite3_column_text(stmt, 0)));
+  sqlite3_finalize(stmt);
+  dt_free(query);
+  dt_free(set);
+  return g_list_reverse(list);  // list was built in reverse order, so un-reverse it
+}
+
 GList *dt_image_repository_get_ids_with_flag(const int flag)
 {
   GList *ids = NULL;

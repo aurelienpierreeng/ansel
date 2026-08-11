@@ -233,6 +233,22 @@ gboolean dt_image_repository_set_version(const int32_t imgid, const int version)
  */
 int dt_image_repository_count_others_with_flag(const int32_t imgid, const int flag);
 
+/**
+ * @brief Of the images in @p imgids, those whose `flags` carry @p flag, in row order.
+ *
+ * @details The id set is built into the statement as integers. Callers used to pass a
+ * comma-joined STRING bound to a single `IN (?)` parameter, which SQLite reads as ONE value:
+ * it matched a lone id and matched NOTHING for two or more.
+ */
+GList *dt_image_repository_get_ids_with_flag_among(GList *imgids, const int flag);
+
+/** @brief Set @p flag on every image in @p imgids. */
+gboolean dt_image_repository_set_flag_among(GList *imgids, const int flag);
+
+/** @brief "<folder>/<filename>" for every image in @p imgids, distinct, in row order.
+ *  Caller owns the strings. */
+GList *dt_image_repository_get_full_paths(GList *imgids);
+
 /** @brief Every image id whose `flags` carry @p flag, in row order. */
 GList *dt_image_repository_get_ids_with_flag(const int flag);
 
