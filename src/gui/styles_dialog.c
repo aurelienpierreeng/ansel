@@ -34,8 +34,10 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "common/selection.h"
+#include "common/image.h"
+#include "system/mem_alloc.h"
 #endif
-#include "database/sql_debug.h"
 #include "common/history.h"
 #include "common/styles.h"
 #include "control/control.h"
@@ -76,22 +78,11 @@ typedef enum _style_items_columns_t
 
 static int _single_selected_imgid()
 {
-  int32_t imgid = UNKNOWN_IMAGE;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
-                              NULL);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    if(imgid == UNKNOWN_IMAGE)
-      imgid = sqlite3_column_int(stmt, 0);
-    else
-    {
-      imgid = UNKNOWN_IMAGE;
-      break;
-    }
-  }
-  sqlite3_finalize(stmt);
-  return imgid;
+  // Exactly one selected image, or nothing. The length test must come FIRST: it null-checks the
+  // selection, dt_selection_get_first_id() does not.
+  return (dt_selection_get_length(dt_selection_get_global()) == 1)
+             ? dt_selection_get_first_id(dt_selection_get_global())
+             : UNKNOWN_IMAGE;
 }
 
 static gboolean _gui_styles_is_copy_module_order_set(dt_gui_styles_dialog_t *d)
