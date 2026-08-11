@@ -35,12 +35,15 @@ extern "C" {
 /** The collection query: which images the lighttable is currently showing, and in what order.
  *
  *  This is the one place in the tree that COMPOSES SQL rather than merely running it, and that
- *  is why it lives here. The rules come in as a `dt_collection_params_t` plus the rule-derived
- *  WHERE fragments; the SQL built from them never leaves this file. Callers ask for ids, counts
- *  and offsets.
+ *  is why it lives here. Rules arrive as rules -- a `dt_collection_params_t` and an array of
+ *  `dt_collection_rule_t` -- never as SQL. Turning each rule into a WHERE, joining them with
+ *  their conjunctions and assembling the query is this module's job, and none of that text
+ *  leaves the file. Callers ask for ids, counts and offsets.
  *
  *  Reading the user's rules out of conf stays in `common/collection.c`: this module reads no
- *  configuration, which is what lets it be reused against a different database.
+ *  configuration, which is what lets it be reused against a different database. For the same
+ *  reason anything presentational -- translating a module-order name, deciding whether a
+ *  metadata field is hidden -- is resolved by the caller and handed in.
  *
  *  There is no handle. `dt_collection_new()` has a single call site, so the collection is a
  *  singleton in practice and an argument no caller chooses is not a parameter.

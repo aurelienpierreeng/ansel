@@ -209,6 +209,9 @@ void dt_module_preset_free(gpointer data)
   dt_free(p->name);
   dt_free(p->description);
   dt_free(p->op_params);
+  // The IOP readers fill this one; a lib preset leaves it NULL. Missing it leaked the blend
+  // blob of every IOP preset row listed by gui/presets.c and libs/lib.c.
+  dt_free(p->blendop_params);
   dt_free(p);
 }
 

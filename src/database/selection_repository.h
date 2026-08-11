@@ -61,7 +61,10 @@ void dt_selection_repository_deselect_list(const char *ids);
 /** @brief Empty the selection. */
 void dt_selection_repository_clear(void);
 
-/** @brief Every selected image id, `GINT_TO_POINTER`, descending. Free with g_list_free(). */
+/** @brief Every selected image id, `GINT_TO_POINTER`, ASCENDING. Free with g_list_free().
+ *
+ *  The query orders DESC and the list is built by prepending, which flips it -- that is the
+ *  order the selection's in-memory mirror is kept in and what every caller expects. */
 GList *dt_selection_repository_get_all(void);
 
 /** @brief Drop selected images that are no longer in the current collection. */
