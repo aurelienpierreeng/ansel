@@ -269,6 +269,21 @@ GList *dt_tag_repository_get_suggestions(const uint32_t nb_selected, const int c
                                          const char *recent_tags, const int nb_recent);
 
 /** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
+/**
+ * @brief Do all of @p imgids carry exactly the same tags? The same categories?
+ *
+ * @details A tag is shared when every image in the set carries it, so the test is per tag:
+ * count the distinct images attached to it and compare against the size of the set. Any tag
+ * short of that means the images disagree. Tags flagged `DT_TF_CATEGORY` are answered
+ * separately because the panel shows them on their own row. Darktable's internal `darktable|*`
+ * namespace is excluded, as it always was.
+ *
+ * Both out-parameters are set to TRUE for an empty or unreadable set -- vacuously, nothing
+ * disagrees. Either may be NULL.
+ */
+void dt_tag_repository_get_agreement(GList *imgids, gboolean *same_tags,
+                                     gboolean *same_categories);
+
 void dt_tag_repository_cleanup(void);
 
 /** One row of dt_tag_repository_get_by_path_with_counts(). */

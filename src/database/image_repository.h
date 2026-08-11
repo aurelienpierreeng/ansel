@@ -331,6 +331,71 @@ dt_image_geo_point_t *dt_image_repository_get_collected_geo_points(const double 
                                                                    const double lat1, const double lat2,
                                                                    int *count);
 
+/* ---------------------------------------------------------------------------------------
+ *  Do these images agree?
+ * ------------------------------------------------------------------------------------- */
+
+/** Fields dt_image_repository_count_distinct_fields() reports on, IN THE ORDER IT RETURNS
+ *  THEM. This enumeration is the contract: its one consumer is a metadata panel whose own row
+ *  enumeration runs in the same order, and it checks the length it gets back against its own
+ *  before reading a single value. Append here and there, never insert. */
+typedef enum dt_image_field_t
+{
+  DT_IMAGE_FIELD_FILM_ROLL = 0,
+  DT_IMAGE_FIELD_FILM_ROLL_ID,
+  DT_IMAGE_FIELD_IMGID,          /**< always reported as differing: ids are unique by definition */
+  DT_IMAGE_FIELD_GROUP_ID,
+  DT_IMAGE_FIELD_FILENAME,
+  DT_IMAGE_FIELD_VERSION,
+  DT_IMAGE_FIELD_PATH,
+  DT_IMAGE_FIELD_LOCAL_COPY,
+  DT_IMAGE_FIELD_IMPORT_TIMESTAMP,
+  DT_IMAGE_FIELD_CHANGE_TIMESTAMP,
+  DT_IMAGE_FIELD_EXPORT_TIMESTAMP,
+  DT_IMAGE_FIELD_PRINT_TIMESTAMP,
+  DT_IMAGE_FIELD_FLAGS,
+  DT_IMAGE_FIELD_MODEL,
+  DT_IMAGE_FIELD_MAKER,
+  DT_IMAGE_FIELD_LENS,
+  DT_IMAGE_FIELD_APERTURE,
+  DT_IMAGE_FIELD_EXPOSURE,
+  DT_IMAGE_FIELD_EXPOSURE_BIAS,
+  DT_IMAGE_FIELD_FOCAL_LENGTH,
+  DT_IMAGE_FIELD_FOCUS_DISTANCE,
+  DT_IMAGE_FIELD_ISO,
+  DT_IMAGE_FIELD_DATETIME,
+  DT_IMAGE_FIELD_WIDTH,
+  DT_IMAGE_FIELD_HEIGHT,
+  DT_IMAGE_FIELD_EXPORT_WIDTH,
+  DT_IMAGE_FIELD_EXPORT_HEIGHT,
+  DT_IMAGE_FIELD_META_TITLE,     /**< the eight main.meta_data keys, in the panel's display order */
+  DT_IMAGE_FIELD_META_DESCRIPTION,
+  DT_IMAGE_FIELD_META_CREATOR,
+  DT_IMAGE_FIELD_META_PUBLISHER,
+  DT_IMAGE_FIELD_META_RIGHTS,
+  DT_IMAGE_FIELD_META_NOTES,
+  DT_IMAGE_FIELD_META_VERSION_NAME,
+  DT_IMAGE_FIELD_META_IMAGE_ID,
+  DT_IMAGE_FIELD_LATITUDE,
+  DT_IMAGE_FIELD_LONGITUDE,
+  DT_IMAGE_FIELD_ALTITUDE,
+  DT_IMAGE_FIELD_COUNT
+} dt_image_field_t;
+
+/**
+ * @brief How many DISTINCT values each ::dt_image_field_t takes over @p imgids.
+ *
+ * @details One value per field, so a caller can grey out whatever the images disagree on. A
+ * count above 1 means they disagree; 0 means nothing was read.
+ *
+ * The id set is built into the statement as integers, never bound to an `IN (?)` -- SQLite
+ * reads a bound comma-joined string as ONE value, which matches a lone id and matches nothing
+ * at all for two or more.
+ *
+ * @return a newly allocated array of ::DT_IMAGE_FIELD_COUNT ints, or NULL. Free with dt_free().
+ */
+int *dt_image_repository_count_distinct_fields(GList *imgids);
+
 /** @brief `main.images.write_timestamp` for @p imgid, or 0. */
 int64_t dt_image_repository_get_write_timestamp(const int32_t imgid);
 
