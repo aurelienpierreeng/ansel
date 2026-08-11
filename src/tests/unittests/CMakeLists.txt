@@ -11,6 +11,7 @@ set(DATABASE_UNIT_TESTS
   test_history_repository
   test_preset_repository
   test_tag_selection_metadata
+  test_metadata_notify
 )
 
 foreach(test ${DATABASE_UNIT_TESTS})
