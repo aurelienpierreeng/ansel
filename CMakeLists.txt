@@ -696,8 +696,12 @@ endif()
 # The DEFAULT is tolerant: a Debug machine without cmocka builds without tests and says so,
 # because several CI Debug runners are not provisioned for it. An EXPLICIT
 # -DBUILD_TESTING=ON stays a hard requirement.
+#
+# Linux only. Windows links every executable with -municode, so each test binary needs the
+# wWinMain wrapper wired up first; Apple's ld64 has no --wrap, so the cmocka mock tests can
+# never link there. Both platforms opt in explicitly once someone does that work.
 set(_build_testing_defaulted FALSE)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND "${BUILD_TESTING}" STREQUAL "")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND "${BUILD_TESTING}" STREQUAL "" AND NOT WIN32 AND NOT APPLE)
   set(BUILD_TESTING ON)
   set(_build_testing_defaulted TRUE)
 endif()

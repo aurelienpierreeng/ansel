@@ -25,7 +25,6 @@
 #include "common/image.h" // UNKNOWN_IMAGE
 #include "common/tags.h"  // DT_TF_CATEGORY
 
-#include <string.h>
 
 static void test_selection_lowest_id(void **state)
 {
