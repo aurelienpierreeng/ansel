@@ -77,7 +77,6 @@
 #include "common/history_actions.h"
 #include "develop/imageop.h"
 #include "common/collection.h"
-#include "database/sql_debug.h"
 #include "system/dtpthread.h"
 #include "common/exif.h"
 #include "common/file_location.h"
@@ -1280,160 +1279,12 @@ int32_t dt_image_duplicate(const int32_t imgid)
   return dt_image_duplicate_with_version(imgid, -1);
 }
 
-static int32_t _image_duplicate_with_version_ext(const int32_t imgid, const int32_t newversion)
-{
-  sqlite3_stmt *stmt;
-  int32_t newid = -1;
 
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT a.id"
-                              "  FROM main.images AS a JOIN main.images AS b"
-                              "  WHERE a.film_id = b.film_id AND a.filename = b.filename"
-                              "   AND b.id = ?1 AND a.version = ?2"
-                              "  ORDER BY a.id DESC",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, newversion);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    newid = sqlite3_column_int(stmt, 0);
-  }
-  sqlite3_finalize(stmt);
-
-  // requested version is already present in DB, so we just return it
-  if(newid != -1) return newid;
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2
-    (dt_database_get_sqlite3_global(),
-     "INSERT INTO main.images"
-     "  (id, group_id, film_id, width, height, filename, maker, model, lens, exposure,"
-     "   aperture, iso, focal_length, focus_distance, datetime_taken, flags,"
-     "   output_width, output_height, crop, raw_parameters, raw_denoise_threshold,"
-     "   raw_auto_bright_threshold, raw_black, raw_maximum,"
-     "   license, sha1sum, orientation, histogram, lightmap,"
-     "   longitude, latitude, altitude, color_matrix, colorspace, version, max_version, history_end,"
-     "   aspect_ratio, exposure_bias, import_timestamp)"
-     " SELECT NULL, group_id, film_id, width, height, filename, maker, model, lens,"
-     "       exposure, aperture, iso, focal_length, focus_distance, datetime_taken,"
-     "       flags, output_width, output_height, crop, raw_parameters, raw_denoise_threshold,"
-     "       raw_auto_bright_threshold, raw_black, raw_maximum,"
-     "       license, sha1sum, orientation, histogram, lightmap,"
-     "       longitude, latitude, altitude, color_matrix, colorspace, NULL, NULL, 0,"
-     "       aspect_ratio, exposure_bias, import_timestamp"
-     " FROM main.images WHERE id = ?1",
-     -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT a.id, a.film_id, a.filename, b.max_version"
-                              "  FROM main.images AS a JOIN main.images AS b"
-                              "  WHERE a.film_id = b.film_id AND a.filename = b.filename AND b.id = ?1"
-                              "  ORDER BY a.id DESC",
-    -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  int32_t film_id = UNKNOWN_IMAGE;
-  int32_t max_version = -1;
-  gchar *filename = NULL;
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    newid = sqlite3_column_int(stmt, 0);
-    film_id = sqlite3_column_int(stmt, 1);
-    filename = g_strdup((gchar *)sqlite3_column_text(stmt, 2));
-    max_version = sqlite3_column_int(stmt, 3);
-  }
-  sqlite3_finalize(stmt);
-
-  if(newid != -1)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "INSERT INTO main.color_labels (imgid, color)"
-                                "  SELECT ?1, color FROM main.color_labels WHERE imgid = ?2",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "INSERT INTO main.meta_data (id, key, value)"
-                                "  SELECT ?1, key, value FROM main.meta_data WHERE id = ?2",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "INSERT INTO main.tagged_images (imgid, tagid, position)"
-                                "  SELECT ?1, tagid, "
-                                "        (SELECT (IFNULL(MAX(position),0) & 0xFFFFFFFF00000000)"
-                                "         FROM main.tagged_images)"
-                                "         + (ROW_NUMBER() OVER (ORDER BY imgid) << 32)"
-                                " FROM main.tagged_images AS ti"
-                                " WHERE imgid = ?2",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "INSERT INTO main.module_order (imgid, iop_list, version)"
-                                "  SELECT ?1, iop_list, version FROM main.module_order WHERE imgid = ?2",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    // set version of new entry and max_version of all involved duplicates (with same film_id and filename)
-    // this needs to happen before we do anything with the image cache, as version isn't updated through the cache
-    const int32_t version = (newversion != -1) ? newversion : max_version + 1;
-    max_version = (newversion != -1) ? MAX(max_version, newversion) : max_version + 1;
-
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "UPDATE main.images SET version=?1 WHERE id = ?2",
-                                -1, &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, version);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, newid);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE main.images SET max_version=?1 WHERE film_id = ?2 AND filename = ?3", -1,
-                                &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, max_version);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, film_id);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, filename, -1, SQLITE_TRANSIENT);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    dt_free(filename);
-  }
-  return newid;
-}
 
 static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t newversion, const gboolean undo,
                                              const gboolean reload)
 {
-  const int32_t newid = _image_duplicate_with_version_ext(imgid, newversion);
+  const int32_t newid = dt_image_repository_duplicate(imgid, newversion);
 
   if(newid != -1)
   {
@@ -1632,7 +1483,7 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
       // dt_image_duplicate_with_version() as this version also set the group which
       // is using DT_IMAGE_CACHE_SAFE and so will write the .XMP. But we must avoid
       // this has the xmp for the duplicate is read just below.
-      newid = _image_duplicate_with_version_ext(id, version);
+      newid = dt_image_repository_duplicate(id, version);
       const dt_image_t *img = dt_image_cache_get(id, 'r');
       grpid = img->group_id;
       dt_image_cache_read_release(img);
@@ -1684,8 +1535,6 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     dt_free(ext);
     return 0;
   }
-  int rc;
-  sqlite3_stmt *stmt;
   // select from images; if found => return
   gchar *imgfname = g_path_get_basename(normalized_filename);
   int32_t id = dt_image_get_id(film_id, imgfname);
@@ -1718,30 +1567,8 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     dt_free(extra_file);
   }
 
-  //insert a v0 record (which may be updated later if no v0 xmp exists)
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2
-    (dt_database_get_sqlite3_global(),
-     "INSERT INTO main.images (id, film_id, filename, license, sha1sum, flags, version, "
-     "                         max_version, history_end, position, import_timestamp)"
-     " SELECT NULL, ?1, ?2, '', '', ?3, 0, 0, 0, (IFNULL(MAX(position),0) & 0xFFFFFFFF00000000)  + (1 << 32), ?4 "
-     " FROM images",
-     -1, &stmt, NULL);
-  // clang-format on
-
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film_id);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, imgfname, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, flags);
-  DT_DEBUG_SQLITE3_BIND_INT64(stmt, 4, dt_datetime_now_to_gtimespan());
-
-  rc = sqlite3_step(stmt);
-  if(rc != SQLITE_DONE)
-  {
-    fprintf(stderr, "sqlite3 error %d\n", rc);
-    sqlite3_finalize(stmt);
+  if(!dt_image_repository_insert_import(film_id, imgfname, flags, dt_datetime_now_to_gtimespan()))
     return 0;
-  }
-  sqlite3_finalize(stmt);
 
   id = dt_image_get_id(film_id, imgfname);
 
@@ -1756,21 +1583,11 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   // in case we are not a jpg check if we need to change group representative
   if(strcmp(ext, "jpg") != 0 && strcmp(ext, "jpeg") != 0)
   {
-    sqlite3_stmt *stmt2;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2
-      (dt_database_get_sqlite3_global(),
-       "SELECT group_id"
-       " FROM main.images"
-       " WHERE film_id = ?1 AND filename LIKE ?2 AND id = group_id", -1, &stmt2,
-      NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, film_id);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt2, 2, sql_pattern, -1, SQLITE_TRANSIENT);
+    const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, TRUE, id);
     // if we have a group already
-    if(sqlite3_step(stmt2) == SQLITE_ROW)
+    if(other_group != -1)
     {
-      int other_id = sqlite3_column_int(stmt2, 0);
+      int other_id = other_group;
       dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
       gchar *other_basename = g_strdup(other_img->filename);
       gchar *cc3 = other_basename + strlen(other_img->filename);
@@ -1783,20 +1600,16 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
       {
         other_img->group_id = id;
         dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
-        sqlite3_stmt *stmt3;
-        DT_DEBUG_SQLITE3_PREPARE_V2
-          (dt_database_get_sqlite3_global(),
-           "SELECT id FROM main.images WHERE group_id = ?1 AND id != ?1", -1, &stmt3, NULL);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt3, 1, other_id);
-        while(sqlite3_step(stmt3) == SQLITE_ROW)
+        GList *members = dt_image_repository_get_group_members(other_id, other_id);
+        for(GList *l = members; l; l = g_list_next(l))
         {
-          other_id = sqlite3_column_int(stmt3, 0);
+          other_id = GPOINTER_TO_INT(l->data);
           dt_image_t *group_img = dt_image_cache_get(other_id, 'w');
           group_img->group_id = id;
           dt_image_cache_write_release(group_img, DT_IMAGE_CACHE_SAFE);
         }
+        g_list_free(members);
         group_id = id;
-        sqlite3_finalize(stmt3);
       }
       else
       {
@@ -1810,35 +1623,13 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     {
       group_id = id;
     }
-    sqlite3_finalize(stmt2);
   }
   else
   {
-    sqlite3_stmt *stmt2;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2
-      (dt_database_get_sqlite3_global(),
-       "SELECT group_id"
-       " FROM main.images"
-       " WHERE film_id = ?1 AND filename LIKE ?2 AND id != ?3", -1, &stmt2, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, film_id);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt2, 2, sql_pattern, -1, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt2, 3, id);
-    if(sqlite3_step(stmt2) == SQLITE_ROW)
-      group_id = sqlite3_column_int(stmt2, 0);
-    else
-      group_id = id;
-    sqlite3_finalize(stmt2);
+    const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, FALSE, id);
+    group_id = (other_group != -1) ? other_group : id;
   }
-  DT_DEBUG_SQLITE3_PREPARE_V2
-    (dt_database_get_sqlite3_global(),
-     "UPDATE main.images SET group_id = ?1 WHERE id = ?2",
-     -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, group_id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, id);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  dt_image_repository_set_group(id, group_id);
 
   // printf("[image_import] importing `%s' to img id %d\n", imgfname, id);
 
@@ -2056,12 +1847,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
   dt_image_full_path(imgid,  oldimg,  sizeof(oldimg),  &from_cache, __FUNCTION__);
   gchar *newdir = NULL;
 
-  sqlite3_stmt *film_stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT folder FROM main.film_rolls WHERE id = ?1",
-                              -1, &film_stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(film_stmt, 1, filmid);
-  if(sqlite3_step(film_stmt) == SQLITE_ROW) newdir = g_strdup((gchar *)sqlite3_column_text(film_stmt, 0));
-  sqlite3_finalize(film_stmt);
+  newdir = dt_image_repository_get_film_folder(filmid);
 
   gchar copysrcpath[PATH_MAX] = { 0 };
   gchar copydestpath[PATH_MAX] = { 0 };
@@ -2114,25 +1900,11 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
     {
       _move_text_sidecar_if_present(oldimg, newimg, FALSE);
 
-      // statement for getting ids of the image to be moved and its duplicates
-      sqlite3_stmt *duplicates_stmt;
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2
-        (dt_database_get_sqlite3_global(),
-         "SELECT id"
-         " FROM main.images"
-         " WHERE filename IN (SELECT filename FROM main.images WHERE id = ?1)"
-         "   AND film_id IN (SELECT film_id FROM main.images WHERE id = ?1)",
-         -1, &duplicates_stmt, NULL);
-      // clang-format on
-
       // first move xmp files of image and duplicates
-      GList *dup_list = NULL;
-      DT_DEBUG_SQLITE3_BIND_INT(duplicates_stmt, 1, imgid);
-      while(sqlite3_step(duplicates_stmt) == SQLITE_ROW)
+      GList *dup_list = dt_image_repository_get_duplicate_ids(imgid);
+      for(GList *l = dup_list; l; l = g_list_next(l))
       {
-        const int32_t id = sqlite3_column_int(duplicates_stmt, 0);
-        dup_list = g_list_prepend(dup_list, GINT_TO_POINTER(id));
+        const int32_t id = GPOINTER_TO_INT(l->data);
         gchar oldxmp[PATH_MAX] = { 0 }, newxmp[PATH_MAX] = { 0 };
         g_strlcpy(oldxmp, oldimg, sizeof(oldxmp));
         g_strlcpy(newxmp, newimg, sizeof(newxmp));
@@ -2149,9 +1921,6 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
         g_object_unref(goldxmp);
         g_object_unref(gnewxmp);
       }
-      sqlite3_finalize(duplicates_stmt);
-
-      dup_list = g_list_reverse(dup_list);  // list was built in reverse order, so un-reverse it
 
       // then update database and cache
       // if update was performed in above loop, dt_image_path_append_version()
@@ -2256,19 +2025,13 @@ int32_t dt_image_move(const int32_t imgid, const int32_t filmid)
 int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gchar *newname)
 {
   int32_t newid = -1;
-  sqlite3_stmt *stmt;
   gchar srcpath[PATH_MAX] = { 0 };
   gchar *newdir = NULL;
-  gchar *filename = NULL;
   gboolean from_cache = FALSE;
   gchar *oldFilename = NULL;
   gchar *newFilename = NULL;
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT folder FROM main.film_rolls WHERE id = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
-  if(sqlite3_step(stmt) == SQLITE_ROW) newdir = g_strdup((gchar *)sqlite3_column_text(stmt, 0));
-  sqlite3_finalize(stmt);
+  newdir = dt_image_repository_get_film_folder(filmid);
 
   GFile *src = NULL, *dest = NULL;
   if(newdir)
@@ -2321,182 +2084,18 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
         dt_free(dest_image_path);
       }
 
-      // update database
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2
-        (dt_database_get_sqlite3_global(),
-         "INSERT INTO main.images"
-         "  (id, group_id, film_id, width, height, filename, maker, model, lens, exposure,"
-         "   aperture, iso, focal_length, focus_distance, datetime_taken, flags,"
-         "   output_width, output_height, crop, raw_parameters, raw_denoise_threshold,"
-         "   raw_auto_bright_threshold, raw_black, raw_maximum,"
-         "   license, sha1sum, orientation, histogram, lightmap,"
-         "   longitude, latitude, altitude, color_matrix, colorspace, version, max_version,"
-         "   aspect_ratio, exposure_bias)"
-         " SELECT NULL, group_id, ?1 as film_id, width, height, ?2 as filename, maker, model, lens,"
-         "        exposure, aperture, iso, focal_length, focus_distance, datetime_taken,"
-         "        flags, width, height, crop, raw_parameters, raw_denoise_threshold,"
-         "        raw_auto_bright_threshold, raw_black, raw_maximum,"
-         "        license, sha1sum, orientation, histogram, lightmap,"
-         "        longitude, latitude, altitude, color_matrix, colorspace, -1, -1,"
-         "        aspect_ratio, exposure_bias"
-         " FROM main.images"
-         " WHERE id = ?3",
-        -1, &stmt, NULL);
-      // clang-format on
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
-      DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, newFilename, -1, SQLITE_TRANSIENT);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, imgid);
-      sqlite3_step(stmt);
-      sqlite3_finalize(stmt);
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2
-        (dt_database_get_sqlite3_global(),
-         "SELECT a.id, a.filename"
-         " FROM main.images AS a"
-         " JOIN main.images AS b"
-         "   WHERE a.film_id = ?1 AND a.filename = ?2 AND b.filename = ?3 AND b.id = ?4"
-         "   ORDER BY a.id DESC",
-         -1, &stmt, NULL);
-      // clang-format on
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
-      DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, newFilename, -1, SQLITE_TRANSIENT);
-      DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, oldFilename, -1, SQLITE_TRANSIENT);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, imgid);
-
-      if(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        newid = sqlite3_column_int(stmt, 0);
-        filename = g_strdup((gchar *)sqlite3_column_text(stmt, 1));
-      }
-      sqlite3_finalize(stmt);
+      newid = dt_image_repository_copy_to_film(imgid, filmid, newFilename, oldFilename);
 
       if(newid != -1)
       {
         // also copy over on-disk thumbnails, if any
         dt_mipmap_cache_copy_thumbnails(newid, imgid);
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "INSERT INTO main.color_labels (imgid, color)"
-                                    " SELECT ?1, color"
-                                    " FROM main.color_labels"
-                                    " WHERE imgid = ?2",
-                                    -1, &stmt, NULL);
-        // clang-format on
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "INSERT INTO main.meta_data (id, key, value)"
-                                    " SELECT ?1, key, value"
-                                    " FROM main.meta_data"
-                                    " WHERE id = ?2",
-                                    -1, &stmt, NULL);
-        // clang-format on
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "INSERT INTO main.tagged_images (imgid, tagid, position)"
-                                    " SELECT ?1, tagid, "
-                                    "        (SELECT (IFNULL(MAX(position),0) & 0xFFFFFFFF00000000)"
-                                    "         FROM main.tagged_images)"
-                                    "         + (ROW_NUMBER() OVER (ORDER BY imgid) << 32)"
-                                    " FROM main.tagged_images AS ti"
-                                    " WHERE imgid = ?2",
-                                    -1, &stmt, NULL);
-        // clang-format on
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-
-        // get max_version of image duplicates in destination filmroll
-        int32_t max_version = -1;
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2
-          (dt_database_get_sqlite3_global(),
-           "SELECT MAX(a.max_version)"
-           " FROM main.images AS a"
-           " JOIN main.images AS b"
-           "   WHERE a.film_id = b.film_id AND a.filename = b.filename AND b.id = ?1",
-           -1, &stmt, NULL);
-        // clang-format on
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-
-        if(sqlite3_step(stmt) == SQLITE_ROW) max_version = sqlite3_column_int(stmt, 0);
-        sqlite3_finalize(stmt);
-
-        // set version of new entry and max_version of all involved duplicates (with same film_id and
-        // filename)
-        max_version = (max_version >= 0) ? max_version + 1 : 0;
-        int32_t version = max_version;
-
-        DT_DEBUG_SQLITE3_PREPARE_V2
-          (dt_database_get_sqlite3_global(),
-           "UPDATE main.images SET version=?1 WHERE id = ?2", -1, &stmt, NULL);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, version);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, newid);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-
-        DT_DEBUG_SQLITE3_PREPARE_V2
-          (dt_database_get_sqlite3_global(),
-           "UPDATE main.images SET max_version=?1 WHERE film_id = ?2 AND filename = ?3",
-           -1, &stmt, NULL);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, max_version);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, filmid);
-        DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, filename, -1, SQLITE_TRANSIENT);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-
-        // image group handling follows
-        // get group_id of potential image duplicates in destination filmroll
-        int32_t new_group_id = -1;
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2
-          (dt_database_get_sqlite3_global(),
-           "SELECT DISTINCT a.group_id"
-           " FROM main.images AS a"
-           " JOIN main.images AS b"
-           "   WHERE a.film_id = b.film_id AND a.filename = b.filename"
-           "     AND b.id = ?1 AND a.id != ?1",
-           -1, &stmt, NULL);
-        // clang-format on
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newid);
-
-        if(sqlite3_step(stmt) == SQLITE_ROW) new_group_id = sqlite3_column_int(stmt, 0);
-
-        // then check if there are further duplicates belonging to different group(s)
-        if(sqlite3_step(stmt) == SQLITE_ROW) new_group_id = -1;
-        sqlite3_finalize(stmt);
-
-        // rationale:
-        // if no group exists or if the image duplicates belong to multiple groups, then the
-        // new image builds a group of its own, else it is added to the (one) existing group
-        if(new_group_id == -1) new_group_id = newid;
-
-        // make copied image belong to a group
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "UPDATE main.images SET group_id=?1 WHERE id = ?2", -1, &stmt, NULL);
-
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, new_group_id);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, newid);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
 
         dt_history_copy_and_paste_on_image(imgid, newid, NULL, TRUE, DT_HISTORY_MERGE_REPLACE, FALSE, NULL);
 
         dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                                    NULL);
       }
-
-      dt_free(filename);
     }
     else
     {

@@ -91,6 +91,48 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt);
  * ------------------------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------------------------
+ *  Duplicating and copying a row, with everything that hangs off it
+ *
+ *  An image is one `main.images` row plus satellites in `main.color_labels`,
+ *  `main.meta_data`, `main.tagged_images` and `main.module_order`. Copying one means copying
+ *  all five, in one place, or the copy is silently partial -- which is why these are single
+ *  calls rather than a set of per-table ones the caller would have to remember to make.
+ * ------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Duplicate @p imgid as a new version, returning the new image id (-1 on failure).
+ *
+ * @param newversion the version to give the duplicate, or -1 for "one past the current max".
+ *        If that version already exists for this file, its id is returned and NOTHING is
+ *        written -- the call is idempotent per version.
+ *
+ * @warning History is NOT copied. Callers that then paste history onto the duplicate must use
+ *          dt_image_duplicate_no_reload() and issue their own collection reload once, after
+ *          the paste -- otherwise the lighttable can render the duplicate in its momentary
+ *          historyless state and cache that render.
+ */
+int32_t dt_image_repository_duplicate(const int32_t imgid, const int32_t newversion);
+
+/**
+ * @brief Every image id sharing @p imgid's film roll and filename, itself included, in row
+ *        order -- an image and its duplicates.
+ */
+GList *dt_image_repository_get_duplicate_ids(const int32_t imgid);
+
+/**
+ * @brief Copy @p imgid into film roll @p filmid under @p new_filename, returning the new id.
+ *
+ * @details The database half of "copy an image to another folder": the row, its four satellite
+ * tables, the version and max_version of every duplicate sharing the destination name, and the
+ * group the copy joins. Moving the file and copying its history are the caller's.
+ *
+ * @param old_filename @p imgid's current filename, needed to tell the freshly inserted row
+ *        apart from any pre-existing image of the same name in the destination roll.
+ */
+int32_t dt_image_repository_copy_to_film(const int32_t imgid, const int32_t filmid,
+                                         const char *new_filename, const char *old_filename);
+
+/* ---------------------------------------------------------------------------------------
  *  Identity lookups
  *
  *  Finding the row for a file on disk. Both of these answer -1 for "no such image", which is
@@ -163,6 +205,33 @@ gboolean dt_image_repository_delete(const int32_t imgid);
  * @return a `GList` of ids as `GINT_TO_POINTER`, in database order. Free with g_list_free().
  */
 GList *dt_image_repository_get_group_members(const int32_t group_id, const int32_t exclude_imgid);
+
+/**
+ * @brief Insert a bare row for a file being imported, returning TRUE on success.
+ *
+ * @details Everything but the identity is left at its default and filled in later from EXIF
+ * and the sidecar. `position` takes the next free slot at the end of the collection order.
+ * The row's id is not returned: the caller finds it with
+ * dt_image_repository_find_by_film_and_filename(), which is what the original did.
+ */
+gboolean dt_image_repository_insert_import(const int32_t film_id, const char *filename,
+                                           const int flags, const int64_t import_timestamp);
+
+/**
+ * @brief The group leader of an existing image in @p film_id matching @p filename_pattern
+ *        (a LIKE pattern), or -1.
+ *
+ * @details Used at import to decide whether the file joins an existing group of same-basename
+ * images. Two questions, one per caller: @p leader_only TRUE asks for a row that IS its own
+ * group leader; FALSE asks for any row's group, excluding @p exclude_imgid.
+ */
+int32_t dt_image_repository_find_group_for_pattern(const int32_t film_id,
+                                                   const char *filename_pattern,
+                                                   const gboolean leader_only,
+                                                   const int32_t exclude_imgid);
+
+/** @brief Set @p imgid's `group_id`. */
+gboolean dt_image_repository_set_group(const int32_t imgid, const int32_t group_id);
 
 /**
  * @brief Image ids in group @p group_id that the current collection also contains.
