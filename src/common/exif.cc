@@ -113,8 +113,8 @@
 #include "caches/image_cache.h"
 #include "imageio/imageio_core.h"
 #include "common/exif.h"
-#include "imageio/imageio_jpeg.h"
 #include "metadata/metadata.h"
+#include "metadata/notify.h"
 #include "metadata/tags.h"
 #include "develop/iop_order.h"
 #include "common/variables.h"
@@ -128,7 +128,6 @@
 #include "database/colorlabel_repository.h"
 #include "common/datetime.h"
 #include "common/conf.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/blend.h"
 #include "develop/masks.h"
@@ -711,7 +710,7 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
         dt_free(tag);
         ++pos;
       }
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+      dt_metadata_tags_changed();
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Caption"))
     {
@@ -4564,7 +4563,9 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
       {
         if(end > 1000000)
         {
-          dt_control_log(_("The XMP file \n'%s'\n weighs %.2f MB. Writing it will take some time."), filename, (float)end / 1000000);
+          dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE,
+                             _("The XMP file \n'%s'\n weighs %.2f MB. Writing it will take some time."),
+                             filename, (float)end / 1000000);
           fprintf(stdout, "The XMP file '%s' weighs %.2f MB. Writing it will take some time.\n", filename, (float)end / 1000000);
         }
 
@@ -4574,7 +4575,8 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
       else
       {
         fprintf(stderr, "cannot read xmp file '%s': '%s'\n", filename, strerror(errno));
-        dt_control_log(_("cannot read xmp file '%s': '%s'"), filename, strerror(errno));
+        dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE, _("cannot read xmp file '%s': '%s'"),
+                           filename, strerror(errno));
       }
 
       Exiv2::DataBuf buf = Exiv2::readFile(WIDEN(filename));
@@ -4630,7 +4632,8 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
       else
       {
         fprintf(stderr, "cannot write xmp file '%s': '%s'\n", filename, strerror(errno));
-        dt_control_log(_("cannot write xmp file '%s': '%s'"), filename, strerror(errno));
+        dt_metadata_notify(DT_METADATA_NOTICE_MESSAGE, _("cannot write xmp file '%s': '%s'"),
+                           filename, strerror(errno));
         return -1;
       }
     }
