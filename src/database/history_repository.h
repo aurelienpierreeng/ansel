@@ -188,6 +188,52 @@ typedef void (*dt_history_repository_mask_cb)(void *user_data, const int num, co
 void dt_history_repository_foreach_mask_item(const int32_t imgid,
                                              dt_history_repository_mask_cb cb, void *user_data);
 
+/* ------------------------------------------------------------------------------------------
+ * main.module_order
+ *
+ * Which order the modules run in for one image: a version from ::dt_iop_order_t, plus -- when
+ * that version is CUSTOM, or when the image carries multiple instances of a module -- the
+ * serialized list itself. One row per image, or no row at all, which is a meaningful state:
+ * it means nobody has chosen, and the caller picks a built-in default from the image's kind.
+ * ------------------------------------------------------------------------------------------ */
+
+/** @brief @p imgid's stored order version.
+ *
+ *  @return FALSE when the image has no row, leaving @p version untouched. That is the caller's
+ *  cue to derive a default rather than trust a zero. */
+gboolean dt_history_repository_get_module_order_version(const int32_t imgid, int *version);
+
+/** @brief Whether @p imgid has a `main.module_order` row at all, whatever it says.
+ *
+ *  @details Same table and same predicate as
+ *  dt_history_repository_get_module_order_version(); it just discards the value. */
+gboolean dt_history_repository_has_module_order(const int32_t imgid);
+
+/** @brief Whether @p imgid's row stores a serialized list, i.e. `iop_list IS NOT NULL`. */
+gboolean dt_history_repository_has_custom_module_order(const int32_t imgid);
+
+/** @brief One `main.module_order` row. */
+typedef struct dt_module_order_row_t
+{
+  int version;      /**< a ::dt_iop_order_t value */
+  char *iop_list;   /**< the serialized list, or NULL when the column is NULL. Caller owns it. */
+} dt_module_order_row_t;
+
+/** @brief Read @p imgid's row. FALSE when there is none, and @p row is then left zeroed. */
+gboolean dt_history_repository_get_module_order(const int32_t imgid, dt_module_order_row_t *row);
+
+/** @brief Release what dt_history_repository_get_module_order() allocated. */
+void dt_module_order_row_cleanup(dt_module_order_row_t *row);
+
+/** @brief Store @p imgid's order: @p version, and @p iop_list serialized or NULL.
+ *
+ *  @details Two statements, as the caller's own two-step was: INSERT OR REPLACE a bare row so
+ *  that one exists, then UPDATE it. Kept that shape rather than collapsed into a single
+ *  INSERT OR REPLACE carrying the values, because the row this replaces is deleted either way
+ *  and the cascade that follows is worth leaving exactly where it was. */
+gboolean dt_history_repository_set_module_order(const int32_t imgid, const int version,
+                                                const char *iop_list);
+
 /** finalise every cached statement. Must run before the connection closes. */
 void dt_history_repository_cleanup(void);
 

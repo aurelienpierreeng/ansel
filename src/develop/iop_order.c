@@ -39,7 +39,7 @@
 
 #include "develop/iop_order.h"
 #include "common/styles.h"
-#include "database/sql_debug.h"
+#include "database/history_repository.h"
 #include "common/deprecations.h"
 #include "common/image.h"
 #include "caches/image_cache.h"
@@ -811,19 +811,12 @@ GList *dt_ioppr_insert_missing_modules(GList *iop_order_list)
 dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid)
 {
   dt_iop_order_t iop_order_version = DT_IOP_ORDER_ANSEL_RAW;
-  gboolean has_stored_order = FALSE;
 
   // check current iop order version
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT version FROM main.module_order WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    iop_order_version = sqlite3_column_int(stmt, 0);
-    has_stored_order = TRUE;
-  }
-  sqlite3_finalize(stmt);
+  int stored_version = 0;
+  const gboolean has_stored_order
+      = dt_history_repository_get_module_order_version(imgid, &stored_version);
+  if(has_stored_order) iop_order_version = stored_version;
 
   if(!has_stored_order && imgid > 0 && !!dt_image_cache_is_ready())
   {
@@ -1026,41 +1019,17 @@ gboolean dt_ioppr_has_multiple_instances(GList *iop_order_list)
  */
 static gboolean dt_ioppr_write_iop_order(const dt_iop_order_t kind, GList *iop_order_list, const int32_t imgid)
 {
-  sqlite3_stmt *stmt;
+  // The list is stored verbatim for a custom order, and also whenever the image carries more
+  // than one instance of some module -- a built-in version number alone cannot describe that.
+  // Otherwise the version is the whole answer and the column stays NULL.
+  const gboolean store_list = (kind == DT_IOP_ORDER_CUSTOM
+                               || dt_ioppr_has_multiple_instances(iop_order_list));
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT OR REPLACE INTO main.module_order VALUES (?1, 0, NULL)", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) != SQLITE_DONE) return FALSE;
-  sqlite3_finalize(stmt);
+  gchar *iop_list_txt = store_list ? dt_ioppr_serialize_text_iop_order_list(iop_order_list) : NULL;
+  const gboolean ok = dt_history_repository_set_module_order(imgid, kind, iop_list_txt);
+  dt_free(iop_list_txt);
 
-  if(kind == DT_IOP_ORDER_CUSTOM || dt_ioppr_has_multiple_instances(iop_order_list))
-  {
-    gchar *iop_list_txt = dt_ioppr_serialize_text_iop_order_list(iop_order_list);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE main.module_order SET version = ?2, iop_list = ?3 WHERE imgid = ?1", -1,
-                                &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, kind);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, iop_list_txt, -1, SQLITE_TRANSIENT);
-    if(sqlite3_step(stmt) != SQLITE_DONE) return FALSE;
-    sqlite3_finalize(stmt);
-
-    dt_free(iop_list_txt);
-  }
-  else
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE main.module_order SET version = ?2, iop_list = NULL WHERE imgid = ?1", -1,
-                                &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, kind);
-    if(sqlite3_step(stmt) != SQLITE_DONE) return FALSE;
-    sqlite3_finalize(stmt);
-  }
-
-  return TRUE;
+  return ok;
 }
 
 gboolean dt_ioppr_write_iop_order_list(GList *iop_order_list, const int32_t imgid)
@@ -1125,25 +1094,7 @@ GList *dt_ioppr_get_iop_order_list_version(dt_iop_order_t version)
 
 gboolean dt_ioppr_has_iop_order_list(int32_t imgid)
 {
-  gboolean result = FALSE;
-  sqlite3_stmt *stmt;
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT version, iop_list"
-                              " FROM main.module_order"
-                              " WHERE imgid=?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    result = (sqlite3_column_type(stmt, 1) != SQLITE_NULL);
-  }
-
-  sqlite3_finalize(stmt);
-
-  return result;
+  return dt_history_repository_has_custom_module_order(imgid);
 }
 
 GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
@@ -1152,29 +1103,20 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
 
   if(imgid > 0)
   {
-    sqlite3_stmt *stmt;
-
     // we read the iop-order-list in the preset table, the actual version is
     // the first int32_t serialized into the io_params. This is then a sequential
     // search, but there will not be many such presets and we do call this routine
     // only when loading an image and when changing the iop-order.
 
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT version, iop_list"
-                                " FROM main.module_order"
-                                " WHERE imgid=?1", -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-    if(sqlite3_step(stmt) == SQLITE_ROW)
+    dt_module_order_row_t row = { 0 };
+    if(dt_history_repository_get_module_order(imgid, &row))
     {
-      const dt_iop_order_t version = sqlite3_column_int(stmt, 0);
-      const gboolean has_iop_list = (sqlite3_column_type(stmt, 1) != SQLITE_NULL);
+      const dt_iop_order_t version = row.version;
+      const gboolean has_iop_list = !IS_NULL_PTR(row.iop_list);
 
       if(version == DT_IOP_ORDER_CUSTOM || has_iop_list)
       {
-        const char *buf = (char *)sqlite3_column_text(stmt, 1);
+        const char *buf = row.iop_list;
         if(buf) iop_order_list = dt_ioppr_deserialize_text_iop_order_list(buf);
 
         if(!iop_order_list)
@@ -1223,7 +1165,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
       }
     }
 
-    sqlite3_finalize(stmt);
+    dt_module_order_row_cleanup(&row);
   }
 
   // Fall back to the image-format default order when no module_order row exists
@@ -1369,17 +1311,7 @@ void dt_ioppr_set_default_iop_order(dt_develop_t *dev, const int32_t imgid)
   // First check whether the image already owns an order in DB. If it does not,
   // choose the built-in order from dev->image_storage, which was just refreshed
   // by the darkroom/history caller and is the image state used by module reloads.
-  gboolean has_stored_order = FALSE;
-  if(imgid > 0)
-  {
-    sqlite3_stmt *stmt;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT 1 FROM main.module_order WHERE imgid = ?1", -1,
-                                &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    has_stored_order = (sqlite3_step(stmt) == SQLITE_ROW);
-    sqlite3_finalize(stmt);
-  }
+  const gboolean has_stored_order = dt_history_repository_has_module_order(imgid);
 
   GList *iop_order_list = NULL;
   if(!has_stored_order && dev->image_storage.id == imgid)
