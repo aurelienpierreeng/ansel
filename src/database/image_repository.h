@@ -252,11 +252,42 @@ GList *dt_image_repository_get_full_paths(GList *imgids);
 /** @brief Every image id whose `flags` carry @p flag, in row order. */
 GList *dt_image_repository_get_ids_with_flag(const int flag);
 
+/** @brief Replace @p imgid's whole `flags` word. */
+gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags);
+
+/** @brief One row of dt_image_repository_foreach_with_path(). @p image_path is borrowed:
+ *  it lives until the callback returns. */
+typedef void (*dt_image_repository_path_row_cb)(const int32_t imgid,
+                                                const int64_t write_timestamp,
+                                                const int version,
+                                                const char *image_path,
+                                                const int flags,
+                                                void *user_data);
+
+/**
+ * @brief Walk every image in the library, film roll by film roll, filename within each.
+ *
+ * @details Hands the callback what is needed to find an image's files on disk and compare
+ * them against the row: its path, its version (for the sidecar's `_NN` suffix), the
+ * `write_timestamp` a sidecar's mtime is checked against, and the `flags` word recording
+ * which companion files it had last time.
+ *
+ * The statement is prepared and finalised around the walk rather than cached, and no
+ * internal lock is held while the callback runs: the callback is expected to write back
+ * through this same repository (dt_image_repository_set_flags()), and a cached statement
+ * under the shared statement mutex would deadlock on that re-entry.
+ */
+void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, void *user_data);
+
 /** @brief `main.images.write_timestamp` for @p imgid, or 0. */
 int64_t dt_image_repository_get_write_timestamp(const int32_t imgid);
 
 /** @brief Set `write_timestamp` of @p imgid to now. */
 void dt_image_repository_touch_write_timestamp(const int32_t imgid);
+
+/** @brief Set `write_timestamp` of @p imgid to @p timestamp (seconds since the epoch).
+ *  Bound as a 64-bit integer; the caller this replaced bound it as an `int`. */
+gboolean dt_image_repository_set_write_timestamp(const int32_t imgid, const int64_t timestamp);
 
 /**
  * @brief Delete @p imgid from `main.images` and `main.meta_data`.

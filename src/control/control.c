@@ -56,8 +56,8 @@
 #endif
 #include "widgets/bauhaus.h"
 #include "darktable.h"
+#include "common/logging.h"
 #include "control/control.h"
-#include "database/sql_debug.h"
 #include "develop/develop.h"
 
 #include "gui/application.h"
@@ -475,9 +475,9 @@ void dt_control_shutdown(dt_control_t *s)
 
 void dt_control_cleanup(dt_control_t *s)
 {
-  // vacuum TODO: optional?
-  // DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "PRAGMA incremental_vacuum(0)", NULL, NULL, NULL);
-  // DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "vacuum", NULL, NULL, NULL);
+  // A vacuum used to be contemplated here. It belongs to whoever owns the connection, and
+  // src/database now does it -- VACUUM + ANALYZE on both schemas, on the maintenance policy
+  // the user configured. Nothing for the control layer to decide.
   dt_control_jobs_cleanup(s);
   g_free(s->cursor.shape_str);
   g_free(s->cursor.current_shape_str);

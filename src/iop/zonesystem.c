@@ -68,8 +68,8 @@
 #include "math/math.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "common/logging.h"
 #include "develop/imageop.h"
-#include "database/sql_debug.h"
 #include "develop/imageop_math.h"
 #include "widgets/drawingarea.h"
 #include "iop/iop_api.h"
@@ -105,14 +105,10 @@ typedef struct dt_iop_zonesystem_data_t
 /*
 void init_presets (dt_iop_module_so_t *self)
 {
-//   DT_DEBUG_SQLITE3_EXEC(dt_database_get_global(), "begin", NULL, NULL, NULL);
-
   dt_gui_presets_add_generic(_("Fill-light 0.25EV with 4 zones"), self->op, self->version(),
 &(dt_iop_zonesystem_params_t){0.25,0.25,4.0} , sizeof(dt_iop_zonesystem_params_t), 1);
   dt_gui_presets_add_generic(_("Fill-shadow -0.25EV with 4 zones"), self->op, self->version(),
 &(dt_iop_zonesystem_params_t){-0.25,0.25,4.0} , sizeof(dt_iop_zonesystem_params_t), 1);
-
-//   DT_DEBUG_SQLITE3_EXEC(dt_database_get_global(), "commit", NULL, NULL, NULL);
 }
 */
 
