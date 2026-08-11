@@ -692,12 +692,36 @@ endif()
 # explicitly with -DBUILD_TESTING=ON/OFF. An EMPTY value counts as undecided -- existing
 # build trees carry an empty BUILD_TESTING:BOOL in their cache, which is defined but
 # answers no question. Not cached on purpose: flipping the build type flips the default.
+#
+# The DEFAULT is tolerant: a Debug machine without cmocka builds without tests and says so,
+# because several CI Debug runners are not provisioned for it. An EXPLICIT
+# -DBUILD_TESTING=ON stays a hard requirement.
+set(_build_testing_defaulted FALSE)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND "${BUILD_TESTING}" STREQUAL "")
   set(BUILD_TESTING ON)
+  set(_build_testing_defaulted TRUE)
 endif()
 
 if(BUILD_TESTING)
-  find_package(cmocka 1.1.0 CONFIG REQUIRED)
+  if(_build_testing_defaulted)
+    find_package(cmocka 1.1.0 CONFIG QUIET)
+    if(NOT cmocka_FOUND)
+      message(STATUS "Debug build without unit tests: cmocka not found (install it, or pass -DBUILD_TESTING=ON to make this an error)")
+      set(BUILD_TESTING OFF)
+    endif()
+  else()
+    find_package(cmocka 1.1.0 CONFIG REQUIRED)
+  endif()
+endif()
+
+if(BUILD_TESTING)
+  # cmocka >= 2 exports cmocka::cmocka and its plain `cmocka` name no longer carries the
+  # include directory (homebrew, notably); older packages export only `cmocka`.
+  if(TARGET cmocka::cmocka)
+    set(CMOCKA_LINK_TARGET cmocka::cmocka)
+  else()
+    set(CMOCKA_LINK_TARGET cmocka)
+  endif()
   include(AddCMockaTest)
   include(AddCMockaMockTest)
   include_directories(${CMOCKA_INCLUDE_DIR} include)

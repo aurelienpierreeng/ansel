@@ -16,7 +16,8 @@ set(DATABASE_UNIT_TESTS
 foreach(test ${DATABASE_UNIT_TESTS})
   add_cmocka_test(${test}
                   SOURCES ${test}.c
-                  LINK_LIBRARIES cmocka lib_ansel)
+                  COMPILE_OPTIONS -Wno-error=deprecated-declarations # cmocka >= 2 deprecates check_expected et al.
+                  LINK_LIBRARIES ${CMOCKA_LINK_TARGET} lib_ansel)
   target_include_directories(${test} PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_BINARY_DIR}/src
