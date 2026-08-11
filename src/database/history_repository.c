@@ -39,6 +39,7 @@
 
 
 static sqlite3_stmt *_history_check_module_exists_stmt = NULL;
+static sqlite3_stmt *_history_count_items_stmt = NULL;
 static sqlite3_stmt *_history_get_end_stmt = NULL;
 static sqlite3_stmt *_history_set_end_stmt = NULL;
 static sqlite3_stmt *_history_get_next_num_stmt = NULL;
@@ -460,6 +461,70 @@ gboolean dt_history_repository_get_autoapply_ioporder_params(const int32_t imgid
   return ok;
 }
 
+int dt_history_repository_count_items(const int32_t imgid)
+{
+  int found_it = 0;
+
+  _history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(IS_NULL_PTR(_history_count_items_stmt))
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT COUNT(imgid) FROM main.history WHERE imgid = ?1", -1,
+                                &_history_count_items_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _history_count_items_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+    found_it = sqlite3_column_int(stmt, 0);
+
+  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+
+  return found_it;
+}
+
+gboolean dt_history_repository_get_last_enabled_params(const int32_t imgid, const char *operation,
+                                                       void **params, int32_t *params_len)
+{
+  if(imgid <= 0 || IS_NULL_PTR(operation) || IS_NULL_PTR(params) || IS_NULL_PTR(params_len))
+    return FALSE;
+
+  *params = NULL;
+  *params_len = 0;
+
+  gboolean ok = FALSE;
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+    dt_database_get_sqlite3_global(),
+    "SELECT op_params, enabled"
+    " FROM main.history"
+    " WHERE imgid=?1 AND operation=?2"
+    " ORDER BY num DESC LIMIT 1", -1,
+    &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
+  if(sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 1) != 0)
+  {
+    // The blob dies with the statement and the caller reads it through module introspection
+    // well after, so it is copied out rather than pointed at.
+    const void *blob = sqlite3_column_blob(stmt, 0);
+    const int32_t len = sqlite3_column_bytes(stmt, 0);
+    if(blob && len > 0)
+    {
+      *params = g_malloc(len);
+      memcpy(*params, blob, len);
+      *params_len = len;
+      ok = TRUE;
+    }
+  }
+  sqlite3_finalize(stmt);
+  return ok;
+}
+
 gboolean dt_history_repository_module_exists(const int32_t imgid, const char *operation)
 {
   gboolean result = FALSE;
@@ -601,6 +666,11 @@ void dt_history_repository_cleanup(void)
   {
     sqlite3_finalize(_history_check_module_exists_stmt);
     _history_check_module_exists_stmt = NULL;
+  }
+  if(_history_count_items_stmt)
+  {
+    sqlite3_finalize(_history_count_items_stmt);
+    _history_count_items_stmt = NULL;
   }
   if(_history_get_end_stmt)
   {

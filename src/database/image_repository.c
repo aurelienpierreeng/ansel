@@ -36,6 +36,8 @@
  * is why the calls below serialise against each other. */
 static sqlite3_stmt *_image_load_stmt = NULL;
 static sqlite3_stmt *_image_write_history_hash_stmt = NULL;
+static sqlite3_stmt *_image_write_timestamp_select_stmt = NULL;
+static sqlite3_stmt *_image_write_timestamp_update_stmt = NULL;
 static dt_pthread_mutex_t _image_stmt_mutex;
 static gsize _image_stmt_mutex_inited = 0;
 
@@ -396,6 +398,209 @@ GList *dt_image_repository_get_ratings(const int32_t imgid)
   return g_list_reverse(result);
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * Identity lookups
+ * ------------------------------------------------------------------------------------------ */
+
+int32_t dt_image_repository_find_by_film_and_filename(const int32_t film_id, const char *filename)
+{
+  if(IS_NULL_PTR(filename)) return -1;
+
+  int32_t id = -1;
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT id FROM main.images WHERE film_id = ?1 AND filename = ?2",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film_id);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, filename, -1, SQLITE_TRANSIENT);
+  if(sqlite3_step(stmt) == SQLITE_ROW) id=sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return id;
+}
+
+int32_t dt_image_repository_find_by_folder_and_filename(const char *folder, const char *filename)
+{
+  if(IS_NULL_PTR(folder) || IS_NULL_PTR(filename)) return -1;
+
+  int32_t id = -1;
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT images.id"
+                              " FROM main.images, main.film_rolls"
+                              " WHERE film_rolls.folder = ?1"
+                              "       AND images.film_id = film_rolls.id"
+                              "       AND images.filename = ?2",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, folder, -1, SQLITE_STATIC);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, filename, -1, SQLITE_STATIC);
+  if(sqlite3_step(stmt) == SQLITE_ROW) id=sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+
+  return id;
+}
+
+char *dt_image_repository_get_film_folder(const int32_t film_id)
+{
+  char *folder = NULL;
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT folder FROM main.film_rolls WHERE id = ?1",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film_id);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+    folder = g_strdup((const char *)sqlite3_column_text(stmt, 0));
+  sqlite3_finalize(stmt);
+  return folder;
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Versions, flags and the write timestamp
+ * ------------------------------------------------------------------------------------------ */
+
+int dt_image_repository_get_version(const int32_t imgid)
+{
+  int version = 0;
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT version FROM main.images WHERE id = ?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+
+  if(sqlite3_step(stmt) == SQLITE_ROW) version = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return version;
+}
+
+gboolean dt_image_repository_set_version(const int32_t imgid, const int version)
+{
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2
+    (dt_database_get_sqlite3_global(),
+     "UPDATE main.images SET version=?1, max_version = ?1 WHERE id = ?2", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, version);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
+  const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  return ok;
+}
+
+int dt_image_repository_count_others_with_flag(const int32_t imgid, const int flag)
+{
+  sqlite3_stmt *stmt;
+  int result = 1;
+
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT COUNT(*)"
+                              " FROM main.images"
+                              " WHERE id!=?1 AND flags&?2=?2"
+                              "   AND film_id=(SELECT film_id"
+                              "                FROM main.images"
+                              "                WHERE id=?1)"
+                              "   AND filename=(SELECT filename"
+                              "                 FROM main.images"
+                              "                 WHERE id=?1);",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, flag);
+  if(sqlite3_step(stmt) == SQLITE_ROW) result = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+
+  return result;
+}
+
+GList *dt_image_repository_get_ids_with_flag(const int flag)
+{
+  GList *ids = NULL;
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT id FROM main.images WHERE flags&?1=?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, flag);
+
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    ids = g_list_prepend(ids, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+  sqlite3_finalize(stmt);
+
+  // Row order, NOT reverse-row: the caller filters this list and prepends into its own, and
+  // that second prepend reproduces the single prepend the original did off the cursor.
+  return g_list_reverse(ids);
+}
+
+int64_t dt_image_repository_get_write_timestamp(const int32_t imgid)
+{
+  if(imgid <= 0) return 0;
+
+  _image_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  if(IS_NULL_PTR(_image_write_timestamp_select_stmt))
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT write_timestamp FROM main.images WHERE id = ?1",
+                                -1, &_image_write_timestamp_select_stmt, NULL);
+  }
+  if(IS_NULL_PTR(_image_write_timestamp_select_stmt))
+  {
+    dt_pthread_mutex_unlock(&_image_stmt_mutex);
+    return 0;
+  }
+
+  int64_t write_timestamp = 0;
+  DT_DEBUG_SQLITE3_BIND_INT(_image_write_timestamp_select_stmt, 1, imgid);
+  if(sqlite3_step(_image_write_timestamp_select_stmt) == SQLITE_ROW)
+    write_timestamp = sqlite3_column_int64(_image_write_timestamp_select_stmt, 0);
+  sqlite3_reset(_image_write_timestamp_select_stmt);
+  sqlite3_clear_bindings(_image_write_timestamp_select_stmt);
+  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+
+  return write_timestamp;
+}
+
+void dt_image_repository_touch_write_timestamp(const int32_t imgid)
+{
+  if(imgid <= 0) return;
+
+  _image_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  if(!_image_write_timestamp_update_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2
+      (dt_database_get_sqlite3_global(),
+       "UPDATE main.images SET write_timestamp = STRFTIME('%s', 'now') WHERE id = ?1",
+       -1, &_image_write_timestamp_update_stmt, NULL);
+  }
+  if(_image_write_timestamp_update_stmt)
+  {
+    DT_DEBUG_SQLITE3_BIND_INT(_image_write_timestamp_update_stmt, 1, imgid);
+    sqlite3_step(_image_write_timestamp_update_stmt);
+    sqlite3_reset(_image_write_timestamp_update_stmt);
+    sqlite3_clear_bindings(_image_write_timestamp_update_stmt);
+  }
+  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+}
+
+gboolean dt_image_repository_delete(const int32_t imgid)
+{
+  gboolean ok = TRUE;
+  sqlite3_stmt *stmt;
+
+  // due to foreign keys added in db version 33,
+  // all entries from tables having references to the images are deleted as well
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "DELETE FROM main.images WHERE id = ?1", -1, &stmt,
+                              NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);   // the original overwrote `stmt` here and leaked this statement
+
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "DELETE FROM main.meta_data WHERE id = ?1", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+
+  return ok;
+}
+
 void dt_image_repository_cleanup(void)
 {
   if(_image_load_stmt)
@@ -408,6 +613,17 @@ void dt_image_repository_cleanup(void)
     sqlite3_finalize(_image_write_history_hash_stmt);
     _image_write_history_hash_stmt = NULL;
   }
+  if(_image_write_timestamp_select_stmt)
+  {
+    sqlite3_finalize(_image_write_timestamp_select_stmt);
+    _image_write_timestamp_select_stmt = NULL;
+  }
+  if(_image_write_timestamp_update_stmt)
+  {
+    sqlite3_finalize(_image_write_timestamp_update_stmt);
+    _image_write_timestamp_update_stmt = NULL;
+  }
+
   if(_image_stmt_mutex_inited)
   {
     dt_pthread_mutex_destroy(&_image_stmt_mutex);

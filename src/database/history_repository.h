@@ -125,6 +125,16 @@ gboolean dt_history_repository_get_autoapply_ioporder_params(const int32_t imgid
                                                              const int iformat, const int excluded,
                                                              void **params, int32_t *params_len);
 
+/** how many history items an image has -- 0 means "never developed", which is what the
+ *  "altered" indicator and the embedded-JPEG-vs-raw thumbnail decision both read */
+int dt_history_repository_count_items(const int32_t imgid);
+
+/** the params blob and enabled flag of the LAST history item for `operation`, or FALSE if the
+ *  image has none. `*params` is a copy the caller owns; only written when the item exists AND
+ *  is enabled, because that is the only case its one consumer acts on. */
+gboolean dt_history_repository_get_last_enabled_params(const int32_t imgid, const char *operation,
+                                                       void **params, int32_t *params_len);
+
 /** is this module present in the image's stored history at all? */
 gboolean dt_history_repository_module_exists(const int32_t imgid, const char *operation);
 
