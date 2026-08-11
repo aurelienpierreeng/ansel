@@ -157,6 +157,20 @@ int32_t dt_metadata_repository_find_image_by_value(const char *value)
   return imgid;
 }
 
+void dt_metadata_repository_foreach(const int32_t imgid, dt_metadata_repository_row_cb cb,
+                                    void *user_data)
+{
+  if(!cb) return;
+
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT key, value FROM main.meta_data WHERE id = ?1",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    cb(user_data, sqlite3_column_int(stmt, 0), (const char *)sqlite3_column_text(stmt, 1));
+  sqlite3_finalize(stmt);
+}
+
 void dt_metadata_repository_cleanup(void)
 {
   sqlite3_stmt **const cached[] = { &_get_selected_stmt, &_get_single_stmt };

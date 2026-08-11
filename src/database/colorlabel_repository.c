@@ -138,6 +138,20 @@ GList *dt_colorlabel_repository_get_list(const int32_t imgid)
   return g_list_reverse(result);
 }
 
+void dt_colorlabel_repository_foreach(const int32_t imgid, void (*cb)(void *, const int),
+                                      void *user_data)
+{
+  if(!cb) return;
+
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT color FROM main.color_labels WHERE imgid=?1",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    cb(user_data, sqlite3_column_int(stmt, 0));
+  sqlite3_finalize(stmt);
+}
+
 void dt_colorlabel_repository_cleanup(void)
 {
   sqlite3_stmt **const cached[] = { &_get_stmt, &_set_stmt, &_remove_stmt, &_remove_all_stmt };

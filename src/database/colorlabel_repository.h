@@ -31,6 +31,10 @@
 #include <glib.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 G_BEGIN_DECLS
 
 /**
@@ -71,9 +75,23 @@ GList *dt_colorlabel_repository_get_list(const int32_t imgid);
  * cannot be closed out from under a live `sqlite3_stmt`, so this is what has to run before
  * dt_database_close() for a workspace swap to become possible.
  */
+/** @brief Every colour label of @p imgid, one call per row, in the order the rows come back.
+ *
+ *  @details dt_colorlabel_repository_get() folds the same rows into a bitmask, which loses that
+ *  order. The sidecar writer needs it, because the XMP sequence it builds is compared byte for
+ *  byte against the file already on disk.
+ */
+void dt_colorlabel_repository_foreach(const int32_t imgid, void (*cb)(void *, const int),
+                                      void *user_data);
+
 void dt_colorlabel_repository_cleanup(void);
 
 G_END_DECLS
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DT_DATABASE_COLORLABEL_REPOSITORY_H
 

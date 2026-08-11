@@ -112,6 +112,12 @@ const gchar *dt_database_get_path(void);
  *  give it a name. See `src/database/README.md`. */
 sqlite3 *dt_database_get_sqlite3_global(void);
 
+/** The message for the most recent failed call on the connection.
+ *
+ *  Exists so that reporting an error does not require the handle. Valid until the next call
+ *  into the database from any thread -- copy it if you keep it. */
+const char *dt_database_get_last_error(void);
+
 /* ---------------------------------------------------------------------------------------
  *  Maintenance and snapshot policy
  *

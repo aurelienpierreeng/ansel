@@ -895,6 +895,24 @@ GList *dt_tag_repository_get_suggestions(const uint32_t nb_selected, const int c
   return g_list_reverse(tags); // query order, which is what the caller appended in
 }
 
+gboolean dt_tag_repository_attach(const guint tagid, const int32_t imgid)
+{
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "INSERT INTO main.tagged_images (tagid, imgid, position)"
+                              "  VALUES (?1, ?2,"
+                              "    (SELECT (IFNULL(MAX(position),0) & 0xFFFFFFFF00000000) + (1 << 32)"
+                              "      FROM main.tagged_images))",
+                               -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, tagid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
+  const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  return ok;
+}
+
 void dt_tag_repository_cleanup(void)
 {
   for(int i = 0; i < 2; i++)

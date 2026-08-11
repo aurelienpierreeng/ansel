@@ -44,6 +44,10 @@
 #include <sqlite3.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 G_BEGIN_DECLS
 
 /**
@@ -131,6 +135,41 @@ GList *dt_image_repository_get_duplicate_ids(const int32_t imgid);
  */
 int32_t dt_image_repository_copy_to_film(const int32_t imgid, const int32_t filmid,
                                          const char *new_filename, const char *old_filename);
+
+/* ---------------------------------------------------------------------------------------
+ *  The two reads that write a sidecar
+ *
+ *  Both distinguish a NULL column from a zero one, which is why they carry `has_*` flags
+ *  rather than a sentinel: 0 is a legitimate longitude and a legitimate timestamp.
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief The `main.images` fields an XMP sidecar carries. */
+typedef struct dt_image_xmp_row_t
+{
+  char *filename;              /**< copied out; release with dt_image_repository_xmp_row_cleanup() */
+  int flags;
+  int raw_parameters;
+  int history_end;
+  double longitude, latitude, altitude;
+  gboolean has_longitude, has_latitude, has_altitude;
+  int64_t datetime_taken;
+} dt_image_xmp_row_t;
+
+/** @brief Read @p imgid's sidecar fields. FALSE when there is no such image. */
+gboolean dt_image_repository_get_xmp_row(const int32_t imgid, dt_image_xmp_row_t *row);
+
+/** @brief Release what dt_image_repository_get_xmp_row() allocated. */
+void dt_image_repository_xmp_row_cleanup(dt_image_xmp_row_t *row);
+
+/** @brief The four timestamps, each with whether it is set at all. */
+typedef struct dt_image_timestamps_t
+{
+  int64_t import_timestamp, change_timestamp, export_timestamp, print_timestamp;
+  gboolean has_import, has_change, has_export, has_print;
+} dt_image_timestamps_t;
+
+/** @brief Read @p imgid's four timestamps. FALSE when there is no such image. */
+gboolean dt_image_repository_get_timestamps(const int32_t imgid, dt_image_timestamps_t *ts);
 
 /* ---------------------------------------------------------------------------------------
  *  Identity lookups
@@ -267,6 +306,11 @@ GList *dt_image_repository_get_ratings(const int32_t imgid);
 void dt_image_repository_cleanup(void);
 
 G_END_DECLS
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DT_DATABASE_IMAGE_REPOSITORY_H
 

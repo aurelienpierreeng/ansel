@@ -38,6 +38,10 @@
 #include <glib.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 G_BEGIN_DECLS
 
 /**
@@ -89,9 +93,21 @@ void dt_metadata_repository_add(const dt_metadata_row_t *rows, const size_t coun
 int32_t dt_metadata_repository_find_image_by_value(const char *value);
 
 /** @brief Finalise the prepared statements. See dt_colorlabel_repository_cleanup(). */
+/** @brief One `main.meta_data` row: its key id and its value. */
+typedef void (*dt_metadata_repository_row_cb)(void *user_data, const int keyid, const char *value);
+
+/** @brief Every metadata row of @p imgid, in row order. */
+void dt_metadata_repository_foreach(const int32_t imgid, dt_metadata_repository_row_cb cb,
+                                    void *user_data);
+
 void dt_metadata_repository_cleanup(void);
 
 G_END_DECLS
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DT_DATABASE_METADATA_REPOSITORY_H
 

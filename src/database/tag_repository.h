@@ -39,6 +39,10 @@
 #include <glib.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 G_BEGIN_DECLS
 
 /**
@@ -115,6 +119,9 @@ void dt_tag_repository_set_synonyms(const guint tagid, const char *synonyms);
 /* ---------------------------------------------------------------------------------------
  *  Attachments -- `main.tagged_images`
  * ------------------------------------------------------------------------------------- */
+
+/** @brief Attach @p tagid to @p imgid, at the end of the tag order. */
+gboolean dt_tag_repository_attach(const guint tagid, const int32_t imgid);
 
 /** @brief TRUE when @p tagid is attached to @p imgid. */
 gboolean dt_tag_repository_is_attached(const guint tagid, const int32_t imgid);
@@ -287,6 +294,11 @@ GList *dt_tag_repository_get_by_path_with_counts(const char *path, const char *p
 
 
 G_END_DECLS
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DT_DATABASE_TAG_REPOSITORY_H
 

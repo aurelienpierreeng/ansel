@@ -658,6 +658,75 @@ void dt_history_repository_foreach_item(const int32_t imgid, dt_history_reposito
   sqlite3_finalize(stmt);
 }
 
+gboolean dt_history_repository_write_mask_item(const int32_t imgid, const int num, const int formid,
+                                               const int form, const char *name, const int version,
+                                               const void *points, const int points_len,
+                                               const int points_count, const void *source,
+                                               const int source_len)
+{
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+    dt_database_get_sqlite3_global(),
+                              "INSERT INTO main.masks_history (imgid, num, formid, form, name, version, points, points_count, source) "
+                              "VALUES (?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, formid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, form);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, version);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, points, points_len, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, points_count);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 8, source, source_len, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, num);
+
+  const int rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return (rc == SQLITE_DONE);
+}
+
+int dt_history_repository_count_mask_items(const int32_t imgid)
+{
+  int num_masks = 0;
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT COUNT(*) FROM main.masks_history WHERE imgid = ?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  if(sqlite3_step(stmt) == SQLITE_ROW)
+    num_masks = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return num_masks;
+}
+
+void dt_history_repository_foreach_mask_item(const int32_t imgid,
+                                             dt_history_repository_mask_cb cb, void *user_data)
+{
+  if(IS_NULL_PTR(cb)) return;
+
+  sqlite3_stmt *stmt;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get_sqlite3_global(),
+      "SELECT imgid, formid, form, name, version, points, points_count, source, num"
+      " FROM main.masks_history"
+      " WHERE imgid = ?1"
+      " ORDER BY num",
+      -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    cb(user_data, sqlite3_column_int(stmt, 8), sqlite3_column_int(stmt, 1),
+       sqlite3_column_int(stmt, 2), (const char *)sqlite3_column_text(stmt, 3),
+       sqlite3_column_int(stmt, 4), sqlite3_column_blob(stmt, 5), sqlite3_column_bytes(stmt, 5),
+       sqlite3_column_int(stmt, 6), sqlite3_column_blob(stmt, 7), sqlite3_column_bytes(stmt, 7));
+  }
+  sqlite3_finalize(stmt);
+}
+
 void dt_history_repository_cleanup(void)
 {
   _history_stmt_mutex_ensure();
