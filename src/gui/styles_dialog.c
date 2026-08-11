@@ -34,10 +34,10 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 #include "common/selection.h"
 #include "common/image.h"
 #include "system/mem_alloc.h"
-#endif
 #include "common/history.h"
 #include "common/styles.h"
 #include "control/control.h"
