@@ -46,9 +46,26 @@ extern "C" {
  *  singleton in practice and an argument no caller chooses is not a parameter.
  */
 
-/** Replace the rules and recompose. `where_ext` is the NULL-terminated array of WHERE fragments
- *  the rules produced; both it and `params` are copied, so the caller keeps ownership. */
-int dt_collection_query_set_rules(const dt_collection_params_t *params, gchar **where_ext,
+/** Resolve a user-visible module-order name to the version id stored in `main.module_order`,
+ *  or -1 when it names none.
+ *
+ *  Matching a LOCALISED string is presentation, and this module has no business doing it -- but
+ *  the "module order" collection rule is expressed that way. The caller installs a resolver. */
+typedef int (*dt_collection_query_order_resolver_t)(const char *text);
+void dt_collection_query_set_order_resolver(dt_collection_query_order_resolver_t fn);
+
+/** Supply the user-visible module-order names, index-aligned with the versions stored in
+ *  `main.module_order`. The value list for that property interpolates them into its query, so
+ *  the module needs the strings themselves -- but not the ability to translate. Borrowed. */
+void dt_collection_query_set_order_names(const char *const *names, const int count);
+
+/** Replace the rules and recompose.
+ *
+ *  The rules arrive as rules -- property, mode, text -- not as SQL. Turning them into WHERE
+ *  fragments and assembling the query is this module's whole job. Everything is copied, so the
+ *  caller keeps ownership of what it passed. */
+int dt_collection_query_set_rules(const dt_collection_params_t *params,
+                                  const dt_collection_rule_t *rules, const int n_rules,
                                   const uint32_t tagid);
 
 /** Recompose from the rules already held -- what a caller does after changing something the
@@ -88,6 +105,35 @@ void dt_collection_query_restrict_to_selection(void);
  *  out. Lives here rather than in image_repository because it is scoped by the collection
  *  query, and that text does not leave this file. */
 GList *dt_collection_query_get_group_members(const int32_t group_id, const int32_t exclude_imgid);
+
+/** What to list, and every preference the answer depends on, resolved by the caller.
+ *
+ *  Each of these was a conf read inside the query builder. They are display decisions -- which
+ *  rule excludes itself, whether a metadata field is hidden, how film rolls are ordered -- and
+ *  this module reads no configuration. */
+typedef struct dt_collection_values_request_t
+{
+  dt_collection_properties_t property;
+  int exclude_rule;              /**< the rule being edited, so it does not hide its own choices */
+  gboolean apply_exclude;        /**< FALSE for an OR rule, which does not limit the collection */
+  gboolean metadata_hidden;      /**< for the metadata properties: is this field hidden? */
+  const char *filmroll_order_by; /**< "film_rolls_id DESC" | "folder" | "folder DESC" */
+} dt_collection_values_request_t;
+
+/** The distinct values of the requested property across the collection, with counts. */
+GList *dt_collection_query_get_property_values(const dt_collection_values_request_t *req);
+
+/** Camera maker/model pairs present in the library, sanitised and as EXIF recorded them. */
+void dt_collection_query_get_makermodels(const gchar *filter, GList **sanitized, GList **exif);
+
+/** Image ids matching ONE rule, independent of the active collection -- what batch operations
+ *  enumerate over. */
+GList *dt_collection_query_get_images_for_rule(const dt_collection_properties_t property,
+                                               const char *text, gboolean recursive);
+
+/** The first collected image that is not in @p imgids, looked for after the list and then
+ *  before it; -1 if there is none. */
+int32_t dt_collection_query_find_neighbour(GList *imgids);
 
 /** Finalise the cached statements and release the stored rules. Must run before the connection
  *  closes. */

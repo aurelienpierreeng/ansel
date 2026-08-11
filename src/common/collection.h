@@ -164,6 +164,18 @@ typedef enum dt_collection_change_t
   DT_COLLECTION_CHANGE_RELOAD    = 3  // we have just reload the collection after images changes (query is identical)
 } dt_collection_change_t;
 
+/** One rule of a collection: "images whose <property> <mode> matches <text>".
+ *
+ *  This is what crosses into the database module. The module turns rules into SQL; reading them
+ *  out of the user's configuration is common/collection.c's. */
+typedef struct dt_collection_rule_t
+{
+  dt_collection_properties_t property;
+  int mode;              /**< 0 = AND, 1 = OR, 2 = AND NOT */
+  const char *text;      /**< empty or NULL means "match everything" */
+  gboolean recursive;    /**< for the path-like properties: match below the value too */
+} dt_collection_rule_t;
+
 typedef struct dt_collection_params_t
 {
   /** flags for which query parts to use, see COLLECTION_QUERY_x defines... */
@@ -183,8 +195,8 @@ typedef struct dt_collection_params_t
 
 typedef struct dt_collection_t
 {
-  gchar *query;
-  gchar **where_ext;
+  dt_collection_rule_t *rules;   /**< the user's rules; SQL is composed from these downstream */
+  int n_rules;
   unsigned int count;
   unsigned int tagid;
   dt_collection_params_t params;
@@ -212,9 +224,10 @@ int dt_collection_update(const dt_collection_t *collection);
 /** reset collection to default dummy selection */
 void dt_collection_reset(const dt_collection_t *collection);
 /** gets an extended where part */
-gchar *dt_collection_get_extended_where(const dt_collection_t *collection, int exclude);
 /** sets an extended where part */
-void dt_collection_set_extended_where(const dt_collection_t *collection, gchar **extended_where);
+/** Replace the collection's rules and rebuild its query. */
+void dt_collection_set_rules(const dt_collection_t *collection, const dt_collection_rule_t *rules,
+                             const int n_rules);
 
 /** get filter flags for collection */
 dt_collection_filter_flag_t dt_collection_get_filter_flags(const dt_collection_t *collection);
