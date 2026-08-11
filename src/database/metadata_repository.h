@@ -92,7 +92,6 @@ void dt_metadata_repository_add(const dt_metadata_row_t *rows, const size_t coun
  */
 int32_t dt_metadata_repository_find_image_by_value(const char *value);
 
-/** @brief Finalise the prepared statements. See dt_colorlabel_repository_cleanup(). */
 /** @brief One `main.meta_data` row: its key id and its value. */
 typedef void (*dt_metadata_repository_row_cb)(void *user_data, const int keyid, const char *value);
 
@@ -100,6 +99,22 @@ typedef void (*dt_metadata_repository_row_cb)(void *user_data, const int keyid, 
 void dt_metadata_repository_foreach(const int32_t imgid, dt_metadata_repository_row_cb cb,
                                     void *user_data);
 
+/** @brief One distinct (key, value) across the selection, and how many selected images
+ *  carry it. */
+typedef void (*dt_metadata_repository_selected_cb)(void *user_data, const int keyid,
+                                                   const char *value, const uint32_t count);
+
+/**
+ * @brief Every distinct (key, value) pair across `main.selected_images`, ordered by value.
+ *
+ * @details One pass instead of one dt_metadata_repository_get_values() call per key, which
+ * is what the panel needs: for each field it must know both the values present and whether
+ * every selected image agrees on one -- hence the count travelling with the pair.
+ */
+void dt_metadata_repository_foreach_selected(dt_metadata_repository_selected_cb cb,
+                                             void *user_data);
+
+/** @brief Finalise the prepared statements. See dt_colorlabel_repository_cleanup(). */
 void dt_metadata_repository_cleanup(void);
 
 G_END_DECLS
