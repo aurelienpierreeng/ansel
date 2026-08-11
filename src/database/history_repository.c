@@ -733,6 +733,30 @@ void dt_history_repository_foreach_mask_item(const int32_t imgid,
   sqlite3_finalize(stmt);
 }
 
+void dt_history_repository_foreach_active_module(const int32_t imgid,
+                                                 dt_history_repository_active_module_cb cb,
+                                                 void *user_data)
+{
+  if(imgid <= 0 || IS_NULL_PTR(cb)) return;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT MIN(num) AS num, operation, multi_name "
+                              "FROM main.history "
+                              "WHERE imgid = ?1 AND enabled = 1 "
+                              "GROUP BY operation, multi_name "
+                              "ORDER BY MIN(num) ASC", -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    cb(user_data, sqlite3_column_int(stmt, 0), (const char *)sqlite3_column_text(stmt, 1),
+       (const char *)sqlite3_column_text(stmt, 2));
+  sqlite3_finalize(stmt);
+}
+
 /* ---- main.module_order --------------------------------------------------------------- */
 
 gboolean dt_history_repository_get_module_order_version(const int32_t imgid, int *version)

@@ -188,6 +188,20 @@ typedef void (*dt_history_repository_mask_cb)(void *user_data, const int num, co
 void dt_history_repository_foreach_mask_item(const int32_t imgid,
                                              dt_history_repository_mask_cb cb, void *user_data);
 
+/** one enabled module of an image, as a reader wants to see it listed */
+typedef void (*dt_history_repository_active_module_cb)(void *user_data, const int num,
+                                                       const char *operation, const char *multi_name);
+
+/**
+ * @brief Every module an image has enabled, once each, in the order they run.
+ *
+ * @details Grouped by (operation, multi_name) and ordered by the lowest `num` of each group,
+ * so a module edited ten times appears once, at the position of its first appearance.
+ */
+void dt_history_repository_foreach_active_module(const int32_t imgid,
+                                                 dt_history_repository_active_module_cb cb,
+                                                 void *user_data);
+
 /* ------------------------------------------------------------------------------------------
  * main.module_order
  *

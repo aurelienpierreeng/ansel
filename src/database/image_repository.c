@@ -86,7 +86,7 @@ static sqlite3_stmt *_image_get_stmt(void)
   return _image_load_stmt;
 }
 
-void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
+static void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
 {
   if(sqlite3_column_type(stmt, 0) != SQLITE_NULL) img->id = sqlite3_column_int(stmt, 0);
   if(sqlite3_column_type(stmt, 1) != SQLITE_NULL) img->group_id = sqlite3_column_int(stmt, 1);
@@ -224,6 +224,50 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img)
   return found;
 }
 
+void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, void *user_data)
+{
+  if(IS_NULL_PTR(cb)) return;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get_sqlite3_global(),
+      // Same columns, same order, as the single-image load above -- dt_image_from_stmt() maps
+      // both. Only the source differs: the collection instead of one id.
+      "SELECT i.id, i.group_id, "
+      "       (SELECT COUNT(id) FROM main.images WHERE group_id = i.group_id), "
+      "       (SELECT COUNT(imgid) FROM main.history WHERE imgid = i.id), "
+      "       COALESCE((SELECT current_hash FROM main.history_hash WHERE imgid = i.id), -1), "
+      "       COALESCE((SELECT mipmap_hash FROM main.history_hash WHERE imgid = i.id), -1), "
+      "       i.film_id, i.version, i.width, i.height, i.orientation, i.flags, "
+      "       i.import_timestamp, i.change_timestamp, i.export_timestamp, i.print_timestamp, "
+      "       i.exposure, i.exposure_bias, i.aperture, i.iso, i.focal_length, i.focus_distance, "
+      "       i.datetime_taken, i.longitude, i.latitude, i.altitude, "
+      "       i.filename, f.folder || '" G_DIR_SEPARATOR_S "' || i.filename, "
+      "       i.maker, i.model, i.lens, f.folder, "
+      "       COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=i.id), 0), "
+      "       i.crop, i.raw_parameters, i.color_matrix, i.colorspace, "
+      "       i.raw_black, i.raw_maximum, i.aspect_ratio, i.output_width, i.output_height"
+      "  FROM main.images AS i"
+      "  JOIN memory.collected_images AS c ON i.id = c.imgid"
+      "  LEFT JOIN main.film_rolls AS f ON f.id = i.film_id"
+      "  ORDER BY c.rowid ASC",
+      -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
+
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_image_t info;
+    dt_image_init(&info);
+    dt_image_from_stmt(&info, stmt);
+    // No lock is held here on purpose: see the header. cb() reaches the selection and the
+    // image cache, and either can come back through this function.
+    cb(user_data, &info);
+  }
+  sqlite3_finalize(stmt);
+}
+
 
 void dt_image_repository_store(const dt_image_t *img)
 {
@@ -332,6 +376,80 @@ GList *dt_image_repository_get_group_members(const int32_t group_id, const int32
                               "SELECT id FROM main.images WHERE group_id = ?1", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, group_id);
   return _collect_ids(stmt, exclude_imgid);
+}
+
+void dt_image_group_member_free(gpointer data)
+{
+  dt_image_group_member_t *member = (dt_image_group_member_t *)data;
+  if(IS_NULL_PTR(member)) return;
+  dt_free(member->filename);
+  dt_free(member);
+}
+
+GList *dt_image_repository_get_group_member_rows(const int32_t group_id)
+{
+  GList *members = NULL;
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT id, version, filename"
+                              " FROM main.images"
+                              " WHERE group_id = ?1", -1, &stmt,
+                              NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return NULL;
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, group_id);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_image_group_member_t *member = (dt_image_group_member_t *)calloc(1, sizeof(dt_image_group_member_t));
+    if(IS_NULL_PTR(member)) break;
+    member->imgid = sqlite3_column_int(stmt, 0);
+    member->version = sqlite3_column_int(stmt, 1);
+    const char *filename = (const char *)sqlite3_column_text(stmt, 2);
+    member->filename = filename ? g_strdup(filename) : NULL;
+    members = g_list_prepend(members, member);
+  }
+  sqlite3_finalize(stmt);
+
+  // Row order: the caller walks it once to build a tooltip listing the group, and the order
+  // it reads is the order the rows came in.
+  return g_list_reverse(members);
+}
+
+int dt_image_repository_count_in_id_range(const int32_t min_imgid, const int32_t max_imgid)
+{
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT COUNT(*) FROM main.images WHERE id >= ?1 AND id <= ?2", -1,
+                              &stmt, 0);
+  if(IS_NULL_PTR(stmt)) return -1;
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, min_imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, max_imgid);
+  const int count = (sqlite3_step(stmt) == SQLITE_ROW) ? sqlite3_column_int(stmt, 0) : -1;
+  sqlite3_finalize(stmt);
+
+  return count;
+}
+
+void dt_image_repository_foreach_in_id_range(const int32_t min_imgid, const int32_t max_imgid,
+                                             dt_image_repository_id_filename_cb cb,
+                                             void *user_data)
+{
+  if(IS_NULL_PTR(cb)) return;
+
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT id, filename FROM main.images WHERE id >= ?1 AND id <= ?2", -1,
+                              &stmt, 0);
+  if(IS_NULL_PTR(stmt)) return;
+
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, min_imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, max_imgid);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+    cb(sqlite3_column_int(stmt, 0), (const char *)sqlite3_column_text(stmt, 1), user_data);
+  sqlite3_finalize(stmt);
 }
 
 

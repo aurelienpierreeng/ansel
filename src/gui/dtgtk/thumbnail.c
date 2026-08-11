@@ -44,11 +44,11 @@
 
 #include "widgets/bauhaus.h"
 #include "caches/pixelpipe_cache_alloc.h"
-#include "database/sql_debug.h"
+#include "database/history_repository.h"
+#include "database/image_repository.h"
 #include "gui/dtgtk/focus.h"
 #include "widgets/focus_peaking.h"
 #include "common/grouping.h"
-#include "database/database.h"
 #include "common/ratings.h"
 #include "common/selection.h"
 #include "common/utility.h"
@@ -61,7 +61,6 @@
 #include "views/view.h"
 
 #include <glib-object.h>
-#include <sqlite3.h>
 #include "gui/application.h"
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
@@ -110,33 +109,24 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
   }
 
   // and the other images
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id, version, filename"
-                              " FROM main.images"
-                              " WHERE group_id = ?1", -1, &stmt,
-                              NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, thumb->info.group_id);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  GList *members = dt_image_repository_get_group_member_rows(thumb->info.group_id);
+  for(GList *m = members; m; m = g_list_next(m))
   {
+    const dt_image_group_member_t *member = (const dt_image_group_member_t *)m->data;
     nb++;
-    const int id = sqlite3_column_int(stmt, 0);
-    const int v = sqlite3_column_int(stmt, 1);
 
-    if(id != thumb->info.group_id)
+    if(member->imgid != thumb->info.group_id)
     {
-      if(id == thumb->info.id)
+      if(member->imgid == thumb->info.id)
         tt = dt_util_dstrcat(tt, "\n\u2022 %s", _("current"));
       else
       {
-        tt = dt_util_dstrcat(tt, "\n\u2022 %s", sqlite3_column_text(stmt, 2));
-        if(v > 0) tt = dt_util_dstrcat(tt, " v%d", v);
+        tt = dt_util_dstrcat(tt, "\n\u2022 %s", member->filename);
+        if(member->version > 0) tt = dt_util_dstrcat(tt, " v%d", member->version);
       }
     }
   }
-  sqlite3_finalize(stmt);
+  g_list_free_full(members, dt_image_group_member_free);
 
   // and the number of grouped images
   gchar *ttf = g_strdup_printf("%d %s\n%s", nb, _("grouped images"), tt);
@@ -215,41 +205,26 @@ static void _preview_window_open(GtkWidget *widget, dt_thumbnail_t *thumb)
   dt_preview_window_spawn(thumb->info.id);
 }
 
+static void _active_module_row(void *user_data, const int num, const char *op, const char *multi)
+{
+  GString *text = (GString *)user_data;
+  const gboolean has_multi = (multi && multi[0] && strcmp(multi, " "));
+
+  if(has_multi)
+    g_string_append_printf(text, "%d. %s (%s)\n", num, op ? op : "?", multi);
+  else
+    g_string_append_printf(text, "%d. %s\n", num, op ? op : "?");
+}
+
 static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
 {
   (void)widget;
   if(IS_NULL_PTR(thumb)) return;
 
-  sqlite3 *handle = dt_database_get_sqlite3_global();
-  if(IS_NULL_PTR(handle)) return;
-
-  static const char *sql =
-      "SELECT MIN(num) AS num, operation, multi_name "
-      "FROM main.history "
-      "WHERE imgid = ?1 AND enabled = 1 "
-      "GROUP BY operation, multi_name "
-      "ORDER BY MIN(num) ASC";
-
-  sqlite3_stmt *stmt = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(handle, sql, -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, thumb->info.id);
-
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "image id: %d\nfile: %s\n\n", thumb->info.id,
                          (thumb->info.fullpath[0]) ? thumb->info.fullpath : thumb->info.filename);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int num = sqlite3_column_int(stmt, 0);
-    const char *op = (const char *)sqlite3_column_text(stmt, 1);
-    const char *multi = (const char *)sqlite3_column_text(stmt, 2);
-    const gboolean has_multi = (multi && multi[0] && strcmp(multi, " "));
-
-    if(has_multi)
-      g_string_append_printf(text, "%d. %s (%s)\n", num, op ? op : "?", multi);
-    else
-      g_string_append_printf(text, "%d. %s\n", num, op ? op : "?");
-  }
-  sqlite3_finalize(stmt);
+  dt_history_repository_foreach_active_module(thumb->info.id, _active_module_row, text);
 
   if(text->len == 0) g_string_assign(text, _("No active modules"));
 

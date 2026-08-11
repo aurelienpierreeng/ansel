@@ -34,7 +34,6 @@
 #include <gtk/gtk.h> // for gtk_init_check
 #include <libintl.h> // for bind_textdomain_codeset, etc
 #include <limits.h>  // for PATH_MAX
-#include <sqlite3.h> // for sqlite3_column_int, etc
 #include <stddef.h>  // for size_t
 #include <stdint.h>  // for uint32_t
 #include <stdio.h>   // for fprintf, stderr, snprintf, NULL, etc
@@ -42,8 +41,7 @@
 #include <string.h>  // for strcmp
 
 #include "darktable.h"    // for darktable, darktable_t, dt_cleanup, etc
-#include "database/database.h"     // for dt_database_get
-#include "database/sql_debug.h"        // for DT_DEBUG_SQLITE3_PREPARE_V2
+#include "database/image_repository.h" // for dt_image_repository_foreach_in_id_range
 #include "caches/mipmap_cache.h" // for dt_mipmap_size_t, etc
 #include "common/file_location.h"
 #include "config.h"              // for GETTEXT_PACKAGE, etc
@@ -57,6 +55,44 @@
 #ifdef _WIN32
 #include "win/main_wrapper.h"
 #endif
+
+/* What _generate_one() needs that is not in the row: the mip range to fill, and where the
+ * progress line is up to. */
+typedef struct _generate_ctx_t
+{
+  size_t image_count;
+  size_t counter;
+  dt_mipmap_size_t min_mip;
+  dt_mipmap_size_t max_mip;
+} _generate_ctx_t;
+
+static void _generate_one(const int32_t imgid, const char *imgfilename, void *user_data)
+{
+  _generate_ctx_t *ctx = (_generate_ctx_t *)user_data;
+
+  ctx->counter++;
+  fprintf(stderr, "image %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT " (%.02f%%) (id:%d, file=%s)\n",
+          ctx->counter, ctx->image_count, 100.0 * ctx->counter / (float)ctx->image_count, imgid,
+          imgfilename);
+
+  for(int k = ctx->max_mip; k >= ctx->min_mip && k >= 0; k--)
+  {
+    char filename[PATH_MAX] = { 0 };
+    dt_mipmap_get_cache_filename(filename, k, imgid);
+
+    // if a valid thumbnail file is already on disc - do nothing
+    if(dt_util_test_image_file(filename)) continue;
+
+    // else, generate thumbnail and store in mipmap cache.
+    dt_mipmap_buffer_t buf;
+    dt_mipmap_cache_get(&buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
+    dt_mipmap_cache_release(&buf);
+  }
+
+  // and immediately write thumbs to disc and remove from mipmap cache.
+  dt_mimap_cache_evict(imgid);
+  // thumbnail in sync with image
+}
 
 static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mipmap_size_t max_mip, const int32_t min_imgid, const int32_t max_imgid)
 {
@@ -75,21 +111,9 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
   }
 
   // some progress counter
-  sqlite3_stmt *stmt;
-  size_t image_count = 0, counter = 0;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT COUNT(*) FROM main.images WHERE id >= ?1 AND id <= ?2", -1, &stmt, 0);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, min_imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, max_imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    image_count = sqlite3_column_int(stmt, 0);
-    sqlite3_finalize(stmt);
-  }
-  else
-  {
-    return 1;
-  }
+  const int counted = dt_image_repository_count_in_id_range(min_imgid, max_imgid);
+  if(counted < 0) return 1;
+  size_t image_count = (size_t)counted;
 
   if(!image_count)
   {
@@ -101,38 +125,10 @@ static int generate_thumbnail_cache(const dt_mipmap_size_t min_mip, const dt_mip
   }
 
   // go through all images:
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id, filename FROM main.images WHERE id >= ?1 AND id <= ?2", -1, &stmt, 0);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, min_imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, max_imgid);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
-    const char *imgfilename = (const char*)sqlite3_column_text(stmt, 1);
+  _generate_ctx_t ctx = { .image_count = image_count, .counter = 0,
+                          .min_mip = min_mip, .max_mip = max_mip };
+  dt_image_repository_foreach_in_id_range(min_imgid, max_imgid, _generate_one, &ctx);
 
-    counter++;
-    fprintf(stderr, "image %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT " (%.02f%%) (id:%d, file=%s)\n", counter, image_count, 100.0 * counter / (float)image_count, imgid, imgfilename);
-
-    for(int k = max_mip; k >= min_mip && k >= 0; k--)
-    {
-      char filename[PATH_MAX] = { 0 };
-      dt_mipmap_get_cache_filename(filename, k, imgid);
-
-      // if a valid thumbnail file is already on disc - do nothing
-      if(dt_util_test_image_file(filename)) continue;
-
-      // else, generate thumbnail and store in mipmap cache.
-      dt_mipmap_buffer_t buf;
-      dt_mipmap_cache_get(&buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
-      dt_mipmap_cache_release(&buf);
-    }
-
-    // and immediately write thumbs to disc and remove from mipmap cache.
-    dt_mimap_cache_evict(imgid);
-    // thumbnail in sync with image
-  }
-
-  sqlite3_finalize(stmt);
   fprintf(stderr, "done\n");
 
   return 0;
