@@ -2,7 +2,8 @@ add_subdirectory(iop)
 
 add_cmocka_test(test_sample
                 SOURCES test_sample.c
-                LINK_LIBRARIES cmocka)
+                COMPILE_OPTIONS -Wno-error=deprecated-declarations # cmocka >= 2 deprecates check_expected et al.
+                LINK_LIBRARIES ${CMOCKA_LINK_TARGET})
 
 # Windows: main-method requires the wrapper provided by lib-darktable
 if(WIN32)
