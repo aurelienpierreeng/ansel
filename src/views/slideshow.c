@@ -41,7 +41,6 @@
 #include "common/module_versioning.h"
 #include "common/collection.h"
 #include "common/selection.h"
-#include "database/sql_debug.h"
 #include "system/dtpthread.h"
 #include "common/conf.h"
 #include "control/control.h"
