@@ -191,14 +191,6 @@ int32_t dt_image_repository_find_by_film_and_filename(const int32_t film_id, con
  */
 int32_t dt_image_repository_find_by_folder_and_filename(const char *folder, const char *filename);
 
-/**
- * @brief The `folder` of film roll @p film_id, or NULL. Caller owns it.
- *
- * @details Lives here rather than in a film repository because its callers start from an image
- * and only ever want the roll behind it. When `common/film.c` is extracted, `main.film_rolls`
- * gains an owner and this should become a call into it.
- */
-char *dt_image_repository_get_film_folder(const int32_t film_id);
 
 /* ---------------------------------------------------------------------------------------
  *  Versions, flags and the write timestamp

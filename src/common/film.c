@@ -41,10 +41,11 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/film.h"
+#include "database/database.h"
+#include "database/film_repository.h"
 #include "control/settings.h"
 #include "common/collection.h"
 #include "caches/mipmap_cache.h"
-#include "database/sql_debug.h"
 #include "system/dtpthread.h"
 #include "caches/image_cache.h"
 #include "common/tags.h"
@@ -95,64 +96,28 @@ void dt_film_set_query(const int32_t id)
   /* enable film id filter and set film id */
   dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
   dt_conf_set_int("plugins/lighttable/collect/item0", 0);
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id, folder"
-                              " FROM main.film_rolls"
-                              " WHERE id = ?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
+  char *folder = dt_film_repository_get_folder(id);
+  if(folder)
   {
-    dt_conf_set_string("plugins/lighttable/collect/string0", (gchar *)sqlite3_column_text(stmt, 1));
+    dt_conf_set_string("plugins/lighttable/collect/string0", folder);
+    dt_free(folder);
   }
-  sqlite3_finalize(stmt);
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 }
 
 int32_t dt_film_get_id(const char *folder)
 {
-  int32_t filmroll_id = -1;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-#ifdef _WIN32
-                              "SELECT id FROM main.film_rolls WHERE folder LIKE ?1",
-#else
-                              "SELECT id FROM main.film_rolls WHERE folder = ?1",
-#endif
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, folder, -1, SQLITE_STATIC);
-  if(sqlite3_step(stmt) == SQLITE_ROW) filmroll_id = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
-  return filmroll_id;
+  return dt_film_repository_find_by_folder(folder);
 }
 
 int dt_film_open(const int32_t id)
 {
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id, folder"
-                              " FROM main.film_rolls"
-                              " WHERE id = ?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
+  char *folder = dt_film_repository_get_folder(id);
+  if(folder)
   {
-    sqlite3_finalize(stmt);
-
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE main.film_rolls"
-                                " SET access_timestamp = strftime('%s', 'now')"
-                                " WHERE id = ?1", -1, &stmt,
-                                NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-    sqlite3_step(stmt);
+    dt_film_repository_touch_access(id);
+    dt_free(folder);
   }
-  sqlite3_finalize(stmt);
   // TODO: prefetch to cache using image_open
   dt_film_set_query(id);
   dt_control_queue_redraw_center();
@@ -163,8 +128,6 @@ int dt_film_open(const int32_t id)
 
 int dt_film_new(dt_film_t *film, const char *directory)
 {
-  sqlite3_stmt *stmt;
-
   // Try open filmroll for folder if exists
   film->id = -1;
   g_strlcpy(film->dirname, directory, sizeof(film->dirname));
@@ -181,50 +144,22 @@ int dt_film_new(dt_film_t *film, const char *directory)
   {
     // create a new filmroll
     /* insert a new film roll into database */
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "INSERT INTO main.film_rolls (id, access_timestamp, folder)"
-                                "  VALUES (NULL, strftime('%s', 'now'), ?1)",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, film->dirname, -1, SQLITE_STATIC);
-    const int rc = sqlite3_step(stmt);
-    if(rc != SQLITE_DONE)
-      fprintf(stderr, "[film_new] failed to insert film roll! %s\n",
-              sqlite3_errmsg(dt_database_get_sqlite3_global()));
-    sqlite3_finalize(stmt);
+    if(!dt_film_repository_insert(film->dirname))
+      fprintf(stderr, "[film_new] failed to insert film roll! %s\n", dt_database_get_last_error());
     /* requery for filmroll and fetch new id */
     film->id = dt_film_get_id(film->dirname);
     if(film->id)
     {
       // add it to the table memory.film_folder
-      sqlite3_stmt *stmt2;
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "INSERT INTO memory.film_folder (id, status) "
-                                  "VALUES (?1, 1)",
-                                  -1, &stmt2, NULL);
-      // clang-format on
-      DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, film->id);
-      sqlite3_step(stmt2);
-      sqlite3_finalize(stmt2);
+      dt_film_repository_folder_status_set(film->id, TRUE);
     }
   }
-#ifdef _WIN32
-  else
-  {
-    // make sure we reuse the same path case
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT folder FROM main.film_rolls WHERE id = ?1",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film->id);
-    if(sqlite3_step(stmt) != SQLITE_ROW)
-      g_strlcpy(film->dirname, (const char *)sqlite3_column_text(stmt, 0), sizeof(film->dirname));
-    sqlite3_finalize(stmt);
-  }
-#endif
+  // On Windows this used to "make sure we reuse the same path case" by re-reading the stored
+  // folder -- but it tested `sqlite3_step(...) != SQLITE_ROW` and then read column 0 of a
+  // statement that had returned no row, so it could only ever have copied a NULL. film->id comes
+  // from dt_film_get_id() immediately above, so the row always exists, the test was never true
+  // and the copy never ran. Dropped as the no-op it is, rather than "fixed" to `== SQLITE_ROW`,
+  // which would change what Windows stores in film->dirname.
 
   if(film->id <= 0)
     dt_print(DT_DEBUG_IMPORT, "[Import] Could not create a new filmid for %s\n", directory);
@@ -293,32 +228,56 @@ void dt_film_remove_directories(const GList *dirs)
     rmdir((char *)iter->data);
 }
 
+
+typedef struct _empty_rolls_t
+{
+  GList *ids;
+  GList *folders;
+} _empty_rolls_t;
+
+static void _collect_empty_roll(void *user_data, const int32_t id, const char *folder)
+{
+  _empty_rolls_t *r = (_empty_rolls_t *)user_data;
+  r->ids = g_list_prepend(r->ids, GINT_TO_POINTER(id));
+  r->folders = g_list_prepend(r->folders, g_strdup(folder));
+}
+
+typedef struct _relocation_t
+{
+  const char *old_path;
+  const char *new_path;
+  GList *ids;
+  GList *folders;
+} _relocation_t;
+
+static void _collect_relocation(void *user_data, const int32_t id, const char *folder)
+{
+  _relocation_t *r = (_relocation_t *)user_data;
+  gchar *final = g_strcmp0(folder, r->old_path)
+                     ? g_strdup_printf("%s/%s", r->new_path, folder + strlen(r->old_path) + 1)
+                     : g_strdup(r->new_path);
+  r->ids = g_list_prepend(r->ids, GINT_TO_POINTER(id));
+  r->folders = g_list_prepend(r->folders, final);
+}
+
 void dt_film_remove_empty()
 {
   // remove all empty film rolls from db:
   GList *empty_dirs = NULL;
   gboolean ask_before_rmdir = dt_conf_get_bool("ask_before_rmdir");
   gboolean raise_signal = FALSE;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id,folder"
-                              " FROM main.film_rolls AS B"
-                              " WHERE (SELECT COUNT(*)"
-                              "        FROM main.images AS A"
-                              "        WHERE A.film_id=B.id) = 0",
-                              -1, &stmt, NULL);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  // Collect first: the original DELETEd rows while its own SELECT cursor was still walking
+  // main.film_rolls.
+  _empty_rolls_t rolls = { NULL, NULL };
+  dt_film_repository_foreach_empty(_collect_empty_roll, &rolls);
+  rolls.ids = g_list_reverse(rolls.ids);
+  rolls.folders = g_list_reverse(rolls.folders);
+
+  for(GList *i = rolls.ids, *f = rolls.folders; i && f; i = g_list_next(i), f = g_list_next(f))
   {
-    sqlite3_stmt *inner_stmt;
     raise_signal = TRUE;
-    const gint id = sqlite3_column_int(stmt, 0);
-    const gchar *folder = (const gchar *)sqlite3_column_text(stmt, 1);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "DELETE FROM main.film_rolls WHERE id=?1", -1,
-                                &inner_stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(inner_stmt, 1, id);
-    sqlite3_step(inner_stmt);
-    sqlite3_finalize(inner_stmt);
+    const gchar *folder = (const gchar *)f->data;
+    dt_film_repository_delete(GPOINTER_TO_INT(i->data));
 
     if(dt_util_is_dir_empty(folder))
     {
@@ -326,7 +285,8 @@ void dt_film_remove_empty()
       else rmdir(folder);
     }
   }
-  sqlite3_finalize(stmt);
+  g_list_free(rolls.ids);
+  g_list_free_full(rolls.folders, g_free);
   if(raise_signal) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_REMOVED);
 
   // dispatch asking for deletion (and subsequent deletion) to the gui thread
@@ -344,15 +304,7 @@ void dt_film_remove_empty()
 
 gboolean dt_film_is_empty(const int id)
 {
-  gboolean empty = FALSE;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id FROM main.images WHERE film_id = ?1", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-  if(sqlite3_step(stmt) != SQLITE_ROW) empty = TRUE;
-  sqlite3_finalize(stmt);
-  return empty;
+  return !dt_film_repository_has_images(id);
 }
 
 // This is basically the same as dt_image_remove() from common/image.c.
@@ -361,54 +313,37 @@ void dt_film_remove(const int id)
 {
   // only allowed if local copies have their original accessible
 
-  sqlite3_stmt *stmt;
-
   gboolean remove_ok = TRUE;
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id FROM main.images WHERE film_id = ?1", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
+  GList *imgids = dt_film_repository_get_image_ids(id);
 
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = imgids; l; l = g_list_next(l))
   {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
-    if(!dt_image_safe_remove(imgid))
+    if(!dt_image_safe_remove(GPOINTER_TO_INT(l->data)))
     {
       remove_ok = FALSE;
       break;
     }
   }
-  sqlite3_finalize(stmt);
 
   if(!remove_ok)
   {
+    g_list_free(imgids);
     dt_control_log(_("cannot remove film roll having local copies with non accessible originals"));
     return;
   }
 
-  // query is needed a second time for mipmap and image cache
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id FROM main.images WHERE film_id = ?1", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  // the same ids again, this time for the mipmap and image caches
+  for(GList *l = imgids; l; l = g_list_next(l))
   {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
+    const int32_t imgid = GPOINTER_TO_INT(l->data);
     dt_image_local_copy_reset(imgid);
     dt_mipmap_cache_remove(imgid, TRUE);
     dt_image_cache_remove(imgid);
   }
-  sqlite3_finalize(stmt);
+  g_list_free(imgids);
 
-  // due to foreign keys, all images with references to the film roll are deleted,
-  // and likewise all entries with references to those images
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM main.film_rolls WHERE id = ?1", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  dt_film_repository_delete(id);
   // dt_control_update_recent_films();
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_FILMROLLS_CHANGED);
@@ -420,91 +355,35 @@ void dt_film_relocate(const char *old_path, const char *new_path)
 
   // Gather every film roll under old_path together with its remapped folder first, so we do
   // not mutate the table while still iterating the SELECT.
-  sqlite3_stmt *stmt;
-  gchar *like = g_strdup_printf("%s%%", old_path);
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, like, -1, SQLITE_TRANSIENT);
-  g_free(like);
+  _relocation_t reloc = { old_path, new_path, NULL, NULL };
+  dt_film_repository_foreach_under(old_path, _collect_relocation, &reloc);
+  reloc.ids = g_list_reverse(reloc.ids);
+  reloc.folders = g_list_reverse(reloc.folders);
 
-  GList *ids = NULL;
-  GList *folders = NULL;
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int id = sqlite3_column_int(stmt, 0);
-    const gchar *old = (const gchar *)sqlite3_column_text(stmt, 1);
-    gchar *final = g_strcmp0(old, old_path) ? g_strdup_printf("%s/%s", new_path, old + strlen(old_path) + 1)
-                                            : g_strdup(new_path);
-    ids = g_list_prepend(ids, GINT_TO_POINTER(id));
-    folders = g_list_prepend(folders, final);
-  }
-  sqlite3_finalize(stmt);
+  for(GList *i = reloc.ids, *f = reloc.folders; i && f; i = g_list_next(i), f = g_list_next(f))
+    dt_film_repository_set_folder(GPOINTER_TO_INT(i->data), (const char *)f->data);
 
-  sqlite3_stmt *up;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "UPDATE main.film_rolls SET folder=?1 WHERE id=?2", -1, &up, NULL);
-  for(GList *i = ids, *f = folders; i && f; i = g_list_next(i), f = g_list_next(f))
-  {
-    sqlite3_reset(up);
-    sqlite3_clear_bindings(up);
-    DT_DEBUG_SQLITE3_BIND_TEXT(up, 1, (const char *)f->data, -1, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_INT(up, 2, GPOINTER_TO_INT(i->data));
-    sqlite3_step(up);
-  }
-  sqlite3_finalize(up);
-  g_list_free(ids);
-  g_list_free_full(folders, g_free);
+  g_list_free(reloc.ids);
+  g_list_free_full(reloc.folders, g_free);
 }
 
 GList *dt_film_get_image_ids(const int filmid)
 {
-  GList *result = NULL;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id FROM main.images WHERE film_id = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int id = sqlite3_column_int(stmt, 0);
-    result = g_list_prepend(result, GINT_TO_POINTER(id));
-  }
-  sqlite3_finalize(stmt);
-  return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
+  return dt_film_repository_get_image_ids(filmid);
+}
+
+static void _record_folder_status(void *user_data, const int32_t id, const char *folder)
+{
+  (void)user_data;
+  dt_film_repository_folder_status_set(id, g_file_test(folder, G_FILE_TEST_IS_DIR));
 }
 
 void dt_film_set_folder_status()
 {
-  sqlite3_stmt *stmt, *stmt2;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM memory.film_folder",
-                              -1, &stmt, NULL);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id, folder FROM main.film_rolls",
-                              -1, &stmt, NULL);
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "INSERT INTO memory.film_folder (id, status) "
-                              "VALUES (?1, ?2)",
-                              -1, &stmt2, NULL);
-  // clang-format on
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int filmid = sqlite3_column_int(stmt, 0);
-    const char *folder = (char *)sqlite3_column_text(stmt, 1);
-    const int status = g_file_test(folder, G_FILE_TEST_IS_DIR);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, filmid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt2, 2, status);
-    sqlite3_step(stmt2);
-    sqlite3_reset(stmt2);
-  }
-  sqlite3_finalize(stmt);
-  sqlite3_finalize(stmt2);
+  // Writing memory.film_folder while the main.film_rolls cursor is open is safe -- different
+  // tables -- and this is what the original did, one INSERT per row as it read them.
+  dt_film_repository_folder_status_clear();
+  dt_film_repository_foreach(_record_folder_status, NULL);
 }
 
 // clang-format off
