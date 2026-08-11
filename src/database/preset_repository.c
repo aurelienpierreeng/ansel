@@ -283,10 +283,45 @@ GList *dt_preset_repository_list_all_versions(const char *operation)
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "SELECT rowid, op_version, op_params, name FROM data.presets"
-                              " WHERE operation=?1",
+                              " WHERE operation=?1"
+                              " ORDER BY writeprotect DESC, LOWER(name), rowid",
                               -1, &stmt, NULL);
   // clang-format on
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+
+  GList *presets = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_module_preset_t *p = g_malloc0(sizeof(dt_module_preset_t));
+    if(p)
+    {
+      p->rowid = sqlite3_column_int(stmt, 0);
+      p->op_version = sqlite3_column_int(stmt, 1);
+      p->op_params = _column_blob(stmt, 2, &p->op_params_size);
+      p->name = _column_text(stmt, 3);
+      p->description = g_strdup("");
+      presets = g_list_prepend(presets, p);
+    }
+  }
+  sqlite3_finalize(stmt);
+
+  /* Reversed so the caller iterates in the order the rows came back, which is what it did
+   * when it stepped the statement itself. */
+  return g_list_reverse(presets);
+}
+
+GList *dt_preset_repository_list_for_version(const char *operation, const int op_version)
+{
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT rowid, op_version, op_params, name FROM data.presets"
+                              " WHERE operation=?1 AND op_version=?2"
+                              " ORDER BY writeprotect DESC, LOWER(name), rowid",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, op_version);
 
   GList *presets = NULL;
   while(sqlite3_step(stmt) == SQLITE_ROW)
