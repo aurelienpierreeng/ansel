@@ -49,11 +49,6 @@ static dt_collection_query_order_resolver_t _order_resolver = NULL;
 static const char *const *_order_names = NULL;
 static int _order_names_count = 0;
 
-static sqlite3_stmt *_collection_count_stmt = NULL;
-static sqlite3_stmt *_collection_get_limit_stmt = NULL;
-static sqlite3_stmt *_collection_get_stmt = NULL;
-static sqlite3_stmt *_collection_image_offset_stmt = NULL;
-static sqlite3_stmt *_collection_get_makermodels_stmt = NULL;
 
 #define LIMIT_QUERY "LIMIT ?1, ?2"
 
@@ -107,9 +102,15 @@ void dt_collection_query_set_order_names(const char *const *names, const int cou
 
 static int _store(gchar *query)
 {
+  /* The generation advances only when the composed text actually changes. Consumers hash it
+   * in place of the text (gui/dtgtk/thumbtable.c), and every
+   * DT_COLLECTION_CHANGE_RELOAD recomposes an IDENTICAL query -- the enum is defined by it.
+   * An unconditional bump would turn each of those reloads (a rating, a tag, an import
+   * batch) into a full "collection changed" reset downstream. */
+  const gboolean changed = (g_strcmp0(_query, query) != 0);
   dt_free(_query);
   _query = g_strdup(query);
-  _generation++;
+  if(changed) _generation++;
   return 1;
 }
 
@@ -646,9 +647,6 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
   return query;
 }
 
-/** The WHERE for every rule except @p exclude, or for all of them when @p apply_exclude is
- *  FALSE. The caller decides whether the exclusion applies -- that used to be a conf read of
- *  "plugins/lighttable/collect/mode<N>", and conf is not this module's to read. */
 static dt_collection_name_value_t *_name_value_new(char *name, int id, int count, int status)
 {
   dt_collection_name_value_t *v = g_malloc0(sizeof(dt_collection_name_value_t));
@@ -659,14 +657,20 @@ static dt_collection_name_value_t *_name_value_new(char *name, int id, int count
   return v;
 }
 
+/** The WHERE for every rule except @p exclude -- or NO restriction at all when
+ *  @p apply_exclude is FALSE. The caller decides whether the exclusion applies (that used
+ *  to be a conf read of "plugins/lighttable/collect/mode<N>", and conf is not this module's
+ *  to read), and FALSE means the rule being edited is an OR rule: an OR rule does not limit
+ *  the collection, so nothing may limit its value list either. The original spelled this
+ *  "don't limit the collection for OR" and appended no rule whatsoever. */
 static gchar *_extended_where_excluding(const int exclude, const gboolean apply_exclude)
 {
   gchar *complete_string = g_strdup("");
-  if(_where_ext)
+  if(_where_ext && apply_exclude)
   {
     for(int i = 0; !IS_NULL_PTR(_where_ext[i]); i++)
     {
-      if(apply_exclude && i == exclude) continue;
+      if(i == exclude) continue;
       complete_string = dt_util_dstrcat(complete_string, "%s", _where_ext[i]);
     }
   }
@@ -1055,16 +1059,13 @@ static int _recompose(void){
 
 static uint32_t _compute_count(void){
   uint32_t count = 1;
-  if(IS_NULL_PTR(_collection_count_stmt))
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT COUNT(DISTINCT imgid) from memory.collected_images",
-                                -1, &_collection_count_stmt, NULL);
-  }
-  sqlite3_stmt *stmt = _collection_count_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT COUNT(DISTINCT imgid) from memory.collected_images",
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return count;
   if(sqlite3_step(stmt) == SQLITE_ROW) count = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
   _count = count;
   return count;
 }
@@ -1455,15 +1456,11 @@ void dt_collection_query_get_makermodels(const gchar *filter, GList **sanitized,
       needle[strlen(needle) - 1] = '\0';
   }
 
-  if(IS_NULL_PTR(_collection_get_makermodels_stmt))
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT maker, model FROM main.images GROUP BY maker, model",
-                                -1, &_collection_get_makermodels_stmt, NULL);
-  }
-  sqlite3_stmt *stmt = _collection_get_makermodels_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT maker, model FROM main.images GROUP BY maker, model",
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return;
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const char *exif_maker = (char *)sqlite3_column_text(stmt, 0);
@@ -1493,6 +1490,7 @@ void dt_collection_query_get_makermodels(const gchar *filter, GList **sanitized,
     dt_free(haystack);
     dt_free(makermodel);
   }
+  sqlite3_finalize(stmt);
   dt_free(needle);
 
   if(sanitized)
@@ -1596,31 +1594,8 @@ int32_t dt_collection_query_find_neighbour(GList *imgids)
 
 void dt_collection_query_cleanup(void)
 {
-  if(_collection_count_stmt)
-  {
-    sqlite3_finalize(_collection_count_stmt);
-    _collection_count_stmt = NULL;
-  }
-  if(_collection_get_stmt)
-  {
-    sqlite3_finalize(_collection_get_stmt);
-    _collection_get_stmt = NULL;
-  }
-  if(_collection_image_offset_stmt)
-  {
-    sqlite3_finalize(_collection_image_offset_stmt);
-    _collection_image_offset_stmt = NULL;
-  }
-  if(_collection_get_makermodels_stmt)
-  {
-    sqlite3_finalize(_collection_get_makermodels_stmt);
-    _collection_get_makermodels_stmt = NULL;
-  }
-  if(_collection_get_limit_stmt)
-  {
-    sqlite3_finalize(_collection_get_limit_stmt);
-    _collection_get_limit_stmt = NULL;
-  }
+  /* No cached statements any more: everything in this file is prepared and finalised per
+   * call, so there is nothing to finalise ahead of the connection closing. */
   dt_free(_query);
   _query = NULL;
   dt_free(_params.text_filter);
@@ -1675,43 +1650,21 @@ GList *dt_collection_query_get_images(const uint32_t limit){
   const gchar *query = _ensure_query();
   if(query)
   {
-    if(_params.query_flags & COLLECTION_QUERY_USE_LIMIT)
-    {
-      if(IS_NULL_PTR(_collection_get_limit_stmt))
-      {
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "SELECT imgid FROM memory.collected_images LIMIT -1, ?1",
-                                    -1, &_collection_get_limit_stmt, NULL);
-      }
-      sqlite3_stmt *stmt = _collection_get_limit_stmt;
-      sqlite3_reset(stmt);
-      sqlite3_clear_bindings(stmt);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, limit);
+    const gboolean use_limit = (_params.query_flags & COLLECTION_QUERY_USE_LIMIT) != 0;
+    sqlite3_stmt *stmt = NULL;
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                use_limit ? "SELECT imgid FROM memory.collected_images LIMIT -1, ?1"
+                                          : "SELECT imgid FROM memory.collected_images",
+                                -1, &stmt, NULL);
+    if(IS_NULL_PTR(stmt)) return NULL;
+    if(use_limit) DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, limit);
 
-      while(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        const int32_t imgid = sqlite3_column_int(stmt, 0);
-        list = g_list_prepend(list, GINT_TO_POINTER(imgid));
-      }
-    }
-    else
+    while(sqlite3_step(stmt) == SQLITE_ROW)
     {
-      if(IS_NULL_PTR(_collection_get_stmt))
-      {
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "SELECT imgid FROM memory.collected_images",
-                                    -1, &_collection_get_stmt, NULL);
-      }
-      sqlite3_stmt *stmt = _collection_get_stmt;
-      sqlite3_reset(stmt);
-      sqlite3_clear_bindings(stmt);
-
-      while(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        const int32_t imgid = sqlite3_column_int(stmt, 0);
-        list = g_list_prepend(list, GINT_TO_POINTER(imgid));
-      }
+      const int32_t imgid = sqlite3_column_int(stmt, 0);
+      list = g_list_prepend(list, GINT_TO_POINTER(imgid));
     }
+    sqlite3_finalize(stmt);
   }
 
   return g_list_reverse(list);  // list built in reverse order, so un-reverse it
@@ -1741,15 +1694,11 @@ int32_t dt_collection_query_get_nth(const int nth){
 int dt_collection_query_image_offset(const int32_t imgid){
   if(imgid == UNKNOWN_IMAGE) return 0;
   int offset = 0;
-  if(IS_NULL_PTR(_collection_image_offset_stmt))
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT imgid FROM memory.collected_images",
-                                -1, &_collection_image_offset_stmt, NULL);
-  }
-  sqlite3_stmt *stmt = _collection_image_offset_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT imgid FROM memory.collected_images",
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return 0;
 
   gboolean found = FALSE;
 
@@ -1763,6 +1712,8 @@ int dt_collection_query_image_offset(const int32_t imgid){
     }
     offset++;
   }
+
+  sqlite3_finalize(stmt);
 
   if(!found) offset = 0;
 
@@ -1797,6 +1748,12 @@ void dt_collection_query_restrict_to_selection(void)
                         "  WHERE imgid NOT IN "
                         "  (SELECT imgid FROM main.selected_images)",
                         NULL, NULL, NULL);
+
+  /* The published count follows every mutation of memory.collected_images this module
+   * makes. The refresh already counted, but the caller runs this restriction AFTER the
+   * refresh -- the original computed its count after both, and dt_collection_get_count()
+   * in culling mode must report the culled subset, not the full collection. */
+  _compute_count();
 }
 
 // clang-format off

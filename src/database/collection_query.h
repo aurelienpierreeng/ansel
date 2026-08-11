@@ -109,7 +109,8 @@ GList *dt_collection_query_get_images(const uint32_t limit);
 /** The id at position `nth`, or -1. */
 int32_t dt_collection_query_get_nth(const int nth);
 
-/** The position of `imgid` within the collection, or -1 if it is not in it. */
+/** The position of `imgid` within the collection, or 0 if it is not in it -- the original's
+ *  convention, which callers use to land at the start rather than error out. */
 int dt_collection_query_image_offset(const int32_t imgid);
 
 /** Save / restore `memory.collected_images`, for code that needs to collect something else for

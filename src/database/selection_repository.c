@@ -29,7 +29,6 @@
 /* The read is on the hot path -- every selection change re-reads the whole table to
  * rebuild the in-memory mirror -- so its statement is cached. The writes are one per user
  * action and are not. */
-static sqlite3_stmt *_get_all_stmt = NULL;
 
 void dt_selection_repository_select(const int32_t imgid)
 {
@@ -75,22 +74,22 @@ void dt_selection_repository_clear(void)
 
 GList *dt_selection_repository_get_all(void)
 {
-  if(IS_NULL_PTR(_get_all_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT imgid FROM main.selected_images ORDER BY imgid DESC",
-                                -1, &_get_all_stmt, NULL);
-    // clang-format on
-  }
-
-  sqlite3_stmt *stmt = _get_all_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  /* Prepared per call: a cached statement here would be shared GUI-thread/worker-thread
+   * state with no lock, and two threads stepping one statement interleave both row
+   * cursors. Same rule as the rest of this module's uncached functions. */
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT imgid FROM main.selected_images ORDER BY imgid DESC",
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return NULL;
 
   GList *list = NULL;
   while(sqlite3_step(stmt) == SQLITE_ROW)
     list = g_list_prepend(list, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+
+  sqlite3_finalize(stmt);
 
   /* Not reversed: the query orders DESC and prepending flips it, so the caller gets
    * ascending order. That was the previous behaviour and the selection's in-memory mirror
@@ -146,11 +145,8 @@ int32_t dt_selection_repository_get_lowest_id(void)
 
 void dt_selection_repository_cleanup(void)
 {
-  if(_get_all_stmt)
-  {
-    sqlite3_finalize(_get_all_stmt);
-    _get_all_stmt = NULL;
-  }
+  /* Nothing cached any more: every statement in this file is prepared and finalised per
+   * call. Kept because the connection's close order calls every repository's cleanup. */
 }
 
 // clang-format off

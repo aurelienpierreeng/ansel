@@ -922,6 +922,11 @@ static void _preview_gpx_file(GtkWidget *widget, dt_lib_module_t *self)
   gtk_widget_destroy(dialog);
 }
 
+static gint _cmp_imgid_asc(gconstpointer a, gconstpointer b)
+{
+  return GPOINTER_TO_INT(a) - GPOINTER_TO_INT(b);
+}
+
 static void _setup_selected_images_list(dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
@@ -940,7 +945,13 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
   // selection.h reserves the raw "SELECT imgid FROM main.selected_images" for JOINs that fetch
   // metadata in the same query; this loop reads its metadata from the image cache, so it is the
   // other case and must iterate the selection.
-  GList *selected = dt_selection_get_list(dt_selection_get_global());
+  //
+  // Sorted ascending, and that is load-bearing: the in-memory selection comes back in
+  // pick order, but the SQL scan this replaced yielded ascending imgid (the table's
+  // INTEGER PRIMARY KEY), and _refresh_images_displayed_on_track() collapses same-location
+  // images into one map marker by comparing each entry with its list NEIGHBOUR -- adjacency
+  // the deterministic order provided and click order does not.
+  GList *selected = g_list_sort(dt_selection_get_list(dt_selection_get_global()), _cmp_imgid_asc);
   for(GList *l = selected; l; l = g_list_next(l))
   {
     const int32_t imgid = GPOINTER_TO_INT(l->data);

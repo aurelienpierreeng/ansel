@@ -85,13 +85,16 @@ on the strength of a question nobody was asked, and a headless run never reaches
 
 ## The lock, and why there is no `dt_database_swap()` yet
 
-`_db_lock` is a private rwlock. Every query the module runs takes it for reading;
-`dt_database_close()` takes it for writing and therefore waits for them.
+`_db_lock` is a private rwlock, taken for reading by the TRANSACTION machinery
+(begin/end and their batch variants) and for writing by `dt_database_close()` — so close
+waits for open transactions, and for nothing else yet. No per-query read lock exists: a
+repository mid-`sqlite3_step` on another thread is invisible to it.
 
-**It does not yet make closing safe, and the module does not pretend it does.**
-`dt_database_get_sqlite3_global()` hands the connection to 344 call sites that keep using
-it long after they returned — outside the lock, outside anything the module can wait for.
-Until that number is zero, the lock covers the module's own statements and nothing else.
+**It does not yet make closing safe, and the module does not pretend it does.** The
+handle-escape count is now zero — no call site outside the module holds the raw connection
+any more — but the per-query read side of this lock is the remaining piece: until every
+repository query runs under it, close must be preceded by stopping the workers, exactly as
+shutdown does today.
 
 So the pieces a workspace swap needs are here — one owned connection, a lock with the
 right shape, an open/close pair that is symmetric and reentrant — but `dt_database_swap()`

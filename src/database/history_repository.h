@@ -37,11 +37,18 @@ extern "C" {
  *  plus the two auto-apply queries that read `data.presets` / `main.legacy_presets` to seed a
  *  new image's history.
  *
- *  Every statement here is prepared once and cached; `dt_history_repository_cleanup()` finalises
- *  them, which the connection must be able to do before it closes. Rows never leave as a
- *  `sqlite3_stmt` -- the two foreach families decode each row into scalars and hand those to a
- *  callback, so a caller never sees a cursor it would have to remember to finalise, and never
- *  holds the statement mutex itself.
+ *  The hot statements (the per-image read/write cycle) are prepared once, cached, and used
+ *  only under this file's statement mutex; `dt_history_repository_cleanup()` finalises them,
+ *  which the connection must be able to do before it closes. The rest prepare and finalise
+ *  per call. Rows never leave as a `sqlite3_stmt` -- the foreach families decode each row
+ *  into scalars and hand those to a callback.
+ *
+ *  @warning dt_history_repository_foreach_row() and
+ *  dt_history_repository_foreach_auto_preset_row() step a CACHED statement and therefore
+ *  hold the statement mutex across every callback invocation. The mutex is not recursive:
+ *  a callback that calls back into this repository deadlocks its own thread. Today's
+ *  callbacks only decode; keep it that way, or move those two walks to per-call statements
+ *  first.
  */
 
 /* ---------------------------------------------------------------------------------------------
@@ -165,9 +172,10 @@ void dt_history_repository_foreach_item(const int32_t imgid, dt_history_reposito
 
 /** append one mask row. TRUE when the INSERT ran to completion.
  *
- *  @warning its one caller does NOT act on this. See the note beside the call in
- *  common/exif.cc: that code tests for a value sqlite3_step() cannot return on an INSERT, so
- *  its "insert this entry only once" guard has never fired. Preserved, not fixed here. */
+ *  Both callers act on this: common/exif.cc's add_mask_entry_to_db() marks the entry
+ *  already-added on success (its "insert once" guard used to test sqlite3_step() against a
+ *  value an INSERT cannot return, and never fired -- fixed alongside the extraction), and
+ *  develop/masks/masks.c writes each form through it. */
 gboolean dt_history_repository_write_mask_item(const int32_t imgid, const int num, const int formid,
                                                const int form, const char *name, const int version,
                                                const void *points, const int points_len,

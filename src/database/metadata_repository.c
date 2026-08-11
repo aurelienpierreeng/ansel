@@ -25,44 +25,32 @@
 
 #include <sqlite3.h>
 
-/* Both reads are on the metadata panel's refresh path, which runs on every selection
- * change, so they keep their statements. */
-static sqlite3_stmt *_get_selected_stmt = NULL;
-static sqlite3_stmt *_get_single_stmt = NULL;
-
 GList *dt_metadata_repository_get_values(const int32_t imgid, const int keyid)
 {
+  /* Prepared per call: a cached statement here would be shared across the GUI thread and
+   * worker jobs with no lock -- two threads stepping one statement interleave both row
+   * cursors, and the lazy first-use prepare is itself a race. */
   sqlite3_stmt *stmt = NULL;
 
   if(imgid < 0)
   {
-    if(IS_NULL_PTR(_get_selected_stmt))
-    {
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "SELECT value FROM main.meta_data WHERE id IN "
-                                  "(SELECT imgid FROM main.selected_images) AND key = ?1 ORDER BY value",
-                                  -1, &_get_selected_stmt, NULL);
-      // clang-format on
-    }
-    stmt = _get_selected_stmt;
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT value FROM main.meta_data WHERE id IN "
+                                "(SELECT imgid FROM main.selected_images) AND key = ?1 ORDER BY value",
+                                -1, &stmt, NULL);
+    // clang-format on
+    if(IS_NULL_PTR(stmt)) return NULL;
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, keyid);
   }
   else // single image under mouse cursor
   {
-    if(IS_NULL_PTR(_get_single_stmt))
-    {
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "SELECT value FROM main.meta_data WHERE id = ?1 AND key = ?2 ORDER BY value",
-                                  -1, &_get_single_stmt, NULL);
-      // clang-format on
-    }
-    stmt = _get_single_stmt;
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT value FROM main.meta_data WHERE id = ?1 AND key = ?2 ORDER BY value",
+                                -1, &stmt, NULL);
+    // clang-format on
+    if(IS_NULL_PTR(stmt)) return NULL;
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, keyid);
   }
@@ -73,6 +61,7 @@ GList *dt_metadata_repository_get_values(const int32_t imgid, const int keyid)
     const char *value = (const char *)sqlite3_column_text(stmt, 0);
     result = g_list_prepend(result, g_strdup(value ? value : "")); // to avoid NULL value
   }
+  sqlite3_finalize(stmt);
 
   return g_list_reverse(result); // list was built in reverse order, so un-reverse it
 }
@@ -194,15 +183,8 @@ void dt_metadata_repository_foreach_selected(dt_metadata_repository_selected_cb 
 
 void dt_metadata_repository_cleanup(void)
 {
-  sqlite3_stmt **const cached[] = { &_get_selected_stmt, &_get_single_stmt };
-  for(size_t i = 0; i < sizeof(cached) / sizeof(cached[0]); i++)
-  {
-    if(*cached[i])
-    {
-      sqlite3_finalize(*cached[i]);
-      *cached[i] = NULL;
-    }
-  }
+  /* Nothing cached any more: every statement in this file is prepared and finalised per
+   * call. Kept because the connection's close order calls every repository's cleanup. */
 }
 
 // clang-format off
