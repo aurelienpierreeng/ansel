@@ -2823,6 +2823,8 @@ lock_again:
     {
       if(write(fd, pid, strlen(pid) + 1) > -1) lock_acquired = TRUE;
       close(fd);
+      // we created the file; if the PID could not be written it is ours to remove
+      if(!lock_acquired) g_unlink(*lockfile);
     }
     else // the lockfile already exists - see if it's a stale one left over from a crashed instance
     {
@@ -2889,6 +2891,15 @@ lock_again:
   if(db->error_message)
     db->error_dbfilename = g_strdup(dbfilename);
 
+  /* The stored path must outlive this call ONLY when this process owns the file:
+   * _database_free() unlinks whatever these fields point at, unconditionally, and a
+   * lock-failed database still travels -- dt_database_open() publishes it so the caller
+   * can read the error, and the retry loop closes it before trying again. Left set on
+   * failure, the path points at the OTHER instance's live lock file, and that close
+   * deletes it -- after which the retry "succeeds" and two instances write the same
+   * database. (dt_free NULLs the field.) */
+  if(!lock_acquired) dt_free(*lockfile);
+
   return lock_acquired;
 }
 
@@ -2898,8 +2909,13 @@ static gboolean _lock_databases(dt_database_t *db)
     return FALSE;
   if(!_lock_single_database(db, db->dbfilename_library, &db->lockfile_library))
   {
-    // unlock data.db to not leave a stale lock file around
-    g_unlink(db->lockfile_data);
+    // unlock data.db to not leave a stale lock file around -- and drop the path, so
+    // _database_free() does not unlink whatever lives at that name by the time it runs
+    if(db->lockfile_data)
+    {
+      g_unlink(db->lockfile_data);
+      dt_free(db->lockfile_data);
+    }
     return FALSE;
   }
   return TRUE;
@@ -3086,10 +3102,21 @@ static dt_database_t *_database_init(const dt_database_params_t *params)
 start:
   if(IS_NULL_PTR(alternative))
   {
-    /* migrate default database location to new default */
-    dt_free(migrated_name);
+    /* migrate default database location to new default. On a corrupt-database retry,
+     * `library` may still alias the PREVIOUS pass's migrated name -- so that allocation
+     * must survive until a new name actually replaces it. Freeing it first and then
+     * passing `library` into the migration reads freed memory. */
+    gchar *previous_name = migrated_name;
     migrated_name = _database_migrate_to_xdg_structure(library);
-    if(!IS_NULL_PTR(migrated_name)) library = migrated_name;
+    if(!IS_NULL_PTR(migrated_name))
+    {
+      library = migrated_name;
+      dt_free(previous_name);
+    }
+    else
+    {
+      migrated_name = previous_name; // keep ownership: `library` may point into it
+    }
   }
 
   /* delete old mipmaps files */
@@ -3167,6 +3194,7 @@ start:
   {
     fprintf(stderr, "[init] database is locked, probably another process is already using it\n");
     dt_free(dbname);
+    dt_free(migrated_name);
     return db;
   }
 
@@ -3183,6 +3211,7 @@ start:
     fprintf(stderr, "[init] try `cp %s/anselrc %s/anselrc'\n", dbfilename_library, datadir);
     sqlite3_close(db->handle);
     dt_free(dbname);
+    dt_free(migrated_name);
     dt_free(db->lockfile_data);
     dt_free(db->dbfilename_data);
     dt_free(db->lockfile_library);
@@ -3204,6 +3233,7 @@ start:
     _ask_readonly(db->dbfilename_library);
     _database_free(db);
     dt_free(dbname);
+    dt_free(migrated_name);
     db = NULL;
     return NULL;
   }
@@ -3689,10 +3719,12 @@ static void _database_free(dt_database_t *db)
 
 void dt_database_close(void)
 {
-  /* Exclusive: wait for every query this module has in flight before the handle goes.
-   * It does NOT wait for the call sites holding a connection from
-   * dt_database_get_sqlite3_global() -- nothing can, which is the whole argument for
-   * getting rid of them. */
+  /* Exclusive against the TRANSACTION writers -- begin/end and their batch variants are
+   * the only readers-side acquirers of _db_lock today, so this waits for open transactions
+   * and for nothing else. It does NOT wait for a repository mid-sqlite3_step on another
+   * thread (no per-query read lock exists yet), and it cannot wait for the call sites
+   * holding a raw connection -- nothing can, which is the whole argument for getting rid
+   * of them. Callers must stop the workers before closing. */
   if(_db_lock_inited) dt_pthread_rwlock_wrlock(&_db_lock);
 
   dt_database_t *const db = _db;

@@ -76,7 +76,6 @@ void dt_selection_repository_push(void);
 /** @brief Copy `memory.selected_backup` back over the selection. */
 void dt_selection_repository_pop(void);
 
-/** @brief Finalise the prepared statements. See dt_colorlabel_repository_cleanup(). */
 /**
  * @brief The lowest selected image id, or UNKNOWN_IMAGE when nothing is selected.
  *
@@ -87,6 +86,8 @@ void dt_selection_repository_pop(void);
  */
 int32_t dt_selection_repository_get_lowest_id(void);
 
+/** @brief Finalise whatever this repository still caches -- today, nothing. See
+ *  dt_colorlabel_repository_cleanup() for why the hook stays. */
 void dt_selection_repository_cleanup(void);
 
 G_END_DECLS

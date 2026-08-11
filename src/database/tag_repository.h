@@ -268,7 +268,6 @@ void dt_tag_repository_get_similar(const char *keyword, GList **tags, GList **im
 GList *dt_tag_repository_get_suggestions(const uint32_t nb_selected, const int confidence,
                                          const char *recent_tags, const int nb_recent);
 
-/** @brief Finalise the cached statements. See dt_colorlabel_repository_cleanup(). */
 /**
  * @brief Do all of @p imgids carry exactly the same tags? The same categories?
  *
@@ -284,6 +283,8 @@ GList *dt_tag_repository_get_suggestions(const uint32_t nb_selected, const int c
 void dt_tag_repository_get_agreement(GList *imgids, gboolean *same_tags,
                                      gboolean *same_categories);
 
+/** @brief Finalise whatever this repository still caches -- today, nothing. See
+ *  dt_colorlabel_repository_cleanup() for why the hook stays. */
 void dt_tag_repository_cleanup(void);
 
 /** One row of dt_tag_repository_get_by_path_with_counts(). */

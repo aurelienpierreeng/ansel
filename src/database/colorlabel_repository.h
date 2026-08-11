@@ -68,13 +68,6 @@ gboolean dt_colorlabel_repository_has(const int32_t imgid, const int color);
  */
 GList *dt_colorlabel_repository_get_list(const int32_t imgid);
 
-/**
- * @brief Finalise the prepared statements.
- *
- * @details Every repository has one of these, and they are not optional: a connection
- * cannot be closed out from under a live `sqlite3_stmt`, so this is what has to run before
- * dt_database_close() for a workspace swap to become possible.
- */
 /** @brief Every colour label of @p imgid, one call per row, in the order the rows come back.
  *
  *  @details dt_colorlabel_repository_get() folds the same rows into a bitmask, which loses that
@@ -84,6 +77,14 @@ GList *dt_colorlabel_repository_get_list(const int32_t imgid);
 void dt_colorlabel_repository_foreach(const int32_t imgid, void (*cb)(void *, const int),
                                       void *user_data);
 
+/**
+ * @brief Finalise whatever this repository still caches -- today, nothing.
+ *
+ * @details Every repository has one of these, and the hook is not optional even when it is
+ * empty: dt_database_close() runs every repository's cleanup, because a connection cannot
+ * be closed out from under a live `sqlite3_stmt` -- that contract is what makes a workspace
+ * swap possible, and the repositories that do cache (image, history, style) rely on it.
+ */
 void dt_colorlabel_repository_cleanup(void);
 
 G_END_DECLS

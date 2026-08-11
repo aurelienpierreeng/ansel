@@ -63,10 +63,10 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img);
 /**
  * @brief Write @p img back to `main.images`, plus its colour labels and history hash.
  *
- * @details Three statements, because three tables carry one image's state: the row itself,
- * `main.color_labels` (through dt_colorlabels_set_labels()) and `main.history_hash`. A caller
- * that wrote only the first would leave an image whose labels and hash describe its previous
- * contents.
+ * @details Three tables carry one image's state: the row itself, `main.color_labels`
+ * (through dt_colorlabel_repository_set()/dt_colorlabel_repository_remove(), one call per
+ * colour) and `main.history_hash`. A caller that wrote only the first would leave an image
+ * whose labels and hash describe its previous contents.
  *
  * @param img image to persist. Ignored when NULL or when its `id` is not positive.
  */
@@ -107,9 +107,11 @@ void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, 
  *  Duplicating and copying a row, with everything that hangs off it
  *
  *  An image is one `main.images` row plus satellites in `main.color_labels`,
- *  `main.meta_data`, `main.tagged_images` and `main.module_order`. Copying one means copying
- *  all five, in one place, or the copy is silently partial -- which is why these are single
- *  calls rather than a set of per-table ones the caller would have to remember to make.
+ *  `main.meta_data` and `main.tagged_images`. Copying one means copying all four, in one
+ *  place, or the copy is silently partial -- which is why these are single calls rather
+ *  than a set of per-table ones the caller would have to remember to make.
+ *  (`main.module_order` is deliberately NOT among them: it travels with the history, which
+ *  the caller copies next via dt_history_copy_and_paste_on_image().)
  * ------------------------------------------------------------------------------------- */
 
 /**
@@ -157,7 +159,7 @@ GList *dt_image_repository_get_duplicate_ids(const int32_t imgid);
 /**
  * @brief Copy @p imgid into film roll @p filmid under @p new_filename, returning the new id.
  *
- * @details The database half of "copy an image to another folder": the row, its four satellite
+ * @details The database half of "copy an image to another folder": the row, its three satellite
  * tables, the version and max_version of every duplicate sharing the destination name, and the
  * group the copy joins. Moving the file and copying its history are the caller's.
  *
@@ -305,8 +307,10 @@ typedef struct dt_image_geo_bounds_t
 
 /** @brief Bounding box of every collected image carrying coordinates.
  *
- *  @return FALSE when the query cannot be read; @p bounds is zeroed first either way, and a
- *  `count` of 0 means the collection has nothing geotagged. */
+ *  @return FALSE when the query cannot be read. @p bounds is seeded with an empty extent
+ *  (mins at +INFINITY, maxes at -INFINITY, count 0) -- the caller's original locals -- so
+ *  the numbers mean something ONLY when `count` is positive. A `count` of 0 means the
+ *  collection has nothing geotagged, and the extent fields must not be read. */
 gboolean dt_image_repository_get_collected_geo_bounds(dt_image_geo_bounds_t *bounds);
 
 /** @brief One geotagged image, in degrees as stored. */

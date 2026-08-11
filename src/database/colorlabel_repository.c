@@ -24,65 +24,60 @@
 
 #include <sqlite3.h>
 
-/* The four statements common/colorlabels.c used to hold itself, along with the
- * lazy-prepare idiom around them. They are hot -- the lighttable asks for an image's
- * labels on every thumbnail -- which is why they are cached rather than prepared per
- * call, and why they need finalising before the connection can be closed. */
-static sqlite3_stmt *_get_stmt = NULL;
-static sqlite3_stmt *_set_stmt = NULL;
-static sqlite3_stmt *_remove_stmt = NULL;
-static sqlite3_stmt *_remove_all_stmt = NULL;
-
-static sqlite3_stmt *_prepared(sqlite3_stmt **cache, const char *query)
+/* Every statement is prepared and finalised per call. These four were cached "because the
+ * lighttable asks for an image's labels on every thumbnail" -- that stopped being true when
+ * the thumbtable moved to one bulk query computing the label mask inline; the remaining
+ * callers run at import/click frequency, and an unlocked cached statement shared between
+ * the GUI thread and worker jobs is a data race, not an optimisation. */
+static sqlite3_stmt *_prepared(const char *query)
 {
-  if(IS_NULL_PTR(*cache))
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, cache, NULL);
-
-  sqlite3_reset(*cache);
-  sqlite3_clear_bindings(*cache);
-  return *cache;
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
+  return stmt;
 }
 
 int dt_colorlabel_repository_get(const int32_t imgid)
 {
-  sqlite3_stmt *stmt = _prepared(&_get_stmt, "SELECT color FROM main.color_labels WHERE imgid = ?1");
+  sqlite3_stmt *stmt = _prepared("SELECT color FROM main.color_labels WHERE imgid = ?1");
+  if(IS_NULL_PTR(stmt)) return 0;
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
 
   int colors = 0;
   // Colors are int between 0 and 5, turn them into octal bitmask
   while(sqlite3_step(stmt) == SQLITE_ROW)
     colors |= (1 << sqlite3_column_int(stmt, 0));
+  sqlite3_finalize(stmt);
 
   return colors;
 }
 
 void dt_colorlabel_repository_set(const int32_t imgid, const int color)
 {
-  // clang-format off
-  sqlite3_stmt *stmt = _prepared(&_set_stmt,
-                                 "INSERT OR IGNORE INTO main.color_labels (imgid, color) VALUES (?1, ?2)");
-  // clang-format on
+  sqlite3_stmt *stmt = _prepared("INSERT OR IGNORE INTO main.color_labels (imgid, color) VALUES (?1, ?2)");
+  if(IS_NULL_PTR(stmt)) return;
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, color);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 void dt_colorlabel_repository_remove(const int32_t imgid, const int color)
 {
-  // clang-format off
-  sqlite3_stmt *stmt = _prepared(&_remove_stmt,
-                                 "DELETE FROM main.color_labels WHERE imgid=?1 AND color=?2");
-  // clang-format on
+  sqlite3_stmt *stmt = _prepared("DELETE FROM main.color_labels WHERE imgid=?1 AND color=?2");
+  if(IS_NULL_PTR(stmt)) return;
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, color);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 void dt_colorlabel_repository_remove_all(const int32_t imgid)
 {
-  sqlite3_stmt *stmt = _prepared(&_remove_all_stmt, "DELETE FROM main.color_labels WHERE imgid=?1");
+  sqlite3_stmt *stmt = _prepared("DELETE FROM main.color_labels WHERE imgid=?1");
+  if(IS_NULL_PTR(stmt)) return;
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 gboolean dt_colorlabel_repository_has(const int32_t imgid, const int color)
@@ -154,15 +149,8 @@ void dt_colorlabel_repository_foreach(const int32_t imgid, void (*cb)(void *, co
 
 void dt_colorlabel_repository_cleanup(void)
 {
-  sqlite3_stmt **const cached[] = { &_get_stmt, &_set_stmt, &_remove_stmt, &_remove_all_stmt };
-  for(size_t i = 0; i < sizeof(cached) / sizeof(cached[0]); i++)
-  {
-    if(*cached[i])
-    {
-      sqlite3_finalize(*cached[i]);
-      *cached[i] = NULL;
-    }
-  }
+  /* Nothing cached any more: every statement in this file is prepared and finalised per
+   * call. Kept because the connection's close order calls every repository's cleanup. */
 }
 
 // clang-format off

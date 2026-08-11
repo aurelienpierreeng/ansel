@@ -126,10 +126,13 @@ void dt_module_preset_free(gpointer data);
 /**
  * @brief Every preset of `(operation, op_version)`.
  *
- * @param with_description also read the description column.
+ * @param with_description also read the description column. When FALSE the rows come back
+ *        UNORDERED and @p shipped_first is ignored -- faithful to the caller this branch
+ *        replaced (get_active_preset_name), which scans every row for a params match and
+ *        never cared about order.
  * @param shipped_first order the read-only presets before the user's, rather than after.
  *        A boolean rather than a sort direction: the caller used to interpolate "DESC" or
- *        "ASC" into the query text itself.
+ *        "ASC" into the query text itself. Only meaningful with @p with_description.
  */
 GList *dt_preset_repository_list_for_module(const char *operation, const int op_version,
                                             const gboolean with_description,
@@ -379,7 +382,10 @@ typedef struct dt_preset_conditions_t
   double iso_min, iso_max;
   double exposure_min, exposure_max;
   double aperture_min, aperture_max;
-  int focal_length_min, focal_length_max;
+  /* REAL columns, like the pairs above: read and bound as doubles so a fractional stored
+   * bound survives an open-and-save of the edit dialog. The dialog displays whole
+   * millimetres, but display rounding is the dialog's, not the store's. */
+  double focal_length_min, focal_length_max;
   int autoapply;
   int filter;
   int format;

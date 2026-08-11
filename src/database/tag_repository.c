@@ -433,12 +433,12 @@ void dt_tag_repository_attach_batch(const char *values)
  *  Attached-tag listings
  * ------------------------------------------------------------------------------------- */
 
-/* Four statements for one question, because the SQL genuinely differs on two axes: one
+/* Four queries for one question, because the SQL genuinely differs on two axes: one
  * image (bind an id) versus the selection (join `main.selected_images`), and whether
  * internal tags are excluded. Indexed [selection][ignore_internal] so the pair of booleans
- * picks the query rather than four copies of the surrounding code doing it. */
-static sqlite3_stmt *_attached_stmt[2][2] = { { NULL, NULL }, { NULL, NULL } };
-
+ * picks the query rather than four copies of the surrounding code doing it. Prepared per
+ * call: a cached statement here would be shared GUI-thread/worker-thread state with no
+ * lock, and the tag panel and batch tag jobs both come through this. */
 static const char *const _attached_query[2][2] = {
   /* one image */
   { "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
@@ -492,13 +492,10 @@ GList *dt_tag_repository_get_attached(const int32_t imgid, const gboolean ignore
   const int sel = (imgid > 0) ? 0 : 1;
   const int ign = ignore_internal ? 1 : 0;
 
-  if(IS_NULL_PTR(_attached_stmt[sel][ign]))
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _attached_query[sel][ign],
-                                -1, &_attached_stmt[sel][ign], NULL);
-
-  sqlite3_stmt *stmt = _attached_stmt[sel][ign];
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _attached_query[sel][ign],
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return NULL;
   if(sel == 0) DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
 
   GList *tags = NULL;
@@ -507,6 +504,7 @@ GList *dt_tag_repository_get_attached(const int32_t imgid, const gboolean ignore
     dt_tag_t *t = _tag_from_row(stmt, TRUE);
     if(t) tags = g_list_prepend(tags, t);
   }
+  sqlite3_finalize(stmt);
 
   return g_list_reverse(tags); // the ORDER BY is the point
 }
@@ -964,13 +962,8 @@ void dt_tag_repository_get_agreement(GList *imgids, gboolean *same_tags, gboolea
 
 void dt_tag_repository_cleanup(void)
 {
-  for(int i = 0; i < 2; i++)
-    for(int j = 0; j < 2; j++)
-      if(_attached_stmt[i][j])
-      {
-        sqlite3_finalize(_attached_stmt[i][j]);
-        _attached_stmt[i][j] = NULL;
-      }
+  /* Nothing cached any more: every statement in this file is prepared and finalised per
+   * call. Kept because the connection's close order calls every repository's cleanup. */
 }
 
 // clang-format off

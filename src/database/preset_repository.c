@@ -194,10 +194,6 @@ gboolean dt_preset_repository_insert(const dt_preset_t *preset)
 
 /* Three of these run on every preset-menu popup, so they keep their statements, as
  * libs/lib.c did before. The rest are one per user action. */
-static sqlite3_stmt *_lib_add_stmt = NULL;
-static sqlite3_stmt *_lib_remove_stmt = NULL;
-static sqlite3_stmt *_lib_select_stmt = NULL;
-static sqlite3_stmt *_lib_delete_operation_stmt = NULL;
 
 /* The two inserts below differ in ONE digit of exposure_max -- 1e8 for a preset created
  * from the menu, 1e7 for one registered by a module at startup -- and have since they were
@@ -243,18 +239,17 @@ GList *dt_preset_repository_list_for_module(const char *operation, const int op_
   }
   else
   {
-    if(IS_NULL_PTR(_lib_select_stmt))
-    {
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "SELECT name, op_params, writeprotect FROM data.presets"
-                                  " WHERE operation=?1 AND op_version=?2",
-                                  -1, &_lib_select_stmt, NULL);
-      // clang-format on
-    }
-    stmt = _lib_select_stmt;
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT name, op_params, writeprotect FROM data.presets"
+                                " WHERE operation=?1 AND op_version=?2",
+                                -1, &stmt, NULL);
+    // clang-format on
+  }
+  if(IS_NULL_PTR(stmt))
+  {
+    dt_free(query);
+    return NULL;
   }
 
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
@@ -276,11 +271,8 @@ GList *dt_preset_repository_list_for_module(const char *operation, const int op_
     }
   }
 
-  if(with_description)
-  {
-    sqlite3_finalize(stmt);
-    dt_free(query);
-  }
+  sqlite3_finalize(stmt);
+  dt_free(query); // NULL in the plain branch; dt_free is NULL-safe
 
   return g_list_reverse(presets); // the ORDER BY is the point; keep it
 }
@@ -447,20 +439,16 @@ void dt_preset_repository_add_shipped_preset(const char *name, const char *opera
                                              const int op_version, const void *params,
                                              const int params_size, const int writeprotect)
 {
-  if(IS_NULL_PTR(_lib_add_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-        "INSERT INTO data.presets " _PRESET_COLUMNS
-        " VALUES (?1, '', ?2, ?3, ?4, NULL, 0, 1, '%', '%', '%', 0, "
-        "         340282346638528859812000000000000000000, 0, 10000000, 0, 100000000, "
-        "         0, 1000, ?5, 0, 0, 0, 0)",
-        -1, &_lib_add_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _lib_add_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+      "INSERT INTO data.presets " _PRESET_COLUMNS
+      " VALUES (?1, '', ?2, ?3, ?4, NULL, 0, 1, '%', '%', '%', 0, "
+      "         340282346638528859812000000000000000000, 0, 10000000, 0, 100000000, "
+      "         0, 1000, ?5, 0, 0, 0, 0)",
+      -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
 
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
@@ -468,6 +456,7 @@ void dt_preset_repository_add_shipped_preset(const char *name, const char *opera
   DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, params, params_size, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, writeprotect);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 void dt_preset_repository_update_module_params(const char *operation, const char *name,
@@ -605,41 +594,35 @@ void dt_preset_repository_duplicate_module_preset(const char *operation, const i
 void dt_preset_repository_delete_module_preset(const char *operation, const int op_version,
                                                const char *name)
 {
-  if(IS_NULL_PTR(_lib_remove_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "DELETE FROM data.presets"
-                                " WHERE name=?1 AND operation=?2 AND op_version=?3 AND writeprotect=0",
-                                -1, &_lib_remove_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _lib_remove_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "DELETE FROM data.presets"
+                              " WHERE name=?1 AND operation=?2 AND op_version=?3 AND writeprotect=0",
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
 
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, op_version);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 void dt_preset_repository_delete_all_for_module(const char *operation)
 {
-  if(IS_NULL_PTR(_lib_delete_operation_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "DELETE FROM data.presets WHERE operation=?1",
-                                -1, &_lib_delete_operation_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _lib_delete_operation_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "DELETE FROM data.presets WHERE operation=?1",
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
 
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, operation, -1, SQLITE_TRANSIENT);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 void dt_preset_repository_update_params_by_rowid(const int rowid, const int op_version,
@@ -675,13 +658,9 @@ void dt_preset_repository_delete_by_rowid(const int rowid)
  *  Auto-apply conditions
  * ------------------------------------------------------------------------------------- */
 
-/* One cached statement per column, as gui/presets.c held them. The queries are literal and
- * indexed by the enum rather than assembled, so `grep "iso_min" src/database` still finds
- * the one that writes it. */
-static sqlite3_stmt *_range_stmt[DT_PRESET_RANGE_LAST] = { NULL };
-static sqlite3_stmt *_flag_stmt[DT_PRESET_FLAG_LAST] = { NULL };
-static sqlite3_stmt *_camera_stmt = NULL;
-static sqlite3_stmt *_iop_add_stmt = NULL;
+/* One literal query per column, indexed by the enum rather than assembled, so
+ * `grep "iso_min" src/database` still finds the one that writes it. Prepared per call:
+ * the cached statements these replaced were unlocked cross-thread shared state. */
 
 static const char *const _range_query[DT_PRESET_RANGE_LAST] = {
   [DT_PRESET_RANGE_ISO] = "UPDATE data.presets"
@@ -716,13 +695,10 @@ void dt_preset_repository_update_range(const char *operation, const int op_versi
 {
   if(range < 0 || range >= DT_PRESET_RANGE_LAST) return;
 
-  if(IS_NULL_PTR(_range_stmt[range]))
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _range_query[range],
-                                -1, &_range_stmt[range], NULL);
-
-  sqlite3_stmt *stmt = _range_stmt[range];
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _range_query[range],
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return;
 
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, min);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, max);
@@ -730,6 +706,7 @@ void dt_preset_repository_update_range(const char *operation, const int op_versi
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, op_version);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, name, -1, SQLITE_TRANSIENT);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 void dt_preset_repository_update_flag(const char *operation, const int op_version, const char *name,
@@ -737,37 +714,31 @@ void dt_preset_repository_update_flag(const char *operation, const int op_versio
 {
   if(flag < 0 || flag >= DT_PRESET_FLAG_LAST) return;
 
-  if(IS_NULL_PTR(_flag_stmt[flag]))
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _flag_query[flag],
-                                -1, &_flag_stmt[flag], NULL);
-
-  sqlite3_stmt *stmt = _flag_stmt[flag];
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), _flag_query[flag],
+                              -1, &stmt, NULL);
+  if(IS_NULL_PTR(stmt)) return;
 
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, value);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, op_version);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, name, -1, SQLITE_TRANSIENT);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 void dt_preset_repository_update_camera(const char *operation, const int op_version, const char *name,
                                         const char *maker, const char *model, const char *lens)
 {
-  if(IS_NULL_PTR(_camera_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "UPDATE data.presets"
-                                " SET maker='%' || ?1 || '%', model=?2, lens=?3"
-                                " WHERE operation=?4 AND op_version=?5 AND name=?6",
-                                -1, &_camera_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _camera_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "UPDATE data.presets"
+                              " SET maker='%' || ?1 || '%', model=?2, lens=?3"
+                              " WHERE operation=?4 AND op_version=?5 AND name=?6",
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
 
   /* An empty model or lens means "any", and the auto-apply query matches with LIKE, so it
    * has to be stored as the wildcard rather than as "". */
@@ -778,6 +749,7 @@ void dt_preset_repository_update_camera(const char *operation, const int op_vers
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, op_version);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 6, name, -1, SQLITE_TRANSIENT);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 
@@ -861,25 +833,21 @@ void dt_preset_repository_add_iop_preset(const char *name, const char *operation
                                          const void *blend_params, const int blend_params_size,
                                          const int blendop_version, const int enabled)
 {
-  if(IS_NULL_PTR(_iop_add_stmt))
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-        "INSERT OR REPLACE"
-        " INTO data.presets (name, description, operation, op_version, op_params, enabled,"
-        "                    blendop_params, blendop_version, multi_priority, multi_name,"
-        "                    model, maker, lens, iso_min, iso_max, exposure_min, exposure_max,"
-        "                    aperture_min, aperture_max, focal_length_min, focal_length_max,"
-        "                    writeprotect, autoapply, filter, def, format)"
-        " VALUES (?1, '', ?2, ?3, ?4, ?5, ?6, ?7, 0, '', '%', '%', '%', 0,"
-        "         340282346638528859812000000000000000000, 0, 10000000, 0, 100000000, 0,"
-        "         1000, 1, 0, 0, 0, 0)",
-        -1, &_iop_add_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _iop_add_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+      "INSERT OR REPLACE"
+      " INTO data.presets (name, description, operation, op_version, op_params, enabled,"
+      "                    blendop_params, blendop_version, multi_priority, multi_name,"
+      "                    model, maker, lens, iso_min, iso_max, exposure_min, exposure_max,"
+      "                    aperture_min, aperture_max, focal_length_min, focal_length_max,"
+      "                    writeprotect, autoapply, filter, def, format)"
+      " VALUES (?1, '', ?2, ?3, ?4, ?5, ?6, ?7, 0, '', '%', '%', '%', 0,"
+      "         340282346638528859812000000000000000000, 0, 10000000, 0, 100000000, 0,"
+      "         1000, 1, 0, 0, 0, 0)",
+      -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return;
 
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
@@ -889,6 +857,7 @@ void dt_preset_repository_add_iop_preset(const char *name, const char *operation
   DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, blend_params, blend_params_size, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, blendop_version);
   sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 GList *dt_preset_repository_list_for_iop(const char *operation, const int op_version)
@@ -1092,8 +1061,8 @@ gboolean dt_preset_repository_get_conditions(const char *operation, const int op
     c->exposure_max = sqlite3_column_double(stmt, 8);
     c->aperture_min = sqlite3_column_double(stmt, 9);
     c->aperture_max = sqlite3_column_double(stmt, 10);
-    c->focal_length_min = sqlite3_column_int(stmt, 11);
-    c->focal_length_max = sqlite3_column_int(stmt, 12);
+    c->focal_length_min = sqlite3_column_double(stmt, 11);
+    c->focal_length_max = sqlite3_column_double(stmt, 12);
     c->autoapply = sqlite3_column_int(stmt, 13);
     c->filter = sqlite3_column_int(stmt, 14);
     c->format = sqlite3_column_int(stmt, 15);
@@ -1117,8 +1086,8 @@ static void _bind_conditions(sqlite3_stmt *stmt, const dt_preset_conditions_t *c
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 9, c->exposure_max);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 10, c->aperture_min);
   DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 11, c->aperture_max);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 12, c->focal_length_min);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 13, c->focal_length_max);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 12, c->focal_length_min);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 13, c->focal_length_max);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 14, c->autoapply);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 15, c->filter);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 16, c->format);
@@ -1347,31 +1316,8 @@ GList *dt_preset_repository_list_editable(void)
 
 void dt_preset_repository_cleanup(void)
 {
-  sqlite3_stmt **const cached[]
-      = { &_lib_add_stmt, &_lib_remove_stmt, &_lib_select_stmt, &_lib_delete_operation_stmt,
-          &_camera_stmt, &_iop_add_stmt };
-  for(size_t i = 0; i < sizeof(cached) / sizeof(cached[0]); i++)
-  {
-    if(*cached[i])
-    {
-      sqlite3_finalize(*cached[i]);
-      *cached[i] = NULL;
-    }
-  }
-
-  for(int i = 0; i < DT_PRESET_RANGE_LAST; i++)
-    if(_range_stmt[i])
-    {
-      sqlite3_finalize(_range_stmt[i]);
-      _range_stmt[i] = NULL;
-    }
-
-  for(int i = 0; i < DT_PRESET_FLAG_LAST; i++)
-    if(_flag_stmt[i])
-    {
-      sqlite3_finalize(_flag_stmt[i]);
-      _flag_stmt[i] = NULL;
-    }
+  /* Nothing cached any more: every statement in this file is prepared and finalised per
+   * call. Kept because the connection's close order calls every repository's cleanup. */
 }
 
 // clang-format off
