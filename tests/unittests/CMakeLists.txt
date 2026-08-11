@@ -1,4 +1,8 @@
-add_subdirectory(iop)
+# Apple's ld64 does not support -Wl,--wrap, which add_cmocka_mock_test() is built on --
+# the mock tests cannot link on macOS, with any cmocka.
+if(NOT APPLE)
+  add_subdirectory(iop)
+endif()
 
 add_cmocka_test(test_sample
                 SOURCES test_sample.c

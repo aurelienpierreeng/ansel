@@ -22,7 +22,6 @@
 
 #include "testdb.h"
 
-#include <string.h>
 
 static const unsigned char params_a[] = { 0xde, 0xad, 0xbe, 0xef, 0x01 };
 static const unsigned char params_b[] = { 0xca, 0xfe, 0xba, 0xbe };

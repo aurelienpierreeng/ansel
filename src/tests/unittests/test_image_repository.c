@@ -26,7 +26,6 @@
 
 #include "testdb.h"
 
-#include <string.h>
 
 // an arbitrary flag bit with no side meaning in these tests
 #define TEST_FLAG 2048
