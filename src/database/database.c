@@ -3769,8 +3769,14 @@ static gchar *_database_migrate_to_xdg_structure(const char *configured_db)
 {
   gchar dbfilename[PATH_MAX] = { 0 };
 
-  gchar datadir[PATH_MAX] = { 0 };
-  dt_loc_get_datadir(datadir, sizeof(datadir));
+  /* The destination must be the directory _database_init() resolves a relative library
+   * name against -- the user config dir -- because the name this returns is exactly such a
+   * relative name. It used to be dt_loc_get_datadir(), a fossil from when "datadir" WAS the
+   * user's directory; today that is the read-only <prefix>/share/ansel, where the rename
+   * fails on a system install (EACCES, or EXDEV across mounts) and would land the file
+   * where the open path never looks on any install where it could succeed. */
+  gchar configdir[PATH_MAX] = { 0 };
+  dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
   if(configured_db && configured_db[0] != '/')
   {
@@ -3779,11 +3785,19 @@ static gchar *_database_migrate_to_xdg_structure(const char *configured_db)
     if(g_file_test(dbfilename, G_FILE_TEST_EXISTS))
     {
       char destdbname[PATH_MAX] = { 0 };
-      dt_concat_path_file(destdbname, datadir, "library.db");
+      dt_concat_path_file(destdbname, configdir, "library.db");
       if(!g_file_test(destdbname, G_FILE_TEST_EXISTS))
       {
         fprintf(stderr, "[init] moving database into new XDG directory structure\n");
-        rename(dbfilename, destdbname);
+        if(rename(dbfilename, destdbname) != 0)
+        {
+          /* Report the migration ONLY when it happened: the old code returned success on a
+           * failed rename, so conf was rewritten to name a file that was never created and
+           * the next open built an empty library while the real one sat orphaned in $HOME. */
+          fprintf(stderr, "[init] could not move `%s' to `%s' (%s), keeping the old location\n",
+                  dbfilename, destdbname, strerror(errno));
+          return NULL;
+        }
         if(!IS_NULL_PTR(_renamed_handler)) _renamed_handler("library.db");
         return g_strdup("library.db");
       }
