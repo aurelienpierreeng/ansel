@@ -154,12 +154,25 @@ int dt_film_new(dt_film_t *film, const char *directory)
       dt_film_repository_folder_status_set(film->id, TRUE);
     }
   }
-  // On Windows this used to "make sure we reuse the same path case" by re-reading the stored
-  // folder -- but it tested `sqlite3_step(...) != SQLITE_ROW` and then read column 0 of a
-  // statement that had returned no row, so it could only ever have copied a NULL. film->id comes
-  // from dt_film_get_id() immediately above, so the row always exists, the test was never true
-  // and the copy never ran. Dropped as the no-op it is, rather than "fixed" to `== SQLITE_ROW`,
-  // which would change what Windows stores in film->dirname.
+#ifdef _WIN32
+  else
+  {
+    // Make sure we reuse the same path case.
+    //
+    // dt_film_get_id() matches case-insensitively on Windows (LIKE), so film->dirname can differ
+    // in case from what the roll is actually stored under; adopt the stored spelling so the two
+    // agree. This used to test `sqlite3_step(...) != SQLITE_ROW` and then read column 0 of a
+    // statement that had returned no row -- i.e. it could only ever have copied a NULL, and
+    // since film->id comes from dt_film_get_id() just above the row always exists, so the copy
+    // never ran at all. The test is inverted here to what it was plainly meant to be.
+    char *stored = dt_film_repository_get_folder(film->id);
+    if(stored)
+    {
+      g_strlcpy(film->dirname, stored, sizeof(film->dirname));
+      dt_free(stored);
+    }
+  }
+#endif
 
   if(film->id <= 0)
     dt_print(DT_DEBUG_IMPORT, "[Import] Could not create a new filmid for %s\n", directory);

@@ -3109,20 +3109,21 @@ static void add_mask_entry_to_db(int32_t imgid, mask_entry_t *entry)
   const int mask_num = 0;
 
   const int mask_num_used = (entry->version < 3) ? mask_num : entry->mask_num;
-  dt_history_repository_write_mask_item(imgid, mask_num_used, entry->mask_id, entry->mask_type,
-                                        entry->mask_name, entry->mask_version, entry->mask_points,
-                                        entry->mask_points_len, entry->mask_nb, entry->mask_src,
-                                        entry->mask_src_len);
+  const gboolean inserted =
+      dt_history_repository_write_mask_item(imgid, mask_num_used, entry->mask_id, entry->mask_type,
+                                            entry->mask_name, entry->mask_version, entry->mask_points,
+                                            entry->mask_points_len, entry->mask_nb, entry->mask_src,
+                                            entry->mask_src_len);
 
-  // NOTE: this used to test sqlite3_step()'s result against SQLITE_OK. An INSERT that runs to
-  // completion returns SQLITE_DONE, never SQLITE_OK, so the flag below has never been set and
-  // the "add the mask entry only once" guard at the top of this function has never fired.
-  // Preserved exactly: turning the guard on changes what a sidecar read writes to
-  // main.masks_history, which is not a refactor's decision to make.
-  const int prepare_result = SQLITE_DONE;
-
-  // Mark entry to true only after confirmation the sql insert was successful
-  if(prepare_result == SQLITE_OK)
+  // Mark entry to true only after confirmation the sql insert was successful.
+  //
+  // This used to compare sqlite3_step()'s result against SQLITE_OK. An INSERT that runs to
+  // completion returns SQLITE_DONE, so the test was never true, the flag was never set, and the
+  // guard at the top of this function never fired. For a legacy sidecar (xmp_version < 3) every
+  // non-clone mask is reached TWICE -- once by the hash-table pass over every entry, and again
+  // by the per-history-item recursion through its group -- and once more per extra module
+  // sharing that group. Each of those wrote another row into main.masks_history.
+  if(inserted)
   {
     entry->already_added = TRUE;
   }
