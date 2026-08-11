@@ -288,6 +288,49 @@ typedef void (*dt_image_repository_path_row_cb)(const int32_t imgid,
  */
 void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, void *user_data);
 
+/* ---------------------------------------------------------------------------------------
+ *  Geolocation
+ *
+ *  `main.images.latitude`/`longitude`, restricted to the current collection. The map view
+ *  asks two questions of it: where to centre, and which images fall inside the viewport.
+ * ------------------------------------------------------------------------------------- */
+
+/** @brief The extent of the collection's geotagged images. */
+typedef struct dt_image_geo_bounds_t
+{
+  double min_latitude, max_latitude;
+  double min_longitude, max_longitude;
+  int count;   /**< how many geotagged images the extent was computed from; 0 means none */
+} dt_image_geo_bounds_t;
+
+/** @brief Bounding box of every collected image carrying coordinates.
+ *
+ *  @return FALSE when the query cannot be read; @p bounds is zeroed first either way, and a
+ *  `count` of 0 means the collection has nothing geotagged. */
+gboolean dt_image_repository_get_collected_geo_bounds(dt_image_geo_bounds_t *bounds);
+
+/** @brief One geotagged image, in degrees as stored. */
+typedef struct dt_image_geo_point_t
+{
+  int32_t imgid;
+  double longitude;
+  double latitude;
+} dt_image_geo_point_t;
+
+/**
+ * @brief Collected images inside the box, **ordered by longitude ascending**.
+ *
+ * @details The order is not cosmetic: the caller's DBSCAN clustering sweeps the array in
+ * longitude order and would cluster differently without it.
+ *
+ * @param count out: how many points the array holds. Never NULL.
+ * @return a newly allocated array of @p count points, or NULL when there are none.
+ *         Free with dt_free().
+ */
+dt_image_geo_point_t *dt_image_repository_get_collected_geo_points(const double lon1, const double lon2,
+                                                                   const double lat1, const double lat2,
+                                                                   int *count);
+
 /** @brief `main.images.write_timestamp` for @p imgid, or 0. */
 int64_t dt_image_repository_get_write_timestamp(const int32_t imgid);
 

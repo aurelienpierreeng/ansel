@@ -748,6 +748,90 @@ void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, v
   sqlite3_finalize(stmt);
 }
 
+gboolean dt_image_repository_get_collected_geo_bounds(dt_image_geo_bounds_t *bounds)
+{
+  if(IS_NULL_PTR(bounds)) return FALSE;
+
+  bounds->min_latitude = INFINITY;
+  bounds->max_latitude = -INFINITY;
+  bounds->min_longitude = INFINITY;
+  bounds->max_longitude = -INFINITY;
+  bounds->count = 0;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT MIN(latitude), MAX(latitude),"
+                              "       MIN(longitude), MAX(longitude), COUNT(*)"
+                              " FROM main.images AS i "
+                              " JOIN memory.collected_images AS l ON l.imgid = i.id "
+                              " WHERE latitude NOT NULL AND longitude NOT NULL",
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return FALSE;
+
+  const gboolean ok = (sqlite3_step(stmt) == SQLITE_ROW);
+  if(ok)
+  {
+    bounds->min_latitude = sqlite3_column_double(stmt, 0);
+    bounds->max_latitude = sqlite3_column_double(stmt, 1);
+    bounds->min_longitude = sqlite3_column_double(stmt, 2);
+    bounds->max_longitude = sqlite3_column_double(stmt, 3);
+    bounds->count = sqlite3_column_int(stmt, 4);
+  }
+  sqlite3_finalize(stmt);
+
+  return ok;
+}
+
+dt_image_geo_point_t *dt_image_repository_get_collected_geo_points(const double lon1, const double lon2,
+                                                                   const double lat1, const double lat2,
+                                                                   int *count)
+{
+  if(IS_NULL_PTR(count)) return NULL;
+  *count = 0;
+
+  sqlite3_stmt *stmt = NULL;
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT * FROM"
+                              " (SELECT i.id, i.longitude, i.latitude "
+                              "   FROM main.images i INNER JOIN memory.collected_images c ON i.id = c.imgid"
+                              "   WHERE longitude >= ?1 AND longitude <= ?2"
+                              "           AND latitude <= ?3 AND latitude >= ?4 "
+                              "           AND longitude NOT NULL AND latitude NOT NULL)"
+                              "   ORDER BY longitude ASC",  // critical to make dbscan work
+                              -1, &stmt, NULL);
+  // clang-format on
+  if(IS_NULL_PTR(stmt)) return NULL;
+
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 1, lon1);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 2, lon2);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 3, lat1);
+  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 4, lat2);
+
+  // One pass into a growing array, where the caller used to step the whole cursor once to
+  // count the rows and a second time to fill an exactly-sized buffer.
+  GArray *points = g_array_new(FALSE, FALSE, sizeof(dt_image_geo_point_t));
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    dt_image_geo_point_t p = { .imgid = sqlite3_column_int(stmt, 0),
+                               .longitude = sqlite3_column_double(stmt, 1),
+                               .latitude = sqlite3_column_double(stmt, 2) };
+    g_array_append_val(points, p);
+  }
+  sqlite3_finalize(stmt);
+
+  *count = (int)points->len;
+  if(points->len == 0)
+  {
+    g_array_free(points, TRUE);
+    return NULL;
+  }
+
+  return (dt_image_geo_point_t *)g_array_free(points, FALSE);  // hand over the buffer
+}
+
 int64_t dt_image_repository_get_write_timestamp(const int32_t imgid)
 {
   if(imgid <= 0) return 0;
