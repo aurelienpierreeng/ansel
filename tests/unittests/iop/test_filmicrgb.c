@@ -32,7 +32,7 @@
  *
  * Please see README.md for more detailed documentation.
  */
-#include "common/darktable.h"
+#include "system/mem_alloc.h" // dt_free
 #include <limits.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -77,12 +77,13 @@ void __wrap_dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean update)
 
 static void test_name(void **state)
 {
-  assert_string_equal(name(), "filmic rgb");
+  // the underscore is the mnemonic marker (see "Modules: implement mnemonics on names")
+  assert_string_equal(name(), "fil_mic");
 }
 
 static void test_default_group(void **state)
 {
-  assert_int_equal(default_group(), IOP_GROUP_TONES | IOP_GROUP_TECHNICAL);
+  assert_int_equal(default_group(), IOP_GROUP_TONES);
 }
 
 static void test_clamp_simd(void **state)
@@ -123,7 +124,7 @@ static void test_pixel_rgb_norm_power(void **state)
     assert_true(norm > 0.0f);
     assert_true(norm <= 1.0f + 1e-6f);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that norm is equal to pixel (r=g=b) value on greyscale "
     "values");
@@ -135,7 +136,7 @@ static void test_pixel_rgb_norm_power(void **state)
     TR_DEBUG("pixel={%e, %e, %e) => norm=%e", p[0], p[1], p[2], norm);
     assert_float_equal(norm, p[0], E);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that norm is in ]0; +inf[ for bad greyscale pixels in "
     "]0;  +inf[");
@@ -152,7 +153,7 @@ static void test_pixel_rgb_norm_power(void **state)
       assert_true(norm <= FLT_MAX);
     }
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that norm is in ]0; +inf[ for bad negative greyscale pixels "
     "in ]-inf; 0]");
@@ -174,7 +175,7 @@ static void test_pixel_rgb_norm_power(void **state)
       assert_float_equal(norm, 0.0f, FLT_MIN);
     }
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 }
 
 static void test_get_pixel_norm(void **state)
@@ -194,7 +195,7 @@ static void test_get_pixel_norm(void **state)
     assert_true(norm > 0.0f);
     assert_true(norm <= 1.0f + E);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that max-rgb norm is equal to pixel (r=g=b) value on "
     "greyscale values");
@@ -206,7 +207,7 @@ static void test_get_pixel_norm(void **state)
     TR_DEBUG("pixel={%e, %e, %e) => norm=%e", p[0], p[1], p[2], norm);
     assert_float_equal(norm, p[0], E);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that max-rgb norm is in ]0; +inf[ for bad greyscale pixels "
     "in ]0;  +inf[");
@@ -218,7 +219,7 @@ static void test_get_pixel_norm(void **state)
     assert_true(norm > 0.0f);
     assert_true(norm <= FLT_MAX);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that max-rgb norm is in ]0; +inf[ for bad negative greyscale "
     "pixels in ]-inf; 0]");
@@ -232,7 +233,7 @@ static void test_get_pixel_norm(void **state)
     // bug: assert_true(norm > 0.0f);
     assert_true(norm <= FLT_MAX);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify luminance-y norm (verify subsequent function calls)");
   // TODO: find out how to mock inline functions!
@@ -243,7 +244,7 @@ static void test_get_pixel_norm(void **state)
   // TODO: find out how to mock inline functions!
 }
 
-static void test_log_tonemapping_v2(void **state)
+static void test_log_tonemapping(void **state)
 {
   Testimg *ti;
   float grey = 0.1845f;
@@ -257,7 +258,7 @@ static void test_log_tonemapping_v2(void **state)
   ti = testimg_gen_grey_space(TESTIMG_STD_WIDTH);
   for_testimg_pixels_p_xy(ti)
   {
-    float ret = log_tonemapping_v2(p[0], grey, black, dyn_range);
+    float ret = log_tonemapping(p[0], grey, black, dyn_range);
     TR_DEBUG("%e => %e", p[0], ret);
     float exp = testimg_val_to_log(p[0]);
     if (exp < MIN)
@@ -269,14 +270,14 @@ static void test_log_tonemapping_v2(void **state)
       assert_float_equal(ret, exp, E);
     }
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that output is 1 EV brighter (and clipped to [0; 1]) when "
     "grey is set to half");
   ti = testimg_gen_grey_space(TESTIMG_STD_WIDTH);
   for_testimg_pixels_p_xy(ti)
   {
-    float ret = log_tonemapping_v2(p[0], (grey / 2.0f), black, dyn_range);
+    float ret = log_tonemapping(p[0], (grey / 2.0f), black, dyn_range);
     TR_DEBUG("%e => %e", p[0], ret);
     float exp = testimg_val_to_log(p[0] * 2.0f);  // *2.0 means +1EV
     if (exp < MIN)
@@ -292,30 +293,30 @@ static void test_log_tonemapping_v2(void **state)
       assert_float_equal(ret, exp, E);
     }
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that output is bound to [0; 1] for all non-negative values");
   ti = testimg_gen_grey_max_dr();
   for_testimg_pixels_p_xy(ti)
   {
-    float ret = log_tonemapping_v2(p[0], grey, black, dyn_range);
+    float ret = log_tonemapping(p[0], grey, black, dyn_range);
     TR_DEBUG("{%e, %e, %e, %e} => %e", p[0], p[1], p[2], p[3], ret);
     assert_true(ret >= MIN);
     assert_true(ret <= MAX);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that output is bound to [0; 1] for all negative values "
     "(incl. 0.0)");
   ti = testimg_gen_grey_max_dr_neg();
   for_testimg_pixels_p_xy(ti)
   {
-    float ret = log_tonemapping_v2(p[0], grey, black, dyn_range);
+    float ret = log_tonemapping(p[0], grey, black, dyn_range);
     TR_DEBUG("{%e, %e, %e, %e} => %e", p[0], p[1], p[2], p[3], ret);
     assert_true(ret >= MIN);
     assert_true(ret <= MAX);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 }
 
 static void test_filmic_spline(void **state)
@@ -411,7 +412,7 @@ static void test_filmic_desaturate_v1(void **state)
           assert_float_equal(ret, 1.0f, 1e-2);
         }
       }
-      testimdt_free(ti);
+      testimg_free(ti);
     }
   }
 
@@ -430,7 +431,7 @@ static void test_filmic_desaturate_v1(void **state)
   }
   // set saturation back:
   saturation = saturation_gui_to_internal(saturation_percent);
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify output is in ]0; 1] for bad values in ]0; +inf[");
   ti = testimg_gen_grey_max_dr();
@@ -441,7 +442,7 @@ static void test_filmic_desaturate_v1(void **state)
     assert_true(ret > 0.0f);
     assert_true(ret <= 1.0f);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify output is in ]0; 1] for bad negative values in ]-inf; 0]");
   ti = testimg_gen_grey_max_dr_neg();
@@ -452,7 +453,7 @@ static void test_filmic_desaturate_v1(void **state)
     assert_true(ret > 0.0f);
     assert_true(ret <= 1.0f);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 }
 
 static void test_linear_saturation(void **state)
@@ -477,7 +478,7 @@ static void test_linear_saturation(void **state)
     assert_float_equal(s1, p[1], E);
     assert_float_equal(s2, p[2], E);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that output is equal to value for rgb values when saturation "
     "is 1.0");
@@ -495,7 +496,7 @@ static void test_linear_saturation(void **state)
     assert_float_equal(s1, p[1], E);
     assert_float_equal(s2, p[2], E);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 
   TR_STEP("verify that output is pure grey, equal to luminance, for rgb values "
     "when saturation is 0.0");
@@ -513,7 +514,7 @@ static void test_linear_saturation(void **state)
     assert_float_equal(s0, s2, E);
     assert_float_equal(s0, luminance, E);
   }
-  testimdt_free(ti);
+  testimg_free(ti);
 }
 
 /*
@@ -527,7 +528,7 @@ int main(int argc, char* argv[])
     cmocka_unit_test(test_clamp_simd),
     cmocka_unit_test(test_pixel_rgb_norm_power),
     cmocka_unit_test(test_get_pixel_norm),
-    cmocka_unit_test(test_log_tonemapping_v2),
+    cmocka_unit_test(test_log_tonemapping),
     cmocka_unit_test(test_filmic_spline),
     cmocka_unit_test(test_filmic_desaturate_v1),
     cmocka_unit_test(test_linear_saturation)
