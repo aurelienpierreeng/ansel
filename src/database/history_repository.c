@@ -55,6 +55,12 @@ static sqlite3_stmt *_history_update_item_stmt = NULL;
 static sqlite3_stmt *_history_auto_presets_stmt = NULL;
 static sqlite3_stmt *_history_auto_presets_legacy_stmt = NULL;
 static sqlite3_stmt *_history_auto_ioporder_stmt = NULL;
+
+static sqlite3_stmt *_module_order_select_stmt = NULL;
+static sqlite3_stmt *_module_order_select_version_stmt = NULL;
+static sqlite3_stmt *_module_order_insert_stmt = NULL;
+static sqlite3_stmt *_module_order_update_list_stmt = NULL;
+static sqlite3_stmt *_module_order_update_null_stmt = NULL;
 static dt_pthread_mutex_t _history_stmt_mutex;
 static gsize _history_stmt_mutex_inited = 0;
 
@@ -727,10 +733,183 @@ void dt_history_repository_foreach_mask_item(const int32_t imgid,
   sqlite3_finalize(stmt);
 }
 
+/* ---- main.module_order --------------------------------------------------------------- */
+
+gboolean dt_history_repository_get_module_order_version(const int32_t imgid, int *version)
+{
+  if(imgid <= 0 || IS_NULL_PTR(version)) return FALSE;
+
+  _history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(!_module_order_select_version_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT version FROM main.module_order WHERE imgid = ?1", -1,
+                                &_module_order_select_version_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _module_order_select_version_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  const gboolean found = (sqlite3_step(stmt) == SQLITE_ROW);
+  if(found) *version = sqlite3_column_int(stmt, 0);
+  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+
+  return found;
+}
+
+gboolean dt_history_repository_has_module_order(const int32_t imgid)
+{
+  int version = 0;
+  return dt_history_repository_get_module_order_version(imgid, &version);
+}
+
+gboolean dt_history_repository_get_module_order(const int32_t imgid, dt_module_order_row_t *row)
+{
+  if(IS_NULL_PTR(row)) return FALSE;
+
+  row->version = 0;
+  row->iop_list = NULL;
+  if(imgid <= 0) return FALSE;
+
+  _history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(!_module_order_select_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "SELECT version, iop_list"
+                                " FROM main.module_order"
+                                " WHERE imgid=?1", -1, &_module_order_select_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _module_order_select_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+
+  const gboolean found = (sqlite3_step(stmt) == SQLITE_ROW);
+  if(found)
+  {
+    row->version = sqlite3_column_int(stmt, 0);
+    if(sqlite3_column_type(stmt, 1) != SQLITE_NULL)
+    {
+      const char *buf = (const char *)sqlite3_column_text(stmt, 1);
+      // the text points into the statement, which the next caller resets -- copy it out
+      if(buf) row->iop_list = g_strdup(buf);
+    }
+  }
+  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+
+  return found;
+}
+
+gboolean dt_history_repository_has_custom_module_order(const int32_t imgid)
+{
+  dt_module_order_row_t row = { 0 };
+  const gboolean found = dt_history_repository_get_module_order(imgid, &row);
+  const gboolean has_list = found && !IS_NULL_PTR(row.iop_list);
+  dt_module_order_row_cleanup(&row);
+  return has_list;
+}
+
+void dt_module_order_row_cleanup(dt_module_order_row_t *row)
+{
+  if(IS_NULL_PTR(row)) return;
+  dt_free(row->iop_list);
+  row->iop_list = NULL;
+}
+
+gboolean dt_history_repository_set_module_order(const int32_t imgid, const int version,
+                                                const char *iop_list)
+{
+  if(imgid <= 0) return FALSE;
+
+  _history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_history_stmt_mutex);
+
+  if(!_module_order_insert_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "INSERT OR REPLACE INTO main.module_order VALUES (?1, 0, NULL)",
+                                -1, &_module_order_insert_stmt, NULL);
+  }
+  sqlite3_reset(_module_order_insert_stmt);
+  sqlite3_clear_bindings(_module_order_insert_stmt);
+  DT_DEBUG_SQLITE3_BIND_INT(_module_order_insert_stmt, 1, imgid);
+  gboolean ok = (sqlite3_step(_module_order_insert_stmt) == SQLITE_DONE);
+
+  if(ok && !IS_NULL_PTR(iop_list))
+  {
+    if(!_module_order_update_list_stmt)
+    {
+      // clang-format off
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                  "UPDATE main.module_order SET version = ?2, iop_list = ?3"
+                                  " WHERE imgid = ?1",
+                                  -1, &_module_order_update_list_stmt, NULL);
+      // clang-format on
+    }
+    sqlite3_stmt *stmt = _module_order_update_list_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, version);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, iop_list, -1, SQLITE_TRANSIENT);
+    ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  }
+  else if(ok)
+  {
+    if(!_module_order_update_null_stmt)
+    {
+      // clang-format off
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                  "UPDATE main.module_order SET version = ?2, iop_list = NULL"
+                                  " WHERE imgid = ?1",
+                                  -1, &_module_order_update_null_stmt, NULL);
+      // clang-format on
+    }
+    sqlite3_stmt *stmt = _module_order_update_null_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, version);
+    ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  }
+
+  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  return ok;
+}
+
 void dt_history_repository_cleanup(void)
 {
   _history_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(_module_order_select_stmt)
+  {
+    sqlite3_finalize(_module_order_select_stmt);
+    _module_order_select_stmt = NULL;
+  }
+  if(_module_order_select_version_stmt)
+  {
+    sqlite3_finalize(_module_order_select_version_stmt);
+    _module_order_select_version_stmt = NULL;
+  }
+  if(_module_order_insert_stmt)
+  {
+    sqlite3_finalize(_module_order_insert_stmt);
+    _module_order_insert_stmt = NULL;
+  }
+  if(_module_order_update_list_stmt)
+  {
+    sqlite3_finalize(_module_order_update_list_stmt);
+    _module_order_update_list_stmt = NULL;
+  }
+  if(_module_order_update_null_stmt)
+  {
+    sqlite3_finalize(_module_order_update_null_stmt);
+    _module_order_update_null_stmt = NULL;
+  }
   if(_history_check_module_exists_stmt)
   {
     sqlite3_finalize(_history_check_module_exists_stmt);
