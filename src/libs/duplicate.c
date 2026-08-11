@@ -36,10 +36,9 @@
 */
 
 #include "common/collection.h"
+#include "database/image_repository.h"
 #include "widgets/button.h"
 #include "control/jobs/control_jobs.h"
-#include "database/database.h"
-#include "database/sql_debug.h"
 #include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/metadata.h"
@@ -60,7 +59,6 @@
 
 DT_MODULE(1)
 
-static sqlite3_stmt *_duplicate_versions_stmt = NULL;
 
 typedef struct dt_lib_duplicate_t
 {
@@ -245,37 +243,25 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   // and the other widgets too
   dt_gui_container_destroy_children(GTK_CONTAINER(d->duplicate_box));
   // retrieve all the versions of the image
-  sqlite3_stmt *stmt;
   dt_develop_t *dev = dt_dev_get_global();
 
   int count = 0;
 
   // we get a summarize of all versions of the image
   // clang-format off
-  if(IS_NULL_PTR(_duplicate_versions_stmt))
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT i.version, i.id, m.value"
-                                " FROM images AS i"
-                                " LEFT JOIN meta_data AS m ON m.id = i.id AND m.key = ?3"
-                                " WHERE film_id = ?1 AND filename = ?2"
-                                " ORDER BY i.version",
-                                -1, &_duplicate_versions_stmt, NULL);
-  }
-  stmt = _duplicate_versions_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.film_id);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, dev->image_storage.filename, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, DT_METADATA_XMP_VERSION_NAME);
+  // Materialised first: the loop below builds a thumbnail and several widgets per row, which
+  // re-enter the image cache and the database -- it used to do that from inside its own cursor.
+  GList *versions = dt_image_repository_get_versions(dev->image_storage.film_id,
+                                                     dev->image_storage.filename,
+                                                     DT_METADATA_XMP_VERSION_NAME);
 
   GtkWidget *bt = NULL;
 
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = versions; l; l = g_list_next(l))
   {
+    const dt_image_version_t *v = (const dt_image_version_t *)l->data;
     GtkWidget *hb = gtk_grid_new();
-    const int32_t imgid = sqlite3_column_int(stmt, 1);
+    const int32_t imgid = v->imgid;
     dt_image_t info = { 0 };
     info.id = imgid;
     dt_thumbnail_t *thumb = dt_thumbnail_new(0, DT_THUMBNAIL_OVERLAYS_NONE, NULL, &info);
@@ -302,8 +288,8 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
     }
 
     gchar chl[256];
-    gchar *path = (gchar *)sqlite3_column_text(stmt, 2);
-    g_snprintf(chl, sizeof(chl), "%d", sqlite3_column_int(stmt, 0));
+    const gchar *path = v->version_name;
+    g_snprintf(chl, sizeof(chl), "%d", v->version);
 
     GtkWidget *tb = gtk_entry_new();
     dt_accels_disconnect_on_text_input(tb);
@@ -334,7 +320,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
     d->thumbs = g_list_append(d->thumbs, thumb);
     count++;
   }
-  sqlite3_reset(stmt);
+  g_list_free_full(versions, dt_image_version_free);
 
   gtk_widget_show(d->duplicate_box);
 
@@ -413,11 +399,6 @@ void gui_cleanup(dt_lib_module_t *self)
     dt_gui_container_destroy_children(GTK_CONTAINER(d->duplicate_box));
   }
 
-  if(_duplicate_versions_stmt)
-  {
-    sqlite3_finalize(_duplicate_versions_stmt);
-    _duplicate_versions_stmt = NULL;
-  }
 
   dt_free(self->data);
 }

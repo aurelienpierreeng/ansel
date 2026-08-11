@@ -117,6 +117,28 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt);
  */
 int32_t dt_image_repository_duplicate(const int32_t imgid, const int32_t newversion);
 
+/** @brief One version of a file: which duplicate it is, its id, and the name the user gave it. */
+typedef struct dt_image_version_t
+{
+  int version;
+  int32_t imgid;
+  char *version_name;   /**< NULL when the image has none */
+} dt_image_version_t;
+
+/** @brief Release one dt_image_version_t. Use with g_list_free_full(). */
+void dt_image_version_free(gpointer data);
+
+/**
+ * @brief Every version of the file (@p film_id, @p filename), in version order, each with the
+ *        name stored under metadata key @p name_keyid.
+ *
+ * @details Which key holds the version name is the caller's vocabulary, so it is passed in.
+ * The whole list is materialised: the one caller builds a GTK widget per row and would
+ * otherwise re-enter the database from inside its own open cursor.
+ */
+GList *dt_image_repository_get_versions(const int32_t film_id, const char *filename,
+                                        const int name_keyid);
+
 /**
  * @brief Every image id sharing @p imgid's film roll and filename, itself included, in row
  *        order -- an image and its duplicates.
