@@ -83,6 +83,7 @@
 #include "common/file_location.h"
 #include "common/grouping.h"
 #include "common/history.h"
+#include "database/history_repository.h"
 #include "develop/history_merge.h"
 #include "common/history_snapshot.h"
 #include "caches/image_cache.h"
@@ -1073,10 +1074,10 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
 {
   // push new orientation to sql via additional history entry:
   const int iop_flip_MODVER = 2;
-  const int num = dt_history_db_get_next_history_num(imgid);
-  dt_history_db_write_history_item(imgid, num, "flip", &orientation, sizeof(int32_t), iop_flip_MODVER, 1,
+  const int num = dt_history_repository_get_next_num(imgid);
+  dt_history_repository_write_item(imgid, num, "flip", &orientation, sizeof(int32_t), iop_flip_MODVER, 1,
                                    NULL, 0, 0, 0, "");
-  dt_history_set_end(imgid, num + 1);
+  dt_history_repository_set_end(imgid, num + 1);
   dt_control_save_xmp(imgid);
 
   // Refresh the cached metadata and thumbnail. Without this the stale history_items keeps the

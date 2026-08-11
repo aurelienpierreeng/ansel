@@ -44,6 +44,7 @@
 #include "control/signal.h"
 #include "common/utility.h"
 #include "common/history.h"
+#include "database/history_repository.h"
 #include "common/ratings.h"
 #include "common/tags.h"
 #include "common/metadata.h"
@@ -351,10 +352,10 @@ static void dt_add_hist(int32_t imgid, char *operation, dt_iop_params_t *params,
 {
   dt_develop_blend_params_t blend_params = { 0 };
 
-  const int32_t num = dt_history_db_get_next_history_num(imgid);
-  dt_history_db_write_history_item(imgid, num, operation, params, params_size, version, 1,
+  const int32_t num = dt_history_repository_get_next_num(imgid);
+  dt_history_repository_write_item(imgid, num, operation, params, params_size, version, 1,
                                    &blend_params, sizeof(dt_develop_blend_params_t), LRDT_BLEND_VERSION, 0, " ");
-  dt_history_set_end(imgid, num + 1);
+  dt_history_repository_set_end(imgid, num + 1);
 
   if(imported[0]) g_strlcat(imported, ", ", imported_len);
   g_strlcat(imported, dt_iop_get_localized_name(operation), imported_len);

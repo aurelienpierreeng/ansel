@@ -60,6 +60,7 @@
 */
 #include "common/conf.h"
 #include "common/history.h"
+#include "database/history_repository.h"
 
 #include "common/undo.h"
 #include "caches/image_cache.h"
@@ -1629,7 +1630,7 @@ void dt_apply_dev_history_update(dt_develop_t *dev)
  */
 static void _cleanup_history(const int32_t imgid)
 {
-  dt_history_db_delete_dev_history(imgid);
+  dt_history_repository_delete_dev_history(imgid);
 }
 
 guint dt_dev_mask_history_overload(GList *dev_history, guint threshold)
@@ -1683,7 +1684,7 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
   const int blendop_version
       = h->blend_params ? (h->blendop_version > 0 ? h->blendop_version : dt_develop_blend_version()) : 0;
 
-  dt_history_db_write_history_item(imgid, num, operation, h->params, params_size, module_version, h->enabled != 0,
+  dt_history_repository_write_item(imgid, num, operation, h->params, params_size, module_version, h->enabled != 0,
                                    h->blend_params, blendop_params_size, blendop_version, h->multi_priority, h->multi_name);
 
   // write masks (if any)
@@ -1702,7 +1703,7 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
 
 void dt_dev_history_cleanup(void)
 {
-  // No-op: SQL statement caching/cleanup for history lives in common/history.c (dt_history_cleanup()).
+  // No-op: SQL statement caching/cleanup for history lives in common/history.c (dt_history_repository_cleanup()).
 }
 
 
@@ -1727,7 +1728,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
     i++;
   }
 
-  dt_history_set_end(imgid, dt_dev_get_history_end_ext(dev));
+  dt_history_repository_set_end(imgid, dt_dev_get_history_end_ext(dev));
 
   // write the current iop-order-list for this image
   dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
@@ -1822,7 +1823,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
 
   int legacy_params = 0;
   dt_dev_history_db_ctx_t ctx = { .dev = dev, .imgid = imgid, .legacy_params = &legacy_params, .presets = TRUE };
-  dt_history_db_foreach_auto_preset_row(imgid, image, workflow_preset, iformat, excluded, _dev_history_db_row_cb, &ctx);
+  dt_history_repository_foreach_auto_preset_row(imgid, image, workflow_preset, iformat, excluded, _dev_history_db_row_cb, &ctx);
 
   // now we want to auto-apply the iop-order list if one corresponds and none are
   // still applied. Note that we can already have an iop-order list set when
@@ -1832,7 +1833,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
   {
     void *params = NULL;
     int32_t params_len = 0;
-    if(dt_history_db_get_autoapply_ioporder_params(imgid, image, iformat, excluded, &params, &params_len))
+    if(dt_history_repository_get_autoapply_ioporder_params(imgid, image, iformat, excluded, &params, &params_len))
     {
       GList *iop_list = dt_ioppr_deserialize_iop_order_list(params, params_len);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
@@ -1892,7 +1893,7 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
   //    "missing" there too, causing every already-edited image to get spurious duplicate default
   //    entries prepended ahead of its real history on every single load.
   if(!IS_NULL_PTR(dt_dev_history_get_first_item_by_module(dev->history, module))
-     || dt_history_check_module_exists(dev->image_storage.id, module->op, FALSE))
+     || dt_history_repository_module_exists(dev->image_storage.id, module->op))
     return;
 
   // Module has no user params: no history: don't prepend either
@@ -2355,10 +2356,10 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
   // Find the new history end from DB now, if defined.
   // Note: dt_dev_set_history_end_ext sanitizes the value with the actual history size.
   // It needs to run after dev->history is fully populated.
-  int32_t history_end = dt_history_get_end(imgid);
+  int32_t history_end = dt_history_repository_get_end(imgid);
 
   // Find out if we already have an history, and how many items  
-  const int32_t db_items = dt_history_db_get_next_history_num(imgid);
+  const int32_t db_items = dt_history_repository_get_next_num(imgid);
 
   // Load all the modules that may be required by the image format,
   // plus auto-presets if it's a new edit
@@ -2371,7 +2372,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   // Load DB history into dev->history
   dt_dev_history_db_ctx_t ctx = { .dev = dev, .imgid = imgid, .legacy_params = &legacy_params, .presets = FALSE };
-  dt_history_db_foreach_history_row(imgid, _dev_history_db_row_cb, &ctx);
+  dt_history_repository_foreach_row(imgid, _dev_history_db_row_cb, &ctx);
   const int32_t history_length = g_list_length(dev->history);
 
   if(history_length > db_items)

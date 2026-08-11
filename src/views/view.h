@@ -50,6 +50,7 @@
 #include "common/image.h"   // dt_view_image_over_t
 
 #include "system/atomic.h"
+#include "system/dtpthread.h"
 
 #include "common/history.h"
 #ifdef HAVE_PRINT

@@ -58,7 +58,7 @@ gboolean dt_history_snapshot_repository_create(const int snap_id, const int32_t 
  *
  * @warning The caller must have cleared the live history first, and must be inside its own
  * transaction: restoring is only half of an operation whose other half
- * (dt_history_delete_on_image_ext(), dt_history_set_end()) is domain code this module must
+ * (dt_history_delete_on_image_ext(), dt_history_repository_set_end()) is domain code this module must
  * not call. `common/history_snapshot.c` opens the transaction around both.
  */
 gboolean dt_history_snapshot_repository_restore(const int snap_id, const int32_t imgid);

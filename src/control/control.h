@@ -45,6 +45,7 @@
 
 
 #include <gtk/gtk.h>
+#include "system/dtpthread.h"
 #include <inttypes.h>
 #ifdef _OPENMP
 #include <omp.h>

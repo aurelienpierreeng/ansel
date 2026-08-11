@@ -121,6 +121,7 @@
 #include "common/variables.h"
 #include "common/utility.h"
 #include "common/history.h"
+#include "database/history_repository.h"
 #include "common/datetime.h"
 #include "common/conf.h"
 #include "control/control.h"
@@ -3323,7 +3324,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     GList *mask_entries_v3 = NULL;
 
     // clean all old masks for this image
-    dt_history_db_delete_masks_history(img->id);
+    dt_history_repository_delete_masks_history(img->id);
 
     // read the masks from the file first so we can add them to the db while reading history entries
     if(xmp_version < 3)
@@ -3374,7 +3375,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     dt_database_start_transaction();
 
-    if(!dt_history_db_delete_history(img->id))
+    if(!dt_history_repository_delete_history(img->id))
     {
       fprintf(stderr, "[exif] error deleting history for image %d\n", img->id);
       fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
@@ -3397,7 +3398,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
         }
       }
 
-      if(!dt_history_db_write_history_item(img->id, db_num, entry->operation,
+      if(!dt_history_repository_write_item(img->id, db_num, entry->operation,
                                            entry->params, entry->params_len,
                                            entry->modversion, entry->enabled != 0,
                                            entry->blendop_params, entry->blendop_params_len,
@@ -3487,14 +3488,14 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if(num_masks > 0)
       {
         // make room for mask_manager entry
-        if(!dt_history_db_shift_history_nums(img->id, 1))
+        if(!dt_history_repository_shift_nums(img->id, 1))
         {
           fprintf(stderr, "[exif] error shifting history nums for image %d\n", img->id);
           fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
           all_ok = FALSE;
           goto end;
         }
-        if(!dt_history_db_write_history_item(img->id, 0, "mask_manager", NULL, 0, 1, 0, NULL, 0, 0, 0, ""))
+        if(!dt_history_repository_write_item(img->id, 0, "mask_manager", NULL, 0, 1, 0, NULL, 0, 0, 0, ""))
         {
           fprintf(stderr, "[exif] error adding mask history entry for image %d\n", img->id);
           fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
@@ -3512,7 +3513,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       int history_end = MIN(pos->toLong(), num);
       if(num_masks > 0) history_end++;
       if((history_end < 1) && preset_applied) preset_applied = -1;
-      if(!dt_history_set_end(img->id, history_end))
+      if(!dt_history_repository_set_end(img->id, history_end))
       {
         fprintf(stderr, "[exif] error writing history_end for image %d\n", img->id);
         fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));
@@ -3523,8 +3524,8 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     else
     {
       if(preset_applied) preset_applied = -1;
-      const int32_t history_end = dt_history_db_get_next_history_num(img->id);
-      if(!dt_history_set_end(img->id, history_end))
+      const int32_t history_end = dt_history_repository_get_next_num(img->id);
+      if(!dt_history_repository_set_end(img->id, history_end))
       {
         fprintf(stderr, "[exif] error writing history_end for image %d\n", img->id);
         fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get_sqlite3_global()));

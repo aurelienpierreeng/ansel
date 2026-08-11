@@ -36,9 +36,6 @@
 
 #include <gtk/gtk.h>
 #include <inttypes.h>
-#include <sqlite3.h>
-
-#include "caches/image_cache.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,44 +56,6 @@ void dt_history_delete_on_image(int32_t imgid);
 
 /** as above but control whether to record undo/redo */
 void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo);
-
-/** read history_end from database for an image (main.images.history_end) */
-int32_t dt_history_get_end(const int32_t imgid);
-
-/** write history_end to database for an image (main.images.history_end) */
-gboolean dt_history_set_end(const int32_t imgid, const int32_t history_end);
-
-/** low-level DB helpers (used by develop/dev_history.c) */
-typedef void (*dt_history_db_row_cb)(void *user_data,
-                                    const int32_t imgid,
-                                    const int num,
-                                    const int module_version,
-                                    const char *operation,
-                                    const void *op_params,
-                                    const int op_params_len,
-                                    const gboolean enabled,
-                                    const void *blendop_params,
-                                    const int blendop_params_len,
-                                    const int blendop_version,
-                                    const int multi_priority,
-                                    const char *multi_name,
-                                    const char *preset_name);
-
-void dt_history_db_foreach_history_row(const int32_t imgid, dt_history_db_row_cb cb, void *user_data);
-void dt_history_db_foreach_auto_preset_row(const int32_t imgid, const struct dt_image_t *image, const char *workflow_preset,
-                                          const int iformat, const int excluded, dt_history_db_row_cb cb, void *user_data);
-gboolean dt_history_db_get_autoapply_ioporder_params(const int32_t imgid, const struct dt_image_t *image,
-                                                    const int iformat, const int excluded, void **params,
-                                                    int32_t *params_len);
-int32_t dt_history_db_get_next_history_num(const int32_t imgid);
-gboolean dt_history_db_delete_history(const int32_t imgid);
-gboolean dt_history_db_delete_masks_history(const int32_t imgid);
-gboolean dt_history_db_delete_dev_history(const int32_t imgid);
-gboolean dt_history_db_shift_history_nums(const int32_t imgid, const int delta);
-gboolean dt_history_db_write_history_item(const int32_t imgid, const int num, const char *operation, const void *op_params,
-                                         const int op_params_size, const int module_version, const int enabled,
-                                         const void *blendop_params, const int blendop_params_size,
-                                         const int blendop_version, const int multi_priority, const char *multi_name);
 
 /* dt_history_duplicate() used to be declared here. It walks dt_dev_history_item_t and calls
  * dt_iop_get_module(), both of which develop/ owns, so its definition cannot come down to
@@ -120,15 +79,6 @@ char *dt_history_get_items_as_string(int32_t imgid);
 
 /** get a single history item as string with enabled status */
 char *dt_history_item_as_string(const char *name, gboolean enabled);
-
-/* check if a module exists in the history of corresponding image */
-gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gboolean enabled);
-/** cleanup cached statements */
-void dt_history_cleanup(void);
-
-/** update mipmap hash in database from the provided image history hash */
-void dt_history_hash_set_mipmap(const int32_t imgid, const uint64_t history_hash,
-                                const dt_image_cache_write_mode_t mode);
 
 #ifdef __cplusplus
 }
