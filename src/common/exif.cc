@@ -106,7 +106,7 @@
 
 #include "glib.h"
 
-#include "common/colorlabels.h"
+#include "metadata/colorlabels.h"
 #include "darktable.h"
 #include "common/deprecations.h"
 #include "common/dng_opcode.h"
@@ -114,8 +114,8 @@
 #include "imageio/imageio_core.h"
 #include "common/exif.h"
 #include "imageio/imageio_jpeg.h"
-#include "common/metadata.h"
-#include "common/tags.h"
+#include "metadata/metadata.h"
+#include "metadata/tags.h"
 #include "develop/iop_order.h"
 #include "common/variables.h"
 #include "common/utility.h"

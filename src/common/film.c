@@ -48,7 +48,7 @@
 #include "caches/mipmap_cache.h"
 #include "system/dtpthread.h"
 #include "caches/image_cache.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs/film_jobs.h"

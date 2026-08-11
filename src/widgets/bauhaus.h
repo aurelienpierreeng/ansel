@@ -41,7 +41,7 @@
 #ifndef DT_WIDGETS_BAUHAUS_H
 #define DT_WIDGETS_BAUHAUS_H
 
-#include "common/colorlabels.h"
+#include "metadata/colorlabels.h"
 #include "common/gui_module_api.h"
 #include "common/introspection.h"
 #include "widgets/widget_settings.h"   // DT_GUI_BOX_SPACING, for INTERNAL_PADDING

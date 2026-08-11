@@ -49,7 +49,7 @@
 #include "gui/dtgtk/focus.h"
 #include "widgets/focus_peaking.h"
 #include "common/grouping.h"
-#include "common/ratings.h"
+#include "metadata/ratings.h"
 #include "common/selection.h"
 #include "common/utility.h"
 #include "common/variables.h"

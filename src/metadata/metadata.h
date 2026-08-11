@@ -27,8 +27,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_METADATA_H
-#define DT_COMMON_METADATA_H
+#ifndef DT_METADATA_METADATA_H
+#define DT_METADATA_METADATA_H
 
 // Types this header's own declarations use. They used to arrive through gui/gtk.h, which
 // this file included without using a single GTK symbol -- and which it then propagated to
@@ -154,7 +154,7 @@ void dt_metadata_cleanup(void);
 }
 #endif
 
-#endif // DT_COMMON_METADATA_H
+#endif // DT_METADATA_METADATA_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -48,7 +48,7 @@
 #include "common/history_snapshot.h"
 #include "caches/image_cache.h"
 #include "caches/mipmap_cache.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/undo.h"
 #include "common/utility.h"
 #include "develop/masks.h"

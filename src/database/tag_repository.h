@@ -34,7 +34,7 @@
 #ifndef DT_DATABASE_TAG_REPOSITORY_H
 #define DT_DATABASE_TAG_REPOSITORY_H
 
-#include "common/tags.h"
+#include "metadata/tags.h"
 
 #include <glib.h>
 #include <stdint.h>

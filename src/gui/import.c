@@ -29,7 +29,7 @@
 #include "caches/image_cache.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_core.h"
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 #include "common/datetime.h"
 #include "common/conf.h"
 #include "control/control.h"

@@ -41,10 +41,10 @@
 */
 #include <glib/gstdio.h>
 #include "common/act_on.h"
-#include "control/settings.h"
+#include "metadata/notify.h"
 #include "common/metadata_export.h"
 #include "common/utility.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/image.h"
@@ -140,7 +140,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undotags->imgid));
     }
 
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+    dt_metadata_tags_changed();
   }
 }
 
@@ -188,7 +188,7 @@ gboolean dt_tag_new_from_gui(const char *name, guint *tagid)
 {
   const gboolean ret = dt_tag_new(name, tagid);
   /* if everything went fine, raise signal of tags change to refresh keywords module in GUI */
-  if(ret) DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+  if(ret) dt_metadata_tags_changed();
   return ret;
 }
 
@@ -1132,7 +1132,7 @@ uint32_t dt_tag_import(const char *filename)
   hierarchy = NULL;
   fclose(fd);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+  dt_metadata_tags_changed();
 
   return count;
 }

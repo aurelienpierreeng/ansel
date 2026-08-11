@@ -34,7 +34,7 @@
 #ifndef DT_DATABASE_LOCATION_REPOSITORY_H
 #define DT_DATABASE_LOCATION_REPOSITORY_H
 
-#include "common/map_locations.h"
+#include "metadata/map_locations.h"
 
 #include <glib.h>
 #include <stdint.h>

@@ -23,7 +23,7 @@
 #include "testdb.h"
 
 #include "common/image.h" // UNKNOWN_IMAGE
-#include "common/tags.h"  // DT_TF_CATEGORY
+#include "metadata/tags.h"  // DT_TF_CATEGORY
 
 
 static void test_selection_lowest_id(void **state)

@@ -21,7 +21,7 @@
 #include "common/datetime.h"
 #include "common/exif.h"
 #include "develop/history_merge.h"
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 #include "common/styles.h"
 #include "control/control.h"
 #include "common/film.h"

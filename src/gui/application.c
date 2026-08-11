@@ -72,7 +72,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "darktable.h"
-#include "common/colorlabels.h"   // DT_COLORLABELS_*
+#include "metadata/colorlabels.h"   // DT_COLORLABELS_*
 #include "gui/screen_metrics.h"
 #include "widgets/widget_settings.h"
 #include "widgets/resize_handle.h"

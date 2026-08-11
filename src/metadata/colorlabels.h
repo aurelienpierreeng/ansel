@@ -27,8 +27,8 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef DT_COMMON_COLORLABELS_H
-#define DT_COMMON_COLORLABELS_H
+#ifndef DT_METADATA_COLORLABELS_H
+#define DT_METADATA_COLORLABELS_H
 
 #include <gtk/gtk.h>
 
@@ -72,7 +72,7 @@ void dt_colorlabels_cleanup(void);
 }
 #endif
 
-#endif // DT_COMMON_COLORLABELS_H
+#endif // DT_METADATA_COLORLABELS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

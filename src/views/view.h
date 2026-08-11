@@ -58,8 +58,8 @@
 #include "common/printing.h"
 #endif
 #ifdef HAVE_MAP
-#include "common/geo.h"
-#include "common/map_locations.h"
+#include "metadata/geo.h"
+#include "metadata/map_locations.h"
 #include <osm-gps-map.h>
 #endif
 #include <cairo.h>

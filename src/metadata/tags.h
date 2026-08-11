@@ -36,8 +36,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_TAGS_H
-#define DT_COMMON_TAGS_H
+#ifndef DT_METADATA_TAGS_H
+#define DT_METADATA_TAGS_H
 
 #include <glib.h>
 #include <sqlite3.h>
@@ -244,7 +244,7 @@ void dt_tags_cleanup(void);
 }
 #endif
 
-#endif // DT_COMMON_TAGS_H
+#endif // DT_METADATA_TAGS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

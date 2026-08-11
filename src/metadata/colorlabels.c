@@ -34,15 +34,14 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/colorlabels.h"
+#include "metadata/colorlabels.h"
+#include "metadata/notify.h"
 #include "common/collection.h"
 #include "system/macros.h"
 #include "database/colorlabel_repository.h"
 #include "caches/image_cache.h"
 #include "common/undo.h"
-#include "control/control.h"
 
-#include <gdk/gdkkeysyms.h>
 
 const char *dt_colorlabels_name[] = {
   "red", "yellow", "green", "blue", "purple",
@@ -252,7 +251,8 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
     dt_undo_end_group(dt_undo_get_global());
   }
   dt_collection_hint_message(dt_collection_get_global());
-  dt_toast_log(_("Color label set to %s for %i image(s)"), dt_colorlabels_get_name(color), g_list_length(list));
+  dt_metadata_notify(DT_METADATA_NOTICE_TOAST, _("Color label set to %s for %i image(s)"),
+                     dt_colorlabels_get_name(color), g_list_length(list));
 }
 
 int dt_colorlabels_check_label(const int32_t imgid, const int color)
