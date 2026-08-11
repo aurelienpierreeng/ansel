@@ -1001,53 +1001,59 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
   dt_pthread_mutex_unlock(&table->lock);
 }
 
+/* One collected image, as the repository read it. Context for _dt_collection_lut() below. */
+typedef struct _collection_lut_ctx_t
+{
+  dt_thumbtable_t *table;
+  GArray *collection;
+} _collection_lut_ctx_t;
+
+static void _collection_lut_row(void *user_data, const dt_image_t *row)
+{
+  _collection_lut_ctx_t *ctx = (_collection_lut_ctx_t *)user_data;
+  const int32_t imgid = row->id;
+  const int32_t groupid = row->group_id;
+
+  if(ctx->table->collapse_groups && imgid != groupid)
+  {
+    // if user requested to collapse image groups in GUI,
+    // only the group leader is shown. But we need to make sure
+    // there is no dangling selection pointing to hidden group members
+    // because it's unexpected that unvisible items might be selected,
+    // and selection sanitization only deals with imgids outside of current collection,
+    // but group members are always within the collection.
+    dt_selection_deselect(dt_selection_get_global(), imgid);
+    return;
+  }
+
+  dt_thumbtable_cache_t entry = { .thumb = NULL, .imgid = imgid, .groupid = groupid };
+  g_array_append_val(ctx->collection, entry);
+
+  // Populate the image cache. We don't keep a copy here because it wouldn't
+  // be memory-managed
+  dt_image_t info = *row;
+  dt_image_derive_fields(&info);
+
+#ifndef NDEBUG
+  dt_thumbtable_info_debug_assert_matches_cache(&info);
+#endif
+
+  // Seed the cache and be done
+  dt_thumbtable_info_seed_image_cache(&info);
+}
+
 static void _dt_collection_lut(dt_thumbtable_t *table)
 {
-  // In-memory collected images don't store group_id, so we need to fetch it again from DB
-  sqlite3_stmt *stmt = dt_thumbtable_info_get_collection_stmt();
-
   // NOTE: non-grouped images have group_id equal to their own id
   // grouped images have group_id equal to the id of the "group leader".
   // In old database versions, it's possible that group_id may have been set to -1 for non-grouped images.
   // That would actually make group detection much easier...
 
-  // Convert SQL imgids into C objects we can work with
+  // Convert SQL imgids into C objects we can work with. In-memory collected images don't store
+  // group_id, so the repository reads the whole row again from the images table.
   GArray *collection = g_array_new(FALSE, FALSE, sizeof(dt_thumbtable_cache_t));
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
-    const int32_t groupid = sqlite3_column_int(stmt, 1);
-
-    if(table->collapse_groups && imgid != groupid)
-    {
-      // if user requested to collapse image groups in GUI,
-      // only the group leader is shown. But we need to make sure
-      // there is no dangling selection pointing to hidden group members
-      // because it's unexpected that unvisible items might be selected,
-      // and selection sanitization only deals with imgids outside of current collection,
-      // but group members are always within the collection.
-      dt_selection_deselect(dt_selection_get_global(), imgid);
-      continue;
-    }
-
-    dt_thumbtable_cache_t entry = { .thumb = NULL, .imgid = imgid, .groupid = groupid };
-    g_array_append_val(collection, entry);
-
-    // Populate the image cache. We don't keep a copy here because it wouldn't
-    // be memory-managed
-    dt_image_t info;
-    dt_image_init(&info);
-    dt_image_from_stmt(&info, stmt);
-    dt_image_derive_fields(&info);
-
-#ifndef NDEBUG
-    dt_thumbtable_info_debug_assert_matches_cache(&info);
-#endif
-
-    // Seed the cache and be done
-    dt_thumbtable_info_seed_image_cache(&info);
-  }
-  sqlite3_reset(stmt);
+  _collection_lut_ctx_t ctx = { .table = table, .collection = collection };
+  dt_image_repository_foreach_collected(_collection_lut_row, &ctx);
 
   if(IS_NULL_PTR(collection) || collection->len == 0)
   {
@@ -1969,8 +1975,6 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_dt_image_info_changed_callback), table);
 
   _dt_thumbtable_empty_list(table);
-
-  dt_thumbtable_info_cleanup();
 
   dt_pthread_mutex_destroy(&table->lock);
 

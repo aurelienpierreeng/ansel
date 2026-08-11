@@ -72,18 +72,27 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img);
  */
 void dt_image_repository_store(const dt_image_t *img);
 
+/** @brief One image of the current collection. @p info is borrowed: it lives until the
+ *  callback returns. */
+typedef void (*dt_image_repository_collected_cb)(void *user_data, const dt_image_t *info);
+
 /**
- * @brief Fill @p img from a row of a query that selected the repository's own column list.
+ * @brief Every image of the current collection, in collection order, already mapped.
  *
- * @details Public because `gui/dtgtk/thumbtable.c` runs its own bulk query with the same
- * columns and maps each row with this rather than reloading images one at a time. Which means
- * the column list in this file and the one in that query are a contract: changing either
- * without the other silently shifts every field.
+ * @details One bulk query instead of one image-cache miss per thumbnail, which is what keeps
+ * scrolling a large collection predictable. It selects the same columns
+ * dt_image_repository_load() does and maps them with the same private mapper, so the column
+ * list and the mapper cannot drift apart -- they used to sit in two files, with the caller
+ * running its own copy of the query and calling the mapper on each row.
  *
- * @param img destination.
- * @param stmt a stepped statement positioned on a row.
+ * The statement is prepared and finalised around the walk rather than cached, and no internal
+ * lock is held while the callback runs. Callbacks here reach the selection and the image
+ * cache, either of which can raise a signal that lands back in this same function; a single
+ * shared statement stepped re-entrantly would have its cursor pulled out from under the outer
+ * walk. One prepare per collection reload is the price, and a collection reload is not a
+ * per-frame event.
  */
-void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt);
+void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, void *user_data);
 
 /* ---------------------------------------------------------------------------------------
  *  Grouping
@@ -305,6 +314,37 @@ gboolean dt_image_repository_delete(const int32_t imgid);
  * @return a `GList` of ids as `GINT_TO_POINTER`, in database order. Free with g_list_free().
  */
 GList *dt_image_repository_get_group_members(const int32_t group_id, const int32_t exclude_imgid);
+
+/** @brief One member of a group, with what a tooltip needs to name it. */
+typedef struct dt_image_group_member_t
+{
+  int32_t imgid;
+  int version;
+  char *filename;
+} dt_image_group_member_t;
+
+/** @brief Free one dt_image_group_member_t. Suits g_list_free_full(). */
+void dt_image_group_member_free(gpointer data);
+
+/** @brief Every member of @p group_id, in row order, named. Free with
+ *  g_list_free_full(list, dt_image_group_member_free). */
+GList *dt_image_repository_get_group_member_rows(const int32_t group_id);
+
+/** @brief How many images have an id in [@p min_imgid, @p max_imgid]. -1 when unreadable. */
+int dt_image_repository_count_in_id_range(const int32_t min_imgid, const int32_t max_imgid);
+
+/** @brief One row of dt_image_repository_foreach_in_id_range(). @p filename is borrowed. */
+typedef void (*dt_image_repository_id_filename_cb)(const int32_t imgid, const char *filename,
+                                                   void *user_data);
+
+/** @brief Walk the images whose id falls in [@p min_imgid, @p max_imgid], in row order.
+ *
+ *  @details Same prepare-and-finalise, no-lock-held contract as
+ *  dt_image_repository_foreach_collected(): its one caller generates a thumbnail per row,
+ *  which goes back through the image and mipmap caches. */
+void dt_image_repository_foreach_in_id_range(const int32_t min_imgid, const int32_t max_imgid,
+                                             dt_image_repository_id_filename_cb cb,
+                                             void *user_data);
 
 /**
  * @brief Insert a bare row for a file being imported, returning TRUE on success.
