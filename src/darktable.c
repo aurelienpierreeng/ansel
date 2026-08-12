@@ -141,6 +141,8 @@
 #include "develop/iop_order.h"
 #include "common/l10n.h"
 #include "metadata/metadata.h"
+#include "common/history_notify.h"
+#include "common/presets.h"
 #include "metadata/notify.h"
 #include "caches/mipmap_cache.h"
 #include "common/noiseprofiles.h"
@@ -738,6 +740,45 @@ static void _metadata_notify(const dt_metadata_notice_t kind, const char *messag
     dt_control_log("%s", message);
 }
 
+/* History, styles and presets state what happened; turning that into a signal is ours. */
+static void _history_notify(const char *message)
+{
+  dt_control_log("%s", message);
+}
+
+static void _history_changed(const dt_history_change_t what)
+{
+  switch(what)
+  {
+    case DT_HISTORY_CHANGE_TAGS:
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+      break;
+    case DT_HISTORY_CHANGE_STYLES:
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
+      break;
+  }
+}
+
+/* The copy is made here, at the raise site, exactly where the call site used to make it:
+ * the signal takes ownership of the list it is given, and the caller keeps its own. */
+static void _history_images_changed(const GList *imgs)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED,
+                                g_list_copy((GList *)imgs));
+}
+
+/* Only the side of the application that owns the panels can answer this. */
+static gboolean _presets_can_autoapply(const gchar *operation)
+{
+  for(const GList *lib_modules = dt_lib_get_global()->plugins; lib_modules;
+      lib_modules = g_list_next(lib_modules))
+  {
+    dt_lib_module_t *lib_module = (dt_lib_module_t *)lib_modules->data;
+    if(!strcmp(lib_module->plugin_name, operation)) return dt_lib_presets_can_autoapply(lib_module);
+  }
+  return TRUE;
+}
+
 /* The two parameters are the GTK signal signature, not ours; neither carries anything we
  * need, since the settings are read from conf either way. */
 static void _preferences_changed(gpointer instance, gpointer user_data)
@@ -1322,6 +1363,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   _database_settings_from_conf();
   dt_database_set_renamed_handler(_database_renamed);
   dt_metadata_set_notify_handler(_metadata_notify);
+  dt_history_set_message_handler(_history_notify);
+  dt_presets_set_autoapply_resolver(_presets_can_autoapply);
 
   gchar *configured_library = dt_conf_get_string("database");
   const dt_database_params_t db_params = { .alternative = dbfilename_from_command,
@@ -1422,6 +1465,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
    * further up: the signal system does not exist until the line above, and nothing can
    * edit a tag before it does. */
   dt_metadata_set_tags_changed_handler(_metadata_tags_changed);
+  // Same reason for these two: they raise signals, so they wait for the signal system.
+  dt_history_set_changed_handler(_history_changed);
+  dt_history_set_images_changed_handler(_history_images_changed);
   // Critical: ensure image cache gets refreshed BEFORE any other IMAGE_INFO_CHANGED handlers.
   // This handler reloads dt_image_t from DB so all downstream callbacks see fresh metadata.
   dt_image_cache_connect_info_changed_first(darktable.signals);
