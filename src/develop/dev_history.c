@@ -69,6 +69,7 @@
 #include "develop/iop_order.h"
 #include "develop/dev_history.h"
 #include "develop/blend.h"
+#include "develop/blend_gui.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"

@@ -57,6 +57,7 @@
 #include "common/styles.h"
 #include "develop/develop.h"
 #include "develop/masks.h"
+#include "develop/blend_gui.h"
 
 #include "gui/application.h"
 #include "libs/lib.h"

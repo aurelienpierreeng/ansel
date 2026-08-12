@@ -108,6 +108,7 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/application.h"
 #include "develop/gui_throttle.h"
+#include "develop/blend_gui.h"
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"

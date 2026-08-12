@@ -86,6 +86,7 @@
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/blend.h"
+#include "develop/blend_gui.h"
 #include "develop/develop.h"
 #include "pixel/format.h"
 #include "develop/masks.h"

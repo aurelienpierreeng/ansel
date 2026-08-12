@@ -54,6 +54,8 @@
 #include "metadata/exif.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "gui/color_picker_proxy.h"
+#include "widgets/collapsible_section.h"
 #include "develop/imageop_math.h"
 #include "math/openmp_maths.h"
 #include "widgets/drawingarea.h"

@@ -63,6 +63,7 @@
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "develop/blend.h"
+#include "develop/blend_gui.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"

@@ -70,6 +70,8 @@
 #include "system/simd.h"
 #include "common/module_versioning.h"
 #include "develop/imageop.h"
+#include "gui/color_picker_proxy.h"
+#include "widgets/collapsible_section.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "math/openmp_maths.h"
