@@ -28,9 +28,17 @@
 
 #include <stdarg.h>
 #include <stddef.h>
-#include <setjmp.h>
+// cmocka.h declares `extern jmp_buf global_expect_assert_env' at file scope and does not
+// include <setjmp.h> itself -- it says so at its own line 50. No test names a setjmp
+// symbol, so include-cleaner cannot attribute this one; removing it stops cmocka.h from
+// parsing. The suppression is on the line itself, not NOLINTNEXTLINE above: that form
+// applies to the immediately following line, which a multi-line reason turns into another
+// comment, silently suppressing nothing.
+#include <setjmp.h>  // NOLINT(misc-include-cleaner)
 #include <stdint.h>
 #include <cmocka.h>
+
+#include <string.h>
 
 #include <glib.h>
 
