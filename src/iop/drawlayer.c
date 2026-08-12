@@ -38,7 +38,6 @@
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "develop/blend.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"

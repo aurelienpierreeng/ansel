@@ -61,6 +61,7 @@
 #include "math/math.h"
 #include "common/conf.h"
 #include "develop/blend.h"
+#include "develop/blend_gui.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"

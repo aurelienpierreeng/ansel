@@ -2243,6 +2243,92 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
 
 // tools/update_modelines.sh
 // remove-trailing-space on;
+/* Name tables for the persisted blend enums. Defined here rather than in blend_gui.c:
+ * they map params values to translatable names, and backend consumers
+ * (develop/supervisor.c) read them with no GUI loaded. */
+const dt_develop_name_value_t dt_develop_blend_mode_names[]
+    = { { NC_("blendmode", "normal"), DEVELOP_BLEND_NORMAL2 },
+        { NC_("blendmode", "normal bounded"), DEVELOP_BLEND_BOUNDED },
+        { NC_("blendmode", "lighten"), DEVELOP_BLEND_LIGHTEN },
+        { NC_("blendmode", "darken"), DEVELOP_BLEND_DARKEN },
+        { NC_("blendmode", "multiply"), DEVELOP_BLEND_MULTIPLY },
+        { NC_("blendmode", "average"), DEVELOP_BLEND_AVERAGE },
+        { NC_("blendmode", "addition"), DEVELOP_BLEND_ADD },
+        { NC_("blendmode", "subtract"), DEVELOP_BLEND_SUBTRACT },
+        { NC_("blendmode", "difference"), DEVELOP_BLEND_DIFFERENCE2 },
+        { NC_("blendmode", "screen"), DEVELOP_BLEND_SCREEN },
+        { NC_("blendmode", "overlay"), DEVELOP_BLEND_OVERLAY },
+        { NC_("blendmode", "softlight"), DEVELOP_BLEND_SOFTLIGHT },
+        { NC_("blendmode", "hardlight"), DEVELOP_BLEND_HARDLIGHT },
+        { NC_("blendmode", "vividlight"), DEVELOP_BLEND_VIVIDLIGHT },
+        { NC_("blendmode", "linearlight"), DEVELOP_BLEND_LINEARLIGHT },
+        { NC_("blendmode", "pinlight"), DEVELOP_BLEND_PINLIGHT },
+        { NC_("blendmode", "lightness"), DEVELOP_BLEND_LIGHTNESS },
+        { NC_("blendmode", "chromaticity"), DEVELOP_BLEND_CHROMATICITY },
+        { NC_("blendmode", "hue"), DEVELOP_BLEND_HUE },
+        { NC_("blendmode", "color"), DEVELOP_BLEND_COLOR },
+        { NC_("blendmode", "coloradjustment"), DEVELOP_BLEND_COLORADJUST },
+        { NC_("blendmode", "Lab lightness"), DEVELOP_BLEND_LAB_LIGHTNESS },
+        { NC_("blendmode", "Lab color"), DEVELOP_BLEND_LAB_COLOR },
+        { NC_("blendmode", "Lab L-channel"), DEVELOP_BLEND_LAB_L },
+        { NC_("blendmode", "Lab a-channel"), DEVELOP_BLEND_LAB_A },
+        { NC_("blendmode", "Lab b-channel"), DEVELOP_BLEND_LAB_B },
+        { NC_("blendmode", "HSV value"), DEVELOP_BLEND_HSV_VALUE },
+        { NC_("blendmode", "HSV color"), DEVELOP_BLEND_HSV_COLOR },
+        { NC_("blendmode", "RGB red channel"), DEVELOP_BLEND_RGB_R },
+        { NC_("blendmode", "RGB green channel"), DEVELOP_BLEND_RGB_G },
+        { NC_("blendmode", "RGB blue channel"), DEVELOP_BLEND_RGB_B },
+        { NC_("blendmode", "divide"), DEVELOP_BLEND_DIVIDE },
+        { NC_("blendmode", "geometric mean"), DEVELOP_BLEND_GEOMETRIC_MEAN },
+        { NC_("blendmode", "harmonic mean"), DEVELOP_BLEND_HARMONIC_MEAN },
+
+        /** deprecated blend modes: make them available as legacy history stacks might want them */
+        { NC_("blendmode", "difference (deprecated)"), DEVELOP_BLEND_DIFFERENCE },
+        { NC_("blendmode", "subtract inverse (deprecated)"), DEVELOP_BLEND_SUBTRACT_INVERSE },
+        { NC_("blendmode", "divide inverse (deprecated)"), DEVELOP_BLEND_DIVIDE_INVERSE },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_blend_mode_flag_names[]
+    = { { NC_("blendoperation", "normal"), 0 },
+        { NC_("blendoperation", "reverse"), DEVELOP_BLEND_REVERSE },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_blend_colorspace_names[]
+    = { { N_("default"), DEVELOP_BLEND_CS_NONE },
+        { N_("RAW"), DEVELOP_BLEND_CS_RAW },
+        { N_("Lab"), DEVELOP_BLEND_CS_LAB },
+        { N_("RGB (display)"), DEVELOP_BLEND_CS_RGB_DISPLAY },
+        { N_("RGB (scene)"), DEVELOP_BLEND_CS_RGB_SCENE },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_mask_mode_names[]
+    = { { N_("None"), 0 },
+        { N_("Uniform"), 1 },
+        { N_("Parametric mask"), 2 },
+        { N_("Drawn mask"), 3 },
+        { N_("Drawn & parametric mask"), 4 },
+        { N_("Reuse an existing mask"), 5 },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_combine_masks_names[]
+    = { { N_("exclusive"), DEVELOP_COMBINE_NORM_EXCL },
+        { N_("inclusive"), DEVELOP_COMBINE_NORM_INCL },
+        { N_("exclusive & inverted"), DEVELOP_COMBINE_INV_EXCL },
+        { N_("inclusive & inverted"), DEVELOP_COMBINE_INV_INCL },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_feathering_guide_names[]
+    = { { N_("output before blur"), DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR },
+        { N_("input before blur"), DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR },
+        { N_("output after blur"), DEVELOP_MASK_GUIDE_OUT_AFTER_BLUR },
+        { N_("input after blur"), DEVELOP_MASK_GUIDE_IN_AFTER_BLUR },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_invert_mask_names[]
+    = { { N_("off"), DEVELOP_COMBINE_NORM },
+        { N_("on"), DEVELOP_COMBINE_INV },
+        { "", 0 } };
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
