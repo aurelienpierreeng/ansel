@@ -40,8 +40,10 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -128,14 +130,14 @@ BLOCK = re.compile(
 # vendored code and git submodules excluded. Reproduce any column with
 # tools/code_health.py on the corresponding tag.
 FROZEN_ENGINE = {
-    "Darktable 3.8": {"tag": "release-3.8.1", "complexity": 35300,
-                      "code": 200385, "comment": 28934},
-    "Darktable 4.0": {"tag": "release-4.0.0", "complexity": 37212,
-                      "code": 207869, "comment": 32107},
-    "Darktable 5.0": {"tag": "release-5.0.0", "complexity": 38072,
-                      "code": 229813, "comment": 34661},
-    "Darktable 5.6": {"tag": "release-5.6.0", "complexity": 44146,
-                      "code": 261163, "comment": 41193},
+    "Darktable 3.8": {"tag": "release-3.8.1", "complexity": 35244,
+                      "code": 199820, "comment": 28736},
+    "Darktable 4.0": {"tag": "release-4.0.0", "complexity": 37156,
+                      "code": 207304, "comment": 31877},
+    "Darktable 5.0": {"tag": "release-5.0.0", "complexity": 38016,
+                      "code": 229248, "comment": 34431},
+    "Darktable 5.6": {"tag": "release-5.6.0", "complexity": 44059,
+                      "code": 260318, "comment": 40879},
 }
 
 # src/external holds the git submodules - rawspeed, LibRaw, sentry-native and the rest -
@@ -145,7 +147,7 @@ FROZEN_ENGINE = {
 # submodules, which is exactly why this filter must be tested against a full checkout
 # rather than assumed to work.
 ENGINE_EXCLUDE = ("/external/", "/apps/ansel-chart/", "/iop/",
-                  "/tests/integration/", "/image_test/samples/",
+                  "/tests/", "/image_test/samples/",
                   "/doxygen-awesome-css/")
 ENGINE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hxx")
 ENGINE_LANGUAGES = frozenset(("C", "C/C++ Header", "C++"))
@@ -207,7 +209,7 @@ def measure_engine(source_dir="src"):
     return {"complexity": complexity, "code": code, "comment": comment}
 
 
-def engine_table(spec):
+def engine_table(spec, previous=""):
     """The engine comparison: local tooling for size and complexity, Sonar for cognitive.
 
     Comparing the projects as a whole compares their feature sets: the set of pixel
@@ -277,12 +279,40 @@ def engine_table(spec):
     def ratio(d):
         return "%.1f %%" % (100.0 * d["comment"] / max(1, d["comment"] + d["code"]))
 
+    # Documentation coverage needs Doxygen's symbol table. When it has not been built,
+    # keep whatever the README already shows rather than blanking a real figure.
+    kept_docs = {}
+    for line in (previous or "").splitlines():
+        if line.startswith("| Functions carrying documentation"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            for label, value in zip(columns, cells[1:]):
+                if value and value != "—":
+                    kept_docs[label] = value
+    live_docs = measure_docs(DOXYGEN_DB[0])
+    if live_docs is None:
+        # Nothing prepared for us: build the symbol table rather than give up on the row.
+        built = build_doxygen_db()
+        if built:
+            sys.stderr.write("readme-metrics: built a Doxygen symbol table for "
+                             "documentation coverage\n")
+            live_docs = measure_docs(built)
+    for label in columns:
+        d = data[label]
+        if label in FROZEN_DOCS:
+            f = FROZEN_DOCS[label]
+            d["docs"] = "%.1f %%" % (100.0 * f["documented"] / f["functions"])
+        elif live_docs:
+            d["docs"] = "%.1f %%" % (100.0 * live_docs["documented"] / live_docs["functions"])
+        else:
+            d["docs"] = kept_docs.get(label, "—")
+
     rows = [("Cyclomatic complexity", lambda d: "{:,}".format(d["complexity"])),
             ("Lines of code", lambda d: "{:,}".format(d["code"])),
             ("Comment lines", lambda d: "{:,}".format(d["comment"])),
             ("Ratio of comments", ratio),
             ("Cognitive complexity",
-             lambda d: "{:,}".format(d["cognitive"]) if d["cognitive"] else "—")]
+             lambda d: "{:,}".format(d["cognitive"]) if d["cognitive"] else "—"),
+            ("Functions carrying documentation", lambda d: d["docs"])]
     out = ["| Metric | " + " | ".join(columns) + " |",
            "| ------ | " + " | ".join("-----------:" for _ in columns) + " |"]
     for label, render in rows:
@@ -304,21 +334,32 @@ def engine_table(spec):
 #     git checkout <tag>
 #     python3 <ansel>/tools/code_health.py --source-dir src --repo-root .
 
+# Share of engine functions carrying a documentation comment, from Doxygen's own record.
+# Doxygen counts functions differently from lizard - it sees static inline definitions in
+# headers, and function-like macros - so these totals do not match the per-function table
+# above. Only the ratio is published, for that reason.
+FROZEN_DOCS = {
+    "Darktable 3.8": {"functions": 9308, "documented": 1997},
+    "Darktable 4.0": {"functions": 9600, "documented": 2008},
+    "Darktable 5.0": {"functions": 10212, "documented": 2048},
+    "Darktable 5.6": {"functions": 11316, "documented": 2228},
+}
+
 FROZEN_FUNCTIONS = {
-    "Darktable 3.8": {"functions": 7268, "mean": 4.86, "max": 194, "over15": 428, "over50": 45},
-    "Darktable 4.0": {"functions": 7510, "mean": 4.95, "max": 210, "over15": 456, "over50": 48},
-    "Darktable 5.0": {"functions": 7785, "mean": 4.89, "max": 252, "over15": 453, "over50": 48},
-    "Darktable 5.6": {"functions": 8741, "mean": 5.05, "max": 249, "over15": 522, "over50": 63},
+    "Darktable 3.8": {"functions": 7242, "mean": 4.87, "max": 194, "over15": 428, "over50": 45},
+    "Darktable 4.0": {"functions": 7484, "mean": 4.96, "max": 210, "over15": 456, "over50": 48},
+    "Darktable 5.0": {"functions": 7759, "mean": 4.90, "max": 252, "over15": 453, "over50": 48},
+    "Darktable 5.6": {"functions": 8691, "mean": 5.07, "max": 249, "over15": 522, "over50": 63},
 }
 
 FROZEN_INCLUDES = {
-    "Darktable 3.8": {"med_dep": 14.1, "avg_aff": 83, "over25": 31,
+    "Darktable 3.8": {"med_dep": 14.5, "avg_aff": 84, "over25": 32,
                       "cycles": 4, "trapped": 17, "god": 30},
-    "Darktable 4.0": {"med_dep": 13.3, "avg_aff": 82, "over25": 31,
+    "Darktable 4.0": {"med_dep": 13.4, "avg_aff": 83, "over25": 31,
                       "cycles": 4, "trapped": 17, "god": 30},
-    "Darktable 5.0": {"med_dep": 14.9, "avg_aff": 94, "over25": 34,
+    "Darktable 5.0": {"med_dep": 15.0, "avg_aff": 95, "over25": 34,
                       "cycles": 4, "trapped": 17, "god": 36},
-    "Darktable 5.6": {"med_dep": 13.1, "avg_aff": 95, "over25": 32,
+    "Darktable 5.6": {"med_dep": 14.1, "avg_aff": 96, "over25": 32,
                       "cycles": 4, "trapped": 17, "god": 38},
 }
 
@@ -329,6 +370,8 @@ FROZEN_SIMILARITY = {
     ("Darktable 3.8", "Darktable 5.6"): 39.6,
     ("Darktable 4.0", "Darktable 5.6"): 43.2,
 }
+
+DOXYGEN_DB = [None]          # set from the command line before any table is built
 
 TREE_DIRS = {"Darktable 3.8": "dt38", "Darktable 4.0": "dt40",
              "Darktable 5.0": "dt50", "Darktable 5.6": "dt56"}
@@ -418,6 +461,66 @@ def measure_includes(repo_root=".", source_dir="src"):
             "cycles": len(cycles),
             "trapped": sum(len(c) for c in cycles),
             "god": god}
+
+
+def build_doxygen_db(doxyfile="doc/Doxyfile"):
+    """Produce Doxygen's symbol table, when one has not been built already.
+
+    The documentation build makes this in its first pass, but running this script by
+    hand should not require having run that first. Only the SQLite output is asked for -
+    no HTML, no graphs - which takes seconds rather than minutes.
+    """
+    if not (shutil.which("doxygen") and os.path.exists(doxyfile)):
+        return None
+    out = tempfile.mkdtemp(prefix="readme-metrics-doxygen-")
+    with open(doxyfile, encoding="utf-8", errors="replace") as fh:
+        config = fh.read()
+    config += "\n".join([
+        "", "OUTPUT_DIRECTORY = %s" % out,
+        "GENERATE_HTML = NO", "GENERATE_AUTOGEN_DEF = NO", "HAVE_DOT = NO",
+        "GENERATE_SQLITE3 = YES", "QUIET = YES", "WARNINGS = NO",
+        "WARN_IF_UNDOCUMENTED = NO", "WARN_IF_DOC_ERROR = NO",
+        "WARN_IF_INCOMPLETE_DOC = NO", ""])
+    try:
+        subprocess.run(["doxygen", "-"], input=config, text=True,
+                       capture_output=True, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    db = os.path.join(out, "sqlite3", "doxygen_sqlite3.db")
+    return db if os.path.exists(db) else None
+
+
+def measure_docs(db_path):
+    """Share of engine functions carrying a documentation comment.
+
+    Reads the SQLite symbol table Doxygen produces (GENERATE_SQLITE3), which the
+    documentation build already generates in its first pass, and filters to the engine
+    the same way everything else here does. A function counts as documented when Doxygen
+    recorded a brief or detailed description for it - that is, when it carries a real
+    doc-comment rather than an ordinary one.
+    """
+    if not db_path or not os.path.exists(db_path):
+        return None
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True)
+        rows = con.execute(
+            "SELECT p.name, "
+            "  TRIM(COALESCE(m.briefdescription,'')) || TRIM(COALESCE(m.detaileddescription,'')) "
+            "FROM memberdef m JOIN path p ON p.rowid = m.file_id "
+            "WHERE m.kind = 'function'").fetchall()
+        con.close()
+    except sqlite3.Error:
+        return None
+    total = documented = 0
+    for path, text in rows:
+        if _engine_excluded(path):
+            continue
+        total += 1
+        if (text or "").strip():
+            documented += 1
+    if not total:
+        return None
+    return {"functions": total, "documented": documented}
 
 
 def _columns(spec):
@@ -545,6 +648,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--readme", default="README.md")
+    ap.add_argument("--doxygen-db",
+                    default="doc/api/sqlite3/doxygen_sqlite3.db",
+                    help="Doxygen SQLite symbol table, for documentation coverage; "
+                         "produced by the docs build's first pass")
     ap.add_argument("--darktable-trees", default=None,
                     help="directory holding dt38/ dt40/ dt50/ dt56/ Darktable checkouts, "
                          "needed only to refresh the Ansel row of the similarity matrix")
@@ -626,6 +733,7 @@ def main():
 
     updated = CELL.sub(replace, text)
 
+    DOXYGEN_DB[0] = args.doxygen_db
     builders = {"engine-metrics": engine_table,
                 "engine-complexity": functions_table,
                 "engine-includes": includes_table,
@@ -637,8 +745,9 @@ def main():
         if build is None:
             return m.group(0)
         try:
-            body = (build(m.group("spec"), m.group("body"))
-                    if build is builders["similarity-matrix"]
+            needs_prev = build in (builders["similarity-matrix"],
+                                   builders["engine-metrics"])
+            body = (build(m.group("spec"), m.group("body")) if needs_prev
                     else build(m.group("spec")))
         except Exception as exc:                       # noqa: BLE001
             sys.stderr.write("readme-metrics: %s failed (%s), left as is\n"
