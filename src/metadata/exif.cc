@@ -82,7 +82,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include "config.h"   // conditional-ok: generated only when the build system defines HAVE_CONFIG_H
 #endif
 
 #include <errno.h>
