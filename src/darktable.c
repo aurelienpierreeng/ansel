@@ -778,6 +778,11 @@ static void _history_notify(const char *message)
   dt_control_log("%s", message);
 }
 
+static void _history_toast(const char *message)
+{
+  dt_toast_log("%s", message);
+}
+
 static void _history_changed(const dt_history_change_t what)
 {
   switch(what)
@@ -787,6 +792,9 @@ static void _history_changed(const dt_history_change_t what)
       break;
     case DT_HISTORY_CHANGE_STYLES:
       DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
+      break;
+    case DT_HISTORY_CHANGE_DEVELOP:
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
       break;
   }
 }
@@ -1402,6 +1410,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_database_set_renamed_handler(_database_renamed);
   dt_metadata_set_notify_handler(_metadata_notify);
   dt_history_set_message_handler(_history_notify);
+  dt_history_set_toast_handler(_history_toast);
   dt_presets_set_autoapply_resolver(_presets_can_autoapply);
   dt_history_set_operation_name_resolver(_history_operation_name);
 

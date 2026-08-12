@@ -61,6 +61,7 @@
 #include "control/control.h"
 #include "common/conf.h"
 #include "history/history.h"
+#include "history/notify.h"
 #include "history/presets.h"   // FOR_RAW/FOR_LDR/... matched against the image at auto-apply
 #include "database/history_repository.h"
 
@@ -83,7 +84,6 @@
 #include <glib.h>
 #include "common/hash.h"
 #include "gui/application.h"
-#include "control/signal.h"
 
 static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
                                       const int modversion, const char *operation, const void *module_params,
@@ -674,8 +674,11 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
 
   // Ensure all UI pieces (history treeview, iop order, etc.) resync after undo/redo.
   // Undo callbacks bypass dt_dev_undo_end_record(), so we need to raise the change signal here.
-  if(dt_gui_get_global() && dev->gui_attached && dev == dt_dev_get_global())
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  // The interactive session's panels resync through the changed-handler; the
+  // dev == dt_dev_get_global() test is engine knowledge (only the interactive dev has
+  // panels), so it stays here rather than in the handler.
+  if(dev->gui_attached && dev == dt_dev_get_global())
+    dt_history_changed(DT_HISTORY_CHANGE_DEVELOP);
 }
 
 void dt_dev_history_undo_start_record(dt_develop_t *dev)
@@ -1623,7 +1626,7 @@ void dt_apply_dev_history_update(dt_develop_t *dev)
   // stale ROI -- same fix as _history_apply_history_end() in libs/history.c.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
   dt_dev_history_pixelpipe_update(dev, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  dt_history_changed(DT_HISTORY_CHANGE_DEVELOP);
 }
 
 /**
@@ -1654,11 +1657,11 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 {
   if(IS_NULL_PTR(dev) || imgid <= 0) return;
 
-  if(dt_gui_get_global() && dev->gui_attached)
+  if(dev->gui_attached)
   {
     const guint states = dt_dev_mask_history_overload(dev->history, 250);
     if(states > 250)
-      dt_toast_log(_("Image #%i history is storing %d mask states. n"
+      dt_history_toast(_("Image #%i history is storing %d mask states. n"
                      "Consider compressing history and removing unused masks to keep reads/writes manageable."),
                      imgid, states);
   }
@@ -2122,8 +2125,8 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
       fprintf(stderr, "[dev_read_history] module `%s' %s version mismatch: history is %d, dt %d.\n", hist->module->op,
               preset, modversion, hist->module->version());
 
-      dt_control_log(_("module `%s' %s version mismatch: %d != %d"), hist->module->op,
-                      preset, hist->module->version(), modversion);
+      dt_history_message(_("module `%s' %s version mismatch: %d != %d"), hist->module->op,
+                         preset, hist->module->version(), modversion);
 
       dt_free(preset);
       return 1;

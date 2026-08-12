@@ -50,6 +50,30 @@ void dt_history_message(const char *format, ...)
   }
 }
 
+static dt_history_toast_handler_t _toast_handler = NULL;
+
+void dt_history_set_toast_handler(dt_history_toast_handler_t handler)
+{
+  _toast_handler = handler;
+}
+
+void dt_history_toast(const char *format, ...)
+{
+  dt_history_toast_handler_t handler = _toast_handler;
+  if(handler == NULL) return;
+
+  va_list args;
+  va_start(args, format);
+  gchar *message = g_strdup_vprintf(format, args);
+  va_end(args);
+
+  if(message)
+  {
+    handler(message);
+    dt_free(message);
+  }
+}
+
 void dt_history_set_changed_handler(dt_history_changed_handler_t handler)
 {
   _changed_handler = handler;

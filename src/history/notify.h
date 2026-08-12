@@ -55,6 +55,11 @@ void dt_history_set_message_handler(dt_history_message_handler_t handler);
  *  string is translated at the call site, because only the call site knows the plural. */
 void dt_history_message(const char *format, ...) G_GNUC_PRINTF(1, 2);
 
+/** @brief Same contract, transient acknowledgement flavour. Was dt_toast_log(). */
+typedef void (*dt_history_toast_handler_t)(const char *message);
+void dt_history_set_toast_handler(dt_history_toast_handler_t handler);
+void dt_history_toast(const char *format, ...) G_GNUC_PRINTF(1, 2);
+
 /** @brief What changed. Each value stands for one signal this code used to raise itself. */
 typedef enum dt_history_change_t
 {
@@ -62,7 +67,11 @@ typedef enum dt_history_change_t
    *  DT_SIGNAL_TAG_CHANGED. */
   DT_HISTORY_CHANGE_TAGS = 0,
   /** A style was created, edited, renamed or deleted. Was DT_SIGNAL_STYLE_CHANGED. */
-  DT_HISTORY_CHANGE_STYLES
+  DT_HISTORY_CHANGE_STYLES,
+  /** The development history of the interactive session changed -- after an undo, or a
+   *  bulk apply. Whoever is showing the history panel or the module order should resync.
+   *  Was DT_SIGNAL_DEVELOP_HISTORY_CHANGE. */
+  DT_HISTORY_CHANGE_DEVELOP
 } dt_history_change_t;
 
 /**
