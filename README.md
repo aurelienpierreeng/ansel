@@ -160,9 +160,9 @@ whole project, pixel operations included:
 
 | Metric | Ansel Master | Darktable 4.0 | Darktable 5.6 |
 | ------ | -----------: | ------------: | ------------: |
-| Cyclomatic complexity | [61,373](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_ansel) | [56,169](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierre_darktable) | [61,715](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_darktable-5) |
-| Cognitive complexity | [76,238](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_ansel) | [72,743](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierre_darktable) | [81,587](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_darktable-5) |
-| Lines of code | [345,184](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_ansel) | [360,322](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierre_darktable) | [374,150](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_darktable-5) |
+| Cyclomatic complexity | [61,394](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_ansel) | [56,169](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierre_darktable) | [61,715](https://sonarcloud.io/component_measures?metric=complexity&id=aurelienpierreeng_darktable-5) |
+| Cognitive complexity | [76,245](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_ansel) | [72,743](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierre_darktable) | [81,587](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_darktable-5) |
+| Lines of code | [345,366](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_ansel) | [360,322](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierre_darktable) | [374,150](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_darktable-5) |
 | Ratio of comments | [13.8%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_ansel) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierre_darktable) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_darktable-5) |
 
 Those totals compare the two projects as a whole, which means they compare their
@@ -184,14 +184,29 @@ little about how maintainable it is.
 Excluding `src/iop` compares the **engine**: the pixel pipeline, the database, the
 caches, the GUI framework, everything both projects need whatever their module set.
 
-<!-- BEGIN GENERATED engine-metrics: aurelienpierreeng_ansel=Ansel Master, aurelienpierre_darktable=Darktable 4.0, aurelienpierreeng_darktable-5=Darktable 5.6, exclude=src/iop -->
-| Metric | Ansel Master | Darktable 4.0 | Darktable 5.6 |
-| ------ | -----------: | -----------: | -----------: |
-| Cyclomatic complexity | 40,161 | 41,240 | 44,799 |
-| Cognitive complexity | 46,859 | 50,862 | 57,120 |
-| Lines of code | 227,262 | 267,657 | 267,162 |
-| Ratio of comments | 14.4% | 11.5% | 11.6% |
+<!-- BEGIN GENERATED engine-metrics: aurelienpierreeng_ansel=Ansel Master, -=Darktable 3.8, aurelienpierre_darktable=Darktable 4.0, -=Darktable 5.0, aurelienpierreeng_darktable-5=Darktable 5.6, exclude=src/iop -->
+| Metric | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
+| ------ | -----------: | -----------: | -----------: | -----------: | -----------: |
+| Cyclomatic complexity | 40,742 | 35,300 | 37,212 | 38,072 | 44,146 |
+| Lines of code | 211,372 | 200,385 | 207,869 | 229,813 | 261,163 |
+| Ratio of comments | 20.2 % | 12.6 % | 13.4 % | 13.1 % | 13.6 % |
+| Cognitive complexity | 46,866 | — | 50,862 | — | 57,120 |
 <!-- END GENERATED engine-metrics -->
+
+<sub>**Methodology.** Cyclomatic complexity, lines of code and comment ratio are measured
+locally with [`lizard`](https://github.com/terryyin/lizard) and
+[`cloc`](https://github.com/AlDanial/cloc), applied identically to every version, on
+C and C++ only — no Python, shell, CMake or documentation. `src/iop` is excluded, and so
+is `src/external`, which holds the git submodules: those are upstream projects pinned at a
+commit rather than this project's code, and they account for about two thirds of the
+functions under `src/` when checked out. One tool is used for all five columns on purpose,
+because SonarCloud and `lizard` do not define cyclomatic complexity the same way and
+mixing them would compare nothing. Cognitive complexity has no local equivalent, so it is
+taken from SonarCloud and shown only for the three versions that have a project there;
+the others are left blank rather than estimated. The Darktable columns are measured once
+from the release tags (`release-3.8.1`, `release-4.0.0`, `release-5.0.0`, `release-5.6.0`)
+and do not change; Ansel's is re-measured by
+[`tools/update_readme_metrics.py`](tools/update_readme_metrics.py) on every run.</sub>
 
 On the engine alone, Ansel is smaller and simpler than both Darktable releases on every
 count, and the gap against Darktable 5.6 is wider than against the 4.0 it forked from:

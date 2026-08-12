@@ -34,8 +34,11 @@ Usage:
 """
 
 import argparse
+import csv
 import json
 import re
+import shutil
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -114,50 +117,160 @@ BLOCK = re.compile(
     re.DOTALL)
 
 
-def engine_table(spec):
-    """Whole-project measures minus one directory, as a markdown table.
+# Engine figures for the Darktable releases, measured once with the tooling below on the
+# tagged source trees, and frozen because a release does not change. Ansel's column is
+# re-measured on every run from the working tree, which is the only one that moves.
+#
+# Measured with: lizard (cyclomatic complexity, summed over every function outside
+# src/iop) and cloc (lines of code and comment lines, C/C++/Objective-C only), with
+# vendored code and git submodules excluded. Reproduce any column with
+# tools/code_health.py on the corresponding tag.
+FROZEN_ENGINE = {
+    "Darktable 3.8": {"tag": "release-3.8.1", "complexity": 35300,
+                      "code": 200385, "comment": 28934},
+    "Darktable 4.0": {"tag": "release-4.0.0", "complexity": 37212,
+                      "code": 207869, "comment": 32107},
+    "Darktable 5.0": {"tag": "release-5.0.0", "complexity": 38072,
+                      "code": 229813, "comment": 34661},
+    "Darktable 5.6": {"tag": "release-5.6.0", "complexity": 44146,
+                      "code": 261163, "comment": 41193},
+}
 
-    Comparing the two projects as a whole compares their feature sets: the set of pixel
-    operations under src/iop has diverged hard between the forks, Ansel having added a
-    painting module, an AI denoiser and a rewritten highlights reconstruction that
-    Darktable does not carry. Subtracting that directory compares the ENGINE - pipeline,
-    database, caches, GUI framework - which is the part both projects genuinely share a
-    purpose for.
+# src/external holds the git submodules - rawspeed, LibRaw, sentry-native and the rest -
+# which are upstream projects pinned at a commit, not this repository's code. They are
+# 64% of the functions under src/ when the submodules are checked out, so leaving them in
+# would not skew the figures, it would replace them. A git worktree does not populate
+# submodules, which is exactly why this filter must be tested against a full checkout
+# rather than assumed to work.
+ENGINE_EXCLUDE = ("/external/", "/apps/ansel-chart/", "/iop/",
+                  "/tests/integration/", "/image_test/samples/",
+                  "/doxygen-awesome-css/")
+ENGINE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hxx")
+ENGINE_LANGUAGES = frozenset(("C", "C/C++ Header", "C++"))
 
-    Densities cannot be subtracted, so the comment ratio is recomputed from comment_lines
-    and ncloc rather than taken from the project-level percentage.
+
+def _engine_excluded(path):
+    p = "/" + path.replace("\\", "/").lstrip("/")
+    if not p.lower().endswith(ENGINE_SUFFIXES):
+        return True
+    return any(part in p for part in ENGINE_EXCLUDE)
+
+
+def measure_engine(source_dir="src"):
+    """Measure this working tree's engine with lizard and cloc.
+
+    Returns None if either tool is missing, so the table is left untouched rather than
+    written with half of it guessed.
     """
-    exclude = "src/iop"
-    columns = []
+    if not (shutil.which("lizard") and shutil.which("cloc")):
+        sys.stderr.write("readme-metrics: lizard and cloc are needed for the engine table\n")
+        return None
+
+    cmd = ["lizard", "--csv", "-l", "c", "-l", "cpp"]
+    for part in ENGINE_EXCLUDE:
+        cmd += ["-x", "*%s*" % part]
+    cmd.append(source_dir)
+    out = subprocess.run(cmd, capture_output=True, text=True,
+                         errors="replace", check=False).stdout
+    complexity = 0
+    for parts in csv.reader(out.splitlines()):
+        # lizard quotes its path fields; csv, never a bare split
+        if len(parts) < 8:
+            continue
+        try:
+            ccn = int(parts[1])
+        except ValueError:
+            continue
+        if _engine_excluded(parts[6]):
+            continue
+        complexity += ccn
+
+    out = subprocess.run(["cloc", "--quiet", "--json", "--by-file", source_dir],
+                         capture_output=True, text=True, errors="replace",
+                         check=False).stdout
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return None
+    data.pop("header", None)
+    data.pop("SUM", None)
+    code = comment = 0
+    for path, v in data.items():
+        if v.get("language") not in ENGINE_LANGUAGES or _engine_excluded(path):
+            continue
+        code += v.get("code", 0)
+        comment += v.get("comment", 0)
+    if not complexity or not code:
+        return None
+    return {"complexity": complexity, "code": code, "comment": comment}
+
+
+def engine_table(spec):
+    """The engine comparison: local tooling for size and complexity, Sonar for cognitive.
+
+    Comparing the projects as a whole compares their feature sets: the set of pixel
+    operations under src/iop has diverged between the forks, and those modules are
+    independent of one another, so their bulk says little about maintainability.
+    Subtracting them compares the engine, which is what both projects need whatever
+    their module set.
+
+    Cyclomatic complexity, lines of code and comment ratio come from ONE tool applied
+    identically to every version, because SonarCloud and lizard do not define
+    cyclomatic complexity the same way and mixing them silently compares nothing.
+    Cognitive complexity has no local equivalent, so it is reported from SonarCloud for
+    the three versions that have a project there, and left blank for the rest rather
+    than approximated.
+    """
+    # Each entry is "<sonar project or -> = <column label>". Whether a column is
+    # measured locally or read from the frozen table is decided by its label, not by
+    # its Sonar key: Ansel is measured locally AND has a Sonar project, and an earlier
+    # version of this code used the key to decide both and silently blanked Ansel's
+    # cognitive complexity.
+    columns, sonar = [], {}
     for item in spec.split(","):
         item = item.strip()
-        if not item:
-            continue
-        if item.startswith("exclude="):
-            exclude = item.split("=", 1)[1].strip()
+        if not item or item.startswith("exclude="):
             continue
         key, _, label = item.partition("=")
-        columns.append((key.strip(), label.strip() or key.strip()))
+        label = label.strip() or key.strip()
+        columns.append(label)
+        key = key.strip()
+        sonar[label] = key if key and key != "-" else None
 
-    metrics = ["complexity", "cognitive_complexity", "ncloc", "comment_lines"]
+    local = measure_engine()
+    if local is None:
+        raise RuntimeError("local engine measurement unavailable")
+
     data = {}
-    for key, _label in columns:
-        total = fetch(key, metrics)
-        part = fetch("%s:%s" % (key, exclude), metrics)
-        data[key] = {m: int(float(total.get(m, 0))) - int(float(part.get(m, 0)))
-                     for m in metrics}
+    for label in columns:
+        if label in FROZEN_ENGINE:
+            data[label] = dict(FROZEN_ENGINE[label])
+        else:
+            data[label] = dict(local)          # the tree this script is running in
+        key = sonar.get(label)
+        cog = None
+        if key:
+            try:
+                total = fetch(key, ["cognitive_complexity"])
+                part = fetch("%s:src/iop" % key, ["cognitive_complexity"])
+                cog = (int(float(total.get("cognitive_complexity", 0)))
+                       - int(float(part.get("cognitive_complexity", 0))))
+            except Exception:                  # noqa: BLE001 - blank beats a wrong number
+                cog = None
+        data[label]["cognitive"] = cog
+
+    def ratio(d):
+        return "%.1f %%" % (100.0 * d["comment"] / max(1, d["comment"] + d["code"]))
 
     rows = [("Cyclomatic complexity", lambda d: "{:,}".format(d["complexity"])),
-            ("Cognitive complexity", lambda d: "{:,}".format(d["cognitive_complexity"])),
-            ("Lines of code", lambda d: "{:,}".format(d["ncloc"])),
-            ("Ratio of comments",
-             lambda d: "%.1f%%" % (100.0 * d["comment_lines"]
-                                   / max(1, d["comment_lines"] + d["ncloc"])))]
-    out = ["| Metric | " + " | ".join(l for _k, l in columns) + " |",
+            ("Lines of code", lambda d: "{:,}".format(d["code"])),
+            ("Ratio of comments", ratio),
+            ("Cognitive complexity",
+             lambda d: "{:,}".format(d["cognitive"]) if d["cognitive"] else "—")]
+    out = ["| Metric | " + " | ".join(columns) + " |",
            "| ------ | " + " | ".join("-----------:" for _ in columns) + " |"]
     for label, render in rows:
-        out.append("| " + label + " | "
-                   + " | ".join(render(data[k]) for k, _l in columns) + " |")
+        out.append("| " + label + " | " + " | ".join(render(data[c]) for c in columns) + " |")
     return "\n".join(out) + "\n"
 
 
