@@ -29,6 +29,25 @@
 
 #include <glib.h>
 
+/**
+ * @brief Which image kinds a preset applies to. Persisted in the presets database
+ * (`database/preset_repository.h` documents its `format` and `excluded` row fields in
+ * terms of these), matched against the image at auto-apply time
+ * (`develop/dev_history.c`), and set by each module's preset registration.
+ *
+ * @details The FOR_NOT_ variants are negated to keep existing presets valid. Lived in
+ * `gui/presets.h` historically, but nothing about it is GUI: it is preset vocabulary,
+ * written to disk.
+ */
+typedef enum dt_presets_format_flag_t
+{
+  FOR_LDR = 1 << 0,
+  FOR_RAW = 1 << 1,
+  FOR_HDR = 1 << 2,
+  FOR_NOT_MONO = 1 << 3,
+  FOR_NOT_COLOR = 1 << 4
+} dt_presets_format_flag_t;
+
 /** save preset to file */
 void dt_presets_save_to_file(const int rowid, const char *preset_name, const char *filedir);
 

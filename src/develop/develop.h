@@ -318,11 +318,6 @@ typedef struct dt_develop_t
   } transient_params;
   dt_pthread_mutex_t transient_params_mutex;
 
-
-  // histogram for display.
-  uint32_t *histogram_pre_tonecurve, *histogram_pre_levels;
-  uint32_t histogram_pre_tonecurve_max, histogram_pre_levels_max;
-
   // list of forms iop can use for masks or whatever
   GList *forms;
 
@@ -503,8 +498,6 @@ typedef struct dt_develop_t
   gboolean mask_lock;
 
   cairo_surface_t *image_surface;
-
-  gboolean loading_cache;
 } dt_develop_t;
 
 static inline uint64_t dt_dev_get_history_hash(const dt_develop_t *dev)
