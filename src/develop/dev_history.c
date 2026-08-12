@@ -58,6 +58,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "control/control.h"
 #include "common/conf.h"
 #include "history/history.h"
 #include "history/presets.h"   // FOR_RAW/FOR_LDR/... matched against the image at auto-apply

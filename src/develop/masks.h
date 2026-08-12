@@ -118,7 +118,6 @@ GList dev->forms
 #include "develop/develop.h"     // dt_develop_t, and dt_iop_module_t through imageop.h
 #include "develop/pixelpipe.h"
 #include "widgets/draw.h"
-#include "control/control.h"
 
 #include <assert.h>
 
