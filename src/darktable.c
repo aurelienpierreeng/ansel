@@ -142,6 +142,7 @@
 #include "common/l10n.h"
 #include "metadata/metadata.h"
 #include "common/image_notify.h"
+#include "develop/dev_history_gui.h"
 #include "develop/pipeline_notify.h"
 #include "history/notify.h"
 #include "history/presets.h"
@@ -1513,6 +1514,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
    * further up: the signal system does not exist until the line above, and nothing can
    * edit a tag before it does. */
   dt_metadata_set_tags_changed_handler(_metadata_tags_changed);
+  dt_dev_history_gui_init();
   dt_metadata_set_geotags_changed_handler(_metadata_geotags_changed);
   dt_image_notify_set_imported_handler(_image_imported);
   dt_pipeline_set_message_handler(_pipeline_message);

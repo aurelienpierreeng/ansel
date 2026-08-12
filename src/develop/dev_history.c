@@ -71,7 +71,6 @@
 #include "develop/iop_order.h"
 #include "develop/dev_history.h"
 #include "develop/blend.h"
-#include "develop/blend_gui.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -563,6 +562,14 @@ GList *dt_history_duplicate(GList *hist)
   return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 
+/* Installed by dt_dev_history_gui_init(); absent under ansel-cli and in tests. */
+static dt_dev_history_undo_restore_gui_handler_t _undo_restore_gui_handler = NULL;
+
+void dt_dev_history_set_undo_restore_gui_handler(dt_dev_history_undo_restore_gui_handler_t handler)
+{
+  _undo_restore_gui_handler = handler;
+}
+
 typedef struct dt_undo_history_t
 {
   GList *before_snapshot, *after_snapshot;
@@ -665,11 +672,9 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   {
     dt_masks_set_edit_mode(dev->gui_module, hist->mask_edit_mode);
     dev->gui_module->request_mask_display = hist->request_mask_display;
-    dt_iop_gui_update_blendif(dev->gui_module);
-    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)(dev->gui_module->blend_data);
-    if(bd)
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask),
-                                   hist->request_mask_display == DT_DEV_PIXELPIPE_DISPLAY_MASK);
+    // the blending panel's widgets are the GUI half's to poke (dev_history_gui.c)
+    if(_undo_restore_gui_handler)
+      _undo_restore_gui_handler(dev, hist->mask_edit_mode, hist->request_mask_display);
   }
 
   // Ensure all UI pieces (history treeview, iop order, etc.) resync after undo/redo.

@@ -351,6 +351,22 @@ void dt_dev_write_history(struct dt_develop_t *dev, gboolean async);
 void dt_dev_history_gui_update(struct dt_develop_t *dev);
 
 /**
+ * @brief Restores the presentation half of an undo record: the blending panel's mask
+ * toggles for the focused module.
+ *
+ * @details Undo records capture `mask_edit_mode` and `request_mask_display` alongside the
+ * history snapshot, because undoing an edit should also undo what the user was LOOKING at.
+ * Restoring the data half is the engine's job; restoring the widgets is not, so the engine
+ * calls this handler -- installed by dt_dev_history_gui_init(), absent headless -- with the
+ * recorded values (dt_masks_edit_mode_t and dt_dev_pixelpipe_display_mask_t, widened to
+ * int so this header does not need their enums).
+ */
+typedef void (*dt_dev_history_undo_restore_gui_handler_t)(struct dt_develop_t *dev,
+                                                          int mask_edit_mode,
+                                                          int request_mask_display);
+void dt_dev_history_set_undo_restore_gui_handler(dt_dev_history_undo_restore_gui_handler_t handler);
+
+/**
  * @brief Rebuild or resync pixelpipes after backend history changes.
  *
  * @param dev Develop context.
