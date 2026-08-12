@@ -77,7 +77,6 @@
 #include "develop/pixelpipe_process.h"
 #include "develop/tiling.h"
 #include "develop/masks.h"
-#include "gui/color_picker_proxy.h"
 
 #include <assert.h>
 #include <inttypes.h>

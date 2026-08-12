@@ -60,6 +60,7 @@
 */
 #include "common/conf.h"
 #include "history/history.h"
+#include "history/presets.h"   // FOR_RAW/FOR_LDR/... matched against the image at auto-apply
 #include "database/history_repository.h"
 
 #include "common/undo.h"
@@ -74,7 +75,6 @@
 #include "develop/supervisor.h"
 #include "develop/gui_throttle.h"
 
-#include "gui/presets.h"
 
 #include <inttypes.h>
 
