@@ -43,7 +43,7 @@
 #include "common/paths.h"
 #include "control/signal.h"
 #include "common/utility.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "database/history_repository.h"
 #include "metadata/ratings.h"
 #include "metadata/tags.h"

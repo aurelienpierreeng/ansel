@@ -38,7 +38,7 @@
 #include "common/selection.h"
 #include "common/image.h"
 #include "system/mem_alloc.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "common/styles.h"
 #include "control/control.h"
 #include "develop/imageop.h"

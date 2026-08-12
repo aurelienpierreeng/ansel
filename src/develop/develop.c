@@ -69,7 +69,7 @@
 #include <unistd.h>
 
 #include "system/atomic.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "caches/image_cache.h"
 #include "caches/mipmap_cache.h"
 #include "metadata/tags.h"

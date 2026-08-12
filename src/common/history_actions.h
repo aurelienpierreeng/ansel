@@ -23,7 +23,7 @@
 #include <inttypes.h>
 
 #include "develop/history_merge.h"
-#include "common/history.h"   // dt_history_copy_item_t, for the clipboard accessor below
+#include "history/history.h"   // dt_history_copy_item_t, for the clipboard accessor below
 
 /** copy history from imgid and pasts on selected images, merge or overwrite... */
 gboolean dt_history_copy(int32_t imgid);

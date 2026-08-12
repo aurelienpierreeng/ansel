@@ -31,8 +31,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_HISTORY_H
-#define DT_COMMON_HISTORY_H
+#ifndef DT_HISTORY_HISTORY_H
+#define DT_HISTORY_HISTORY_H
 
 #include <gtk/gtk.h>
 #include <inttypes.h>
@@ -80,11 +80,31 @@ char *dt_history_get_items_as_string(int32_t imgid);
 /** get a single history item as string with enabled status */
 char *dt_history_item_as_string(const char *name, gboolean enabled);
 
+/**
+ * @brief Turns an operation string ("exposure", "colorbalancergb") into the name a user
+ *        should read.
+ *
+ * @details Only the side of the application that loaded the modules can answer: the
+ * mapping is built from the module list, and the names come from each module's own
+ * translation. That is `dt_iop_get_localized_name()`, in `develop/imageop.c` -- layer 5,
+ * and the single reason this file reached out of layer 1 at all, for three calls that do
+ * nothing but label a history line.
+ *
+ * With no resolver installed the answer is the operation string itself: legible, if
+ * untranslated. dt_init() installs one before anything reads history, and ansel-cli loads
+ * the module list too, so the fallback is for unit tests.
+ */
+typedef const char *(*dt_history_operation_name_resolver_t)(const char *operation);
+void dt_history_set_operation_name_resolver(dt_history_operation_name_resolver_t resolver);
+
+/** @brief Resolve @p operation through the installed resolver, or return it unchanged. */
+const char *dt_history_operation_name(const char *operation);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif // DT_COMMON_HISTORY_H
+#endif // DT_HISTORY_HISTORY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

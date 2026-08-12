@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/history_notify.h"
+#include "history/notify.h"
 
 #include "system/mem_alloc.h"
 

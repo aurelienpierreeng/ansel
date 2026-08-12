@@ -70,7 +70,7 @@
 #include "common/xmp_sidecar.h"
 #include "metadata/exif.h"
 #include "caches/image_cache.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"

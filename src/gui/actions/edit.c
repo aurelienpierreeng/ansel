@@ -29,7 +29,7 @@
 #include "common/undo.h"
 #include "common/selection.h"
 #include "caches/image_cache.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "develop/history_merge.h"
 #include "gui/develop/history_merge_gui.h"
 #include "develop/dev_history.h"

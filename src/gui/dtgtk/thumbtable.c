@@ -52,7 +52,7 @@
 #include "gui/dtgtk/thumbnail.h"
 #include "gui/dtgtk/thumbtable_info.h"
 #include "common/collection.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "caches/image_cache.h"
 #include "database/image_repository.h"
 #include "common/hash.h"

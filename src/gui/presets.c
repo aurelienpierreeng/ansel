@@ -60,7 +60,7 @@
 #endif
 #include "widgets/bauhaus.h"
 #include "database/preset_repository.h"
-#include "common/presets.h"
+#include "history/presets.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"

@@ -24,8 +24,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_PRESETS_H
-#define DT_COMMON_PRESETS_H
+#ifndef DT_HISTORY_PRESETS_H
+#define DT_HISTORY_PRESETS_H
 
 #include <glib.h>
 
@@ -50,7 +50,7 @@ gboolean dt_presets_module_can_autoapply(const gchar *operation);
 typedef gboolean (*dt_presets_autoapply_resolver_t)(const gchar *operation);
 void dt_presets_set_autoapply_resolver(dt_presets_autoapply_resolver_t resolver);
 
-#endif // DT_COMMON_PRESETS_H
+#endif // DT_HISTORY_PRESETS_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

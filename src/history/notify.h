@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/** @file common/history_notify.h
+/** @file history/notify.h
  *
  * @brief Everything the history, styles and presets code says to the outside world:
  * messages for the user, and the fact that something changed.
@@ -37,8 +37,8 @@
  * the module's layer is still an open question.
  */
 
-#ifndef DT_COMMON_HISTORY_NOTIFY_H
-#define DT_COMMON_HISTORY_NOTIFY_H
+#ifndef DT_HISTORY_NOTIFY_H
+#define DT_HISTORY_NOTIFY_H
 
 #include <glib.h>
 
@@ -93,7 +93,7 @@ void dt_history_changed_images(const GList *imgs);
 
 G_END_DECLS
 
-#endif // DT_COMMON_HISTORY_NOTIFY_H
+#endif // DT_HISTORY_NOTIFY_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

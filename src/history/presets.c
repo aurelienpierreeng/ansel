@@ -21,7 +21,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/presets.h"
+#include "history/presets.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "database/preset_repository.h"
