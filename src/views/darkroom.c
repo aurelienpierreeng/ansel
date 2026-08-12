@@ -108,7 +108,10 @@
 #include "gui/color_picker_proxy.h"
 #include "gui/application.h"
 #include "develop/gui_throttle.h"
-#include "develop/blend_gui.h"
+// include-cleaner reports this unused while dt_iop_gui_blend_data_t is dereferenced
+// six times in _toggle_mask_visibility_callback() -- the cast from the void*
+// mod->blend_data seems to defeat its attribution. The definition is required.
+#include "develop/blend_gui.h"  // NOLINT(misc-include-cleaner)
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"

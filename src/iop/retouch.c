@@ -46,6 +46,7 @@
 #include "common/conf.h"
 #include "config.h"
 #endif
+#include "control/control.h"
 #include "widgets/bauhaus.h"
 #include "system/macros.h"
 #include "system/openmp.h"
