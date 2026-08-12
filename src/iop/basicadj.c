@@ -64,6 +64,8 @@
 
 #include "gui/color_picker_proxy.h"
 #include "develop/tiling.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_basicadj_params_t)
 

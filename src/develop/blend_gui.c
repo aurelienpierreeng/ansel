@@ -80,6 +80,7 @@
 #include "widgets/popup.h"
 #include "widgets/scroll_wrap.h"
 #include "widgets/widget_style.h"
+#include "widgets/togglebutton.h"
 
 #define NEUTRAL_GRAY 0.5
 #define BLEND_MASKMODE_CONF_KEY "plugins/darkroom/blending/mask_mode_tab"

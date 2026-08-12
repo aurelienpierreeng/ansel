@@ -78,6 +78,7 @@
 */
 
 #include "control/jobs/control_jobs.h"
+#include "control/signal.h"
 #include "database/film_repository.h"
 #include "database/image_repository.h"
 #include "common/act_on.h"

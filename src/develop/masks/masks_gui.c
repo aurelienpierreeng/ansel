@@ -30,6 +30,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include "widgets/togglebutton.h"
 
 #define DT_MASKS_SHAPE_BUTTON_COUNT 5
 

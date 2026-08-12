@@ -72,6 +72,7 @@
 */
 
 #include "common/image.h"
+#include "common/image_notify.h"
 #include "common/thumbnail_notify.h"
 #include "common/act_on.h"
 #include "common/history_actions.h"
@@ -92,6 +93,7 @@
 #include "common/image_extensions.h"
 #include "imageio/imageio_core.h"
 #include "caches/mipmap_cache.h"
+#include "metadata/notify.h"
 #include "metadata/ratings.h"
 #include "metadata/tags.h"
 #include "common/undo.h"
@@ -872,7 +874,9 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
     if(i > 1) dt_control_log((action == DT_ACTION_UNDO)
                               ? _("geo-location undone for %d images")
                               : _("geo-location re-applied to %d images"), i);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, g_list_copy(*imgs), 0);
+    // the handler copies the list; ours stays ours (the raise it replaces took ownership,
+    // which is why this site used to g_list_copy)
+    dt_metadata_geotags_changed(*imgs);
   }
   else if(type == DT_UNDO_DATETIME)
   {
@@ -1302,7 +1306,7 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
     // make sure that the duplicate doesn't have some magic darktable| tags
     if(dt_tag_detach_by_string("darktable|changed", newid, FALSE, FALSE)
        || dt_tag_detach_by_string("darktable|exported", newid, FALSE, FALSE))
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+      dt_metadata_tags_changed();
 
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     const int grpid = img->group_id;
@@ -1681,9 +1685,12 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
 
   if(raise_signals)
   {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_IMPORT, id);
+    dt_image_notify_imported(id);
+    // the old raise handed the freshly built list to the signal; the handler copies now,
+    // so this site frees its own
     GList *imgs = g_list_prepend(NULL, GINT_TO_POINTER(id));
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
+    dt_metadata_geotags_changed(imgs);
+    g_list_free(imgs);
   }
 
   // the following line would look logical with new_tags_set being the return value

@@ -70,6 +70,7 @@ http://www.youtube.com/watch?v=JVoUgR6bhBc
 
 //#include <gtk/gtk.h>
 #include <stdlib.h>
+#include "control/signal.h"
 
 // these are not in a state to be useful. but they look nice. too bad i couldn't map the enhanced mode with
 // negative values to the wheels :(

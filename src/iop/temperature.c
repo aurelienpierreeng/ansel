@@ -90,6 +90,7 @@
 #include "widgets/collapsible_section.h"
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
+#include "widgets/togglebutton.h"
 
 DT_MODULE_INTROSPECTION(3, dt_iop_temperature_params_t)
 

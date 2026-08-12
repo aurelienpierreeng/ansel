@@ -68,6 +68,7 @@
 #include <string.h>
 #include "widgets/label.h"
 #include "gui/screen_metrics.h"
+#include "control/signal.h"
 
 /**
  * color transfer somewhat based on the glorious paper `color transfer between images'

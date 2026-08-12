@@ -53,6 +53,8 @@
 #include "views/view.h"
 #include "widgets/scroll_wrap.h"
 
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

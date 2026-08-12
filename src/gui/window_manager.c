@@ -34,6 +34,7 @@
 #include "gui/dtgtk/thumbtable.h"
 #include "widgets/accelerators.h"
 #include "widgets/widget_style.h"
+#include "control/signal.h"
 
 #define WINDOW_DEBUG 0
 

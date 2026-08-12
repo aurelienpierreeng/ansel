@@ -64,6 +64,7 @@
 #include <complex.h>
 #include "widgets/label.h"
 #include "widgets/scroll_wrap.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 

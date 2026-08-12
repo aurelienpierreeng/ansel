@@ -101,6 +101,7 @@
 #include <lensfun.h>
 #include "widgets/popup.h"
 #include "widgets/widget_style.h"
+#include "control/signal.h"
 
 extern "C" {
 

@@ -53,6 +53,7 @@
 #include "widgets/label.h"
 #include "widgets/notebook.h"
 #include "gui/screen_metrics.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_splittoning_rgb_params_t)
 

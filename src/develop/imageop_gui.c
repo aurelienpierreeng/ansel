@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "widgets/togglebutton.h"
 
 typedef struct dt_module_param_t
 {

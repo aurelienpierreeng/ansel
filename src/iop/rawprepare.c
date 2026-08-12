@@ -61,6 +61,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "widgets/label.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_rawprepare_params_t)
 

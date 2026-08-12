@@ -125,6 +125,7 @@
 #include <string.h>
 #include <strings.h>
 #include "imageio/imageio_profile.h"
+#include "control/signal.h"
 
 /**
  * @brief Map Exiv2 preview MIME types to decoder format identifiers.

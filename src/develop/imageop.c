@@ -118,6 +118,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include "widgets/togglebutton.h"
 
 #define DT_IOP_HEADER_MENU_OPEN "dt-module-header-menu-open"
 #define DT_IOP_HEADER_MENU_DISMISS_CLICK "dt-module-header-menu-dismiss-click"
@@ -2869,7 +2870,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(switch_button), "toggled", G_CALLBACK(_gui_off_callback), module);
 
-  module->off = DTGTK_TOGGLEBUTTON(switch_button);
+  module->off = switch_button;
   gtk_widget_set_sensitive(GTK_WIDGET(switch_button), !module->hide_enable_button);
 
   /* Wrap the switch in a plain box so the CSS spacing trick that visually tucks it

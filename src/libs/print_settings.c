@@ -67,6 +67,8 @@
 #include <glib/gstdio.h>
 #include "widgets/label.h"
 #include "imageio/imageio_profile.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 DT_MODULE(4)
 

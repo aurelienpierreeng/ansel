@@ -67,6 +67,7 @@
 #include "pixel/gaussian.h"
 #include "math/math.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include "develop/develop.h"
 #include "common/logging.h"
 #include "develop/imageop.h"

@@ -39,6 +39,7 @@
 
 #include "widgets/collapsible_section.h"
 #include "develop/iop_profile.h"
+#include "history/history.h"   // dt_dev_operation_t (raster_mask_source)
 #include "common/opencl.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe.h"

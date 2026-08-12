@@ -39,6 +39,7 @@
 // persisted database vocabulary — database/preset_repository.h documents its `format` and
 // `excluded` fields in terms of them — so they live in history/presets.h now, with the
 // preset code that owns the concept. This include keeps every existing consumer working.
+#include "history/history.h"   // dt_dev_operation_t, named throughout
 #include "history/presets.h"
 
 typedef struct dt_gui_presets_edit_dialog_t

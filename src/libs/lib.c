@@ -80,6 +80,7 @@
 #include "widgets/label.h"
 #include "widgets/popup.h"
 #include "widgets/widget_style.h"
+#include "control/signal.h"
 
 
 typedef enum dt_action_element_lib_t

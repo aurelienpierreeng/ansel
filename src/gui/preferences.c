@@ -79,6 +79,7 @@
 #include "widgets/gtkentry.h"
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
+#include "control/signal.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif

@@ -62,6 +62,7 @@
 #include "widgets/bauhaus.h"
 #include "widgets/popup.h"
 #include "widgets/widget_style.h"
+#include "widgets/togglebutton.h"
 
 DT_MODULE(1)
 

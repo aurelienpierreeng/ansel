@@ -100,6 +100,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "widgets/notebook.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(5, dt_iop_clipping_params_t)
 

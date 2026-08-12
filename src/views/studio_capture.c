@@ -49,6 +49,7 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <math.h>
+#include "control/signal.h"
 
 DT_MODULE(1)
 

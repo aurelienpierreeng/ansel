@@ -101,6 +101,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include "control/signal.h"
 
 #define DECORATION_SIZE_LIMIT 40
 

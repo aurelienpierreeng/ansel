@@ -89,6 +89,7 @@
 #include "widgets/label.h"
 #include "widgets/notebook.h"
 #include "gui/screen_metrics.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(3, dt_iop_channelmixer_rgb_params_t)
 
