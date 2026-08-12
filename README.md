@@ -289,6 +289,58 @@ count, and the gap against Darktable 5.6 is wider than against the 4.0 it forked
 Darktable's engine has grown while Ansel's has shrunk. The table above this one, which
 includes the modules, is the reason the totals look closer than the engineering is.
 
+#### Complexity function by function
+
+The totals above are sums, so a project can score well simply by having fewer functions.
+Per function, still excluding `src/iop`:
+
+| Engine only | Ansel Master | Darktable 4.0 | Darktable 5.6 |
+| ----------- | -----------: | ------------: | ------------: |
+| Functions | 8,291 | 7,510 | 8,741 |
+| Average complexity | **4.91** | 4.95 | 5.05 |
+| Worst single function | 229 | 210 | 249 |
+| Functions above 15 — awkward to test | **446** | 456 | 522 |
+| Functions above 50 — effectively untestable | 51 | **48** | 63 |
+
+The averages are close, and honestly so: Ansel's worst function is worse than Darktable
+4.0's, and it has three more functions above 50 than 4.0 did. What separates the three is
+the tail against the current release — Darktable 5.6 has 76 more functions above 15 than
+Ansel, in an engine doing the same job.
+
+#### The include graph
+
+Every C file starts by including headers, and each header drags in whatever *it* includes.
+That chain decides how much of the program you must hold in your head to change one file,
+how much has to be recompiled when you do, and whether a change can be reviewed locally at
+all.
+
+| Engine only | Ansel Master | Darktable 4.0 | Darktable 5.6 |
+| ----------- | -----------: | ------------: | ------------: |
+| Headers a source file pulls in, median | **32** | 72 | 81 |
+| Headers reaching more than half the engine | **5** | 17 | 25 |
+| Headers that include the application-wide `darktable.h` | **0** | 30 | 38 |
+| Circular include groups | **0** | 4 | 4 |
+| Dependencies that break layering | **0** | 5 | 7 |
+| Probability a file can reach any other | **3.8 %** | 6.7 % | 6.8 % |
+
+Read the last three rows first. A **circular include group** is a set of headers that all
+depend on one another: no order can be imposed on them, so they can only be read,
+compiled and reasoned about as a single lump. Ansel's engine has none — its include graph
+can be laid out in strict layers, with no exceptions at all. Darktable's has four, one of
+them seven headers wide.
+
+The `darktable.h` row is the one that compounds. It is the application-wide header, and a
+`.c` file including it is a local choice; a **header** including it pushes the entire
+application into every file downstream of that header. Ansel has removed all of those.
+Thirty-eight remain in Darktable 5.6 — four more than in 4.0.
+
+The practical consequence is the first row: a Darktable engine file drags in around 80
+headers before its own first line, an Ansel one around 32.
+
+All of this is measured by [`tools/code_health.py`](tools/code_health.py) on every
+documentation build, and the full per-file tables — including which headers form the
+cycles — are published at [dev.ansel.photos](https://dev.ansel.photos/code_health.html).
+
 Those figures are indirect indicators of the long-term maintainability of the project:
 
 - comments document the code and are used by Doxygen to build the [dev docs](https://dev.ansel.photos),
