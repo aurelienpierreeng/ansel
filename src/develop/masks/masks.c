@@ -55,6 +55,8 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
+#include "develop/masks/masks_functions.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"
 #include "widgets/bauhaus.h"
@@ -4613,6 +4615,28 @@ void apply_operation(struct dt_masks_form_group_t *group_entry, const dt_masks_s
 }
 
 #include "detail.c"
+
+/* The two rasterisation dispatchers. They were inline in masks.h, which forced the
+ * per-shape function table to be public; a per-buffer call is not a per-pixel cost,
+ * so the inline bought nothing and the table is private now. */
+int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                      const dt_dev_pixelpipe_iop_t *const piece,
+                      dt_masks_form_t *const form,
+                      float **buffer, int *width, int *height, int *posx, int *posy)
+{
+  return (form->functions && form->functions->get_mask)
+    ? form->functions->get_mask(module, pipe, piece, form, buffer, width, height, posx, posy)
+    : 1;
+}
+
+int dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                          const dt_dev_pixelpipe_iop_t *const piece,
+                          dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
+{
+  return (form->functions && form->functions->get_mask_roi)
+    ? form->functions->get_mask_roi(module, pipe, piece, form, roi, buffer)
+    : 1;
+}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

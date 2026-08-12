@@ -17,6 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/widget_settings.h"
 #include "common/conf.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"

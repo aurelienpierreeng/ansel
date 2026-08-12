@@ -34,6 +34,7 @@
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
+#include "control/jobs/control_jobs.h"   // dt_control_image_enumerator_t
 #include "control/jobs/import_jobs.h"
 
 #include "widgets/gtkentry.h"
@@ -1711,6 +1712,96 @@ static void dt_import_cleanup(void *data)
   }
   dt_pthread_mutex_destroy(&import->lock);
   dt_free(import);
+}
+
+/* Shows what an import left behind. Lived in control/jobs/import_jobs.c -- the only GUI
+ * code in that job file; the job invokes it through the registered handler and this
+ * function owns freeing the enumerator params and import data, as the contract says. */
+static int _import_discarded_files_popup(dt_control_image_enumerator_t *params)
+{
+  dt_control_import_t *data = params->data;
+
+  // Create the window
+  GtkWidget *dialog = gtk_dialog_new_with_buttons("Message",
+    GTK_WINDOW(dt_gui_main_window()),
+    GTK_DIALOG_DESTROY_WITH_PARENT,
+    _("_OK"),
+    GTK_RESPONSE_NONE,
+    NULL);
+  gtk_window_set_title(GTK_WINDOW(dialog), _("Some files have not been copied"));
+  gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PIXEL_APPLY_DPI(800), DT_PIXEL_APPLY_DPI(800));
+
+  // Create the label
+  GtkWidget *label = gtk_label_new(_("The following source files have not been copied "
+    "because similarly-named files already exist on the destination. "
+    "This may be because the files have already been imported "
+    "or the naming pattern leads to non-unique file names."));
+  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+
+  // Create the scrolled window internal container
+  GtkWidget *scrolled_window = gtk_scrolled_window_new (NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC,
+  GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled_window), TRUE);
+
+  // Create the treeview model from the list of discarded file pathes
+  GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
+  GtkTreeIter iter;
+  for(GList *file = g_list_first(data->discarded); file; file = g_list_next(file))
+  {
+    if(file->data)
+    {
+      gtk_list_store_append(store, &iter);
+      gtk_list_store_set(store, &iter, 0, (char *)file->data, -1);
+    }
+  }
+
+  // Create the treeview view. Sooooo verbose... it's only a flat list.
+  GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+  GtkTreeViewColumn *col = gtk_tree_view_column_new();
+  gtk_tree_view_column_set_title(col, _("Origin path"));
+  GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+  gtk_tree_view_column_pack_start(col, renderer, TRUE);
+  gtk_tree_view_column_set_attributes(col, renderer, "text", 0, NULL);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
+  g_object_unref(store);
+
+  // Pack widgets to an unified box
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
+  dt_gui_add_class(scrolled_window, "dt_recessed_scroll");
+  gtk_container_add(GTK_CONTAINER(scrolled_window), view);
+
+  // Pack the box to the dialog internal container
+  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_add(GTK_CONTAINER(content_area), box);
+  gtk_widget_show_all(dialog);
+
+#ifdef GDK_WINDOWING_QUARTZ
+  dt_osx_disallow_fullscreen(dialog);
+#endif
+
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+
+  dt_control_import_data_free(data);
+  dt_free(data);
+  dt_control_image_enumerator_cleanup(params);
+
+  return 0;
+}
+
+/* Runs on the import worker thread: hop to the GUI main loop, where the dialog lives.
+ * The popup owns freeing params, per the handler contract. */
+static void _import_discarded_files_schedule(dt_control_image_enumerator_t *params)
+{
+  g_main_context_invoke(NULL, (GSourceFunc)_import_discarded_files_popup, params);
+}
+
+void dt_gui_import_init_handlers(void)
+{
+  dt_control_import_set_discarded_files_handler(_import_discarded_files_schedule);
 }
 
 // clang-format off

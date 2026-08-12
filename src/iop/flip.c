@@ -43,6 +43,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "widgets/widget_settings.h"
 #include "database/database.h"
 #include "database/history_repository.h"
 #include <assert.h>

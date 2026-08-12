@@ -45,6 +45,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
+#include "develop/masks_gui.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"

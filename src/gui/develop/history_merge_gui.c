@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/widget_settings.h"
 #include "gui/develop/history_merge_gui.h"
 #include "common/conf.h"
 

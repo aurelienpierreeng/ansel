@@ -68,6 +68,7 @@
 #include <strings.h>
 #include <unistd.h>
 
+#include "widgets/widget_settings.h"
 #include "system/atomic.h"
 #include "history/history.h"
 #include "caches/image_cache.h"

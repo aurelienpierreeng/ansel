@@ -100,6 +100,7 @@
 #include "config.h"
 #include "widgets/widget_settings.h"
 #endif
+#include "develop/masks_gui.h"
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>

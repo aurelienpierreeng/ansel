@@ -20,6 +20,8 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
+#include "develop/masks/masks_functions.h"
 #include "widgets/bauhaus.h"
 #include "common/conf.h"
 #include "control/signal.h"
@@ -950,6 +952,56 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
   gtk_widget_show_all(menu);
   return menu;
+}
+
+/* De-inlined from masks_gui.h: they dispatch through the private per-shape table. */
+gboolean dt_masks_toggle_bezier_node_type(struct dt_iop_module_t *module,
+                                                        struct dt_masks_form_t *mask_form,
+                                                        struct dt_masks_form_gui_t *mask_gui,
+                                                        const int form_index,
+                                                        const struct dt_masks_form_gui_points_t *gui_points,
+                                                        const int node_index,
+                                                        float node[2], float ctrl1[2], float ctrl2[2],
+                                                        dt_masks_points_states_t *state)
+{
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_gui) || IS_NULL_PTR(gui_points) || IS_NULL_PTR(state) || node_index < 0) return FALSE;
+
+  if(dt_masks_node_is_cusp(gui_points, node_index))
+  {
+    *state = DT_MASKS_POINT_STATE_NORMAL;
+    if(mask_form->functions && mask_form->functions->init_ctrl_points)
+      mask_form->functions->init_ctrl_points(mask_form);
+  }
+  else
+  {
+    ctrl1[0] = ctrl2[0] = node[0];
+    ctrl1[1] = ctrl2[1] = node[1];
+    *state = DT_MASKS_POINT_STATE_USER;
+  }
+
+  dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
+  return TRUE;
+}
+
+gboolean dt_masks_reset_bezier_ctrl_points(struct dt_iop_module_t *module,
+                                                         struct dt_masks_form_t *mask_form,
+                                                         struct dt_masks_form_gui_t *mask_gui,
+                                                         const int form_index,
+                                                         const struct dt_masks_form_gui_points_t *gui_points,
+                                                         const int node_index,
+                                                         dt_masks_points_states_t *state)
+{
+  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_gui) || IS_NULL_PTR(gui_points) || IS_NULL_PTR(state) || node_index < 0) return FALSE;
+
+  if(*state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gui_points, node_index))
+  {
+    *state = DT_MASKS_POINT_STATE_NORMAL;
+    if(mask_form->functions && mask_form->functions->init_ctrl_points)
+      mask_form->functions->init_ctrl_points(mask_form);
+    dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
+  }
+
+  return TRUE;
 }
 
 // clang-format off

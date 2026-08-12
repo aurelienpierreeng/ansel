@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/widget_settings.h"
 #include "gui/actions/menu.h"
 #ifdef __APPLE__
 #include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below

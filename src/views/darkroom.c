@@ -102,6 +102,7 @@
 #include "develop/imageop.h"
 #include "develop/supervisor.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
 #include "widgets/button.h"
 #include "gui/dtgtk/thumbtable.h"
 

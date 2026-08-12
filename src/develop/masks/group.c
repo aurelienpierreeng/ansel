@@ -40,6 +40,8 @@
 #include "widgets/gdkkeys.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
+#include "develop/masks/masks_functions.h"
 
 /* Shape handlers receive widget-space coordinates, while normalized output-image
  * coordinates come from `gui->rel_pos` and absolute output-image
