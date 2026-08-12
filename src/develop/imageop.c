@@ -76,7 +76,7 @@
 #include "database/history_repository.h"
 #include "database/preset_repository.h"
 #include "metadata/exif.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "common/imagebuf.h"
 #include "imageio/imageio_rawspeed.h"
 #include "pixel/interpolation.h"

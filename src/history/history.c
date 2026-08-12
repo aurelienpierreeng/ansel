@@ -41,20 +41,34 @@
 
 #include "database/history_repository.h"
 #include "common/thumbnail_notify.h"
-#include "common/history.h"
+#include "history/history.h"
+#include "history/notify.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/history_snapshot.h"
+#include "history/history_snapshot.h"
 #include "caches/image_cache.h"
 #include "caches/mipmap_cache.h"
 #include "metadata/tags.h"
 #include "common/undo.h"
 #include "common/glib_utils.h"
 #include "common/utility.h"
-#include "develop/masks.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
+
+static dt_history_operation_name_resolver_t _operation_name_resolver = NULL;
+
+void dt_history_set_operation_name_resolver(dt_history_operation_name_resolver_t resolver)
+{
+  _operation_name_resolver = resolver;
+}
+
+const char *dt_history_operation_name(const char *operation)
+{
+  dt_history_operation_name_resolver_t resolver = _operation_name_resolver;
+  if(resolver == NULL) return operation;  // untranslated, but legible
+  return resolver(operation);
+}
 
 void dt_history_item_free(gpointer data)
 {
@@ -116,7 +130,7 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
 void dt_history_delete_on_image(int32_t imgid)
 {
   dt_history_delete_on_image_ext(imgid, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+  dt_history_changed(DT_HISTORY_CHANGE_TAGS);
 }
 
 char *dt_history_item_as_string(const char *name, gboolean enabled)
@@ -137,9 +151,9 @@ static void _collect_item(void *user_data, const int num, const char *operation,
   item->enabled = enabled;
 
   if(strcmp(multi_name, "0") == 0)
-    g_snprintf(name, sizeof(name), "%s", dt_iop_get_localized_name(operation));
+    g_snprintf(name, sizeof(name), "%s", dt_history_operation_name(operation));
   else
-    g_snprintf(name, sizeof(name), "%s %s", dt_iop_get_localized_name(operation), multi_name);
+    g_snprintf(name, sizeof(name), "%s %s", dt_history_operation_name(operation), multi_name);
 
   item->name = g_strdup(name);
   item->op = g_strdup(operation);
@@ -162,7 +176,7 @@ static void _collect_item_string(void *user_data, const int num, const char *ope
   if(multi_name && *multi_name && g_strcmp0(multi_name, " ") != 0 && g_strcmp0(multi_name, "0") != 0)
     decorated = g_strconcat(" ", multi_name, NULL);
 
-  char *iname = dt_history_item_as_string(dt_iop_get_localized_name(operation), enabled);
+  char *iname = dt_history_item_as_string(dt_history_operation_name(operation), enabled);
   char *name = g_strconcat(iname, decorated ? decorated : "", NULL);
   // delete_underscore() is this call, and it lives in widgets/label.h -- a whole toolkit
   // layer for one string substitution

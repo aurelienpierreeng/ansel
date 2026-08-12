@@ -25,8 +25,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_HISTORY_SNAPSHOT_H
-#define DT_COMMON_HISTORY_SNAPSHOT_H
+#ifndef DT_HISTORY_HISTORY_SNAPSHOT_H
+#define DT_HISTORY_HISTORY_SNAPSHOT_H
 
 #include "common/undo.h"
 
@@ -47,7 +47,7 @@ void dt_history_snapshot_undo_pop(gpointer user_data, const dt_undo_type_t type,
 
 void dt_history_snapshot_undo_lt_history_data_free(gpointer data);
 
-#endif // DT_COMMON_HISTORY_SNAPSHOT_H
+#endif // DT_HISTORY_HISTORY_SNAPSHOT_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

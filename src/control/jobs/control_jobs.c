@@ -88,7 +88,7 @@
 #include "metadata/exif.h"
 #include "common/film.h"
 #include "metadata/gpx.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "develop/history_merge.h"
 #include "common/image.h"
 #include "caches/image_cache.h"

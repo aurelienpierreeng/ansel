@@ -17,12 +17,12 @@
 */
 
 #include "common/history_actions.h"
-#include "common/history_notify.h"
+#include "history/notify.h"
 
 #include "common/collection.h"
 #include "common/xmp_sidecar.h"
-#include "common/history.h"
-#include "common/history_snapshot.h"
+#include "history/history.h"
+#include "history/history_snapshot.h"
 #include "common/image.h"
 #include "caches/image_cache.h"
 #include "common/styles.h"

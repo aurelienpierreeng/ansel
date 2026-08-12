@@ -53,7 +53,7 @@
 #include "common/xmp_sidecar.h"
 #include "common/film.h"
 #include "common/file_location.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "common/image.h"
 #include "caches/image_cache.h"
 #include "imageio/imageio_module.h"

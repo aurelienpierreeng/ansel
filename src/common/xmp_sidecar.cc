@@ -117,7 +117,7 @@
 #include "common/conf.h"
 #include "common/datetime.h"
 #include "common/deprecations.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "common/utility.h"
 #include "common/variables.h"
 #include "database/colorlabel_repository.h"

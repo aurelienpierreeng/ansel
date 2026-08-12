@@ -75,7 +75,7 @@
 
 #include "widgets/bauhaus.h"
 #include "common/collection.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "common/module_versioning.h"
 #include "common/undo.h"
 #include "control/control.h"

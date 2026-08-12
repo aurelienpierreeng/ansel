@@ -1069,7 +1069,7 @@ static inline float dt_points_get()
  * points.h fails to compile, with an error pointing at sqlite3.h and no hint as to why.
  *
  * That was latent for as long as something else happened to include sqlite3.h earlier in
- * every affected unit -- which the old gui/gtk.h did, by dragging in common/history.h. Take
+ * every affected unit -- which the old gui/gtk.h did, by dragging in history/history.h. Take
  * one god-header out of the include graph and a dozen IOPs stop compiling for reasons that
  * have nothing to do with the change. Undefine them here so the leak cannot come back.
  */

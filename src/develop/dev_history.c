@@ -59,7 +59,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/conf.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "database/history_repository.h"
 
 #include "common/undo.h"

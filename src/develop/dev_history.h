@@ -17,7 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "system/atomic.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "develop/history_merge.h"
 
 #include <glib.h>
@@ -28,7 +28,7 @@
 /**
  * @file develop/dev_history.h
  *
- * The `common/history.h` defines methods to handle histories from/to database.
+ * The `history/history.h` defines methods to handle histories from/to database.
  * They work out of any GUI or development stack, so they don't care about modules .so.
  * This file defines binders between that and the GUI/dev objects.
  *
@@ -656,7 +656,7 @@ gboolean dt_dev_transient_params_get(struct dt_develop_t *dev, const struct dt_i
 /** @brief Whether a transient slot is currently active for `module` (cheap, locked read). */
 gboolean dt_dev_transient_params_active(struct dt_develop_t *dev, const struct dt_iop_module_t *module);
 
-/** Deep-copy a history list. Defined in dev_history.c; declared in common/history.h until it
+/** Deep-copy a history list. Defined in dev_history.c; declared in history/history.h until it
  *  was moved here, since it walks dt_dev_history_item_t and resolves modules through
  *  dt_iop_get_module() -- neither of which layer 1 can see. */
 GList *dt_history_duplicate(GList *hist);

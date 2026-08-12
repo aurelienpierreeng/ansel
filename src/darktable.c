@@ -116,7 +116,7 @@
 #include "system/sys_resources.h"
 #include "common/datetime.h"
 #include "metadata/exif.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "database/history_repository.h"
 #include "common/pwstorage/pwstorage.h"
 #include "common/selection.h"
@@ -141,8 +141,8 @@
 #include "develop/iop_order.h"
 #include "common/l10n.h"
 #include "metadata/metadata.h"
-#include "common/history_notify.h"
-#include "common/presets.h"
+#include "history/notify.h"
+#include "history/presets.h"
 #include "metadata/notify.h"
 #include "caches/mipmap_cache.h"
 #include "common/noiseprofiles.h"
@@ -767,6 +767,12 @@ static void _history_images_changed(const GList *imgs)
                                 g_list_copy((GList *)imgs));
 }
 
+/* Only the side that loaded the modules knows what an operation is called. */
+static const char *_history_operation_name(const char *operation)
+{
+  return dt_iop_get_localized_name(operation);
+}
+
 /* Only the side of the application that owns the panels can answer this. */
 static gboolean _presets_can_autoapply(const gchar *operation)
 {
@@ -1365,6 +1371,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_metadata_set_notify_handler(_metadata_notify);
   dt_history_set_message_handler(_history_notify);
   dt_presets_set_autoapply_resolver(_presets_can_autoapply);
+  dt_history_set_operation_name_resolver(_history_operation_name);
 
   gchar *configured_library = dt_conf_get_string("database");
   const dt_database_params_t db_params = { .alternative = dbfilename_from_command,

@@ -49,7 +49,7 @@
 #include <glib/gstdio.h>
 #include "database/style_repository.h"
 #include "common/styles.h"
-#include "common/history_notify.h"
+#include "history/notify.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
@@ -57,8 +57,8 @@
 #include "common/image.h"
 #include "metadata/exif.h"
 #include "common/file_location.h"
-#include "common/history.h"
-#include "common/history_snapshot.h"
+#include "history/history.h"
+#include "history/history_snapshot.h"
 #include "develop/iop_order.h"
 #include "metadata/tags.h"
 

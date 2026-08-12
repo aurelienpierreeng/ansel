@@ -322,9 +322,31 @@ if [ "${metadata_upcalls_now}" -gt "${metadata_upcalls_baseline}" ]; then
   findings=$((findings + 1))
 fi
 
+
+# 8. src/history is closed: the history stack, styles and presets. It reached up for three
+#    different reasons and each was inverted rather than tolerated -- dt_control_log() and
+#    the signals through history/notify.h, dt_lib_presets_can_autoapply() through the
+#    resolver in history/presets.h, and dt_iop_get_localized_name() through the one in
+#    history/history.h. A history item holds a dt_iop_module_t *, so the pipeline half of
+#    this code genuinely belongs at layer 5 and stays there; what is in this directory is
+#    the half that does not.
+history_upcalls_baseline=0
+
+history_upcalls_now=$(grep -rcE '^#include "(control|gui|libs|views|iop|imageio|widgets|develop|apps)/' \
+                      src/history/ 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+
+echo "history:       ${history_upcalls_now} includes from a higher layer (baseline ${history_upcalls_baseline})."
+
+if [ "${history_upcalls_now}" -gt "${history_upcalls_baseline}" ]; then
+  echo "history: the module reached up into the application. Messages and notifications go"
+  echo "         through history/notify.h; a question only the application can answer gets"
+  echo "         a resolver, as presets.h and history.h already do."
+  findings=$((findings + 1))
+fi
+
 if [ "${findings}" -gt 0 ]; then
   exit 1
 fi
 
-echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl, caches, database and metadata held."
+echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl, caches, database, metadata and history held."
 exit 0

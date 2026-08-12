@@ -24,11 +24,11 @@
 */
 
 #include "database/database.h"
-#include "common/history_snapshot.h"
-#include "common/history_notify.h"
+#include "history/history_snapshot.h"
+#include "history/notify.h"
 #include "system/mem_alloc.h"
 #include "database/history_snapshot_repository.h"
-#include "common/history.h"
+#include "history/history.h"
 #include "database/history_repository.h"
 #include "caches/image_cache.h"
 

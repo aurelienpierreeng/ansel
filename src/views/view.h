@@ -52,7 +52,7 @@
 #include "system/atomic.h"
 #include "system/dtpthread.h"
 
-#include "common/history.h"
+#include "history/history.h"
 #ifdef HAVE_PRINT
 #include "common/cups_print.h"
 #include "common/printing.h"
