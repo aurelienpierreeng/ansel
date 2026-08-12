@@ -106,70 +106,6 @@ But to achieve all that, it was necessary to stop working on any new feature to 
 
 ## Code analysis
 
-### How much Darktable is left in Ansel ?
-
-Ansel is sometimes described as Darktable with a rearranged menu. That is a measurable
-claim, so it is measured here rather than argued about.
-
-[`tools/clone_detect.py`](tools/clone_detect.py) compares the two codebases at the level of
-**tokens**, using winnowing ([Schleimer, Wilkerson & Aiken,
-2003](https://theory.stanford.edu/~aiken/publications/papers/sigmod03.pdf)), the algorithm
-behind the MOSS plagiarism detector. Whitespace, indentation and comments are discarded
-entirely, so a function that was merely reformatted still counts as shared code. The
-settings used detect any common run of 31 tokens or more — roughly four lines.
-
-| Comparison | Same code | Same structure |
-| ---------- | --------: | -------------: |
-| Ansel vs. **Darktable 4.0** — the version it forked from | 44.2 % | 47.9 % |
-| Ansel vs. **Darktable 5.6** — the current release | 29.1 % | 38.6 % |
-| *Control:* Darktable 5.6 vs. **its own** 4.0 | *50.2 %* | *55.8 %* |
-
-"Same structure" is the generous column: it counts a function that was carried over and
-renamed as inherited.
-
-The control row is the one that matters, because "they rewrote a lot" is not on its own
-evidence of anything — every living project rewrites itself. Over the same four years,
-**Darktable replaced about half of its own 4.0 code** (50.2 % survives into 5.6). Ansel
-replaced somewhat more of it (44.2 % survives). Those are the same order of magnitude.
-
-The difference between the two projects is therefore **not how much was rewritten, but
-what**. Darktable's engine grew over that period — 41,240 to 44,799 in cyclomatic
-complexity — while Ansel's came out at 40,161 for the same job. Both projects rewrote
-comparable amounts of code; only one of them ended up smaller.
-
-Where the code was kept, and where it was replaced, is not uniform:
-
-| Ansel files | Shared with Darktable |
-| ----------- | --------------------: |
-| `math/svd.h`, `math/splines.cpp`, `math/homography.c`, `iop/lut3dgmic.cpp` | ~100 % |
-| `database/*_repository.c`, `develop/pixelpipe_cpu.c`, `iop/drawlayer/*`, `system/memory_arena.c` | < 10 % |
-
-That is the expected shape of responsible forking: the **mathematics is inherited
-verbatim**, because correct code has no reason to be rewritten, while the database layer,
-the pixel pipeline and the memory management — the parts this project exists to fix — are
-new. Of the 745 Ansel source files, 103 share less than 10 % with Darktable.
-
-Two further figures, from the shared git history (both projects descend from the same
-2009 root commit):
-
-| | |
-| --- | ---: |
-| Fork point | 2022-05-07 |
-| Darktable commits since, not in Ansel | 11,922 |
-| Ansel commits since, not in Darktable | 4,842 |
-
-Note that **no file is byte-identical** between the two projects, which sounds decisive and
-is not: Ansel converted 245 headers from `#pragma once` to explicit include guards, so a
-file-level comparison reports 0 % sharing and tells you nothing. Token-level comparison is
-the honest measure, which is why it is the one quoted here.
-
-Reproduce it with:
-
-```
-python3 tools/clone_detect.py --a /path/to/ansel/src --b /path/to/darktable/src \
-    --name-a ansel --name-b darktable -o clones.json
-```
-
 Ansel was forked from Darktable after commit 7b88fdd7afe7b8530a992ae3c12e7a088dc9e992, 1 month before Darktable 4.0 release
 (output truncated to relevant languages):
 
@@ -289,7 +225,7 @@ count, and the gap against Darktable 5.6 is wider than against the 4.0 it forked
 Darktable's engine has grown while Ansel's has shrunk. The table above this one, which
 includes the modules, is the reason the totals look closer than the engineering is.
 
-#### Complexity function by function
+### Complexity function by function
 
 The totals above are sums, so a project can score well simply by having fewer functions.
 Per function, still excluding `src/iop`:
@@ -307,39 +243,124 @@ The averages are close, and honestly so: Ansel's worst function is worse than Da
 the tail against the current release — Darktable 5.6 has 76 more functions above 15 than
 Ansel, in an engine doing the same job.
 
-#### The include graph
+### The include graph, or why "modular" folders can be an illusion
 
-Every C file starts by including headers, and each header drags in whatever *it* includes.
-That chain decides how much of the program you must hold in your head to change one file,
-how much has to be recompiled when you do, and whether a change can be reviewed locally at
-all.
+Splitting a program into files and folders looks like modularity, but the compiler never
+sees files. It sees *translation units*: each `.c` file with every header it includes, and
+every header those headers include, pasted in. A header that includes another merges the
+two. Do that enough times and code filed under a dozen tidy subfolders arrives at the
+compiler as one enormous unit — and behaves like one.
+
+The consequence is the expensive part. When files are genuinely separate, a change is
+local: you reason about the file, and the compiler catches you if you were wrong beyond
+it. When they are separate only on disk, a change that looks safe in one corner can break
+something at the far end of the application, for reasons no one reviewing the patch had
+any way to see. The subfolders still *look* modular. That modularity is perceptual.
+
+So the question worth measuring is: **how much of the software is exposed to the rest of
+the software?**
 
 | Engine only | Ansel Master | Darktable 4.0 | Darktable 5.6 |
 | ----------- | -----------: | ------------: | ------------: |
-| Headers a source file pulls in, median | **32** | 72 | 81 |
-| Headers reaching more than half the engine | **5** | 17 | 25 |
-| Headers that include the application-wide `darktable.h` | **0** | 30 | 38 |
+| A source file depends on this share of the engine, median | **5.4 %** | 13.3 % | 13.1 % |
+| Changing one header forces re-reading this many files, average | **46** | 82 | 95 |
+| Headers whose change exposes over a quarter of the engine | **33 of 285 — 12 %** | 73 of 238 — 31 % | 86 of 270 — 32 % |
+| Worst single header, share of engine depending on it | **65 %** | 71 % | 74 % |
 | Circular include groups | **0** | 4 | 4 |
-| Dependencies that break layering | **0** | 5 | 7 |
-| Probability a file can reach any other | **3.8 %** | 6.7 % | 6.8 % |
+| Headers including the application-wide `darktable.h` | **0** | 30 | 38 |
 
-Read the last three rows first. A **circular include group** is a set of headers that all
-depend on one another: no order can be imposed on them, so they can only be read,
-compiled and reasoned about as a single lump. Ansel's engine has none — its include graph
-can be laid out in strict layers, with no exceptions at all. Darktable's has four, one of
-them seven headers wide.
+The third row is the one to read twice. **In Darktable, about a third of the engine's
+headers cannot be touched without putting more than a quarter of the engine at risk. In
+Ansel it is one in eight.** A Darktable engine file also carries two and a half times as
+much of the program behind it as an Ansel one.
 
-The `darktable.h` row is the one that compounds. It is the application-wide header, and a
-`.c` file including it is a local choice; a **header** including it pushes the entire
-application into every file downstream of that header. Ansel has removed all of those.
-Thirty-eight remain in Darktable 5.6 — four more than in 4.0.
+Two structural causes sit underneath those numbers.
 
-The practical consequence is the first row: a Darktable engine file drags in around 80
-headers before its own first line, an Ansel one around 32.
+A **circular include group** is a set of headers that all depend on one another. No order
+can be imposed on them, so they cannot be layered, read or compiled apart — they are one
+unit wearing several filenames. Darktable has four; the largest is seven headers wide
+(`control.h`, `jobs.h` and the five `jobs/*_jobs.h`), and it is the *same* seven in 4.0 and
+in 5.6, so it has stood for four years. Ansel's engine has none: its include graph is a
+directed acyclic graph and can be laid out in strict layers, with no exceptions.
+
+`darktable.h` is the application-wide header. A `.c` file including it is a local choice; a
+**header** including it pushes the entire application into every file downstream of that
+header, permanently. Ansel has removed every one of those. Thirty-eight remain in Darktable
+5.6 — four more than in 4.0.
 
 All of this is measured by [`tools/code_health.py`](tools/code_health.py) on every
-documentation build, and the full per-file tables — including which headers form the
-cycles — are published at [dev.ansel.photos](https://dev.ansel.photos/code_health.html).
+documentation build, and the full per-file tables — including which headers form the cycles
+— are published at [dev.ansel.photos](https://dev.ansel.photos/code_health.html).
+
+### How much Darktable is left in Ansel ?
+
+Ansel is sometimes described as Darktable with a rearranged menu. That is a measurable
+claim, so it is measured here rather than argued about.
+
+[`tools/clone_detect.py`](tools/clone_detect.py) compares the two codebases at the level of
+**tokens**, using winnowing ([Schleimer, Wilkerson & Aiken,
+2003](https://theory.stanford.edu/~aiken/publications/papers/sigmod03.pdf)), the algorithm
+behind the MOSS plagiarism detector. Whitespace, indentation and comments are discarded
+entirely, so a function that was merely reformatted still counts as shared code. The
+settings used detect any common run of 31 tokens or more — roughly four lines.
+
+| Comparison | Same code | Same structure |
+| ---------- | --------: | -------------: |
+| Ansel vs. **Darktable 4.0** — the version it forked from | 44.2 % | 47.9 % |
+| Ansel vs. **Darktable 5.6** — the current release | 29.1 % | 38.6 % |
+| *Control:* Darktable 5.6 vs. **its own** 4.0 | *50.2 %* | *55.8 %* |
+
+"Same structure" is the generous column: it counts a function that was carried over and
+renamed as inherited.
+
+The control row is the one that matters, because "they rewrote a lot" is not on its own
+evidence of anything — every living project rewrites itself. Over the same four years,
+**Darktable replaced about half of its own 4.0 code** (50.2 % survives into 5.6). Ansel
+replaced somewhat more of it (44.2 % survives). Those are the same order of magnitude.
+
+The difference between the two projects is therefore **not how much was rewritten, but
+what**. Darktable's engine grew over that period — 41,240 to 44,799 in cyclomatic
+complexity — while Ansel's came out at 40,161 for the same job. Both projects rewrote
+comparable amounts of code; only one of them ended up smaller.
+
+Where the code was kept, and where it was replaced, is not uniform:
+
+| Ansel files | Shared with Darktable |
+| ----------- | --------------------: |
+| `math/svd.h`, `math/splines.cpp`, `math/homography.c`, `iop/lut3dgmic.cpp` | ~100 % |
+| `database/*_repository.c`, `develop/pixelpipe_cpu.c`, `iop/drawlayer/*`, `system/memory_arena.c` | < 10 % |
+
+That is the expected shape of responsible forking: the **mathematics is inherited
+verbatim**, because correct code has no reason to be rewritten, while the database layer,
+the pixel pipeline and the memory management — the parts this project exists to fix — are
+new. Of the 745 Ansel source files, 103 share less than 10 % with Darktable.
+
+Two further figures, from the shared git history (both projects descend from the same
+2009 root commit):
+
+| | |
+| --- | ---: |
+| Fork point | 2022-05-07 |
+| Darktable commits since, not in Ansel | 11,922 |
+| Ansel commits since, not in Darktable | 4,842 |
+
+Note that **no file is byte-identical** between the two projects, which sounds decisive and
+is not: Ansel converted 245 headers from `#pragma once` to explicit include guards, so a
+file-level comparison reports 0 % sharing and tells you nothing. Token-level comparison is
+the honest measure, which is why it is the one quoted here.
+
+Reproduce it with:
+
+```
+python3 tools/clone_detect.py --a /path/to/ansel/src --b /path/to/darktable/src \
+    --name-a ansel --name-b darktable -o clones.json
+```
+
+None of the rewriting above was done for its own sake. Ansel replaced somewhat more of
+Darktable 4.0 than Darktable itself did over the same four years, and the engine that came
+out of it is smaller, less complex per function, and — the part that compounds — no longer
+wired so that most of it is exposed to the rest of it. That is what the extra rewriting
+bought.
 
 Those figures are indirect indicators of the long-term maintainability of the project:
 
