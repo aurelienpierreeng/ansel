@@ -104,82 +104,33 @@ Go and support these projects so they can have more man-hours put on fixing thos
 
 But to achieve all that, it was necessary to stop working on any new feature to focus on redesigning the core architecture for 4 years. APIs have been tightened, libraries have been isolated, GUI code has been removed from pipeline backend, SQL code has been removed from GUI features, the whole thing has been greatly sanitized and simplified.
 
+## Runtimes
+
+All runtimes computed on a Lenovo Thinkpad P51 laptop (Intel Xeon CPU E3-1505M v6 @ 3.00GHz, Nvidia GPU Quadro M2200 4 GB vRAM, 32 GB RAM, 4K display), CPU in performance mode, Linux Fedora 41 with KDE/Plasma desktop. Pixel pipeline runtimes are not compared since Ansel 0.1-alpha shares its pixel code with Darktable 4.0 by design (compatibility). Ansel Master is taken at commit 09749f1da2c97cd54b62a67e169310f0d304724c (Feb. 21th 2026).
+
+| Description | Ansel Master | Darktable 5.0 |
+| ----------- | ------------ | ------------- |
+| Time from app startup to last lighttable thumbnail drawing (same collection) | 2.12 s | 7.49 s |
+| Time to switch from lighttable to darkroom (same image) | 0.2 s | 1.2 s |
+| Time to scroll (start->end) through the same collection of 471 images* | 0.7 s | 5.0 s |
+
+*: thumbnails preloaded in disk cache in both cases, 5 thumbs columns/row, 4K resolution, no right sidebar.
+
+The following have been measured on battery, in powersave mode, with the application sitting idle (no user interaction) for 5 minutes, using Intel Powertop. The baseline consumption of the whole idle OS is 1.6 % CPU. (Power is given for the app only, % CPU is given for the whole system):
+
+| View | Ansel Master | Darktable 5.0 |
+| ---- | ------------ | ------------- |
+| Lighttable | 1.8 % CPU, power: 0.85 mW | 2.7 % CPU, power: 103 mW |
+| Darkroom   | 1.8 % CPU, power: 7.65 mW | 1.8 % CPU, power: 22 mW |
+
+These figures represent the baseline power consumption of the GUI alone (Gtk, background workers, scheduled timers, etc.).
+
+TL;DR: Darktable is leaking performance by the GUI, and the tedious work done in 2023-2024 on optimizing pixel processing modules for an extra 15-50 ms is completely irrelevant.
+
 ## Code analysis
 
-Ansel was forked from Darktable after commit 7b88fdd7afe7b8530a992ae3c12e7a088dc9e992, 1 month before Darktable 4.0 release
-(output truncated to relevant languages):
-
-```
-$ cloc --git --diff 7b88fdd7afe7b8530a992ae3c12e7a088dc9e992 HEAD
-github.com/AlDanial/cloc v 2.02  T=227.18 s (2.9 files/s, 4772.1 lines/s)
---------------------------------------------------------------------------------
-Language                      files          blank        comment           code
---------------------------------------------------------------------------------
-C
- same                             0              0          23250         199103
- modified                       276              0           1304          10590
- added                           27           2848           3952          24289
- removed                         50           7419           5941          60296
-C/C++ Header
- same                             0              0           5387          13744
- modified                       112              0            236            673
- added                           11            497           1535           1869
- removed                         12            376            956           3072
-C++
- same                             0              0           1018           8555
- modified                         9              0             22            200
- added                            0             15             52            370
- removed                          0             11             14            181
-CSS
- same                             0              0              0              0
- modified                         0              0              0              0
- added                            3            324            357           1794
- removed                         13            419            519           9575
-...
---------------------------------------------------------------------------------
-SUM:
- same                             3             62          53088         466590
- modified                       533              0         109729          57014
- added                           81          11482          38366         116769
- removed                        181          31887         103914         211349
---------------------------------------------------------------------------------
-```
-
-```
-$ cloc --git 7b88fdd7afe7b8530a992ae3c12e7a088dc9e992
-github.com/AlDanial/cloc v 2.02  T=3.70 s (286.4 files/s, 327937.4 lines/s)
---------------------------------------------------------------------------------
-Language                      files          blank        comment           code
---------------------------------------------------------------------------------
-C                               439          51319          37122         303148
-C/C++ Header                    284           7286          11522          24848
-C++                              11           1489           1138           9899
-CSS                              20            564            617          10353
-...
---------------------------------------------------------------------------------
-SUM:                           1160         221925         280733         832393
---------------------------------------------------------------------------------
-```
-
-```
-$ cloc --git HEAD
-github.com/AlDanial/cloc v 2.02  T=3.70 s (286.4 files/s, 327937.4 lines/s)
---------------------------------------------------------------------------------
-Language                      files          blank        comment           code
---------------------------------------------------------------------------------
-C                               416          46748          35133         267141
-C/C++ Header                    284           7416          12115          23674
-C++                              11           1493           1176          10088
-CSS                              10            488            443           2555
-...
---------------------------------------------------------------------------------
-SUM:                           1061         201521         230847         769883
---------------------------------------------------------------------------------
-```
-
-The volume of C code has therefore been reduced by 11%, the volume of CSS (for theming)
-by 75%. Excluding the pixel operations (`cloc  --fullpath --not-match-d=/src/iop --git`),
-the C code volume has reduced by 15%.
+Ansel was forked from Darktable in May 2022, one month before the Darktable 4.0 release,
+from commit `7b88fdd7afe7b8530a992ae3c12e7a088dc9e992`.
 
 The [cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity) and
 [cognitive complexity](https://www.sonarsource.com/resources/cognitive-complexity/) of the
@@ -316,29 +267,36 @@ carries 89.7 % of 3.8, so the two are near enough the same starting point. Measu
 projects against 3.8 therefore asks one question of both: *starting from the same code,
 four years ago, how much of it is left?*
 
-| Comparison | Same code | Same structure |
-| ---------- | --------: | -------------: |
-| Ansel vs. **Darktable 3.8** — the shared starting point | 41.3 % | 45.7 % |
-| Darktable 5.6 vs. **Darktable 3.8** — same starting point, same four years | 45.1 % | 51.5 % |
-| | | |
-| Ansel vs. **Darktable 4.0** — the version it forked from | 44.2 % | 47.9 % |
-| Ansel vs. **Darktable 5.6** — the current release | 29.1 % | 38.6 % |
-| Darktable 4.0 vs. **Darktable 3.8** — three months apart, for scale | 89.7 % | 91.5 % |
+| | Ansel | Darktable 3.8 | Darktable 4.0 | Darktable 5.6 |
+| --- | ---: | ---: | ---: | ---: |
+| **Ansel** | — | 33.1 % | 34.4 % | 23.6 % |
+| **Darktable 3.8** | | — | 87.3 % | 39.6 % |
+| **Darktable 4.0** | | | — | 43.2 % |
+| **Darktable 5.6** | | | | — |
 
-"Same structure" is the generous column: it counts a function that was carried over and
-renamed as inherited.
+Each cell is the share of all distinct code fragments found in *either* of the two
+versions that appear in *both* — so it is symmetrical, and the lower half of the matrix
+would only repeat the upper. Identifiers and literals are normalised before comparing,
+which is the generous setting: a function carried across and renamed still counts as
+shared. Comparing strictly, with identifiers kept, moves every figure down by four to
+eight points and changes none of the conclusions.
 
-The first two rows are the whole argument, and they are close enough to be startling.
-From the same starting point and over the same four years, **Darktable replaced about 55 %
-of its own 3.8 code, and Ansel replaced about 59 % of it.** "They rewrote a lot" is not on
-its own evidence of anything: every living project rewrites itself, and these two rewrote
-almost exactly the same amount.
+Read the **Darktable 3.8** column, which is where both projects started. Asked directly —
+what share of the 3.8 code is still present in each today — Darktable 5.6 keeps **62.9 %**
+of it and Ansel keeps **54.3 %**. So Ansel replaced 46 % of the shared baseline against
+Darktable's 37 %: **Ansel did rewrite more, by about a quarter as much again.** The rest of
+this section is what that bought.
+
+The 87.3 % between 3.8 and 4.0 is the scale marker for reading the matrix. Those two
+releases are three months apart, and that is what a version bump looks like on this
+measure; every other figure here is a genuine divergence.
+
 
 The difference is therefore **not how much was rewritten, but what came out**. Over those
 same four years Darktable's engine grew from 41,240 to 44,799 in cyclomatic complexity and
 kept every one of its four circular include groups; Ansel's came out at 40,161 with none.
-Both projects rewrote roughly three-fifths of the code they started from. Only one of them
-spent it on the foundations.
+Ansel rewrote more of the shared baseline than Darktable did, and that is the point rather
+than an admission: it is where the extra went.
 
 Where the code was kept, and where it was replaced, is not uniform:
 
@@ -439,29 +397,6 @@ Let's see a comparison of Ansel vs. Dartable 4.0 and 5.0 complexity per file/fea
 | `src/common/import.c` | File import popup window | [212](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Fgui%2Fimport.c&view=list&id=aurelienpierreeng_ansel) / 1250 | [309](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Flibs%2Fimport.c&view=list&id=aurelienpierre_darktable) / 1923 | [334](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Flibs%2Fimport.c&view=list&id=aurelienpierreeng_darktable-5) / 2251 |
 | `src/libs/collect.c` | Library/collection GUI toolbox | [578](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_ansel%3Asrc%2Flibs%2Fcollect.c&id=aurelienpierreeng_ansel) / 2596 | [583](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierre_darktable%3Asrc%2Flibs%2Fcollect.c&view=list&id=aurelienpierre_darktable) / 2902 | [635](https://sonarcloud.io/component_measures?metric=complexity&selected=aurelienpierreeng_darktable-5%3Asrc%2Flibs%2Fcollect.c&view=list&id=aurelienpierreeng_darktable-5) / 3416 |
 
-
-## Runtimes
-
-All runtimes computed on a Lenovo Thinkpad P51 laptop (Intel Xeon CPU E3-1505M v6 @ 3.00GHz, Nvidia GPU Quadro M2200 4 GB vRAM, 32 GB RAM, 4K display), CPU in performance mode, Linux Fedora 41 with KDE/Plasma desktop. Pixel pipeline runtimes are not compared since Ansel 0.1-alpha shares its pixel code with Darktable 4.0 by design (compatibility). Ansel Master is taken at commit 09749f1da2c97cd54b62a67e169310f0d304724c (Feb. 21th 2026).
-
-| Description | Ansel Master | Darktable 5.0 |
-| ----------- | ------------ | ------------- |
-| Time from app startup to last lighttable thumbnail drawing (same collection) | 2.12 s | 7.49 s |
-| Time to switch from lighttable to darkroom (same image) | 0.2 s | 1.2 s |
-| Time to scroll (start->end) through the same collection of 471 images* | 0.7 s | 5.0 s |
-
-*: thumbnails preloaded in disk cache in both cases, 5 thumbs columns/row, 4K resolution, no right sidebar.
-
-The following have been measured on battery, in powersave mode, with the application sitting idle (no user interaction) for 5 minutes, using Intel Powertop. The baseline consumption of the whole idle OS is 1.6 % CPU. (Power is given for the app only, % CPU is given for the whole system):
-
-| View | Ansel Master | Darktable 5.0 |
-| ---- | ------------ | ------------- |
-| Lighttable | 1.8 % CPU, power: 0.85 mW | 2.7 % CPU, power: 103 mW |
-| Darkroom   | 1.8 % CPU, power: 7.65 mW | 1.8 % CPU, power: 22 mW |
-
-These figures represent the baseline power consumption of the GUI alone (Gtk, background workers, scheduled timers, etc.).
-
-TL;DR: Darktable is leaking performance by the GUI, and the tedious work done in 2023-2024 on optimizing pixel processing modules for an extra 15-50 ms is completely irrelevant.
 
 ## Contributors
 
