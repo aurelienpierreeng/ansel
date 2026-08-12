@@ -79,10 +79,10 @@
  */
 
 #include "develop/history_merge.h"
+#include "common/history_notify.h"
 
 #include "develop/iop_order.h"
 #include "math/topological_sort.h"
-#include "control/control.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -1948,7 +1948,7 @@ cleanup:
   if(rc)
   {
     const char *msg = _hm_failure_message(cleanup_reason);
-    if(msg) dt_control_log("%s", msg);
+    if(msg) dt_history_message("%s", msg);
   }
   if(src_last_by_id) g_hash_table_destroy(src_last_by_id);
   if(dst_last_before_by_id) g_hash_table_destroy(dst_last_before_by_id);

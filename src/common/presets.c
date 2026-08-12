@@ -26,7 +26,6 @@
 #include "system/mem_alloc.h"
 #include "database/preset_repository.h"
 #include "metadata/exif.h"
-#include "libs/lib.h"
 
 #include <libxml/xmlwriter.h>
 #include <libxml/parser.h>
@@ -221,17 +220,22 @@ int dt_presets_import_from_file(const char *preset_path)
   return result;
 }
 
+static dt_presets_autoapply_resolver_t _autoapply_resolver = NULL;
+
+void dt_presets_set_autoapply_resolver(dt_presets_autoapply_resolver_t resolver)
+{
+  _autoapply_resolver = resolver;
+}
+
 gboolean dt_presets_module_can_autoapply(const gchar *operation)
 {
-  for(const GList *lib_modules = dt_lib_get_global()->plugins; lib_modules; lib_modules = g_list_next(lib_modules))
-  {
-    dt_lib_module_t *lib_module = (dt_lib_module_t *)lib_modules->data;
-    if(!strcmp(lib_module->plugin_name, operation))
-    {
-      return dt_lib_presets_can_autoapply(lib_module);
-    }
-  }
-  return TRUE;
+  dt_presets_autoapply_resolver_t resolver = _autoapply_resolver;
+
+  // With nobody to ask -- ansel-cli, a unit test -- the answer is the same one the old
+  // loop gave for an operation that matched no panel: yes.
+  if(resolver == NULL) return TRUE;
+
+  return resolver(operation);
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

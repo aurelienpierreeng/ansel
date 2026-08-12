@@ -85,6 +85,7 @@ FILE(GLOB SOURCE_FILES
   "common/grouping.c"
   "pixel/guided_filter.c"
   "common/history.c"
+  "common/history_notify.c"
   "common/history_actions.c"
   "develop/history_merge.c"
   "gui/common/collection_gui.c"

@@ -17,6 +17,7 @@
 */
 
 #include "common/history_actions.h"
+#include "common/history_notify.h"
 
 #include "common/collection.h"
 #include "common/xmp_sidecar.h"
@@ -27,22 +28,29 @@
 #include "common/styles.h"
 #include "common/undo.h"
 #include "common/conf.h"
-#include "control/control.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "views/view.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
 
+/* The history clipboard. Was a member of dt_view_manager_t, which the view manager never
+ * touched; zero-initialised there by its calloc, and zero-initialised here by being static. */
+static dt_history_copy_item_t _copy_paste = { 0 };
+
+dt_history_copy_item_t *dt_history_copy_paste_get(void)
+{
+  return &_copy_paste;
+}
+
 static void _history_action_finalize_list(const GList *list, const gboolean changed)
 {
   if(!changed) return;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_copy((GList *)list));
+  dt_history_changed(DT_HISTORY_CHANGE_TAGS);
+  dt_history_changed_images(list);
 }
 
 typedef gboolean (*dt_history_action_fn)(const int32_t imgid, void *user_data);
@@ -195,7 +203,7 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
 
   if(imgid == UNKNOWN_IMAGE)
   {
-    dt_control_log(_("you need to copy history from an image before you paste it onto another"));
+    dt_history_message(_("you need to copy history from an image before you paste it onto another"));
     return 1;
   }
 
@@ -220,7 +228,7 @@ gboolean dt_history_copy(int32_t imgid)
 
   if(imgid <= 0) return FALSE;
 
-  dt_view_manager_get_global()->copy_paste.copied_imageid = imgid;
+  dt_history_copy_paste_get()->copied_imageid = imgid;
 
   return TRUE;
 }
@@ -233,7 +241,7 @@ typedef struct _paste_action_ctx_t
 static gboolean _history_paste_apply(const int32_t imgid, void *user_data)
 {
   _paste_action_ctx_t *ctx = (_paste_action_ctx_t *)user_data;
-  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  const dt_history_copy_item_t *copy_paste = dt_history_copy_paste_get();
   if(copy_paste->copied_imageid <= 0) return FALSE;
   if(imgid <= 0) return FALSE;
 
@@ -254,7 +262,7 @@ gboolean dt_history_paste_on_image(const int32_t imgid)
 
 gboolean dt_history_paste_on_list(const GList *list)
 {
-  if(dt_view_manager_get_global()->copy_paste.copied_imageid <= 0) return FALSE;
+  if(dt_history_copy_paste_get()->copied_imageid <= 0) return FALSE;
   _paste_action_ctx_t ctx = { 0 };
   const gboolean changed = _history_action_on_list(list, _history_paste_apply, &ctx);
   dt_hm_batch_state_cleanup(&ctx.batch);
@@ -264,7 +272,7 @@ gboolean dt_history_paste_on_list(const GList *list)
 static gboolean _history_paste_parts_apply(const int32_t imgid, void *user_data)
 {
   _paste_action_ctx_t *ctx = (_paste_action_ctx_t *)user_data;
-  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  const dt_history_copy_item_t *copy_paste = dt_history_copy_paste_get();
   if(copy_paste->copied_imageid <= 0) return FALSE;
   if(IS_NULL_PTR(copy_paste->selops)) return FALSE;
   if(imgid <= 0) return FALSE;
@@ -286,7 +294,7 @@ gboolean dt_history_paste_parts_on_image(const int32_t imgid)
 
 gboolean dt_history_paste_parts_on_list(const GList *list)
 {
-  const dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  const dt_history_copy_item_t *copy_paste = dt_history_copy_paste_get();
   if(copy_paste->copied_imageid <= 0) return FALSE;
   if(IS_NULL_PTR(copy_paste->selops))
     return FALSE;

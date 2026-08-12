@@ -25,12 +25,12 @@
 
 #include "database/database.h"
 #include "common/history_snapshot.h"
+#include "common/history_notify.h"
 #include "system/mem_alloc.h"
 #include "database/history_snapshot_repository.h"
 #include "common/history.h"
 #include "database/history_repository.h"
 #include "caches/image_cache.h"
-#include "control/signal.h"
 
 dt_undo_lt_history_t *dt_history_snapshot_item_init(void)
 {
@@ -55,7 +55,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   dt_database_start_transaction();
 
   dt_history_delete_on_image_ext(imgid, FALSE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+  dt_history_changed(DT_HISTORY_CHANGE_TAGS);
 
   // if no history end it means the image history was discarded, nothing more to restore
   if(history_end != 0)

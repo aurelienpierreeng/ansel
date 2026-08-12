@@ -54,7 +54,7 @@ gboolean dt_history_copy_parts(int32_t imgid)
   {
     // run dialog, it will insert into selops the selected moduel
 
-    if(dt_gui_hist_dialog_new(&(dt_view_manager_get_global()->copy_paste), imgid, TRUE) == GTK_RESPONSE_CANCEL)
+    if(dt_gui_hist_dialog_new(dt_history_copy_paste_get(), imgid, TRUE) == GTK_RESPONSE_CANCEL)
       return FALSE;
     return TRUE;
   }
@@ -65,7 +65,7 @@ gboolean dt_history_copy_parts(int32_t imgid)
 
 gboolean dt_history_paste_parts_prepare(void)
 {
-  dt_history_copy_item_t *copy_paste = &dt_view_manager_get_global()->copy_paste;
+  dt_history_copy_item_t *copy_paste = dt_history_copy_paste_get();
   if(copy_paste->copied_imageid <= 0) return FALSE;
 
   // we launch the dialog

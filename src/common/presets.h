@@ -38,6 +38,18 @@ int dt_presets_import_from_file(const char *preset_path);
 // does the module support autoapplying presets ?
 gboolean dt_presets_module_can_autoapply(const gchar *operation);
 
+/**
+ * @brief Answers whether the panel named @p operation allows its presets to auto-apply.
+ *
+ * @details Only the side of the application that owns the panels can know. This used to be
+ * answered inline by walking `dt_lib_get_global()->plugins` -- a call from here into
+ * `libs/` (layer 7) for one boolean. With no resolver installed the answer is TRUE, which
+ * is what the loop returned for an operation matching no panel, and so what ansel-cli and
+ * the unit tests already got.
+ */
+typedef gboolean (*dt_presets_autoapply_resolver_t)(const gchar *operation);
+void dt_presets_set_autoapply_resolver(dt_presets_autoapply_resolver_t resolver);
+
 #endif // DT_COMMON_PRESETS_H
 
 // clang-format off

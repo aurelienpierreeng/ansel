@@ -50,9 +50,9 @@
 #include "caches/mipmap_cache.h"
 #include "metadata/tags.h"
 #include "common/undo.h"
+#include "common/glib_utils.h"
 #include "common/utility.h"
 #include "develop/masks.h"
-#include "widgets/label.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
@@ -164,7 +164,9 @@ static void _collect_item_string(void *user_data, const int num, const char *ope
 
   char *iname = dt_history_item_as_string(dt_iop_get_localized_name(operation), enabled);
   char *name = g_strconcat(iname, decorated ? decorated : "", NULL);
-  *items = g_list_prepend(*items, delete_underscore(name));
+  // delete_underscore() is this call, and it lives in widgets/label.h -- a whole toolkit
+  // layer for one string substitution
+  *items = g_list_prepend(*items, dt_string_replace(name, "_"));
 
   dt_free(iname);
   dt_free(name);

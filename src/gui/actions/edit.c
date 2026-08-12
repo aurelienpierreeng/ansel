@@ -209,7 +209,7 @@ static gboolean copy_parts_callback(GtkAccelGroup *group, GObject *acceleratable
 
 static gboolean paste_sensitive_callback()
 {
-  return dt_view_manager_get_global()->copy_paste.copied_imageid > 0;
+  return dt_history_copy_paste_get()->copied_imageid > 0;
 }
 
 static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
