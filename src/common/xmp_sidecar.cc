@@ -89,12 +89,8 @@
 #include <errno.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 
-#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -129,7 +125,6 @@
 #include "database/history_repository.h"
 #include "database/image_repository.h"
 #include "database/metadata_repository.h"
-#include "database/tag_repository.h"
 #include "develop/blend.h"
 #include "develop/iop_order.h"
 #include "develop/masks.h"
@@ -1216,6 +1211,12 @@ int _get_max_multi_priority(GList *history, const char *operation)
 // need a write lock on *img (non-const) to write stars (and soon color labels).
 int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only)
 {
+  // Neither argument was checked, and this is a public entry point: common/image.c passes
+  // a dt_image_cache_get() result straight in, which is nullable everywhere else in the
+  // tree. Non-zero is this function's existing "did not read it" answer, and every caller
+  // already tests for it.
+  if(IS_NULL_PTR(img) || IS_NULL_PTR(filename)) return 1;
+
   // exclude pfm to avoid stupid errors on the console.
   // The length is checked BEFORE the pointer is formed: `filename + strlen(filename) - 4'
   // on a name shorter than four characters computes a pointer before the start of the
