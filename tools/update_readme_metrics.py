@@ -279,6 +279,7 @@ def engine_table(spec):
 
     rows = [("Cyclomatic complexity", lambda d: "{:,}".format(d["complexity"])),
             ("Lines of code", lambda d: "{:,}".format(d["code"])),
+            ("Comment lines", lambda d: "{:,}".format(d["comment"])),
             ("Ratio of comments", ratio),
             ("Cognitive complexity",
              lambda d: "{:,}".format(d["cognitive"]) if d["cognitive"] else "—")]
