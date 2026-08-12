@@ -152,17 +152,20 @@ using namespace std;
 static const char *_exif_get_exiv2_tag_type(const char *tagname)
 {
   if(IS_NULL_PTR(tagname)) return NULL;
+
+  const size_t tagname_len = strlen(tagname);
+
   // the list lives in metadata/exif.cc and is built on first use; it was a file-static
   // shared with this code when the two were one translation unit
   for(const GList *tag = dt_exif_get_exiv2_taglist(); tag; tag = g_list_next(tag))
   {
-    char *t = (char *)tag->data;
-    if(g_str_has_prefix(t, tagname) && t[strlen(tagname)] == ',')
-      if(t)
-      {
-        t += strlen(tagname) + 1;
-        return t;
-      }
+    const char *t = (const char *)tag->data;
+    if(IS_NULL_PTR(t)) continue;   // was tested AFTER t had already been dereferenced
+
+    // each entry is "<tagname>,<type>". The prefix comparison having succeeded is what
+    // makes t[tagname_len] in bounds: it is either the ',' or the terminating NUL.
+    if(strncmp(t, tagname, tagname_len) == 0 && t[tagname_len] == ',')
+      return t + tagname_len + 1;
   }
   return NULL;
 }
@@ -769,7 +772,8 @@ static GList *read_history_v1(const std::string &xmpPacket, const char *filename
 
     current_entry->modversion = atoi(modversion_iter->child_value());
 
-    current_entry->params = dt_exif_xmp_decode(params_iter->child_value(), strlen(params_iter->child_value()),
+    const char *params_text = params_iter->child_value();
+    current_entry->params = dt_exif_xmp_decode(params_text, strlen(params_text),
                                                &current_entry->params_len);
 
     if(multi_name && multi_name_iter != multi_name.node().children().end())
@@ -792,8 +796,8 @@ static GList *read_history_v1(const std::string &xmpPacket, const char *filename
 
     if(blendop_params && blendop_params_iter != blendop_params.node().children().end())
     {
-      current_entry->blendop_params = dt_exif_xmp_decode(blendop_params_iter->child_value(),
-                                                         strlen(blendop_params_iter->child_value()),
+      const char *blendop_text = blendop_params_iter->child_value();
+      current_entry->blendop_params = dt_exif_xmp_decode(blendop_text, strlen(blendop_text),
                                                          &current_entry->blendop_params_len);
       blendop_params_iter++;
     }
@@ -1009,14 +1013,14 @@ static GHashTable *read_masks(Exiv2::XmpData &xmpData, const char *filename, con
 
         std::string mask_str = mask->toString(i);
         const char *mask_c = mask_str.c_str();
-        const size_t mask_c_len = strlen(mask_c);
+        const size_t mask_c_len = mask_str.size();
         entry->mask_points = dt_exif_xmp_decode(mask_c, mask_c_len, &entry->mask_points_len);
 
         entry->mask_nb = mask_nb->toLong(i);
 
         std::string mask_src_str = mask_src->toString(i);
         const char *mask_src_c = mask_src_str.c_str();
-        const size_t mask_src_c_len = strlen(mask_src_c);
+        const size_t mask_src_c_len = mask_src_str.size();
         entry->mask_src = dt_exif_xmp_decode(mask_src_c, mask_src_c_len, &entry->mask_src_len);
 
         g_hash_table_insert(mask_entries, &entry->mask_id, (gpointer)entry);
@@ -1212,9 +1216,13 @@ int _get_max_multi_priority(GList *history, const char *operation)
 // need a write lock on *img (non-const) to write stars (and soon color labels).
 int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only)
 {
-  // exclude pfm to avoid stupid errors on the console
-  const char *c = filename + strlen(filename) - 4;
-  if(c >= filename && !strcmp(c, ".pfm")) return 1;
+  // exclude pfm to avoid stupid errors on the console.
+  // The length is checked BEFORE the pointer is formed: `filename + strlen(filename) - 4'
+  // on a name shorter than four characters computes a pointer before the start of the
+  // array, which is undefined behaviour -- only one-past-the-end is legal. The `c >=
+  // filename' test that used to follow cannot rescue that; the pointer is already invalid.
+  const size_t filename_len = strlen(filename);
+  if(filename_len >= 4 && !strcmp(filename + filename_len - 4, ".pfm")) return 1;
   try
   {
     // read xmp sidecar
@@ -2483,7 +2491,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
               {
                 const char *type = _exif_get_exiv2_tag_type(tagname);
                 if((!g_strcmp0(type, "Rational") || !g_strcmp0(type, "SRational")) &&
-                   (g_strstr_len(result, strlen(result), "/") == NULL))
+                   (strstr(result, "/") == NULL))
                 {
                   float float_value = (float)std::atof(result);
                   if(!isnan(float_value))

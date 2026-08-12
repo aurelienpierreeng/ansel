@@ -124,3 +124,35 @@ boundary with real code after it is reported rather than moved.
 The sidecar belongs in `src/history`: it serialises the development, not the photograph.
 It stays in `common/` only until that module exists. Its five entry points keep their
 `dt_exif_*` names so this cut stays reviewable; renaming them is that move's business.
+
+## The scanners' findings on the moved code
+
+Moving 2687 lines into a new file makes every line of it "new" to SonarCloud, so the split
+drew nine code-scanning alerts on `common/xmp_sidecar.cc`. They are not all the same thing,
+and the triage is the useful part:
+
+* **One real defect.** `dt_exif_xmp_read()` computed `filename + strlen(filename) - 4`
+  before testing the length, then guarded with `c >= filename`. Forming a pointer before
+  the start of an array is undefined behaviour — only one-past-the-end is legal — so the
+  guard tests a pointer that is already invalid. It happens to work on every real target,
+  and the guard proves whoever wrote it knew the short-name case existed. The length is
+  checked first now.
+* **One misplaced NULL check**, in `_exif_get_exiv2_tag_type()`: `if(t)` sat *after* two
+  dereferences of `t`. Not a crash, because `g_str_has_prefix()` NULL-checks internally and
+  short-circuits — but it reads as a guard and is not one. Checked before use now, and the
+  duplicated `strlen(tagname)` hoisted.
+* **Four worth taking.** `strlen(s.c_str())` on a `std::string` rescans what the string
+  already knows (`.size()`); `f(x->child_value(), strlen(x->child_value()))` calls the
+  accessor twice; `g_strstr_len(s, strlen(s), n)` is `strstr(s, n)`.
+* **Two false positives on bounds**, kept as they were: `t[tagname_len]` is in bounds
+  precisely *because* the prefix comparison succeeded. That is now stated in a comment, so
+  the next reader — human or scanner — does not have to re-derive it.
+* **One false positive outright**: "IP addresses should not be hardcoded" on
+  `xmpData["Xmp.exif.GPSVersionID"] = "2.2.0.0"`. That is the EXIF GPS tag version from the
+  spec, not an address. Unchanged.
+
+Re-verified by the same export A/B: 22 bytes differ from the pre-split reference, none of
+them past offset 79598 in a 19 396 010-byte file — filename, the embedded build version
+string, and two timestamps. **Note the build version string**: it moves with every commit,
+which is the TIFF equivalent of the PNG trap in `CLAUDE.md`, and is why `cmp -l` and reading
+the offsets beats hashing the file.
