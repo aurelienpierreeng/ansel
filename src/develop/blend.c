@@ -39,6 +39,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "develop/pipeline_notify.h"
 #include "system/macros.h"
 #include "develop/iop_profile.h"
 #include "system/openmp.h"
@@ -50,7 +51,6 @@
 #include "pixel/guided_filter.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe_hb.h"
@@ -418,7 +418,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   return;
 
   error:
-  dt_control_log(_("detail mask blending error"));
+  dt_pipeline_message(_("detail mask blending error"));
   dt_pixelpipe_cache_free_align(warp_mask);
   dt_pixelpipe_cache_free_align(lum);
   dt_pixelpipe_cache_free_align(tmp);
@@ -698,7 +698,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_control_log(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_pipeline_message(_("skipped blending in module '%s': roi's do not match"), self->op);
     return 0;
   }
 
@@ -724,7 +724,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   float *const restrict _mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
   if(IS_NULL_PTR(_mask))
   {
-    dt_control_log(_("could not allocate buffer for blending"));
+    dt_pipeline_message(_("could not allocate buffer for blending"));
     return 1;
   }
   int raster_error = 0;
@@ -763,7 +763,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
         float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
         if(IS_NULL_PTR(drawn_mask))
         {
-          dt_control_log(_("could not allocate buffer for blending"));
+          dt_pipeline_message(_("could not allocate buffer for blending"));
           dt_pixelpipe_cache_free_align(_mask);
           return 1;
         }
@@ -1096,7 +1096,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   return;
 
   error:
-  dt_control_log(_("detail mask CL blending problem"));
+  dt_pipeline_message(_("detail mask CL blending problem"));
   dt_pixelpipe_cache_free_align(lum);
   dt_opencl_release_mem_object(tmp);
   dt_opencl_release_mem_object(blur);
@@ -1154,7 +1154,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_control_log(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_pipeline_message(_("skipped blending in module '%s': roi's do not match"), self->op);
     return 0;
   }
 
@@ -1185,7 +1185,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
   if(IS_NULL_PTR(_mask))
   {
-    dt_control_log(_("could not allocate buffer for blending"));
+    dt_pipeline_message(_("could not allocate buffer for blending"));
     return 1;
   }
   float *const mask = _mask;

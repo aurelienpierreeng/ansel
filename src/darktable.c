@@ -142,6 +142,7 @@
 #include "common/l10n.h"
 #include "metadata/metadata.h"
 #include "common/image_notify.h"
+#include "develop/pipeline_notify.h"
 #include "history/notify.h"
 #include "history/presets.h"
 #include "metadata/notify.h"
@@ -739,6 +740,23 @@ static void _metadata_notify(const dt_metadata_notice_t kind, const char *messag
     dt_toast_log("%s", message);
   else
     dt_control_log("%s", message);
+}
+
+/* The pipeline worker names what it is chewing on; the banner and its repaint are ours.
+ * Called from worker threads, as the calls it replaces were -- dt_set_main_message()
+ * under log_mutex and the centre redraw are both worker-safe. */
+static void _pipeline_busy(const char *message_or_null)
+{
+  dt_control_t *const control = dt_control_get_global();
+  dt_pthread_mutex_lock(&control->log_mutex);
+  dt_set_main_message(message_or_null ? g_strdup(message_or_null) : NULL);
+  dt_pthread_mutex_unlock(&control->log_mutex);
+  dt_control_queue_redraw_center();
+}
+
+static void _pipeline_message(const char *message)
+{
+  dt_control_log("%s", message);
 }
 
 /* The geotag list is copied here, at the raise site, exactly where the old call sites
@@ -1488,6 +1506,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_metadata_set_tags_changed_handler(_metadata_tags_changed);
   dt_metadata_set_geotags_changed_handler(_metadata_geotags_changed);
   dt_image_notify_set_imported_handler(_image_imported);
+  dt_pipeline_set_message_handler(_pipeline_message);
+  dt_pipeline_set_busy_handler(_pipeline_busy);
   // Same reason for these two: they raise signals, so they wait for the signal system.
   dt_history_set_changed_handler(_history_changed);
   dt_history_set_images_changed_handler(_history_images_changed);

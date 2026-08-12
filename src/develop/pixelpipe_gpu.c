@@ -2,7 +2,7 @@
     Private OpenCL pixelpipe backend.
 */
 
-#include "control/control.h"
+#include "develop/pipeline_notify.h"
 #include "system/macros.h"
 #include "develop/iop_profile.h"
 #include "common/logging.h"
@@ -674,25 +674,25 @@ error:
     switch(fit_reason)
     {
       case DT_OPENCL_FIT_ALLOC_LIMIT:
-        dt_control_log(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
+        dt_pipeline_message(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
                          " MiB but the largest allocation the device allows is %" G_GSIZE_FORMAT
                          " MiB; falling back to CPU"),
                        module->name(), (size_t)(fit_needed / (1024 * 1024)),
                        (size_t)(fit_limit / (1024 * 1024)));
         break;
       case DT_OPENCL_FIT_AVAILABLE:
-        dt_control_log(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
+        dt_pipeline_message(_("OpenCL failed for module `%s`: image buffer needs %" G_GSIZE_FORMAT
                          " MiB but only %" G_GSIZE_FORMAT " MiB are free on the device; falling back to CPU"),
                        module->name(), (size_t)(fit_needed / (1024 * 1024)),
                        (size_t)(fit_limit / (1024 * 1024)));
         break;
       case DT_OPENCL_FIT_DIMENSION:
-        dt_control_log(_("OpenCL failed for module `%s`: image dimensions %" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT
+        dt_pipeline_message(_("OpenCL failed for module `%s`: image dimensions %" G_GSIZE_FORMAT "x%" G_GSIZE_FORMAT
                          " exceed the device limits; falling back to CPU"),
                        module->name(), precheck_width, precheck_height);
         break;
       default: // DT_OPENCL_FIT_OK / UNINITED: the buffer fit, the GPU failed for another reason
-        dt_control_log(_("OpenCL failed for module `%s`; falling back to CPU"), module->name());
+        dt_pipeline_message(_("OpenCL failed for module `%s`; falling back to CPU"), module->name());
         break;
     }
     return pixelpipe_process_on_CPU(pipe, piece, previous_piece, tiling, pixelpipe_flow,
