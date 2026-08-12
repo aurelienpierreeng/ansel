@@ -35,7 +35,9 @@ Usage:
 
 import argparse
 import csv
+import importlib.util
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -287,10 +289,264 @@ def engine_table(spec):
     return "\n".join(out) + "\n"
 
 
+
+# ---------------------------------------------------------------- frozen release data
+#
+# Everything below describes released Darktable versions, measured once with the tooling
+# in this file and in tools/code_health.py on the corresponding tag. A release does not
+# change, so re-measuring it on every run would mean keeping four Darktable checkouts
+# around to compute constants. Ansel's column is measured live, because it is the only
+# one that moves.
+#
+# Reproduce any of these with:
+#     git clone https://github.com/darktable-org/darktable && cd darktable
+#     git checkout <tag>
+#     python3 <ansel>/tools/code_health.py --source-dir src --repo-root .
+
+FROZEN_FUNCTIONS = {
+    "Darktable 3.8": {"functions": 7268, "mean": 4.86, "max": 194, "over15": 428, "over50": 45},
+    "Darktable 4.0": {"functions": 7510, "mean": 4.95, "max": 210, "over15": 456, "over50": 48},
+    "Darktable 5.0": {"functions": 7785, "mean": 4.89, "max": 252, "over15": 453, "over50": 48},
+    "Darktable 5.6": {"functions": 8741, "mean": 5.05, "max": 249, "over15": 522, "over50": 63},
+}
+
+FROZEN_INCLUDES = {
+    "Darktable 3.8": {"med_dep": 14.1, "avg_aff": 83, "over25": 31,
+                      "cycles": 4, "trapped": 17, "god": 30},
+    "Darktable 4.0": {"med_dep": 13.3, "avg_aff": 82, "over25": 31,
+                      "cycles": 4, "trapped": 17, "god": 30},
+    "Darktable 5.0": {"med_dep": 14.9, "avg_aff": 94, "over25": 34,
+                      "cycles": 4, "trapped": 17, "god": 36},
+    "Darktable 5.6": {"med_dep": 13.1, "avg_aff": 95, "over25": 32,
+                      "cycles": 4, "trapped": 17, "god": 38},
+}
+
+# Jaccard similarity, normalised tokens, between released versions only. The cells
+# involving Ansel move with Ansel and are recomputed when --darktable-trees is given.
+FROZEN_SIMILARITY = {
+    ("Darktable 3.8", "Darktable 4.0"): 87.3,
+    ("Darktable 3.8", "Darktable 5.6"): 39.6,
+    ("Darktable 4.0", "Darktable 5.6"): 43.2,
+}
+
+TREE_DIRS = {"Darktable 3.8": "dt38", "Darktable 4.0": "dt40",
+             "Darktable 5.0": "dt50", "Darktable 5.6": "dt56"}
+
+
+def _code_health():
+    """Import the sibling analysis module, which owns the include-graph measurement."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "code_health.py")
+    spec = importlib.util.spec_from_file_location("code_health", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def measure_functions(source_dir="src"):
+    """Per-function complexity of this tree's engine, via lizard."""
+    if not shutil.which("lizard"):
+        return None
+    cmd = ["lizard", "--csv", "-l", "c", "-l", "cpp"]
+    for part in ENGINE_EXCLUDE:
+        cmd += ["-x", "*%s*" % part]
+    cmd.append(source_dir)
+    out = subprocess.run(cmd, capture_output=True, text=True,
+                         errors="replace", check=False).stdout
+    ccns = []
+    for parts in csv.reader(out.splitlines()):
+        if len(parts) < 8:
+            continue
+        try:
+            ccn = int(parts[1])
+        except ValueError:
+            continue
+        if _engine_excluded(parts[6]):
+            continue
+        ccns.append(ccn)
+    if not ccns:
+        return None
+    ccns.sort()
+    n = len(ccns)
+    return {"functions": n, "mean": round(sum(ccns) / n, 2), "max": ccns[-1],
+            "over15": sum(1 for c in ccns if c > 15),
+            "over50": sum(1 for c in ccns if c > 50)}
+
+
+def measure_includes(repo_root=".", source_dir="src"):
+    """Include-graph exposure of this tree's engine."""
+    ch = _code_health()
+    ch.EXCLUDED_DIR_PARTS[:] = [p for p in ENGINE_EXCLUDE]
+    ch.load_submodule_exclusions(repo_root)
+    cwd = os.getcwd()
+    os.chdir(repo_root)
+    try:
+        edges = ch.source_include_edges(".", source_dir) or []
+    finally:
+        os.chdir(cwd)
+    if not edges:
+        return None
+
+    succ, pred, nodes = {}, {}, set()
+    for a, b in edges:
+        succ.setdefault(a, set()).add(b)
+        pred.setdefault(b, set()).add(a)
+        nodes.update((a, b))
+
+    def closure(adj, start):
+        seen, stack = set(), [start]
+        while stack:
+            u = stack.pop()
+            for v in adj.get(u, ()):
+                if v not in seen:
+                    seen.add(v)
+                    stack.append(v)
+        seen.discard(start)
+        return seen
+
+    n = len(nodes)
+    headers = [f for f in nodes if f.lower().endswith((".h", ".hpp", ".hxx"))]
+    sources = [f for f in nodes if f not in headers]
+    dep = sorted(len(closure(succ, f)) / n * 100 for f in sources)
+    aff = [len(closure(pred, h)) for h in headers]
+    cycles = [c for c in ch.strongly_connected(sorted(nodes), succ) if len(c) > 1]
+    god = len({a for a, b in edges
+               if b.endswith("darktable.h") and a.lower().endswith((".h", ".hpp"))})
+    return {"med_dep": round(dep[len(dep) // 2], 1),
+            "avg_aff": int(round(sum(aff) / max(1, len(aff)))),
+            "over25": int(round(100.0 * sum(1 for a in aff if a / n > 0.25) / len(headers))),
+            "cycles": len(cycles),
+            "trapped": sum(len(c) for c in cycles),
+            "god": god}
+
+
+def _columns(spec):
+    out = []
+    for item in spec.split(","):
+        item = item.strip()
+        if not item or "=" not in item:
+            continue
+        key, _, label = item.partition("=")
+        out.append(label.strip())
+    return out
+
+
+def functions_table(spec):
+    """Per-function engine complexity. Ansel measured live, releases frozen."""
+    cols = _columns(spec)
+    live = measure_functions()
+    if live is None:
+        raise RuntimeError("lizard unavailable")
+    data = {c: dict(FROZEN_FUNCTIONS[c]) if c in FROZEN_FUNCTIONS else dict(live)
+            for c in cols}
+    rows = [("Functions", lambda d: "{:,}".format(d["functions"])),
+            ("Average complexity", lambda d: "%.2f" % d["mean"]),
+            ("Worst single function", lambda d: "{:,}".format(d["max"])),
+            ("Functions above 15 — awkward to test", lambda d: "{:,}".format(d["over15"])),
+            ("Functions above 50 — effectively untestable",
+             lambda d: "{:,}".format(d["over50"]))]
+    out = ["| Engine only | " + " | ".join(cols) + " |",
+           "| ----------- | " + " | ".join("-----------:" for _ in cols) + " |"]
+    for label, render in rows:
+        out.append("| " + label + " | " + " | ".join(render(data[c]) for c in cols) + " |")
+    return "\n".join(out) + "\n"
+
+
+def includes_table(spec):
+    """Include-graph exposure. Ansel measured live, releases frozen."""
+    cols = _columns(spec)
+    live = measure_includes()
+    if live is None:
+        raise RuntimeError("include measurement unavailable")
+    data = {c: dict(FROZEN_INCLUDES[c]) if c in FROZEN_INCLUDES else dict(live)
+            for c in cols}
+    rows = [("A source file depends on this share of the engine, median",
+             lambda d: "%.1f %%" % d["med_dep"]),
+            ("Changing one header forces re-reading this many files, average",
+             lambda d: "{:,}".format(d["avg_aff"])),
+            ("Headers whose change exposes over a quarter of the engine",
+             lambda d: "%d %%" % d["over25"]),
+            ("Circular include groups", lambda d: "{:,}".format(d["cycles"])),
+            ("Files trapped in those groups", lambda d: "{:,}".format(d["trapped"])),
+            ("Headers including the application-wide `darktable.h`",
+             lambda d: "{:,}".format(d["god"]))]
+    out = ["| Engine only | " + " | ".join(cols) + " |",
+           "| ----------- | " + " | ".join("-----------:" for _ in cols) + " |"]
+    for label, render in rows:
+        out.append("| " + label + " | " + " | ".join(render(data[c]) for c in cols) + " |")
+    return "\n".join(out) + "\n"
+
+
+def similarity_table(spec, trees=None, previous="", source_dir="src"):
+    """Upper-triangle similarity matrix.
+
+    Release-to-release cells are frozen. The cells involving Ansel move with Ansel and
+    need the Darktable sources to recompute, so they are refreshed only when
+    --darktable-trees points at a directory holding dt38/ dt40/ dt50/ dt56/ checkouts.
+    Without it the values already in the README are KEPT, not blanked: a table that
+    loses real numbers because an optional input was missing is worse than one that is
+    slightly out of date, and the omission is reported on stderr either way.
+    """
+    kept = {}
+    for line in (previous or "").splitlines():
+        if not line.startswith("| **Ansel**"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        labels = _columns(spec)
+        for label, value in zip(labels, cells[1:]):
+            if value and value not in ("—", "?"):
+                kept[label] = value
+    cols = _columns(spec)
+    live = {}
+    if trees:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clone_detect.py")
+        spec_cd = importlib.util.spec_from_file_location("clone_detect", path)
+        cdm = importlib.util.module_from_spec(spec_cd)
+        spec_cd.loader.exec_module(cdm)
+        _f, ansel_corpus, _t = cdm.scan(source_dir, 20, 12, True)
+        for label in cols:
+            sub = TREE_DIRS.get(label)
+            if not sub:
+                continue
+            root = os.path.join(trees, sub, "src")
+            if not os.path.isdir(root):
+                sys.stderr.write("readme-metrics: no tree for %s at %s\n" % (label, root))
+                continue
+            _f2, other, _t2 = cdm.scan(root, 20, 12, True)
+            j = 100.0 * len(ansel_corpus & other) / max(1, len(ansel_corpus | other))
+            live[label] = round(j, 1)
+
+    def cell(a, b):
+        if a == b:
+            return "—"
+        if a == "Ansel" or b == "Ansel":
+            other = b if a == "Ansel" else a
+            if other in live:
+                return "%.1f %%" % live[other]
+            return kept.get(other)          # keep what the README already had
+        return "%.1f %%" % FROZEN_SIMILARITY.get((a, b), FROZEN_SIMILARITY.get((b, a), 0.0))
+
+    out = ["| | " + " | ".join(cols) + " |",
+           "| --- | " + " | ".join("---:" for _ in cols) + " |"]
+    for i, a in enumerate(cols):
+        cells = []
+        for j, b in enumerate(cols):
+            value = "" if j < i else cell(a, b)
+            if value is None:
+                raise RuntimeError(
+                    "no value for %s x %s and none in the README; pass --darktable-trees"
+                    % (a, b))
+            cells.append(value)
+        out.append("| **" + a + "** | " + " | ".join(cells) + " |")
+    return "\n".join(out) + "\n"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--readme", default="README.md")
+    ap.add_argument("--darktable-trees", default=None,
+                    help="directory holding dt38/ dt40/ dt50/ dt56/ Darktable checkouts, "
+                         "needed only to refresh the Ansel row of the similarity matrix")
     ap.add_argument("--check", action="store_true",
                     help="report staleness without writing; non-zero exit if stale")
     args = ap.parse_args()
@@ -369,16 +625,26 @@ def main():
 
     updated = CELL.sub(replace, text)
 
+    builders = {"engine-metrics": engine_table,
+                "engine-complexity": functions_table,
+                "engine-includes": includes_table,
+                "similarity-matrix": lambda sp, prev: similarity_table(
+                    sp, args.darktable_trees, prev)}
+
     def regenerate(m):
-        if m.group("name") != "engine-metrics":
+        build = builders.get(m.group("name"))
+        if build is None:
             return m.group(0)
         try:
-            body = engine_table(m.group("spec"))
+            body = (build(m.group("spec"), m.group("body"))
+                    if build is builders["similarity-matrix"]
+                    else build(m.group("spec")))
         except Exception as exc:                       # noqa: BLE001
-            sys.stderr.write("readme-metrics: engine table failed (%s), left as is\n" % exc)
+            sys.stderr.write("readme-metrics: %s failed (%s), left as is\n"
+                             % (m.group("name"), exc))
             return m.group(0)
         if body.strip() != m.group("body").strip():
-            changes.append(("engine-metrics", "generated block", "stale", "refreshed"))
+            changes.append((m.group("name"), "generated block", "stale", "refreshed"))
         return m.group("open") + body + m.group("close")
 
     updated = BLOCK.sub(regenerate, updated)
