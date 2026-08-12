@@ -348,7 +348,20 @@ void dt_dev_write_history(struct dt_develop_t *dev, gboolean async);
  *
  * @param dev Develop context.
  */
+/* Implemented in dev_history_gui.c: attaches missing expanders and refreshes every module
+ * widget after a backend history reload. Declared here because its callers are the ones
+ * already driving the engine, and the signature carries no GTK type. */
 void dt_dev_history_gui_update(struct dt_develop_t *dev);
+
+/**
+ * @brief Commit one history item immediately -- record undo, take history_mutex as
+ * writer, write through, resync the pipes.
+ *
+ * @details The engine core behind dt_dev_add_history_item(): that entry (implemented in
+ * dev_history_gui.c) coalesces slider-drag input through a GTK main-loop timer and drains
+ * into this. Call it directly only where queueing would be wrong.
+ */
+void dt_dev_history_commit_item_now(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
 
 /**
  * @brief Restores the presentation half of an undo record: the blending panel's mask
@@ -365,6 +378,12 @@ typedef void (*dt_dev_history_undo_restore_gui_handler_t)(struct dt_develop_t *d
                                                           int mask_edit_mode,
                                                           int request_mask_display);
 void dt_dev_history_set_undo_restore_gui_handler(dt_dev_history_undo_restore_gui_handler_t handler);
+
+/** @brief Post-commit presentation work: viewport-size refresh for geometry-changing
+ *  modules, and the enable-toggle sync a param edit may have flipped. Installed by
+ *  dt_dev_history_gui_init(); the engine calls it after each immediate commit. */
+typedef void (*dt_dev_history_commit_gui_handler_t)(struct dt_develop_t *dev, struct dt_iop_module_t *module);
+void dt_dev_history_set_commit_gui_handler(dt_dev_history_commit_gui_handler_t handler);
 
 /**
  * @brief Rebuild or resync pixelpipes after backend history changes.
@@ -617,7 +636,13 @@ dt_dev_history_item_t *dt_dev_history_get_last_item_by_module(GList *history_lis
  * @param history History list.
  * @return 0 on success, non-zero on error.
  */
-int dt_dev_history_refresh_nodes_ext(struct dt_develop_t *dev, GList **iop, GList *history);
+/** @param removed_gui_modules When non-NULL, receives the instances unlinked from @p iop.
+ * Their widgets are NOT touched here -- they used to be destroyed inside history_mutex,
+ * which is exactly the GTK-inside-the-engine-lock hazard this parameter removes. The
+ * caller (dt_dev_history_gui_update() in dev_history_gui.c) destroys them after unlock
+ * and frees the list; the modules themselves stay parked in dev->alliop. */
+int dt_dev_history_refresh_nodes_ext(struct dt_develop_t *dev, GList **iop, GList *history,
+                                     GList **removed_gui_modules);
 
 /** truncate history stack */
 void dt_dev_history_truncate(struct dt_develop_t *dev, const int32_t imgid);

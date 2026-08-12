@@ -563,6 +563,13 @@ GList *dt_history_duplicate(GList *hist)
 }
 
 /* Installed by dt_dev_history_gui_init(); absent under ansel-cli and in tests. */
+static dt_dev_history_commit_gui_handler_t _commit_gui_handler = NULL;
+
+void dt_dev_history_set_commit_gui_handler(dt_dev_history_commit_gui_handler_t handler)
+{
+  _commit_gui_handler = handler;
+}
+
 static dt_dev_history_undo_restore_gui_handler_t _undo_restore_gui_handler = NULL;
 
 void dt_dev_history_set_undo_restore_gui_handler(dt_dev_history_undo_restore_gui_handler_t handler)
@@ -989,192 +996,11 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
 }
 
 
-/* ---------------------------------------------------------------------------------------
- * Throttling the history commit, at the one place every widget already goes through.
- *
- * A history commit is not cheap: it records an undo step, takes history_mutex as writer,
- * rehashes the whole history, writes the image cache, rebuilds the masks list, schedules a
- * DB+XMP write, and finally tells the pipes their history changed -- which also raises their
- * `shutdown` atomic, so the worker abandons the frame it is rendering. Running that per step
- * of a slider drag or a combobox scroll blocks the GUI thread often enough that the widget
- * cannot even repaint its own value, and aborts each render before it can finish.
- *
- * Widgets used to dodge that by deferring their own `value-changed` emission through
- * gui_throttle (bauhaus, and a copy of the same dance in nine curve modules). That put the
- * policy in every widget that wanted it and left every other widget without it. The commit
- * is deferred here instead, where all of them already arrive.
- *
- * TWO RULES, and the difference between them matters:
- *
- * 1. NOTHING IS MERGED. A tempting optimisation is to collapse pending requests into one
- *    carrying the union of their flags; do not. Drawn masks, raster masks, module
- *    enable/disable, the mask manager and plain parameter edits each commit differently, and
- *    any merging rule is somewhere to silently drop one of them. The queue is FIFO and every
- *    distinct request is kept, in order.
- *
- * 2. A REPEAT OF THE PENDING TAIL IS NOT A NEW REQUEST. If the last thing queued is already
- *    "commit `module`, enable=`enable`" and that is exactly what is being asked for again,
- *    there is nothing to add: the queued request reads module->params when it drains, so it
- *    necessarily commits the newest value. This is consecutive-duplicate suppression against
- *    the TAIL only -- never a search of the queue, never a combination of two different
- *    requests -- so ordering is exactly preserved. It is what keeps a 300-tick scroll from
- *    queueing 300 commits, which is the whole point: a transient intermediate value of an
- *    ongoing gesture is not a history event.
- *
- * This is a batching window, not a debounce: the timer is armed by the first request and is
- * NOT re-armed by the ones that follow, so a sustained drag keeps committing once per window
- * instead of freezing until the user stops moving.
- *
- * dt_dev_add_history_item_ext() is NOT throttled and never was. Anything that must land
- * before the next statement (bulk history loads, style application, image duplication)
- * already goes through it.
- *
- * GUI thread only, like the commit path it serves ("always called from GUI controls" below),
- * hence no lock -- same contract as gui_throttle's own queue.
- */
+/* The pending-commit throttle queue lives in dev_history_gui.c: it exists to coalesce
+ * slider-drag input on the GTK main loop, and its headless timeout is zero -- the
+ * engine entry it drains into is dt_dev_history_commit_item_now() below. */
 
-typedef struct dt_dev_pending_commit_t
-{
-  dt_develop_t *dev;
-  dt_iop_module_t *module;
-  gboolean enable;
-} dt_dev_pending_commit_t;
-
-static GQueue _pending_commits = G_QUEUE_INIT;
-static guint _pending_commit_source = 0;
-
-static void _commit_history_item_now(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable);
-
-static gboolean _drain_pending_commits(gpointer user_data)
-{
-  (void)user_data;
-
-  _pending_commit_source = 0;
-
-  // Detach the queue before draining: a commit can trigger another one (a module reacting in
-  // post_history_commit), which would push onto the queue we are iterating.
-  GQueue ready = G_QUEUE_INIT;
-  ready.head = _pending_commits.head;
-  ready.tail = _pending_commits.tail;
-  ready.length = _pending_commits.length;
-  g_queue_init(&_pending_commits);
-
-  while(!g_queue_is_empty(&ready))
-  {
-    dt_dev_pending_commit_t *request = (dt_dev_pending_commit_t *)g_queue_pop_head(&ready);
-    _commit_history_item_now(request->dev, request->module, request->enable);
-    dt_free(request);
-  }
-
-  return G_SOURCE_REMOVE;
-}
-
-static void _queue_pending_commit(dt_develop_t *dev, dt_iop_module_t *module, const gboolean enable)
-{
-  // A zero timeout means the user turned throttling off in the preferences (and is also what
-  // a headless run gets, since nothing ever sets one there). Same call, same place, just now.
-  const guint timeout_ms = dt_gui_throttle_get_timeout_ms();
-  if(timeout_ms == 0)
-  {
-    _commit_history_item_now(dev, module, enable);
-    return;
-  }
-
-  // Rule 2 above: a repeat of what is already queued at the tail adds nothing.
-  const dt_dev_pending_commit_t *tail = (const dt_dev_pending_commit_t *)_pending_commits.tail
-                                        ? (const dt_dev_pending_commit_t *)_pending_commits.tail->data
-                                        : NULL;
-  if(!IS_NULL_PTR(tail) && tail->dev == dev && tail->module == module && tail->enable == enable) return;
-
-  dt_dev_pending_commit_t *queued = (dt_dev_pending_commit_t *)calloc(1, sizeof(*queued));
-  if(IS_NULL_PTR(queued))
-  {
-    // Out of memory for a 24-byte record: commit now rather than lose the edit.
-    _commit_history_item_now(dev, module, enable);
-    return;
-  }
-
-  queued->dev = dev;
-  queued->module = module;
-  queued->enable = enable;
-  g_queue_push_tail(&_pending_commits, queued);
-
-  if(!_pending_commit_source)
-    _pending_commit_source = g_timeout_add(timeout_ms, _drain_pending_commits, NULL);
-}
-
-void dt_dev_history_flush_pending_commits(dt_develop_t *dev)
-{
-  // Run them, do not drop them: a pending request IS the user's last edit, and dropping it
-  // would lose the value they left a slider on. Callers invoke this while `dev` is still
-  // whole -- before any pipe node, iop or history teardown -- so committing here is safe,
-  // and it is the only moment at which it still is. A request draining after teardown is the
-  // race CLAUDE.md documents, which corrupts the heap and crashes somewhere unrelated.
-  if(_pending_commit_source)
-  {
-    g_source_remove(_pending_commit_source);
-    _pending_commit_source = 0;
-  }
-
-  GList *iter = _pending_commits.head;
-  while(iter)
-  {
-    GList *next = g_list_next(iter);
-    dt_dev_pending_commit_t *request = (dt_dev_pending_commit_t *)iter->data;
-    if(IS_NULL_PTR(dev) || request->dev == dev)
-    {
-      g_queue_delete_link(&_pending_commits, iter);
-      _commit_history_item_now(request->dev, request->module, request->enable);
-      dt_free(request);
-    }
-    iter = next;
-  }
-
-  // Something else's requests may remain (another dev): give them their timer back.
-  if(!g_queue_is_empty(&_pending_commits))
-  {
-    const guint timeout_ms = dt_gui_throttle_get_timeout_ms();
-    if(timeout_ms > 0) _pending_commit_source = g_timeout_add(timeout_ms, _drain_pending_commits, NULL);
-    else _drain_pending_commits(NULL);
-  }
-}
-
-void dt_dev_history_drop_pending_commits(dt_develop_t *dev)
-{
-  // Last-resort counterpart to the flush, for a `dev` that is already too far gone to commit
-  // to. Nothing should normally be left here by the time this runs.
-  GList *iter = _pending_commits.head;
-  while(iter)
-  {
-    GList *next = g_list_next(iter);
-    dt_dev_pending_commit_t *request = (dt_dev_pending_commit_t *)iter->data;
-    if(IS_NULL_PTR(dev) || request->dev == dev)
-    {
-      g_queue_delete_link(&_pending_commits, iter);
-      dt_free(request);
-    }
-    iter = next;
-  }
-
-  if(_pending_commit_source && g_queue_is_empty(&_pending_commits))
-  {
-    g_source_remove(_pending_commit_source);
-    _pending_commit_source = 0;
-  }
-}
-
-
-// The next 2 functions are always called from GUI controls setting parameters
-// This is why they directly start a pipeline recompute.
-// Otherwise, please keep GUI and pipeline fully separated.
-
-void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean redraw)
-{
-  (void)redraw;
-  _queue_pending_commit(dev, module, enable);
-}
-
-static void _commit_history_item_now(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
+void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
 {
   gboolean add_new_pipe_node = FALSE;
 
@@ -1254,20 +1080,11 @@ static void _commit_history_item_now(dt_develop_t *dev, dt_iop_module_t *module,
 
   dt_dev_masks_list_update(dev);
 
-  if(!IS_NULL_PTR(dt_gui_get_global()) && dev->gui_attached && !IS_NULL_PTR(module))
-  {
-    // If module params change the geometry of the ROI,
-    // update immediately so we avoid drawing glitches.
-    if(module->modify_roi_in || module->modify_roi_out)
-      dt_dev_get_thumbnail_size(dev);
-    
-
-    // Changing a parameter of a disabled module enables it,
-    // so update the GUI toggle state to reflect it.
-    dt_gui_freeze_begin(); // don't run GUI callbacks when setting GUI state
-    dt_iop_gui_set_enable_button(module);
-    dt_gui_freeze_end();
-  }
+  // The post-commit presentation work -- refreshing the viewport size when the module
+  // changes ROI geometry, and syncing the enable toggle a param edit may have flipped --
+  // is the GUI half's (dev_history_gui.c), reached through the handler.
+  if(dev->gui_attached && !IS_NULL_PTR(module) && _commit_gui_handler)
+    _commit_gui_handler(dev, module);
   
   // Save history straight away. Regular GUI edits are the only place where
   // we accept an asynchronous write because `dev` is the long-lived darkroom
@@ -1566,42 +1383,8 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
 }
 
-void dt_dev_history_gui_update(dt_develop_t *dev)
-{
-  if(!dev->gui_attached) return;
-
-  // Match the live module instances to the reloaded history before touching GTK.
-  // This loop may remove obsolete instances or expose instances newly created
-  // while reading a style/history from the database.
-  dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_history_refresh_nodes_ext(dev, &dev->iop, dev->history);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
-
-  dt_gui_freeze_begin();
-
-  for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)(module->data);
-
-    // History reload is backend-only and creates new multi-instances without
-    // GTK state. Attach every missing GUI here, after releasing history_mutex,
-    // so styles and global history actions expose their complete module set.
-    if(!dt_iop_is_hidden(mod) && IS_NULL_PTR(mod->expander))
-    {
-      if(IS_NULL_PTR(mod->widget)) dt_iop_gui_init(mod);
-      dt_iop_gui_set_expander(mod);
-    }
-
-    // Parameters, enabled state, headers and blending controls may all have
-    // changed, therefore refresh every module rather than only history entries.
-    dt_iop_gui_update(mod);
-  }
-
-  dt_dev_masks_list_change(dev);
-  dt_gui_freeze_end();
-
-  dt_dev_signal_modules_moved(dev);
-}
+/* dt_dev_history_gui_update() lives in dev_history_gui.c: it attaches missing GTK
+ * expanders and refreshes every module widget after a backend history reload. */
 
 void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
 {
@@ -2721,7 +2504,8 @@ void dt_dev_history_compress_or_truncate(dt_develop_t *dev)
  * @param history_list History list.
  * @return 0 on success, non-zero on error.
  */
-static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList *history_list)
+static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList *history_list,
+                                    GList **removed_gui_modules)
 {
   GList *iop_list = *_iop_list;
   int deleted_module_found = 0;
@@ -2795,21 +2579,6 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
     {
       deleted_module_found = 1;
 
-      if(dev->gui_module == mod) dt_iop_request_focus(NULL);
-
-      dt_gui_freeze_begin();
-
-      // we remove the plugin effectively
-      if(!dt_iop_is_hidden(mod))
-      {
-        // we just hide the module to avoid lots of gtk critical warnings
-        gtk_widget_hide(mod->expander);
-
-        // this is copied from dt_iop_gui_delete_callback(), not sure why the above sentence...
-        dt_iop_gui_cleanup_module(mod);
-        gtk_widget_destroy(mod->widget);
-      }
-
       iop_list = g_list_delete_link(iop_list, modules);
 
       // remove the module reference from all snapshots
@@ -2818,7 +2587,13 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
       // don't delete the module, a pipe may still need it
       dev->alliop = g_list_append(dev->alliop, mod);
 
-      dt_gui_freeze_end();
+      // Its widgets used to be destroyed RIGHT HERE, under history_mutex as writer --
+      // GTK teardown inside the engine lock. The caller collects the removed instances
+      // and destroys their widgets after the lock is released; the module is already
+      // unlinked from the iop list and parked in alliop, so nothing re-touches it in
+      // the meantime.
+      if(removed_gui_modules)
+        *removed_gui_modules = g_list_append(*removed_gui_modules, mod);
 
       // and reset the list
       modules = iop_list;
@@ -2968,7 +2743,8 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
 
 // returns 1 if the topology of the pipe has changed, aka it needs a full rebuild
 // 0 means only internal parameters of pipe nodes have change, so it's a mere resync
-int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *history)
+int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *history,
+                                     GList **removed_gui_modules)
 {
   GList *iop_list = *iop;
 
@@ -2988,7 +2764,7 @@ int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *hist
     pipe_remove = 1;
 
   // check if this is a redo of a delete module or an undo of an add module
-  if(_check_deleted_instances(dev, &iop_list, history))
+  if(_check_deleted_instances(dev, &iop_list, history, removed_gui_modules))
     pipe_remove = 1;
 
   *iop = iop_list;
