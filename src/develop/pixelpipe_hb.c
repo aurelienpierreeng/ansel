@@ -51,6 +51,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "develop/pipeline_notify.h"
 #include "colorprofiles/profile_types.h"
 #include "system/capabilities.h"
 #include "system/sys_resources.h"
@@ -61,7 +62,6 @@
 #include "system/atomic.h"
 #include "common/opencl.h"
 #include "develop/iop_order.h"
-#include "control/control.h"
 #include "control/signal.h"
 #include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
@@ -969,15 +969,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   if(pipe->dev->gui_attached)
   {
     gchar *module_label = dt_history_item_get_name(module);
-    dt_control_t *const control = dt_control_get_global();
-    dt_pthread_mutex_lock(&control->log_mutex);
-    dt_set_main_message(g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."),
-                                        module_label, dt_pixelpipe_get_pipe_name(pipe->type),
-                                        piece->roi_out.width, piece->roi_out.height,
-                                        piece->roi_out.scale * 100.f));
-    dt_pthread_mutex_unlock(&control->log_mutex);
+    dt_pipeline_busy_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."),
+                            module_label, dt_pixelpipe_get_pipe_name(pipe->type),
+                            piece->roi_out.width, piece->roi_out.height,
+                            piece->roi_out.scale * 100.f);
     dt_free(module_label);
-    dt_control_queue_redraw_center();
   }
 
   dt_pixel_cache_entry_t *output_entry = NULL;
@@ -1194,13 +1190,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
     dt_dev_pixelpipe_cache_flag_auto_destroy(output_entry);
 
   if(pipe->dev->gui_attached)
-  {
-    dt_control_t *const control = dt_control_get_global();
-    dt_pthread_mutex_lock(&control->log_mutex);
-    dt_set_main_message(NULL);
-    dt_pthread_mutex_unlock(&control->log_mutex);
-    dt_control_queue_redraw_center();
-  }
+    dt_pipeline_busy_clear();
 
   // From here on we only publish/inspect the finished output. Keep the writable lock strictly
   // around cacheline allocation and backend processing, then release it at one visible point
@@ -1299,12 +1289,12 @@ static void _print_opencl_errors(int error, dt_dev_pixelpipe_t *pipe)
   {
     case 1:
       dt_print(DT_DEBUG_OPENCL, "[opencl] Opencl errors; disabling opencl for %s pipeline!\n", dt_pixelpipe_get_pipe_name(pipe->type));
-      dt_control_log(_("Ansel discovered problems with your OpenCL setup; disabling OpenCL for %s pipeline!"), dt_pixelpipe_get_pipe_name(pipe->type));
+      dt_pipeline_message(_("Ansel discovered problems with your OpenCL setup; disabling OpenCL for %s pipeline!"), dt_pixelpipe_get_pipe_name(pipe->type));
       break;
     case 2:
       dt_print(DT_DEBUG_OPENCL,
                  "[opencl] Too many opencl errors; disabling opencl for this session!\n");
-      dt_control_log(_("Ansel discovered problems with your OpenCL setup; disabling OpenCL for this session!"));
+      dt_pipeline_message(_("Ansel discovered problems with your OpenCL setup; disabling OpenCL for this session!"));
       break;
     default:
       break;

@@ -193,6 +193,7 @@ FILE(GLOB SOURCE_FILES
   "develop/pixelpipe.c"
   "caches/pixelpipe_cache.c"
   "develop/pixelpipe_cpu.c"
+  "develop/pipeline_notify.c"
   "develop/pixelpipe_gpu.c"
   "develop/supervisor.c"
   "develop/blend.c"
