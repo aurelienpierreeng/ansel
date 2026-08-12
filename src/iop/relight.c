@@ -207,14 +207,14 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)self->gui_data;
+  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_relight_params_t *p = (dt_iop_relight_params_t *)self->params;
   dtgtk_gradient_slider_set_value(g->center, p->center);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)self->gui_data;
+  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)dt_iop_gui_data(self);
   float mean, min, max;
 
   if(self->picked_color_max[0] >= 0.0f)
@@ -251,7 +251,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(sliderbox, GTK_WIDGET(g->center), TRUE, TRUE, 0);
   g->colorpicker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, GTK_WIDGET(sliderbox));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->colorpicker), _("toggle tool for picking median lightness in image"));
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(sliderbox), TRUE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(sliderbox), TRUE, FALSE, 0);
 
   g->width = dt_bauhaus_slider_from_params(self, N_("width"));
   gtk_widget_set_tooltip_text(g->width, _("width of fill-light area defined in zones"));

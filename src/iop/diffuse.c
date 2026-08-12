@@ -1647,9 +1647,9 @@ void cleanup_global(dt_iop_module_so_t *module)
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_diffuse_gui_data_t *g = IOP_GUI_ALLOC(diffuse);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("properties")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("properties")), FALSE, FALSE, 0);
 
   g->iterations = dt_bauhaus_slider_from_params(self, "iterations");
   dt_bauhaus_slider_set_soft_range(g->iterations, 1., 128);
@@ -1680,7 +1680,7 @@ void gui_init(struct dt_iop_module_t *self)
                    "the radius should be around the width of your lens blur."));
 
   GtkWidget *label_speed = dt_ui_section_label_new(_("speed (sharpen \342\206\224 diffuse)"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label_speed, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label_speed, FALSE, FALSE, 0);
 
   g->first = dt_bauhaus_slider_from_params(self, "first");
   dt_bauhaus_slider_set_digits(g->first, 4);
@@ -1719,7 +1719,7 @@ void gui_init(struct dt_iop_module_t *self)
                   "zero does nothing."));
 
   GtkWidget *label_direction = dt_ui_section_label_new(_("direction"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label_direction, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label_direction, FALSE, FALSE, 0);
 
   g->anisotropy_first = dt_bauhaus_slider_from_params(self, "anisotropy_first");
   dt_bauhaus_slider_set_digits(g->anisotropy_first, 4);
@@ -1753,7 +1753,7 @@ void gui_init(struct dt_iop_module_t *self)
                   "positive values rather avoid edges (isophotes), \n"
                   "zero affects both equally (isotropic)."));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("edge management")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("edge management")), FALSE, FALSE, 0);
 
   g->sharpness = dt_bauhaus_slider_from_params(self, "sharpness");
   dt_bauhaus_slider_set_format(g->sharpness, "%");
@@ -1776,7 +1776,7 @@ void gui_init(struct dt_iop_module_t *self)
                                 "if dark areas seem oversharpened compared to bright areas."));
 
 
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("diffusion spatiality")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("diffusion spatiality")), FALSE, FALSE, 0);
 
   g->threshold = dt_bauhaus_slider_from_params(self, "threshold");
   dt_bauhaus_slider_set_format(g->threshold, "%");

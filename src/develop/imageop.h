@@ -313,15 +313,20 @@ typedef struct dt_iop_module_t
   dt_iop_params_t *params, *default_params;
   /** size of individual params struct. */
   int32_t params_size;
-  /** parameters needed if a gui is attached. will be NULL if in export/batch mode. */
-  dt_iop_gui_data_t *gui_data;
-  dt_pthread_mutex_t gui_lock;
   /** other stuff that may be needed by the module, not only in gui mode. */
   dt_iop_global_data_t *global_data;
+
+  /**
+   * The module's interactive half: every widget pointer, the per-module GUI data blob and
+   * its lock, the blending panel state. Allocated by dt_iop_gui_init(), freed by
+   * dt_iop_gui_cleanup_module(), and NULL for every headless module -- "does this module
+   * have a GUI" is this pointer, asked once, instead of fifteen widget NULL-checks.
+   * Defined in develop/imageop_gui.h; this header carries only the name.
+   */
+  struct dt_iop_module_gui_t *gui;
+
   /** blending params */
   struct dt_develop_blend_params_t *blend_params, *default_blendop_params;
-  /** holder for blending ui control */
-  gpointer blend_data;
   struct {
     struct {
       /** if this module generates a mask, is it used later on? needed to decide if the mask should be stored.
@@ -339,29 +344,7 @@ typedef struct dt_iop_module_t
       int id;
     } sink;
   } raster_mask;
-  /** child widget which is added to the GtkExpander. copied from module_so_t. */
-  GtkWidget *widget;
-  /** off button, somewhere in header, common to all plug-ins. A GtkDarktableToggleButton
-   * underneath; declared as the base type so this header does not feed widgets/ to all
-   * ~122 of its consumers — every external user already casts via GTK_TOGGLE_BUTTON(). */
-  GtkWidget *off;
-  /** this is the module header, contains label and buttons */
-  GtkWidget *header;
-  /** this is the module mask indicator, inside header */
-  GtkWidget *mask_indicator;
-  /** expander containing the widget and flag to store expanded state */
-  GtkWidget *expander;
-  gboolean expanded;
-  /** reset parameters button */
-  GtkWidget *reset_button;
-  /** show preset menu button */
-  GtkWidget *presets_button;
-  /** fusion slider */
-  GtkWidget *fusion_slider;
 
-  /** show/hide guide button and combobox */
-  GtkWidget *guides_toggle;
-  GtkWidget *guides_combo;
 
   /** the corresponding SO object */
   dt_iop_module_so_t *so;
@@ -369,14 +352,7 @@ typedef struct dt_iop_module_t
   /** multi-instances things */
   int multi_priority; // user may change this
   char multi_name[128]; // user may change this name
-  gboolean multi_show_close;
-  gboolean multi_show_up;
-  gboolean multi_show_down;
-  gboolean multi_show_new;
-  GtkWidget *multimenu_button;
 
-  /** delayed-event handling */
-  guint timeout_handle;
 
   int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                        const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
@@ -417,18 +393,18 @@ gboolean dt_iop_is_hidden(dt_iop_module_t *module);
 /** Check if the module is currently visible in GUI */
 gboolean dt_iop_is_visible(dt_iop_module_t *module);
 
-/** enter a GUI critical section by acquiring gui_data->lock **/
-static inline void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module)
-  ACQUIRE(&module->gui_lock)
-{
-  dt_pthread_mutex_lock(&module->gui_lock);
-}
-/** leave a GUI critical section by releasing gui_data->lock **/
-static inline void dt_iop_gui_leave_critical_section(dt_iop_module_t *const module)
-  RELEASE(&module->gui_lock)
-{
-  dt_pthread_mutex_unlock(&module->gui_lock);
-}
+/** enter/leave a GUI critical section by acquiring gui->gui_lock. Implemented in
+ * imageop_gui.c; tolerate headless callers (no GUI, no GUI data to protect), so
+ * common/iop-autoset.c and friends can call them without seeing the gui struct. */
+void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module);
+void dt_iop_gui_leave_critical_section(dt_iop_module_t *const module);
+
+/** widget-identity helpers for gui/ callers that must not see the gui struct through this
+ * header's forward declaration (the struct lives in imageop_gui.h, layer-wise above them
+ * until the T6 re-stratification). Implemented in imageop_gui.c; all NULL-safe. */
+GtkWidget *dt_iop_gui_get_off(dt_iop_module_t *module);
+gboolean dt_iop_gui_owns_widget(const dt_iop_module_t *module, const GtkWidget *target);
+
 /** cleans up gui of module and of blendops */
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module);
 /** updates the enable button state. (take into account module->enabled and module->hide_enable_button  */
@@ -596,23 +572,8 @@ const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_te
                                     const char *purpose, const char *input,
                                     const char *process, const char *output);
 
-static inline dt_iop_gui_data_t *_iop_gui_alloc(dt_iop_module_t *module, size_t size)
-{
-  // Align so that DT_ALIGNED_ARRAY may be used within gui_data struct
-  module->gui_data = (dt_iop_gui_data_t*)dt_calloc_align(size);
-  dt_pthread_mutex_init(&module->gui_lock,NULL);
-  return module->gui_data;
-}
-#define IOP_GUI_ALLOC(module) \
-  (dt_iop_##module##_gui_data_t *)_iop_gui_alloc(self,sizeof(dt_iop_##module##_gui_data_t))
-
-#define IOP_GUI_FREE \
-  dt_pthread_mutex_destroy(&self->gui_lock);       \
-  if(self->gui_data){                              \
-    dt_free_align(self->gui_data);                 \
-    self->gui_data = NULL;                         \
-  }                                                \
-  self->gui_data = NULL;
+/* _iop_gui_alloc and IOP_GUI_ALLOC/IOP_GUI_FREE live in imageop_gui.h, with the
+ * dt_iop_module_gui_t they operate on. */
 
 /* bring up module rename dialog */
 void dt_iop_gui_rename_module(dt_iop_module_t *module);

@@ -171,7 +171,7 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
 
 static void gui_update_from_coeffs(dt_iop_module_t *self)
 {
-  dt_iop_invert_gui_data_t *g = (dt_iop_invert_gui_data_t *)self->gui_data;
+  dt_iop_invert_gui_data_t *g = (dt_iop_invert_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_invert_params_t *p = (dt_iop_invert_params_t *)self->params;
 
   GdkRGBA color = (GdkRGBA){.red = p->color[0], .green = p->color[1], .blue = p->color[2], .alpha = 1.0 };
@@ -210,13 +210,13 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_gui_freeze_end();
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
 }
 
 static void colorpicker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_invert_gui_data_t *g = (dt_iop_invert_gui_data_t *)self->gui_data;
+  dt_iop_invert_gui_data_t *g = (dt_iop_invert_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_invert_params_t *p = (dt_iop_invert_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -342,7 +342,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_invert_gui_data_t *const g = (dt_iop_invert_gui_data_t *)self->gui_data;
+  dt_iop_invert_gui_data_t *const g = (dt_iop_invert_gui_data_t *)dt_iop_gui_data(self);
   const dt_image_t *const img = &self->dev->image_storage;
 
   // Per-image GUI state (moved here from reload_defaults so it only runs on the GUI thread with
@@ -377,12 +377,12 @@ void gui_init(dt_iop_module_t *self)
   dt_iop_invert_gui_data_t *g = IOP_GUI_ALLOC(invert);
   dt_iop_invert_params_t *p = (dt_iop_invert_params_t *)self->params;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   g->label = DTGTK_RESET_LABEL(dt_iop_gui_reset_label_new("", self, &p->color, sizeof(float) * 4));
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->label), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->label), TRUE, TRUE, 0);
 
   g->pickerbuttons = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->pickerbuttons), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->pickerbuttons), TRUE, TRUE, 0);
 
   GdkRGBA color = (GdkRGBA){.red = p->color[0], .green = p->color[1], .blue = p->color[2], .alpha = 1.0 };
   g->colorpicker = gtk_color_button_new_with_rgba(&color);

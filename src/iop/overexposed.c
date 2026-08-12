@@ -54,6 +54,7 @@
 #include "system/target_clones.h"
 #include "config.h"
 #endif
+#include "develop/imageop_gui.h"
 #include <stdlib.h>
 
 #include <cairo.h>
@@ -410,7 +411,6 @@ void init(dt_iop_module_t *module)
   module->hide_enable_button = 1;
   module->default_enabled = 1;
   module->params_size = sizeof(dt_iop_overexposed_t);
-  module->gui_data = NULL;
 
   // This module permanently bypasses the cache because it takes input from GUI
   // and doesn't leave internal parameters to compute an integrity hash on.

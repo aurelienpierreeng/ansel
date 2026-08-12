@@ -263,7 +263,7 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
  */
 static gboolean _set_max_clip(dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
   // we want to know the size of the actual buffer
@@ -413,7 +413,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 {
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)p1;
   dt_iop_crop_data_t *d = (dt_iop_crop_data_t *)piece->data;
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
 
   if(!IS_NULL_PTR(g) && g->editing)
   {
@@ -590,7 +590,7 @@ static void _aspect_apply(dt_iop_module_t *self, _grab_region_t grab)
 {
   if(grab == GRAB_NONE) return;
 
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
 
   // enforce aspect ratio.
   float aspect = _aspect_ratio_get(self, g->aspect_presets);
@@ -781,7 +781,7 @@ static void _float_to_fract(const char *num, int *n, int *d)
 
 static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   int d = abs(p->ratio_d), n = p->ratio_n;
@@ -922,7 +922,7 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
   dt_gui_freeze_begin();
@@ -980,7 +980,7 @@ void gui_reset(struct dt_iop_module_t *self)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
   //  set aspect ratio based on the current image, if not found let's default
@@ -1041,7 +1041,7 @@ static void _event_key_swap(dt_iop_module_t *self)
 
 static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *self)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
   if(!self->enabled) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
@@ -1086,7 +1086,7 @@ static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *se
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
 
   // Close edit mode on commit
   g->editing = FALSE;
@@ -1300,7 +1300,7 @@ void gui_init(struct dt_iop_module_t *self)
      _("margins"),
      GTK_BOX(box_enabled), GTK_PACK_END);
 
-  self->widget = GTK_WIDGET(g->cs.container);
+  self->gui->widget = GTK_WIDGET(g->cs.container);
 
   g->cx = dt_bauhaus_slider_from_params(self, "cx");
   dt_bauhaus_slider_set_digits(g->cx, 4);
@@ -1326,7 +1326,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->ch, "%");
   gtk_widget_set_tooltip_text(g->ch, _("the bottom margin cannot overlap with the top margin"));
 
-  self->widget = box_enabled;
+  self->gui->widget = box_enabled;
 }
 
 static void _aspect_free(gpointer data)
@@ -1338,7 +1338,7 @@ static void _aspect_free(gpointer data)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   g_list_free_full(g->aspect_list, _aspect_free);
   g->aspect_list = NULL;
 
@@ -1380,7 +1380,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointery)
 {
   dt_develop_t *dev = self->dev;
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return;
 
   _aspect_apply(self, GRAB_HORIZONTAL);
@@ -1514,7 +1514,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   dt_develop_t *dev = self->dev;
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   if(!g->editing) return 0;
 
   float pzxpy[2] = { (float)x, (float)y };
@@ -1665,7 +1665,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
 int button_released(struct dt_iop_module_t *self, double x, double y, int which, uint32_t state)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   if(!g->editing) return 0;
 
   /* reset internal ui states*/
@@ -1685,7 +1685,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 int button_pressed(struct dt_iop_module_t *self, double x, double y, double pressure, int which, int type,
                    uint32_t state)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   if(!g->editing) return 0;
 
   // avoid unexpected back to lt mode:
@@ -1759,7 +1759,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
 int mouse_leave(struct dt_iop_module_t *self)
 {
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   if(!g->editing) return 0;
 
   g->shift_hold = FALSE;

@@ -869,7 +869,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 static void watermark_callback(GtkWidget *tb, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
+  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)dt_iop_gui_data(self);
 
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
@@ -882,7 +882,7 @@ static void watermark_callback(GtkWidget *tb, gpointer user_data)
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
+  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
 
   if(fabsf(p->color[0] - self->picked_color[0]) < 0.0001f
@@ -948,7 +948,7 @@ static void load_watermarks(const char *basedir, dt_iop_watermark_gui_data_t *g)
 
 static void refresh_watermarks(dt_iop_module_t *self)
 {
-  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
+  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
 
   g_signal_handlers_block_by_func(g->watermarks, watermark_callback, self);
@@ -982,7 +982,7 @@ static void alignment_callback(GtkWidget *tb, gpointer user_data)
 {
   int index = -1;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
+  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)dt_iop_gui_data(self);
 
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
@@ -1089,7 +1089,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
+  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
   for(int i = 0; i < 9; i++)
   {
@@ -1120,7 +1120,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_iop_watermark_gui_data_t *g = IOP_GUI_ALLOC(watermark);
   dt_iop_watermark_params_t *p = (dt_iop_watermark_params_t *)self->params;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkGrid *grid = GTK_GRID(gtk_grid_new());
   gtk_grid_set_row_spacing(grid, DT_GUI_BOX_SPACING);
@@ -1188,13 +1188,13 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_grid_attach_next_to(grid, g->colorpick, label, GTK_POS_RIGHT, 1, 1);
   gtk_grid_attach_next_to(grid, g->color_picker_button, g->colorpick, GTK_POS_RIGHT, 1, 1);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(grid), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(grid), TRUE, TRUE, 0);
 
   // Add opacity/scale sliders to table
   g->opacity = dt_bauhaus_slider_from_params(self, N_("opacity"));
   dt_bauhaus_slider_set_format(g->opacity, "%");
 
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("placement")), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("placement")), TRUE, TRUE, 0);
 
   // rotate
   g->rotate = dt_bauhaus_slider_from_params(self, "rotate");
@@ -1223,7 +1223,7 @@ void gui_init(struct dt_iop_module_t *self)
     g_signal_connect(G_OBJECT(g->align[i]), "toggled", G_CALLBACK(alignment_callback), self);
   }
 
-  gtk_box_pack_start(GTK_BOX(self->widget), bat, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), bat, FALSE, FALSE, 0);
 
   // x/y offset
   g->x_offset = dt_bauhaus_slider_from_params(self, "xoffset");
@@ -1247,7 +1247,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
+  dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)dt_iop_gui_data(self);
   g_list_free_full(g->watermarks_filenames, dt_free_gpointer);
   g->watermarks_filenames = NULL;
 

@@ -680,7 +680,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)self->params;
-  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
+  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)dt_iop_gui_data(self);
 
   if(IS_NULL_PTR(w) || w == g->type)
   {
@@ -730,7 +730,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
+  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_blurs_params_t *p = (dt_iop_blurs_params_t *)self->params;
 
   GtkAllocation allocation;
@@ -783,7 +783,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_blurs_gui_data_t *g = IOP_GUI_ALLOC(blurs);
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Image buffer to store the kernel look
   // Don't recompute it in the drawing function, only when a param is changed
@@ -794,7 +794,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.f));
   g_signal_connect(G_OBJECT(g->area), "draw", G_CALLBACK(dt_iop_tonecurve_draw), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
 
   g->radius = dt_bauhaus_slider_from_params(self, "radius");
   dt_bauhaus_slider_set_format(g->radius, " px");
@@ -820,7 +820,7 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
+  dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)dt_iop_gui_data(self);
   dt_free_align(g->img);
   g->img = NULL;
   IOP_GUI_FREE;

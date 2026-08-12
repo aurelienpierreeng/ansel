@@ -1461,7 +1461,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_cacorrect_gui_data_t *g = (dt_iop_cacorrect_gui_data_t *)self->gui_data;
+  dt_iop_cacorrect_gui_data_t *g = (dt_iop_cacorrect_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_cacorrect_params_t *p = (dt_iop_cacorrect_params_t *)self->params;
 
   dt_image_t *img = &self->dev->image_storage;
@@ -1469,7 +1469,7 @@ void gui_update(dt_iop_module_t *self)
   const gboolean active = _cacorrect_supported(img);
   self->hide_enable_button = !active;
 
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), active ? "raw" : "non_raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), active ? "raw" : "non_raw");
 
   gtk_widget_set_visible(g->avoidshift, active);
   gtk_widget_set_visible(g->iterations, active);
@@ -1479,14 +1479,14 @@ void gui_update(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_cacorrect_gui_data_t *g = (dt_iop_cacorrect_gui_data_t *)self->gui_data;
+  dt_iop_cacorrect_gui_data_t *g = (dt_iop_cacorrect_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_cacorrect_params_t *p = (dt_iop_cacorrect_params_t *)self->params;
 
   dt_image_t *img = &self->dev->image_storage;
 
   const gboolean active = _cacorrect_supported(img);
 
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), active ? "raw" : "non_raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), active ? "raw" : "non_raw");
 
   gtk_widget_set_visible(g->avoidshift, active);
   dt_bauhaus_combobox_set_from_value(g->iterations, p->iterations);
@@ -1502,7 +1502,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_cacorrect_gui_data_t *g = IOP_GUI_ALLOC(cacorrect);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->iterations = dt_bauhaus_combobox_from_params(self, "iterations");
   gtk_widget_set_tooltip_text(g->iterations, _("iteration runs, default is twice"));
@@ -1511,12 +1511,12 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->avoidshift, _("activate colorshift correction for blue & red channels"));
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 
   GtkWidget *label_non_raw = dt_ui_label_new(_("automatic chromatic aberration correction\nonly for Bayer raw files"));
-  gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
 }
 
 #undef CA_SIZE_MINIMUM

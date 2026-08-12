@@ -1067,7 +1067,7 @@ static void get_selected_lutname(dt_iop_lut3d_gui_data_t *g, char *const lutname
 
 static void get_compressed_clut(dt_iop_module_t *self, gboolean newlutname)
 {
-  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)self->gui_data;
+  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_lut3d_params_t *p = (dt_iop_lut3d_params_t *)self->params;
   int nb_lut = 0;
   char *lutfolder = dt_conf_get_string("plugins/darkroom/lut3d/def_path");
@@ -1105,7 +1105,7 @@ static void get_compressed_clut(dt_iop_module_t *self, gboolean newlutname)
 
 static void show_hide_controls(dt_iop_module_t *self)
 {
-  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)self->gui_data;
+  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)dt_iop_gui_data(self);
   GtkTreeModel *model = gtk_tree_view_get_model((GtkTreeView *)g->lutname);
   const int nb_luts = gtk_tree_model_iter_n_children(model, NULL);
   if ((nb_luts > 1) || ((nb_luts > 0) &&
@@ -1179,7 +1179,7 @@ static void filepath_callback(GtkWidget *widget, dt_iop_module_t *self)
   {
     filepath_set_unix_separator(filepath);
 #ifdef HAVE_GMIC
-    dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)self->gui_data;
+    dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)dt_iop_gui_data(self);
     if (strcmp(filepath, p->filepath) != 0 && !(g_str_has_suffix(filepath, ".gmz") || g_str_has_suffix(filepath, ".GMZ")))
     {
       // if new file is gmz we try to keep the same lut
@@ -1201,7 +1201,7 @@ static void filepath_callback(GtkWidget *widget, dt_iop_module_t *self)
 #ifdef HAVE_GMIC
 static void entry_callback(GtkEntry *entry, dt_iop_module_t *self)
 {
-  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)self->gui_data;
+  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)dt_iop_gui_data(self);
   apply_filter_lutname_list(g);
 }
 
@@ -1330,7 +1330,7 @@ static void update_filepath_combobox(dt_iop_lut3d_gui_data_t *g, char *filepath,
 
 static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
 {
-  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)self->gui_data;
+  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_lut3d_params_t *p = (dt_iop_lut3d_params_t *)self->params;
   gchar* lutfolder = dt_conf_get_string("plugins/darkroom/lut3d/def_path");
   if (strlen(lutfolder) == 0)
@@ -1403,7 +1403,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
 static void _show_hide_colorspace(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self)) return;
-  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)self->gui_data;
+  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->colorspace)) return;
   GList *iop_order_list = self->dev->iop_order_list;
   const int order_lut3d = dt_ioppr_get_iop_order(iop_order_list, self->op, self->multi_priority);
@@ -1422,7 +1422,7 @@ static void _show_hide_colorspace(dt_iop_module_t *self)
 void gui_update(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self)) return;
-  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)self->gui_data;
+  dt_iop_lut3d_gui_data_t *g = (dt_iop_lut3d_gui_data_t *)dt_iop_gui_data(self);
     if(IS_NULL_PTR(g)) return;
   dt_iop_lut3d_params_t *p = (dt_iop_lut3d_params_t *)self->params;
     if(IS_NULL_PTR(p)) return;
@@ -1461,7 +1461,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_lut3d_gui_data_t *g = IOP_GUI_ALLOC(lut3d);
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *button = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
@@ -1489,14 +1489,14 @@ void gui_init(dt_iop_module_t *self)
 #endif // HAVE_GMIC
   g_signal_connect(G_OBJECT(g->filepath), "value-changed", G_CALLBACK(filepath_callback), self);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->hbox), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->hbox), TRUE, TRUE, 0);
 
 #ifdef HAVE_GMIC
   // text entry
   GtkWidget *entry = gtk_entry_new();
   dt_accels_disconnect_on_text_input(entry);
   gtk_widget_set_tooltip_text(entry, _("enter lut name"));
-  gtk_box_pack_start((GtkBox *)self->widget,entry, TRUE, TRUE, 0);
+  gtk_box_pack_start((GtkBox *)self->gui->widget,entry, TRUE, TRUE, 0);
   gtk_widget_add_events(entry, GDK_KEY_RELEASE_MASK);
   g_signal_connect(G_OBJECT(entry), "changed", G_CALLBACK(entry_callback), self);
   g->lutentry = entry;
@@ -1526,7 +1526,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
   g->lutname_handler_id = g_signal_connect(G_OBJECT(selection), "changed", G_CALLBACK(lutname_callback), self);
   g_signal_connect(G_OBJECT(view), "scroll-event", G_CALLBACK(mouse_scroll), (gpointer)self);
-  gtk_box_pack_start((GtkBox *)self->widget, sw , TRUE, TRUE, 0);
+  gtk_box_pack_start((GtkBox *)self->gui->widget, sw , TRUE, TRUE, 0);
 #endif // HAVE_GMIC
 
   g->colorspace = dt_bauhaus_combobox_from_params(self, "colorspace");

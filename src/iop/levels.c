@@ -305,7 +305,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   (void)pipe;
   (void)piece;
-  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
 
   /* we need to save the last picked color to prevent flickering when
@@ -374,7 +374,7 @@ static inline __attribute__((always_inline)) void commit_params_late(dt_iop_modu
                                const dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_levels_data_t *d = (dt_iop_levels_data_t *)piece->data;
-  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
 
   if(d->mode == LEVELS_MODE_AUTOMATIC)
   {
@@ -551,7 +551,7 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
 
   if(w == g->mode)
@@ -570,7 +570,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
 
   dt_bauhaus_combobox_set(g->mode, p->mode);
@@ -584,7 +584,7 @@ void gui_update(dt_iop_module_t *self)
   g->hash = 0;
   dt_iop_gui_leave_critical_section(self);
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 void init(dt_iop_module_t *module)
@@ -668,7 +668,7 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_stack_add_named(GTK_STACK(c->mode_stack), vbox_manual, "manual");
 
-  GtkWidget *vbox_automatic = self->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  GtkWidget *vbox_automatic = self->gui->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   c->percentile_black = dt_bauhaus_slider_from_params(self, N_("black"));
   gtk_widget_set_tooltip_text(c->percentile_black, _("black percentile"));
@@ -685,16 +685,16 @@ void gui_init(dt_iop_module_t *self)
   gtk_stack_add_named(GTK_STACK(c->mode_stack), vbox_automatic, "automatic");
 
   // start building top level widget
-  self->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  self->gui->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   c->mode = dt_bauhaus_combobox_from_params(self, N_("mode"));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), c->mode_stack, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), c->mode_stack, TRUE, TRUE, 0);
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   g_list_free(g->modes);
   g->modes = NULL;
 
@@ -704,7 +704,7 @@ void gui_cleanup(dt_iop_module_t *self)
 static gboolean dt_iop_levels_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   c->mouse_x = c->mouse_y = -1.0;
   gtk_widget_queue_draw(widget);
   return TRUE;
@@ -713,7 +713,7 @@ static gboolean dt_iop_levels_leave_notify(GtkWidget *widget, GdkEventCrossing *
 static gboolean dt_iop_levels_area_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
 
   const int inset = DT_GUI_CURVE_EDITOR_INSET;
@@ -834,7 +834,7 @@ static gboolean dt_iop_levels_area_draw(GtkWidget *widget, cairo_t *crf, gpointe
 static void dt_iop_levels_move_handle(dt_iop_module_t *self, int handle_move, float new_pos, float *levels,
                                       float drag_start_percentage)
 {
-  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   float min_x = 0;
   float max_x = 1;
 
@@ -872,7 +872,7 @@ static void dt_iop_levels_move_handle(dt_iop_module_t *self, int handle_move, fl
 static gboolean dt_iop_levels_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
   const int inset = DT_GUI_CURVE_EDITOR_INSET;
   GtkAllocation allocation;
@@ -927,18 +927,18 @@ static gboolean dt_iop_levels_button_press(GtkWidget *widget, GdkEventButton *ev
     if(event->type == GDK_2BUTTON_PRESS)
     {
       // Reset
-      dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+      dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
       memcpy(self->params, self->default_params, self->params_size);
 
       // Needed in case the user scrolls or drags immediately after a reset,
       // as drag_start_percentage is only updated when the mouse is moved.
       c->drag_start_percentage = 0.5;
       dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-      gtk_widget_queue_draw(self->widget);
+      gtk_widget_queue_draw(self->gui->widget);
     }
     else
     {
-      dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+      dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
       c->dragging = 1;
     }
     return TRUE;
@@ -951,7 +951,7 @@ static gboolean dt_iop_levels_button_release(GtkWidget *widget, GdkEventButton *
   if(event->button == 1)
   {
     dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-    dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+    dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
     c->dragging = 0;
     return TRUE;
   }
@@ -961,7 +961,7 @@ static gboolean dt_iop_levels_button_release(GtkWidget *widget, GdkEventButton *
 static gboolean dt_iop_levels_scroll(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
 
   int delta_y;
@@ -991,7 +991,7 @@ static void dt_iop_levels_autoadjust_callback(GtkRange *range, dt_iop_module_t *
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)self->params;
-  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)self->gui_data;
+  dt_iop_levels_gui_data_t *c = (dt_iop_levels_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_color_picker_reset(self, TRUE);
 

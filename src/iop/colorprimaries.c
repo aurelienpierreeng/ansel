@@ -1003,7 +1003,7 @@ static void _set_slider_stop_from_profile_rgb(GtkWidget *slider, const float sto
 
 static void _refresh_slider_gradients(dt_iop_module_t *self)
 {
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)self->params;
   const dt_iop_order_iccprofile_info_t *lut_profile
       = self->dev ? dt_colorspaces_add_profile(DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
@@ -1086,7 +1086,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
   // state and must never be read from a pipeline thread (see commit_params(), which uses
   // the historical params it is passed instead). g->viewer_lut is this instance's own gui_data,
   // never shared with any other instance's viewer or with the pipeline's piece->data clut.
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)self->params;
   const dt_iop_order_iccprofile_info_t *lut_profile
       = self->dev ? dt_colorspaces_add_profile(DT_COLORSPACE_HLG_REC2020, "", DT_INTENT_PERCEPTUAL)
@@ -1130,7 +1130,7 @@ static void _update_gui_lut_cache(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return;
   _refresh_slider_gradients(self);
   _update_gui_lut_cache(self);
@@ -1139,7 +1139,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 void gui_update(dt_iop_module_t *self)
 {
   const dt_iop_colorprimaries_params_t *p = (const dt_iop_colorprimaries_params_t *)self->params;
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)dt_iop_gui_data(self);
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->white_level, p->white_level);
@@ -1163,7 +1163,7 @@ void gui_update(dt_iop_module_t *self)
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)dt_iop_gui_data(self);
   dt_free_align(g->viewer_lut.clut);
   g->viewer_lut.clut = NULL;
   dt_lut_viewer_destroy(&g->viewer);
@@ -1181,7 +1181,7 @@ static GtkWidget *_new_section_label(GtkWidget *box, const char *label)
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
                         dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)self->gui_data;
+  dt_iop_colorprimaries_gui_data_t *g = (dt_iop_colorprimaries_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorprimaries_params_t *p = (dt_iop_colorprimaries_params_t *)self->params;
   const dt_iop_module_t *sampled_module = piece && piece->module ? piece->module : self;
 
@@ -1235,11 +1235,11 @@ void gui_init(dt_iop_module_t *self)
   g->preview_signal_connected = FALSE;
   g->viewer_display_profile = NULL;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->tabs = GTK_NOTEBOOK(gtk_notebook_new());
   gtk_notebook_set_show_border(g->tabs, FALSE);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->tabs), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->tabs), TRUE, TRUE, 0);
   // white_level lives on the "options" tab; reset it if still active once the
   // user switches away from that tab.
   dt_ui_notebook_set_picker_owner(g->tabs, self);
@@ -1250,8 +1250,8 @@ void gui_init(dt_iop_module_t *self)
   gtk_notebook_append_page(g->tabs, colors_page, colors_tab);
   gtk_container_child_set(GTK_CONTAINER(g->tabs), colors_page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
 
-  GtkWidget *const module_root = self->widget;
-  self->widget = colors_page;
+  GtkWidget *const module_root = self->gui->widget;
+  self->gui->widget = colors_page;
   for(int node = 0; node < DT_IOP_COLORPRIMARIES_NODE_COUNT; node++)
   {
     char hue_name[16] = { 0 };
@@ -1278,7 +1278,7 @@ void gui_init(dt_iop_module_t *self)
     dt_bauhaus_slider_set_soft_range(g->node_brightness[node], -0.25f, 0.25f);
     dt_bauhaus_slider_set_default(g->node_brightness[node], defaults->brightness[node]);
   }
-  self->widget = module_root;
+  self->gui->widget = module_root;
 
   GtkWidget *options_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   GtkWidget *options_tab = gtk_label_new(_("options"));
@@ -1286,7 +1286,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_notebook_append_page(g->tabs, options_page, options_tab);
   gtk_container_child_set(GTK_CONTAINER(g->tabs), options_page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
 
-  self->widget = options_page;
+  self->gui->widget = options_page;
   g->white_level = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "white_level"));
   dt_bauhaus_slider_set_default(g->white_level, defaults->white_level);
   dt_bauhaus_slider_set_format(g->white_level, _(" EV"));
@@ -1316,13 +1316,13 @@ void gui_init(dt_iop_module_t *self)
 
   g->interpolation = dt_bauhaus_combobox_from_params(self, "interpolation");
   dt_bauhaus_combobox_set_default(g->interpolation, defaults->interpolation);
-  self->widget = module_root;
+  self->gui->widget = module_root;
 
   g->viewer = dt_lut_viewer_new(DT_GUI_MODULE(self));
   if(g->viewer)
     gtk_box_pack_start(GTK_BOX(options_page), dt_lut_viewer_get_widget(g->viewer), TRUE, TRUE, 0);
 
-  gtk_widget_show_all(self->widget);
+  gtk_widget_show_all(self->gui->widget);
   gui_update(self);
 }
 

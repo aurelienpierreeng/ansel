@@ -1006,7 +1006,7 @@ void cleanup_global(dt_iop_module_so_t *self)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)self->gui_data;
+  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rawprepare_params_t *p = (dt_iop_rawprepare_params_t *)self->params;
 
   const gboolean is_monochrome = (self->dev->image_storage.flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER)) != 0;
@@ -1029,12 +1029,12 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->flat_field, p->flat_field);
 
   // raw vs non_raw page, from the per-image default computed by reload_defaults()
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->default_enabled ? "raw" : "non_raw");
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)self->gui_data;
+  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rawprepare_params_t *p = (dt_iop_rawprepare_params_t *)self->params;
 
   const gboolean is_monochrome = (self->dev->image_storage.flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER)) != 0;
@@ -1059,7 +1059,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_rawprepare_gui_data_t *g = IOP_GUI_ALLOC(rawprepare);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   for(int i = 0; i < 4; i++)
   {
@@ -1080,7 +1080,7 @@ void gui_init(dt_iop_module_t *self)
   g->flat_field = dt_bauhaus_combobox_from_params(self, "flat_field");
   gtk_widget_set_tooltip_text(g->flat_field, _("flat field correction to compensate for lens shading"));
 
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(self->gui->widget),
                       dt_ui_section_label_new(_("In-camera crop")), FALSE, FALSE, 0);
 
   g->x = dt_bauhaus_slider_from_params(self, "x");
@@ -1100,13 +1100,13 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_max(g->height, 256);
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
   GtkWidget *label_non_raw = dt_ui_label_new(_("raw black/white point correction\nonly works for the sensors that need it."));
 
-  gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 // clang-format off

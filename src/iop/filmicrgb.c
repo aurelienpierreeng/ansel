@@ -2701,7 +2701,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   // display mask and exit
   if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL && !IS_NULL_PTR(mask))
   {
-    dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+    dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
     if(!IS_NULL_PTR(g) && g->show_mask)
     {
@@ -3180,7 +3180,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // display mask and exit
   if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
-    dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+    dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
     if(!IS_NULL_PTR(g) && g->show_mask)
     {
@@ -3397,7 +3397,7 @@ static void apply_auto_grey(dt_iop_module_t *self,
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
   const float grey = get_pixel_norm(self->picked_color, p->preserve_color, work_profile) / 2.0f;
 
@@ -3416,7 +3416,7 @@ static void apply_auto_grey(dt_iop_module_t *self,
   dt_bauhaus_slider_set(g->output_power, p->output_power);
   dt_gui_freeze_end();
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -3425,7 +3425,7 @@ static void apply_auto_black(dt_iop_module_t *self,
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
   // Black
   const float black = get_pixel_norm(self->picked_color_min, DT_FILMIC_METHOD_MAX_RGB, work_profile);
@@ -3442,7 +3442,7 @@ static void apply_auto_black(dt_iop_module_t *self,
   dt_bauhaus_slider_set(g->output_power, p->output_power);
   dt_gui_freeze_end();
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -3452,7 +3452,7 @@ static void apply_auto_white_point_source(dt_iop_module_t *self,
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
   // White
   const float white = get_pixel_norm(self->picked_color_max, DT_FILMIC_METHOD_MAX_RGB, work_profile);
@@ -3469,14 +3469,14 @@ static void apply_auto_white_point_source(dt_iop_module_t *self,
   dt_bauhaus_slider_set(g->output_power, p->output_power);
   dt_gui_freeze_end();
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 static void apply_autotune(dt_iop_module_t *self,
                            const dt_iop_order_iccprofile_info_t *const work_profile)
 {
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
 
   // Grey
@@ -3508,7 +3508,7 @@ static void apply_autotune(dt_iop_module_t *self,
   dt_bauhaus_slider_set(g->output_power, p->output_power);
   dt_gui_freeze_end();
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -3567,7 +3567,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_print(DT_DEBUG_DEV, "[picker/filmicrgb] apply picker=%p pipe=%p min=%g max=%g avg=%g\n",
            (void *)picker, (void *)pipe,
            self->picked_color_min[0], self->picked_color_max[0], self->picked_color[0]);
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_order_iccprofile_info_t *const work_profile
       = pipe ? dt_ioppr_get_pipe_current_profile_info(self, pipe)
              : dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
@@ -3586,8 +3586,8 @@ static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, g
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), TRUE);
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
   // if blend module is displaying mask do not display it here
   if(self->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
@@ -4054,7 +4054,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
   if(!in)
   {
@@ -4090,7 +4090,7 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 
 static void filmic_gui_sync_toe_shoulder(dt_iop_module_t *self)
 {
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
   float toe = 0.0f;
   float shoulder = 0.0f;
@@ -4107,7 +4107,7 @@ static void toe_shoulder_callback(GtkWidget *slider, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
   filmic_v3_direct_to_legacy(p, dt_bauhaus_slider_get(g->toe), dt_bauhaus_slider_get(g->shoulder),
                              &p->latitude, &p->balance);
@@ -4117,7 +4117,7 @@ static void toe_shoulder_callback(GtkWidget *slider, gpointer user_data)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -4296,7 +4296,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   gboolean contrast_clamped = dt_iop_filmic_rgb_compute_spline(p, &g->spline);
 
   // Cache the graph objects to avoid recomputing all the view at each redraw
@@ -5145,7 +5145,7 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return TRUE;
 
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_request_focus(self);
 
@@ -5233,7 +5233,7 @@ static gboolean area_enter_notify(GtkWidget *widget, GdkEventCrossing *event, gp
   if(dt_gui_widgets_suppressed()) return 1;
   if(!self->enabled) return 0;
 
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   g->gui_hover = TRUE;
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   return TRUE;
@@ -5246,7 +5246,7 @@ static gboolean area_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gp
   if(dt_gui_widgets_suppressed()) return 1;
   if(!self->enabled) return 0;
 
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   g->gui_hover = FALSE;
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   return TRUE;
@@ -5257,7 +5257,7 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return 1;
 
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
   if(!g->gui_sizes_inited) return FALSE;
 
   // get in-widget coordinates
@@ -5365,7 +5365,7 @@ void gui_init(dt_iop_module_t *self)
   dt_ui_notebook_set_picker_owner(g->notebook, self);
 
   // Page SCENE
-  self->widget = dt_ui_notebook_page(g->notebook, N_("scene"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("scene"), NULL);
 
   g->grey_point_source
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "grey_point_source"));
@@ -5415,10 +5415,10 @@ void gui_init(dt_iop_module_t *self)
                                                 "but fails for high-keys, low-keys and high-ISO pictures.\n"
                                                 "this is not an artificial intelligence, but a simple guess.\n"
                                                 "ensure you understand its assumptions before using it."));
-  gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, FALSE, FALSE, 0);
 
   GtkWidget *label = dt_ui_section_label_new(_("advanced"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->custom_grey = dt_bauhaus_toggle_from_params(self, "custom_grey");
   gtk_widget_set_tooltip_text(g->custom_grey, _("enable to input custom middle-gray values.\n"
@@ -5427,10 +5427,10 @@ void gui_init(dt_iop_module_t *self)
                                                 "disable to use standard 18.45 %% middle gray."));
 
   // Page RECONSTRUCT
-  self->widget = dt_ui_notebook_page(g->notebook, N_("reconstruct"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("reconstruct"), NULL);
 
   label = dt_ui_section_label_new(_("highlights clipping"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->reconstruct_threshold = dt_bauhaus_slider_from_params(self, "reconstruct_threshold");
   dt_bauhaus_slider_set_format(g->reconstruct_threshold, _(" EV"));
@@ -5457,10 +5457,10 @@ void gui_init(dt_iop_module_t *self)
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->show_highlight_mask), dtgtk_cairo_paint_showmask, 0, NULL);
   dt_gui_add_class(g->show_highlight_mask, "dt_bauhaus_alignment");
 
-  gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, FALSE, FALSE, 0);
 
   label = dt_ui_section_label_new(_("balance"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->reconstruct_structure_vs_texture = dt_bauhaus_slider_from_params(self, "reconstruct_structure_vs_texture");
   dt_bauhaus_slider_set_format(g->reconstruct_structure_vs_texture, "%");
@@ -5497,7 +5497,7 @@ void gui_init(dt_iop_module_t *self)
                                 "decrease if you see magenta or out-of-gamut highlights."));
 
   label = dt_ui_section_label_new(_("advanced"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   // Color inpainting
   g->high_quality_reconstruction = dt_bauhaus_slider_from_params(self, "high_quality_reconstruction");
@@ -5520,10 +5520,10 @@ void gui_init(dt_iop_module_t *self)
                                                        "this is useful to match natural sensor noise pattern.\n"));
 
   // Page LOOK
-  self->widget = dt_ui_notebook_page(g->notebook, N_("look"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("look"), NULL);
 
   label = dt_ui_section_label_new(_("tone mapping"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->contrast = dt_bauhaus_slider_from_params(self, N_("contrast"));
   dt_bauhaus_slider_set_soft_range(g->contrast, 0.5, 3.0);
@@ -5542,7 +5542,7 @@ void gui_init(dt_iop_module_t *self)
   // with the params defaults (which keep latitude/balance for compatibility)
 
   g->shoulder = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->shoulder, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->shoulder, FALSE, FALSE, 0);
   dt_bauhaus_widget_set_label(g->shoulder, N_("highlights"));
   dt_bauhaus_slider_set_soft_range(g->shoulder, 0.1f, 90.0f);
   dt_bauhaus_slider_set_format(g->shoulder, "%");
@@ -5553,7 +5553,7 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->shoulder), "value-changed", G_CALLBACK(toe_shoulder_callback), self);
 
   g->toe = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 100.0f, 0.0f, 10.0f, 2);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->toe, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->toe, FALSE, FALSE, 0);
   dt_bauhaus_widget_set_label(g->toe, N_("shadows"));
   dt_bauhaus_slider_set_soft_range(g->toe, 0.1f, 90.0f);
   dt_bauhaus_slider_set_format(g->toe, "%");
@@ -5579,7 +5579,7 @@ void gui_init(dt_iop_module_t *self)
                                             "hard compresses shadows more, soft less."));
 
   label = dt_ui_section_label_new(_("color mapping"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   g->saturation = dt_bauhaus_slider_from_params(self, "saturation");
   dt_bauhaus_slider_set_soft_range(g->saturation, -100.0, 100.0);
@@ -5594,7 +5594,7 @@ void gui_init(dt_iop_module_t *self)
                                                    "so ensure they are properly corrected elsewhere.\n"));
 
   label = dt_ui_section_label_new(_("advanced"));
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   // Color science
   g->version = dt_bauhaus_combobox_from_params(self, "version");
@@ -5622,7 +5622,7 @@ void gui_init(dt_iop_module_t *self)
                           "disable if you want a manual control."));
 
   // Page DISPLAY
-  self->widget = dt_ui_notebook_page(g->notebook, N_("display"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("display"), NULL);
 
   // Black slider
   g->black_point_target = dt_bauhaus_slider_from_params(self, "black_point_target");
@@ -5646,19 +5646,19 @@ void gui_init(dt_iop_module_t *self)
                                                        "this should be 100%\nexcept if you want a faded look"));
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(self->gui->widget),
                      dt_ui_resizable_drawing_area(GTK_WIDGET(g->area),
                                                   "plugins/darkroom/filmicrgb/graphheight", 230, 100),
                      FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_filmicrgb_params_t *p = (dt_iop_filmicrgb_params_t *)self->params;
-  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
   if(IS_NULL_PTR(w) || w == g->auto_hardness || w == g->security_factor || w == g->grey_point_source
      || w == g->black_point_source || w == g->white_point_source)

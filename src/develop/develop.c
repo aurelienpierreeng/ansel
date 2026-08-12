@@ -68,6 +68,7 @@
 #include <strings.h>
 #include <unistd.h>
 
+#include "develop/imageop_gui.h"
 #include "widgets/widget_settings.h"
 #include "system/atomic.h"
 #include "history/history.h"
@@ -1416,18 +1417,20 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
                                  ? dt_ioppr_check_can_move_before_iop(dev->iop, module, mod_prev)
                                  : -1.0;
 
-  module->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
+  if(IS_NULL_PTR(module->gui)) return;   // headless module: no buttons to update
+
+  module->gui->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
   // Never allow deleting the base instance (multi_priority == 0) nor modules limited to one instance.
-  module->multi_show_close =
+  module->gui->multi_show_close =
       (nb_instances > 1 && module->multi_priority > 0 && !(module->flags() & IOP_FLAGS_ONE_INSTANCE));
   if(!IS_NULL_PTR(mod_next))
-    module->multi_show_up = move_next;
+    module->gui->multi_show_up = move_next;
   else
-    module->multi_show_up = 0;
+    module->gui->multi_show_up = 0;
   if(!IS_NULL_PTR(mod_prev))
-    module->multi_show_down = move_prev;
+    module->gui->multi_show_down = move_prev;
   else
-    module->multi_show_down = 0;
+    module->gui->multi_show_down = 0;
 
   // If it's an additional instance supposed to be added by an history item after
   // the current history_end cursor, conceptually it doesn't exist yet,
@@ -1435,7 +1438,7 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   if(nb_instances > 1
      && module->multi_priority > 0
      && !g_hash_table_contains(state->modules_in_history, module))
-    gtk_widget_hide(module->expander);
+    gtk_widget_hide(module->gui->expander);
 }
 
 // FIXME: this function should just disappear, as it mixes concepts from multi-instances from before

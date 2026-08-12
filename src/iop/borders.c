@@ -743,7 +743,7 @@ void init_presets(dt_iop_module_so_t *self)
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
 
   if(fabsf(p->color[0] - self->picked_color[0]) < 0.0001f
@@ -787,7 +787,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
 static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   const char *text = dt_bauhaus_combobox_get_text(combo);
@@ -809,7 +809,7 @@ static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   const char *text = dt_bauhaus_combobox_get_text(combo);
@@ -831,7 +831,7 @@ static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   const char *text = dt_bauhaus_combobox_get_text(combo);
@@ -853,7 +853,7 @@ static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
 
   if (w == g->aspect_slider)
   {
@@ -906,7 +906,7 @@ static void frame_colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *s
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
 
 // FIXME by hand
@@ -966,7 +966,7 @@ void gui_update(struct dt_iop_module_t *self)
 
 static void gui_init_aspect(struct dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
 
   dt_bauhaus_combobox_add(g->aspect, _("image"));
   dt_bauhaus_combobox_add(g->aspect, _("3:1"));
@@ -999,7 +999,7 @@ static void gui_init_aspect(struct dt_iop_module_t *self)
 
 static void gui_init_positions(struct dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
 
   dt_bauhaus_combobox_add(g->pos_h, _("center"));
   dt_bauhaus_combobox_add(g->pos_h, _("1/3"));
@@ -1041,7 +1041,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->aspect = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->aspect, 1);
   dt_bauhaus_widget_set_label(g->aspect, N_("aspect"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->aspect, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->aspect, TRUE, TRUE, 0);
   gui_init_aspect(self);
   g_signal_connect(G_OBJECT(g->aspect), "value-changed", G_CALLBACK(aspect_changed), self);
   gtk_widget_set_tooltip_text(g->aspect, _("select the aspect ratio or right click and type your own (w:h)"));
@@ -1057,7 +1057,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->pos_h = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_h, 1);
   dt_bauhaus_widget_set_label(g->pos_h, N_("horizontal position"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->pos_h, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->pos_h, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->pos_h), "value-changed", G_CALLBACK(position_h_changed), self);
   gtk_widget_set_tooltip_text(g->pos_h, _("select the horizontal position ratio relative to top "
                                           "or right click and type your own (y:h)"));
@@ -1067,7 +1067,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->pos_v = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_v, 1);
   dt_bauhaus_widget_set_label(g->pos_v, N_("vertical position"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->pos_v, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->pos_v, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->pos_v), "value-changed", G_CALLBACK(position_v_changed), self);
   gtk_widget_set_tooltip_text(g->pos_v, _("select the vertical position ratio relative to left "
                                           "or right click and type your own (x:w)"));
@@ -1100,7 +1100,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(g->colorpick), FALSE, TRUE, 0);
   g->border_picker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, box);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->border_picker), _("pick border color from image"));
-  gtk_box_pack_start(GTK_BOX(self->widget), box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), box, TRUE, TRUE, 0);
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   label = dt_iop_gui_reset_label_new(_("frame line color"), self, &p->color, 3 * sizeof(float));
@@ -1112,7 +1112,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(g->frame_colorpick), FALSE, TRUE, 0);
   g->frame_picker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, box);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->frame_picker), _("pick frame line color from image"));
-  gtk_box_pack_start(GTK_BOX(self->widget), box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), box, TRUE, TRUE, 0);
 }
 
 

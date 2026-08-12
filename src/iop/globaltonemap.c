@@ -182,7 +182,7 @@ static inline void process_drago(struct dt_iop_module_t *self, const dt_dev_pixe
                                  const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                  dt_iop_global_tonemap_data_t *data)
 {
-  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
+  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)dt_iop_gui_data(self);
   float *in = (float *)ivoid;
   float *out = (float *)ovoid;
   const int ch = 4;
@@ -378,7 +378,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
+  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_global_tonemap_params_t *p = (dt_iop_global_tonemap_params_t *)self->params;
 
   if(IS_NULL_PTR(w) || w == g->operator)
@@ -390,7 +390,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)self->gui_data;
+  dt_iop_global_tonemap_gui_data_t *g = (dt_iop_global_tonemap_gui_data_t *)dt_iop_gui_data(self);
 
   gui_changed(self, NULL, 0);
 

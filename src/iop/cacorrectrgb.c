@@ -741,7 +741,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_cacorrectrgb_gui_data_t *g = (dt_iop_cacorrectrgb_gui_data_t *)self->gui_data;
+  dt_iop_cacorrectrgb_gui_data_t *g = (dt_iop_cacorrectrgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_cacorrectrgb_params_t *p = (dt_iop_cacorrectrgb_params_t *)self->params;
   const dt_iop_cacorrectrgb_params_t *d = (const dt_iop_cacorrectrgb_params_t *)self->default_params;
 
@@ -772,7 +772,7 @@ void reload_defaults(dt_iop_module_t *module)
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_cacorrectrgb_gui_data_t *g = IOP_GUI_ALLOC(cacorrectrgb);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->guide_channel = dt_bauhaus_combobox_from_params(self, "guide_channel");
   gtk_widget_set_tooltip_text(g->guide_channel, _("channel used as a reference to\n"
                                            "correct the other channels.\n"
@@ -788,7 +788,7 @@ void gui_init(dt_iop_module_t *self)
                                              "high values can lead to overshooting\n"
                                              "and edge bleeding."));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("advanced parameters")), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("advanced parameters")), TRUE, TRUE, 0);
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
   gtk_widget_set_tooltip_text(g->mode, _("correction mode to use.\n"
                                          "can help with multiple\n"

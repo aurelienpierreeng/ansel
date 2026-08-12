@@ -81,6 +81,7 @@
 */
 /** this is the view for the darkroom module.  */
 
+#include "develop/imageop_gui.h"
 #include "widgets/bauhaus.h"
 #include "widgets/widget_settings.h"
 #include <glib/gstdio.h>
@@ -1827,7 +1828,7 @@ void enter(dt_view_t *self)
       if(module->multi_priority == 0)
       {
         snprintf(option, sizeof(option), "plugins/darkroom/%s/expanded", module->op);
-        module->expanded = dt_conf_get_bool(option);
+        module->gui->expanded = dt_conf_get_bool(option);
         dt_iop_gui_update_expanded(module);
 
         if(active_plugin && !strcmp(module->op, active_plugin))

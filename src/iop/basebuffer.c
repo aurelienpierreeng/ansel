@@ -19,6 +19,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "develop/imageop_gui.h"
 
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -195,7 +196,6 @@ void init(dt_iop_module_t *self)
   self->default_enabled = 1;
   self->hide_enable_button = 1;
   self->params_size = sizeof(dt_iop_basebuffer_params_t);
-  self->gui_data = NULL;
 }
 
 void cleanup(dt_iop_module_t *self)

@@ -688,7 +688,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 
 static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
   // we want to know the size of the actual buffer
@@ -1230,7 +1230,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
 static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *self)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   g->preview_ready = TRUE;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_event_preview_updated_callback), self);
   // force max size to be recomputed
@@ -1239,7 +1239,7 @@ static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
   dt_iop_set_cache_bypass(self, in);
@@ -1433,7 +1433,7 @@ static float _ratio_get_aspect(dt_iop_module_t *self, GtkWidget *combo)
 
 static void apply_box_aspect(dt_iop_module_t *self, _grab_region_t grab)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
 
   int iwd, iht;
   dt_dev_get_processed_size(self->dev, &iwd, &iht);
@@ -1602,7 +1602,7 @@ static void _float_to_fract(const char *num, int *n, int *d)
 
 static void aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   int d = abs(p->ratio_d), n = p->ratio_n;
@@ -1738,7 +1738,7 @@ static void aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
   dt_gui_freeze_begin();
@@ -1775,7 +1775,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_reset(struct dt_iop_module_t *self)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   /* reset aspect preset to default */
   dt_conf_set_int("plugins/darkroom/clipping/ratio_d", 0);
   dt_conf_set_int("plugins/darkroom/clipping/ratio_n", 0);
@@ -1784,7 +1784,7 @@ void gui_reset(struct dt_iop_module_t *self)
 
 static void keystone_type_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   if((which == 5) || (which == 4 && p->k_h == 0 && p->k_v == 0))
@@ -1822,7 +1822,7 @@ static void keystone_type_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 static void keystone_type_populate(struct dt_iop_module_t *self, gboolean with_applied, int select)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
   dt_bauhaus_combobox_clear(g->keystone_type);
   dt_bauhaus_combobox_add(g->keystone_type, _("none"));
@@ -1848,7 +1848,7 @@ static void keystone_type_populate(struct dt_iop_module_t *self, gboolean with_a
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
   int hvflip = 0;
@@ -1933,7 +1933,7 @@ void gui_update(struct dt_iop_module_t *self)
 static void hvflip_callback(GtkWidget *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
   const int flip = dt_bauhaus_combobox_get(widget);
   p->cw = copysignf(p->cw, (flip & 1) ? -1.0 : 1.0);
@@ -2012,7 +2012,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->notebook = dt_ui_notebook_new();
 
-  self->widget = dt_ui_notebook_page(g->notebook, N_("main"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("main"), NULL);
 
   g->hvflip = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->hvflip, N_("flip"));
@@ -2022,7 +2022,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->hvflip, _("both"));
   g_signal_connect(G_OBJECT(g->hvflip), "value-changed", G_CALLBACK(hvflip_callback), self);
   gtk_widget_set_tooltip_text(g->hvflip, _("mirror image horizontally and/or vertically"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->hvflip, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->hvflip, TRUE, TRUE, 0);
 
   g->angle = dt_bauhaus_slider_from_params(self, N_("angle"));
   dt_bauhaus_slider_set_factor(g->angle, -1.0);
@@ -2037,7 +2037,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->keystone_type, _("full"));
   gtk_widget_set_tooltip_text(g->keystone_type, _("set perspective correction for your image"));
   g_signal_connect(G_OBJECT(g->keystone_type), "value-changed", G_CALLBACK(keystone_type_changed), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->keystone_type, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->keystone_type, TRUE, TRUE, 0);
 
   g->crop_auto = dt_bauhaus_combobox_from_params(self, "crop_auto");
   gtk_widget_set_tooltip_text(g->crop_auto, _("automatically crop to avoid black edges"));
@@ -2157,9 +2157,9 @@ void gui_init(struct dt_iop_module_t *self)
                                                    "to enter custom aspect ratio open the combobox and type ratio in x:y or decimal format"));
   dt_bauhaus_widget_set_quad_paint(g->aspect_presets, dtgtk_cairo_paint_aspectflip, 0, NULL);
   g_signal_connect(G_OBJECT(g->aspect_presets), "quad-pressed", G_CALLBACK(aspect_flip), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->aspect_presets, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->aspect_presets, TRUE, TRUE, 0);
 
-  self->widget = dt_ui_notebook_page(g->notebook, _("margins"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, _("margins"), NULL);
 
   g->cx = dt_bauhaus_slider_from_params(self, "cx");
   dt_bauhaus_slider_set_digits(g->cx, 4);
@@ -2185,7 +2185,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->ch, "%");
   gtk_widget_set_tooltip_text(g->ch, _("the bottom margin cannot overlap with the top margin"));
 
-  self->widget = GTK_WIDGET(g->notebook);
+  self->gui->widget = GTK_WIDGET(g->notebook);
 }
 
 static void free_aspect(gpointer data)
@@ -2197,7 +2197,7 @@ static void free_aspect(gpointer data)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   g_list_free_full(g->aspect_list, free_aspect);
   g->aspect_list = NULL;
 
@@ -2253,7 +2253,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointerx, int32_t pointery)
 {
   dt_develop_t *dev = self->dev;
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
@@ -2650,7 +2650,7 @@ static float dist_seg(float xa, float ya, float xb, float yb, float xc, float yc
 
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
   const dt_develop_t *dev = (const dt_develop_t *)self->dev;
 
@@ -3044,7 +3044,7 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
 
 int button_released(struct dt_iop_module_t *self, double x, double y, int which, uint32_t state)
 {
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return 0;
 
@@ -3092,7 +3092,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
 
-  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
+  dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
   dt_develop_t *dev = self->dev;
 

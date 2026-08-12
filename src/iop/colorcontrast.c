@@ -234,7 +234,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_colorcontrast_gui_data_t *g = (dt_iop_colorcontrast_gui_data_t *)self->gui_data;
+  dt_iop_colorcontrast_gui_data_t *g = (dt_iop_colorcontrast_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorcontrast_params_t *p = (dt_iop_colorcontrast_params_t *)self->params;
   dt_bauhaus_slider_set(g->a_scale, p->a_steepness);
   dt_bauhaus_slider_set(g->b_scale, p->b_steepness);

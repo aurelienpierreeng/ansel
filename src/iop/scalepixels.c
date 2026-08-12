@@ -33,6 +33,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "develop/imageop_gui.h"
 #include "widgets/bauhaus.h"
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
@@ -293,7 +294,7 @@ void reload_defaults(dt_iop_module_t *self)
 
 void gui_update(dt_iop_module_t *self)
 {
-  gtk_label_set_text(GTK_LABEL(self->widget), self->default_enabled
+  gtk_label_set_text(GTK_LABEL(self->gui->widget), self->default_enabled
                      ? _("automatic pixel scaling")
                      : _("automatic pixel scaling\nonly works for the sensors that need it."));
 }
@@ -302,8 +303,8 @@ void gui_init(dt_iop_module_t *self)
 {
   IOP_GUI_ALLOC(scalepixels);
 
-  self->widget = dt_ui_label_new("");
-  gtk_label_set_line_wrap(GTK_LABEL(self->widget), TRUE);
+  self->gui->widget = dt_ui_label_new("");
+  gtk_label_set_line_wrap(GTK_LABEL(self->gui->widget), TRUE);
 
 }
 

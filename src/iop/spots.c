@@ -241,7 +241,7 @@ static void _resynch_params(struct dt_iop_module_t *self)
 
 static gboolean _reset_form_creation(GtkWidget *widget, dt_iop_module_t *self)
 {
-  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)self->gui_data;
+  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)dt_iop_gui_data(self);
 
   // we check the nb of shapes limit
   dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
@@ -299,16 +299,16 @@ static int _shape_is_being_added(dt_iop_module_t *self, const int shape_type)
 static gboolean _add_shape(GtkWidget *widget, dt_iop_module_t *self)
 {
   //turn module on (else shape creation won't work)
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), TRUE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), TRUE);
 
   //switch mask edit mode off
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
   if(bd) bd->masks_shown = DT_MASKS_EDIT_OFF;
 
   if(!_reset_form_creation(widget, self)) return TRUE;
   if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return FALSE;
 
-  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)self->gui_data;
+  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)dt_iop_gui_data(self);
   // we want to be sure that the iop has focus
   dt_iop_request_focus(self);
   // we create the new form
@@ -333,7 +333,7 @@ static gboolean _add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_iop
 {
   if(dt_gui_widgets_suppressed()) return FALSE;
 
-  const dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *) self->gui_data;
+  const dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)dt_iop_gui_data(self);
 
   _add_shape(widget, self);
 
@@ -355,8 +355,8 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
     return FALSE;
   }
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
-  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)self->gui_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
+  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)dt_iop_gui_data(self);
 
   //hide all shapes and free if some are in creation
   if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
@@ -730,7 +730,6 @@ void init(dt_iop_module_t *module)
   // by default:
   module->default_enabled = 0;
   module->params_size = sizeof(dt_iop_spots_params_t);
-  module->gui_data = NULL;
   // init defaults:
   dt_iop_spots_params_t tmp = (dt_iop_spots_params_t){ { 0 }, { 2 } };
 
@@ -741,11 +740,11 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
   if(self->enabled)
   {
-    dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)self->gui_data;
+    dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)dt_iop_gui_data(self);
 
     if(in)
     {
-      dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
+      dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
 
       // update edit shapes status
       dt_develop_blend_params_t *bp = self->blend_params;
@@ -801,7 +800,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 void gui_update(dt_iop_module_t *self)
 {
   _resynch_params(self);
-  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)self->gui_data;
+  dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)dt_iop_gui_data(self);
   // update clones count
   dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
   guint nb = 0;
@@ -816,7 +815,7 @@ void gui_update(dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), _shape_is_being_added(self, DT_MASKS_ELLIPSE));
 
   // update edit shapes status
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
 
   //only toggle shape show button if shapes exist
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
@@ -835,7 +834,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_spots_gui_data_t *g = IOP_GUI_ALLOC(spots);
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("number of strokes:")), FALSE, TRUE, 0);
@@ -860,7 +859,7 @@ void gui_init(dt_iop_module_t *self)
                                          dtgtk_cairo_paint_masks_circle, hbox);
 
   gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(g->label), FALSE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 }
 
 void gui_reset(struct dt_iop_module_t *self)

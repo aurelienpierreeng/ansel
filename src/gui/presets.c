@@ -799,7 +799,7 @@ void dt_gui_presets_apply_preset(const gchar* name, dt_iop_module_t *module)
 
   dt_iop_gui_update(module);
   dt_dev_add_history_item(dt_dev_get_global(), module, FALSE, TRUE);
-  gtk_widget_queue_draw(module->widget);
+  gtk_widget_queue_draw(dt_iop_gui_get_widget(module));
 }
 
 static void _menuitem_pick_preset(GtkMenuItem *menuitem, dt_iop_module_t *module)
@@ -860,8 +860,11 @@ static gboolean _menuitem_button_released_preset(GtkMenuItem *menuitem, GdkEvent
   else if (event->button == 3)
   {
     dt_iop_module_t *new_module = dt_iop_gui_duplicate(module, FALSE);
-    if(new_module) _menuitem_pick_preset(menuitem, new_module);
-    dt_iop_gui_rename_module(new_module);
+    if(new_module)
+    {
+      _menuitem_pick_preset(menuitem, new_module);
+      dt_iop_gui_rename_module(new_module);
+    }
   }
 
   return FALSE;

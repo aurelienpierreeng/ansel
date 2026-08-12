@@ -38,6 +38,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "develop/imageop_gui.h"
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "common/logging.h"
@@ -180,7 +181,7 @@ static void _lib_masks_clear_blending_box(dt_lib_module_t *self)
 static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
 {
   if(!_lib_masks_module_is_current(module) || !module->flags
-     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->blend_data)
+     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->gui || !module->gui->blend_data)
     return FALSE;
 
   return TRUE;
@@ -976,11 +977,11 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
           dt_iop_module_t *module = NULL;
           _lib_masks_get_values(model, &iter, &module, NULL, NULL);
 
-          if(module && module->blend_data
+          if(module && module->gui && module->gui->blend_data
              && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
              && !(module->flags() & IOP_FLAGS_NO_MASKS))
           {
-            dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+            dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
             bd->masks_shown = 1;
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
             gtk_widget_queue_draw(bd->masks_edit);

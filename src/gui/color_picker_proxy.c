@@ -761,8 +761,8 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     if(prior_picker->module) prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
   }
 
-  if(module && module->off)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), TRUE);
+  GtkWidget *off = dt_iop_gui_get_off(module);
+  if(off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(off), TRUE);
 
   const GdkModifierType state = !IS_NULL_PTR(e) ? e->state : dt_key_modifier_state();
   const gboolean ctrl_key_pressed = dt_modifier_is(state, GDK_CONTROL_MASK) || (!IS_NULL_PTR(e) && e->button == 3);

@@ -345,7 +345,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highlights_data_t *d = (dt_iop_highlights_data_t *)piece->data;
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_highlights_global_data_t *gd = (dt_iop_highlights_global_data_t *)self->global_data;
 
   const uint32_t filters = piece->dsc_in.filters;
@@ -548,7 +548,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // filters==9u / !filters checks are shift-invariant.
   const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
 
   /* This transient preview belongs to the central darkroom view. Do not infer
    * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
@@ -1034,7 +1034,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_highlights_params_t *p = (dt_iop_highlights_params_t *)self->params;
 
   const gboolean raw = (self->dev->image_storage.dsc.filters != 0);
@@ -1055,7 +1055,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   const dt_image_t *const image = &self->dev->image_storage;
   const gboolean supported = _highlights_image_supported(image);
   // Auto-enable only on raw colorimetry (raw / sRAW, not monochrome); on rendered RGB it is opt-in.
@@ -1065,7 +1065,7 @@ void gui_update(struct dt_iop_module_t *self)
   // the module self-disables (mono-raw / greyscale), and even then keep it if already enabled (history
   // copy & paste from a RAW image) so the user can turn it back off.
   self->hide_enable_button = !supported && !self->enabled;
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), supported ? "default" : "monochrome");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), supported ? "default" : "monochrome");
 
   // capability entries, added once (moved here from reload_defaults so it never touches widgets off
   // the GUI thread / on a widget-less export dev)
@@ -1102,7 +1102,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
 
   // if blend module is displaying mask do not display it here
   if(self->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
@@ -1118,7 +1118,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   if(!in)
   {
     const gboolean was_visualize = g->show_visualize;
@@ -1131,7 +1131,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_highlights_gui_data_t *g = IOP_GUI_ALLOC(highlights);
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
   gtk_widget_set_tooltip_text(g->mode, _("highlight reconstruction method"));
@@ -1169,10 +1169,10 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(monochromes, _("no highlights reconstruction for monochrome images"));
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
-  gtk_stack_add_named(GTK_STACK(self->widget), monochromes, "monochrome");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "default");
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), monochromes, "monochrome");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "default");
 }
 
 // clang-format off

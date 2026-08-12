@@ -57,6 +57,7 @@
 #include "config.h"
 #include "system/simd.h"
 #endif
+#include "develop/imageop_gui.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -626,12 +627,12 @@ dt_iop_colorout_gui_data_t dummy;
 void gui_init(dt_iop_module_t *self)
 {
   IOP_GUI_ALLOC(colorout);
-  self->widget = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(self->widget),_("Convert images to the display or export RGB color space. "
+  self->gui->widget = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(self->gui->widget),_("Convert images to the display or export RGB color space. "
                                                  "The color profile is set in the export module or in the display preferences. "));
-  gtk_widget_set_halign(self->widget, GTK_ALIGN_START);
-  gtk_label_set_xalign (GTK_LABEL(self->widget), 0.0f);
-  gtk_label_set_line_wrap(GTK_LABEL(self->widget), TRUE);
+  gtk_widget_set_halign(self->gui->widget, GTK_ALIGN_START);
+  gtk_label_set_xalign (GTK_LABEL(self->gui->widget), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(self->gui->widget), TRUE);
 }
 
 

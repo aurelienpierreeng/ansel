@@ -284,7 +284,7 @@ static void _store_color_history(const dt_iop_drawlayer_gui_data_t *g)
 /** @brief Push current display color to history and trigger swatch redraw. */
 static void _remember_display_color(dt_iop_module_t *self, const float display_rgb[3])
 {
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
 
   if(!dt_drawlayer_widgets_push_color_history(g->ui.widgets, display_rgb)) return;
@@ -295,7 +295,7 @@ static void _remember_display_color(dt_iop_module_t *self, const float display_r
 /** @brief Apply display-space brush color to conf, widgets and redraw. */
 static void _apply_display_brush_color(dt_iop_module_t *self, const float display_rgb[3], const gboolean remember)
 {
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
 
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, _clamp01(display_rgb[0]));
@@ -316,7 +316,7 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
 /** @brief Refresh picker widgets from persisted config color. */
 static void _sync_color_picker_from_conf(dt_iop_module_t *self)
 {
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
   float display_rgb[3] = { 0.0f };
@@ -330,7 +330,7 @@ static void _sync_color_picker_from_conf(dt_iop_module_t *self)
 /** @brief Sync active GUI widget values back into persistent config keys. */
 static void _sync_params_from_gui(dt_iop_module_t *self, const gboolean record_history)
 {
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   (void)record_history;
   if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
