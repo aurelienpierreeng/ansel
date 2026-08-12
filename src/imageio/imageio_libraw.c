@@ -26,7 +26,7 @@
 #include "system/mem_alloc.h"
 #include "imageio/imageio_core.h"
 #include "develop/develop.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 
 #include <memory.h>
 #include <stdio.h>

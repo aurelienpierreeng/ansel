@@ -45,7 +45,7 @@
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "caches/pixelpipe_cache_alloc.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "math/math.h"

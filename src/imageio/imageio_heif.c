@@ -41,7 +41,7 @@
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "system/openmp.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "develop/develop.h"
 #include "imageio_heif.h"
 

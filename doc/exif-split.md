@@ -1,54 +1,126 @@
 # Splitting `common/exif.cc`
 
-Measured on the 4772-line file at `refactor/exif-split`, by brace-matched function
-parsing plus transitive call-graph closure (`tools/include_graph.py` has no notion of
-intra-file structure, so this was done ad hoc; the script is in the PR discussion).
+Done. `common/exif.cc` (4775 lines) is now `metadata/exif.cc` (2225) and
+`common/xmp_sidecar.cc` (2683), with `metadata/exif_internal.h` holding what genuinely
+spans both.
 
-## The file is two modules
+Measured by brace-matched function parsing plus transitive reference closure
+(`tools/include_graph.py` has no notion of intra-file structure, so this was done ad hoc;
+the scripts are in the PR discussion).
 
-`exif.cc` handles two unrelated things that meet only in the XMP document:
+## The file was two modules
 
-| half | roots | fns | own lines |
-|---|---|---|---|
-| EXIF/IPTC tags — pure metadata | 25 | 34 exclusive | 789 |
-| XMP sidecar carrying the **development** | 5 | 34 exclusive | 2555 |
-| seam (needed by both) | — | 4 | 127 |
+`exif.cc` handled two unrelated things that meet only in the XMP document:
+
+| half | fns | own lines |
+|---|---|---|
+| EXIF/IPTC tags — what the photograph says about itself | 27 | 1673 |
+| XMP sidecar carrying the **development** | 36 | 2442 |
+| seam — wanted by both | 8 | 429 |
+| unreachable from either | 2 | 37 |
 
 The five history-side roots are the whole XMP sidecar API plus one blob writer:
 
-    dt_exif_xmp_read              383   reads history, masks, module order back
-    dt_exif_read_blob             351   dt_imageio_dng_write_tiff_header
-    dt_exif_xmp_attach_export     253
-    dt_exif_xmp_write_with_imgpath 113
-    dt_exif_xmp_read_string        69
+    dt_exif_xmp_read              reads history, masks, module order back
+    dt_exif_read_blob             dt_imageio_dng_write_tiff_header
+    dt_exif_xmp_attach_export
+    dt_exif_xmp_write_with_imgpath
+    dt_exif_xmp_read_string
 
-They reach eleven `dt_ioppr_*` symbols, `dt_develop_blend_params_t` and
-`dt_masks_form_group_t` — i.e. `develop/`, layer 5. That is why `exif.cc` cannot move
-into `src/metadata` (layer 1) whole, and why the metadata module gate holds at zero
-without it.
+They reach eleven `dt_ioppr_*` symbols, `dt_develop_blend_params_t`,
+`dt_masks_form_group_t` and `dt_imageio_dng_write_tiff_header` — i.e. `develop/` (layer 5)
+and `imageio/` (layer 6). The tag half reaches **nothing above layer 1**, which is what
+made the cut worth making: `metadata/exif.cc` sits in the module and the gate still reads
+zero.
 
-## Verified, and worth not re-deriving
+## Three ways the call graph lied, each caught by measurement
 
-* `dt_exif_read` — the main EXIF reader — is **NOT** history-tainted. An earlier
-  classification said otherwise; it is reachable *from* a history root without being one,
-  which is a different thing. Confirmed by BFS from `dt_exif_read` finding no tainted
-  callee.
-* The seam is only four functions: `dt_exif_xmp_encode`, `dt_exif_xmp_encode_internal`
-  (both already public in `exif.h`, so the history half can simply include it),
-  `dt_remove_exif_keys` and `add_mask_entry_to_db` (both `static` today — these two are
-  the only ones needing a private header).
+Worth not re-deriving, because each one silently moved functions into the wrong half:
 
-## The cut
+* **Function pointers.** A `name\s*\(` regex misses every `GHFunc`, `GDestroyNotify` and
+  log handler. Twelve helpers looked unreachable — `_xmp_append_history`,
+  `free_mask_entry`, `dt_exif_log_handler` and friends. Match bare identifiers instead.
+* **Function-like macros are edges.** `FIND_EXIF_TAG` is used 78 times in the tag half and
+  expands to `_exif_read_exif_tag`; without expanding it, that function files under
+  whichever half happens to name it directly (the sidecar, twice). All 7 function-like
+  macros in the file were checked; 4 reach a function.
+* **`:(` in a comment parses as a parameter list.** Take the name from comment-masked text,
+  or `read_history_v1` comes out anonymous.
 
-1. `src/metadata/exif.{cc,h}` — the 25 clean roots. Module gate stays at zero.
-2. `src/common/xmp_sidecar.{cc,h}` — the 5 history roots and their 34 helpers. Stays in
-   `common/` until point 3 gives it a home in `src/history`, where it belongs: it
-   serialises the development, not the photograph's own description.
-3. `src/common/exif_internal.h` — `dt_remove_exif_keys` and `add_mask_entry_to_db` only.
+Two functions are reachable from no root at all and are simply dead:
+`print_history_entry` (already `__attribute__((unused))`) and `_get_max_multi_priority`.
+Both went with the sidecar; neither is called.
 
-**Do the cut with a brace-matched byte-range script, and assert afterwards that every one
-of the 72 parsed functions appears in exactly one output file and that the two outputs'
-line counts sum to the original.** A forward token search across this file has already
-destroyed 117 lines once (see `[[scripted-region-replacement]]` in the project notes):
-the failure mode is silent, and only `-Werror=unused-but-set-variable` in the Debug build
-caught it.
+Also verified: `dt_exif_read` is **NOT** history-tainted. An earlier classification said
+otherwise; it is reachable *from* a history root without being one, which is a different
+thing.
+
+## What the cut actually produced
+
+1. `src/metadata/exif.h` / `.cc` — the tag half plus the seam. 15 public functions.
+2. `src/common/xmp_sidecar.h` / `.cc` — the 5 sidecar roots and their helpers.
+3. `src/metadata/exif_internal.h` — `class Lock`, `read_metadata_threadsafe`, and three
+   functions: `dt_remove_exif_keys`, `dt_exif_read_exif_tag`, `dt_exif_decode_xmp_data`.
+   Private to those two `.cc` files by convention; a third includer is the signal to
+   promote something into `exif.h` deliberately instead.
+
+`#include "darktable.h"` is gone from both halves. Its only real use was
+`darktable.exiv2_threadsafe` inside `class Lock`, which now goes through the existing
+`dt_exiv2_threadsafe_mutex()` accessor in `common/global_mutexes.h`; every other
+`darktable.` in the file is an XMP key string (`Xmp.darktable.history`).
+
+Five deliberate edits beyond pure code motion, and nothing else:
+
+* `_exif_decode_xmp_data` → `dt_exif_decode_xmp_data`, `_exif_read_exif_tag` →
+  `dt_exif_read_exif_tag`. They stop being `static`, and a leading underscore at global
+  scope is reserved.
+* those two and `dt_remove_exif_keys` lose `static`.
+* `class Lock` takes the mutex through the accessor.
+* `_exif_get_exiv2_tag_type` reads the tag list through `dt_exif_get_exiv2_taglist()`
+  rather than the `exiv2_taglist` file-static it can no longer see. The accessor builds
+  the list if it is empty, so this is if anything more robust; `dt_init()` builds it long
+  before any sidecar work, so in practice the two are identical.
+
+## How the cut was made safe
+
+A forward token search across this file has already destroyed 117 lines once (see
+`[[scripted-region-replacement]]` in the project notes): the failure mode is silent, and
+only `-Werror=unused-but-set-variable` in the Debug build caught it. So the cut was done by
+assigning **every byte** of the original to exactly one destination and asserting, before
+writing anything:
+
+* consecutive segments abut exactly, and the last one ends at `len(text)` — no gap, no
+  overlap;
+* all 73 parsed functions are placed, and none is placed twice;
+* the parts' line counts sum to the original's 4775.
+
+One trap the assertions surfaced: a segment boundary falls where the previous statement
+ended, which is **mid-line** whenever that line carries a trailing comment
+(`static const guint dt_xmp_keys_n = ...; // the number of keys`). The comment then lands
+in the other file. Every boundary is snapped forward to the next line start, and any
+boundary with real code after it is reported rather than moved.
+
+## Verification
+
+* Four configurations build clean: Release, Debug (`-Werror`), nofeatures, and the
+  unit-test build. `ctest` 7/7.
+* `metadata: 0 includes from a higher layer` — the module gate holds.
+* Layering violations 198 → 196 (`develop/imageop.h` and `darktable.h` both dropped).
+* Export A/B against the pre-split build on `_DSC9410.NEF` with `--export_masks 1` — a
+  57-node brush, so the XMP history *and* `masks_history` read paths both run, and the mask
+  is written out as a second TIFF page. Of 19 396 010 bytes, **8 differ**, and every one of
+  them is provably not a pixel:
+
+      397-399     the embedded output filename, `out-old/` vs `out-new/`
+      48634-48637 the export timestamp, `02:19:50` vs `02:17:19`
+      79596,79598 the ICC profile's own creation date, in the 12-byte field before `acsp`
+
+  Build both halves, export the same raw twice, `cmp -l`, and read the offsets — do not
+  sha256 the file and call it a difference, which is the trap `check_export_pixels.sh`
+  exists for.
+
+## Left for later
+
+The sidecar belongs in `src/history`: it serialises the development, not the photograph.
+It stays in `common/` only until that module exists. Its five entry points keep their
+`dt_exif_*` names so this cut stays reviewable; renaming them is that move's business.

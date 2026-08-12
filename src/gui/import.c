@@ -23,7 +23,7 @@
 #include "common/film.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "gui/import.h"
 #include "common/image.h"
 #include "caches/image_cache.h"

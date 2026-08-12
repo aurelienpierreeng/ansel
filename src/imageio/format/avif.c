@@ -44,7 +44,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
-#include "common/exif.h"
+#include "common/xmp_sidecar.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"

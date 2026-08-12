@@ -51,7 +51,7 @@
 #include "widgets/bauhaus.h"
 #include "math/math.h"
 #include "common/opencl.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

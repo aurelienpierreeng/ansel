@@ -38,7 +38,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "develop/develop.h"
 
 #include <inttypes.h>

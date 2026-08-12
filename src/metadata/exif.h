@@ -32,8 +32,20 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef DT_COMMON_EXIF_H
-#define DT_COMMON_EXIF_H
+/** @file metadata/exif.h
+ *
+ * @brief What a photograph says about itself: the EXIF, IPTC and XMP tags a camera and a
+ * cataloguer write, read into and out of `dt_image_t`.
+ *
+ * @details This half of the old `common/exif.cc` names nothing above layer 1. The other
+ * half -- the XMP sidecar that carries the *development*: history, masks, module order --
+ * reaches `develop/` and `imageio/`, and lives in `common/xmp_sidecar.h`. The two met only
+ * in the XMP document, which is why they could be cut apart at all; what genuinely spans
+ * both is in `metadata/exif_internal.h` and is private to those two files.
+ */
+
+#ifndef DT_METADATA_EXIF_H
+#define DT_METADATA_EXIF_H
 
 #include "colorprofiles/profile_types.h"
 #include "common/image.h"
@@ -84,11 +96,6 @@ int dt_exif_read(dt_image_t *img, const char *path);
 /** read exif data to image struct from given data blob, wherever you got it from. */
 int dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size);
 
-/** write exif to blob, return length in bytes. blob will be allocated by the function. sRGB should be true
- * if sRGB colorspace is used as output. */
-int dt_exif_read_blob(uint8_t **blob, const char *path, const int32_t imgid, const int sRGB, const int out_width,
-                      const int out_height, const int dng_mode);
-
 /** Reads exif tags that are not cached in the database */
 void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename);
 
@@ -102,18 +109,6 @@ void dt_exif_read_usercrop(dt_image_t *img, const char *filename);
 /** write blob to file exif. merges with existing exif information.*/
 int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int compressed);
 
-/** write xmp sidecar file. */
-int dt_exif_xmp_write_with_imgpath(const struct dt_image_t *image, const char *filename, const char *imgpath);
-
-/** write xmp packet inside an image. */
-int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *metadata);
-
-/** get the xmp blob for imgid. */
-char *dt_exif_xmp_read_string(const int32_t imgid);
-
-/** read xmp sidecar file. */
-int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only);
-
 /** fetch largest exif thumbnail jpg bytestream into buffer */
 int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char **mime_type, int *width, int *height, int min_width);
 
@@ -121,7 +116,11 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
 void dt_exif_init();
 void dt_exif_cleanup();
 
-/** encode / decode op params */
+/** encode / decode op params.
+ *
+ * Used by the XMP sidecar to serialise module parameter blobs, and by anything that has to
+ * read one back; they are here rather than beside the sidecar because they are a codec, not
+ * a document format -- `common/styles.c` and `common/presets.c` use them too. */
 char *dt_exif_xmp_encode(const unsigned char *input, const int len, int *output_len);
 char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int *output_len, gboolean do_compress);
 unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_len);
@@ -136,7 +135,7 @@ void dt_exif_get_datetime_taken(const uint8_t *data, size_t size, char *datetime
 }
 #endif
 
-#endif // DT_COMMON_EXIF_H
+#endif // DT_METADATA_EXIF_H
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

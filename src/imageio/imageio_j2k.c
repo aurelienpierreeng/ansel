@@ -32,7 +32,7 @@
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_j2k.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 

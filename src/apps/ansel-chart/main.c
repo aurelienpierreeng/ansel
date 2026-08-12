@@ -41,7 +41,7 @@
 #include "apps/ansel-chart/pfm.h"
 #include "math/attic/thinplate.h"
 #include "apps/ansel-chart/tonecurve.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 
 #include <glib/gstdio.h>
 #include <stdio.h>

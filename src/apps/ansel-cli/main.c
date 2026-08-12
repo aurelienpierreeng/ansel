@@ -50,7 +50,7 @@
  */
 
 #include "darktable.h"
-#include "common/exif.h"
+#include "common/xmp_sidecar.h"
 #include "common/film.h"
 #include "common/file_location.h"
 #include "common/history.h"

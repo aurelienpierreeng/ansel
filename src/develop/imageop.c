@@ -75,7 +75,7 @@
 #include "database/database.h"
 #include "database/history_repository.h"
 #include "database/preset_repository.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "common/history.h"
 #include "common/imagebuf.h"
 #include "imageio/imageio_rawspeed.h"

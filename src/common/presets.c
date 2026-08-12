@@ -25,7 +25,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "database/preset_repository.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "libs/lib.h"
 
 #include <libxml/xmlwriter.h>
