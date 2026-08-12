@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
 #include "common/logging.h"
 #include "system/macros.h"
 #include "common/module_versioning.h"

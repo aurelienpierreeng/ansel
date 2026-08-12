@@ -20,6 +20,7 @@
 #include "config.h"
 #include "develop/iop_profile.h"
 #endif
+#include "develop/masks_gui.h"
 
 #include <math.h>
 #include <stdlib.h>

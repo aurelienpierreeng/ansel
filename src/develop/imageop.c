@@ -63,6 +63,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "develop/masks_gui.h"
 #include "darktable.h"
 #include "widgets/widget_settings.h"
 #include "common/conf.h"

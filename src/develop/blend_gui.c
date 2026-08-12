@@ -64,6 +64,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
 #include "widgets/button.h"
 #include "widgets/gradientslider.h"
 

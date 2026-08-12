@@ -38,6 +38,8 @@
 #include "common/conf.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
+#include "develop/masks/masks_functions.h"
 #include "math/openmp_maths.h"
 
 #define extent_MIN 0.0005f

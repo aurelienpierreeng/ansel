@@ -35,6 +35,9 @@
 struct dt_variables_params_t;
 void dt_images_import();
 
+/** @brief Register the GUI-side import handlers (the discarded-files recap dialog). */
+void dt_gui_import_init_handlers(void);
+
 #endif // DT_GUI_IMPORT_H
 
 // clang-format off

@@ -50,6 +50,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/widget_settings.h"
 #include "common/history_actions.h"
 #include "gui/common/history_actions_gui.h"
 #include "system/macros.h"

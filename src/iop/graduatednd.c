@@ -54,6 +54,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "develop/masks_gui.h"
 #include <assert.h>
 #include "system/macros.h"
 #include "system/openmp.h"

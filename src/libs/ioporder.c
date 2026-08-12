@@ -24,6 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/widget_settings.h"
 #include "colorprofiles/colorspaces.h"
 #include "database/preset_repository.h"
 #include "develop/iop_order.h"

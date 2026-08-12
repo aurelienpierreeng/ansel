@@ -58,6 +58,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "widgets/widget_settings.h"
 #include "control/control.h"
 #include "common/conf.h"
 #include "history/history.h"

@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/widget_settings.h"
 #include "develop/dev_history_gui.h"
 
 #include "develop/blend_gui.h"

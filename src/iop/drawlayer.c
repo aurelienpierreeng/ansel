@@ -27,6 +27,7 @@
 #include "common/hash.h"
 #include "config.h"
 #endif
+#include "develop/masks_gui.h"
 
 #include "widgets/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"

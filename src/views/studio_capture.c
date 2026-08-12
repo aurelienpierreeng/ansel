@@ -22,6 +22,7 @@
     surface fetcher (fit-to-window or 100% with panning); the darkroom editing
     panels are intentionally absent: this is a viewer, not an editor. */
 
+#include "develop/masks_gui.h"
 #include "system/atomic.h"
 #include "widgets/widget_settings.h"
 #include "common/collection.h"

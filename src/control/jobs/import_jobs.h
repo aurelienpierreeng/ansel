@@ -119,4 +119,16 @@ int dt_control_import(dt_control_import_t data);
 #ifdef __cplusplus
 }
 #endif
+/** @brief Install the GUI-side handler that shows the discarded-files recap after an
+ *  import.
+ *
+ * The handler is called on the import worker thread and owns the
+ * dt_control_image_enumerator_t* (and its dt_control_import_t data): it frees them when
+ * done, and it is responsible for getting itself onto the GUI thread -- main-context
+ * dispatch is toolkit machinery, not a job's. With none installed the job frees them
+ * itself. */
+struct dt_control_image_enumerator_t;
+typedef void (*dt_control_import_discarded_handler_t)(struct dt_control_image_enumerator_t *params);
+void dt_control_import_set_discarded_files_handler(dt_control_import_discarded_handler_t handler);
+
 #endif // DT_CONTROL_JOBS_IMPORT_JOBS_H
