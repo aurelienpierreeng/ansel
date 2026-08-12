@@ -69,6 +69,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "gui/screen_metrics.h"
+#include "control/signal.h"
 
 static dt_control_pointer_input_t _pointer_input = { 0 };
 

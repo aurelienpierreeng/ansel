@@ -64,6 +64,7 @@
 #include "gui/application.h"
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
+#include "control/signal.h"
 
 /**
  * @file thumbnail.c

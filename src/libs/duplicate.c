@@ -56,6 +56,7 @@
 #include "widgets/scroll_wrap.h"
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 

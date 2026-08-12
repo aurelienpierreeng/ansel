@@ -69,6 +69,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include "widgets/widget_style.h"
+#include "control/signal.h"
 #if defined (_WIN32)
 #include "win/getdelim.h"
 #endif // defined (_WIN32)

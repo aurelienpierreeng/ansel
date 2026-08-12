@@ -52,6 +52,7 @@
 #include "widgets/accelerators.h"
 #include "widgets/container.h"
 #include "widgets/widget_settings.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 

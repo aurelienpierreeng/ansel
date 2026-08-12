@@ -54,6 +54,8 @@
 #include "widgets/notebook.h"
 #include "widgets/scroll_wrap.h"
 #include "gui/screen_metrics.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 

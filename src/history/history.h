@@ -37,6 +37,18 @@
 #include <gtk/gtk.h>
 #include <inttypes.h>
 
+/**
+ * @brief The string identifying an operation in the history stack ("exposure",
+ * "colorbalancergb", ...): the identity every history item, preset row and raster-mask
+ * source reference is keyed on.
+ *
+ * @details Lived in `control/settings.h` historically, which used it for nothing — while
+ * `develop/imageop.h` trailed `control/signal.h` into all 122 of its consumers just to
+ * reach this one typedef. It keeps the `dt_dev_` prefix for now; renaming a symbol this
+ * widespread is its own change, not a relocation's.
+ */
+typedef char dt_dev_operation_t[20];
+
 #ifdef __cplusplus
 extern "C" {
 #endif

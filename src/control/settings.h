@@ -34,7 +34,8 @@
 
 #include <inttypes.h>
 
-typedef char dt_dev_operation_t[20];
+// dt_dev_operation_t lived here historically; it is the history-stack operation identity
+// and nothing in control/ ever used it, so it moved to history/history.h.
 
 #define DEV_NUM_OP_PARAMS 10
 

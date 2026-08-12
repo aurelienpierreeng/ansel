@@ -31,6 +31,7 @@
 #include "gui/window_manager.h"
 
 #include <gtk/gtk.h>
+#include "control/signal.h"
 
 
 /** FULL SCREEN MODE **/

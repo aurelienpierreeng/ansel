@@ -43,6 +43,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <string.h>
+#include "widgets/togglebutton.h"
 
 /*
   The color_picker_proxy code is an interface which links the UI

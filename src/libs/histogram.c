@@ -90,6 +90,7 @@
 #include "widgets/scroll_wrap.h"
 #include "widgets/widget_style.h"
 #include "gui/screen_metrics.h"
+#include "widgets/togglebutton.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #endif

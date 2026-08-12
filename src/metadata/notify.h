@@ -80,6 +80,18 @@ void dt_metadata_set_tags_changed_handler(dt_metadata_tags_changed_handler_t han
 /** @brief Raise it. Internal to the module. */
 void dt_metadata_tags_changed(void);
 
+/**
+ * @brief The geo-location of these images changed. Whoever is showing a map, or the
+ *        geotag panel, should look again.
+ *
+ * @details Carries the image list because the signal it replaces did. The handler does
+ * the copying, at the raise site, exactly as the old call sites used to: @p imgs stays
+ * the caller's, and a handler that needs to keep it copies it.
+ */
+typedef void (*dt_metadata_geotags_changed_handler_t)(const GList *imgs);
+void dt_metadata_set_geotags_changed_handler(dt_metadata_geotags_changed_handler_t handler);
+void dt_metadata_geotags_changed(const GList *imgs);
+
 G_END_DECLS
 
 #endif // DT_METADATA_NOTIFY_H

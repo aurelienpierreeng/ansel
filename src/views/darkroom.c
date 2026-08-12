@@ -129,6 +129,8 @@
 #include "widgets/label.h"
 #include "widgets/widget_style.h"
 #include "gui/screen_metrics.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 #ifndef G_SOURCE_FUNC // Defined for glib >= 2.58
 #define G_SOURCE_FUNC(f) ((GSourceFunc) (void (*)(void)) (f))

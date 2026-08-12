@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "widgets/widget_settings.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 

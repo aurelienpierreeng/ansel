@@ -81,6 +81,7 @@
 #include <glib.h>
 #include "common/hash.h"
 #include "gui/application.h"
+#include "control/signal.h"
 
 static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
                                       const int modversion, const char *operation, const void *module_params,

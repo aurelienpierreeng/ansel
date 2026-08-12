@@ -141,6 +141,7 @@
 #include "develop/iop_order.h"
 #include "common/l10n.h"
 #include "metadata/metadata.h"
+#include "common/image_notify.h"
 #include "history/notify.h"
 #include "history/presets.h"
 #include "metadata/notify.h"
@@ -738,6 +739,19 @@ static void _metadata_notify(const dt_metadata_notice_t kind, const char *messag
     dt_toast_log("%s", message);
   else
     dt_control_log("%s", message);
+}
+
+/* The geotag list is copied here, at the raise site, exactly where the old call sites
+ * copied it: the signal takes ownership of what it is given. */
+static void _metadata_geotags_changed(const GList *imgs)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED,
+                                g_list_copy((GList *)imgs), 0);
+}
+
+static void _image_imported(const int32_t imgid)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_IMPORT, imgid);
 }
 
 /* History, styles and presets state what happened; turning that into a signal is ours. */
@@ -1472,6 +1486,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
    * further up: the signal system does not exist until the line above, and nothing can
    * edit a tag before it does. */
   dt_metadata_set_tags_changed_handler(_metadata_tags_changed);
+  dt_metadata_set_geotags_changed_handler(_metadata_geotags_changed);
+  dt_image_notify_set_imported_handler(_image_imported);
   // Same reason for these two: they raise signals, so they wait for the signal system.
   dt_history_set_changed_handler(_history_changed);
   dt_history_set_images_changed_handler(_history_images_changed);

@@ -60,6 +60,19 @@ void dt_metadata_tags_changed(void)
   if(handler) handler();
 }
 
+static dt_metadata_geotags_changed_handler_t _geotags_changed_handler = NULL;
+
+void dt_metadata_set_geotags_changed_handler(dt_metadata_geotags_changed_handler_t handler)
+{
+  _geotags_changed_handler = handler;
+}
+
+void dt_metadata_geotags_changed(const GList *imgs)
+{
+  dt_metadata_geotags_changed_handler_t handler = _geotags_changed_handler;
+  if(handler) handler(imgs);
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

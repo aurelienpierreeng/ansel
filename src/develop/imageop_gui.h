@@ -26,6 +26,7 @@
 #define DT_DEVELOP_IMAGEOP_GUI_H
 
 #include "develop/imageop.h"
+#include "widgets/paint.h"   // DTGTKCairoPaintIconFunc, named in three declarations below
 
 #ifdef __cplusplus
 extern "C" {

@@ -88,6 +88,7 @@
 #include "widgets/notebook.h"
 #include "widgets/scroll_wrap.h"
 #include "gui/screen_metrics.h"
+#include "widgets/togglebutton.h"
 
 DT_MODULE_INTROSPECTION(5, dt_iop_colorzones_params_t)
 

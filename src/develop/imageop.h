@@ -68,10 +68,9 @@
 #include "common/gui_module_api.h"
 #include "common/opencl.h"
 
-#include "control/settings.h"
+#include "history/history.h"   // dt_dev_operation_t, both structs' `op` member
 #include "pixel/format.h"
 #include "develop/pixelpipe_hb.h"
-#include "widgets/togglebutton.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -342,8 +341,10 @@ typedef struct dt_iop_module_t
   } raster_mask;
   /** child widget which is added to the GtkExpander. copied from module_so_t. */
   GtkWidget *widget;
-  /** off button, somewhere in header, common to all plug-ins. */
-  GtkDarktableToggleButton *off;
+  /** off button, somewhere in header, common to all plug-ins. A GtkDarktableToggleButton
+   * underneath; declared as the base type so this header does not feed widgets/ to all
+   * ~122 of its consumers — every external user already casts via GTK_TOGGLE_BUTTON(). */
+  GtkWidget *off;
   /** this is the module header, contains label and buttons */
   GtkWidget *header;
   /** this is the module mask indicator, inside header */

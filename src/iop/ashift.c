@@ -146,6 +146,8 @@
 #include "math/nelder_mead_simplex.h"
 #include "widgets/collapsible_section.h"
 #include "widgets/label.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 
 DT_MODULE_INTROSPECTION(5, dt_iop_ashift_params_t)

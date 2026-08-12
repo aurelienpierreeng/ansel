@@ -97,6 +97,7 @@
 #include <strings.h>
 
 #include "imageio/imageio_profile.h"
+#include "control/signal.h"
 
 // max iccprofile file name length
 // must be in synch with dt_colorspaces_color_profile_t

@@ -144,6 +144,9 @@
 #include "widgets/widget_style.h"
 #include "gui/screen_metrics.h"
 
+#include "control/signal.h"
+#include "widgets/togglebutton.h"
+
 #ifdef _OPENMP
 #include <omp.h>
 #endif

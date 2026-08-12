@@ -57,6 +57,7 @@
 #include "widgets/popup.h"
 #include "widgets/scroll_wrap.h"
 #include "gui/screen_metrics.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 

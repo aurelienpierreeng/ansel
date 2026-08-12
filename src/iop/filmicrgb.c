@@ -91,6 +91,7 @@
 #include "widgets/scroll_wrap.h"
 #include "widgets/widget_style.h"
 #include "gui/screen_metrics.h"
+#include "widgets/togglebutton.h"
 
 #define INVERSE_SQRT_3 0.5773502691896258f
 #define SAFETY_MARGIN 0.01f

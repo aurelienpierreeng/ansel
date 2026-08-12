@@ -159,6 +159,7 @@ typedef struct drawlayer_wait_dialog_t
 
 #include "drawlayer/conf.c"
 #include "drawlayer/coordinates.c"
+#include "control/signal.h"
 
 /** @brief Convert one display-space brush color snapshot to pipeline space. */
 static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const float display_rgb[3], float pipeline_rgb[3])
