@@ -15,22 +15,26 @@ It is forked on Darktable 4.0, and is compatible with editing histories produced
 It is not compatible with Darktable 4.2 and later and will not be, since 4.2 introduces irresponsible choices that
 will be the burden of those who commited them to maintain, and 4.4 will be even worse.
 
-The end goal is :
+The end goal is **less complexity, for everyone** :
 
-1. to produce a more robust and faster software, with fewer opportunities for weird, contextual bugs
-that can't be systematically reproduced, and therefore will never be fixed,
-2. to break with the trend of making Darktable a Vim editor for image processing, truly usable
-only from (broken) keyboard shortcuts known only by the hardcore geeks that made them,
-3. to sanitize the code base in order to reduce the cost of maintenance, now and in the future,
-4. to make the general UI nicer to people who don't have a master's in computer science and
-more efficient to use for people actually interested in photography, especially for folks
-using Wacom (and other brands) graphic tablets,
-5. to optimize the GUI to streamline the scene-referred workflow and make it feel more natural.
+1. a **saner codebase to maintain** — fewer weird, contextual bugs that cannot be reproduced
+   and therefore never get fixed,
+2. a **simpler codebase to optimize** — performance work is only possible in code you can
+   still reason about,
+3. a **leaner GUI to use** — designed around photography rather than around the keyboard
+   shortcuts of the people who wrote it.
 
-Ultimately, the future of Darktable is [vkdt](https://github.com/hanatos/vkdt/), but
-this will be available only for computers with GPU and is a prototype that will not be usable by a general
-audience for the next years to come. __Ansel__ aims at sunsetting __Darktable__ with something "finished",
-pending a VKDT version usable by common folks.
+Less overwhelming for developers, less overwhelming for users. Those are the same problem
+seen from opposite ends.
+
+[vkdt](https://github.com/hanatos/vkdt/) is often presented as the future of Darktable. It
+is technically superior in essentially every respect, and it requires a Vulkan-capable GPU.
+Our own telemetry, published at [ansel.photos](https://ansel.photos), shows that **45 % of
+our users have no GPU at all**. However good it is, a GPU-only editor cannot be the future
+of this software without leaving behind nearly half the people using it.
+
+__Ansel__ exists for those users: a finished, maintainable editor that runs on the hardware
+photographers actually own.
 
 ## Download and test
 
@@ -85,6 +89,24 @@ Go and support these projects so they can have more man-hours put on fixing thos
 - The scene-referred workflow feature split is [now complete](https://ansel.photos/en/news/color-controls-finally-correct/), with 5 new color modules and alternative GUI for color calibration
 - The GUI has been entirely redesigned and simplified : global menu, features reordering and reorganizing workflow-wise
 - Many user preferences have been removed or factorized.
+
+New pixel modules, not available in Darktable :
+
+- __drawlayer__ — paint premultiplied RGB layers into a TIFF sidecar, with realtime brush feedback
+- __raw denoise (AI)__ — a learned denoiser working on raw, linear, scene-referred data
+- __photographic grain__ — grain simulated from stacked silver-halide crystal layers, not added noise
+- __scan restore__ — recovery of scanned film
+- __color primaries__ and __split-toning__ — colour grading in RGB
+- __detail mask__ — a reusable mask built from image detail
+
+Rewritten pixel modules :
+
+- __highlights reconstruction__ — a new harmonic-transposition method, validated against a CPU/OpenCL reference battery
+- __demosaic__ — split into one module per algorithm
+
+The engine itself has been split into modules that have no equivalent in Darktable, each
+owning its own state behind an API : `src/system`, `src/math`, `src/pixel`, `src/database`,
+`src/caches`, `src/colorprofiles` and `src/widgets`.
 
 ## Why is Ansel better than Darktable ?
 
@@ -181,13 +203,13 @@ includes the modules, is the reason the totals look closer than the engineering 
 The totals above are sums, so a project can score well simply by having fewer functions.
 Per function, still excluding `src/iop`:
 
-| Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.6 |
-| ----------- | -----------: | ------------: | ------------: | ------------: |
-| Functions | 8,291 | 7,268 | 7,510 | 8,741 |
-| Average complexity | 4.91 | **4.86** | 4.95 | 5.05 |
-| Worst single function | 229 | **194** | 210 | 249 |
-| Functions above 15 — awkward to test | 446 | **428** | 456 | 522 |
-| Functions above 50 — effectively untestable | 51 | **45** | 48 | 63 |
+| Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
+| ----------- | -----------: | ------------: | ------------: | ------------: | ------------: |
+| Functions | 8,291 | 7,268 | 7,510 | 7,785 | 8,741 |
+| Average complexity | 4.91 | **4.86** | 4.95 | 4.89 | 5.05 |
+| Worst single function | 229 | **194** | 210 | 252 | 249 |
+| Functions above 15 — awkward to test | 446 | **428** | 456 | 453 | 522 |
+| Functions above 50 — effectively untestable | 51 | **45** | 48 | 48 | 63 |
 
 The averages are close, and honestly so: Ansel's worst function is worse than Darktable
 4.0's, and it has three more functions above 50 than 4.0 did. What separates the three is
@@ -211,25 +233,25 @@ any way to see. The subfolders still *look* modular. That modularity is perceptu
 So the question worth measuring is: **how much of the software is exposed to the rest of
 the software?**
 
-| Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.6 |
-| ----------- | -----------: | ------------: | ------------: | ------------: |
-| A source file depends on this share of the engine, median | **5.4 %** | 14.1 % | 13.3 % | 13.1 % |
-| Changing one header forces re-reading this many files, average | **46** | 83 | 82 | 95 |
-| Headers whose change exposes over a quarter of the engine | **12 %** | 31 % | 31 % | 32 % |
-| Circular include groups | **0** | 4 | 4 | 4 |
-| Files trapped in those groups | **0** | 17 | 17 | 17 |
-| Headers including the application-wide `darktable.h` | **0** | 30 | 30 | 38 |
+| Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
+| ----------- | -----------: | ------------: | ------------: | ------------: | ------------: |
+| A source file depends on this share of the engine, median | **5.4 %** | 14.1 % | 13.3 % | 14.9 % | 13.1 % |
+| Changing one header forces re-reading this many files, average | **46** | 83 | 82 | 94 | 95 |
+| Headers whose change exposes over a quarter of the engine | **12 %** | 31 % | 31 % | 34 % | 32 % |
+| Circular include groups | **0** | 4 | 4 | 4 | 4 |
+| Files trapped in those groups | **0** | 17 | 17 | 17 | 17 |
+| Headers including the application-wide `darktable.h` | **0** | 30 | 30 | 36 | 38 |
 
 The third row is the one to read twice. **In Darktable, about a third of the engine's
 headers cannot be touched without putting more than a quarter of the engine at risk. In
 Ansel it is one in eight.** A Darktable engine file also carries two and a half times as
 much of the program behind it as an Ansel one.
 
-The Darktable columns are the other thing to notice, because they barely move. Between
-3.8 and 5.6 — four years and three major releases — the number of circular include groups
-stayed at four, the files trapped in them stayed at seventeen (the same seventeen), and the
-headers pulling the whole application in behind them went from 30 to 38. This is not a
-problem that is being worked on slowly. It is a problem that is not being worked on.
+The Darktable columns are the other thing to notice, because they barely move. Across 3.8,
+4.0, 5.0 and 5.6 — four years and four releases — the number of circular include groups
+stayed at four and the files trapped in them stayed at seventeen, the same seventeen every
+time, while the headers pulling the whole application in behind them went from 30 to 38.
+This is not a problem being worked on slowly. It is a problem that is not being worked on.
 
 Two structural causes sit underneath those numbers.
 
