@@ -118,14 +118,24 @@ behind the MOSS plagiarism detector. Whitespace, indentation and comments are di
 entirely, so a function that was merely reformatted still counts as shared code. The
 settings used detect any common run of 31 tokens or more — roughly four lines.
 
-| Measure | Ansel code also present in Darktable 5.6 |
-| ------- | ---------------------------------------: |
-| Same code (identifiers kept) | **29.2 %** |
-| Same structure (identifiers, literals normalised) | **38.6 %** |
+| Comparison | Same code | Same structure |
+| ---------- | --------: | -------------: |
+| Ansel vs. **Darktable 4.0** — the version it forked from | 44.2 % | 47.9 % |
+| Ansel vs. **Darktable 5.6** — the current release | 29.1 % | 38.6 % |
+| *Control:* Darktable 5.6 vs. **its own** 4.0 | *50.2 %* | *55.8 %* |
 
-The second figure is the generous one: it counts a function that was carried over and
-renamed as inherited. Roughly **six lines in ten of Ansel have no counterpart in
-Darktable**, and the reverse holds too — 37.6 % of Darktable is present in Ansel.
+"Same structure" is the generous column: it counts a function that was carried over and
+renamed as inherited.
+
+The control row is the one that matters, because "they rewrote a lot" is not on its own
+evidence of anything — every living project rewrites itself. Over the same four years,
+**Darktable replaced about half of its own 4.0 code** (50.2 % survives into 5.6). Ansel
+replaced somewhat more of it (44.2 % survives). Those are the same order of magnitude.
+
+The difference between the two projects is therefore **not how much was rewritten, but
+what**. Darktable's engine grew over that period — 41,240 to 44,799 in cyclomatic
+complexity — while Ansel's came out at 40,161 for the same job. Both projects rewrote
+comparable amounts of code; only one of them ended up smaller.
 
 Where the code was kept, and where it was replaced, is not uniform:
 
@@ -247,12 +257,20 @@ whole project, pixel operations included:
 | Ratio of comments | [13.8%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_ansel) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierre_darktable) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_darktable-5) |
 
 Those totals compare the two projects as a whole, which means they compare their
-**feature sets** as much as their engineering. The set of pixel operations under
-`src/iop` has diverged hard between the forks: Ansel carries a painting module, an AI
-denoiser and a rewritten highlights reconstruction that Darktable does not have, and
-Darktable carries modules Ansel dropped. Those modules are largely independent of one
-another — they are the one genuinely modular part of the codebase — so their bulk says
-little about how maintainable the application is.
+**feature sets** as much as their engineering.
+
+`src/iop` holds the *image operation* modules — the individual pixel-processing steps a
+user enables in the darkroom: exposure, white balance, denoising, lens correction, tone
+curves, and so on. Each is a self-contained plugin implementing a fixed API, discovered
+and loaded at runtime, and they do not call one another. There are 95 of them in Ansel
+and 96 in Darktable 5.6, but they are not the same 95: Ansel carries a painting module,
+an AI denoiser and a rewritten highlights reconstruction that Darktable does not have,
+while Darktable carries modules Ansel dropped.
+
+Because the modules are independent, adding one adds complexity that never has to be
+reasoned about anywhere else — it is the one genuinely modular part of either codebase.
+Their bulk therefore says a great deal about how many features a project ships, and very
+little about how maintainable it is.
 
 Excluding `src/iop` compares the **engine**: the pixel pipeline, the database, the
 caches, the GUI framework, everything both projects need whatever their module set.
