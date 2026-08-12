@@ -415,7 +415,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_hotpixels_gui_data_t *g = (dt_iop_hotpixels_gui_data_t *)self->gui_data;
+  dt_iop_hotpixels_gui_data_t *g = (dt_iop_hotpixels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_hotpixels_params_t *p = (dt_iop_hotpixels_params_t *)self->params;
   gtk_toggle_button_set_active(g->permissive, p->permissive);
 
@@ -424,14 +424,14 @@ void gui_update(dt_iop_module_t *self)
   // can't be switched on for non-mosaiced images:
   self->hide_enable_button = !enabled;
 
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "non_raw" : "raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->hide_enable_button ? "non_raw" : "raw");
 }
 
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_hotpixels_gui_data_t *g = IOP_GUI_ALLOC(hotpixels);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->threshold = dt_bauhaus_slider_from_params(self, N_("threshold"));
   dt_bauhaus_slider_set_digits(g->threshold, 4);
@@ -445,13 +445,13 @@ void gui_init(dt_iop_module_t *self)
   g->permissive = GTK_TOGGLE_BUTTON(dt_bauhaus_toggle_from_params(self, "permissive"));
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
   GtkWidget *label_non_raw = dt_ui_label_new(_("hot pixel correction\nonly works for raw images."));
 
-  gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 // clang-format off

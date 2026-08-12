@@ -32,6 +32,7 @@
 #include "common/logging.h"
 #include "config.h"
 #endif
+#include "develop/imageop_gui.h"
 #include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
@@ -149,7 +150,6 @@ void init(dt_iop_module_t *self)
   self->default_enabled = 1;
   self->hide_enable_button = 1;
   self->params_size = sizeof(dt_iop_initialscale_params_t);
-  self->gui_data = NULL;
 }
 
 void cleanup(dt_iop_module_t *self)
@@ -166,13 +166,13 @@ dt_iop_initialscale_gui_data_t dummy;
 void gui_init(dt_iop_module_t *self)
 {
   IOP_GUI_ALLOC(initialscale);
-  self->widget = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(self->widget),_("This module is used to downscale images at export time. "
+  self->gui->widget = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(self->gui->widget),_("This module is used to downscale images at export time. "
                                                  "Moving it along the pipeline will have diffent effects on exported images. "
                                                  "<a href='https://ansel.photos/en/doc/modules/processing-modules/initialscale/'>Learn more</a>"));
-  gtk_widget_set_halign(self->widget, GTK_ALIGN_START);
-  gtk_label_set_xalign (GTK_LABEL(self->widget), 0.0f);
-  gtk_label_set_line_wrap(GTK_LABEL(self->widget), TRUE);
+  gtk_widget_set_halign(self->gui->widget, GTK_ALIGN_START);
+  gtk_label_set_xalign (GTK_LABEL(self->gui->widget), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(self->gui->widget), TRUE);
 }
 
 // clang-format off

@@ -1746,7 +1746,6 @@ void init(dt_iop_module_t *module)
   // module is disabled by default
   module->default_enabled = 0;
   module->params_size = sizeof(dt_iop_liquify_params_t);
-  module->gui_data = NULL;
 
   // all allocated to 0, which is the default
   module->params = calloc(1, module->params_size);
@@ -1948,7 +1947,7 @@ static void _draw_paths(dt_iop_module_t *module,
                         dt_iop_liquify_params_t *p,
                         GList *layers)
 {
-  const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
@@ -2472,7 +2471,7 @@ static dt_liquify_hit_t _hit_paths(dt_iop_module_t *module,
 
 static void draw_paths(struct dt_iop_module_t *module, cairo_t *cr, const float scale, dt_iop_liquify_params_t *params)
 {
-  const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   GList *layers = NULL;
 
   for(dt_liquify_layer_enum_t layer = 0; layer < DT_LIQUIFY_LAYER_LAST; ++layer)
@@ -2778,7 +2777,7 @@ static void init_warp(dt_liquify_warp_t *warp, float complex point)
 
 static dt_liquify_path_data_t *alloc_move_to(dt_iop_module_t *module, float complex start_point)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   dt_liquify_path_data_t* m = (dt_liquify_path_data_t*)node_alloc(&g->params, &g->node_index);
   if(m)
   {
@@ -2791,7 +2790,7 @@ static dt_liquify_path_data_t *alloc_move_to(dt_iop_module_t *module, float comp
 
 static dt_liquify_path_data_t *alloc_line_to(dt_iop_module_t *module, float complex end_point)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   dt_liquify_path_data_t* l = (dt_liquify_path_data_t*)node_alloc(&g->params, &g->node_index);
   if(!IS_NULL_PTR(l))
   {
@@ -2804,7 +2803,7 @@ static dt_liquify_path_data_t *alloc_line_to(dt_iop_module_t *module, float comp
 
 static dt_liquify_path_data_t *alloc_curve_to(dt_iop_module_t *module, float complex end_point)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   dt_liquify_path_data_t* c = (dt_liquify_path_data_t*)node_alloc(&g->params, &g->node_index);
   if(!IS_NULL_PTR(c))
   {
@@ -2842,7 +2841,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_develop_t *develop = module->dev;
   if(IS_NULL_PTR(develop))
     return;
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   if(IS_NULL_PTR(g))
     return;
 
@@ -2889,7 +2888,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 {
   if(history)
   {
-    const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+    const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
     // something definitive has happened like button release ... so
     // redraw pipe
     memcpy(module->params, &g->params, sizeof(dt_iop_liquify_params_t));
@@ -2952,7 +2951,7 @@ int mouse_moved(struct dt_iop_module_t *module,
                  double pressure,
                  int which)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   gboolean handled = FALSE;
   float complex pt = 0.0f;
   float scale = 0.0f;
@@ -3195,7 +3194,7 @@ static void get_stamp_params(dt_iop_module_t *module, float *radius, float *r_st
  */
 int scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state)
 {
-  const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  const dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
 
   // add an option to allow skip mouse events while editing masks
   const gboolean incr = dt_mask_scroll_increases(up);
@@ -3271,7 +3270,7 @@ int button_pressed(struct dt_iop_module_t *module,
                     int type,
                     uint32_t state)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   int handled = 0;
   float complex pt = 0.0f;
   float scale = 0.0f;
@@ -3382,7 +3381,7 @@ done:
 
 static void _start_new_shape(dt_iop_module_t *module)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
 
   //  create initial shape at the center
   float complex pt = 0.0f;
@@ -3410,7 +3409,7 @@ int button_released(struct dt_iop_module_t *module,
                      int which,
                      uint32_t state)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   int handled = 0;
   float complex pt = 0.0f;
   float scale = 0.0f;
@@ -3664,7 +3663,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
 {
   if(IS_NULL_PTR(event)) return 0;
 
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return 0;
   guint key = dt_keys_mainpad_alternatives(event->keyval);
 
@@ -3835,7 +3834,7 @@ int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
 
 static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *event, dt_iop_module_t *module)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
 
   // if currently dragging and a form (line or node) has been started, does nothing (expect resetting the toggle button status).
   if(is_dragging(g) && g->temp && node_prev(&g->params, g->temp))
@@ -3898,7 +3897,7 @@ static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *ev
 
 void gui_update(dt_iop_module_t *module)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *) module->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(module);
   memcpy(&g->params, module->params, sizeof(dt_iop_liquify_params_t));
   update_warp_count(g);
 }
@@ -3919,11 +3918,11 @@ void gui_init(dt_iop_module_t *self)
   g->last_hit = NOWHERE;
   g->node_index = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_widget_set_tooltip_text(hbox, _("use a tool to add warps.\nright-click to remove a warp."));
-  gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 
 
   GtkWidget *lbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -3944,7 +3943,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(lbox), labelbox2, FALSE, TRUE, 0);
 
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, TRUE, TRUE, 0);
 
   g->btn_node_tool = GTK_TOGGLE_BUTTON(dt_iop_togglebutton_new(self, NULL, N_("edit, add and delete nodes"), NULL,
                                        G_CALLBACK(btn_make_radio_callback), TRUE, 0, 0,
@@ -3978,7 +3977,7 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_reset(dt_iop_module_t *self)
 {
-  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)self->gui_data;
+  dt_iop_liquify_gui_data_t *g = (dt_iop_liquify_gui_data_t *)dt_iop_gui_data(self);
   g->dragging = NOWHERE;
   g->temp = NULL;
   g->status = 0;

@@ -366,7 +366,7 @@ static gboolean _is_identity(dt_iop_rgbcurve_params_t *p, rgbcurve_channel_t cha
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
 
   if(w == g->autoscale)
@@ -424,7 +424,7 @@ static void interpolator_callback(GtkWidget *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
 
   const int combo = dt_bauhaus_combobox_get(widget);
 
@@ -446,11 +446,11 @@ static void tab_switch_callback(GtkNotebook *notebook, GtkWidget *page, guint pa
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
 
   g->channel = (rgbcurve_channel_t)page_num;
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 static gboolean _area_resized_callback(GtkWidget *widget, GdkEvent *event, gpointer user_data)
@@ -528,7 +528,7 @@ static inline int _add_node_from_picker(dt_iop_rgbcurve_params_t *p, const float
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   (void)piece;
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
   if(picker == g->colorpicker_set_values)
   {
     dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
@@ -570,7 +570,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
 }
 
 static gboolean _sanity_check(const float x, const int selected, const int nodes,
@@ -597,7 +597,7 @@ static gboolean _sanity_check(const float x, const int selected, const int nodes
 static gboolean _move_point_internal(dt_iop_module_t *self, GtkWidget *widget, float dx, float dy, guint state)
 {
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
 
   const int ch = g->channel;
   dt_iop_rgbcurve_node_t *curve = p->curve_nodes[ch];
@@ -623,7 +623,7 @@ static gboolean _move_point_internal(dt_iop_module_t *self, GtkWidget *widget, f
 static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event, dt_iop_module_t *self)
 {
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
 
   gdouble delta_y;
 
@@ -646,7 +646,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, dt_iop_module_t *self)
 {
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
 
   // if autoscale is on: do not modify g and b curves
   if((p->curve_autoscale != DT_S_SCALE_MANUAL_RGB) && g->channel != DT_IOP_RGBCURVE_R) return TRUE;
@@ -699,7 +699,7 @@ static gboolean _area_leave_notify_callback(GtkWidget *widget, GdkEventCrossing 
 
 static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_module_t *self)
 {
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
   dt_develop_t *dev = self->dev;
 
@@ -1043,7 +1043,7 @@ finally:
 
 static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event, dt_iop_module_t *self)
 {
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
 
   const int inset = DT_GUI_CURVE_EDITOR_INSET;
@@ -1126,7 +1126,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 {
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
   dt_iop_rgbcurve_params_t *d = (dt_iop_rgbcurve_params_t *)self->default_params;
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
 
   const int ch = g->channel;
   const int autoscale = p->curve_autoscale;
@@ -1187,7 +1187,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
           dt_iop_color_picker_reset(self, TRUE);
           dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-          gtk_widget_queue_draw(self->widget);
+          gtk_widget_queue_draw(self->gui->widget);
         }
 
       return TRUE;
@@ -1209,7 +1209,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
         dt_bauhaus_combobox_set(g->interpolator, p->curve_type[DT_IOP_RGBCURVE_R]);
         dt_iop_color_picker_reset(self, TRUE);
         dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-        gtk_widget_queue_draw(self->widget);
+        gtk_widget_queue_draw(self->gui->widget);
       }
       else
       {
@@ -1220,7 +1220,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
           dt_bauhaus_combobox_set(g->autoscale, 1);
           dt_iop_color_picker_reset(self, TRUE);
           dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-          gtk_widget_queue_draw(self->widget);
+          gtk_widget_queue_draw(self->gui->widget);
         }
       }
       return TRUE;
@@ -1234,7 +1234,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       curve_nodes[g->selected].y = curve_nodes[g->selected].x = reset_value;
       dt_iop_color_picker_reset(self, TRUE);
       dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-      gtk_widget_queue_draw(self->widget);
+      gtk_widget_queue_draw(self->gui->widget);
       return TRUE;
     }
 
@@ -1248,7 +1248,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     p->curve_num_nodes[ch]--;
     dt_iop_color_picker_reset(self, TRUE);
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-    gtk_widget_queue_draw(self->widget);
+    gtk_widget_queue_draw(self->gui->widget);
     return TRUE;
   }
   return FALSE;
@@ -1256,7 +1256,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
 void gui_reset(struct dt_iop_module_t *self)
 {
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
 
   g->channel = DT_IOP_RGBCURVE_R;
@@ -1266,12 +1266,12 @@ void gui_reset(struct dt_iop_module_t *self)
 
   dt_bauhaus_combobox_set(g->interpolator, p->curve_type[DT_IOP_RGBCURVE_R]);
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 void change_image(struct dt_iop_module_t *self)
 {
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g))
   {
     if(!g->channel)
@@ -1298,7 +1298,7 @@ void gui_init(struct dt_iop_module_t *self)
   }
 
   g->channel = DT_IOP_RGBCURVE_R;
-  self->timeout_handle = 0;
+  self->gui->timeout_handle = 0;
   change_image(self);
 
   g->autoscale = dt_bauhaus_combobox_from_params(self, "curve_autoscale");
@@ -1329,7 +1329,7 @@ void gui_init(struct dt_iop_module_t *self)
                                                            "shift+drag to create a negative curve"));
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(self->widget), vbox, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), vbox, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(hbox), TRUE, TRUE, 0);
 
   g->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
@@ -1366,7 +1366,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->interpolator, _("cubic spline"));
   dt_bauhaus_combobox_add(g->interpolator, _("centripetal spline"));
   dt_bauhaus_combobox_add(g->interpolator, _("monotonic spline"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->interpolator, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->interpolator, TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(g->interpolator,
       _("change this method if you see oscillations or cusps in the curve\n"
         "- cubic spline is better to produce smooth curves but oscillates when nodes are too close\n"
@@ -1383,7 +1383,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
 
   dt_bauhaus_combobox_set(g->autoscale, p->curve_autoscale);
@@ -1395,12 +1395,12 @@ void gui_update(struct dt_iop_module_t *self)
   _rgbcurve_show_hide_controls(p, g);
 
   // that's all, gui curve is read directly from params during expose event.
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+  dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)dt_iop_gui_data(self);
 
   for(int k = 0; k < DT_IOP_RGBCURVE_MAX_CHANNELS; k++) dt_draw_curve_destroy(g->minmax_curve[k]);
 

@@ -283,7 +283,7 @@ static void apply_auto_grey(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
-  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
+  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)dt_iop_gui_data(self);
 
   float grey = fmax(fmax(self->picked_color[0], self->picked_color[1]), self->picked_color[2]);
   p->grey_point = 100.f * grey;
@@ -299,7 +299,7 @@ static void apply_auto_black(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
-  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
+  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)dt_iop_gui_data(self);
 
   float noise = powf(2.0f, -16.0f);
 
@@ -321,7 +321,7 @@ static void apply_auto_dynamic_range(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
-  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
+  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)dt_iop_gui_data(self);
 
   float noise = powf(2.0f, -16.0f);
 
@@ -345,7 +345,7 @@ static void apply_auto_dynamic_range(dt_iop_module_t *self)
 static void apply_autotune(dt_iop_module_t *self)
 {
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
-  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
+  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)dt_iop_gui_data(self);
 
   float noise = powf(2.0f, -16.0f);
 
@@ -378,7 +378,7 @@ static void apply_autotune(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
+  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_profilegamma_params_t *p = (dt_iop_profilegamma_params_t *)self->params;
 
   if(w == g->mode)
@@ -421,7 +421,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
+  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)dt_iop_gui_data(self);
   if     (picker == g->grey_point)
     apply_auto_grey(self);
   else if(picker == g->shadows_range)
@@ -526,7 +526,7 @@ void gui_reset(dt_iop_module_t *self)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)self->gui_data;
+  dt_iop_profilegamma_gui_data_t *g = (dt_iop_profilegamma_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_color_picker_reset(self, TRUE);
 
@@ -543,7 +543,7 @@ void gui_init(dt_iop_module_t *self)
 
   /**** GAMMA MODE ***/
 
-  GtkWidget *vbox_gamma = self->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  GtkWidget *vbox_gamma = self->gui->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   g->linear = dt_bauhaus_slider_from_params(self, N_("linear"));
   dt_bauhaus_slider_set_digits(g->linear, 4);
@@ -557,7 +557,7 @@ void gui_init(dt_iop_module_t *self)
 
   /**** LOG MODE ****/
 
-  GtkWidget *vbox_log = self->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  GtkWidget *vbox_log = self->gui->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   g->grey_point
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "grey_point"));
@@ -590,12 +590,12 @@ void gui_init(dt_iop_module_t *self)
   gtk_stack_add_named(GTK_STACK(g->mode_stack), vbox_log, "log");
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->mode = dt_bauhaus_combobox_from_params(self, N_("mode"));
   gtk_widget_set_tooltip_text(g->mode, _("tone mapping method"));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), g->mode_stack, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->mode_stack, TRUE, TRUE, 0);
 }
 
 

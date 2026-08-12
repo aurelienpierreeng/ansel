@@ -2183,7 +2183,8 @@ gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_
       }
 
       dt_masks_iop_update(creation_module);
-      dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)creation_module->blend_data;
+      dt_iop_gui_blend_data_t *blend_data
+          = creation_module->gui ? (dt_iop_gui_blend_data_t *)creation_module->gui->blend_data : NULL;
       if(!IS_NULL_PTR(dev) && !IS_NULL_PTR(dev->form_gui))
         dev->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
       if(!IS_NULL_PTR(blend_data) && GTK_IS_TOGGLE_BUTTON(blend_data->masks_edit))
@@ -3375,9 +3376,9 @@ void dt_masks_reset_form_gui(dt_develop_t *dev)
   dt_masks_shape_buttons_deactivate_all(NULL);
   dt_iop_module_t *module = dev->gui_module;
   if(!IS_NULL_PTR(module) && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(module->flags() & IOP_FLAGS_NO_MASKS)
-    && !IS_NULL_PTR(module->blend_data))
+    && !IS_NULL_PTR(module->gui) && !IS_NULL_PTR(module->gui->blend_data))
   {
-    dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->blend_data;
+    dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
     blend_data->masks_shown = DT_MASKS_EDIT_OFF;
     if(!IS_NULL_PTR(blend_data->masks_edit))
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(blend_data->masks_edit), 0);
@@ -3391,9 +3392,9 @@ void dt_masks_reset_show_masks_icons(dt_develop_t *dev)
   {
     dt_iop_module_t *module = (dt_iop_module_t *)module_node->data;
     if(module && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && !(module->flags() & IOP_FLAGS_NO_MASKS)
-    && !IS_NULL_PTR(module->blend_data))
+    && !IS_NULL_PTR(module->gui) && !IS_NULL_PTR(module->gui->blend_data))
     {
-      dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->blend_data;
+      dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
       blend_data->masks_shown = DT_MASKS_EDIT_OFF;
       if(!IS_NULL_PTR(blend_data->masks_edit))
       {
@@ -3460,7 +3461,7 @@ void dt_masks_iop_combo_populate(GtkWidget *widget, void *data)
   // we ensure that the module has focus
   dt_iop_module_t *module = (dt_iop_module_t *)data;
   dt_iop_request_focus(module);
-  dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   // we determine a higher approx of the entry number
   const guint forms_count = g_list_length(module->dev->forms);
@@ -3542,7 +3543,7 @@ void dt_masks_iop_combo_populate(GtkWidget *widget, void *data)
 void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module_t *module)
 {
   // we get the corresponding value
-  dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   int selection_index = dt_bauhaus_combobox_get(blend_data->masks_combo);
   if(selection_index == 0) return;
@@ -4202,7 +4203,7 @@ void apply_operation(struct dt_masks_form_group_t *group_entry, const dt_masks_s
 void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t value)
 {
   if(IS_NULL_PTR(module)) return;
-  dt_iop_gui_blend_data_t *blend_data = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *blend_data = module->gui ? (dt_iop_gui_blend_data_t *)module->gui->blend_data : NULL;
   if(IS_NULL_PTR(blend_data)) return;
 
   dt_masks_form_t *group_form = NULL;

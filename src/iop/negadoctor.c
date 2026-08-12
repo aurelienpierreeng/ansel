@@ -437,7 +437,7 @@ static void setup_color_variables(dt_iop_negadoctor_gui_data_t *const g, const g
 
 static void toggle_stock_controls(dt_iop_module_t *const self)
 {
-  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_negadoctor_params_t *const p = (dt_iop_negadoctor_params_t *)self->params;
 
   if(p->film_stock == DT_FILMSTOCK_NB)
@@ -462,7 +462,7 @@ static void toggle_stock_controls(dt_iop_module_t *const self)
 
 static void Dmin_picker_update(dt_iop_module_t *self)
 {
-  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_negadoctor_params_t *const p = (dt_iop_negadoctor_params_t *)self->params;
 
   GdkRGBA color;
@@ -485,7 +485,7 @@ static void Dmin_picker_update(dt_iop_module_t *self)
 static void Dmin_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -509,7 +509,7 @@ static void Dmin_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 
 static void WB_low_picker_update(dt_iop_module_t *self)
 {
-  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_negadoctor_params_t *const p = (dt_iop_negadoctor_params_t *)self->params;
 
   GdkRGBA color;
@@ -530,7 +530,7 @@ static void WB_low_picker_update(dt_iop_module_t *self)
 static void WB_low_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -557,7 +557,7 @@ static void WB_low_picker_callback(GtkColorButton *widget, dt_iop_module_t *self
 
 static void WB_high_picker_update(dt_iop_module_t *self)
 {
-  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_negadoctor_params_t *const p = (dt_iop_negadoctor_params_t *)self->params;
 
   GdkRGBA color;
@@ -578,7 +578,7 @@ static void WB_high_picker_update(dt_iop_module_t *self)
 static void WB_high_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);
@@ -605,7 +605,7 @@ static void Wb_low_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
 
@@ -621,7 +621,7 @@ static void Wb_low_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
   dt_gui_freeze_end();
 
   WB_low_picker_update(self);
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -629,7 +629,7 @@ static void Wb_high_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   const float WB_high_min = v_minf(p->wb_high);
@@ -644,7 +644,7 @@ static void Wb_high_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
   dt_gui_freeze_end();
 
   WB_low_picker_update(self);
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -654,7 +654,7 @@ static void Wb_high_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
 static void apply_auto_Dmin(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   for(int k = 0; k < 4; k++) p->Dmin[k] = self->picked_color[k];
@@ -666,7 +666,7 @@ static void apply_auto_Dmin(dt_iop_module_t *self)
   dt_gui_freeze_end();
 
   Dmin_picker_update(self);
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -674,7 +674,7 @@ static void apply_auto_Dmin(dt_iop_module_t *self)
 static void apply_auto_Dmax(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_aligned_pixel_t RGB;
@@ -690,7 +690,7 @@ static void apply_auto_Dmax(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->D_max, p->D_max);
   dt_gui_freeze_end();
 
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -698,7 +698,7 @@ static void apply_auto_Dmax(dt_iop_module_t *self)
 static void apply_auto_offset(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_aligned_pixel_t RGB;
@@ -712,7 +712,7 @@ static void apply_auto_offset(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->offset, p->offset);
   dt_gui_freeze_end();
 
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -721,7 +721,7 @@ static void apply_auto_offset(dt_iop_module_t *self)
 static void apply_auto_WB_low(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_aligned_pixel_t RGB_min;
@@ -738,7 +738,7 @@ static void apply_auto_WB_low(dt_iop_module_t *self)
   dt_gui_freeze_end();
 
   WB_low_picker_update(self);
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -747,7 +747,7 @@ static void apply_auto_WB_low(dt_iop_module_t *self)
 static void apply_auto_WB_high(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_aligned_pixel_t RGB_min;
@@ -764,7 +764,7 @@ static void apply_auto_WB_high(dt_iop_module_t *self)
   dt_gui_freeze_end();
 
   WB_high_picker_update(self);
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -773,7 +773,7 @@ static void apply_auto_WB_high(dt_iop_module_t *self)
 static void apply_auto_black(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_aligned_pixel_t RGB;
@@ -790,7 +790,7 @@ static void apply_auto_black(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->black, p->black);
   dt_gui_freeze_end();
 
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -799,7 +799,7 @@ static void apply_auto_black(dt_iop_module_t *self)
 static void apply_auto_exposure(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_aligned_pixel_t RGB;
@@ -816,7 +816,7 @@ static void apply_auto_exposure(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->exposure, log2f(p->exposure));
   dt_gui_freeze_end();
 
-  dt_control_queue_redraw_widget(self->widget);
+  dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -826,7 +826,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   (void)pipe;
   (void)piece;
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
 
   if     (picker == g->Dmin_sampler)
     apply_auto_Dmin(self);
@@ -857,7 +857,7 @@ void gui_init(dt_iop_module_t *self)
   dt_ui_notebook_set_picker_owner(g->notebook, self);
 
   // Page FILM PROPERTIES
-  GtkWidget *page1 = self->widget = dt_ui_notebook_page(g->notebook, N_("film properties"), NULL);
+  GtkWidget *page1 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("film properties"), NULL);
 
   // Dmin
 
@@ -924,7 +924,7 @@ void gui_init(dt_iop_module_t *self)
                                            "before the inversion, so blacks are neither clipped or too pale."));
 
   // Page CORRECTIONS
-  GtkWidget *page2 = self->widget = dt_ui_notebook_page(g->notebook, N_("corrections"), NULL);
+  GtkWidget *page2 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("corrections"), NULL);
 
   // WB shadows
   gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("shadows color cast")), FALSE, FALSE, 0);
@@ -1007,7 +1007,7 @@ void gui_init(dt_iop_module_t *self)
                                               "recovering the global white balance in difficult cases."));
 
   // Page PRINT PROPERTIES
-  GtkWidget *page3 = self->widget = dt_ui_notebook_page(g->notebook, N_("print properties"), NULL);
+  GtkWidget *page3 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("print properties"), NULL);
 
   // print corrections
   gtk_box_pack_start(GTK_BOX(page3), dt_ui_section_label_new(_("virtual paper properties")), FALSE, FALSE, 0);
@@ -1044,13 +1044,13 @@ void gui_init(dt_iop_module_t *self)
                                              "the global contrast and avoid clipping highlights."));
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   // Film emulsion
   g->film_stock = dt_bauhaus_combobox_from_params(self, "film_stock");
   gtk_widget_set_tooltip_text(g->film_stock, _("toggle on or off the color controls"));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
   const int active_page = dt_conf_get_int("plugins/darkroom/negadoctor/gui_page");
   gtk_widget_show(gtk_notebook_get_nth_page(g->notebook, active_page));
   gtk_notebook_set_current_page(g->notebook, active_page);
@@ -1059,7 +1059,7 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g) && GTK_IS_NOTEBOOK(g->notebook))
     dt_conf_set_int("plugins/darkroom/negadoctor/gui_page", gtk_notebook_get_current_page(g->notebook));
   IOP_GUI_FREE;
@@ -1068,7 +1068,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
-  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(w) || w == g->film_stock)
   {
     toggle_stock_controls(self);
@@ -1103,7 +1103,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 void gui_update(dt_iop_module_t *const self)
 {
   // let gui slider match current parameters:
-  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_negadoctor_params_t *const p = (dt_iop_negadoctor_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);

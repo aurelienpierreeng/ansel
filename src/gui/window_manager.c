@@ -323,7 +323,7 @@ static gboolean _ui_scroll_target_is_live_widget(const GtkWidget *target, const 
     {
       const dt_iop_module_t *module = (const dt_iop_module_t *)iops->data;
       if(IS_NULL_PTR(module)) continue;
-      if(module->expander == target || module->header == target) return TRUE;
+      if(dt_iop_gui_owns_widget(module, target)) return TRUE;
     }
   }
 

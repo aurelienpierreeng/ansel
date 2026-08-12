@@ -20,6 +20,7 @@
 #include "config.h"
 #include "common/conf.h"
 #endif
+#include "develop/imageop_gui.h"
 
 #include "widgets/bauhaus.h"
 #include "pixel/chromatic_adaptation.h"
@@ -379,7 +380,7 @@ static inline __attribute__((always_inline)) void _get_split_matrix(const float 
 
 static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point, float *error)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   GtkWidget *const widgets[6]
       = { g->point[point].simple_theta, g->point[point].simple_psi, g->point[point].simple_stretch_1,
@@ -412,7 +413,7 @@ static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point,
 
 static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int point, float *error)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   GtkWidget *const widgets[9]
       = { g->point[point].primaries_achromatic_hue, g->point[point].primaries_achromatic_purity,
@@ -449,7 +450,7 @@ static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int poi
 
 static void _queue_preview_redraw(dt_iop_module_t *self)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   if(g && g->preview) gtk_widget_queue_draw(g->preview);
 }
 
@@ -467,7 +468,7 @@ static void _queue_preview_redraw(dt_iop_module_t *self)
 static void _pipe_finished_callback(gpointer instance, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
 
   if(IS_NULL_PTR(g)) return;
 
@@ -496,7 +497,7 @@ static void _pipe_finished_callback(gpointer instance, gpointer user_data)
  */
 static void _update_point_slider_colors(dt_iop_module_t *self, const int point)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const dt_iop_order_iccprofile_info_t *work_profile = self->dev && self->dev->pipe
                                                            ? dt_ioppr_get_pipe_work_profile_info(self->dev->pipe)
@@ -541,7 +542,7 @@ static void _update_point_slider_colors(dt_iop_module_t *self, const int point)
 
 static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget *changed)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
 
   const dt_iop_splittoning_rgb_mixer_mode_t active_mode = dt_bauhaus_combobox_get(g->point[point].mixer_mode);
@@ -588,7 +589,7 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
 
 static void _commit_gui_change(dt_iop_module_t *self, GtkWidget *changed)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(changed), "split-point"));
 
   _update_point_slider_colors(self, point);
@@ -680,7 +681,7 @@ static void _render_preview_surface(dt_iop_module_t *self, cairo_surface_t *surf
 static gboolean _preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   GtkAllocation allocation;
 
   gtk_widget_get_allocation(widget, &allocation);
@@ -707,7 +708,7 @@ static void _general_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   gboolean changed_complete = FALSE;
@@ -745,7 +746,7 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   const dt_iop_splittoning_rgb_mixer_mode_t mode = dt_bauhaus_combobox_get(widget);
@@ -796,7 +797,7 @@ static void _simple_slider_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   GtkWidget *const widgets[6]
@@ -825,7 +826,7 @@ static void _primaries_slider_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   GtkWidget *const widgets[9]
@@ -1027,7 +1028,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const dt_iop_module_t *const sampled_module = piece && piece->module ? piece->module : self;
   const dt_iop_order_iccprofile_info_t *const work_profile
@@ -1062,7 +1063,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
 
   dt_gui_freeze_begin();
@@ -1270,7 +1271,7 @@ static void _build_primaries_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gu
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_splittoning_rgb_gui_data_t *g = IOP_GUI_ALLOC(splittoning_rgb);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->preview_surface = NULL;
   g->preview_width = 0;
   g->preview_height = 0;
@@ -1278,11 +1279,11 @@ void gui_init(struct dt_iop_module_t *self)
   g->preview = GTK_WIDGET(gtk_drawing_area_new());
   gtk_widget_set_size_request(g->preview, -1, DT_PIXEL_APPLY_DPI(DT_SPLITTONING_RGB_PREVIEW_HEIGHT));
   g_signal_connect(G_OBJECT(g->preview), "draw", G_CALLBACK(_preview_draw), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->preview, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->preview, FALSE, FALSE, 0);
 
   g->tabs = dt_ui_notebook_new();
   dt_ui_notebook_set_picker_owner(g->tabs, self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->tabs), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->tabs), FALSE, FALSE, 0);
 
   for(int point = 0; point < DT_SPLITTONING_RGB_POINT_COUNT; point++)
   {
@@ -1346,7 +1347,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_pipe_finished_callback), self);
   if(g->preview_surface) cairo_surface_destroy(g->preview_surface);
   IOP_GUI_FREE;

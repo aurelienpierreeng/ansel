@@ -1030,7 +1030,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   gboolean showmask = FALSE;
   if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
-    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
     if(g) showmask = (g->visual_mask);
     // take care of passthru modes
     if(pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU)
@@ -1663,7 +1663,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   gboolean showmask = FALSE;
   if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
-    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
     if(g) showmask = (g->visual_mask);
     // take care of passthru modes
     if(pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU)
@@ -2296,7 +2296,7 @@ void reload_defaults(dt_iop_module_t *module)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_demosaic_params_t *p = (dt_iop_demosaic_params_t *)self->params;
 
   const gboolean bayer = (self->dev->image_storage.dsc.filters != 9u);
@@ -2342,20 +2342,20 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 }
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
   dt_bauhaus_widget_set_quad_active(g->dual_thrs, FALSE);
 
   g->visual_mask = FALSE;
   gui_changed(self, NULL, NULL);
 
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->default_enabled ? "raw" : "non_raw");
 }
 
 static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
 
   g->visual_mask = dt_bauhaus_widget_get_quad_active(quad);
   dt_dev_pixelpipe_update_history_main(self->dev);
@@ -2363,7 +2363,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
   if(!in)
   {
     const gboolean was_dualmask = g->visual_mask;
@@ -2377,7 +2377,7 @@ void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_demosaic_gui_data_t *g = IOP_GUI_ALLOC(demosaic);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->demosaic_method_bayer = dt_bauhaus_combobox_from_params(self, "demosaicing_method");
   for(int i=0;i<7;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_bayer, 9);
@@ -2411,14 +2411,14 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->greeneq, _("green channels matching method"));
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
   GtkWidget *label_non_raw = dt_ui_label_new(_("not applicable"));
   gtk_widget_set_tooltip_text(label_non_raw, _("demosaicing is only used for color raw images"));
 
-  gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 // clang-format off

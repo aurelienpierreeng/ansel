@@ -583,7 +583,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorreconstruct_data_t *data = (dt_iop_colorreconstruct_data_t *)piece->data;
-  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)self->gui_data;
+  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)dt_iop_gui_data(self);
   float *in = (float *)ivoid;
   float *out = (float *)ovoid;
 
@@ -922,7 +922,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_colorreconstruct_data_t *d = (dt_iop_colorreconstruct_data_t *)piece->data;
   dt_iop_colorreconstruct_global_data_t *gd = (dt_iop_colorreconstruct_global_data_t *)self->global_data;
-  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)self->gui_data;
+  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)dt_iop_gui_data(self);
 
   const float scale = dt_dev_get_module_scale(pipe, roi_in);
   const float sigma_r = fmax(d->range, 0.1f); // does not depend on scale
@@ -1030,7 +1030,7 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_colorreconstruct_params_t *p = (dt_iop_colorreconstruct_params_t *)self->params;
-  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)self->gui_data;
+  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)dt_iop_gui_data(self);
   if(w == g->precedence)
   {
     gtk_widget_set_visible(g->hue, p->precedence == COLORRECONSTRUCT_PRECEDENCE_HUE);
@@ -1070,11 +1070,11 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 void gui_update(struct dt_iop_module_t *self)
 {
   const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
-  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)self->gui_data;
+  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorreconstruct_params_t *p = (dt_iop_colorreconstruct_params_t *)self->params;
 
   self->hide_enable_button = monochrome;
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), !monochrome ? "default" : "monochrome");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), !monochrome ? "default" : "monochrome");
 
   gtk_widget_set_visible(g->hue, p->precedence == COLORRECONSTRUCT_PRECEDENCE_HUE);
 
@@ -1115,7 +1115,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->can = NULL;
   g->hash = 0;
 
-  GtkWidget *box_enabled = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_enabled = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->threshold = dt_bauhaus_slider_from_params(self, N_("threshold"));
   g->spatial = dt_bauhaus_slider_from_params(self, N_("spatial"));
@@ -1145,15 +1145,15 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *monochromes = dt_ui_label_new(_("not applicable"));
   gtk_widget_set_tooltip_text(monochromes, _("no highlights reconstruction for monochrome images"));
 
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
-  gtk_stack_add_named(GTK_STACK(self->widget), monochromes, "monochrome");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_enabled, "default");
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), monochromes, "monochrome");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_enabled, "default");
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)self->gui_data;
+  dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorreconstruct_bilateral_dump(g->can);
 
   IOP_GUI_FREE;

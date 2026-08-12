@@ -507,7 +507,7 @@ static void profile_changed(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_request_focus(self);
   dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)self->params;
-  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
+  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)dt_iop_gui_data(self);
   int pos = dt_bauhaus_combobox_get(widget);
 
   /* The combo lists this image's own derived profiles first (g->image_profiles, which
@@ -910,7 +910,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
+  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)self->params;
 
   dt_bauhaus_combobox_set(g->clipping_combobox, p->normalize);
@@ -976,7 +976,7 @@ void reload_defaults(dt_iop_module_t *module)
 
 static void update_profile_list(dt_iop_module_t *self)
 {
-  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
+  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)dt_iop_gui_data(self);
 
   if(IS_NULL_PTR(g)) return;
 
@@ -1129,15 +1129,15 @@ void gui_init(struct dt_iop_module_t *self)
   dt_loc_get_datadir(datadir, sizeof(datadir));
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->profile_combobox = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->profile_combobox, N_("input profile"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->profile_combobox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->profile_combobox, TRUE, TRUE, 0);
 
   g->work_combobox = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_widget_set_label(g->work_combobox, N_("working profile"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->work_combobox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->work_combobox, TRUE, TRUE, 0);
 
   dt_bauhaus_combobox_set(g->profile_combobox, 0);
   {
@@ -1170,7 +1170,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
+  dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)dt_iop_gui_data(self);
   while(g->image_profiles)
   {
     dt_free(g->image_profiles->data);

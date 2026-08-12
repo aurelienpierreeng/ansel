@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "develop/imageop_gui.h"
 #include "widgets/widget_settings.h"
 #include "develop/dev_history_gui.h"
 
@@ -38,7 +39,9 @@ static void _undo_restore_gui(dt_develop_t *dev, const int mask_edit_mode,
   (void)mask_edit_mode;   // consumed by the engine's dt_masks_set_edit_mode() call
 
   dt_iop_gui_update_blendif(dev->gui_module);
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)(dev->gui_module->blend_data);
+  dt_iop_gui_blend_data_t *bd = dev->gui_module && dev->gui_module->gui
+                                  ? (dt_iop_gui_blend_data_t *)dev->gui_module->gui->blend_data
+                                  : NULL;
   if(bd)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask),
                                  request_mask_display == DT_DEV_PIXELPIPE_DISPLAY_MASK);
@@ -65,12 +68,12 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
     if(dev->gui_module == mod) dt_iop_request_focus(NULL);
-    if(!dt_iop_is_hidden(mod) && mod->expander)
+    if(!dt_iop_is_hidden(mod) && mod->gui && mod->gui->expander)
     {
       // hide first to avoid a burst of gtk critical warnings from the live container
-      gtk_widget_hide(mod->expander);
+      gtk_widget_hide(mod->gui->expander);
+      // frees mod->gui and destroys the whole expander/header/widget tree itself
       dt_iop_gui_cleanup_module(mod);
-      gtk_widget_destroy(mod->widget);
     }
   }
   g_list_free(removed);
@@ -82,9 +85,10 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
     // History reload is backend-only and creates new multi-instances without
     // GTK state. Attach every missing GUI here, after releasing history_mutex,
     // so styles and global history actions expose their complete module set.
-    if(!dt_iop_is_hidden(mod) && IS_NULL_PTR(mod->expander))
+    if(!dt_iop_is_hidden(mod) && (IS_NULL_PTR(mod->gui) || IS_NULL_PTR(mod->gui->expander)))
     {
-      if(IS_NULL_PTR(mod->widget)) dt_iop_gui_init(mod);
+      // a backend-created instance has no gui struct at all -- that IS "never initialised"
+      if(IS_NULL_PTR(mod->gui) || IS_NULL_PTR(mod->gui->widget)) dt_iop_gui_init(mod);
       dt_iop_gui_set_expander(mod);
     }
 

@@ -26,6 +26,82 @@
 #define DT_DEVELOP_IMAGEOP_GUI_H
 
 #include "develop/imageop.h"
+
+/**
+ * @brief The interactive half of a module instance, owned by the GUI.
+ *
+ * @details Held by dt_iop_module_t as an opaque pointer: allocated in dt_iop_gui_init(),
+ * freed in dt_iop_gui_cleanup_module(), NULL whenever no GUI is attached to the module
+ * (export, thumbnails, ansel-cli, tests). Member names are unchanged from their previous
+ * life directly on dt_iop_module_t: call sites read `module->gui->widget` where they read
+ * `module->widget` before.
+ */
+typedef struct dt_iop_module_gui_t
+{
+  /** parameters needed if a gui is attached. will be NULL if in export/batch mode. */
+  dt_iop_gui_data_t *gui_data;
+  dt_pthread_mutex_t gui_lock;
+  /** holder for blending ui control */
+  gpointer blend_data;
+  /** child widget which is added to the GtkExpander. copied from module_so_t. */
+  GtkWidget *widget;
+  /** off button, somewhere in header, common to all plug-ins. A GtkDarktableToggleButton
+   * underneath; declared as the base type so this header does not feed widgets/ to all
+   * ~122 of its consumers — every external user already casts via GTK_TOGGLE_BUTTON(). */
+  GtkWidget *off;
+  /** this is the module header, contains label and buttons */
+  GtkWidget *header;
+  /** this is the module mask indicator, inside header */
+  GtkWidget *mask_indicator;
+  /** expander containing the widget and flag to store expanded state */
+  GtkWidget *expander;
+  gboolean expanded;
+  /** reset parameters button */
+  GtkWidget *reset_button;
+  /** show preset menu button */
+  GtkWidget *presets_button;
+  /** fusion slider */
+  GtkWidget *fusion_slider;
+  /** show/hide guide button and combobox */
+  GtkWidget *guides_toggle;
+  GtkWidget *guides_combo;
+  gboolean multi_show_close;
+  gboolean multi_show_up;
+  gboolean multi_show_down;
+  gboolean multi_show_new;
+  GtkWidget *multimenu_button;
+  /** delayed-event handling */
+  guint timeout_handle;
+} dt_iop_module_gui_t;
+
+
+/** @brief The module's GUI data blob, NULL-safe for headless callers: IOP process()
+ *  implementations read it for darkroom-only feedback and must get NULL, not a crash,
+ *  when no GUI exists. */
+static inline dt_iop_gui_data_t *dt_iop_gui_data(const struct dt_iop_module_t *m)
+{
+  return m->gui ? m->gui->gui_data : NULL;
+}
+
+static inline dt_iop_gui_data_t *_iop_gui_alloc(dt_iop_module_t *module, size_t size)
+{
+  // Align so that DT_ALIGNED_ARRAY may be used within gui_data struct
+  module->gui->gui_data = (dt_iop_gui_data_t*)dt_calloc_align(size);
+  dt_pthread_mutex_init(&module->gui->gui_lock,NULL);
+  return module->gui->gui_data;
+}
+#define IOP_GUI_ALLOC(module) \
+  (dt_iop_##module##_gui_data_t *)_iop_gui_alloc(self,sizeof(dt_iop_##module##_gui_data_t))
+
+#define IOP_GUI_FREE                                    \
+  dt_pthread_mutex_destroy(&self->gui->gui_lock);       \
+  if(self->gui->gui_data)                               \
+  {                                                     \
+    dt_free_align(self->gui->gui_data);                 \
+    self->gui->gui_data = NULL;                         \
+  }                                                     \
+  self->gui->gui_data = NULL;
+
 #include "widgets/paint.h"   // DTGTKCairoPaintIconFunc, named in three declarations below
 
 #ifdef __cplusplus

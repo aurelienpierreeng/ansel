@@ -54,6 +54,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+#include "develop/imageop_gui.h"
 #include "widgets/bauhaus.h"
 #include "widgets/resize_handle.h"
 #include "widgets/widget_settings.h"
@@ -259,7 +260,7 @@ static void _refresh_module_histogram(const dt_dev_pixelpipe_t *pipe, const dt_d
                           &module->histogram, module->histogram_max);
   dt_iop_gui_leave_critical_section(module);
 
-  if(module->widget) dt_control_queue_redraw_widget(module->widget);
+  if(module->gui && module->gui->widget) dt_control_queue_redraw_widget(module->gui->widget);
 }
 
 static dt_backbuf_t *_get_histogram_backbuf(dt_develop_t *dev, const char *op)

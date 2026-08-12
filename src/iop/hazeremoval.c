@@ -207,7 +207,7 @@ void cleanup_global(dt_iop_module_so_t *self)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_hazeremoval_gui_data_t *g = (dt_iop_hazeremoval_gui_data_t *)self->gui_data;
+  dt_iop_hazeremoval_gui_data_t *g = (dt_iop_hazeremoval_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_gui_enter_critical_section(self);
   g->distance_max = NAN;
@@ -234,7 +234,7 @@ static void _history_resync_callback(gpointer instance, gpointer user_data)
 {
   (void)instance;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_hazeremoval_gui_data_t *g = (dt_iop_hazeremoval_gui_data_t *)self->gui_data;
+  dt_iop_hazeremoval_gui_data_t *g = (dt_iop_hazeremoval_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return;
 
   const uint64_t preview_hash = _current_preview_hash(self);
@@ -494,7 +494,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t*)self->gui_data;
+  dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_hazeremoval_params_t *d = piece->data;
   int err = 0;
   gray_image trans_map = (gray_image){ 0 };
@@ -803,7 +803,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t*)self->gui_data;
+  dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_hazeremoval_params_t *d = piece->data;
 
   const int ch = piece->dsc_in.channels;

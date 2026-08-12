@@ -550,7 +550,7 @@ error:
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_dither_params_t *p = (dt_iop_dither_params_t *)self->params;
-  dt_iop_dither_gui_data_t *g = (dt_iop_dither_gui_data_t *)self->gui_data;
+  dt_iop_dither_gui_data_t *g = (dt_iop_dither_gui_data_t *)dt_iop_gui_data(self);
 
   if(w == g->dither_type)
   {
@@ -644,7 +644,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_dither_gui_data_t *g = (dt_iop_dither_gui_data_t *)self->gui_data;
+  dt_iop_dither_gui_data_t *g = (dt_iop_dither_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_dither_params_t *p = (dt_iop_dither_params_t *)self->params;
 #if 0
   dt_bauhaus_slider_set(g->radius, p->random.radius);
@@ -662,7 +662,7 @@ void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_dither_gui_data_t *g = IOP_GUI_ALLOC(dither);
 
-  g->random = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  g->random = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
 #if 0
   g->radius = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0, 200.0, 0.1, p->random.radius, 2);
@@ -697,11 +697,11 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(g->random), g->range, TRUE, TRUE, 0);
 #endif
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->dither_type = dt_bauhaus_combobox_from_params(self, "dither_type");
 
-  gtk_box_pack_start(GTK_BOX(self->widget), g->random, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->random, TRUE, TRUE, 0);
 
 #if 0
   g_signal_connect (G_OBJECT (g->radius), "value-changed",

@@ -24,6 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "develop/imageop_gui.h"
 #include "widgets/widget_settings.h"
 #include "colorprofiles/colorspaces.h"
 #include "database/preset_repository.h"
@@ -698,11 +699,11 @@ static void _ioporder_set_enable_button_icon(GtkWidget *widget, dt_iop_module_t 
 static void _ioporder_node_toggle_enable(GtkToggleButton *togglebutton, gpointer user_data)
 {
   const dt_ioporder_graph_node_t *node = (const dt_ioporder_graph_node_t *)user_data;
-  if(!node || !GTK_IS_TOGGLE_BUTTON(node->module->off)) return;
+  if(!node || !node->module->gui || !GTK_IS_TOGGLE_BUTTON(node->module->gui->off)) return;
 
   const gboolean active = gtk_toggle_button_get_active(togglebutton);
-  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->off)) != active)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->off), active);
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->gui->off)) != active)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->gui->off), active);
 }
 
 /**
@@ -714,11 +715,11 @@ static void _ioporder_node_toggle_enable(GtkToggleButton *togglebutton, gpointer
 static void _ioporder_node_toggle_mask(GtkToggleButton *togglebutton, gpointer user_data)
 {
   const dt_ioporder_graph_node_t *node = (const dt_ioporder_graph_node_t *)user_data;
-  if(!node || !GTK_IS_TOGGLE_BUTTON(node->module->mask_indicator)) return;
+  if(!node || !node->module->gui || !GTK_IS_TOGGLE_BUTTON(node->module->gui->mask_indicator)) return;
 
   const gboolean active = gtk_toggle_button_get_active(togglebutton);
-  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->mask_indicator)) != active)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->mask_indicator), active);
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->gui->mask_indicator)) != active)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->gui->mask_indicator), active);
 }
 
 /**

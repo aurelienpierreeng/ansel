@@ -149,7 +149,7 @@ const char **description(struct dt_iop_module_t *self)
 
 static void _turn_select_region_off(struct dt_iop_module_t *self)
 {
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g))
   {
     g->button_down = g->draw_selected_region = 0;
@@ -166,7 +166,7 @@ static void _turn_selregion_picker_off(struct dt_iop_module_t *self)
 static void _develop_ui_pipe_finished_callback(gpointer instance, dt_iop_module_t *self)
 {
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
 
   if(IS_NULL_PTR(g)) return;
 
@@ -256,7 +256,7 @@ static void _rgblevels_show_hide_controls(dt_iop_rgblevels_params_t *p, dt_iop_r
 
 static gboolean _area_leave_notify_callback(GtkWidget *widget, GdkEventCrossing *event, dt_iop_module_t *self)
 {
-  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   c->mouse_x = c->mouse_y = -1.0;
   gtk_widget_queue_draw(widget);
   return TRUE;
@@ -264,7 +264,7 @@ static gboolean _area_leave_notify_callback(GtkWidget *widget, GdkEventCrossing 
 
 static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_module_t *self)
 {
-  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
 
   const int inset = DT_GUI_CURVE_EDITOR_INSET;
@@ -397,7 +397,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
 static void _rgblevels_move_handle(dt_iop_module_t *self, const int handle_move, const float new_pos, float *levels,
                                       const float drag_start_percentage)
 {
-  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   float min_x = 0.f;
   float max_x = 1.f;
 
@@ -437,7 +437,7 @@ static void _rgblevels_move_handle(dt_iop_module_t *self, const int handle_move,
 
 static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event, dt_iop_module_t *self)
 {
-  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
   const int inset = DT_GUI_CURVE_EDITOR_INSET;
   GtkAllocation allocation;
@@ -492,7 +492,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       _turn_selregion_picker_off(self);
 
       // Reset
-      dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+      dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
       dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
       dt_iop_rgblevels_params_t *default_params = (dt_iop_rgblevels_params_t *)self->default_params;
 
@@ -503,13 +503,13 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
       // as drag_start_percentage is only updated when the mouse is moved.
       c->drag_start_percentage = 0.5;
       dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-      gtk_widget_queue_draw(self->widget);
+      gtk_widget_queue_draw(self->gui->widget);
     }
     else
     {
       _turn_selregion_picker_off(self);
 
-      dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+      dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
       c->dragging = 1;
     }
     return TRUE;
@@ -521,7 +521,7 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
 {
   if(event->button == 1)
   {
-    dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+    dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
     c->dragging = 0;
     return TRUE;
   }
@@ -530,7 +530,7 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
 
 static gboolean _area_scroll_callback(GtkWidget *widget, GdkEventScroll *event, dt_iop_module_t *self)
 {
-  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
 
   int delta_y;
@@ -559,12 +559,12 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_request_focus(self);
-  if(self->off)
+  if(self->gui->off)
   {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), 1);
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
@@ -585,12 +585,12 @@ static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_io
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_request_focus(self);
-  if(self->off)
+  if(self->gui->off)
   {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), 1);
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
@@ -612,7 +612,7 @@ static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_io
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
 
   _turn_selregion_picker_off(self);
@@ -629,11 +629,11 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 static void _tab_switch_callback(GtkNotebook *notebook, GtkWidget *page, guint page_num, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
 
   g->channel = (dt_iop_rgblevels_channel_t)page_num;
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 static void _color_picker_callback(GtkWidget *button, dt_iop_module_t *self)
@@ -645,7 +645,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   (void)pipe;
   (void)piece;
-  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *c = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
 
   const dt_iop_rgblevels_channel_t channel = c->channel;
@@ -751,14 +751,14 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 void gui_update(dt_iop_module_t *self)
 {
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)self->params;
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
 
   dt_bauhaus_combobox_set(g->cmb_autoscale, p->autoscale);
   dt_bauhaus_combobox_set(g->cmb_preserve_colors, p->preserve_colors);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_select_region), g->draw_selected_region);
   _rgblevels_show_hide_controls(p, g);
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
@@ -768,13 +768,13 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
 void gui_reset(struct dt_iop_module_t *self)
 {
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
 
   _turn_selregion_picker_off(self);
 
   g->channel = DT_IOP_RGBLEVELS_R;
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 void init(dt_iop_module_t *self)
@@ -795,7 +795,7 @@ void init(dt_iop_module_t *self)
 
 void change_image(struct dt_iop_module_t *self)
 {
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
 
   g->channel = DT_IOP_RGBLEVELS_R;
   g->call_auto_levels = 0;
@@ -824,12 +824,12 @@ void gui_init(dt_iop_module_t *self)
   dt_ui_notebook_page(c->channel_tabs, N_("B"), _("curve nodes for b channel"));
   g_signal_connect(G_OBJECT(c->channel_tabs), "switch_page", G_CALLBACK(_tab_switch_callback), self);
   dt_ui_notebook_set_picker_owner(c->channel_tabs, self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(c->channel_tabs), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(c->channel_tabs), FALSE, FALSE, 0);
 
   c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
   gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
 
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(self->gui->widget),
                      dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
                                                   "plugins/darkroom/rgblevels/graphheight", 280, 100),
                      FALSE, FALSE, 0);
@@ -870,7 +870,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(pick_hbox), GTK_WIDGET(c->greypick ), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(pick_hbox), GTK_WIDGET(c->whitepick), TRUE, TRUE, 0);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), pick_hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), pick_hbox, TRUE, TRUE, 0);
 
   c->bt_auto_levels = gtk_button_new_with_label(_("auto"));
   gtk_widget_set_tooltip_text(c->bt_auto_levels, _("apply auto levels"));
@@ -886,7 +886,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(autolevels_box), c->bt_auto_levels, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(autolevels_box), c->bt_select_region, TRUE, TRUE, 0);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), autolevels_box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), autolevels_box, TRUE, TRUE, 0);
 
   g_signal_connect(G_OBJECT(c->bt_auto_levels), "clicked", G_CALLBACK(_auto_levels_callback), self);
   g_signal_connect(G_OBJECT(c->bt_select_region), "toggled", G_CALLBACK(_select_region_toggled_callback), self);
@@ -1044,7 +1044,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   const dt_iop_rgblevels_data_t *const d = (dt_iop_rgblevels_data_t *)piece->data;
   dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)&d->params;
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
+  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
 
   // process auto levels

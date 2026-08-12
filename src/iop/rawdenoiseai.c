@@ -1708,7 +1708,7 @@ static void _custom_model_callback(GtkWidget *w, dt_iop_module_t *self)
 
 static void _custom_model_populate(dt_iop_module_t *self)
 {
-  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_rawdenoiseai_params_t *const p = (dt_iop_rawdenoiseai_params_t *)self->params;
   dt_bauhaus_combobox_clear(g->custom_model);
   dt_bauhaus_combobox_add(g->custom_model, _("(shipped model)"));
@@ -1737,10 +1737,10 @@ static void _custom_model_populate(dt_iop_module_t *self)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_rawdenoiseai_params_t *p = (dt_iop_rawdenoiseai_params_t *)self->params;
   dt_iop_rawdenoiseai_global_data_t *gd = (dt_iop_rawdenoiseai_global_data_t *)self->global_data;
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "unsupported" : "raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->hide_enable_button ? "unsupported" : "raw");
 
   // rescan on every panel update: the user may have dropped a file in since
   _custom_model_populate(self);
@@ -1771,7 +1771,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_rawdenoiseai_gui_data_t *g = IOP_GUI_ALLOC(rawdenoiseai);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->strength = dt_bauhaus_slider_from_params(self, "strength");
   dt_bauhaus_slider_set_digits(g->strength, 3);
@@ -1822,7 +1822,7 @@ void gui_init(dt_iop_module_t *self)
 
   dt_gui_new_collapsible_section(&g->cs, "plugins/darkroom/rawdenoiseai/expand_channel",
                                  _("per-channel corrections"), GTK_BOX(box_raw), GTK_PACK_START);
-  self->widget = GTK_WIDGET(g->cs.container); // sliders below pack into the section
+  self->gui->widget = GTK_WIDGET(g->cs.container); // sliders below pack into the section
 
   const char *sigma_tooltip = _("per-channel correction of the camera noise profile, applied on top\n"
                                 "of the global correction. Profiles are measured after demosaicing,\n"
@@ -1845,15 +1845,15 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->sigma_blue, "%");
   gtk_widget_set_tooltip_text(g->sigma_blue, sigma_tooltip);
 
-  self->widget = box_raw; // done packing into the collapsible section
+  self->gui->widget = box_raw; // done packing into the collapsible section
 
   GtkWidget *label_unsupported = dt_ui_label_new(_("AI raw denoising needs a mosaiced raw image\n"
                                                    "and an installed rawdenoiseai model file."));
 
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
-  gtk_stack_add_named(GTK_STACK(self->widget), label_unsupported, "unsupported");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_unsupported, "unsupported");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 void gui_cleanup(dt_iop_module_t *self)

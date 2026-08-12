@@ -341,6 +341,8 @@ static void _init_default_curves(dt_iop_colorequal_params_t *p)
 static inline gboolean _curve_fields_equal(const dt_iop_colorequal_params_t *const a,
                                            const dt_iop_colorequal_params_t *const b)
 {
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(b)) return a == b;   // params can be NULL before first init
+
   return !memcmp(a->curve_num_nodes, b->curve_num_nodes, sizeof(a->curve_num_nodes))
          && !memcmp(a->curve, b->curve, sizeof(a->curve));
 }
@@ -348,6 +350,8 @@ static inline gboolean _curve_fields_equal(const dt_iop_colorequal_params_t *con
 static inline gboolean _lut_fields_equal(const dt_iop_colorequal_params_t *const a,
                                          const dt_iop_colorequal_params_t *const b)
 {
+  if(IS_NULL_PTR(a) || IS_NULL_PTR(b)) return a == b;   // params can be NULL before first init
+
   return _curve_fields_equal(a, b) && a->sigma_L == b->sigma_L && a->sigma_rho == b->sigma_rho
          && a->sigma_theta == b->sigma_theta && a->neutral_protection == b->neutral_protection;
 }
@@ -956,7 +960,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 static void _update_gui_lut_cache(dt_iop_module_t *self)
 {
   if(!self->enabled) return;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorequal_params_t *p = g ? &g->gui_params : (const dt_iop_colorequal_params_t *)self->params;
   const gboolean log_perf = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
   const double start = log_perf ? dt_get_wtime() : 0.0;
@@ -1121,7 +1125,7 @@ static void _draw_graph_background(cairo_t *cr, const dt_iop_colorequal_channel_
 static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorequal_params_t *p = &g->gui_params;
   const dt_iop_colorequal_ring_t ring
       = (dt_iop_colorequal_ring_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "colorequal-ring"));
@@ -1344,7 +1348,7 @@ static void _cacheline_ready_callback(gpointer instance, const guint64 hash,
   (void)instance;
   (void)producer_node_key;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   if(g->pending_preview_hash != hash || !_refresh_preview_cursor_sample(self)) return;
 
   const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
@@ -1356,9 +1360,9 @@ static void _cacheline_ready_callback(gpointer instance, const guint64 hash,
 static void _preview_cache_wait_restart(gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->gui_data)) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(dt_iop_gui_data(self))) return;
 
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || !g->has_focus || !_refresh_preview_cursor_sample(self)) return;
 
   const dt_iop_colorequal_ring_t ring = _active_ring_from_gui(g);
@@ -1371,7 +1375,7 @@ static int _find_selected_node(const dt_iop_module_t *self, const dt_iop_coloreq
                                const dt_iop_colorequal_channel_t channel, const float mouse_x, const float mouse_y,
                                const float graph_width, const float graph_height)
 {
-  const dt_iop_colorequal_gui_data_t *g = (const dt_iop_colorequal_gui_data_t *)self->gui_data;
+  const dt_iop_colorequal_gui_data_t *g = (const dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorequal_params_t *p = &g->gui_params;
   int selected = -1;
   float best = DT_PIXEL_APPLY_DPI(10.f) * DT_PIXEL_APPLY_DPI(10.f);
@@ -1434,7 +1438,7 @@ static gboolean _move_selected_node(dt_iop_module_t *self, const dt_iop_colorequ
                                     const dt_iop_colorequal_channel_t channel, const int node, const float x,
                                     const float y)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorequal_params_t *p = &g->gui_params;
   dt_iop_colorequal_node_t *curve = _curve_nodes(p, ring, channel);
   const int nodes = _curve_nodes_count_const(p, ring, channel);
@@ -1466,7 +1470,7 @@ static gboolean _move_selected_node(dt_iop_module_t *self, const dt_iop_colorequ
 static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorequal_ring_t ring
       = (dt_iop_colorequal_ring_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "colorequal-ring"));
   const dt_iop_colorequal_channel_t channel
@@ -1510,7 +1514,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
 static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorequal_ring_t ring
       = (dt_iop_colorequal_ring_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "colorequal-ring"));
   const dt_iop_colorequal_channel_t channel
@@ -1615,7 +1619,7 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
     const dt_iop_colorequal_channel_t channel
         = (dt_iop_colorequal_channel_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "colorequal-channel"));
     dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-    dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+    dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
     const gboolean was_dragging = g->dragging[ring][channel];
     g->dragging[ring][channel] = FALSE;
 
@@ -1643,7 +1647,7 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const int source_ring = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(notebook), "colorequal-ring"));
   const dt_iop_colorequal_channel_t channel
       = (dt_iop_colorequal_channel_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(page), "colorequal-channel"));
@@ -1668,7 +1672,7 @@ static void _ring_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page, g
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
 
   if(page_num < DT_IOP_COLOREQUAL_NUM_RINGS)
   {
@@ -1694,7 +1698,7 @@ static void _ring_tabs_switch_callback(GtkNotebook *notebook, GtkWidget *page, g
 
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   dt_develop_t *dev = self ? self->dev : NULL;
   if(!g->has_focus) return 0;
 
@@ -1742,7 +1746,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
 int mouse_leave(struct dt_iop_module_t *self)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   g->cursor_valid = FALSE;
   _invalidate_preview_cursor(g);
   _switch_preview_cursor(self);
@@ -1762,14 +1766,14 @@ int mouse_leave(struct dt_iop_module_t *self)
 int button_pressed(struct dt_iop_module_t *self, double x, double y, double pressure, int which, int type,
                    uint32_t state)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   if(!g->has_focus || which != 3 || !g->cursor_valid || !g->cursor_sample_valid
      || dt_iop_color_picker_is_visible(self->dev))
     return 0;
 
   if(!self->enabled)
   {
-    if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    if(self->gui->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), 1);
     return 1;
   }
 
@@ -1799,7 +1803,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
 int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   // A drawn mask being edited (anywhere on canvas, not just hovered directly -- that case
   // already wins via dt_masks_events_mouse_scrolled in views/darkroom.c) must not leak scroll
   // input into this module's own hue/chroma curve adjustment.
@@ -1809,7 +1813,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
 
   if(!self->enabled)
   {
-    if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    if(self->gui->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), 1);
     return 1;
   }
 
@@ -1867,7 +1871,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
 void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t height,
                      int32_t pointerx, int32_t pointery)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   dt_develop_t *dev = self ? self->dev : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(dev)) return;
   if(!g->has_focus || !self->enabled || !g->cursor_valid || dt_iop_color_picker_is_visible(dev))
@@ -1960,7 +1964,7 @@ static void _pipe_rgb_to_dt_ucs_hsb(dt_iop_module_t *self, dt_dev_pixelpipe_t *p
 
 static void _switch_preview_cursor(dt_iop_module_t *self)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   GtkWidget *widget = dt_gui_main_window();
 
   if(!widget || !gtk_widget_get_window(widget)) return;
@@ -1991,7 +1995,7 @@ static void _switch_preview_cursor(dt_iop_module_t *self)
 
 static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   dt_develop_t *dev = self ? self->dev : NULL;
   if(!self->enabled || !g->cursor_valid)
   {
@@ -2121,7 +2125,7 @@ static void _format_picker_brightness_position(const float brightness, char *tex
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
                         dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorequal_params_t *p = (dt_iop_colorequal_params_t *)self->params;
   const dt_iop_module_t *sampled_module = piece && piece->module ? piece->module : self;
 
@@ -2193,7 +2197,7 @@ void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe
   if(IS_NULL_PTR(work_profile) || piece->dsc_in.channels != 4) return;
 
   dt_iop_colorequal_params_t *p = (dt_iop_colorequal_params_t *)self->params;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const float *const restrict in = (const float *)i;
   float max_Y = 0.0f;
@@ -2214,7 +2218,7 @@ void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
   const gboolean curves_changed = !_curve_fields_equal(&g->gui_params, p);
   memcpy(&g->gui_params, self->params, sizeof(dt_iop_colorequal_params_t));
@@ -2233,7 +2237,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 void gui_update(dt_iop_module_t *self)
 {
   const dt_iop_colorequal_params_t *p = (const dt_iop_colorequal_params_t *)self->params;
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   memcpy(&g->gui_params, p, sizeof(dt_iop_colorequal_params_t));
   dt_bauhaus_slider_set(g->white_level, p->white_level);
   dt_bauhaus_slider_set(g->sigma_L, p->sigma_L);
@@ -2246,7 +2250,7 @@ void gui_update(dt_iop_module_t *self)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   g->has_focus = in;
 
   if(in)
@@ -2275,7 +2279,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)dt_iop_gui_data(self);
   self->request_color_pick = DT_REQUEST_COLORPICK_OFF;
   // The LUT viewer's task holds `self` and reads g->..., both invalid past this point.
   // (It was never cancelled here: only the history task, which no longer exists, was.)
@@ -2319,10 +2323,10 @@ void gui_init(dt_iop_module_t *self)
   g->pending_preview_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->has_focus = FALSE;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   GtkWidget *ring_tabs_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(self->widget), ring_tabs_box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), ring_tabs_box, TRUE, TRUE, 0);
 
   g->ring_notebook = GTK_NOTEBOOK(gtk_notebook_new());
   gtk_widget_set_name(GTK_WIDGET(g->ring_notebook), "colorequal-ring-tabs");
@@ -2383,8 +2387,8 @@ void gui_init(dt_iop_module_t *self)
   gtk_notebook_append_page(g->ring_notebook, options_page, options_label);
   gtk_container_child_set(GTK_CONTAINER(g->ring_notebook), options_page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
 
-  GtkWidget *const module_root = self->widget;
-  self->widget = options_page;
+  GtkWidget *const module_root = self->gui->widget;
+  self->gui->widget = options_page;
 
   g->white_level
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "white_level"));
@@ -2407,7 +2411,7 @@ void gui_init(dt_iop_module_t *self)
   g->interpolation = dt_bauhaus_combobox_from_params(self, "interpolation");
   gtk_widget_set_tooltip_text(g->interpolation, _("select the interpolation method"));
 
-  self->widget = module_root;
+  self->gui->widget = module_root;
 
   GtkWidget *picker_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(ring_tabs_box), picker_box, FALSE, FALSE, 0);
@@ -2443,9 +2447,9 @@ void gui_init(dt_iop_module_t *self)
   g->viewer_control_node_count = 0;
   g->viewer = dt_lut_viewer_new(DT_GUI_MODULE(self));
   if(g->viewer)
-    gtk_box_pack_start(GTK_BOX(GTK_BOX(self->widget)), dt_lut_viewer_get_widget(g->viewer), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(GTK_BOX(self->gui->widget)), dt_lut_viewer_get_widget(g->viewer), TRUE, TRUE, 0);
 
-  gtk_widget_show_all(self->widget);
+  gtk_widget_show_all(self->gui->widget);
 }
 
 void init_global(dt_iop_module_so_t *module)

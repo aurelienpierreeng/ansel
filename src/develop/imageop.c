@@ -63,6 +63,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "develop/imageop_gui.h"
 #include "develop/masks_gui.h"
 #include "darktable.h"
 #include "widgets/widget_settings.h"
@@ -324,7 +325,6 @@ void dt_iop_default_init(dt_iop_module_t *module)
   module->default_params = (dt_iop_params_t *)calloc(1, param_size);
 
   module->default_enabled = 0;
-  module->gui_data = NULL;
 
   dt_introspection_field_t *i = module->so->get_introspection_linear();
   while(i->header.type != DT_INTROSPECTION_TYPE_NONE)
@@ -398,9 +398,9 @@ static void _iop_ensure_visible(dt_gui_module_t *m)
   dt_iop_module_t *module = (dt_iop_module_t *)m;
   if(IS_NULL_PTR(module)) return;
 
-  if(!IS_NULL_PTR(module->expander))
+  if(module->gui && !IS_NULL_PTR(module->gui->expander))
   {
-    g_object_set_data(G_OBJECT(module->expander), "dt-modulegroups-switch-from-active-once",
+    g_object_set_data(G_OBJECT(module->gui->expander), "dt-modulegroups-switch-from-active-once",
                       GINT_TO_POINTER(TRUE));
     dt_iop_gui_set_expanded(module, TRUE, TRUE);
   }
@@ -477,12 +477,12 @@ int dt_iop_load_module_so(void *m, const char *libname, const char *module_name)
   return 0;
 }
 
+/* The old inline widget members were zeroed here at load; the gui struct is calloc'd by
+ * dt_iop_gui_init() when (and only when) a GUI attaches, so a headless load must not
+ * touch module->gui at all -- it is NULL by design. */
 int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt_develop_t *dev)
 {
   module->dev = dev;
-  module->widget = NULL;
-  module->header = NULL;
-  module->off = NULL;
   module->hide_enable_button = 0;
   module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
   module->request_histogram = DT_REQUEST_ONLY_IN_GUI;
@@ -522,9 +522,6 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
   module->process_plain = so->process_plain;
   module->have_introspection = so->have_introspection;
 
-  module->reset_button = NULL;
-  module->presets_button = NULL;
-  module->fusion_slider = NULL;
 
   module->global_data = so->data;
 
@@ -718,7 +715,7 @@ void dt_iop_reload_defaults(dt_iop_module_t *module)
     dt_iop_load_default_params(module);
   }
 
-  if(module->header) dt_iop_gui_update_header(module);
+  if(module->gui && module->gui->header) dt_iop_gui_update_header(module);
 }
 
 

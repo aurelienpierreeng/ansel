@@ -298,7 +298,7 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboole
   if(IS_NULL_PTR(ctx) || IS_NULL_PTR(ctx->self) || !flush_pending) return;
 
   dt_iop_module_t *self = ctx->self;
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(ctx->self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   dt_develop_t *dev = self->dev;
   if(IS_NULL_PTR(ctx->worker) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || IS_NULL_PTR(dev) || !ctx->worker->live_publish_damage.valid) return;
@@ -325,7 +325,7 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, gboole
 static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *input,
                                    dt_drawlayer_paint_stroke_t *stroke)
 {
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(input) || IS_NULL_PTR(stroke)) return;
 
   drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, g->stroke.worker, stroke);
@@ -354,7 +354,7 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
 
 void dt_drawlayer_worker_publish_backend_stroke_damage(dt_iop_module_t *self)
 {
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g)) return;
 
   dt_drawlayer_damaged_rect_t backend_damage = { 0 };
@@ -885,7 +885,7 @@ static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max
 
 static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gint64 budget_us)
 {
-  dt_iop_drawlayer_gui_data_t *g = (ctx && ctx->self) ? (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data : NULL;
+  dt_iop_drawlayer_gui_data_t *g = (ctx && ctx->self) ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(ctx->self) : NULL;
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
   dt_drawlayer_worker_t *worker = ctx ? ctx->worker : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(stroke) || IS_NULL_PTR(worker) || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
@@ -1125,7 +1125,7 @@ static gboolean _rt_workers_any_active(dt_drawlayer_worker_t *rt)
 /** @brief Backend-worker idle hook. */
 static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, rt, rt ? rt->stroke : NULL);
   if(!IS_NULL_PTR(self) && g && !IS_NULL_PTR(rt) && rt->stroke && rt->stroke->pending_dabs && rt->stroke->pending_dabs->len > 0)
   {
