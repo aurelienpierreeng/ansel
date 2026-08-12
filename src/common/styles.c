@@ -54,7 +54,7 @@
 #include "common/logging.h"
 #include "common/paths.h"
 #include "common/image.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "common/file_location.h"
 #include "common/history.h"
 #include "common/history_snapshot.h"

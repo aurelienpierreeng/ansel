@@ -30,7 +30,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/exif.h"
+#include "common/xmp_sidecar.h"
 #include "caches/image_cache.h"
 #include "imageio/imageio_module.h"
 #include "common/utility.h"

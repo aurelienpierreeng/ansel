@@ -19,7 +19,7 @@
 #include "import_jobs.h"
 #include "common/collection.h"
 #include "common/datetime.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "develop/history_merge.h"
 #include "metadata/metadata.h"
 #include "common/styles.h"

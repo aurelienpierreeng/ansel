@@ -31,7 +31,7 @@
 #include "system/macros.h"
 #include "common/logging.h"
 #include "develop/develop.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_magick_abort_guard.h"
 
 #include <memory.h>

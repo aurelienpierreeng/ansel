@@ -62,7 +62,7 @@
 
 #include "glib.h"
 
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "common/file_location.h"
 #include "common/global_mutexes.h"
 #include "imageio/imageio_core.h"

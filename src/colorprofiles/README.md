@@ -53,7 +53,7 @@ colour management, and the only reason this code would ever include codec header
 That is not a preference — measured with `tools/include_graph.py --what-if`, layer 2 costs
 **+6** violations and layer 0 costs **+13**.
 
-The cap is five layer-1 headers reaching in — `common/cups_print.h`, `common/exif.h` and
+The cap is five layer-1 headers reaching in — `common/cups_print.h`, `metadata/exif.h` and
 `caches/mipmap_cache.h` for the enums in `profile_types.h`, `common/color_picker.h` and
 `common/histogram.h` for the derived-profile struct in `iop_profile.h`. The floor is
 `colorspaces.c` needing `common/conf.h`, `common/file_location.h`, `common/utility.h` and

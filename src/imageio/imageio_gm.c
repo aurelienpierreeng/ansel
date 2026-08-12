@@ -29,7 +29,7 @@
 #include "imageio_gm.h"
 #include "system/macros.h"
 #include "common/logging.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_magick_abort_guard.h"
 #include "develop/develop.h"
 

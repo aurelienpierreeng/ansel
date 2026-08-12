@@ -43,7 +43,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_core.h"
 #include "system/simd.h"
 

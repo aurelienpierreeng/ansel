@@ -19,7 +19,7 @@
 #include "common/history_actions.h"
 
 #include "common/collection.h"
-#include "common/exif.h"
+#include "common/xmp_sidecar.h"
 #include "common/history.h"
 #include "common/history_snapshot.h"
 #include "common/image.h"

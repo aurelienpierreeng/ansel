@@ -115,7 +115,7 @@
 #include "common/global_mutexes.h"
 #include "system/sys_resources.h"
 #include "common/datetime.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "common/history.h"
 #include "database/history_repository.h"
 #include "common/pwstorage/pwstorage.h"
