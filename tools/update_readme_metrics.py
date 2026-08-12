@@ -281,13 +281,16 @@ def engine_table(spec, previous=""):
 
     # Documentation coverage needs Doxygen's symbol table. When it has not been built,
     # keep whatever the README already shows rather than blanking a real figure.
-    kept_docs = {}
+    kept_docs, kept_other = {}, {}
     for line in (previous or "").splitlines():
-        if line.startswith("| Functions carrying documentation"):
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            for label, value in zip(columns, cells[1:]):
-                if value and value != "—":
-                    kept_docs[label] = value
+        for prefix, store in (("| Functions carrying documentation", kept_docs),
+                              ("| Types, constants and macros carrying documentation",
+                               kept_other)):
+            if line.startswith(prefix):
+                cells = [c.strip() for c in line.strip().strip("|").split("|")]
+                for label, value in zip(columns, cells[1:]):
+                    if value and value != "—":
+                        store[label] = value
     live_docs = measure_docs(DOXYGEN_DB[0])
     if live_docs is None:
         # Nothing prepared for us: build the symbol table rather than give up on the row.
@@ -305,6 +308,14 @@ def engine_table(spec, previous=""):
             d["docs"] = "%.1f %%" % (100.0 * live_docs["documented"] / live_docs["functions"])
         else:
             d["docs"] = kept_docs.get(label, "—")
+        if label in FROZEN_DOCS_OTHER:
+            f = FROZEN_DOCS_OTHER[label]
+            d["docs_other"] = "%.1f %%" % (100.0 * f["documented"] / f["symbols"])
+        elif live_docs and live_docs.get("other_symbols"):
+            d["docs_other"] = "%.1f %%" % (100.0 * live_docs["other_documented"]
+                                           / live_docs["other_symbols"])
+        else:
+            d["docs_other"] = kept_other.get(label, "—")
 
     rows = [("Cyclomatic complexity", lambda d: "{:,}".format(d["complexity"])),
             ("Lines of code", lambda d: "{:,}".format(d["code"])),
@@ -312,7 +323,9 @@ def engine_table(spec, previous=""):
             ("Ratio of comments", ratio),
             ("Cognitive complexity",
              lambda d: "{:,}".format(d["cognitive"]) if d["cognitive"] else "—"),
-            ("Functions carrying documentation", lambda d: d["docs"])]
+            ("Functions carrying documentation", lambda d: d["docs"]),
+            ("Types, constants and macros carrying documentation",
+             lambda d: d["docs_other"])]
     out = ["| Metric | " + " | ".join(columns) + " |",
            "| ------ | " + " | ".join("-----------:" for _ in columns) + " |"]
     for label, render in rows:
@@ -343,6 +356,17 @@ FROZEN_DOCS = {
     "Darktable 4.0": {"functions": 9600, "documented": 2008},
     "Darktable 5.0": {"functions": 10212, "documented": 2048},
     "Darktable 5.6": {"functions": 11316, "documented": 2228},
+}
+
+# Everything that is not a function: types, constants, enumerations and macros. Reported
+# separately because the two behave nothing alike - a codebase can explain what its
+# functions do while leaving every type and macro bare, and that is what all five of these
+# versions do.
+FROZEN_DOCS_OTHER = {
+    "Darktable 3.8": {"symbols": 6363, "documented": 332},
+    "Darktable 4.0": {"symbols": 6695, "documented": 329},
+    "Darktable 5.0": {"symbols": 7373, "documented": 349},
+    "Darktable 5.6": {"symbols": 8190, "documented": 404},
 }
 
 FROZEN_FUNCTIONS = {
@@ -504,23 +528,27 @@ def measure_docs(db_path):
     try:
         con = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True)
         rows = con.execute(
-            "SELECT p.name, "
+            "SELECT p.name, m.kind, "
             "  TRIM(COALESCE(m.briefdescription,'')) || TRIM(COALESCE(m.detaileddescription,'')) "
-            "FROM memberdef m JOIN path p ON p.rowid = m.file_id "
-            "WHERE m.kind = 'function'").fetchall()
+            "FROM memberdef m JOIN path p ON p.rowid = m.file_id").fetchall()
         con.close()
     except sqlite3.Error:
         return None
-    total = documented = 0
-    for path, text in rows:
+    fn_total = fn_doc = other_total = other_doc = 0
+    for path, kind, text in rows:
         if _engine_excluded(path):
             continue
-        total += 1
-        if (text or "").strip():
-            documented += 1
-    if not total:
+        has = bool((text or "").strip())
+        if kind == "function":
+            fn_total += 1
+            fn_doc += 1 if has else 0
+        else:
+            other_total += 1
+            other_doc += 1 if has else 0
+    if not fn_total:
         return None
-    return {"functions": total, "documented": documented}
+    return {"functions": fn_total, "documented": fn_doc,
+            "other_symbols": other_total, "other_documented": other_doc}
 
 
 def _columns(spec):

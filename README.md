@@ -187,12 +187,13 @@ caches, the GUI framework, everything both projects need whatever their module s
 <!-- BEGIN GENERATED engine-metrics: aurelienpierreeng_ansel=Ansel Master, -=Darktable 3.8, aurelienpierre_darktable=Darktable 4.0, -=Darktable 5.0, aurelienpierreeng_darktable-5=Darktable 5.6, exclude=src/iop -->
 | Metric | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
 | ------ | -----------: | -----------: | -----------: | -----------: | -----------: |
-| Cyclomatic complexity | 41,051 | 35,244 | 37,156 | 38,016 | 44,059 |
-| Lines of code | 210,954 | 199,820 | 207,304 | 229,248 | 260,318 |
-| Comment lines | 53,891 | 28,736 | 31,877 | 34,431 | 40,879 |
-| Ratio of comments | 20.3 % | 12.6 % | 13.3 % | 13.1 % | 13.6 % |
+| Cyclomatic complexity | 41,064 | 35,244 | 37,156 | 38,016 | 44,059 |
+| Lines of code | 211,041 | 199,820 | 207,304 | 229,248 | 260,318 |
+| Comment lines | 54,000 | 28,736 | 31,877 | 34,431 | 40,879 |
+| Ratio of comments | 20.4 % | 12.6 % | 13.3 % | 13.1 % | 13.6 % |
 | Cognitive complexity | 46,881 | — | 46,536 | — | 57,120 |
-| Functions carrying documentation | 31.5 % | 21.5 % | 20.9 % | 20.1 % | 19.7 % |
+| Functions carrying documentation | 31.8 % | 21.5 % | 20.9 % | 20.1 % | 19.7 % |
+| Types, constants and macros carrying documentation | 6.9 % | 5.2 % | 4.9 % | 4.7 % | 4.9 % |
 <!-- END GENERATED engine-metrics -->
 
 <sub>**Methodology.** Cyclomatic complexity, lines of code and comment ratio are measured
@@ -202,6 +203,10 @@ C and C++ only — no Python, shell, CMake or documentation. **Functions carryin
 documentation** is the share of engine functions for which Doxygen recorded a description,
 that is, which carry a real doc-comment rather than an ordinary one; Doxygen counts
 functions differently from `lizard`, so only the ratio is published and not its totals.
+The row below it is every other symbol — types, constants, enumerations and macros —
+counted the same way and reported separately because the two behave nothing alike: all
+five versions explain a fair share of what their functions *do* while leaving the things
+those functions operate *on* almost entirely bare.
 `src/iop`, `tests/` and `src/external` are excluded — the last holds the git submodules: those are upstream projects pinned at a
 commit rather than this project's code, and they account for about two thirds of the
 functions under `src/` when checked out. One tool is used for all five columns on purpose,
@@ -258,8 +263,8 @@ Per function, still excluding `src/iop`:
 <!-- BEGIN GENERATED engine-complexity: -=Ansel Master, -=Darktable 3.8, -=Darktable 4.0, -=Darktable 5.0, -=Darktable 5.6 -->
 | Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
 | ----------- | -----------: | -----------: | -----------: | -----------: | -----------: |
-| Functions | 8,330 | 7,242 | 7,484 | 7,759 | 8,691 |
-| Average complexity | 4.93 | 4.87 | 4.96 | 4.90 | 5.07 |
+| Functions | 8,338 | 7,242 | 7,484 | 7,759 | 8,691 |
+| Average complexity | 4.92 | 4.87 | 4.96 | 4.90 | 5.07 |
 | Worst single function | 229 | 194 | 210 | 252 | 249 |
 | Functions above 15 — awkward to test | 454 | 428 | 456 | 453 | 522 |
 | Functions above 50 — effectively untestable | 52 | 45 | 48 | 48 | 63 |
