@@ -85,21 +85,15 @@
 #include "config.h"   // conditional-ok: generated only when the build system defines HAVE_CONFIG_H
 #endif
 
-#include <errno.h>
 #include <glib.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 #include <zlib.h>
 
-#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include <exiv2/exiv2.hpp>
