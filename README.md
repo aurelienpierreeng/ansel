@@ -187,10 +187,10 @@ caches, the GUI framework, everything both projects need whatever their module s
 <!-- BEGIN GENERATED engine-metrics: aurelienpierreeng_ansel=Ansel Master, -=Darktable 3.8, aurelienpierre_darktable=Darktable 4.0, -=Darktable 5.0, aurelienpierreeng_darktable-5=Darktable 5.6, exclude=src/iop -->
 | Metric | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.0 | Darktable 5.6 |
 | ------ | -----------: | -----------: | -----------: | -----------: | -----------: |
-| Cyclomatic complexity | 40,742 | 35,300 | 37,212 | 38,072 | 44,146 |
-| Lines of code | 211,372 | 200,385 | 207,869 | 229,813 | 261,163 |
-| Ratio of comments | 20.2 % | 12.6 % | 13.4 % | 13.1 % | 13.6 % |
-| Cognitive complexity | 46,866 | — | 50,862 | — | 57,120 |
+| Cyclomatic complexity | 41,106 | 35,300 | 37,212 | 38,072 | 44,146 |
+| Lines of code | 211,430 | 200,385 | 207,869 | 229,813 | 261,163 |
+| Ratio of comments | 20.3 % | 12.6 % | 13.4 % | 13.1 % | 13.6 % |
+| Cognitive complexity | 46,866 | — | 47,052 | — | 57,120 |
 <!-- END GENERATED engine-metrics -->
 
 <sub>**Methodology.** Cyclomatic complexity, lines of code and comment ratio are measured
@@ -203,15 +203,26 @@ functions under `src/` when checked out. One tool is used for all five columns o
 because SonarCloud and `lizard` do not define cyclomatic complexity the same way and
 mixing them would compare nothing. Cognitive complexity has no local equivalent, so it is
 taken from SonarCloud and shown only for the three versions that have a project there;
-the others are left blank rather than estimated. The Darktable columns are measured once
+the others are left blank rather than estimated. `src/iop` **and** `src/external` are
+subtracted from those SonarCloud figures as well, because the three projects do not
+configure the same exclusions — one of them analyses its vendored submodules and the other
+two do not — and trusting each project's own scope would compare different bodies of code. The Darktable columns are measured once
 from the release tags (`release-3.8.1`, `release-4.0.0`, `release-5.0.0`, `release-5.6.0`)
 and do not change; Ansel's is re-measured by
 [`tools/update_readme_metrics.py`](tools/update_readme_metrics.py) on every run.</sub>
 
-On the engine alone, Ansel is smaller and simpler than both Darktable releases on every
-count, and the gap against Darktable 5.6 is wider than against the 4.0 it forked from:
-Darktable's engine has grown while Ansel's has shrunk. The table above this one, which
-includes the modules, is the reason the totals look closer than the engineering is.
+Against **current** Darktable, the engine comparison is clear: Ansel carries 19 % fewer
+lines and 7 % less cyclomatic complexity than 5.6, with half again as many comments per
+line of code.
+
+Against the **4.0 it forked from**, Ansel's engine is slightly larger and somewhat more
+complex — 41,106 against 37,212. That is worth stating plainly rather than burying: four
+years of new capability that Darktable does not have (a painting module, an AI denoiser, a
+database layer, a unit-test suite) is not free, and it lands in the engine as well as in
+the modules. Darktable's engine grew faster over the same period, from 37,212 to 44,146,
+without adding a comparable amount of function.
+
+Where the difference stops being a matter of degree is the include graph, below.
 
 ### Complexity function by function
 
@@ -330,8 +341,12 @@ measure; every other figure here is a genuine divergence.
 
 
 The difference is therefore **not how much was rewritten, but what came out**. Over those
-same four years Darktable's engine grew from 41,240 to 44,799 in cyclomatic complexity and
-kept every one of its four circular include groups; Ansel's came out at 40,161 with none.
+same four years Darktable's engine grew by 19 %, from 37,212 to 44,146 in cyclomatic
+complexity, and kept every one of its four circular include groups, all seventeen files
+trapped in them, and every one of its headers that drags the whole application in behind
+it. Ansel's engine grew too — it gained modules Darktable has not got — but it came out
+with **no cycles at all**, no such headers, and a third of Darktable's coupling.
+
 Ansel rewrote more of the shared baseline than Darktable did, and that is the point rather
 than an admission: it is where the extra went.
 

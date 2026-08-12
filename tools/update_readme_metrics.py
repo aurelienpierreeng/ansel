@@ -250,11 +250,24 @@ def engine_table(spec):
         key = sonar.get(label)
         cog = None
         if key:
+            # Subtract src/external as well as src/iop. The three projects do NOT
+            # configure the same exclusions - aurelienpierre_darktable analyses its
+            # vendored submodules while the other two exclude them - so trusting each
+            # project's own scope compares different bodies of code. Left uncorrected
+            # this inflated Darktable 4.0's engine by 4,242 cyclomatic and 3,810
+            # cognitive, enough to reverse its ranking against Ansel and to make the
+            # SonarCloud figures appear to contradict the local ones. A component that
+            # is already excluded simply 404s and contributes zero.
             try:
-                total = fetch(key, ["cognitive_complexity"])
-                part = fetch("%s:src/iop" % key, ["cognitive_complexity"])
-                cog = (int(float(total.get("cognitive_complexity", 0)))
-                       - int(float(part.get("cognitive_complexity", 0))))
+                m = ["cognitive_complexity"]
+                total = fetch(key, m)
+                cog = int(float(total.get("cognitive_complexity", 0)))
+                for sub in ("src/iop", "src/external"):
+                    try:
+                        part = fetch("%s:%s" % (key, sub), m)
+                        cog -= int(float(part.get("cognitive_complexity", 0)))
+                    except Exception:          # noqa: BLE001 - absent means excluded
+                        pass
             except Exception:                  # noqa: BLE001 - blank beats a wrong number
                 cog = None
         data[label]["cognitive"] = cog
