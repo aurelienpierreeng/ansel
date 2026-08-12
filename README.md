@@ -235,8 +235,9 @@ The volume of C code has therefore been reduced by 11%, the volume of CSS (for 
 by 75%. Excluding the pixel operations (`cloc  --fullpath --not-match-d=/src/iop --git`),
 the C code volume has reduced by 15%.
 
-The [cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity) of the project
-has also been reduced:
+The [cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity) and
+[cognitive complexity](https://www.sonarsource.com/resources/cognitive-complexity/) of the
+whole project, pixel operations included:
 
 | Metric | Ansel Master | Darktable 4.0 | Darktable 5.6 |
 | ------ | -----------: | ------------: | ------------: |
@@ -244,6 +245,31 @@ has also been reduced:
 | Cognitive complexity | [76,238](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_ansel) | [72,743](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierre_darktable) | [81,587](https://sonarcloud.io/component_measures?metric=cognitive_complexity&id=aurelienpierreeng_darktable-5) |
 | Lines of code | [345,184](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_ansel) | [360,322](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierre_darktable) | [374,150](https://sonarcloud.io/component_measures?metric=ncloc&id=aurelienpierreeng_darktable-5) |
 | Ratio of comments | [13.8%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_ansel) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierre_darktable) | [11.5%](https://sonarcloud.io/component_measures?metric=comment_lines_density&id=aurelienpierreeng_darktable-5) |
+
+Those totals compare the two projects as a whole, which means they compare their
+**feature sets** as much as their engineering. The set of pixel operations under
+`src/iop` has diverged hard between the forks: Ansel carries a painting module, an AI
+denoiser and a rewritten highlights reconstruction that Darktable does not have, and
+Darktable carries modules Ansel dropped. Those modules are largely independent of one
+another — they are the one genuinely modular part of the codebase — so their bulk says
+little about how maintainable the application is.
+
+Excluding `src/iop` compares the **engine**: the pixel pipeline, the database, the
+caches, the GUI framework, everything both projects need whatever their module set.
+
+<!-- BEGIN GENERATED engine-metrics: aurelienpierreeng_ansel=Ansel Master, aurelienpierre_darktable=Darktable 4.0, aurelienpierreeng_darktable-5=Darktable 5.6, exclude=src/iop -->
+| Metric | Ansel Master | Darktable 4.0 | Darktable 5.6 |
+| ------ | -----------: | -----------: | -----------: |
+| Cyclomatic complexity | 40,161 | 41,240 | 44,799 |
+| Cognitive complexity | 46,859 | 50,862 | 57,120 |
+| Lines of code | 227,262 | 267,657 | 267,162 |
+| Ratio of comments | 14.4% | 11.5% | 11.6% |
+<!-- END GENERATED engine-metrics -->
+
+On the engine alone, Ansel is smaller and simpler than both Darktable releases on every
+count, and the gap against Darktable 5.6 is wider than against the 4.0 it forked from:
+Darktable's engine has grown while Ansel's has shrunk. The table above this one, which
+includes the modules, is the reason the totals look closer than the engineering is.
 
 Those figures are indirect indicators of the long-term maintainability of the project:
 

@@ -104,6 +104,63 @@ def format_like(old, value, metric):
     return "{:,}".format(n) if "," in old else str(n)
 
 
+# A block the script owns entirely, regenerated on every run. The marker carries its
+# own specification - which projects, under which column headings, and which directory
+# to subtract - so the README stays the single source of truth for what it displays.
+BLOCK = re.compile(
+    r"(?P<open><!-- BEGIN GENERATED (?P<name>[\w-]+):(?P<spec>[^>]*)-->\n)"
+    r"(?P<body>.*?)"
+    r"(?P<close><!-- END GENERATED (?P=name) -->)",
+    re.DOTALL)
+
+
+def engine_table(spec):
+    """Whole-project measures minus one directory, as a markdown table.
+
+    Comparing the two projects as a whole compares their feature sets: the set of pixel
+    operations under src/iop has diverged hard between the forks, Ansel having added a
+    painting module, an AI denoiser and a rewritten highlights reconstruction that
+    Darktable does not carry. Subtracting that directory compares the ENGINE - pipeline,
+    database, caches, GUI framework - which is the part both projects genuinely share a
+    purpose for.
+
+    Densities cannot be subtracted, so the comment ratio is recomputed from comment_lines
+    and ncloc rather than taken from the project-level percentage.
+    """
+    exclude = "src/iop"
+    columns = []
+    for item in spec.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if item.startswith("exclude="):
+            exclude = item.split("=", 1)[1].strip()
+            continue
+        key, _, label = item.partition("=")
+        columns.append((key.strip(), label.strip() or key.strip()))
+
+    metrics = ["complexity", "cognitive_complexity", "ncloc", "comment_lines"]
+    data = {}
+    for key, _label in columns:
+        total = fetch(key, metrics)
+        part = fetch("%s:%s" % (key, exclude), metrics)
+        data[key] = {m: int(float(total.get(m, 0))) - int(float(part.get(m, 0)))
+                     for m in metrics}
+
+    rows = [("Cyclomatic complexity", lambda d: "{:,}".format(d["complexity"])),
+            ("Cognitive complexity", lambda d: "{:,}".format(d["cognitive_complexity"])),
+            ("Lines of code", lambda d: "{:,}".format(d["ncloc"])),
+            ("Ratio of comments",
+             lambda d: "%.1f%%" % (100.0 * d["comment_lines"]
+                                   / max(1, d["comment_lines"] + d["ncloc"])))]
+    out = ["| Metric | " + " | ".join(l for _k, l in columns) + " |",
+           "| ------ | " + " | ".join("-----------:" for _ in columns) + " |"]
+    for label, render in rows:
+        out.append("| " + label + " | "
+                   + " | ".join(render(data[k]) for k, _l in columns) + " |")
+    return "\n".join(out) + "\n"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -185,6 +242,20 @@ def main():
         return out
 
     updated = CELL.sub(replace, text)
+
+    def regenerate(m):
+        if m.group("name") != "engine-metrics":
+            return m.group(0)
+        try:
+            body = engine_table(m.group("spec"))
+        except Exception as exc:                       # noqa: BLE001
+            sys.stderr.write("readme-metrics: engine table failed (%s), left as is\n" % exc)
+            return m.group(0)
+        if body.strip() != m.group("body").strip():
+            changes.append(("engine-metrics", "generated block", "stale", "refreshed"))
+        return m.group("open") + body + m.group("close")
+
+    updated = BLOCK.sub(regenerate, updated)
 
     for comp, err in failed:
         sys.stderr.write("readme-metrics: WARNING could not read %s (%s)\n" % (comp, err))
