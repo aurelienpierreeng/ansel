@@ -230,13 +230,13 @@ includes the modules, is the reason the totals look closer than the engineering 
 The totals above are sums, so a project can score well simply by having fewer functions.
 Per function, still excluding `src/iop`:
 
-| Engine only | Ansel Master | Darktable 4.0 | Darktable 5.6 |
-| ----------- | -----------: | ------------: | ------------: |
-| Functions | 8,291 | 7,510 | 8,741 |
-| Average complexity | **4.91** | 4.95 | 5.05 |
-| Worst single function | 229 | 210 | 249 |
-| Functions above 15 — awkward to test | **446** | 456 | 522 |
-| Functions above 50 — effectively untestable | 51 | **48** | 63 |
+| Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.6 |
+| ----------- | -----------: | ------------: | ------------: | ------------: |
+| Functions | 8,291 | 7,268 | 7,510 | 8,741 |
+| Average complexity | 4.91 | **4.86** | 4.95 | 5.05 |
+| Worst single function | 229 | **194** | 210 | 249 |
+| Functions above 15 — awkward to test | 446 | **428** | 456 | 522 |
+| Functions above 50 — effectively untestable | 51 | **45** | 48 | 63 |
 
 The averages are close, and honestly so: Ansel's worst function is worse than Darktable
 4.0's, and it has three more functions above 50 than 4.0 did. What separates the three is
@@ -260,19 +260,25 @@ any way to see. The subfolders still *look* modular. That modularity is perceptu
 So the question worth measuring is: **how much of the software is exposed to the rest of
 the software?**
 
-| Engine only | Ansel Master | Darktable 4.0 | Darktable 5.6 |
-| ----------- | -----------: | ------------: | ------------: |
-| A source file depends on this share of the engine, median | **5.4 %** | 13.3 % | 13.1 % |
-| Changing one header forces re-reading this many files, average | **46** | 82 | 95 |
-| Headers whose change exposes over a quarter of the engine | **33 of 285 — 12 %** | 73 of 238 — 31 % | 86 of 270 — 32 % |
-| Worst single header, share of engine depending on it | **65 %** | 71 % | 74 % |
-| Circular include groups | **0** | 4 | 4 |
-| Headers including the application-wide `darktable.h` | **0** | 30 | 38 |
+| Engine only | Ansel Master | Darktable 3.8 | Darktable 4.0 | Darktable 5.6 |
+| ----------- | -----------: | ------------: | ------------: | ------------: |
+| A source file depends on this share of the engine, median | **5.4 %** | 14.1 % | 13.3 % | 13.1 % |
+| Changing one header forces re-reading this many files, average | **46** | 83 | 82 | 95 |
+| Headers whose change exposes over a quarter of the engine | **12 %** | 31 % | 31 % | 32 % |
+| Circular include groups | **0** | 4 | 4 | 4 |
+| Files trapped in those groups | **0** | 17 | 17 | 17 |
+| Headers including the application-wide `darktable.h` | **0** | 30 | 30 | 38 |
 
 The third row is the one to read twice. **In Darktable, about a third of the engine's
 headers cannot be touched without putting more than a quarter of the engine at risk. In
 Ansel it is one in eight.** A Darktable engine file also carries two and a half times as
 much of the program behind it as an Ansel one.
+
+The Darktable columns are the other thing to notice, because they barely move. Between
+3.8 and 5.6 — four years and three major releases — the number of circular include groups
+stayed at four, the files trapped in them stayed at seventeen (the same seventeen), and the
+headers pulling the whole application in behind them went from 30 to 38. This is not a
+problem that is being worked on slowly. It is a problem that is not being worked on.
 
 Two structural causes sit underneath those numbers.
 
@@ -304,24 +310,35 @@ behind the MOSS plagiarism detector. Whitespace, indentation and comments are di
 entirely, so a function that was merely reformatted still counts as shared code. The
 settings used detect any common run of 31 tokens or more — roughly four lines.
 
+Darktable 3.8 is the last release both projects share: Ansel forked from master about
+three months after it, and Darktable 4.0 was tagged three months after that — 4.0 still
+carries 89.7 % of 3.8, so the two are near enough the same starting point. Measuring both
+projects against 3.8 therefore asks one question of both: *starting from the same code,
+four years ago, how much of it is left?*
+
 | Comparison | Same code | Same structure |
 | ---------- | --------: | -------------: |
+| Ansel vs. **Darktable 3.8** — the shared starting point | 41.3 % | 45.7 % |
+| Darktable 5.6 vs. **Darktable 3.8** — same starting point, same four years | 45.1 % | 51.5 % |
+| | | |
 | Ansel vs. **Darktable 4.0** — the version it forked from | 44.2 % | 47.9 % |
 | Ansel vs. **Darktable 5.6** — the current release | 29.1 % | 38.6 % |
-| *Control:* Darktable 5.6 vs. **its own** 4.0 | *50.2 %* | *55.8 %* |
+| Darktable 4.0 vs. **Darktable 3.8** — three months apart, for scale | 89.7 % | 91.5 % |
 
 "Same structure" is the generous column: it counts a function that was carried over and
 renamed as inherited.
 
-The control row is the one that matters, because "they rewrote a lot" is not on its own
-evidence of anything — every living project rewrites itself. Over the same four years,
-**Darktable replaced about half of its own 4.0 code** (50.2 % survives into 5.6). Ansel
-replaced somewhat more of it (44.2 % survives). Those are the same order of magnitude.
+The first two rows are the whole argument, and they are close enough to be startling.
+From the same starting point and over the same four years, **Darktable replaced about 55 %
+of its own 3.8 code, and Ansel replaced about 59 % of it.** "They rewrote a lot" is not on
+its own evidence of anything: every living project rewrites itself, and these two rewrote
+almost exactly the same amount.
 
-The difference between the two projects is therefore **not how much was rewritten, but
-what**. Darktable's engine grew over that period — 41,240 to 44,799 in cyclomatic
-complexity — while Ansel's came out at 40,161 for the same job. Both projects rewrote
-comparable amounts of code; only one of them ended up smaller.
+The difference is therefore **not how much was rewritten, but what came out**. Over those
+same four years Darktable's engine grew from 41,240 to 44,799 in cyclomatic complexity and
+kept every one of its four circular include groups; Ansel's came out at 40,161 with none.
+Both projects rewrote roughly three-fifths of the code they started from. Only one of them
+spent it on the foundations.
 
 Where the code was kept, and where it was replaced, is not uniform:
 
