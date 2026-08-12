@@ -1575,8 +1575,11 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history_current_hash"))) != xmpData.end())
       {
         int hash_len = 0;
-        unsigned char *decoded = dt_exif_xmp_decode(pos->toString().c_str(), strlen(pos->toString().c_str()),
-                                                    &hash_len);
+        // one temporary, measured once: toString() called twice returns two distinct
+        // strings, so the length came from a different object than the pointer did --
+        // same contents, so it worked, but nothing said it had to
+        const std::string hash_str = pos->toString();
+        unsigned char *decoded = dt_exif_xmp_decode(hash_str.c_str(), hash_str.size(), &hash_len);
         if(decoded && hash_len == (int)sizeof(uint64_t))
         {
           uint64_t be_hash = 0;

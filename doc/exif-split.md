@@ -108,16 +108,19 @@ boundary with real code after it is reported rather than moved.
 * Layering violations 198 → 196 (`develop/imageop.h` and `darktable.h` both dropped).
 * Export A/B against the pre-split build on `_DSC9410.NEF` with `--export_masks 1` — a
   57-node brush, so the XMP history *and* `masks_history` read paths both run, and the mask
-  is written out as a second TIFF page. Of 19 396 010 bytes, **8 differ**, and every one of
-  them is provably not a pixel:
+  is written out as a second TIFF page. **Zero differing pixels**, on both pages
+  (6016x4016x3, uint8), max abs diff 0.
 
-      397-399     the embedded output filename, `out-old/` vs `out-new/`
-      48634-48637 the export timestamp, `02:19:50` vs `02:17:19`
-      79596,79598 the ICC profile's own creation date, in the 12-byte field before `acsp`
+  **Compare decoded pixel arrays, not file bytes.** `cmp -l` on the two TIFFs reports
+  ~19.2 million differing bytes of 19.4 million — because the exported file embeds the
+  build's version string and two timestamps, and when those change *length* every byte
+  after them shifts. Two runs of the *same binary* differ that way; the files came out
+  19396008, 19396010 and 19396012 bytes across three runs. A byte comparison here answers
+  a different question than the one being asked, and answers it wrongly. This is the trap
+  `CLAUDE.md` records for PNG exports, and it applies to TIFF for the same reason:
 
-  Build both halves, export the same raw twice, `cmp -l`, and read the offsets — do not
-  sha256 the file and call it a difference, which is the trap `check_export_pixels.sh`
-  exists for.
+      ok, pages = cv2.imreadmulti(path, flags=cv2.IMREAD_UNCHANGED)   # both pages
+      d = np.abs(a.astype(np.int64) - b.astype(np.int64))             # per page
 
 ## Left for later
 
@@ -151,8 +154,5 @@ and the triage is the useful part:
   `xmpData["Xmp.exif.GPSVersionID"] = "2.2.0.0"`. That is the EXIF GPS tag version from the
   spec, not an address. Unchanged.
 
-Re-verified by the same export A/B: 22 bytes differ from the pre-split reference, none of
-them past offset 79598 in a 19 396 010-byte file — filename, the embedded build version
-string, and two timestamps. **Note the build version string**: it moves with every commit,
-which is the TIFF equivalent of the PNG trap in `CLAUDE.md`, and is why `cmp -l` and reading
-the offsets beats hashing the file.
+Re-verified the same way, on decoded pixel arrays: zero differing pixels against the
+pre-split reference, both pages, max abs diff 0.
