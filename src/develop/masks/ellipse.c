@@ -388,8 +388,8 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
                                       float radius_b, float rotation, float **points, int *points_count,
                                       const dt_iop_module_t *module)
 {
-  const float wd = dev->roi.raw_width;
-  const float ht = dev->roi.raw_height;
+  const float wd = dt_dev_geometry_raw_width(dev);
+  const float ht = dt_dev_geometry_raw_height(dev);
 
   // compute the points of the target (center and circumference of ellipse)
   // we get the point in RAW image reference
@@ -442,8 +442,8 @@ error:
 static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radius_a, float radius_b,
                                float rotation, float **points, int *points_count)
 {
-  const float wd = dev->roi.raw_width;
-  const float ht = dev->roi.raw_height;
+  const float wd = dt_dev_geometry_raw_width(dev);
+  const float ht = dt_dev_geometry_raw_height(dev);
 
   *points = _points_to_transform(dev, xx, yy, radius_a, radius_b, rotation, wd, ht, points_count);
   if(IS_NULL_PTR(*points)) return 1;

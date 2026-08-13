@@ -1983,8 +1983,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
                                      dt_masks_form_gui_t *mask_gui, int index)
 {
   dt_develop_t *dev = mask_gui->dev;
-  const int iwidth = dev->roi.raw_width;
-  const int iheight = dev->roi.raw_height;
+  const int iwidth = dt_dev_geometry_raw_width(dev);
+  const int iheight = dt_dev_geometry_raw_height(dev);
 
   if(mask_gui->creation)
   {
@@ -2274,8 +2274,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // in creation mode
   if(mask_gui->creation)
   {
-    const float iwd = mask_gui->dev->roi.raw_width;
-    const float iht = mask_gui->dev->roi.raw_height;
+    const float iwd = dt_dev_geometry_raw_width(mask_gui->dev);
+    const float iht = dt_dev_geometry_raw_height(mask_gui->dev);
     const float min_iwd_iht = MIN(iwd, iht);
 
     if(mask_gui->guipoints_count == 0)

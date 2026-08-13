@@ -1766,16 +1766,16 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
 {
   // Virtual pipe exists only for GUI geometry (ROI/mask transforms) and never processes pixels.
   if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->virtual_pipe)) return;
-  if(!dev->roi.raw_inited || dev->image_storage.id <= 0) return;
+  if(!dt_dev_geometry_raw_inited(dev) || dev->image_storage.id <= 0) return;
 
   // Ensure its input image metadata matches the current dev state.
   if(dev->virtual_pipe->imgid != dev->image_storage.id
-     || dev->virtual_pipe->iwidth != dev->roi.raw_width
-     || dev->virtual_pipe->iheight != dev->roi.raw_height
+     || dev->virtual_pipe->iwidth != dt_dev_geometry_raw_width(dev)
+     || dev->virtual_pipe->iheight != dt_dev_geometry_raw_height(dev)
      || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
   {
     dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
-                               dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
+                               dt_dev_geometry_raw_width(dev), dt_dev_geometry_raw_height(dev), 1.0f, DT_MIPMAP_FULL);
   }
 
   // Mirror the preview-pipe change flags and commit immediately.

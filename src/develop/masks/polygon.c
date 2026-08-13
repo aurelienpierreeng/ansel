@@ -2040,8 +2040,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   if(IS_NULL_PTR(gui_points)) return 0;
 
-  const int iwidth = dev->roi.raw_width;
-  const int iheight = dev->roi.raw_height;
+  const int iwidth = dt_dev_geometry_raw_width(dev);
+  const int iheight = dt_dev_geometry_raw_height(dev);
 
   if(mask_gui->node_dragging >= 0)
   {

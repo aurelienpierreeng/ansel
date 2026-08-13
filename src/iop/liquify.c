@@ -2845,8 +2845,8 @@ void gui_post_expose(struct dt_iop_module_t *module,
   if(IS_NULL_PTR(g))
     return;
 
-  const float bb_width = develop->roi.processed_width;
-  const float bb_height = develop->roi.processed_height;
+  const float bb_width = dt_dev_geometry_processed_width(develop);
+  const float bb_height = dt_dev_geometry_processed_height(develop);
   if(bb_width < 1.0 || bb_height < 1.0)
     return;
 
@@ -3180,8 +3180,8 @@ static void get_stamp_params(dt_iop_module_t *module, float *radius, float *r_st
   const int last_win_min = MIN(allocation.width, allocation.height);
 
   const dt_develop_t *dev = module->dev;
-  const float iwd_min = MIN(dev->roi.raw_width, dev->roi.raw_height);
-  const float proc_wdht_min = MIN(dev->roi.processed_width, dev->roi.processed_height);
+  const float iwd_min = MIN(dt_dev_geometry_raw_width(dev), dt_dev_geometry_raw_height(dev));
+  const float proc_wdht_min = MIN(dt_dev_geometry_processed_width(dev), dt_dev_geometry_processed_height(dev));
   const float scale = 1.f / (get_zoom_scale(dev));
   const float im_scale = 0.09f * iwd_min * last_win_min * scale / proc_wdht_min;
 
