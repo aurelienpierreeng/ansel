@@ -3780,8 +3780,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
   // the usual rescaling stuff
-  const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(dev);
+  const float ht = dt_dev_roi_request_preview_height(dev);
   if(wd < 1.0 || ht < 1.0) return;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
@@ -4236,8 +4236,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   gboolean handled = FALSE;
 
-  const float wd = self->dev->roi.preview_width;
-  const float ht = self->dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(self->dev);
+  const float ht = dt_dev_roi_request_preview_height(self->dev);
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzxpy[2] = { (float)x, (float)y };
@@ -4488,8 +4488,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   float pzx = pzxpy[0];
   float pzy = pzxpy[1];
 
-  const float wd = self->dev->roi.preview_width;
-  const float ht = self->dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(self->dev);
+  const float ht = dt_dev_roi_request_preview_height(self->dev);
   if(wd < 1.0 || ht < 1.0) return 1;
 
   // if we start to draw a straightening line
@@ -4734,8 +4734,8 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
   if(IS_NULL_PTR(g)) return FALSE;
-  const float wd = self->dev->roi.preview_width;
-  const float ht = self->dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(self->dev);
+  const float ht = dt_dev_roi_request_preview_height(self->dev);
 
   dt_control_change_cursor(GDK_LEFT_PTR);
 
@@ -4929,8 +4929,8 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
     const float pzx = pzxpy[0];
     const float pzy = pzxpy[1];
-    const float wd = self->dev->roi.preview_width;
-    const float ht = self->dev->roi.preview_height;
+    const float wd = dt_dev_roi_request_preview_width(self->dev);
+    const float ht = dt_dev_roi_request_preview_height(self->dev);
 
     float near_delta = 5.0f;
     if(g->current_structure_method == ASHIFT_METHOD_QUAD || g->current_structure_method == ASHIFT_METHOD_LINES)

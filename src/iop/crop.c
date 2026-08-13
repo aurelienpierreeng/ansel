@@ -210,8 +210,8 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
   if(IS_NULL_PTR(piece)) return;
   // we want value in iop space
-  const float wd = (float)piece->buf_out.width; //self->dev->roi.preview_width;
-  const float ht = (float)piece->buf_out.height; //self->dev->roi.preview_height;
+  const float wd = (float)piece->buf_out.width; //dt_dev_roi_request_preview_width(self->dev);
+  const float ht = (float)piece->buf_out.height; //dt_dev_roi_request_preview_height(self->dev);
 
   const float bbox_left   = g->clip_x * wd;
   const float bbox_top    = g->clip_y * ht;
@@ -1385,8 +1385,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 
-  g->wd = dev->roi.preview_width;
-  g->ht = dev->roi.preview_height;
+  g->wd = dt_dev_roi_request_preview_width(dev);
+  g->ht = dt_dev_roi_request_preview_height(dev);
   if(g->wd < 1.0 || g->ht < 1.0) return;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
