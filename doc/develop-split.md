@@ -182,3 +182,58 @@ immediately redraws.
 So: merge #1130 as it stands; stop growing `src/history`; start T0+T1 — they are the
 cheapest cuts with the largest fan-out, they are fully specified by the survey, and nothing
 in them blocks on a design decision.
+
+## T4b field survey: what `dev->roi` actually is, measured
+
+The tranche list above assigns `dev->roi` three artifacts. Before writing them, every one of
+its 416 access sites was traced to a writer, a reader and a thread — six independent passes,
+each classification then attacked by a checker whose brief was to find one counter-example.
+Six of the checker's attacks succeeded, and they are the reason this section exists: the
+first-pass classification was right about *meaning* and wrong about *reach*, which is the
+same mistake that shipped the `raw_width == 0` masks bug.
+
+**The site count is larger than a grep suggests.** `grep 'dev->roi'` finds 349; the real
+figure is 416, because the struct is also reached through `self->dev->roi`,
+`mask_gui->dev->roi`, `pipe->dev->roi`, `module->dev->roi` and `d->dev->roi`. Of those, 57
+are writes, and they sit in just 17 functions — `_zoom_preset_change()` (12),
+`_change_scaling()` (6), `mouse_moved()`/`key_pressed()` (4 each), `dt_dev_get_thumbnail_size()`
+(4), `dt_dev_reset_roi()` (4). That concentration is what makes the D1=A2 setter API
+tractable: seventeen call sites to reroute, not fifty-seven.
+
+**The classification, after the checkers.** `raw_width`/`raw_height`/`raw_inited` are backend
+and reached headless (confirmed: `_dt_dev_mipmap_prefetch_full()` still writes all three
+unconditionally, the CLAUDE.md fix intact). `processed_width`/`height` survived the
+refutation attempt as GUI-populated: nothing reads them with `gui_attached == FALSE`, and the
+backend keeps its own copy in `pipe->processed_*` (pixelpipe_hb.h:239) — the mask coordinate
+path reaches absolute positions through the virtual pipe, not through these. `scaling`, `x`,
+`y`, `border_size`, `orig_width`, `orig_height`, `gui_inited` are viewport; `preview_*`,
+`natural_scale`, `output_inited` are derived. `main_width`/`main_height` were neither: zero
+readers tree-wide, deleted in T4b-1.
+
+**The hazard is a torn pair, not a stale scalar.** `x` and `y` are written as two separate
+statements at every one of the eight write sites, and read as two separate statements by
+`_update_darkroom_roi()` on the worker thread — so a frame can be planned from half the old
+pan and half the new one. `preview_width`/`preview_height` have the identical shape. Any
+channel that only guarantees freshness, without publishing the tuple atomically, leaves this
+in place.
+
+**Three defects the survey found, which are not bookkeeping:**
+
+* `iop/finalscale.c`'s `commit_params()` reads `pipe->dev->roi.scaling` and `natural_scale`
+  to decide `piece->enabled` — on the pipeline thread, unsynchronised, and for the export and
+  thumbnail pipes as well, where the dev is headless and those fields hold their `calloc`
+  zero. The later clauses of the predicate decide those two pipe types on their own, so the
+  read is load-bearing only for the darkroom pipes, which are exactly the ones that race.
+* The drawlayer paint thread reads viewport state and drives the virtual pipe. Chain:
+  `_drawlayer_worker_main` (a pthread, worker.c:1378) → `process_sample` →
+  `_backend_worker_process_sample` → `_process_backend_input` →
+  `dt_drawlayer_paint_interpolate_path` → the `layer_to_widget` callback →
+  `dt_dev_coordinates_image_norm_to_widget()`, which reads `roi.orig_width`/`orig_height`
+  (develop.c:1100-1101) and calls `dt_dev_distort_transform_plus(self->dev->virtual_pipe, …)`
+  — a pipe documented as owned by the GUI main thread. It runs once per dab, so a window
+  resize or panel toggle during a stroke races it.
+* `dt_focus_draw_clusters()` (gui/dtgtk/focus.h:288) reads
+  `dt_dev_get_global()->roi.border_size` from `_get_image_buffer`, a `dt_control_job` body
+  (thumbnail.c:657). A lighttable thumbnail render job thus reads darkroom viewport state
+  through the global, from a view that is not darkroom. After the split that viewport may not
+  exist, so this call site needs rewriting rather than re-pointing.
