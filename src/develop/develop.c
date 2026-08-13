@@ -402,10 +402,14 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe,
                                              const dt_iop_roi_t *roi)
 {
-  // Pipeline thread: compare against what this pipe was planned from, not what the GUI has
-  // published since.
-  const dt_dev_roi_request_t request = pipe->roi_request;
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !dev->gui_attached || !request.valid) return FALSE;
+  // The NULL checks come FIRST: this is called with dev->preview_pipe, which is allocated only
+  // for a gui_attached dev (dt_dev_init) and is therefore NULL on every export and thumbnail
+  // dev -- iop/denoiseprofile.c passes exactly that.
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !dev->gui_attached) return FALSE;
+
+  // Compare against what this pipe was planned from, not what the GUI has published since.
+  const dt_dev_roi_request_t request = dt_dev_roi_request_of_pipe(pipe);
+  if(!request.valid) return FALSE;
 
   int x = 0;
   int y = 0;
@@ -456,7 +460,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 {  
   // The latched snapshot, not the live record: this runs on the worker, and the frame must be
   // planned from the same numbers the rest of this iteration uses.
-  const dt_dev_roi_request_t request = pipe->roi_request;
+  const dt_dev_roi_request_t request = dt_dev_roi_request_of_pipe(pipe);
   if(!request.valid) return 1;
 
   // Store previous values
@@ -628,7 +632,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     // viewport states.
     const dt_dev_roi_request_t latched = dt_dev_roi_request_get(dev);
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-      pipes[i]->roi_request = latched;
+      dt_dev_roi_request_latch(pipes[i], &latched);
 
     // This is cheap to run, keep it in sync always.
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);

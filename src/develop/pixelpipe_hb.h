@@ -306,7 +306,7 @@ typedef struct dt_dev_pixelpipe_t
    * dt_dev_pixelpipe_init_cached() gives it: scaling 1, natural_scale -1, which is what those
    * pipes have always read off a headless dev. See develop/dev_roi_request.h.
    */
-  dt_dev_roi_request_t roi_request;
+  dt_dev_roi_request_store_t roi_request;
 
   // processing is true when actual pixel computations are ongoing
   int processing;

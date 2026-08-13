@@ -26,6 +26,7 @@
 #include "system/atomic.h"
 
 struct dt_develop_t;
+struct dt_dev_pixelpipe_t;
 
 /**
  * @brief The coherent set of numbers a darkroom pipe plans its ROI from.
@@ -121,6 +122,21 @@ uint64_t dt_dev_roi_request_publish(struct dt_develop_t *dev);
 /** Coherent copy (seqlock read). The returned record is zeroed with valid == FALSE when nothing
  *  usable has been published. */
 dt_dev_roi_request_t dt_dev_roi_request_get(const struct dt_develop_t *dev);
+
+/**
+ * @brief Publish onto a pipe the request its next run is planned from. Darkroom worker only.
+ *
+ * @details Same seqlock as the dev-level store, and for the same reason: the worker writes this
+ * once per loop iteration while the GUI thread can read it at any moment --
+ * dt_dev_pipelines_share_preview_output() does exactly that from the darkroom expose path, and
+ * every dt_dev_pixelpipe_has_preview_output() call from an IOP GUI callback does too. A plain
+ * struct assignment across those threads is a torn read of the same shape this record exists to
+ * prevent.
+ */
+void dt_dev_roi_request_latch(struct dt_dev_pixelpipe_t *pipe, const dt_dev_roi_request_t *request);
+
+/** Coherent copy of what a pipe was last latched with. Safe from any thread. */
+dt_dev_roi_request_t dt_dev_roi_request_of_pipe(const struct dt_dev_pixelpipe_t *pipe);
 
 /* Single-field readers, one line each. Use dt_dev_roi_request_get() wherever more than one is
  * needed: the whole point of the record is that its members are consumed as a product. */
