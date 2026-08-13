@@ -39,11 +39,9 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
   }
   else
   {
-    int32_t processed_size_w = 0;
-    int32_t processed_size_h = 0;
-    dt_dev_geometry_get_processed_size(self->dev, &processed_size_w, &processed_size_h);
-    resolved_width = processed_size_w;
-    resolved_height = processed_size_h;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+    resolved_width = geometry.processed_width;
+    resolved_height = geometry.processed_height;
   }
   if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
   if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;

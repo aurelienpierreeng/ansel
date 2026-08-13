@@ -87,8 +87,16 @@ void dt_dev_geometry_set_raw_size(struct dt_develop_t *dev, int32_t width, int32
 /** Publish the processed pair. GUI thread only: its producer runs the virtual pipe. */
 void dt_dev_geometry_set_processed_size(struct dt_develop_t *dev, int32_t width, int32_t height);
 
-/** Coherent copy of the whole record. Returns FALSE, and zeroes *out, when nothing has been
- *  published yet. */
+/** Coherent copy of the whole record, by value -- the ordinary way to read it:
+ *
+ *    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+ *
+ *  One seqlock read, then plain member access, so a caller that needs several fields cannot
+ *  accidentally pair them across a publication. Zeroed, with both _inited bits FALSE, when
+ *  nothing has been published yet. */
+dt_dev_image_geometry_t dt_dev_geometry_snapshot(const struct dt_develop_t *dev);
+
+/** Out-param form, for callers that also want the "is anything published" answer. */
 gboolean dt_dev_geometry_get(const struct dt_develop_t *dev, dt_dev_image_geometry_t *out);
 
 /** Coherent copy of the raw pair. Returns raw_inited; the out-params are written either way,
