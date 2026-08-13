@@ -153,10 +153,10 @@ gboolean dt_dev_snapshot_is_valid(const dt_dev_snapshot_t *snap)
 static gboolean _compute_main_roi(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, dt_iop_roi_t *roi)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(roi)) return FALSE;
-  if(!dev->roi.output_inited || dt_dev_viewport_box_width(dev) <= 0 || dt_dev_viewport_box_height(dev) <= 0) return FALSE;
+  if(!dt_dev_roi_request_valid(dev) || dt_dev_viewport_box_width(dev) <= 0 || dt_dev_viewport_box_height(dev) <= 0) return FALSE;
   if(pipe->processed_width <= 0 || pipe->processed_height <= 0) return FALSE;
 
-  const float scale = dev->roi.natural_scale * dt_dev_viewport_scaling(dev);
+  const float scale = dt_dev_roi_request_natural_scale(dev) * dt_dev_viewport_scaling(dev);
   const int roi_width = (int)roundf(scale * pipe->processed_width);
   const int roi_height = (int)roundf(scale * pipe->processed_height);
 
@@ -173,10 +173,10 @@ static gboolean _compute_main_roi(const dt_develop_t *dev, const dt_dev_pixelpip
 static gboolean _compute_preview_roi(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, dt_iop_roi_t *roi)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(roi)) return FALSE;
-  if(!dev->roi.output_inited) return FALSE;
+  if(!dt_dev_roi_request_valid(dev)) return FALSE;
   if(pipe->processed_width <= 0 || pipe->processed_height <= 0) return FALSE;
 
-  const float scale = dev->roi.natural_scale;
+  const float scale = dt_dev_roi_request_natural_scale(dev);
   roi->width = MAX(1, (int)roundf(scale * pipe->processed_width));
   roi->height = MAX(1, (int)roundf(scale * pipe->processed_height));
   roi->x = 0;

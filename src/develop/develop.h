@@ -61,6 +61,7 @@
 #include "develop/pixelpipe_hb.h"
 #include "develop/dev_geometry.h"
 #include "develop/dev_viewport.h"
+#include "develop/dev_roi_request.h"
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 
@@ -199,28 +200,15 @@ typedef struct dt_develop_t
    */
   dt_dev_viewport_t *viewport;
 
-  // The roi structure is used in darkroom GUI only.
-  // It defines the output size of the image backbuffer fitting
-  // into the darkroom center widget. This is critically used for all
-  // GUI <-> RAW pixel coordinates conversions. It should be recomputed
-  // ASAP when widget size changes.
-  struct {
-    // Dimensions of the preview backbuffer, depending on the
-    // darkroom main widget size and DPI factor.
-    // These are computed early, before we have the actual buffer.
-    // Use them everywhere in GUI.
-    // They respect the final image aspect ratio and fit within
-    // the width x height bounding box.
-    int32_t preview_width, preview_height;
+  /**
+   * @brief What the darkroom pipes plan their ROI from: the viewport and the geometry,
+   * combined and derived once, published as one coherent record.
+   *
+   * @details Every dev has one; a dev with no viewport simply publishes the neutral inputs.
+   * See develop/dev_roi_request.h.
+   */
+  dt_dev_roi_request_store_t roi_request;
 
-    // natural scaling = MIN(dev->width / dt_dev_geometry_processed_width(dev), dev->height / dt_dev_geometry_processed_height(dev))
-    // aka ensure that image fits into widget minus margins/borders.
-    float natural_scale;
-
-    // Conveniency state to check if all output (backbuffer) sizes are inited
-    gboolean output_inited;
-
-  } roi;
 
   // image processing pipeline with caching
   struct dt_dev_pixelpipe_t *pipe, *preview_pipe;

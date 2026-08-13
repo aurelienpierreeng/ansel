@@ -17,6 +17,7 @@
 */
 
 #include "develop/dev_viewport.h"
+#include "develop/dev_roi_request.h"
 #include "develop/develop.h"
 
 #include <string.h>
@@ -110,6 +111,8 @@ gboolean dt_dev_viewport_set_widget_size(dt_develop_t *dev, const int32_t widget
   next.widget_width = widget_width;
   next.widget_height = widget_height;
   _publish(dev->viewport, &next);
+  // The ROI request is derived from this state; republish it so the two cannot disagree.
+  dt_dev_roi_request_publish(dev);
   return TRUE;
 }
 
@@ -122,6 +125,8 @@ gboolean dt_dev_viewport_set_border(dt_develop_t *dev, const int32_t border_size
 
   next.border_size = border_size;
   _publish(dev->viewport, &next);
+  // The ROI request is derived from this state; republish it so the two cannot disagree.
+  dt_dev_roi_request_publish(dev);
   return TRUE;
 }
 
@@ -136,6 +141,8 @@ gboolean dt_dev_viewport_set_box(dt_develop_t *dev, const int32_t box_width, con
   next.box_height = box_height;
   next.configured = TRUE;
   _publish(dev->viewport, &next);
+  // The ROI request is derived from this state; republish it so the two cannot disagree.
+  dt_dev_roi_request_publish(dev);
   return TRUE;
 }
 
@@ -151,6 +158,8 @@ gboolean dt_dev_viewport_set_center(dt_develop_t *dev, const float center_x, con
   next.center_x = center_x;
   next.center_y = center_y;
   _publish(dev->viewport, &next);
+  // The ROI request is derived from this state; republish it so the two cannot disagree.
+  dt_dev_roi_request_publish(dev);
   return TRUE;
 }
 
@@ -163,6 +172,8 @@ gboolean dt_dev_viewport_set_scaling(dt_develop_t *dev, const float scaling)
 
   next.scaling = scaling;
   _publish(dev->viewport, &next);
+  // The ROI request is derived from this state; republish it so the two cannot disagree.
+  dt_dev_roi_request_publish(dev);
   return TRUE;
 }
 
@@ -176,6 +187,7 @@ void dt_dev_viewport_reset(dt_develop_t *dev)
   next.center_x = neutral.center_x;
   next.center_y = neutral.center_y;
   _publish(dev->viewport, &next);
+  dt_dev_roi_request_publish(dev);
 }
 
 // clang-format off

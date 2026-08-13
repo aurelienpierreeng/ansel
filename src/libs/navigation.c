@@ -299,8 +299,8 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   }
   else
   {
-    wd = dev->roi.preview_width;
-    ht = dev->roi.preview_height;
+    wd = dt_dev_roi_request_preview_width(dev);
+    ht = dt_dev_roi_request_preview_height(dev);
   }
 
   if(d->image_surface && imgid == dev->image_storage.id)
@@ -393,7 +393,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     if(dt_dev_viewport_scaling(dev) == 1.f)
       fit = g_strdup(_("Fit"));
   
-    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dt_dev_viewport_scaling(dev) * dev->roi.natural_scale * 100);
+    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dt_dev_viewport_scaling(dev) * dt_dev_roi_request_natural_scale(dev) * 100);
     if(fit)
     {
       dt_free(fit);
@@ -498,13 +498,13 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
   switch(zoom)
   {
     default:
-      dt_dev_viewport_set_scaling(dev, dev->roi.natural_scale);
+      dt_dev_viewport_set_scaling(dev, dt_dev_roi_request_natural_scale(dev));
       break;
     case LIB_ZOOM_SMALL:
-      dt_dev_viewport_set_scaling(dev, dev->roi.natural_scale * 0.33);
+      dt_dev_viewport_set_scaling(dev, dt_dev_roi_request_natural_scale(dev) * 0.33);
       break;
     case LIB_ZOOM_FIT:
-      dt_dev_viewport_set_scaling(dev, dev->roi.natural_scale);
+      dt_dev_viewport_set_scaling(dev, dt_dev_roi_request_natural_scale(dev));
       break;
     case LIB_ZOOM_25:
       dt_dev_viewport_set_scaling(dev, 0.25);
@@ -532,9 +532,9 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
       break;
   }
 
-  // Actual pixelpipe scaling is dt_dev_viewport_scaling(dev) * dev->roi.natural_scale,
-  // where dev->roi.natural_scale ensures the image fits within the viewport.
-  dt_dev_viewport_set_scaling(dev, dt_dev_viewport_scaling(dev) / dev->roi.natural_scale);
+  // Actual pixelpipe scaling is dt_dev_viewport_scaling(dev) * dt_dev_roi_request_natural_scale(dev),
+  // where dt_dev_roi_request_natural_scale(dev) ensures the image fits within the viewport.
+  dt_dev_viewport_set_scaling(dev, dt_dev_viewport_scaling(dev) / dt_dev_roi_request_natural_scale(dev));
 
   dt_dev_clamp_viewport_center(dev);
   dt_dev_pixelpipe_change_zoom_main(dev);

@@ -1711,8 +1711,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     return 0;
   }
 
-  const int wd = dev->roi.preview_width;
-  const int ht = dev->roi.preview_height;
+  const int wd = dt_dev_roi_request_preview_width(dev);
+  const int ht = dt_dev_roi_request_preview_height(dev);
   if(wd < 1 || ht < 1) return 0;
 
   float point[2] = { (float)x, (float)y };

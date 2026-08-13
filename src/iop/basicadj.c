@@ -428,8 +428,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->posx_from == g->posx_to && g->posy_from == g->posy_to) return;
 
   dt_develop_t *dev = self->dev;
-  //const float wd = dev->roi.preview_width;
-  //const float ht = dev->roi.preview_height;
+  //const float wd = dt_dev_roi_request_preview_width(dev);
+  //const float ht = dt_dev_roi_request_preview_height(dev);
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   const float posx_from = fmin(g->posx_from, g->posx_to);

@@ -377,8 +377,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
-  const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(dev);
+  const float ht = dt_dev_roi_request_preview_height(dev);
   float bigger_side, smaller_side;
   if(wd >= ht)
   {
@@ -464,8 +464,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return 0;
-  const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(dev);
+  const float ht = dt_dev_roi_request_preview_height(dev);
   float bigger_side, smaller_side;
   if(wd >= ht)
   {

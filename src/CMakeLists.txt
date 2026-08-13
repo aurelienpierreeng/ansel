@@ -184,6 +184,7 @@ FILE(GLOB SOURCE_FILES
   "develop/develop.c"
   "develop/dev_geometry.c"
   "develop/dev_viewport.c"
+  "develop/dev_roi_request.c"
   "develop/gui_throttle.c"
   "develop/dev_history.c"
   "develop/dev_history_gui.c"

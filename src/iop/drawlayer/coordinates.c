@@ -171,8 +171,8 @@ gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, const float padd
 
   const float widget_w = (float)dt_dev_viewport_widget_width(self->dev);
   const float widget_h = (float)dt_dev_viewport_widget_height(self->dev);
-  const float preview_w = self->dev->roi.preview_width;
-  const float preview_h = self->dev->roi.preview_height;
+  const float preview_w = dt_dev_roi_request_preview_width(self->dev);
+  const float preview_h = dt_dev_roi_request_preview_height(self->dev);
   if(widget_w <= 0.0f || widget_h <= 0.0f || preview_w <= 0.0f || preview_h <= 0.0f) return FALSE;
 
   const float zoom_scale = dt_dev_get_overlay_scale(self->dev);

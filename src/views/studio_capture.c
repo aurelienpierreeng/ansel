@@ -919,8 +919,8 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   // live backbuf above: d->dev->roi always describes "fit", never this view's own 100%/pan.
   if(d->zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    const float wd = d->dev->roi.preview_width;
-    const float ht = d->dev->roi.preview_height;
+    const float wd = dt_dev_roi_request_preview_width(d->dev);
+    const float ht = dt_dev_roi_request_preview_height(d->dev);
     const float scaling = dt_dev_get_overlay_scale(d->dev);
 
     cairo_save(cr);

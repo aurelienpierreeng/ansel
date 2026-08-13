@@ -342,8 +342,8 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
   cairo_save(cri);
   // The colorpicker samples bounding rectangle should only be displayed inside the visible image
 
-  const double wd = dev->roi.preview_width;
-  const double ht = dev->roi.preview_height;
+  const double wd = dt_dev_roi_request_preview_width(dev);
+  const double ht = dt_dev_roi_request_preview_height(dev);
   const double scale = dt_dev_get_fit_scale(dev);
   const double lw = 1.0 / scale;
   const double dashes[1] = { lw * 4.0 };
@@ -745,10 +745,14 @@ static uint64_t _darkroom_zoom_hash(const dt_develop_t *dev)
   const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
   hash = dt_hash(hash, (const char *)&geometry, sizeof(geometry));
 
-  hash = dt_hash(hash, (const char *)&dev->roi.preview_width, sizeof(dev->roi.preview_width));
-  hash = dt_hash(hash, (const char *)&dev->roi.preview_height, sizeof(dev->roi.preview_height));
-  hash = dt_hash(hash, (const char *)&dev->roi.natural_scale, sizeof(dev->roi.natural_scale));
-  hash = dt_hash(hash, (const char *)&dev->roi.output_inited, sizeof(dev->roi.output_inited));
+  // The request's generation, not its bytes: the record carries four bytes of tail padding
+  // (its uint64_t forces 8-byte alignment) whose contents C does not define across a copy, so
+  // hashing it raw could key the cached surface differently for identical content. The
+  // generation exists precisely to answer "did this change", and advances only when it did.
+  // dt_dev_viewport_state_t and dt_dev_image_geometry_t above are padding-free, so their bytes
+  // are safe to hash directly -- checked, not assumed.
+  const dt_dev_roi_request_t request = dt_dev_roi_request_get(dev);
+  hash = dt_hash(hash, (const char *)&request.generation, sizeof(request.generation));
   return hash;
 }
 
@@ -838,8 +842,8 @@ void expose(
   _darkroom_prepare_image_surface(dev, width, height, &expose_state);
 
   cairo_t *cr = cairo_create(dev->image_surface);
-  const int full_width = dev->roi.preview_width;
-  const int full_height = dev->roi.preview_height;
+  const int full_width = dt_dev_roi_request_preview_width(dev);
+  const int full_height = dt_dev_roi_request_preview_height(dev);
   const uint64_t main_backbuf_hash = dt_dev_backbuf_get_hash(&dev->pipe->backbuf);
   const uint64_t preview_backbuf_hash = dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf);
   const gboolean main_has_backbuf = main_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID;
@@ -1053,8 +1057,8 @@ void expose(
   // draw guide lines if needed
   if(!dev->gui_module || !(dev->gui_module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW))
   {
-    const float wd = dev->roi.preview_width;
-    const float ht = dev->roi.preview_height;
+    const float wd = dt_dev_roi_request_preview_width(dev);
+    const float ht = dt_dev_roi_request_preview_height(dev);
     const float scaling = dt_dev_get_overlay_scale(dev);
 
     cairo_save(cri);
@@ -2828,12 +2832,12 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     // Incremental zoom-in on middle button click, from fit to 800% 
     // by power of 2 increments (100%, 200%, 400%, 800%).
     float new_scale = 1.f;
-    if(dt_dev_viewport_scaling(dev) < 1.f || dt_dev_viewport_scaling(dev) > 7.f / dev->roi.natural_scale)
+    if(dt_dev_viewport_scaling(dev) < 1.f || dt_dev_viewport_scaling(dev) > 7.f / dt_dev_roi_request_natural_scale(dev))
       new_scale = 1.f; // zoom to fit
-    else if(dt_dev_viewport_scaling(dev) * dev->roi.natural_scale < 1.f)
-      new_scale = 1.f / dev->roi.natural_scale; // 100 %
+    else if(dt_dev_viewport_scaling(dev) * dt_dev_roi_request_natural_scale(dev) < 1.f)
+      new_scale = 1.f / dt_dev_roi_request_natural_scale(dev); // 100 %
     else
-      new_scale = floorf(dt_dev_viewport_scaling(dev) * dev->roi.natural_scale) * 2.f / dev->roi.natural_scale;
+      new_scale = floorf(dt_dev_viewport_scaling(dev) * dt_dev_roi_request_natural_scale(dev)) * 2.f / dt_dev_roi_request_natural_scale(dev);
 
     const float point[2] = { x, y };
     return _change_scaling(dev, point, new_scale);

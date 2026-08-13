@@ -2263,8 +2263,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // reapply box aspect to be sure that the ratio has not been modified by the keystone transform
   apply_box_aspect(self, GRAB_HORIZONTAL);
 
-  const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(dev);
+  const float ht = dt_dev_roi_request_preview_height(dev);
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   cairo_translate(cr, width / 2.0, height / 2.0);
@@ -2657,8 +2657,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return 0;
 
-  const float wd = self->dev->roi.preview_width;
-  const float ht = self->dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(self->dev);
+  const float ht = dt_dev_roi_request_preview_height(self->dev);
   const float zoom_scale = dt_dev_viewport_scaling(dev);
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
@@ -3021,8 +3021,8 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
     p->cw = p->ch = 1.0f;
   }
   // we want value in iop space
-  const float wd = self->dev->roi.preview_width;
-  const float ht = self->dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(self->dev);
+  const float ht = dt_dev_roi_request_preview_height(self->dev);
   float points[4]
       = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
   if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
