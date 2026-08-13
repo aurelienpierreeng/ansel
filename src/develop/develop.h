@@ -59,6 +59,7 @@
 #include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
+#include "develop/dev_geometry.h"
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 
@@ -177,6 +178,16 @@ typedef struct dt_develop_t
    */
   dt_atomic_int mask_preview_settings_revision;
 
+  /**
+   * @brief Objective geometry of the image being worked on: the raw dimensions and the
+   * full-resolution processed dimensions.
+   *
+   * @details Not GUI state -- every dev has it, headless ones included, and reading it
+   * through dt_dev_geometry_get*() is what makes the pair coherent for the pipeline
+   * threads that consume it. See develop/dev_geometry.h.
+   */
+  dt_dev_geometry_store_t geometry;
+
   // The roi structure is used in darkroom GUI only.
   // It defines the output size of the image backbuffer fitting
   // into the darkroom center widget. This is critically used for all
@@ -214,24 +225,12 @@ typedef struct dt_develop_t
     // the width x height bounding box.
     int32_t preview_width, preview_height;
 
-    // natural scaling = MIN(dev->width / dev->roi.processed_width, dev->height / dev->roi.processed_height)
+    // natural scaling = MIN(dev->width / dt_dev_geometry_processed_width(dev), dev->height / dt_dev_geometry_processed_height(dev))
     // aka ensure that image fits into widget minus margins/borders.
     float natural_scale;
 
-    // Dimensions of the full-resolution RAW image
-    // being worked on.
-    int32_t raw_width, raw_height;
-
-    // Dimensions of the final processed image if we processed it full-resolution.
-    // This is used to get the final aspect ratio of an image,
-    // taking all cropping and distortions into account.
-    int32_t processed_width, processed_height;
-
     // Conveniency state to check if all widget sizes are inited
     gboolean gui_inited;
-
-    // Conveniency state to check if input (raw image) sizes are inited
-    gboolean raw_inited;
 
     // Conveniency state to check if all output (backbuffer) sizes are inited
     gboolean output_inited;

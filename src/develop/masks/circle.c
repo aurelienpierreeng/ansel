@@ -507,8 +507,8 @@ static int _circle_get_points_source(dt_develop_t *dev, float x, float y, float 
 {
    // global callback signature
   
-  const float wd = dev->roi.raw_width;
-  const float ht = dev->roi.raw_height;
+  const float wd = dt_dev_geometry_raw_width(dev);
+  const float ht = dt_dev_geometry_raw_height(dev);
 
   // compute the points of the target (center and circumference of circle)
   // we get the point in RAW image reference
@@ -561,8 +561,8 @@ static int _circle_get_points(dt_develop_t *dev, float x, float y, float radius,
 {
    // global callback signature
   
-  const float wd = dev->roi.raw_width;
-  const float ht = dev->roi.raw_height;
+  const float wd = dt_dev_geometry_raw_width(dev);
+  const float ht = dt_dev_geometry_raw_height(dev);
 
   // compute the points we need to transform (center and circumference of circle)
   *points = _points_to_transform(dev, x, y, radius, wd, ht, points_count);

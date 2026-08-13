@@ -146,7 +146,7 @@ gboolean dt_dev_snapshot_is_valid(const dt_dev_snapshot_t *snap)
 }
 
 // Mirrors _update_darkroom_roi()'s main-pipe branch (develop/develop.c), substituting `pipe`'s
-// own processed size for dev->roi.processed_width/height -- the snapshot's own image may have
+// own processed size for dt_dev_geometry_processed_width(dev)/height -- the snapshot's own image may have
 // different dimensions than the one currently open in darkroom. Deliberately ignores the caller's
 // clip rect: only dev's pan/zoom (dev->roi) drives what gets processed, so resizing/dragging a
 // compare split line never triggers a reprocess.

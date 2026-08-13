@@ -39,8 +39,8 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
   }
   else
   {
-    resolved_width = self->dev->roi.processed_width;
-    resolved_height = self->dev->roi.processed_height;
+    resolved_width = dt_dev_geometry_processed_width(self->dev);
+    resolved_height = dt_dev_geometry_processed_height(self->dev);
   }
   if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
   if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;

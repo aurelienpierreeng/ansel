@@ -395,8 +395,8 @@ static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt
   }
   else
   {
-    resolved_width = self->dev->roi.processed_width;
-    resolved_height = self->dev->roi.processed_height;
+    resolved_width = dt_dev_geometry_processed_width(self->dev);
+    resolved_height = dt_dev_geometry_processed_height(self->dev);
   }
 
   if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
@@ -1903,8 +1903,8 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
   int layer_height = 0;
   if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
-    layer_width = self->dev->roi.raw_width;
-    layer_height = self->dev->roi.raw_height;
+    layer_width = dt_dev_geometry_raw_width(self->dev);
+    layer_height = dt_dev_geometry_raw_height(self->dev);
   }
 
   char path[PATH_MAX] = { 0 };
@@ -2010,8 +2010,8 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   int layer_height = 0;
   if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
-    layer_width = self->dev->roi.raw_width;
-    layer_height = self->dev->roi.raw_height;
+    layer_width = dt_dev_geometry_raw_width(self->dev);
+    layer_height = dt_dev_geometry_raw_height(self->dev);
   }
 
   if(!_commit_dabs(self, FALSE))

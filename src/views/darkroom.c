@@ -718,6 +718,46 @@ static inline gboolean _darkroom_preview_fallback_valid(const dt_develop_t *dev,
          && _darkroom_preview_fallback_height == height;
 }
 
+/**
+ * @brief The frame-validity key for the locked main surface.
+ *
+ * @details Every viewport quantity that changes what the composed image should look like,
+ * named one by one. This used to be `dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi))` --
+ * a raw hash of the whole struct, which silently absorbed whatever was added to it and would
+ * just as silently have absorbed the members leaving it as `dev->roi` is divided into its
+ * three real objects. Naming them makes the dependency reviewable and makes the compiler,
+ * rather than a stale cached frame, report the next member that moves.
+ *
+ * The value never leaves the process and is only ever compared against another value computed
+ * here, so it does not have to reproduce the old byte layout -- only to change exactly when
+ * the old one changed.
+ */
+static uint64_t _darkroom_zoom_hash(const dt_develop_t *dev)
+{
+  uint64_t hash = 5381;
+  hash = dt_hash(hash, (const char *)&dev->roi.width, sizeof(dev->roi.width));
+  hash = dt_hash(hash, (const char *)&dev->roi.height, sizeof(dev->roi.height));
+  hash = dt_hash(hash, (const char *)&dev->roi.scaling, sizeof(dev->roi.scaling));
+  hash = dt_hash(hash, (const char *)&dev->roi.x, sizeof(dev->roi.x));
+  hash = dt_hash(hash, (const char *)&dev->roi.y, sizeof(dev->roi.y));
+  hash = dt_hash(hash, (const char *)&dev->roi.border_size, sizeof(dev->roi.border_size));
+  hash = dt_hash(hash, (const char *)&dev->roi.orig_width, sizeof(dev->roi.orig_width));
+  hash = dt_hash(hash, (const char *)&dev->roi.orig_height, sizeof(dev->roi.orig_height));
+  hash = dt_hash(hash, (const char *)&dev->roi.preview_width, sizeof(dev->roi.preview_width));
+  hash = dt_hash(hash, (const char *)&dev->roi.preview_height, sizeof(dev->roi.preview_height));
+  hash = dt_hash(hash, (const char *)&dev->roi.natural_scale, sizeof(dev->roi.natural_scale));
+  hash = dt_hash(hash, (const char *)&dev->roi.gui_inited, sizeof(dev->roi.gui_inited));
+
+  // One coherent read of the image geometry, hashed as the record it is: hashing the four
+  // numbers through four separate accessor calls would let a publication land between two of
+  // them and produce a key for a geometry that never existed.
+  dt_dev_image_geometry_t geometry;
+  dt_dev_geometry_get(dev, &geometry);
+  hash = dt_hash(hash, (const char *)&geometry, sizeof(geometry));
+  hash = dt_hash(hash, (const char *)&dev->roi.output_inited, sizeof(dev->roi.output_inited));
+  return hash;
+}
+
 static inline gboolean _darkroom_locked_main_valid_for_zoom(const darkroom_expose_state_t *state,
                                                             const uint64_t zoom_hash)
 {
@@ -798,7 +838,7 @@ void expose(
     .main_zoom_hash = 0,
     .pending_main_hash = DT_PIXELPIPE_CACHE_HASH_INVALID,
   };
-  const uint64_t zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi));
+  const uint64_t zoom_hash = _darkroom_zoom_hash(dev);
   const gboolean roi_changed = !_darkroom_locked_main_valid_for_zoom(&expose_state, zoom_hash);
 
   _darkroom_prepare_image_surface(dev, width, height, &expose_state);
@@ -2340,8 +2380,8 @@ static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
   dt_develop_t *dev = edge.dev;
   dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-  float roi[2] = { dev->roi.x + delta[0] / (float)dev->roi.processed_width,
-                   dev->roi.y + delta[1] / (float)dev->roi.processed_height
+  float roi[2] = { dev->roi.x + delta[0] / (float)dt_dev_geometry_processed_width(dev),
+                   dev->roi.y + delta[1] / (float)dt_dev_geometry_processed_height(dev)
                  };
   dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
@@ -2421,8 +2461,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       float mouse_point[2] = { (float)x, (float)y };
       dt_dev_coordinates_widget_to_image_norm(dev, mouse_point, 1);
       const float delta[2] = {
-        1.0f / dev->roi.processed_width,
-        1.0f / dev->roi.processed_height
+        1.0f / dt_dev_geometry_processed_width(dev),
+        1.0f / dt_dev_geometry_processed_height(dev)
       };
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
@@ -2529,8 +2569,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-    float roi[2] = { dev->roi.x - (delta[0] / dev->roi.processed_width),
-                     dev->roi.y - (delta[1] / dev->roi.processed_height) };
+    float roi[2] = { dev->roi.x - (delta[0] / dt_dev_geometry_processed_width(dev)),
+                     dev->roi.y - (delta[1] / dt_dev_geometry_processed_height(dev)) };
     dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
     dev->roi.x = roi[0];
@@ -2563,8 +2603,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
     // new roi position in full image scale
-    float roi[2] = { dev->roi.x - (delta[0] / dev->roi.processed_width),
-                     dev->roi.y - (delta[1] / dev->roi.processed_height) };
+    float roi[2] = { dev->roi.x - (delta[0] / dt_dev_geometry_processed_width(dev)),
+                     dev->roi.y - (delta[1] / dt_dev_geometry_processed_height(dev)) };
     dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
     dev->roi.x = roi[0];
@@ -2653,8 +2693,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     const float zoom_scale = dt_dev_get_fit_scale(dev);
     float handle[2] = { 6.0f, 6.0f };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, handle, 1);
-    handle[0] /= dev->roi.processed_width;
-    handle[1] /= dev->roi.processed_height;
+    handle[0] /= dt_dev_geometry_processed_width(dev);
+    handle[1] /= dt_dev_geometry_processed_height(dev);
 
     if(which == 1)
     {
@@ -2662,7 +2702,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       {
         // The default box will be a square with 1% of the image width
         const float delta_x = 0.01f;
-        const float delta_y = delta_x * (float)dev->roi.processed_width / (float)dev->roi.processed_height;
+        const float delta_y = delta_x * (float)dt_dev_geometry_processed_width(dev) / (float)dt_dev_geometry_processed_height(dev);
 
         if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
         {
@@ -2749,8 +2789,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
               MAX(26.0f, roundf(3.0f * zoom_scale))
             };
             dt_dev_coordinates_widget_delta_to_image_delta(dev, slop, 1);
-            slop[0] /= dev->roi.processed_width;
-            slop[1] /= dev->roi.processed_height;
+            slop[0] /= dt_dev_geometry_processed_width(dev);
+            slop[1] /= dt_dev_geometry_processed_height(dev);
             float live_point[2] = { live_sample->point[0], live_sample->point[1] };
             dt_dev_coordinates_raw_norm_to_image_norm(dev, live_point, 1);
             if(fabsf(point[0] - live_point[0]) > slop[0]
@@ -2967,25 +3007,25 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   {
     case GDK_KEY_Up:
     {
-      dev->roi.y -= delta[1] / (float)dev->roi.processed_height;
+      dev->roi.y -= delta[1] / (float)dt_dev_geometry_processed_height(dev);
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Down:
     {
-      dev->roi.y += delta[1] / (float)dev->roi.processed_height;
+      dev->roi.y += delta[1] / (float)dt_dev_geometry_processed_height(dev);
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Left:
     {
-      dev->roi.x -= delta[0] / (float)dev->roi.processed_width;
+      dev->roi.x -= delta[0] / (float)dt_dev_geometry_processed_width(dev);
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Right:
     {
-      dev->roi.x += delta[0] / (float)dev->roi.processed_width;
+      dev->roi.x += delta[0] / (float)dt_dev_geometry_processed_width(dev);
       _key_scroll(dev);
       return 1;
     }
