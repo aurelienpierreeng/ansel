@@ -214,13 +214,6 @@ typedef struct dt_develop_t
     // the width x height bounding box.
     int32_t preview_width, preview_height;
 
-    // Dimension of the main image backbuffer
-    // They are at lower than or equal to (width, height),
-    // the bounding box defined by the widget where main image fits.
-    // Since the ROI may clip the zoomed-in image, they don't respect
-    // the final image aspect ratio
-    int32_t main_width, main_height;
-
     // natural scaling = MIN(dev->width / dev->roi.processed_width, dev->height / dev->roi.processed_height)
     // aka ensure that image fits into widget minus margins/borders.
     float natural_scale;
