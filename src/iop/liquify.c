@@ -2845,8 +2845,11 @@ void gui_post_expose(struct dt_iop_module_t *module,
   if(IS_NULL_PTR(g))
     return;
 
-  const float bb_width = dt_dev_geometry_processed_width(develop);
-  const float bb_height = dt_dev_geometry_processed_height(develop);
+  int32_t processed_size_w = 0;
+  int32_t processed_size_h = 0;
+  dt_dev_geometry_get_processed_size(develop, &processed_size_w, &processed_size_h);
+  const float bb_width = processed_size_w;
+  const float bb_height = processed_size_h;
   if(bb_width < 1.0 || bb_height < 1.0)
     return;
 

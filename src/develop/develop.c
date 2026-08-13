@@ -327,13 +327,16 @@ static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return FALSE;
 
+  dt_dev_image_geometry_t geometry;
+  dt_dev_geometry_get(dev, &geometry);
+
   return dev->image_storage.id > 0
          && dev->roi.width >= 32
          && dev->roi.height >= 32
-         && dt_dev_geometry_raw_width(dev) >= 32
-         && dt_dev_geometry_raw_height(dev) >= 32
-         && dt_dev_geometry_processed_width(dev) >= 32
-         && dt_dev_geometry_processed_height(dev) >= 32
+         && geometry.raw_width >= 32
+         && geometry.raw_height >= 32
+         && geometry.processed_width >= 32
+         && geometry.processed_height >= 32
          && dev->roi.preview_width >= 32
          && dev->roi.preview_height >= 32;
 }
@@ -344,12 +347,16 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 
   // Keep the virtual pipe synced so ROI computations on the GUI thread
   // always use up-to-date history and input sizes.
+  int32_t raw_width = 0;
+  int32_t raw_height = 0;
+  dt_dev_geometry_get_raw_size(dev, &raw_width, &raw_height);
+
   if(dev->virtual_pipe->imgid != dev->image_storage.id
-      || dev->virtual_pipe->iwidth != dt_dev_geometry_raw_width(dev)
-      || dev->virtual_pipe->iheight != dt_dev_geometry_raw_height(dev)
+      || dev->virtual_pipe->iwidth != raw_width
+      || dev->virtual_pipe->iheight != raw_height
       || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
     dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
-                                dt_dev_geometry_raw_width(dev), dt_dev_geometry_raw_height(dev), 1.0f, DT_MIPMAP_FULL);
+                                raw_width, raw_height, 1.0f, DT_MIPMAP_FULL);
 
   if(!dev->virtual_pipe->nodes)
     dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_REMOVE);
@@ -364,11 +371,9 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
     dt_dev_pixelpipe_change(dev->virtual_pipe);
 
-  // Compute the virtual full-res output. This needs an inited history
-  int32_t raw_width = 0;
-  int32_t raw_height = 0;
-  dt_dev_geometry_get_raw_size(dev, &raw_width, &raw_height);
-
+  // Compute the virtual full-res output. This needs an inited history.
+  // raw_width/raw_height come from the single coherent read at the top of this function:
+  // nothing between here and there republishes the raw geometry.
   int processed_width = 0;
   int processed_height = 0;
   dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, raw_width, raw_height,
@@ -472,8 +477,12 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
   // Width, height, x and y are already expressed in raster pixels, so they
   // must follow the same raster-space sampling ratio as roi->scale.
-  int roi_width = roundf(*scale * dt_dev_geometry_processed_width(dev));
-  int roi_height = roundf(*scale * dt_dev_geometry_processed_height(dev));
+  int32_t processed_width = 0;
+  int32_t processed_height = 0;
+  dt_dev_geometry_get_processed_size(dev, &processed_width, &processed_height);
+
+  int roi_width = roundf(*scale * processed_width);
+  int roi_height = roundf(*scale * processed_height);
   int widget_wd = dev->roi.width;
   int widget_ht = dev->roi.height;
 
@@ -618,8 +627,11 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
     }
 
     // This is cheap to run, keep it in sync always.
+    int32_t input_width = 0;
+    int32_t input_height = 0;
+    dt_dev_geometry_get_raw_size(dev, &input_width, &input_height);
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-      dt_dev_pixelpipe_set_input(pipes[i], dev->image_storage.id, dt_dev_geometry_raw_width(dev), dt_dev_geometry_raw_height(dev),
+      dt_dev_pixelpipe_set_input(pipes[i], dev->image_storage.id, input_width, input_height,
                                  1.0f, DT_MIPMAP_FULL);
 
     gboolean pipe_needs_update[G_N_ELEMENTS(pipes)] = { FALSE };
@@ -940,8 +952,12 @@ static inline dt_dev_image_storage_t _dt_dev_load_raw(dt_develop_t *dev, const i
 // return the zoom scale to fit into the viewport
 float dt_dev_get_zoom_scale(const dt_develop_t *dev, const gboolean preview)
 {
-  const float w = preview ? dt_dev_geometry_processed_width(dev) : dev->pipe->processed_width;
-  const float h = preview ? dt_dev_geometry_processed_height(dev) : dev->pipe->processed_height;
+  int32_t processed_width = 0;
+  int32_t processed_height = 0;
+  dt_dev_geometry_get_processed_size(dev, &processed_width, &processed_height);
+
+  const float w = preview ? processed_width : dev->pipe->processed_width;
+  const float h = preview ? processed_height : dev->pipe->processed_height;
   return fminf(dev->roi.width / w, dev->roi.height / h);
 }
 
@@ -1040,8 +1056,11 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
 {
   if(IS_NULL_PTR(dev)) return;
-  *procw = dt_dev_geometry_processed_width(dev);
-  *proch = dt_dev_geometry_processed_height(dev);
+  int32_t processed_width = 0;
+  int32_t processed_height = 0;
+  dt_dev_geometry_get_processed_size(dev, &processed_width, &processed_height);
+  *procw = processed_width;
+  *proch = processed_height;
  }
 
 void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *points, size_t num_points)
@@ -1064,8 +1083,11 @@ void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *po
 void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dt_dev_geometry_processed_width(dev);
-  const float processed_height = dt_dev_geometry_processed_height(dev);
+  int32_t processed_size_w = 0;
+  int32_t processed_size_h = 0;
+  dt_dev_geometry_get_processed_size(dev, &processed_size_w, &processed_size_h);
+  const float processed_width = processed_size_w;
+  const float processed_height = processed_size_h;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   // Widget events are expressed in GUI logical coordinates, while the pipeline
@@ -1092,8 +1114,11 @@ void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, s
 void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dt_dev_geometry_processed_width(dev);
-  const float processed_height = dt_dev_geometry_processed_height(dev);
+  int32_t processed_size_w = 0;
+  int32_t processed_size_h = 0;
+  dt_dev_geometry_get_processed_size(dev, &processed_size_w, &processed_size_h);
+  const float processed_width = processed_size_w;
+  const float processed_height = processed_size_h;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   // GUI overlays are drawn in logical widget coordinates, so use the same
@@ -1121,8 +1146,11 @@ void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, s
 void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dt_dev_geometry_processed_width(dev);
-  const float processed_height = dt_dev_geometry_processed_height(dev);
+  int32_t processed_size_w = 0;
+  int32_t processed_size_h = 0;
+  dt_dev_geometry_get_processed_size(dev, &processed_size_w, &processed_size_h);
+  const float processed_width = processed_size_w;
+  const float processed_height = processed_size_h;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   for(size_t i = 0; i < num_points; ++i)
@@ -1136,8 +1164,11 @@ void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points
 void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dt_dev_geometry_processed_width(dev);
-  const float processed_height = dt_dev_geometry_processed_height(dev);
+  int32_t processed_size_w = 0;
+  int32_t processed_size_h = 0;
+  dt_dev_geometry_get_processed_size(dev, &processed_size_w, &processed_size_h);
+  const float processed_width = processed_size_w;
+  const float processed_height = processed_size_h;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   const float inv_width = 1.0f / processed_width;
@@ -1153,8 +1184,11 @@ void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points
 void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float raw_width = dt_dev_geometry_raw_width(dev);
-  const float raw_height = dt_dev_geometry_raw_height(dev);
+  int32_t raw_size_w = 0;
+  int32_t raw_size_h = 0;
+  dt_dev_geometry_get_raw_size(dev, &raw_size_w, &raw_size_h);
+  const float raw_width = raw_size_w;
+  const float raw_height = raw_size_h;
   if(raw_width == 0.0f || raw_height == 0.0f) return;
   
   const float inv_width = 1.f / raw_width;
@@ -1170,8 +1204,11 @@ void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, si
 void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float raw_width = dt_dev_geometry_raw_width(dev);
-  const float raw_height = dt_dev_geometry_raw_height(dev);
+  int32_t raw_size_w = 0;
+  int32_t raw_size_h = 0;
+  dt_dev_geometry_get_raw_size(dev, &raw_size_w, &raw_size_h);
+  const float raw_width = raw_size_w;
+  const float raw_height = raw_size_h;
   if(raw_width == 0.0f || raw_height == 0.0f) return;
   
   for(size_t i = 0; i < num_points; i++)
