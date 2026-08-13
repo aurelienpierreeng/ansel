@@ -180,9 +180,9 @@ static void _fill_runtime_inputs(const dt_drawlayer_runtime_context_t *runtime,
     .have_valid_output_roi = request->roi_out && request->roi_out->width > 0 && request->roi_out->height > 0,
     .use_opencl = request->use_opencl,
     .view_changed = g && self && self->dev
-                    && (fabsf(g->session.last_view_x - self->dev->roi.x) > 1e-6f
-                        || fabsf(g->session.last_view_y - self->dev->roi.y) > 1e-6f
-                        || fabsf(g->session.last_view_scale - self->dev->roi.scaling) > 1e-6f),
+                    && (fabsf(g->session.last_view_x - dt_dev_viewport_center_x(self->dev)) > 1e-6f
+                        || fabsf(g->session.last_view_y - dt_dev_viewport_center_y(self->dev)) > 1e-6f
+                        || fabsf(g->session.last_view_scale - dt_dev_viewport_scaling(self->dev)) > 1e-6f),
     .padding_changed = g && self && fabsf(g->session.live_padding - dt_drawlayer_current_live_padding(self)) > 1e-6f,
   };
 }

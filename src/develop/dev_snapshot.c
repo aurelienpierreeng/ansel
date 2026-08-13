@@ -153,17 +153,17 @@ gboolean dt_dev_snapshot_is_valid(const dt_dev_snapshot_t *snap)
 static gboolean _compute_main_roi(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, dt_iop_roi_t *roi)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(roi)) return FALSE;
-  if(!dev->roi.output_inited || dev->roi.width <= 0 || dev->roi.height <= 0) return FALSE;
+  if(!dev->roi.output_inited || dt_dev_viewport_box_width(dev) <= 0 || dt_dev_viewport_box_height(dev) <= 0) return FALSE;
   if(pipe->processed_width <= 0 || pipe->processed_height <= 0) return FALSE;
 
-  const float scale = dev->roi.natural_scale * dev->roi.scaling;
+  const float scale = dev->roi.natural_scale * dt_dev_viewport_scaling(dev);
   const int roi_width = (int)roundf(scale * pipe->processed_width);
   const int roi_height = (int)roundf(scale * pipe->processed_height);
 
-  roi->width = MAX(1, MIN(roi_width, dev->roi.width));
-  roi->height = MAX(1, MIN(roi_height, dev->roi.height));
-  roi->x = (int)roundf(dev->roi.x * roi_width - roi->width * .5f);
-  roi->y = (int)roundf(dev->roi.y * roi_height - roi->height * .5f);
+  roi->width = MAX(1, MIN(roi_width, dt_dev_viewport_box_width(dev)));
+  roi->height = MAX(1, MIN(roi_height, dt_dev_viewport_box_height(dev)));
+  roi->x = (int)roundf(dt_dev_viewport_center_x(dev) * roi_width - roi->width * .5f);
+  roi->y = (int)roundf(dt_dev_viewport_center_y(dev) * roi_height - roi->height * .5f);
   roi->scale = scale;
   return TRUE;
 }
@@ -322,9 +322,9 @@ static void _draw_preview_fallback(dt_dev_snapshot_engine_t *engine, dt_develop_
   const float ppd = dt_gui_get_global()->ppd;
   const float preview_wd = engine->preview_locked.width / ppd;
   const float preview_ht = engine->preview_locked.height / ppd;
-  const float preview_scale = dev->roi.scaling;
-  const float tx = 0.5f * width - dev->roi.x * preview_wd * preview_scale;
-  const float ty = 0.5f * height - dev->roi.y * preview_ht * preview_scale;
+  const float preview_scale = dt_dev_viewport_scaling(dev);
+  const float tx = 0.5f * width - dt_dev_viewport_center_x(dev) * preview_wd * preview_scale;
+  const float ty = 0.5f * height - dt_dev_viewport_center_y(dev) * preview_ht * preview_scale;
 
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, engine->preview_locked.entry);
   cairo_surface_set_device_scale(engine->preview_locked.surface, ppd, ppd);
@@ -560,7 +560,7 @@ void dt_dev_snapshot_draw(dt_dev_snapshot_t *snap, cairo_t *cri, struct dt_devel
   {
     if(dt_dev_lock_pipe_surface(dev, engine->pipe, &engine->locked, &engine->wait, "snapshot", FALSE)
        && !IS_NULL_PTR(engine->locked.surface))
-      dt_dev_render_locked_surface(cri, dev, &engine->locked, width, height, dev->roi.border_size, bg_color);
+      dt_dev_render_locked_surface(cri, dev, &engine->locked, width, height, dt_dev_viewport_border_size(dev), bg_color);
   }
   else
   {

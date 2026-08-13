@@ -135,8 +135,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_pthread_mutex_init(&dev->transient_params_mutex, NULL);
 
   dev->gui_attached = gui_attached;
-  dev->roi.width = -1;
-  dev->roi.height = -1;
+  if(gui_attached) dev->viewport = dt_dev_viewport_new();
 
   dt_image_init(&dev->image_storage);
 
@@ -223,6 +222,9 @@ void dt_dev_cleanup(dt_develop_t *dev)
 
   dt_gui_throttle_cancel(dev);
   dt_dev_history_drop_pending_commits(dev);
+
+  dt_dev_viewport_free(dev->viewport);
+  dev->viewport = NULL;
 
   dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_coeffs[0] = 0.f;
@@ -331,8 +333,8 @@ static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
   dt_dev_geometry_get(dev, &geometry);
 
   return dev->image_storage.id > 0
-         && dev->roi.width >= 32
-         && dev->roi.height >= 32
+         && dt_dev_viewport_box_width(dev) >= 32
+         && dt_dev_viewport_box_height(dev) >= 32
          && geometry.raw_width >= 32
          && geometry.raw_height >= 32
          && geometry.processed_width >= 32
@@ -343,7 +345,7 @@ static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
 
 int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 {
-  if(!dt_dev_geometry_raw_inited(dev) || !dev->roi.gui_inited) return 1;
+  if(!dt_dev_geometry_raw_inited(dev) || !dt_dev_viewport_configured(dev)) return 1;
 
   // Keep the virtual pipe synced so ROI computations on the GUI thread
   // always use up-to-date history and input sizes.
@@ -473,7 +475,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   // therefore excludes the GUI backing-store density.
   *scale = dev->roi.natural_scale;
   const gboolean preview_pipe = (pipe == dev->preview_pipe);
-  if(!preview_pipe) *scale *= dev->roi.scaling;
+  if(!preview_pipe) *scale *= dt_dev_viewport_scaling(dev);
 
   // Width, height, x and y are already expressed in raster pixels, so they
   // must follow the same raster-space sampling ratio as roi->scale.
@@ -483,21 +485,21 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
   int roi_width = roundf(*scale * processed_width);
   int roi_height = roundf(*scale * processed_height);
-  int widget_wd = dev->roi.width;
-  int widget_ht = dev->roi.height;
+  int widget_wd = dt_dev_viewport_box_width(dev);
+  int widget_ht = dt_dev_viewport_box_height(dev);
 
   *wd = roundf(fminf(roi_width, widget_wd));
   *ht = roundf(fminf(roi_height, widget_ht));
 
-  // dev->roi.x,y are the relative coordinates of the ROI center.
+  // dt_dev_viewport_center_x(dev),y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
   // otherwise, x,y here are the top-left corner. Translate:
-  *x = preview_pipe ? 0 : roundf(dev->roi.x * roi_width - *wd * .5f);
-  *y = preview_pipe ? 0 : roundf(dev->roi.y * roi_height - *ht * .5f);
+  *x = preview_pipe ? 0 : roundf(dt_dev_viewport_center_x(dev) * roi_width - *wd * .5f);
+  *y = preview_pipe ? 0 : roundf(dt_dev_viewport_center_y(dev) * roi_height - *ht * .5f);
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
-            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, dt_gui_get_global()->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
+            dt_dev_viewport_center_x(dev), dt_dev_viewport_center_y(dev), dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, dt_gui_get_global()->ppd, *scale, dev->roi.natural_scale, dt_dev_viewport_scaling(dev));
 */
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
@@ -962,7 +964,7 @@ float dt_dev_get_zoom_scale(const dt_develop_t *dev, const gboolean preview)
 
   const float w = preview ? processed_width : dev->pipe->processed_width;
   const float h = preview ? processed_height : dev->pipe->processed_height;
-  return fminf(dev->roi.width / w, dev->roi.height / h);
+  return fminf(dt_dev_viewport_box_width(dev) / w, dt_dev_viewport_box_height(dev) / h);
 }
 
 dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
@@ -1008,18 +1010,35 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
   const dt_iop_roi_t gui_roi = { .x = 0, .y = 0, .width = wd, .height = ht, .scale = 1.0f };
   dt_iop_roi_t pipe_roi = { 0 };
   dt_dev_convert_roi(dev, &gui_roi, &pipe_roi, DT_DEV_ROI_GUI_LOGICAL, DT_DEV_ROI_PIPELINE);
-  dev->roi.width = pipe_roi.width;
-  dev->roi.height = pipe_roi.height;
-  dev->roi.gui_inited = TRUE;
+  dt_dev_viewport_set_box(dev, pipe_roi.width, pipe_roi.height);
 
   dt_print(DT_DEBUG_DEV,
            "[pixelpipe] Darkroom requested a %i×%i px widget -> %i×%i px raster preview\n",
-           wd, ht, dev->roi.width, dev->roi.height);
+           wd, ht, dt_dev_viewport_box_width(dev), dt_dev_viewport_box_height(dev));
 
   dt_dev_get_thumbnail_size(dev);
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_pixelpipe_update_zoom_preview(dev);
   dt_control_queue_redraw();
+}
+
+/**
+ * @brief Clamp the viewport centre against the box currently visible at this zoom.
+ *
+ * @details Four call sites used to hand dt_dev_check_zoom_pos_bounds() the addresses of the
+ * centre fields and let it write through them. Nothing may hold a pointer into the viewport
+ * now -- it publishes whole states -- so the read/clamp/publish round trip lives here once
+ * instead of being spelled out at each site.
+ *
+ * @return TRUE when the clamp actually moved the centre.
+ */
+gboolean dt_dev_clamp_viewport_center(dt_develop_t *dev)
+{
+  const dt_dev_viewport_state_t viewport = dt_dev_viewport_get(dev);
+  float center_x = viewport.center_x;
+  float center_y = viewport.center_y;
+  dt_dev_check_zoom_pos_bounds(dev, &center_x, &center_y, NULL, NULL);
+  return dt_dev_viewport_set_center(dev, center_x, center_y);
 }
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
@@ -1033,16 +1052,16 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   const float scale = dt_dev_get_zoom_level(dev);
 
   // find the box size
-  const float bw = dev->roi.width / (proc_w * scale);
-  const float bh = dev->roi.height / (proc_h * scale);
+  const float bw = dt_dev_viewport_box_width(dev) / (proc_w * scale);
+  const float bh = dt_dev_viewport_box_height(dev) / (proc_h * scale);
 
   // calculate half-dimensions once
   const float half_bw = bw * 0.5f;
   const float half_bh = bh * 0.5f;
 
   // clamp position using pre-calculated values
-  *dev_x = (bw > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
-  *dev_y = (bh > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
+  *dev_x = (bw > 1.0f || dt_dev_viewport_scaling(dev) <= 1.0f) ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
+  *dev_y = (bh > 1.0f || dt_dev_viewport_scaling(dev) <= 1.0f) ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
   // return box size
   if(!IS_NULL_PTR(box_w)) *box_w = bw;
   if(!IS_NULL_PTR(box_h)) *box_h = bh;
@@ -1096,10 +1115,10 @@ void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, s
   // zoom lives in raster pixels. Convert back to the same GUI-space zoom used
   // by dt_dev_rescale_roi() so event hit-testing and overlay drawing stay aligned.
   const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
-  const float roi_x = (float)dev->roi.x;
-  const float roi_y = (float)dev->roi.y;
-  const float center_x = 0.5f * (float)dev->roi.orig_width;
-  const float center_y = 0.5f * (float)dev->roi.orig_height;
+  const float roi_x = (float)dt_dev_viewport_center_x(dev);
+  const float roi_y = (float)dt_dev_viewport_center_y(dev);
+  const float center_x = 0.5f * (float)dt_dev_viewport_widget_width(dev);
+  const float center_y = 0.5f * (float)dt_dev_viewport_widget_height(dev);
   const float inv_scaled_width = 1.0f / (processed_width * scale);
   const float inv_scaled_height = 1.0f / (processed_height * scale);
 
@@ -1124,12 +1143,12 @@ void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, s
   // GUI overlays are drawn in logical widget coordinates, so use the same
   // GUI-space zoom that the Cairo darkroom transform applies.
   const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
-  const float roi_x = (float)dev->roi.x;
-  const float roi_y = (float)dev->roi.y;
+  const float roi_x = (float)dt_dev_viewport_center_x(dev);
+  const float roi_y = (float)dt_dev_viewport_center_y(dev);
   const float scaled_width = processed_width * scale;
   const float scaled_height = processed_height * scale;
-  const float center_x = 0.5f * (float)dev->roi.orig_width;
-  const float center_y = 0.5f * (float)dev->roi.orig_height;
+  const float center_x = 0.5f * (float)dt_dev_viewport_widget_width(dev);
+  const float center_y = 0.5f * (float)dt_dev_viewport_widget_height(dev);
 
   for(size_t i = 0; i < num_points; ++i)
   {
@@ -1806,17 +1825,17 @@ void dt_dev_masks_update_hash(dt_develop_t *dev)
 
 float dt_dev_get_natural_scale(dt_develop_t *dev)
 {
-  if(!dev->roi.gui_inited || !dt_dev_geometry_raw_inited(dev)) return -1.f;
+  if(!dt_dev_viewport_configured(dev) || !dt_dev_geometry_raw_inited(dev)) return -1.f;
 
-  return fminf(fminf((float)dev->roi.width / (float)dt_dev_geometry_processed_width(dev),
-                      (float)dev->roi.height / (float)dt_dev_geometry_processed_height(dev)),
+  return fminf(fminf((float)dt_dev_viewport_box_width(dev) / (float)dt_dev_geometry_processed_width(dev),
+                      (float)dt_dev_viewport_box_height(dev) / (float)dt_dev_geometry_processed_height(dev)),
                 1.f);
 }
 
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return 1.0f;
-  return dev->roi.scaling / dt_gui_get_global()->ppd;
+  return dt_dev_viewport_scaling(dev) / dt_gui_get_global()->ppd;
 }
 
 float dt_dev_get_overlay_scale(dt_develop_t *dev)
@@ -1833,18 +1852,18 @@ float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, const float scaling)
 void dt_dev_get_widget_center(const dt_develop_t *dev, float *point)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(point)) return;
-  point[0] = 0.5f * dev->roi.orig_width;
-  point[1] = 0.5f * dev->roi.orig_height;
+  point[0] = 0.5f * dt_dev_viewport_widget_width(dev);
+  point[1] = 0.5f * dt_dev_viewport_widget_height(dev);
 }
 
 void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width, const int32_t height, float *box)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(box)) return;
 
-  const float scale = dev->roi.scaling / dt_gui_get_global()->ppd;
+  const float scale = dt_dev_viewport_scaling(dev) / dt_gui_get_global()->ppd;
   const float roi_width = fminf(width, dev->roi.preview_width * scale);
   const float roi_height = fminf(height, dev->roi.preview_height * scale);
-  const float border = dev->roi.border_size;
+  const float border = dt_dev_viewport_border_size(dev);
 
   box[0] = fmaxf(border, 0.5f * (width - roi_width));
   box[1] = fmaxf(border, 0.5f * (height - roi_height));
@@ -1855,15 +1874,13 @@ void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return 1.f;
-  return dev->roi.scaling * dev->roi.natural_scale;
+  return dt_dev_viewport_scaling(dev) * dev->roi.natural_scale;
 }
 
 void dt_dev_reset_roi(dt_develop_t *dev)
 {
   dev->roi.natural_scale = -1.f;
-  dev->roi.scaling = 1.f;
-  dev->roi.x = 0.5f;
-  dev->roi.y = 0.5f;
+  dt_dev_viewport_reset(dev);
 }
 
 void dt_dev_convert_roi(const dt_develop_t *dev, const dt_iop_roi_t *roi_in, dt_iop_roi_t *roi_out,
@@ -1897,7 +1914,7 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
   if(wd == 0.f || ht == 0.f) return TRUE;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
-  const int32_t border = dev->roi.border_size;
+  const int32_t border = dt_dev_viewport_border_size(dev);
   const float roi_width = fminf(width, wd * zoom_scale);
   const float roi_height = fminf(height, ht * zoom_scale);
 
@@ -1923,8 +1940,8 @@ static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width
 
   // Get image's origin position and scale
   const float zoom_scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
-  const float tx = 0.5f * width - dev->roi.x * proc_wd * zoom_scale;
-  const float ty = 0.5f * height - dev->roi.y * proc_ht * zoom_scale;
+  const float tx = 0.5f * width - dt_dev_viewport_center_x(dev) * proc_wd * zoom_scale;
+  const float ty = 0.5f * height - dt_dev_viewport_center_y(dev) * proc_ht * zoom_scale;
 
   cairo_translate(cr, tx, ty);
   
@@ -1954,23 +1971,24 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev)
 {
   const float natural_scale = dev->roi.natural_scale;
+  const float scaling = dt_dev_viewport_scaling(dev);
 
   // Limit zoom in to 16x the size of an apparent pixel on screen
-  const float pixel_actual_size = natural_scale * dev->roi.scaling;
+  const float pixel_actual_size = natural_scale * scaling;
   const float pixel_max_size = 16.f;
-  
+
   if(pixel_actual_size >= pixel_max_size)
   {
     // Restore old scaling (caller should handle this)
-    dev->roi.scaling = pixel_max_size / natural_scale;
+    dt_dev_viewport_set_scaling(dev, pixel_max_size / natural_scale);
     return TRUE;
   }
-  
+
   // Limit zoom out to 1/3rd of the fit-to-window size
   const float min_scaling = 0.33f;
-  if(dev->roi.scaling < min_scaling)
+  if(scaling < min_scaling)
   {
-    dev->roi.scaling = min_scaling;
+    dt_dev_viewport_set_scaling(dev, min_scaling);
     return TRUE;
   }
   return FALSE;

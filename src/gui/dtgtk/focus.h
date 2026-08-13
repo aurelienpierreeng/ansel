@@ -285,7 +285,12 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
     dt_dev_cleanup(&dev);
   }
 
-  const int32_t tb = dt_dev_get_global()->roi.border_size;
+  // Reads the DARKROOM's border size from a lighttable thumbnail render job, on a control-job
+  // thread, through the global dev. Wrong on two axes -- a view that is not darkroom, a thread
+  // that is not the GUI's -- and flagged as such in doc/develop-split.md; kept behaviour-
+  // identical here because changing which border a thumbnail overlay uses is a visual change,
+  // not a relocation.
+  const int32_t tb = dt_dev_viewport_border_size(dt_dev_get_global());
   const float scale = fminf((width - 2 * tb) / (float)wd, (height - 2 * tb) / (float)ht) * full_zoom;
   cairo_scale(cr, scale, scale);
   float fx = 0.0f;

@@ -2866,7 +2866,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
   _distort_paths(module, &d_params, &copy_params);
 
   // You're not supposed to understand this
-  const float zoom_scale = get_zoom_scale(develop) * develop->roi.scaling;
+  const float zoom_scale = get_zoom_scale(develop) * dt_dev_viewport_scaling(develop);
 
   if(dt_dev_rescale_roi_to_input(develop, cr, width, height))
     return;
@@ -3387,7 +3387,7 @@ static void _start_new_shape(dt_iop_module_t *module)
   //  create initial shape at the center
   float complex pt = 0.0f;
   float scale = 1.0f;
-  get_point_scale(module, 0.5f * module->dev->roi.width, 0.5f * module->dev->roi.height, &pt, &scale);
+  get_point_scale(module, 0.5f * dt_dev_viewport_box_width(module->dev), 0.5f * dt_dev_viewport_box_height(module->dev), &pt, &scale);
   float radius = 0.0f, r = 1.0f, phi = 0.0f;
   get_stamp_params(module, &radius, &r, &phi);
   //  start a new path

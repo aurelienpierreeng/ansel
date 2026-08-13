@@ -43,15 +43,15 @@ void dt_dev_toolbox_apply_iso_12646_size(dt_develop_t *dev)
     // no matter the size of the widget. Meaning we force them to fit a square
     // of length matching the smaller widget dimension. The goal is to leave
     // a consistent perceptual impression between pictures, independent from orientation.
-    const int main_dim = MIN(dev->roi.orig_width, dev->roi.orig_height);
-    dev->roi.border_size = 0.125 * main_dim;
+    const int main_dim = MIN(dt_dev_viewport_widget_width(dev), dt_dev_viewport_widget_height(dev));
+    dt_dev_viewport_set_border(dev, 0.125 * main_dim);
   }
   else
   {
-    dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+    dt_dev_viewport_set_border(dev, DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size")));
   }
 
-  dt_dev_configure(dev, dev->roi.orig_width - 2 * dev->roi.border_size, dev->roi.orig_height - 2 * dev->roi.border_size);
+  dt_dev_configure(dev, dt_dev_viewport_widget_width(dev) - 2 * dt_dev_viewport_border_size(dev), dt_dev_viewport_widget_height(dev) - 2 * dt_dev_viewport_border_size(dev));
 }
 
 /*

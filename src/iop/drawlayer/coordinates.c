@@ -169,14 +169,14 @@ gboolean dt_drawlayer_compute_view_patch(dt_iop_module_t *self, const float padd
   int layer_height = 0;
   if(!_virtual_piece_layer_geometry(self, &layer_width, &layer_height)) return FALSE;
 
-  const float widget_w = (float)self->dev->roi.orig_width;
-  const float widget_h = (float)self->dev->roi.orig_height;
+  const float widget_w = (float)dt_dev_viewport_widget_width(self->dev);
+  const float widget_h = (float)dt_dev_viewport_widget_height(self->dev);
   const float preview_w = self->dev->roi.preview_width;
   const float preview_h = self->dev->roi.preview_height;
   if(widget_w <= 0.0f || widget_h <= 0.0f || preview_w <= 0.0f || preview_h <= 0.0f) return FALSE;
 
   const float zoom_scale = dt_dev_get_overlay_scale(self->dev);
-  const float border = (float)self->dev->roi.border_size;
+  const float border = (float)dt_dev_viewport_border_size(self->dev);
   const float roi_w = fminf(widget_w, preview_w * zoom_scale);
   const float roi_h = fminf(widget_h, preview_h * zoom_scale);
   const float rec_x = fmaxf(border, 0.5f * (widget_w - roi_w));

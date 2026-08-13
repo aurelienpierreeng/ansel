@@ -3640,7 +3640,7 @@ gboolean dt_masks_form_get_gravity_center(dt_develop_t *dev, const dt_masks_form
  * @brief Center the darkroom ROI on a mask form gravity center.
  *
  * @details Mask forms store their gravity center in normalized RAW coordinates,
- * while `dev->roi.x` and `dev->roi.y` address the processed image. Transforming
+ * while `dt_dev_viewport_center_x(dev)` and `dt_dev_viewport_center_y(dev)` address the processed image. Transforming
  * through absolute RAW and processed-image coordinates keeps the center aligned
  * with the final image after distortion modules, then the ROI clamp preserves
  * the same bounds used by manual panning.
@@ -3659,9 +3659,8 @@ int dt_masks_center_view_on_form(dt_develop_t *dev, const dt_masks_form_t *mask_
   if(!dt_dev_coordinates_raw_abs_to_image_abs(dev, center, 1)) return 1;
   dt_dev_coordinates_image_abs_to_image_norm(dev, center, 1);
 
-  dev->roi.x = center[0];
-  dev->roi.y = center[1];
-  dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+  dt_dev_viewport_set_center(dev, center[0], center[1]);
+  dt_dev_clamp_viewport_center(dev);
   dt_dev_pixelpipe_change_zoom_main(dev);
 
   return 0;

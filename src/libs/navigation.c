@@ -324,7 +324,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   }
 
   // draw box where we are
-  if(dev->roi.scaling > 1.f)
+  if(dt_dev_viewport_scaling(dev) > 1.f)
   {
     // Add a dark overlay on the picture to make it fade
     cairo_rectangle(cr, 0, 0, wd, ht);
@@ -332,11 +332,17 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
     // clip dimensions to navigation area
     float boxw = 1, boxh = 1;
-    dt_dev_check_zoom_pos_bounds(dev, &(dev->roi.x), &(dev->roi.y), &boxw, &boxh);
+    // Reads the box; the centre clamp it also performed is kept, because removing a
+    // mutation from a paint handler is a behaviour change that belongs with the setter work,
+    // not with the relocation.
+    float clamped_x = dt_dev_viewport_center_x(dev);
+    float clamped_y = dt_dev_viewport_center_y(dev);
+    dt_dev_check_zoom_pos_bounds(dev, &clamped_x, &clamped_y, &boxw, &boxh);
+    dt_dev_viewport_set_center(dev, clamped_x, clamped_y);
     const float roi_w = MIN(boxw * wd, wd);
     const float roi_h = MIN(boxh * ht, ht);
-    const float roi_x = dev->roi.x * wd - roi_w * 0.5f;
-    const float roi_y = dev->roi.y * ht - roi_h * 0.5f;
+    const float roi_x = dt_dev_viewport_center_x(dev) * wd - roi_w * 0.5f;
+    const float roi_y = dt_dev_viewport_center_y(dev) * ht - roi_h * 0.5f;
     cairo_rectangle(cr, roi_x - 1, roi_y - 1, roi_w + 2, roi_h + 2);
 
     /* Use even–odd rule to punch the hole */
@@ -384,10 +390,10 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   gchar *zoomline;
   {
     gchar *fit = NULL;
-    if(dev->roi.scaling == 1.f)
+    if(dt_dev_viewport_scaling(dev) == 1.f)
       fit = g_strdup(_("Fit"));
   
-    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->roi.scaling * dev->roi.natural_scale * 100);
+    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dt_dev_viewport_scaling(dev) * dev->roi.natural_scale * 100);
     if(fit)
     {
       dt_free(fit);
@@ -446,7 +452,7 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
 {
   dt_develop_t *dev = dt_dev_get_global();
   const dt_lib_navigation_t *d = (const dt_lib_navigation_t *)self->data;
-  if(!(dev && d->dragging && dev->roi.scaling > 1.f)) return;
+  if(!(dev && d->dragging && dt_dev_viewport_scaling(dev) > 1.f)) return;
 
   // Compute size of navigation ROI in widget coordinates
   int proc_wd, proc_ht;
@@ -465,8 +471,7 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
   fy /= (float)nav_img_h;
   dt_dev_check_zoom_pos_bounds(dev, &fx, &fy, NULL, NULL);
 
-  dev->roi.x = fx;
-  dev->roi.y = fy;
+  dt_dev_viewport_set_center(dev, fx, fy);
 
   /* redraw myself */
   gtk_widget_queue_draw(d->area);
@@ -493,45 +498,45 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
   switch(zoom)
   {
     default:
-      dev->roi.scaling = dev->roi.natural_scale;
+      dt_dev_viewport_set_scaling(dev, dev->roi.natural_scale);
       break;
     case LIB_ZOOM_SMALL:
-      dev->roi.scaling = dev->roi.natural_scale * 0.33;
+      dt_dev_viewport_set_scaling(dev, dev->roi.natural_scale * 0.33);
       break;
     case LIB_ZOOM_FIT:
-      dev->roi.scaling = dev->roi.natural_scale;
+      dt_dev_viewport_set_scaling(dev, dev->roi.natural_scale);
       break;
     case LIB_ZOOM_25:
-      dev->roi.scaling = 0.25;
+      dt_dev_viewport_set_scaling(dev, 0.25);
       break;
     case LIB_ZOOM_33:
-      dev->roi.scaling = 0.33;
+      dt_dev_viewport_set_scaling(dev, 0.33);
       break;
     case LIB_ZOOM_50:
-      dev->roi.scaling = 0.50;
+      dt_dev_viewport_set_scaling(dev, 0.50);
       break;
     case LIB_ZOOM_100:
-      dev->roi.scaling = 1.;
+      dt_dev_viewport_set_scaling(dev, 1.);
       break;
     case LIB_ZOOM_200:
-      dev->roi.scaling = 2.;
+      dt_dev_viewport_set_scaling(dev, 2.);
       break;
     case LIB_ZOOM_400:
-      dev->roi.scaling = 4.;
+      dt_dev_viewport_set_scaling(dev, 4.);
       break;
     case LIB_ZOOM_800:
-      dev->roi.scaling = 8.;
+      dt_dev_viewport_set_scaling(dev, 8.);
       break;
     case LIB_ZOOM_1600:
-      dev->roi.scaling = 16.;
+      dt_dev_viewport_set_scaling(dev, 16.);
       break;
   }
 
-  // Actual pixelpipe scaling is dev->roi.scaling * dev->roi.natural_scale,
+  // Actual pixelpipe scaling is dt_dev_viewport_scaling(dev) * dev->roi.natural_scale,
   // where dev->roi.natural_scale ensures the image fits within the viewport.
-  dev->roi.scaling /= dev->roi.natural_scale;
+  dt_dev_viewport_set_scaling(dev, dt_dev_viewport_scaling(dev) / dev->roi.natural_scale);
 
-  dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+  dt_dev_clamp_viewport_center(dev);
   dt_dev_pixelpipe_change_zoom_main(dev);
 }
 

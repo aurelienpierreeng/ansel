@@ -627,7 +627,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   const float ppd = dt_gui_get_global()->ppd;
   const float preview_wd = wd / ppd;
   const float preview_ht = ht / ppd;
-  const float preview_scale = dev->roi.scaling;
+  const float preview_scale = dt_dev_viewport_scaling(dev);
   float image_box[4] = { 0.0f };
   dt_dev_get_image_box_in_widget(dev, width, height, image_box);
 
@@ -659,8 +659,8 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   cairo_rectangle(cr, rec_x, rec_y, rec_w, rec_h);
   cairo_clip(cr);
 
-  const float tx = 0.5f * width - dev->roi.x * preview_wd * preview_scale;
-  const float ty = 0.5f * height - dev->roi.y * preview_ht * preview_scale;
+  const float tx = 0.5f * width - dt_dev_viewport_center_x(dev) * preview_wd * preview_scale;
+  const float ty = 0.5f * height - dt_dev_viewport_center_y(dev) * preview_ht * preview_scale;
   cairo_translate(cr, tx, ty);
   cairo_scale(cr, preview_scale, preview_scale);
   cairo_rectangle(cr, 0, 0, preview_wd, preview_ht);
@@ -735,25 +735,19 @@ static inline gboolean _darkroom_preview_fallback_valid(const dt_develop_t *dev,
 static uint64_t _darkroom_zoom_hash(const dt_develop_t *dev)
 {
   uint64_t hash = 5381;
-  hash = dt_hash(hash, (const char *)&dev->roi.width, sizeof(dev->roi.width));
-  hash = dt_hash(hash, (const char *)&dev->roi.height, sizeof(dev->roi.height));
-  hash = dt_hash(hash, (const char *)&dev->roi.scaling, sizeof(dev->roi.scaling));
-  hash = dt_hash(hash, (const char *)&dev->roi.x, sizeof(dev->roi.x));
-  hash = dt_hash(hash, (const char *)&dev->roi.y, sizeof(dev->roi.y));
-  hash = dt_hash(hash, (const char *)&dev->roi.border_size, sizeof(dev->roi.border_size));
-  hash = dt_hash(hash, (const char *)&dev->roi.orig_width, sizeof(dev->roi.orig_width));
-  hash = dt_hash(hash, (const char *)&dev->roi.orig_height, sizeof(dev->roi.orig_height));
+
+  // Three coherent reads, hashed as the three records they are. Hashing field by field through
+  // accessors would let a publication land between two of them and key the cached surface to a
+  // viewport that never existed -- which is the same tearing the objects were built to remove.
+  const dt_dev_viewport_state_t viewport = dt_dev_viewport_get(dev);
+  hash = dt_hash(hash, (const char *)&viewport, sizeof(viewport));
+
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  hash = dt_hash(hash, (const char *)&geometry, sizeof(geometry));
+
   hash = dt_hash(hash, (const char *)&dev->roi.preview_width, sizeof(dev->roi.preview_width));
   hash = dt_hash(hash, (const char *)&dev->roi.preview_height, sizeof(dev->roi.preview_height));
   hash = dt_hash(hash, (const char *)&dev->roi.natural_scale, sizeof(dev->roi.natural_scale));
-  hash = dt_hash(hash, (const char *)&dev->roi.gui_inited, sizeof(dev->roi.gui_inited));
-
-  // One coherent read of the image geometry, hashed as the record it is: hashing the four
-  // numbers through four separate accessor calls would let a publication land between two of
-  // them and produce a key for a geometry that never existed.
-  dt_dev_image_geometry_t geometry;
-  dt_dev_geometry_get(dev, &geometry);
-  hash = dt_hash(hash, (const char *)&geometry, sizeof(geometry));
   hash = dt_hash(hash, (const char *)&dev->roi.output_inited, sizeof(dev->roi.output_inited));
   return hash;
 }
@@ -819,7 +813,7 @@ void expose(
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  const int32_t border = dev->roi.border_size;
+  const int32_t border = dt_dev_viewport_border_size(dev);
 
 #if DARKROOM_EXPOSE_DUMB_DEBUG
   dt_aligned_pixel_t bg_color_dbg;
@@ -1798,7 +1792,7 @@ void gui_init(dt_view_t *self)
 
   dt_view_manager_get_global()->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
   dt_view_manager_get_global()->proxy.darkroom.set_default_cursor = _darkroom_set_default_cursor;
-  dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+  dt_dev_viewport_set_border(dev, DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size")));
 }
 
 static gboolean _is_scroll_captured_by_widget()
@@ -2286,7 +2280,7 @@ static void _darkroom_edge_pan_update_state(dt_view_t *self,
 
   if(!gui->pan_edge.enabled
      || dt_view_manager_get_current_view(dt_view_manager_get_global()) != self
-     || dev->roi.scaling <= 1.0f)
+     || dt_dev_viewport_scaling(dev) <= 1.0f)
     return;
 
   float image_box[4] = { 0.0f };
@@ -2380,18 +2374,17 @@ static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
   dt_develop_t *dev = edge.dev;
   dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-  float roi[2] = { dev->roi.x + delta[0] / (float)dt_dev_geometry_processed_width(dev),
-                   dev->roi.y + delta[1] / (float)dt_dev_geometry_processed_height(dev)
+  float roi[2] = { dt_dev_viewport_center_x(dev) + delta[0] / (float)dt_dev_geometry_processed_width(dev),
+                   dt_dev_viewport_center_y(dev) + delta[1] / (float)dt_dev_geometry_processed_height(dev)
                  };
   dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
   ctl->button_x = pointer_x;
   ctl->button_y = pointer_y;
 
-  if(dev->roi.x != roi[0] || dev->roi.y != roi[1])
+  if(dt_dev_viewport_center_x(dev) != roi[0] || dt_dev_viewport_center_y(dev) != roi[1])
   {
-    dev->roi.x = roi[0];
-    dev->roi.y = roi[1];
+    dt_dev_viewport_set_center(dev, roi[0], roi[1]);
     // Updating ctl->button_x/y changes the cursor position, which is the same as a mouse move event.
     mouse_moved(self, pointer_x, pointer_y, 1.0, 0);
     //dt_control_queue_redraw_center();
@@ -2564,17 +2557,16 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   dt_control_commit_cursor();
 
   if(_darkroom_center_pan_drag && dt_control_get_global()->button_down
-     && dt_control_get_global()->button_down_which == 1 && dev->roi.scaling > 1)
+     && dt_control_get_global()->button_down_which == 1 && dt_dev_viewport_scaling(dev) > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-    float roi[2] = { dev->roi.x - (delta[0] / dt_dev_geometry_processed_width(dev)),
-                     dev->roi.y - (delta[1] / dt_dev_geometry_processed_height(dev)) };
+    float roi[2] = { dt_dev_viewport_center_x(dev) - (delta[0] / dt_dev_geometry_processed_width(dev)),
+                     dt_dev_viewport_center_y(dev) - (delta[1] / dt_dev_geometry_processed_height(dev)) };
     dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
-    dev->roi.x = roi[0];
-    dev->roi.y = roi[1];
+    dt_dev_viewport_set_center(dev, roi[0], roi[1]);
     ctl->button_x = x;
     ctl->button_y = y;
 
@@ -2597,18 +2589,17 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 
   // panning with left mouse button
-  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && dev->roi.scaling > 1)
+  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && dt_dev_viewport_scaling(dev) > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
     // new roi position in full image scale
-    float roi[2] = { dev->roi.x - (delta[0] / dt_dev_geometry_processed_width(dev)),
-                     dev->roi.y - (delta[1] / dt_dev_geometry_processed_height(dev)) };
+    float roi[2] = { dt_dev_viewport_center_x(dev) - (delta[0] / dt_dev_geometry_processed_width(dev)),
+                     dt_dev_viewport_center_y(dev) - (delta[1] / dt_dev_geometry_processed_height(dev)) };
     dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
-    dev->roi.x = roi[0];
-    dev->roi.y = roi[1];
+    dt_dev_viewport_set_center(dev, roi[0], roi[1]);
 
     // update clicked position
     ctl->button_x = x;
@@ -2829,7 +2820,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     return 1;
   }
 
-  if(which == 1 && dev->roi.scaling > 1.0f && mouse_in_imagearea(self, x, y))
+  if(which == 1 && dt_dev_viewport_scaling(dev) > 1.0f && mouse_in_imagearea(self, x, y))
     _darkroom_center_pan_drag = TRUE;
 
   if(which == 2)
@@ -2837,12 +2828,12 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     // Incremental zoom-in on middle button click, from fit to 800% 
     // by power of 2 increments (100%, 200%, 400%, 800%).
     float new_scale = 1.f;
-    if(dev->roi.scaling < 1.f || dev->roi.scaling > 7.f / dev->roi.natural_scale)
+    if(dt_dev_viewport_scaling(dev) < 1.f || dt_dev_viewport_scaling(dev) > 7.f / dev->roi.natural_scale)
       new_scale = 1.f; // zoom to fit
-    else if(dev->roi.scaling * dev->roi.natural_scale < 1.f)
+    else if(dt_dev_viewport_scaling(dev) * dev->roi.natural_scale < 1.f)
       new_scale = 1.f / dev->roi.natural_scale; // 100 %
     else
-      new_scale = floorf(dev->roi.scaling * dev->roi.natural_scale) * 2.f / dev->roi.natural_scale;
+      new_scale = floorf(dt_dev_viewport_scaling(dev) * dev->roi.natural_scale) * 2.f / dev->roi.natural_scale;
 
     const float point[2] = { x, y };
     return _change_scaling(dev, point, new_scale);
@@ -2853,14 +2844,14 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
 static int _change_scaling(dt_develop_t *dev, const float point[2], const float new_scaling)
 {
-  const float old_scaling = dev->roi.scaling;
+  const float old_scaling = dt_dev_viewport_scaling(dev);
 
   // Round scaling to 1.0 (fit) if close enough
   const float epsilon = fabsf(old_scaling - new_scaling);
   if(fabsf(new_scaling - 1.0f) < epsilon)
-    dev->roi.scaling = 1.0f;
+    dt_dev_viewport_set_scaling(dev, 1.0f);
   else
-    dev->roi.scaling = new_scaling;
+    dt_dev_viewport_set_scaling(dev, new_scaling);
 
   if(!dt_dev_check_zoom_scale_bounds(dev))
   { 
@@ -2875,27 +2866,29 @@ static int _change_scaling(dt_develop_t *dev, const float point[2], const float 
     // Keep the image point under the mouse fixed in widget coordinates while
     // the pipeline zoom stays DPI-invariant.
     const float old_zoom = dt_dev_get_widget_zoom_scale(dev, old_scaling);
-    const float new_zoom = dt_dev_get_widget_zoom_scale(dev, dev->roi.scaling);
+    const float new_zoom = dt_dev_get_widget_zoom_scale(dev, dt_dev_viewport_scaling(dev));
     if(old_zoom <= 1e-6f || new_zoom <= 1e-6f)
     {
-      dev->roi.scaling = old_scaling;
+      dt_dev_viewport_set_scaling(dev, old_scaling);
       return 0;
     }
 
     // Adjust the center to compensate for the scale change
     int proc_w = 0.f, proc_h = 0.f;
     dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-    dev->roi.x += mouse_offset[0] * (1.f / old_zoom - 1.f / new_zoom) / proc_w;
-    dev->roi.y += mouse_offset[1] * (1.f / old_zoom - 1.f / new_zoom) / proc_h;
+    const dt_dev_viewport_state_t anchored = dt_dev_viewport_get(dev);
+    dt_dev_viewport_set_center(dev,
+                               anchored.center_x + mouse_offset[0] * (1.f / old_zoom - 1.f / new_zoom) / proc_w,
+                               anchored.center_y + mouse_offset[1] * (1.f / old_zoom - 1.f / new_zoom) / proc_h);
     
-    dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+    dt_dev_clamp_viewport_center(dev);
     dt_dev_pixelpipe_change_zoom_main(dev);
     return 1;
   }
   else
   {
     // Invalid zoom level, keep previous value
-    dev->roi.scaling = old_scaling;
+    dt_dev_viewport_set_scaling(dev, old_scaling);
     return 0;
   }
 }
@@ -2906,7 +2899,7 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 
   // Commit the new scaling
   const float step = 1.02f;
-  const float new_scaling = dev->roi.scaling * powf(step, (float)-flow);
+  const float new_scaling = dt_dev_viewport_scaling(dev) * powf(step, (float)-flow);
   const float point[2] = { x, y };
   return _change_scaling(dev, point, new_scaling);
 }
@@ -2949,7 +2942,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
 
 static void _key_scroll(dt_develop_t *dev)
 {
-  dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+  dt_dev_clamp_viewport_center(dev);
   dt_control_queue_redraw_center();
   dt_dev_pixelpipe_change_zoom_main(dev);
 }
@@ -2990,9 +2983,9 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     switch(key)
     {
       case GDK_KEY_plus:
-        return _change_scaling(dev, center, dev->roi.scaling * zoom_step);
+        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) * zoom_step);
       case GDK_KEY_minus:
-        return _change_scaling(dev, center, dev->roi.scaling / zoom_step);
+        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) / zoom_step);
     }
   }
 
@@ -3007,25 +3000,33 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   {
     case GDK_KEY_Up:
     {
-      dev->roi.y -= delta[1] / (float)dt_dev_geometry_processed_height(dev);
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev),
+                                 dt_dev_viewport_center_y(dev)
+                                     - delta[1] / (float)dt_dev_geometry_processed_height(dev));
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Down:
     {
-      dev->roi.y += delta[1] / (float)dt_dev_geometry_processed_height(dev);
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev),
+                                 dt_dev_viewport_center_y(dev)
+                                     + delta[1] / (float)dt_dev_geometry_processed_height(dev));
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Left:
     {
-      dev->roi.x -= delta[0] / (float)dt_dev_geometry_processed_width(dev);
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev)
+                                     - delta[0] / (float)dt_dev_geometry_processed_width(dev),
+                                 dt_dev_viewport_center_y(dev));
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Right:
     {
-      dev->roi.x += delta[0] / (float)dt_dev_geometry_processed_width(dev);
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev)
+                                     + delta[0] / (float)dt_dev_geometry_processed_width(dev),
+                                 dt_dev_viewport_center_y(dev));
       _key_scroll(dev);
       return 1;
     }
@@ -3057,8 +3058,7 @@ void configure(dt_view_t *self, int wd, int ht)
   if(dt_view_manager_get_current_view(dt_view_manager_get_global()) == self)
   {
     // Reference dimensions before ISO 12646 mode
-    dev->roi.orig_height = ht;
-    dev->roi.orig_width = wd;
+    dt_dev_viewport_set_widget_size(dev, wd, ht);
     dt_dev_toolbox_apply_iso_12646_size(dev);
   }
 }
