@@ -158,13 +158,28 @@ error:
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  // Depending on ROI zoom level, we may need to enable finalscale so the pipeline runs
-  // at most at 100%, for pixel-level accuracy, and we upscale at the end. 
+  // Export always upscales at the end; thumbnails never do. Both are decided by the pipe
+  // type alone, so settle them before reading anything off dev: this callback runs on the
+  // pipeline thread, and for those two pipe types `dev` is a headless, throwaway one whose
+  // viewport fields still hold their calloc zero -- the old predicate read them and got the
+  // right answer only because its remaining clauses happened to decide first.
+  if(pipe->type == DT_DEV_PIXELPIPE_EXPORT)
+  {
+    piece->enabled = TRUE;
+    return;
+  }
+  if(pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL)
+  {
+    piece->enabled = FALSE;
+    return;
+  }
+
+  // Darkroom pipes only. Depending on ROI zoom level, we may need to enable finalscale so
+  // the pipeline runs at most at 100%, for pixel-level accuracy, and we upscale at the end.
   // This is important for consistency with exports.
   const float darkroom_zoom = pipe->dev->roi.scaling * pipe->dev->roi.natural_scale;
-  piece->enabled = (darkroom_zoom > 1.f && pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL) 
-    || (pipe->type == DT_DEV_PIXELPIPE_EXPORT)
-    || (dt_conf_get_int("darkroom/render_size") != 1 && darkroom_zoom != 1.f && pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL);
+  piece->enabled = (darkroom_zoom > 1.f)
+    || (dt_conf_get_int("darkroom/render_size") != 1 && darkroom_zoom != 1.f);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
