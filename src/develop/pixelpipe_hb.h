@@ -40,6 +40,7 @@
  * the concrete types needed by value (dt_iop_roi_t, dt_iop_buffer_dsc_t) live in
  * develop/format.h. */
 #include "pixel/format.h"
+#include "develop/dev_roi_request.h"
 #include "develop/pixelpipe.h"
 #include "caches/pixelpipe_cache.h"
 
@@ -293,6 +294,20 @@ typedef struct dt_dev_pixelpipe_t
   GArray *raster_mask_hashes;
 
   int output_imgid;
+  /**
+   * @brief The viewport snapshot this run was planned from.
+   *
+   * @details Latched once per darkroom worker iteration, before any resync, and read by
+   * everything that runs on the pipeline thread for the rest of that run -- so a module
+   * callback and the ROI planner cannot disagree about the zoom, however many times the GUI
+   * thread republishes while the frame is being computed.
+   *
+   * A pipe nobody latches (export, thumbnail, snapshot) keeps the neutral seed
+   * dt_dev_pixelpipe_init_cached() gives it: scaling 1, natural_scale -1, which is what those
+   * pipes have always read off a headless dev. See develop/dev_roi_request.h.
+   */
+  dt_dev_roi_request_t roi_request;
+
   // processing is true when actual pixel computations are ongoing
   int processing;
   // running is true when the pipe thread is running, computing or idle.

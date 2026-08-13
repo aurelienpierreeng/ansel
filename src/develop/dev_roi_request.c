@@ -56,15 +56,22 @@ static inline gboolean _payload_equal(const dt_dev_roi_request_t *a, const dt_de
          && a->valid == b->valid;
 }
 
+dt_dev_roi_request_t dt_dev_roi_request_neutral(void)
+{
+  dt_dev_roi_request_t request;
+  memset(&request, 0, sizeof(request));
+  request.natural_scale = -1.f;
+  request.scaling = 1.f;
+  request.center_x = 0.5f;
+  request.center_y = 0.5f;
+  return request;
+}
+
 void dt_dev_roi_request_init(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;
 
-  memset(&dev->roi_request.value, 0, sizeof(dev->roi_request.value));
-  dev->roi_request.value.natural_scale = -1.f;
-  dev->roi_request.value.scaling = 1.f;
-  dev->roi_request.value.center_x = 0.5f;
-  dev->roi_request.value.center_y = 0.5f;
+  dev->roi_request.value = dt_dev_roi_request_neutral();
   dt_atomic_set_uint64(&dev->roi_request.generation, 0);
 }
 

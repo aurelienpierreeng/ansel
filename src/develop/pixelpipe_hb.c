@@ -435,6 +435,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   memset(pipe, 0, sizeof(dt_dev_pixelpipe_t));
 
   // Set only the stuff that doesn't take 0 as default
+  pipe->roi_request = dt_dev_roi_request_neutral();
   pipe->devid = -1;
   pipe->last_devid = -1;
   dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
