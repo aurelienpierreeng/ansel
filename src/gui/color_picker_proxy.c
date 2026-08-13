@@ -188,11 +188,9 @@ static void _picker_get_module_bounds_image_norm(const dt_develop_t *dev,
   bounds[3] = 1.0f;
 
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(active_module)) return;
-  int32_t processed_size_w = 0;
-  int32_t processed_size_h = 0;
-  dt_dev_geometry_get_processed_size(dev, &processed_size_w, &processed_size_h);
-  const float processed_width = processed_size_w;
-  const float processed_height = processed_size_h;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width <= 0.0f || processed_height <= 0.0f) return;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe,
@@ -230,11 +228,9 @@ static void _picker_initialize_geometry_raw(dt_iop_color_picker_t *picker, dt_de
   float bounds[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
   _picker_get_module_bounds_image_norm(dev, picker->module, bounds);
 
-  int32_t processed_size_w = 0;
-  int32_t processed_size_h = 0;
-  dt_dev_geometry_get_processed_size(dev, &processed_size_w, &processed_size_h);
-  const float processed_width = processed_size_w;
-  const float processed_height = processed_size_h;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width <= 0.0f || processed_height <= 0.0f) return;
   // Fixed border inset in scale-1 image pixels, then converted to image-norm.
   // Keep this explicit here so the caller directly controls default picker coverage.

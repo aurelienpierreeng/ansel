@@ -751,11 +751,9 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   *points = NULL;
   *points_count = 0;
 
-  int32_t raw_size_w = 0;
-  int32_t raw_size_h = 0;
-  dt_dev_geometry_get_raw_size(dev, &raw_size_w, &raw_size_h);
-  const float wd = raw_size_w;
-  const float ht = raw_size_h;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float wd = geometry.raw_width;
+  const float ht = geometry.raw_height;
   if(!isfinite(wd) || !isfinite(ht) || wd <= 0.0f || ht <= 0.0f) return 1;
 
   const float scale = sqrtf(wd * wd + ht * ht);
@@ -879,11 +877,9 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
   distance = CLAMPF(distance, extent_MIN, extent_MAX);
 
   // Get border curve dimensions and scaling
-  int32_t raw_size_w = 0;
-  int32_t raw_size_h = 0;
-  dt_dev_geometry_get_raw_size(dev, &raw_size_w, &raw_size_h);
-  const float wd = raw_size_w;
-  const float ht = raw_size_h;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float wd = geometry.raw_width;
+  const float ht = geometry.raw_height;
   const float scale = sqrtf(wd * wd + ht * ht);
   
   // Calculate perpendicular offsets (±90 degrees from rotation)
@@ -969,11 +965,9 @@ static void _gradient_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const fl
   const float *points = (border) ? pts_line : pts_line + 6;
   const int points_count = (border) ? pts_line_count : pts_line_count - 3;
 
-  int32_t raw_size_w = 0;
-  int32_t raw_size_h = 0;
-  dt_dev_geometry_get_raw_size(dev, &raw_size_w, &raw_size_h);
-  const float wd = raw_size_w;
-  const float ht = raw_size_h;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float wd = geometry.raw_width;
+  const float ht = geometry.raw_height;
 
   int i = 0;
   while(i < points_count)

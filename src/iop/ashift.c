@@ -3049,11 +3049,9 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   else
   {
     // Create new lines
-    int32_t processed_size_w = 0;
-    int32_t processed_size_h = 0;
-    dt_dev_geometry_get_processed_size(self->dev, &processed_size_w, &processed_size_h);
-    const float wd = processed_size_w;
-    const float ht = processed_size_h;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+    const float wd = geometry.processed_width;
+    const float ht = geometry.processed_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
     if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
@@ -4269,11 +4267,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       return FALSE;
     }
 
-    int32_t processed_size_w = 0;
-    int32_t processed_size_h = 0;
-    dt_dev_geometry_get_processed_size(self->dev, &processed_size_w, &processed_size_h);
-    const float pd_w = processed_size_w;
-    const float pd_h = processed_size_h;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+    const float pd_w = geometry.processed_width;
+    const float pd_h = geometry.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
     if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
@@ -4338,11 +4334,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       return FALSE;
     }
 
-    int32_t processed_size_w = 0;
-    int32_t processed_size_h = 0;
-    dt_dev_geometry_get_processed_size(self->dev, &processed_size_w, &processed_size_h);
-    const float pd_w = processed_size_w;
-    const float pd_h = processed_size_h;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+    const float pd_w = geometry.processed_width;
+    const float pd_h = geometry.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
     if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
@@ -4580,11 +4574,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       if(g->points_idx[n].is_near)
       {
-        int32_t processed_size_w = 0;
-        int32_t processed_size_h = 0;
-        dt_dev_geometry_get_processed_size(self->dev, &processed_size_w, &processed_size_h);
-        const float pd_w = processed_size_w;
-        const float pd_h = processed_size_h;
+        const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+        const float pd_w = geometry.processed_width;
+        const float pd_h = geometry.processed_height;
         float pts[2] = { pzx * pd_w, pzy * pd_h };
         dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                           DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
@@ -4683,11 +4675,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
     // we instantiate a new line with both extrema at the current position
     // and enable the "move point" mode with the second extrema
-    int32_t processed_size_w = 0;
-    int32_t processed_size_h = 0;
-    dt_dev_geometry_get_processed_size(self->dev, &processed_size_w, &processed_size_h);
-    const float pd_w = processed_size_w;
-    const float pd_h = processed_size_h;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+    const float pd_w = geometry.processed_width;
+    const float pd_h = geometry.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
     dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
@@ -4757,11 +4747,9 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
     const float pzx = pzxpy[0];
     const float pzy = pzxpy[1];
-    int32_t processed_size_w = 0;
-    int32_t processed_size_h = 0;
-    dt_dev_geometry_get_processed_size(self->dev, &processed_size_w, &processed_size_h);
-    const float pd_w = processed_size_w;
-    const float pd_h = processed_size_h;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+    const float pd_w = geometry.processed_width;
+    const float pd_h = geometry.processed_height;
     float pts[4] = { pzx * pd_w, pzy * pd_h, g->lastx * pd_w, g->lasty * pd_h };
     dt_dev_distort_backtransform_plus(self->dev->virtual_pipe,
                                       self->iop_order,

@@ -96,10 +96,16 @@ gboolean dt_dev_geometry_get(const dt_develop_t *dev, dt_dev_image_geometry_t *o
   return out->raw_inited || out->processed_inited;
 }
 
-gboolean dt_dev_geometry_get_raw_size(const dt_develop_t *dev, int32_t *width, int32_t *height)
+dt_dev_image_geometry_t dt_dev_geometry_snapshot(const dt_develop_t *dev)
 {
   dt_dev_image_geometry_t geometry;
   dt_dev_geometry_get(dev, &geometry);
+  return geometry;
+}
+
+gboolean dt_dev_geometry_get_raw_size(const dt_develop_t *dev, int32_t *width, int32_t *height)
+{
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
 
   if(!IS_NULL_PTR(width)) *width = geometry.raw_width;
   if(!IS_NULL_PTR(height)) *height = geometry.raw_height;
@@ -109,8 +115,7 @@ gboolean dt_dev_geometry_get_raw_size(const dt_develop_t *dev, int32_t *width, i
 
 gboolean dt_dev_geometry_get_processed_size(const dt_develop_t *dev, int32_t *width, int32_t *height)
 {
-  dt_dev_image_geometry_t geometry;
-  dt_dev_geometry_get(dev, &geometry);
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
 
   if(!IS_NULL_PTR(width)) *width = geometry.processed_width;
   if(!IS_NULL_PTR(height)) *height = geometry.processed_height;
@@ -120,35 +125,27 @@ gboolean dt_dev_geometry_get_processed_size(const dt_develop_t *dev, int32_t *wi
 
 int32_t dt_dev_geometry_raw_width(const dt_develop_t *dev)
 {
-  int32_t width = 0;
-  dt_dev_geometry_get_raw_size(dev, &width, NULL);
-  return width;
+  return dt_dev_geometry_snapshot(dev).raw_width;
 }
 
 int32_t dt_dev_geometry_raw_height(const dt_develop_t *dev)
 {
-  int32_t height = 0;
-  dt_dev_geometry_get_raw_size(dev, NULL, &height);
-  return height;
+  return dt_dev_geometry_snapshot(dev).raw_height;
 }
 
 int32_t dt_dev_geometry_processed_width(const dt_develop_t *dev)
 {
-  int32_t width = 0;
-  dt_dev_geometry_get_processed_size(dev, &width, NULL);
-  return width;
+  return dt_dev_geometry_snapshot(dev).processed_width;
 }
 
 int32_t dt_dev_geometry_processed_height(const dt_develop_t *dev)
 {
-  int32_t height = 0;
-  dt_dev_geometry_get_processed_size(dev, NULL, &height);
-  return height;
+  return dt_dev_geometry_snapshot(dev).processed_height;
 }
 
 gboolean dt_dev_geometry_raw_inited(const dt_develop_t *dev)
 {
-  return dt_dev_geometry_get_raw_size(dev, NULL, NULL);
+  return dt_dev_geometry_snapshot(dev).raw_inited;
 }
 
 // clang-format off
