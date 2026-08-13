@@ -1445,6 +1445,22 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
 
     // Panning and zooming change the ROI. Some GUI modes (crop in editing mode) too.
     // dt_dev_get_roi_in() should have run before
+    //
+    // These two folds are ALSO how the darkroom viewport reaches this hash, which is why the
+    // pipe's latched dt_dev_roi_request_t (pixelpipe_hb.h) deliberately does NOT contribute its
+    // generation here. Every field of that record reaches the ROI by construction, in
+    // _update_darkroom_roi(): zoom and the fit scale become roi.scale (their product), the
+    // centre becomes roi.x/roi.y, the box and the processed size become roi.width/height. Even
+    // finalscale's piece->enabled -- the one consumer that reads the record rather than the ROI
+    // -- is a function of that same product, and a disabled piece is skipped above, so a toggle
+    // changes the chain anyway.
+    //
+    // Folding the generation on top would therefore add no discriminating power and would only
+    // over-invalidate: a republication that advances the generation while producing identical
+    // ROIs (a sub-pixel pan that rounds to the same roi.x, a box change the fminf clamp absorbs)
+    // would rekey the whole FULL-pipe cache chain for pixels that are bit-identical. Content,
+    // not version, is the right key here -- unlike mask_preview_settings_revision below, which
+    // hashes a revision precisely because its state reaches no ROI at all.
     local_hash = dt_hash(local_hash, (const char *)&piece->roi_in, sizeof(dt_iop_roi_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->roi_out, sizeof(dt_iop_roi_t));
 
