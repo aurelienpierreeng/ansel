@@ -141,8 +141,11 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   const gboolean ui_thread = ui_ctx && g_main_context_is_owner(ui_ctx);
   if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
-    layer_width = dt_dev_geometry_raw_width(self->dev);
-    layer_height = dt_dev_geometry_raw_height(self->dev);
+    int32_t raw_size_w = 0;
+    int32_t raw_size_h = 0;
+    dt_dev_geometry_get_raw_size(self->dev, &raw_size_w, &raw_size_h);
+    layer_width = raw_size_w;
+    layer_height = raw_size_h;
   }
   if(imgid <= 0 || layer_width <= 0 || layer_height <= 0) return FALSE;
   if(!_layer_name_non_empty(params->layer_name))

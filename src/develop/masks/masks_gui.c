@@ -3972,8 +3972,11 @@ void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *mask_gui, const 
 void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_masks_form_t *mask_form)
 {
   dt_develop_t *dev = mask_gui->dev;
-  const float raw_width = dt_dev_geometry_raw_width(dev);
-  const float raw_height = dt_dev_geometry_raw_height(dev);
+  int32_t raw_size_w = 0;
+  int32_t raw_size_h = 0;
+  dt_dev_geometry_get_raw_size(dev, &raw_size_w, &raw_size_h);
+  const float raw_width = raw_size_w;
+  const float raw_height = raw_size_h;
 
   const float xx = mask_gui->pos[0];
   const float yy = mask_gui->pos[1];
@@ -4046,8 +4049,11 @@ void dt_masks_calculate_source_pos_origin(dt_masks_form_gui_t *mask_gui, const f
 {
   float source_x = 0.0f;
   float source_y = 0.0f;
-  const float raw_width = dt_dev_geometry_raw_width(mask_gui->dev);
-  const float raw_height = dt_dev_geometry_raw_height(mask_gui->dev);
+  int32_t raw_size_w = 0;
+  int32_t raw_size_h = 0;
+  dt_dev_geometry_get_raw_size(mask_gui->dev, &raw_size_w, &raw_size_h);
+  const float raw_width = raw_size_w;
+  const float raw_height = raw_size_h;
   if(mask_gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {
     source_x = xpos + mask_gui->pos_source[0];

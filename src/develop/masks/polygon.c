@@ -2040,8 +2040,11 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   if(IS_NULL_PTR(gui_points)) return 0;
 
-  const int iwidth = dt_dev_geometry_raw_width(dev);
-  const int iheight = dt_dev_geometry_raw_height(dev);
+  int32_t raw_size_w = 0;
+  int32_t raw_size_h = 0;
+  dt_dev_geometry_get_raw_size(dev, &raw_size_w, &raw_size_h);
+  const int iwidth = raw_size_w;
+  const int iheight = raw_size_h;
 
   if(mask_gui->node_dragging >= 0)
   {
