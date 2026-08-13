@@ -20,6 +20,7 @@
 #include "develop/dev_geometry.h"
 #include "develop/dev_viewport.h"
 #include "develop/develop.h"
+#include "develop/pixelpipe_hb.h"
 
 #include <string.h>
 
@@ -160,6 +161,35 @@ uint64_t dt_dev_roi_request_publish(dt_develop_t *dev)
   dt_atomic_set_uint64(&dev->roi_request.generation, published + 2);
 
   return next.generation;
+}
+
+void dt_dev_roi_request_latch(dt_dev_pixelpipe_t *pipe, const dt_dev_roi_request_t *request)
+{
+  if(IS_NULL_PTR(pipe) || IS_NULL_PTR(request)) return;
+
+  const uint64_t published = dt_atomic_get_uint64(&pipe->roi_request.generation);
+  dt_atomic_set_uint64(&pipe->roi_request.generation, published + 1);
+  pipe->roi_request.value = *request;
+  dt_atomic_set_uint64(&pipe->roi_request.generation, published + 2);
+}
+
+dt_dev_roi_request_t dt_dev_roi_request_of_pipe(const dt_dev_pixelpipe_t *pipe)
+{
+  dt_dev_roi_request_t request = dt_dev_roi_request_neutral();
+  if(IS_NULL_PTR(pipe)) return request;
+
+  for(;;)
+  {
+    const uint64_t before = dt_atomic_get_uint64(&pipe->roi_request.generation);
+    if(before & 1) continue;
+
+    request = pipe->roi_request.value;
+
+    const uint64_t after = dt_atomic_get_uint64(&pipe->roi_request.generation);
+    if(before == after) break;
+  }
+
+  return request;
 }
 
 int32_t dt_dev_roi_request_preview_width(const dt_develop_t *dev)

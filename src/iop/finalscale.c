@@ -179,7 +179,8 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
   // This is important for consistency with exports.
   // The pipe's latched snapshot, not a live read off dev: this runs on the pipeline thread, and
   // piece->enabled must agree with the ROI the same iteration planned.
-  const float darkroom_zoom = pipe->roi_request.scaling * pipe->roi_request.natural_scale;
+  const dt_dev_roi_request_t request = dt_dev_roi_request_of_pipe(pipe);
+  const float darkroom_zoom = request.scaling * request.natural_scale;
   piece->enabled = (darkroom_zoom > 1.f)
     || (dt_conf_get_int("darkroom/render_size") != 1 && darkroom_zoom != 1.f);
 }
