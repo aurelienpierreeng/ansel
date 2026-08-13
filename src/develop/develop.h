@@ -60,6 +60,7 @@
 #include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/dev_geometry.h"
+#include "develop/dev_viewport.h"
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 
@@ -188,35 +189,22 @@ typedef struct dt_develop_t
    */
   dt_dev_geometry_store_t geometry;
 
+  /**
+   * @brief The darkroom view's window onto the image: widget allocation, borders, zoom, pan.
+   *
+   * @details Allocated only for a gui_attached dev and NULL otherwise -- its absence IS
+   * "this dev has no viewport", replacing roi.gui_inited. Read it through
+   * dt_dev_viewport_get(), which yields the neutral state for a dev that has none, so a
+   * headless caller needs no special case. See develop/dev_viewport.h.
+   */
+  dt_dev_viewport_t *viewport;
+
   // The roi structure is used in darkroom GUI only.
   // It defines the output size of the image backbuffer fitting
   // into the darkroom center widget. This is critically used for all
   // GUI <-> RAW pixel coordinates conversions. It should be recomputed
   // ASAP when widget size changes.
   struct {
-    // width = orig_width - 2 * border_size,
-    // height = orig_height - 2 * border_size,
-    // converted to raster pixels through the GUI ppd factor.
-    // This is the surface actually covered by an image backbuffer (ROI)
-    // and it is set by `dt_dev_configure()`.
-    int32_t width, height;
-
-    // User-defined scaling factor, related to GUI zoom.
-    // Applies on top of natural scale
-    float scaling;
-
-    // Relative coordinates of the center of the ROI, expressed with
-    // regard to the complete image.
-    float x, y;
-
-    // darkroom border size: ISO 12646 borders or user-defined borders
-    int32_t border_size;
-
-    // Those are the darkroom main widget size in GUI coordinates, aka max
-    // paintable area. This size is allocated by Gtk from the window size
-    // minus all panels. It is NOT the size of the backbuffer/ROI.
-    int32_t orig_width, orig_height;
-
     // Dimensions of the preview backbuffer, depending on the
     // darkroom main widget size and DPI factor.
     // These are computed early, before we have the actual buffer.
@@ -228,9 +216,6 @@ typedef struct dt_develop_t
     // natural scaling = MIN(dev->width / dt_dev_geometry_processed_width(dev), dev->height / dt_dev_geometry_processed_height(dev))
     // aka ensure that image fits into widget minus margins/borders.
     float natural_scale;
-
-    // Conveniency state to check if all widget sizes are inited
-    gboolean gui_inited;
 
     // Conveniency state to check if all output (backbuffer) sizes are inited
     gboolean output_inited;
@@ -601,6 +586,10 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
  * @param box_h the height of navigation's box
  */
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h);
+
+/** Clamp the viewport centre against the box visible at the current zoom. Returns TRUE when
+ *  the centre moved. */
+gboolean dt_dev_clamp_viewport_center(dt_develop_t *dev);
 
 /*
  * modulegroups helpers

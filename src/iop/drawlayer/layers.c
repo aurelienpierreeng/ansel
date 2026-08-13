@@ -431,9 +431,9 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
 
   if(same_view)
   {
-    g->session.last_view_x = self->dev->roi.x;
-    g->session.last_view_y = self->dev->roi.y;
-    g->session.last_view_scale = self->dev->roi.scaling;
+    g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
+    g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
+    g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
     return TRUE;
   }
 
@@ -442,9 +442,9 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
   g->session.preview_rect = preview_rect;
 
   dt_drawlayer_worker_reset_backend_path(g->stroke.worker);
-  g->session.last_view_x = self->dev->roi.x;
-  g->session.last_view_y = self->dev->roi.y;
-  g->session.last_view_scale = self->dev->roi.scaling;
+  g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
+  g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
+  g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
   return TRUE;
 }
 

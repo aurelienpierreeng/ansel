@@ -2913,9 +2913,9 @@ void gui_init(dt_iop_module_t *self)
   g->session.last_view_scale = 1.0f;
   if(self->dev)
   {
-    g->session.last_view_x = self->dev->roi.x;
-    g->session.last_view_y = self->dev->roi.y;
-    g->session.last_view_scale = self->dev->roi.scaling;
+    g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
+    g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
+    g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
   }
 
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);

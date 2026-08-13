@@ -446,7 +446,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
-  const float zoom_scale = dev->roi.scaling;
+  const float zoom_scale = dt_dev_viewport_scaling(dev);
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we get the extremities of the line

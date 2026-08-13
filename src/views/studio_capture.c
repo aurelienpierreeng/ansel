@@ -224,8 +224,7 @@ int try_enter(dt_view_t *self)
  */
 static void _studio_configure_dev_roi(dt_studio_capture_t *d, int width, int height)
 {
-  d->dev->roi.orig_width = width;
-  d->dev->roi.orig_height = height;
+  dt_dev_viewport_set_widget_size(d->dev, width, height);
   dt_dev_toolbox_apply_iso_12646_size(d->dev);
 }
 
@@ -896,7 +895,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     // must not leak past this call.
     cairo_save(cr);
     drew_live = dt_dev_render_locked_surface(cr, d->dev, &d->main_locked, width, height,
-                                             d->dev->roi.border_size, bg_color);
+                                             dt_dev_viewport_border_size(d->dev), bg_color);
     cairo_restore(cr);
   }
 
@@ -905,7 +904,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     cairo_save(cr);
     cairo_translate(cr, tr_x, tr_y);
     if(d->zoom == DT_THUMBTABLE_ZOOM_FIT && d->dev->iso_12646.enabled)
-      dt_dev_draw_iso12646_border(cr, logical_width, logical_height, d->dev->roi.border_size);
+      dt_dev_draw_iso12646_border(cr, logical_width, logical_height, dt_dev_viewport_border_size(d->dev));
     cairo_set_source_surface(cr, d->surface, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), dt_widget_image_filter());
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);

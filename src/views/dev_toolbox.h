@@ -83,7 +83,7 @@ gboolean dt_dev_toolbox_activate_accel(GtkAccelGroup *accel_group, GObject *acce
 gboolean dt_dev_toolbox_focus_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                     GdkModifierType modifier, gpointer data);
 
-/** Re-apply dev->roi.border_size from dev->iso_12646.enabled and the
+/** Re-apply dt_dev_viewport_border_size(dev) from dev->iso_12646.enabled and the
  * "plugins/darkroom/ui/border_size" conf key, then dt_dev_configure() the
  * result. Called by the ISO 12646 toggle, and by any view that needs to
  * resize on iso_12646 changes from its own configure()/resize handling. */
