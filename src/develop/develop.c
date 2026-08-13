@@ -900,7 +900,11 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
   // dev_snapshot.c's frozen dev) resolve to the wrong location, so a module needing mask history
   // (retouch's clone/heal/blur/fill, or any masked blend) either processes empty geometry or
   // silently produces zero visible effect outside the live darkroom.
-  dt_dev_geometry_set_raw_size(dev, buf.width, buf.height, TRUE);
+  // Publish what the read actually produced. `ok' is FALSE when the mipmap cache handed back
+  // no buffer or a 0-sized one; claiming raw_inited in that case told every later reader that
+  // 0x0 was a measured fact about the image, and dt_dev_geometry_refresh()'s own guard
+  // (dt_dev_geometry_raw_inited) then let the virtual pipe run on it.
+  dt_dev_geometry_set_raw_size(dev, ok ? buf.width : 0, ok ? buf.height : 0, ok);
 
   dt_mipmap_cache_release(&buf);
 
