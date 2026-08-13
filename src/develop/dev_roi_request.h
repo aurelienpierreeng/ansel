@@ -94,6 +94,17 @@ static inline float dt_dev_roi_natural_scale(const int32_t box_width, const int3
                1.f);
 }
 
+/**
+ * @brief The value a pipe carries before the worker has latched anything.
+ *
+ * @details NOT a zeroed record. scaling = 1 and natural_scale = -1 are what dt_dev_reset_roi()
+ * left on every dev, headless ones included, before this record existed -- and iop/finalscale.c
+ * multiplies exactly those two to decide whether it enables itself. Seeding zeros there would
+ * change piece->enabled on any pipe that never gets latched, which is every export, thumbnail
+ * and snapshot pipe.
+ */
+dt_dev_roi_request_t dt_dev_roi_request_neutral(void);
+
 /** Seed the store. Call once, from dt_dev_init(). */
 void dt_dev_roi_request_init(struct dt_develop_t *dev);
 

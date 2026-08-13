@@ -402,13 +402,16 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe,
                                              const dt_iop_roi_t *roi)
 {
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !dev->gui_attached || !dt_dev_roi_request_valid(dev)) return FALSE;
+  // Pipeline thread: compare against what this pipe was planned from, not what the GUI has
+  // published since.
+  const dt_dev_roi_request_t request = pipe->roi_request;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !dev->gui_attached || !request.valid) return FALSE;
 
   int x = 0;
   int y = 0;
   int width = 0;
   int height = 0;
-  float scale = dt_dev_roi_request_natural_scale(dev);
+  float scale = request.natural_scale;
 
   if(!IS_NULL_PTR(roi))
   {
@@ -440,10 +443,10 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_d
   // strictly greater than natural_scale, so loosening the size match cannot misclassify those.
   const int tol = 2;
   const gboolean dims_match
-      = (abs(width - dt_dev_roi_request_preview_width(dev)) <= tol && abs(height - dt_dev_roi_request_preview_height(dev)) <= tol)
-        || (abs(width - dt_dev_roi_request_preview_height(dev)) <= tol && abs(height - dt_dev_roi_request_preview_width(dev)) <= tol);
+      = (abs(width - request.preview_width) <= tol && abs(height - request.preview_height) <= tol)
+        || (abs(width - request.preview_height) <= tol && abs(height - request.preview_width) <= tol);
   if(!dims_match) return FALSE;
-  return x == 0 && y == 0 && fabsf(scale - dt_dev_roi_request_natural_scale(dev)) < 1e-4f;
+  return x == 0 && y == 0 && fabsf(scale - request.natural_scale) < 1e-4f;
 }
 
 
@@ -451,7 +454,10 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_d
 static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *x, int *y, int *wd, int *ht,
                                      float *scale)
 {  
-  if(!dt_dev_roi_request_valid(dev)) return 1;
+  // The latched snapshot, not the live record: this runs on the worker, and the frame must be
+  // planned from the same numbers the rest of this iteration uses.
+  const dt_dev_roi_request_t request = pipe->roi_request;
+  if(!request.valid) return 1;
 
   // Store previous values
   int x_old = *x;
@@ -462,20 +468,18 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
   // roi->scale is the pipeline sampling ratio against the processed image and
   // therefore excludes the GUI backing-store density.
-  *scale = dt_dev_roi_request_natural_scale(dev);
+  *scale = request.natural_scale;
   const gboolean preview_pipe = (pipe == dev->preview_pipe);
-  if(!preview_pipe) *scale *= dt_dev_viewport_scaling(dev);
+  if(!preview_pipe) *scale *= request.scaling;
 
   // Width, height, x and y are already expressed in raster pixels, so they
-  // must follow the same raster-space sampling ratio as roi->scale.
-  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
-  const int32_t processed_width = geometry.processed_width;
-  const int32_t processed_height = geometry.processed_height;
-
-  int roi_width = roundf(*scale * processed_width);
-  int roi_height = roundf(*scale * processed_height);
-  int widget_wd = dt_dev_viewport_box_width(dev);
-  int widget_ht = dt_dev_viewport_box_height(dev);
+  // must follow the same raster-space sampling ratio as roi->scale. All of it comes from the
+  // latched record: mixing one live read into this arithmetic is exactly how a frame ends up
+  // describing a viewport that never existed.
+  int roi_width = roundf(*scale * request.processed_width);
+  int roi_height = roundf(*scale * request.processed_height);
+  int widget_wd = request.box_width;
+  int widget_ht = request.box_height;
 
   *wd = roundf(fminf(roi_width, widget_wd));
   *ht = roundf(fminf(roi_height, widget_ht));
@@ -483,8 +487,8 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   // dt_dev_viewport_center_x(dev),y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
   // otherwise, x,y here are the top-left corner. Translate:
-  *x = preview_pipe ? 0 : roundf(dt_dev_viewport_center_x(dev) * roi_width - *wd * .5f);
-  *y = preview_pipe ? 0 : roundf(dt_dev_viewport_center_y(dev) * roi_height - *ht * .5f);
+  *x = preview_pipe ? 0 : roundf(request.center_x * roi_width - *wd * .5f);
+  *y = preview_pipe ? 0 : roundf(request.center_y * roi_height - *ht * .5f);
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
@@ -616,6 +620,15 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       dt_iop_nap(50000); // wait 50 ms until GUI/image sizes are initialized
       continue;
     }
+
+    // Latch the viewport request ONCE for this iteration, before anything reads it. Everything
+    // downstream -- the ROI planner, the resync, every module callback -- then works from one
+    // snapshot for the whole frame, however many times the GUI thread republishes meanwhile.
+    // Reading it live at each consumer is what let a single frame be planned from two different
+    // viewport states.
+    const dt_dev_roi_request_t latched = dt_dev_roi_request_get(dev);
+    for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
+      pipes[i]->roi_request = latched;
 
     // This is cheap to run, keep it in sync always.
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
