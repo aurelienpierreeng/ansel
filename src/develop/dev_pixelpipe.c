@@ -20,6 +20,7 @@
 #include "widgets/widget_settings.h"
 #include "common/conf.h"
 #include "system/macros.h"
+#include "develop/pipe_cache_policy.h"
 #include "system/mem_alloc.h"
 #include "common/hash.h"
 #include "common/logging.h"
@@ -345,21 +346,22 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
 
     const gboolean has_autoset = pipe->autoset && !IS_NULL_PTR(module->autoset);
 
-    const gboolean previous_output_must_cache_host
-        = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on || has_autoset;
+    // The decision is a pure function of these nine facts (develop/pipe_cache_policy.h), pinned
+    // by src/tests/unittests/test_pipe_cache_policy.c. What stays here is GATHERING them, which
+    // is the part that needs a pipe and a dev to look at.
+    const dt_dev_pipe_cache_policy_inputs_t inputs = { .authored_cache = authored_cache,
+                                                       .user_requested_cache = user_requested_cache,
+                                                       .supports_opencl = supports_opencl,
+                                                       .color_picker_on = color_picker_on,
+                                                       .global_hist_output_on = global_hist_output_on,
+                                                       .global_hist_input_on = global_hist_input_on,
+                                                       .module_hist_on = module_hist_on,
+                                                       .active_in_gui = active_in_gui,
+                                                       .has_autoset = has_autoset };
 
     piece->cache_output_on_ram
-        = authored_cache || user_requested_cache || color_picker_on
-          || global_hist_output_on
-          || current_output_must_cache_host;
-
-    // A GPU-capable module that itself needs no host copy of its input must not erase a host
-    // requirement inherited from further downstream (e.g. a CPU-only module reached through it,
-    // or through a module that is disabled right now but was enabled a moment ago and left a
-    // stale host-less cacheline behind). Once established, the requirement has to keep
-    // propagating upstream, module after module, or an intermediate GPU module silently resets
-    // it and the module before it skips the readback that a later, non-adjacent consumer needs.
-    current_output_must_cache_host = previous_output_must_cache_host || current_output_must_cache_host;
+        = dt_dev_pipe_cache_policy_decide(&inputs, current_output_must_cache_host,
+                                          &current_output_must_cache_host);
   }
 }
 
