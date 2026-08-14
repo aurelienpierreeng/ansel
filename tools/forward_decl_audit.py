@@ -25,27 +25,24 @@ Usage:
 import collections
 import json
 import os
+import importlib.util
 import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(REPO, "src")
 
-# Kept in step with tools/include_graph.py deliberately: a second, disagreeing copy of the
-# layer order would be worse than none.
-LAYERS = [
-    ('external', 0), ('win', 0), ('system', 0),
-    ('common', 1), ('math', 1), ('colorprofiles', 1),
-    ('pixel', 2),
-    ('control', 3),
-    ('gui', 4), ('widgets', 4),
-    ('develop', 5),
-    ('iop', 6), ('imageio', 6),
-    ('libs', 7), ('views', 7), ('chart', 7),
-    ('apps', 10),
-    ('app', 9),
-]
-LAYER = dict(LAYERS)
+# IMPORTED from tools/include_graph.py, not copied. This used to be a second copy carrying a
+# comment that said it was "kept in step deliberately: a second, disagreeing copy of the layer
+# order would be worse than none" -- and it had already drifted, missing caches/, database/,
+# metadata/ and history/ entirely and holding widgets/ at the layer it left. The comment was
+# right about the hazard and wrong that a copy could avoid it.
+_ig_spec = importlib.util.spec_from_file_location(
+    "_include_graph", os.path.join(os.path.dirname(os.path.abspath(__file__)), "include_graph.py"))
+_ig = importlib.util.module_from_spec(_ig_spec)
+_ig_spec.loader.exec_module(_ig)   # module level is definitions only; main() is under __main__
+LAYERS = _ig.LAYERS
+LAYER = _ig.LAYER
 
 FWD = re.compile(r'^\s*(?:struct|union|enum)\s+([A-Za-z_]\w*)\s*;\s*$')
 # `} name;` closes a struct/union/enum definition; `struct name {` opens one.
