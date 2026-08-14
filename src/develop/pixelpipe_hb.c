@@ -742,9 +742,13 @@ static void _print_perf_debug(dt_dev_pixelpipe_t *pipe, const dt_pixelpipe_flow_
                   : pixelpipe_flow & PIXELPIPE_FLOW_HISTOGRAM_ON_CPU ? "CPU" : ""));
   }
 
+  const char *blend_log = pixelpipe_flow & PIXELPIPE_FLOW_BLENDED_ON_GPU
+                               ? "blended on GPU"
+                               : pixelpipe_flow & PIXELPIPE_FLOW_BLENDED_ON_CPU ? "blended on CPU" : "no blending";
+
   gchar *module_label = dt_history_item_get_name(module);
   dt_show_times_f(
-      start, "[dev_pixelpipe]", "processed `%s' on %s%s%s%s, blended on %s [%s]", module_label,
+      start, "[dev_pixelpipe]", "processed `%s' on %s%s%s%s, %s [%s]", module_label,
       pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_ON_GPU
           ? "GPU"
           : pixelpipe_flow & PIXELPIPE_FLOW_PROCESSED_ON_CPU ? "CPU" : "",
@@ -753,9 +757,7 @@ static void _print_perf_debug(dt_dev_pixelpipe_t *pipe, const dt_pixelpipe_flow_
       (!(pixelpipe_flow & PIXELPIPE_FLOW_HISTOGRAM_NONE) && (piece->request_histogram & DT_REQUEST_ON))
           ? histogram_log
           : "",
-      pixelpipe_flow & PIXELPIPE_FLOW_BLENDED_ON_GPU
-          ? "GPU"
-          : pixelpipe_flow & PIXELPIPE_FLOW_BLENDED_ON_CPU ? "CPU" : "",
+      blend_log,
       dt_pixelpipe_get_pipe_name(pipe->type));
   dt_free(module_label);
 }
