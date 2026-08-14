@@ -2255,7 +2255,9 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
     {
       dt_pthread_mutex_unlock(&cache_entry->cl_mem_lock);
       dt_dev_pixelpipe_cache_wrlock_entry(FALSE, cache_entry);
-      dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
+      // _non_thread_safe_: our caller holds cache->lock (see the function name), and the
+      // locking variant would take it again on a non-recursive mutex.
+      _non_thread_safe_cache_ref_count_entry(cache, FALSE, cache_entry);
       return NULL;
     }
   }
@@ -2268,7 +2270,8 @@ static dt_pixel_cache_entry_t *_cache_try_rekey_reuse_locked(dt_dev_pixelpipe_ca
   {
     if(stolen_key && stolen_value) g_hash_table_insert(cache->entries, stolen_key, stolen_value);
     dt_dev_pixelpipe_cache_wrlock_entry(FALSE, cache_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
+    // _non_thread_safe_: same reason as the bail path above -- cache->lock is already ours.
+    _non_thread_safe_cache_ref_count_entry(cache, FALSE, cache_entry);
     return NULL;
   }
 
