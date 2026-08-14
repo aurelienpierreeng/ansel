@@ -58,8 +58,7 @@ typedef enum dt_panel_side_t
   PANEL_SIDE_COUNT
 } dt_panel_side_t;
 
-const char *_ui_panel_config_names[]
-    = { "header", "toolbar_top", "toolbar_bottom", "left", "right", "bottom" };
+const char *_ui_panel_config_names[] = { "top", "left", "right", "bottom" };
 
 
 gchar * panels_get_view_path(char *suffix)
