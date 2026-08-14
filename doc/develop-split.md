@@ -237,3 +237,58 @@ in place.
   (thumbnail.c:657). A lighttable thumbnail render job thus reads darkroom viewport state
   through the global, from a view that is not darkroom. After the split that viewport may not
   exist, so this call site needs rewriting rather than re-pointing.
+
+## T4b, as landed
+
+`dev->roi` is gone. The anonymous struct that fused eighteen members of backend fact, GUI
+viewport state and derived values -- unlocked, unversioned, written by the GUI thread and read
+by the pipeline worker -- is three published records, in five PRs (#1140, #1141, #1143, #1144).
+
+* **`develop/dev_geometry.{h,c}`** -- `raw_*`, `processed_*` and their two validity bits. Every
+  dev has one, headless included, which is the half CLAUDE.md's `raw_width == 0` bug was about.
+* **`develop/dev_viewport.{h,c}`** -- widget allocation, borders, box, zoom, centre. Allocated
+  only for a `gui_attached` dev; that NULL *is* the flag, replacing `roi.gui_inited`, and a dev
+  without one reads a neutral state (`scaling 1`, centre `0.5/0.5`) that reproduces exactly what
+  `dt_dev_reset_roi()` used to leave everywhere.
+* **`develop/dev_roi_request.{h,c}`** -- everything derived from the other two, published as one
+  record and latched onto each pipe once per worker iteration.
+
+All three publish under the same single-writer seqlock, and each mutator publishes a whole
+state, so no reader can observe half of one.
+
+**What the tranche actually fixed** is narrower and sharper than "the struct was messy". `x` and
+`y` were written as two statements at all eight write sites and read as two by the worker, so a
+frame could be planned from half the old pan and half the new -- internally consistent, correctly
+hashed, undetectable downstream. The ROI planner then made four separate reads of the record, so
+even a coherent record could not stop one frame being planned from two different reads. The latch
+closes that.
+
+**Three defects the survey found, none of them bookkeeping**: `finalscale` consulting GUI zoom on
+the pipeline thread, including on headless export pipes where it read a `calloc` zero (fixed);
+the drawlayer paint pthread reading viewport state and driving the GUI-owned virtual pipe, once
+per dab (documented, not fixed); and a lighttable thumbnail job reading the darkroom's
+`border_size` through the global (documented, not fixed).
+
+**The step that was planned and not taken.** The tranche was to end by folding the request's
+generation into the FULL pipe hash. It does not, and `dev_pixelpipe.c` says why at the hash site:
+every field of the record already reaches that hash through `piece->roi_in`/`roi_out` -- zoom and
+fit scale as `roi.scale`, centre as `roi.x/y`, box and processed size as the dimensions -- so the
+fold would add no discriminating power and could only over-invalidate, rekeying the whole cache
+chain for republications that produce identical ROIs. Content, not version, is the right key
+there; the contrast with `mask_preview_settings_revision` thirty lines below, which *is* a
+revision fold precisely because its state reaches no ROI, is the part worth remembering.
+
+**What the pixel harness was worth here**: nothing, and that is the calibration to carry into T5.
+The decoded-pixel export A/B printed 0 differing pixels through every real defect found in this
+tranche -- a `memcmp` over struct padding, a self-cancelling invalidation, an inverted initial
+value, a NULL deref hoisted above its guard, and a cross-thread torn read. Every one came from a
+reviewer or from reading the code. For work whose subject is cache keys, thread ownership and
+validity flags, the A/B confirms "rendering still works" and nothing more.
+
+**Left behind, deliberately**, each a behaviour change rather than a relocation: `_change_scaling`
+keeps its own bounds/revert arithmetic instead of being absorbed into a `set_zoom()` with an
+anchor; the navigation draw handler keeps the centre clamp it performs as a paint-path side
+effect; `dev_toolbox` keeps the `orig - 2*border` arithmetic the viewport should own; `focus.h`
+still reads the darkroom's border from a lighttable job; and the geometry setters do not publish
+the request themselves, which is what would close the stale-`processed_*` window for producers
+other than the darkroom's own path.
