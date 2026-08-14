@@ -161,6 +161,13 @@ mechanical with the surveys in hand; T4+ need design.
 * **T5 — the cache-wait ownership move** + progress/backbuf taps: cache layer owns the
   notifier; `_seal_opencl_cache_policy` reads pipe-owned flags. Gate with the
   pipeline-cache regression discipline (issue #817, #1069 lineage).
+  **Half of that last clause is blocked on T6 and was measured, not guessed.** The seal's two
+  GUI-owned inputs are `dev->gui_module` and `dev->color_picker.module`. Having the GUI
+  *publish* them — the T4b viewport shape — means `gui/`(4) calling into `develop/`(5), and
+  `tools/check_layering.sh` fails that (+1, 187 → 188) because today the pipeline sits ABOVE
+  the GUI. The publication is legal only once T6 inverts the table, and is then the natural
+  first use of it. What T5 can do meanwhile is sample both facts ONCE per seal instead of
+  per node, and bring the predicates that read them home from `gui/`.
 * **T6 — re-stratify**: flip the layer table (pipeline + params engine below gui), then
   the IOP question — each IOP is operator + panel in one file; the X-macro API already
   separates the hook groups (survey classified all ~60 hooks into the three axes), so an
