@@ -566,15 +566,31 @@ void dt_gui_set_themes(GList *themes)
   darktable.themes = themes;
 }
 
-const char *dt_get_main_message(void)
+/* The string is written by pipeline worker threads and read by the GUI thread painting the
+ * banner, so it carries its own lock rather than borrowing control->log_mutex: the borrowed
+ * one was taken by the single writer at its CALL SITE, which left the invariant unenforceable
+ * -- and left the reader, dt_control_draw_busy_msg(), holding no lock at all while a worker
+ * dt_free()d the very pointer it had handed to pango. That fired once per module per frame
+ * whenever the darkroom was rendering.
+ *
+ * A private lock also keeps this independent of dt_control_t's lifetime, which is freed at
+ * darktable.c's teardown while this string is not. */
+static dt_pthread_mutex_t _main_message_lock = { PTHREAD_MUTEX_INITIALIZER };
+
+char *dt_get_main_message_copy(void)
 {
-  return darktable.main_message;
+  dt_pthread_mutex_lock(&_main_message_lock);
+  char *const copy = !IS_NULL_PTR(darktable.main_message) ? g_strdup(darktable.main_message) : NULL;
+  dt_pthread_mutex_unlock(&_main_message_lock);
+  return copy;
 }
 
 void dt_set_main_message(char *message)
 {
+  dt_pthread_mutex_lock(&_main_message_lock);
   dt_free(darktable.main_message);
   darktable.main_message = message;
+  dt_pthread_mutex_unlock(&_main_message_lock);
 }
 
 struct dt_view_manager_t *dt_view_manager_get_global(void)
@@ -749,10 +765,9 @@ static void _metadata_notify(const dt_metadata_notice_t kind, const char *messag
  * under log_mutex and the centre redraw are both worker-safe. */
 static void _pipeline_busy(const char *message_or_null)
 {
-  dt_control_t *const control = dt_control_get_global();
-  dt_pthread_mutex_lock(&control->log_mutex);
+  // dt_set_main_message() takes the string's own lock. Do NOT reintroduce an outer
+  // control->log_mutex here: it guards the message LOG, not this, and it bought nothing.
   dt_set_main_message(message_or_null ? g_strdup(message_or_null) : NULL);
-  dt_pthread_mutex_unlock(&control->log_mutex);
   dt_control_queue_redraw_center();
 }
 
