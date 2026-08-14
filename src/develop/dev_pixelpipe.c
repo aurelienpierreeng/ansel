@@ -33,7 +33,6 @@
 #include "caches/pixelpipe_cache.h"
 #include "develop/supervisor.h"
 #include "develop/blend.h"
-#include "gui/color_picker_proxy.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include <stdint.h>
@@ -133,6 +132,31 @@ static gboolean _module_requires_global_histogram_input_cache(const dt_dev_pixel
   if(!pipe->gui_observable_source) return FALSE;
 
   return !strcmp(module->op, "gamma");
+}
+
+/**
+ * @brief Is @p module the one a picker samples, or the one feeding it?
+ *
+ * @details A picker reads its module's OUTPUT and the output of the enabled module before it
+ * (its own input), so both must keep a host copy. @p picker_module is the identity the caller
+ * sampled once for the whole walk, not the live dev field -- and it is only ever compared here,
+ * never followed, so a module torn down since the sample cannot be dereferenced through it.
+ *
+ * This was dt_iop_color_picker_force_cache() in gui/color_picker_proxy.c, which read
+ * pipe->dev->color_picker.module itself. Nothing about it was GUI code: it walks pipe nodes and
+ * compares module identities, and the seal was its only caller.
+ */
+static gboolean _module_feeds_color_picker(const dt_dev_pixelpipe_t *pipe,
+                                           const dt_iop_module_t *module,
+                                           const dt_iop_module_t *picker_module)
+{
+  if(IS_NULL_PTR(picker_module) || IS_NULL_PTR(module)) return FALSE;
+  if(module == picker_module) return TRUE;
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, picker_module);
+  const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
+
+  return !IS_NULL_PTR(previous_piece) && previous_piece->module == module;
 }
 
 static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
@@ -308,6 +332,15 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
   // realtime drawing, where it is pure overhead.
   const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
 
+  // ONE read each, for the whole walk. Both belong to the GUI thread, and both were read LIVE at
+  // every node: a focus change or a picker toggle landing mid-walk gave the early nodes one
+  // answer and the later nodes another, so the sealed pipe described no single moment. Sampling
+  // them here does not make the pipeline the owner of these facts -- having the GUI publish them
+  // instead needs the layer flip, since gui/ may not reach up into develop/ today -- but it does
+  // make one resync describe one moment.
+  const dt_iop_module_t *const focused_module = pipe->dev->gui_module;
+  const dt_iop_module_t *const picker_module = pipe->dev->color_picker.module;
+
   gboolean current_output_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
@@ -329,7 +362,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
     const gboolean user_requested_cache = dt_conf_get_bool(string);
     dt_free(string);
 
-    const gboolean color_picker_on = dt_iop_color_picker_force_cache(pipe, module);
+    const gboolean color_picker_on = _module_feeds_color_picker(pipe, module, picker_module);
     const gboolean global_hist_output_on
         = !realtime && _module_requires_global_histogram_output_cache(pipe, module);
     const gboolean global_hist_input_on
@@ -342,7 +375,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
            && (piece->request_histogram & DT_REQUEST_ON));
     const gboolean active_in_gui
         = (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-           && pipe->dev->gui_module == module;
+           && focused_module == module;
 
     const gboolean has_autoset = pipe->autoset && !IS_NULL_PTR(module->autoset);
 

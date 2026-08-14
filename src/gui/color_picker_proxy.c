@@ -894,16 +894,6 @@ void dt_iop_color_picker_request_update(void)
   _queue_refresh_active_picker(dev);
 }
 
-gboolean dt_iop_color_picker_force_cache(const dt_dev_pixelpipe_t *pipe,
-                                         const dt_iop_module_t *module)
-{
-  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece((dt_dev_pixelpipe_t *)pipe,
-                                                                                 pipe->dev->color_picker.module);
-  const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
-
-  return module == pipe->dev->color_picker.module || (previous_piece && previous_piece->module == module);
-}
-
 static void _track_active_picker_hashes(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev))
