@@ -145,7 +145,7 @@ void dt_dev_pixelpipe_cache_wait_dump_pending(const char *reason)
              wait->request_id,
              !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
              wait->hash,
-             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf",
+             !IS_NULL_PTR(wait->module) ? wait->module_op : "backbuf",
              wait->connected,
              age_ms);
   }
@@ -782,6 +782,24 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
       dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-target-changed");
       wait->pipe = pipe;
       wait->module = !IS_NULL_PTR(piece) ? piece->module : NULL;
+
+      // Copy the labels now, while both objects are certainly alive. The queue never reads
+      // through the two identity pointers above; everything it reports about a waiter comes
+      // from here.
+      const dt_iop_module_t *target_module = !IS_NULL_PTR(piece) ? piece->module : NULL;
+      if(!IS_NULL_PTR(target_module))
+      {
+        g_strlcpy(wait->module_op, target_module->op, sizeof(wait->module_op));
+        wait->module_multi_priority = target_module->multi_priority;
+      }
+      else
+      {
+        wait->module_op[0] = '\0';
+        wait->module_multi_priority = 0;
+      }
+      wait->pipe_type = (int)pipe->type;
+      wait->pipe_imgid = pipe->imgid;
+
       wait->hash = hash;
       // Record the producing node identity so CACHELINE_READY can serve this waiter by
       // its target module even if the exact awaited hash drifts before publish (§8). A
@@ -827,12 +845,12 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
                wait->request_id,
                !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
                wait->hash,
-               !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
+               !IS_NULL_PTR(wait->module) ? wait->module_op : "backbuf");
 
       if(dt_supervisor_active())
         dt_supervisor_cache_wait(DT_SV_CREATE, wait->request_id, wait->hash, wait->owner_tag,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
+                                 !IS_NULL_PTR(wait->module) ? wait->module_op : NULL,
+                                 wait->module_multi_priority,
                                  (int)pipe->type, pipe->imgid, TRUE, NULL);
     }
     else
@@ -848,8 +866,8 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
        * finishes" signature. */
       if(dt_supervisor_active())
         dt_supervisor_cache_wait(DT_SV_READ, wait->request_id, wait->hash, wait->owner_tag,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
+                                 !IS_NULL_PTR(wait->module) ? wait->module_op : NULL,
+                                 wait->module_multi_priority,
                                  (int)pipe->type, pipe->imgid, FALSE, "dedup-poll");
     }
   }
@@ -956,15 +974,15 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
              wait->request_id,
              !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
              wait->hash, hash,
-             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf",
+             !IS_NULL_PTR(wait->module) ? wait->module_op : "backbuf",
              drift_serve ? " (drift: node-key)" : "");
 
     if(dt_supervisor_active())
       dt_supervisor_cache_wait(DT_SV_DELETE, wait->request_id, wait->hash, wait->owner_tag,
-                               !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
-                               !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
-                               !IS_NULL_PTR(wait->pipe) ? (int)wait->pipe->type : -1,
-                               !IS_NULL_PTR(wait->pipe) ? wait->pipe->imgid : -1, FALSE,
+                               !IS_NULL_PTR(wait->module) ? wait->module_op : NULL,
+                               wait->module_multi_priority,
+                               !IS_NULL_PTR(wait->pipe) ? (int)wait->pipe_type : -1,
+                               !IS_NULL_PTR(wait->pipe) ? wait->pipe_imgid : -1, FALSE,
                                drift_serve ? "served (drift: node-key)" : "served");
 
     wait->pipe = NULL;
@@ -988,8 +1006,15 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
   const uint64_t request_id = wait->request_id;
   const uint64_t hash = wait->hash;
   const char *owner_tag = wait->owner_tag;
-  const dt_iop_module_t *module = wait->module;
-  const dt_dev_pixelpipe_t *cancel_pipe = wait->pipe;
+  // Snapshot the identity and its labels together, before the reset below clears them. Nothing
+  // here dereferences the module or the pipe: the labels were copied when the wait was queued,
+  // precisely because either object can be gone by the time a wait is cancelled.
+  const gboolean had_module = !IS_NULL_PTR(wait->module);
+  const gboolean had_pipe = !IS_NULL_PTR(wait->pipe);
+  const char *module_op = had_module ? wait->module_op : NULL;
+  const int module_multi_priority = wait->module_multi_priority;
+  const int cancel_pipe_type = wait->pipe_type;
+  const int32_t cancel_pipe_imgid = wait->pipe_imgid;
   const char *cancel_reason = !IS_NULL_PTR(reason) ? reason : "unspecified";
 
   dt_pthread_mutex_lock(&_cache_wait_manager.lock);
@@ -1022,7 +1047,7 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
            request_id,
            !IS_NULL_PTR(owner_tag) ? owner_tag : "(unknown)",
            hash,
-           !IS_NULL_PTR(module) ? module->op : "backbuf",
+           had_module ? module_op : "backbuf",
            age_ms,
            cancel_reason);
 
@@ -1031,10 +1056,9 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
     char note[64];
     g_snprintf(note, sizeof(note), "cancelled: %s", cancel_reason);
     dt_supervisor_cache_wait(DT_SV_DELETE, request_id, hash, owner_tag,
-                             !IS_NULL_PTR(module) ? module->op : NULL,
-                             !IS_NULL_PTR(module) ? module->multi_priority : 0,
-                             !IS_NULL_PTR(cancel_pipe) ? (int)cancel_pipe->type : -1,
-                             !IS_NULL_PTR(cancel_pipe) ? cancel_pipe->imgid : -1, FALSE, note);
+                             module_op, module_multi_priority,
+                             had_pipe ? cancel_pipe_type : -1,
+                             had_pipe ? cancel_pipe_imgid : -1, FALSE, note);
   }
 
   wait->pipe = NULL;
