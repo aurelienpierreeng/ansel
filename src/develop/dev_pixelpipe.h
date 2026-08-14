@@ -18,6 +18,7 @@
 #ifndef DT_DEVELOP_DEV_PIXELPIPE_H
 #define DT_DEVELOP_DEV_PIXELPIPE_H
 
+#include "caches/pixelpipe_cache_wait.h"
 #include <inttypes.h>
 #include <stdint.h>
 #include <glib.h>
@@ -150,39 +151,12 @@ const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const str
 const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const struct dt_dev_pixelpipe_t *pipe,
                                                                              const struct dt_dev_pixelpipe_iop_t *piece);
 
-typedef void (*dt_dev_pixelpipe_cache_ready_callback_t)(gpointer user_data);
-
-typedef struct dt_dev_pixelpipe_cache_wait_t
-{
-  /* Identity only, never dereferenced: these say WHICH pipe and module a waiter is about, so
-   * a re-request can be recognised as the same one and a teardown can cancel by owner. The
-   * queue must not read through them -- it outlives neither, and the labels below exist so it
-   * never has to. Typed as void* rather than as develop types because the queue this record
-   * belongs to is cache state, and the cache layer has no business knowing what an IOP module
-   * is: it needs a key to compare and a name to log. */
-  const void *pipe;
-  const void *module;
-
-  /* Captured at enqueue, for debug traces and supervisor node keys. Copied rather than
-   * borrowed: a module can be destroyed while its wait is still queued (history reload drops
-   * instances, and dt_iop_gui_cleanup_module frees the GUI half), and the old record read
-   * module->op at serve time -- a use-after-free waiting for the right timing. */
-  char module_op[20];
-  int module_multi_priority;
-  int pipe_type;
-  int32_t pipe_imgid;
-
-  uint64_t hash;
-  uint64_t target_node_key; // producer node identity of the awaited output; lets the manager
-                            // serve this waiter when its target module publishes, even if the
-                            // exact awaited hash drifted (INVALID for a backbuf target).
-  dt_dev_pixelpipe_cache_ready_callback_t restart;
-  gpointer user_data;
-  const char *owner_tag;
-  gpointer owner_object;
-  uint64_t request_id;
-  gboolean connected;
-} dt_dev_pixelpipe_cache_wait_t;
+/* The wait queue itself is cache state and lives in caches/pixelpipe_cache_wait.{h,c}. These
+ * two names stay because ~12 files across views/, libs/, iop/ and gui/ use them, and renaming
+ * them would be churn with no reader benefit: what matters is that the queue moved, not what
+ * its record is spelled. */
+typedef dt_pixelpipe_cache_ready_callback_t dt_dev_pixelpipe_cache_ready_callback_t;
+typedef dt_pixelpipe_cache_wait_t dt_dev_pixelpipe_cache_wait_t;
 
 /**
  * @brief Cancel one pending GUI cache wait request and clear its runtime state.
