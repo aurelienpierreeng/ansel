@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Three module boundaries this tree relies on, made checkable rather than remembered.
-# The third is a ratchet on a migration in progress rather than a settled rule.
+# Four module boundaries this tree relies on, made checkable rather than remembered.
+# The third and fourth are ratchets on migrations in progress rather than settled rules.
 #
 #   1. src/system must include nothing that could bring state with it.
 #
@@ -17,11 +17,15 @@
 #   2. src/widgets must not include anything from gui/.
 #
 # That is what makes widgets/ a separate build target and, per the GTK->Qt goal, what makes a
-# port sizeable: the widget set has to be movable without the application coming with it. The
-# layering checker is structurally blind to this one -- tools/include_graph.py puts gui and
-# widgets on the same layer (4), so a widgets->gui edge is not an upward include and does not
-# register. It went unnoticed once already: gui/screen_metrics.h reached widgets/draw.h through
-# two helpers that turned out to have no callers at all, and only an adversarial read caught it.
+# port sizeable: the widget set has to be movable without the application coming with it. It
+# went unnoticed once already: gui/screen_metrics.h reached widgets/draw.h through two helpers
+# that turned out to have no callers at all, and only an adversarial read caught it.
+#
+# The layering checker used to be structurally blind to this -- it put gui/ and widgets/ on the
+# same layer (4), so a widgets->gui edge was not an upward include and did not register. Since
+# widgets/ moved to 2.5, where its own dependencies already put it, that edge IS an upward
+# include and tools/include_graph.py catches it too. This check stays: it is the one that names
+# the rule, and it is cheaper to read than a violation count.
 #
 # What each module may HOLD, rather than include, is a different question and is not answered
 # here: see tools/check_statelessness.sh, which measures it from the compiled objects. A
@@ -344,9 +348,85 @@ if [ "${history_upcalls_now}" -gt "${history_upcalls_baseline}" ]; then
   findings=$((findings + 1))
 fi
 
+# ---------------------------------------------------------------------------------------
+# 4. How much of the pixel engine still names a toolkit -- the GTK->Qt door.
+#
+# This measures a DIFFERENT property from tools/check_layering.sh, and the difference is the
+# whole reason it exists. That one measures dependency ORDER: who may include whom. This one
+# measures toolkit-FREEDOM: whether a translation unit names GtkWidget, GdkEvent, cairo_t or
+# their headers at all.
+#
+# They came apart when widgets/ moved from layer 4 to 2.5. That move is correct on the order
+# axis -- widgets/ depends only on system/, common/, metadata/ and pixel/, so it is a leaf
+# library that happens to be written against GTK, and the move costs zero new violations. But
+# it also makes develop/ -> widgets/ a DOWNWARD include, so 50 edges that the layering ratchet
+# used to count stopped counting, without one line of GTK leaving the pixel engine. Left alone
+# that is a metric improving while the thing it stood for does not, which is worse than no
+# metric. So the property those 50 edges were standing in for gets its own gate here.
+#
+# It is a ratchet because the tranche that lowers it is the IOP operator/panel split: an IOP is
+# currently one file holding both the pixel math and its GTK panel, and 97 of src/iop's 164
+# files name a toolkit type. Each split module lowers the iop count by one. src/pixel (0/39),
+# src/caches (0/11) and src/database (0/31) are already free and are pinned at zero so they
+# stay that way.
+#
+# Files, not occurrences: the file is the unit that gets split, and one GtkWidget in a header
+# is as disqualifying as forty in a callback.
+toolkit_develop_baseline=20
+toolkit_iop_baseline=97
+toolkit_imageio_baseline=13
+toolkit_pixel_baseline=0
+toolkit_caches_baseline=0
+toolkit_database_baseline=0
+
+# Comments are stripped first: a file that only MENTIONS GTK in prose is toolkit-free, and the
+# doc comments in this tree talk about GTK constantly.
+count_toolkit() {
+  ${PYTHON:-python3} - "$1" <<'PYEOF'
+import os, re, sys
+ident = re.compile(r'\b(?:Gtk[A-Z]\w*|Gdk[A-Z]\w*|GTK_[A-Z]\w*|GDK_[A-Z]\w*|cairo_[a-z]\w*|PangoLayout\w*)\b')
+inc = re.compile(r'^\s*#\s*include\s*[<"](?:gtk/|gdk/|cairo|pango)', re.M)
+hits = 0
+for root, _, names in os.walk(sys.argv[1]):
+    parts = root.split(os.sep)
+    if 'external' in parts or 'attic' in parts:
+        continue
+    for n in names:
+        if not n.endswith(('.c', '.h', '.cc', '.cpp', '.hpp')):
+            continue
+        try:
+            text = open(os.path.join(root, n), encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+        text = re.sub(r'//[^\n]*', '', text)
+        if ident.search(text) or inc.search(text):
+            hits += 1
+print(hits)
+PYEOF
+}
+
+toolkit_findings=0
+for module in develop iop imageio pixel caches database; do
+  now=$(count_toolkit "src/${module}")
+  eval "base=\${toolkit_${module}_baseline}"
+  printf 'toolkit:       %-9s %3d files name a toolkit type (baseline %d).\n' "${module}/" "${now}" "${base}"
+  if [ "${now}" -gt "${base}" ]; then
+    echo "toolkit: ${module}/ gained a file that names GTK, GDK, cairo or pango. The pixel engine"
+    echo "         and the params engine must be portable to another toolkit; put the widget code"
+    echo "         in the panel half and keep the operator half free of it."
+    toolkit_findings=$((toolkit_findings + 1))
+  elif [ "${now}" -lt "${base}" ]; then
+    echo "toolkit: ${module}/ fell ${base} -> ${now}. Lower toolkit_${module}_baseline in this"
+    echo "         script, in the same commit, so the gain is locked in."
+    toolkit_findings=$((toolkit_findings + 1))
+  fi
+done
+findings=$((findings + toolkit_findings))
+
 if [ "${findings}" -gt 0 ]; then
   exit 1
 fi
 
-echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl, caches, database, metadata and history held."
+echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl, caches, database, metadata and history held; the pixel engine's toolkit surface did not grow."
 exit 0

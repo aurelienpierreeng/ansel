@@ -37,8 +37,20 @@ LAYERS = [
     # violations, because its consumers (common/, caches/) sit at 1.
     ('caches', 1), ('database', 1), ('metadata', 1), ('history', 1),
     ('pixel', 2),
+    # widgets/: reusable GTK widgets that hold no application state. It was at 4, beside gui/,
+    # on the assumption that "GTK" and "the application's GUI" are one layer. They are not:
+    # widgets/ depends only on system/, common/, metadata/ and pixel/ (focus_peaking.c reads
+    # pixel/eigf.h), so it is a leaf library that happens to be written against GTK, and 2.5 --
+    # above pixel/, below control/ -- is where its own dependencies already put it. Measured,
+    # not assumed: the move creates ZERO new violations and removes three (control/ -> widgets/),
+    # 187 -> 184. At 1.5 it would cost one, because pixel/ would then be above it.
+    #
+    # It does NOT follow that a lower layer may now use GTK freely. Dependency order and
+    # toolkit-freedom are different properties and this table measures only the first; the
+    # second is what the Qt port needs and belongs in its own gate.
+    ('widgets', 2.5),
     ('control', 3),
-    ('gui', 4), ('widgets', 4),   # widgets/ = reusable GTK widgets, no app state
+    ('gui', 4),
     ('develop', 5),
     ('iop', 6), ('imageio', 6),
     ('libs', 7), ('views', 7), ('chart', 7),
