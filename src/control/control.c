@@ -521,7 +521,11 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   layout = pango_cairo_create_layout(cr);
   pango_layout_set_font_description(layout, desc);
-  pango_layout_set_text(layout, darktable.main_message ? darktable.main_message : _("Working..."), -1);
+  // A COPY: a worker thread frees this string on the next dt_set_main_message(), which the
+  // pipeline issues once per module per frame while the darkroom renders.
+  char *const message = dt_get_main_message_copy();
+  pango_layout_set_text(layout, !IS_NULL_PTR(message) ? message : _("Working..."), -1);
+  dt_free(message);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   if(ink.width > width * 0.98)
   {
