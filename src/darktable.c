@@ -575,6 +575,16 @@ void dt_gui_set_themes(GList *themes)
  *
  * A private lock also keeps this independent of dt_control_t's lifetime, which is freed at
  * darktable.c's teardown while this string is not. */
+/* Statically initialised on purpose, and correct in the _DEBUG build too, where
+ * dt_pthread_mutex_t carries ~1.8 kB of instrumentation after the pthread_mutex_t. A
+ * brace-enclosed initialiser with fewer initialisers than members zero-fills the remainder
+ * (C11 6.7.9p21), and this object has static storage duration anyway, so it lives in .bss --
+ * measured: 0 of the 1864 trailing bytes non-zero before first use. That is the same state
+ * dt_pthread_mutex_init() leaves (it memsets), minus only the `name' field, which
+ * dt_pthread_mutex_lock() snprintf()s over before the one place it reads it.
+ *
+ * Static rather than initialised in dt_init() because this string is written from worker
+ * threads: a lock that is valid from program start has no window in which it is not. */
 static dt_pthread_mutex_t _main_message_lock = { PTHREAD_MUTEX_INITIALIZER };
 
 char *dt_get_main_message_copy(void)
