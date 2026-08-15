@@ -96,6 +96,7 @@
 #include "common/selection.h"
 #include "common/undo.h"
 #include "common/conf.h"
+#include "control/input.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/dev_pixelpipe.h"
@@ -2100,7 +2101,6 @@ void mouse_leave(dt_view_t *self)
 {
   // if we are not hovering over a thumbnail in the filmstrip -> show metadata of opened image.
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  dt_control_t *ctl = dt_control_get_global();
   dt_gui_gtk_t *gui = dt_gui_get_global();
   dt_control_mouse_is_dragging(FALSE);
   dt_control_mouse_is_painting(FALSE);
@@ -2109,7 +2109,7 @@ void mouse_leave(dt_view_t *self)
 
   if(gui->pan_edge.timeout_source
      && gui->pan_edge.block_normal_pan
-     && !IS_NULL_PTR(ctl) && ctl->button_down && ctl->button_down_which == 1)
+     && dt_control_button_down(1))
   {
     gui->pan_edge.velocity[0] = 0.0f;
     gui->pan_edge.velocity[1] = 0.0f;
@@ -2448,7 +2448,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   _darkroom_set_default_cursor(self, x, y);
   gboolean handled = FALSE;
 
-  if(picker_active && ctl->button_down && ctl->button_down_which == 1)
+  if(picker_active && dt_control_button_down(1))
   {
     // module requested a color box
     if(mouse_in_imagearea(self, x, y))
@@ -2560,8 +2560,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   dt_control_commit_cursor();
 
-  if(_darkroom_center_pan_drag && dt_control_get_global()->button_down
-     && dt_control_get_global()->button_down_which == 1 && dt_dev_viewport_scaling(dev) > 1)
+  if(_darkroom_center_pan_drag && dt_control_button_down(1) && dt_dev_viewport_scaling(dev) > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
@@ -2593,7 +2592,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 
   // panning with left mouse button
-  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && dt_dev_viewport_scaling(dev) > 1)
+  if(dt_control_button_down(1) && dt_dev_viewport_scaling(dev) > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);

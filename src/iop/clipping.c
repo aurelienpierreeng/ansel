@@ -83,6 +83,7 @@
 #include "pixel/interpolation.h"
 #include "math/math.h"
 #include "common/conf.h"
+#include "control/input.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -2295,7 +2296,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   // draw cropping window dimensions if first mouse button is pressed
-  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && g->k_show != 1)
+  if(dt_control_button_down(1) && g->k_show != 1)
   {
     char dimensions[16];
     dimensions[0] = '\0';
@@ -2668,14 +2669,14 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   _iop_clipping_set_max_clip(self);
   _grab_region_t grab = get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, wd, ht);
 
-  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 3 && g->k_show != 1)
+  if(dt_control_button_down(3) && g->k_show != 1)
   {
     // second mouse button, straighten activated:
     g->straightening = 1;
     dt_control_queue_cursor(GDK_CROSSHAIR);
     dt_control_queue_redraw_center();
   }
-  else if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
+  else if(dt_control_button_down(1))
   {
     // case when we drag a point for keystone
     if(g->k_drag == TRUE && g->k_selected >= 0)
@@ -2795,9 +2796,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       if(grab & GRAB_TOP) g->handle_y = bzy - g->clip_y;
       if(grab & GRAB_RIGHT) g->handle_x = bzx - (g->clip_w + g->clip_x);
       if(grab & GRAB_BOTTOM) g->handle_y = bzy - (g->clip_h + g->clip_y);
-      if(!grab && dt_control_get_global()->button_down_which == 3) g->straightening = 1;
+      if(!grab && dt_control_button_down(3)) g->straightening = 1;
     }
-    if(!g->straightening && dt_control_get_global()->button_down_which == 1 && g->k_show != 1)
+    if(!g->straightening && dt_control_button_down(1) && g->k_show != 1)
     {
       grab = g->cropping;
 
