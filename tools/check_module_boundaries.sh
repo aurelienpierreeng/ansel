@@ -372,6 +372,16 @@ fi
 #
 # Files, not occurrences: the file is the unit that gets split, and one GtkWidget in a header
 # is as disqualifying as forty in a callback.
+#
+# KNOWN BLIND SPOT, stated here so this number is not read as more than it is: every src/iop
+# translation unit is compiled with GTK already in scope, because src/iop/CMakeLists.txt:5-6
+# does `add_definitions(-include iop/iop_api.h)` and develop/iop_api.h:44-45 includes
+# <cairo/cairo.h> and <gtk/gtk.h> under FULL_API_H. No file partition produces a genuinely
+# toolkit-free IOP object file until that force-include is dealt with, and tools/include_graph.py
+# cannot see it either -- its INCLUDE_RE (:24) matches the quote form only, so angle-bracket
+# system includes are outside the graph entirely. So `toolkit: iop/ 0' would mean "no IOP file
+# NAMES a toolkit symbol", not "IOP objects no longer link against GTK". Both are worth having;
+# they are not the same claim.
 toolkit_develop_baseline=20
 toolkit_iop_baseline=97
 toolkit_imageio_baseline=13
