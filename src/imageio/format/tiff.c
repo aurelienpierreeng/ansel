@@ -50,7 +50,7 @@
 #include "imageio/imageio_module.h"
 #include "math/math.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "imageio/format/imageio_format_api.h"
 #include "develop/pixelpipe_hb.h"
 #include <inttypes.h>

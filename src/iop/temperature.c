@@ -75,7 +75,7 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "common/conf.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"

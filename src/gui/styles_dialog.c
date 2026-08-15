@@ -40,7 +40,7 @@
 #include "system/mem_alloc.h"
 #include "history/history.h"
 #include "common/styles.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/imageop.h"
 #include "gui/application.h"
 #include "widgets/draw.h"

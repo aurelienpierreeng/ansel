@@ -104,7 +104,7 @@
 #include "caches/mipmap_cache.h"
 #include "common/styles.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 

@@ -44,7 +44,7 @@
 #include "caches/image_cache.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <stdio.h>
 #include <stdlib.h>

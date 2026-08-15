@@ -29,7 +29,7 @@
 #include "common/times.h"
 #include "math/matrices.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "widgets/drawingarea.h"
 #include "gui/application.h"
 

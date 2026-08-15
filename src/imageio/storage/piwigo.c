@@ -40,7 +40,7 @@
 #include "metadata/tags.h"
 #include "common/curl_tools.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "widgets/button.h"
 #include "imageio/storage/imageio_storage_api.h"
 #include <curl/curl.h>

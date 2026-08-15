@@ -44,7 +44,7 @@
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "pixel/bilateral.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

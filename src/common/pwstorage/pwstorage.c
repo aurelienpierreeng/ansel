@@ -53,7 +53,10 @@
 #endif
 
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
+#include "system/macros.h"    // IS_NULL_PTR, reached through control/control.h until now
+#include <glib/gi18n.h>       // _(), likewise
+
 
 #include <glib.h>
 #include <string.h>
