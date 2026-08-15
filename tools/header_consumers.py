@@ -71,9 +71,55 @@ NOISE = {
 
 
 def strip_noise(text):
-    text = COMMENT_BLOCK.sub(" ", text)
-    text = COMMENT_LINE.sub(" ", text)
-    return STRING_LIT.sub('""', text)
+    """Blank comments and string literals, in ONE pass.
+
+    Three regexes applied in sequence cannot do this, in either order, because each construct
+    can contain the others' delimiters. Comments-first blanks from the `//` of a URL to the end
+    of the line, taking the string's closing quote with it; the surviving opening quote then
+    pairs with the next quote further down the file and swallows everything between. Measured on
+    src/gui/actions/help.c: 7550 of 9491 characters gone, and its three dt_control_log() calls
+    with them -- the file was reported as using NOTHING from control.h while calling it three
+    times. 129 files in this tree contain `//` inside a string literal.
+
+    Strings-first fails symmetrically: a lone `"` inside a comment (`// don't use "foo.h" here`
+    is fine, an unbalanced one is not) starts a literal that eats real code.
+
+    So: scan once, tracking which construct we are inside. Newlines are preserved so line
+    numbers stay meaningful; everything else becomes a space, and a string literal becomes the
+    empty pair the callers already expect.
+    """
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '/' and i + 1 < n and text[i + 1] == '*':
+            j = text.find('*/', i + 2)
+            j = n if j < 0 else j + 2
+            out.append("".join(ch if ch == '\n' else ' ' for ch in text[i:j]))
+            i = j
+        elif c == '/' and i + 1 < n and text[i + 1] == '/':
+            j = text.find('\n', i)
+            j = n if j < 0 else j
+            out.append(' ' * (j - i))
+            i = j
+        elif c == '"' or c == "'":
+            quote, j = c, i + 1
+            while j < n:
+                if text[j] == '\\':
+                    j += 2
+                    continue
+                if text[j] == quote or text[j] == '\n':   # newline: unterminated, stop there
+                    break
+                j += 1
+            if j < n and text[j] == quote:
+                j += 1
+            out.append('""' if quote == '"' else "''")
+            out.append("".join(ch if ch == '\n' else '' for ch in text[i:j]))
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
 
 
 def read(path):
