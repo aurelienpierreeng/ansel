@@ -39,6 +39,19 @@
 #ifndef DT_CONTROL_USER_MESSAGE_H
 #define DT_CONTROL_USER_MESSAGE_H
 
+/* These are defined in a C translation unit and called from C++ ones (imageio/format/exr.cc),
+ * so the declarations must carry C linkage -- control/control.h wraps its own in the same
+ * guard. Without it the C++ caller emits a mangled reference (_Z14dt_control_logPKcz) that
+ * nothing defines.
+ *
+ * On Linux that still LINKS: a shared object may carry undefined symbols and resolve them when
+ * the plugin is dlopen()ed, so the breakage would first appear as a module failing to load at
+ * runtime. macOS and Windows resolve plugin symbols at link time and fail the build instead,
+ * which is how this was caught. Three green Linux configurations do not cover it. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @brief Post a message to the log overlay drawn over the centre view. */
 void dt_control_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
 
@@ -54,6 +67,10 @@ void dt_control_log_busy_enter();
 void dt_control_toast_busy_enter();
 void dt_control_log_busy_leave();
 void dt_control_toast_busy_leave();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DT_CONTROL_USER_MESSAGE_H
 
