@@ -2591,8 +2591,12 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     return;
   }
 
-  // panning with left mouse button
-  if(dt_control_button_down(1) && dt_dev_viewport_scaling(dev) > 1)
+  // panning with left mouse button.
+  // _darkroom_center_pan_drag is what makes this OUR drag: dt_control_button_down() reports the
+  // device's state, so without it a button pressed elsewhere and still held on entry would pan
+  // the image from a stale ctl->button_x/y anchor. The sibling path at :2563 always had this
+  // guard; here it was implicit, back when button_down was set only by our own press handler.
+  if(_darkroom_center_pan_drag && dt_control_button_down(1) && dt_dev_viewport_scaling(dev) > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
