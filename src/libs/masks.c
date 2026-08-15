@@ -44,7 +44,7 @@
 #include "common/logging.h"
 #include "system/macros.h"
 #include "common/module_versioning.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/blend.h"
 #include "develop/blend_gui.h"
 #include "develop/develop.h"

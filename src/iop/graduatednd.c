@@ -72,7 +72,7 @@
 #include "colorprofiles/colorspaces.h"
 #include "math/math.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

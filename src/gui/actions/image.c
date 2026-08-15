@@ -25,7 +25,7 @@
 #include "common/grouping.h"
 #include "metadata/colorlabels.h"
 #include "metadata/ratings.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "common/collection.h"
 
 static gboolean rotate_counterclockwise_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)

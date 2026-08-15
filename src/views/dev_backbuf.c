@@ -28,7 +28,7 @@
 #include "system/macros.h"
 #include "system/simd.h"
 #include "gui/application.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/develop.h"
 #include "caches/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
