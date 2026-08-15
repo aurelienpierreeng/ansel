@@ -23,7 +23,7 @@
 
 #include "gui/common/styles_gui.h"
 
-#include "control/control.h"
+#include "control/user_message.h"
 #include "gui/styles.h"
 
 #include <glib/gi18n.h>

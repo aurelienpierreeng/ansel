@@ -77,7 +77,7 @@
 #include "common/file_location.h"
 #include "caches/image_cache.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 
 #ifdef HAVE_OPENJPEG

@@ -71,7 +71,7 @@
 #include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"

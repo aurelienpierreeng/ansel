@@ -31,7 +31,7 @@
 #include "common/paths.h"
 #include "common/noiseprofiles.h"
 #include "common/file_location.h"
-#include "control/control.h"
+#include "control/user_message.h"
 
 // bump this when the noiseprofiles are getting a different layout or meaning (raw-raw data, ...)
 #define DT_NOISE_PROFILE_VERSION 0

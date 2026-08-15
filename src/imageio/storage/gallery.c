@@ -61,7 +61,7 @@
 #include "common/utility.h"
 #include "common/variables.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "widgets/button.h"
 #include "widgets/paint.h"
 #include "gui/application.h"

@@ -40,7 +40,7 @@
 #include "system/mem_alloc.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 
 #define MIN_FLOAT exp2f(-16.0f)
 

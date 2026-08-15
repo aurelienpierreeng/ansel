@@ -35,7 +35,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "history/history.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/imageop.h"
 #include "develop/dev_history.h"  // dt_history_module_skip_copy, previously reached through gui/draw.h
 #include "gui/application.h"

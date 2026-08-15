@@ -73,7 +73,7 @@
 #include "pixel/interpolation.h"
 #include "math/math.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "pixel/format.h"

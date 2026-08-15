@@ -51,7 +51,7 @@
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "imageio/format/imageio_format_api.h"
 
 #include "imageio/imageio_exr.hh"

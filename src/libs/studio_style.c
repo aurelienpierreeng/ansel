@@ -32,7 +32,7 @@
 #include "common/image.h"
 #include "common/styles.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"

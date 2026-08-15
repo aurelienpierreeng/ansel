@@ -39,7 +39,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "imageio/format/imageio_format_api.h"
 
 #include <strings.h>

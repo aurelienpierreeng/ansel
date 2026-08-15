@@ -61,7 +61,7 @@
 #include <string.h>
 
 #include "widgets/bauhaus.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "system/macros.h"
 #include "system/openmp.h"

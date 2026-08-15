@@ -66,7 +66,7 @@
 #include "common/opencl.h"
 #include "history/presets.h"
 #include "common/utility.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/imageop.h"
 
 #include "widgets/draw.h"

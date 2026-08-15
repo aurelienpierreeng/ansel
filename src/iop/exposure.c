@@ -77,7 +77,7 @@
 #include "caches/image_cache.h"
 #include "caches/mipmap_cache.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "widgets/collapsible_section.h"

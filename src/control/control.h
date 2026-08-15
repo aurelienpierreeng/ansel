@@ -52,6 +52,7 @@
 #endif
 
 #include "control/jobs.h"
+#include "control/user_message.h"   // the message API moved out; still supplied here
 #include "control/progress.h"
 #include "libs/lib.h"
 #include <gtk/gtk.h>
@@ -108,13 +109,6 @@ void dt_control_key_pressed(GdkEventKey *event);
 void dt_control_mouse_leave();
 void dt_control_mouse_enter();
 gboolean dt_control_configure(GtkWidget *da, GdkEventConfigure *event, gpointer user_data);
-void dt_control_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
-void dt_toast_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
-void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
-void dt_control_log_busy_enter();
-void dt_control_toast_busy_enter();
-void dt_control_log_busy_leave();
-void dt_control_toast_busy_leave();
 void dt_control_draw_busy_msg(cairo_t *cr, int width, int height);
 // disable the possibility to change the cursor shape with dt_control_change_cursor
 void dt_control_forbid_change_cursor();

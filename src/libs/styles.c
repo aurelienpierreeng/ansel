@@ -56,7 +56,7 @@
 #include "control/signal.h"
 #include "database/database.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 
 #include "gui/application.h"
 #include "gui/styles.h"

@@ -34,7 +34,7 @@
 #include "common/utility.h"
 #include "metadata/map_locations.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 
 #include "libs/lib.h"
 #include "views/view.h"
