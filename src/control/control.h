@@ -53,6 +53,7 @@
 
 #include "control/jobs.h"
 #include "control/user_message.h"   // the message API moved out; still supplied here
+#include "control/redraw.h"         // the redraw raisers moved out; still supplied here
 #include "control/progress.h"
 #include "libs/lib.h"
 #include <gtk/gtk.h>
@@ -160,39 +161,11 @@ void dt_control_save_xmp(const int32_t imgid);
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history);
 void dt_control_delete_images();
 
-/** \brief request redraw of the workspace.
-    This redraws the whole workspace within a gdk critical
-    section to prevent several threads to carry out a redraw
-    which will end up in crashes.
- */
-void dt_control_queue_redraw();
-
-/** \brief request redraw of center window.
-    This redraws the center view within a gdk critical section
-    to prevent several threads to carry out the redraw.
-*/
-void dt_control_queue_redraw_center();
-
 /** \brief threadsafe request of redraw of specific widget.
     Use this function if you need to redraw a specific widget
     if your current thread context is not gtk main thread.
 */
 void dt_control_queue_redraw_widget(GtkWidget *widget);
-
-/** \brief request redraw of the navigation widget.
-    This redraws the wiget of the navigation module.
- */
-void dt_control_navigation_redraw();
-
-/** \brief request redraw of the log widget.
-    This redraws the message label.
- */
-void dt_control_log_redraw();
-
-/** \brief request redraw of the toast widget.
-    This redraws the message label.
- */
-void dt_control_toast_redraw();
 
 void dt_ctl_switch_mode_to(const char *mode);
 void dt_ctl_switch_mode_to_by_view(const dt_view_t *view);

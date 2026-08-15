@@ -20,7 +20,7 @@
 #include "common/file_location.h"
 #include "common/usermanual_url.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/dev_pixelpipe.h"

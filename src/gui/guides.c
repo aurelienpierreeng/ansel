@@ -36,7 +36,7 @@
 #include "common/utility.h"
 #include "gui/guides.h"
 #include "widgets/draw.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/develop.h"
 #include "widgets/widget_style.h"
 

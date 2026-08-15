@@ -33,7 +33,7 @@
 #include "common/conf.h"
 #include "common/history_actions.h"
 #include "system/macros.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"
 #include "gui/actions/menu.h"

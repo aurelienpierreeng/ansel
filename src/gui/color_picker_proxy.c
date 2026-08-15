@@ -34,7 +34,7 @@
 #include "widgets/bauhaus.h"
 #include "common/color_picker.h"
 #include "control/signal.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/dev_pixelpipe.h"
 #include "caches/pixelpipe_cache.h"
 #include "libs/colorpicker.h"
