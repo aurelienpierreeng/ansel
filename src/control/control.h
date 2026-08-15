@@ -193,7 +193,6 @@ typedef struct dt_control_t
   double tabborder;
   int32_t width, height;
   pthread_t gui_thread;
-  int button_down, button_down_which, button_type;
   double button_x, button_y;
   int history_start;
   int32_t mouse_over_id;

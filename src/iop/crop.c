@@ -43,6 +43,7 @@
 #include "math/math.h"
 #include "common/opencl.h"
 #include "common/conf.h"
+#include "control/input.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -1443,7 +1444,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   // draw cropping window dimensions if first mouse button is pressed
-  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
+  if(dt_control_button_down(1))
   {
     char dimensions[16];
     dimensions[0] = '\0';

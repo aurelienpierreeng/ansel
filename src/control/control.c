@@ -116,8 +116,6 @@ void dt_control_init(dt_control_t *s)
   // start threads
   dt_control_jobs_init(s);
 
-  s->button_down = 0;
-  s->button_down_which = 0;
   s->mouse_over_id = -1;
   s->keyboard_over_id = -1;
   s->cursor.lock = FALSE;
@@ -544,6 +542,29 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
   g_object_unref(layout);
 }
 
+gboolean dt_control_button_down(int which)
+{
+  // The mask is device state, so any of our windows answers the same thing; the centre widget
+  // is the one every caller is dragging over.
+  GtkWidget *center = dt_gui_center_widget();
+  GdkWindow *window = IS_NULL_PTR(center) ? NULL : gtk_widget_get_window(center);
+  GdkDisplay *display = IS_NULL_PTR(window) ? NULL : gdk_window_get_display(window);
+  GdkSeat *seat = IS_NULL_PTR(display) ? NULL : gdk_display_get_default_seat(display);
+  GdkDevice *pointer = IS_NULL_PTR(seat) ? NULL : gdk_seat_get_pointer(seat);
+  if(IS_NULL_PTR(window) || IS_NULL_PTR(pointer)) return FALSE;
+
+  GdkModifierType mask = 0;
+  gdk_window_get_device_position(window, pointer, NULL, NULL, &mask);
+
+  switch(which)
+  {
+    case 1:  return (mask & GDK_BUTTON1_MASK) != 0;
+    case 2:  return (mask & GDK_BUTTON2_MASK) != 0;
+    case 3:  return (mask & GDK_BUTTON3_MASK) != 0;
+    default: return FALSE;
+  }
+}
+
 void *dt_control_expose(void *voidptr)
 {
   int pointerx, pointery;
@@ -636,16 +657,12 @@ void dt_control_key_pressed(GdkEventKey *event)
 
 void dt_control_button_released(double x, double y, int which, uint32_t state)
 {
-  darktable.control->button_down = 0;
-  darktable.control->button_down_which = 0;
 
   dt_view_manager_button_released(darktable.view_manager, x, y, which, state);
 }
 
 static void _dt_ctl_switch_mode_prepare()
 {
-  darktable.control->button_down = 0;
-  darktable.control->button_down_which = 0;
   dt_gui_get_global()->center_tooltip = 0;
   GtkWidget *widget = dt_gui_center_widget();
   gtk_widget_set_tooltip_text(widget, "");
@@ -718,9 +735,6 @@ static gboolean _dt_ctl_toast_message_timeout_callback(gpointer data)
 
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state)
 {
-  darktable.control->button_down = 1;
-  darktable.control->button_down_which = which;
-  darktable.control->button_type = type;
   darktable.control->button_x = x;
   darktable.control->button_y = y;
   // adding pressure to this data structure is not needed right now. should the need ever arise: here is the
