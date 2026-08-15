@@ -299,3 +299,63 @@ effect; `dev_toolbox` keeps the `orig - 2*border` arithmetic the viewport should
 still reads the darkroom's border from a lighttable job; and the geometry setters do not publish
 the request themselves, which is what would close the stale-`processed_*` window for producers
 other than the darkroom's own path.
+
+## T6 field survey: the flip is not blocked by the IOP split, and never was
+
+The tranche list says "flip the layer table, **then** the IOP question". Measurement inverts it.
+
+Pricing the flip first (`develop` 5→3.4, `iop`/`imageio` 6→3.6), before `widgets/` moved:
+**187 → 580, +393 new violations**, of which `iop→widgets` 231, `iop→gui` 102, `develop→widgets`
+50, `imageio→widgets` 26, `develop→gui` 18, `imageio→gui` 3 — 393 edges over 113 files, median 3
+each, and 84 of `src/iop`'s 95 top-level `.c`/`.cc` touching `gui/` or `widgets/`. That is the
+number behind "78% of the cost is IOPs", and it is an artifact of where `widgets/` sat.
+
+`widgets/` was at layer 4 beside `gui/` on the assumption that "GTK" and "the application's GUI"
+are one layer. Its own includes reach only `system/`, `common/`, `metadata/` and `pixel/`
+(`focus_peaking.c` → `pixel/eigf.h`), so it is a leaf library written against GTK. Moving it to
+**2.5** — above `pixel/`, below `control/` — creates ZERO new violations and removes three
+(`control/ → widgets/`): **187 → 184**. At 1.5 it costs one, because `pixel/` would then be above
+it. The four `widgets/ → osx/osx.h` edges never counted either way: `osx` is absent from `LAYERS`,
+so `layer_of()` returns `None` and the edge is skipped in both directions.
+
+That one line retires 307 of the 393. What remains is **123 edges, and 96 of them land in four
+headers**: `gui/presets.h` 35, `gui/color_picker_proxy.h` 33, `gui/screen_metrics.h` 25,
+`gui/application.h` 19. So what the flip needs is not "split 84 IOPs" but "stop operator code
+reaching four headers", three of which are misfiled by their own `#include` lines.
+
+**The knife edge.** Flip with no relocation: **+86** (184 → 270). Flip with all three of
+`presets`, `color_picker_proxy`, `screen_metrics` re-homed: **185**, i.e. free. Drop any one and
+it is +25 minimum — measured `presets`+`screen_metrics` 214, `presets`+`picker` 210,
+`picker`+`screen_metrics` 216. There is no partial credit and no "flip now, tidy later".
+
+**Do not bank the `develop` flip early.** `develop`→3.4 *alone* measures **166** — a fall of 18
+for one table line, the cheapest-looking commit on the board. It then makes the `iop`/`imageio`
+flip a **+19 rise** against that new baseline, which the ratchet refuses. One flip, after the
+relocations.
+
+**Only one of the three relocations is honest on its own terms.** `gui/screen_metrics.{h,c}`
+contains zero GTK references and includes only `system/surface_scaling.h`: genuinely misfiled.
+`gui/presets.c` has 179 GTK references and its header 8; `gui/color_picker_proxy.h` has 5. Moving
+those two *down* would drag GTK below `develop/` to make a number fall — the same trade the
+`widgets/` move makes, and the reason the toolkit ratchet below exists. They are relocations of
+*declarations*, not of GTK code.
+
+**Dependency order and toolkit-freedom are different properties, and only the first was gated.**
+Making 307 edges downward moves no GTK out of the pixel engine. A metric improving while the
+thing it stood for does not is worse than no metric, so `tools/check_module_boundaries.sh` gained
+a fourth rule counting files that *name* `GtkWidget`, `GdkEvent`, `cairo_t`, a `GTK_`/`GDK_`
+macro, or a toolkit header: `develop` 20/73, `iop` 97/164, `imageio` 13/55, with `pixel` 0/39,
+`caches` 0/11, `database` 0/31 pinned at zero. Comments are stripped first — this tree's doc
+comments discuss GTK constantly — and the gate is mutation-tested both ways.
+
+That gate has a stated blind spot: `src/iop/CMakeLists.txt:5-6` force-includes `iop/iop_api.h`
+into every IOP translation unit and `iop_api.h:44-45` includes `<cairo/cairo.h>` and
+`<gtk/gtk.h>`, so **no file partition yields a toolkit-free IOP object** until that is dealt
+with. `include_graph.py` cannot see it either: `INCLUDE_RE` matches the quote form only, so
+angle-bracket includes are outside the graph entirely.
+
+**A live defect found while surveying, unrelated to T6.** `iop/toneequal.c:621` `sanity_check()`
+is reached from `process()` via `toneeq_process()` — the pipeline thread — and there writes
+`self->enabled`, calls `dt_dev_add_history_item()`, and calls `gtk_toggle_button_set_active()` on
+`self->gui->off`. A GTK call off the GUI thread plus a history write from the pipeline, against
+the rule in CLAUDE.md that history is the only thread-safe interface between the two.
