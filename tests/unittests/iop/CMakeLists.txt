@@ -36,10 +36,17 @@ set_target_properties(test_filmicrgb test_embedded_lens_vendors test_lens_params
   BUILD_WITH_INSTALL_RPATH FALSE
   BUILD_RPATH "$<TARGET_FILE_DIR:lib_ansel>")
 
+add_cmocka_mock_test(test_dng_opcode
+                      SOURCES test_dng_opcode.c
+                              ${CMAKE_SOURCE_DIR}/src/common/dng_opcode.c
+                      LINK_LIBRARIES lib_ansel cmocka
+                      MOCKS dt_print)
+
 # Windows: libs have to be copied next to the executable
 if(WIN32)
     _copy_required_library(test_filmicrgb lib_ansel)
     _copy_required_library(test_embedded_lens_vendors lib_ansel)
     _copy_required_library(test_lens_params_v7 lib_ansel)
     _copy_required_library(test_lens_predicates lib_ansel)
+    _copy_required_library(test_dng_opcode lib_ansel)
 endif(WIN32)

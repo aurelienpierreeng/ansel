@@ -56,77 +56,121 @@ static uint32_t get_long(uint8_t *ptr)
   return GUINT32_FROM_BE(in);
 }
 
+typedef enum _dng_opcode_iter_status_t
+{
+  _DNG_OPCODE_ITER_OK,
+  _DNG_OPCODE_ITER_COUNT_TRUNCATED,
+  _DNG_OPCODE_ITER_HEADER_TRUNCATED,
+  _DNG_OPCODE_ITER_PAYLOAD_TRUNCATED,
+} _dng_opcode_iter_status_t;
+
+typedef struct _dng_opcode_envelope_t
+{
+  uint32_t opcode_id;
+  uint32_t flags;
+  uint8_t *payload;
+  uint32_t payload_size;
+} _dng_opcode_envelope_t;
+
+typedef void (*_dng_opcode_handler_t)(const _dng_opcode_envelope_t *envelope, void *context);
+
+static _dng_opcode_iter_status_t _dng_opcode_foreach(uint8_t *buf, uint32_t buf_size,
+                                                      _dng_opcode_handler_t handler, void *context)
+{
+  if(buf_size < 4)
+    return _DNG_OPCODE_ITER_COUNT_TRUNCATED;
+
+  const uint32_t count = get_long(&buf[0]);
+  uint64_t offset = 4;
+  for(uint64_t index = 0; index < count; index++)
+  {
+    if(offset > buf_size || 16 > (uint64_t)buf_size - offset)
+      return _DNG_OPCODE_ITER_HEADER_TRUNCATED;
+
+    const uint64_t payload_offset = offset + 16;
+    const uint32_t payload_size = get_long(&buf[offset + 12]);
+    if(payload_size > (uint64_t)buf_size - payload_offset)
+      return _DNG_OPCODE_ITER_PAYLOAD_TRUNCATED;
+
+    const _dng_opcode_envelope_t envelope = {
+      .opcode_id = get_long(&buf[offset]),
+      .flags = get_long(&buf[offset + 8]),
+      .payload = &buf[payload_offset],
+      .payload_size = payload_size,
+    };
+    handler(&envelope, context);
+    offset = payload_offset + payload_size;
+  }
+
+  return _DNG_OPCODE_ITER_OK;
+}
+
+static void _dng_opcode_process_gain_map(const _dng_opcode_envelope_t *envelope, void *context)
+{
+  dt_image_t *img = context;
+  if(envelope->opcode_id != OPCODE_ID_GAINMAP)
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] OpcodeList2 has unsupported %s opcode %d\n",
+             envelope->flags & 1 ? "optional" : "mandatory", envelope->opcode_id);
+    return;
+  }
+
+  if(envelope->payload_size < 76)
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Undersized GainMap opcode in OpcodeList2\n");
+    return;
+  }
+
+  uint8_t *param = envelope->payload;
+  const uint64_t gain_count = (envelope->payload_size - 76) / 4;
+  const uint32_t map_points_v = get_long(&param[32]);
+  const uint32_t map_points_h = get_long(&param[36]);
+  const uint32_t map_planes = get_long(&param[72]);
+  uint64_t required_gain_count = (uint64_t)map_points_v * map_points_h;
+  if((map_planes > 0 && required_gain_count > UINT64_MAX / map_planes)
+     || (required_gain_count *= map_planes) > gain_count
+     || gain_count > (G_MAXSIZE - sizeof(dt_dng_gain_map_t)) / sizeof(float))
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Undersized GainMap opcode in OpcodeList2\n");
+    return;
+  }
+
+  const gsize gain_map_size = sizeof(dt_dng_gain_map_t) + (gsize)gain_count * sizeof(float);
+  dt_dng_gain_map_t *gm = g_malloc(gain_map_size);
+  gm->top = get_long(&param[0]);
+  gm->left = get_long(&param[4]);
+  gm->bottom = get_long(&param[8]);
+  gm->right = get_long(&param[12]);
+  gm->plane = get_long(&param[16]);
+  gm->planes = get_long(&param[20]);
+  gm->row_pitch = get_long(&param[24]);
+  gm->col_pitch = get_long(&param[28]);
+  gm->map_points_v = map_points_v;
+  gm->map_points_h = map_points_h;
+  gm->map_spacing_v = get_double(&param[40]);
+  gm->map_spacing_h = get_double(&param[48]);
+  gm->map_origin_v = get_double(&param[56]);
+  gm->map_origin_h = get_double(&param[64]);
+  gm->map_planes = map_planes;
+  for(uint64_t i = 0; i < gain_count; i++)
+    gm->map_gain[i] = get_float(&param[76 + 4 * i]);
+
+  img->dng_gain_maps = g_list_append(img->dng_gain_maps, gm);
+}
+
 void dt_dng_opcode_process_opcode_list_2(uint8_t *buf, uint32_t buf_size, dt_image_t *img)
 {
   g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
   img->dng_gain_maps = NULL;
 
-  if(buf_size < 4)
-  {
+  const _dng_opcode_iter_status_t status = _dng_opcode_foreach(buf, buf_size,
+                                                                 _dng_opcode_process_gain_map, img);
+  if(status == _DNG_OPCODE_ITER_COUNT_TRUNCATED)
     dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] OpcodeList2 buffer too small for opcode count\n");
-    return;
-  }
-
-  uint32_t count = get_long(&buf[0]);
-  uint64_t offset = 4;
-  while(count > 0)
-  {
-    if(offset + 16 > buf_size)
-    {
-      dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Truncated opcode header in OpcodeList2\n");
-      return;
-    }
-
-    const uint32_t opcode_id = get_long(&buf[offset]);
-    const uint32_t flags = get_long(&buf[offset + 8]);
-    const uint32_t param_size = get_long(&buf[offset + 12]);
-    uint8_t *param = &buf[offset + 16];
-
-    if(offset + 16 + (uint64_t)param_size > buf_size)
-    {
-      dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Invalid opcode size in OpcodeList2\n");
-      return;
-    }
-
-    if(opcode_id == OPCODE_ID_GAINMAP)
-    {
-      if(param_size < 76)
-      {
-        dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Undersized GainMap opcode in OpcodeList2\n");
-        goto next;
-      }
-      uint32_t gain_count = (param_size - 76) / 4;
-      dt_dng_gain_map_t *gm = g_malloc(sizeof(dt_dng_gain_map_t) + gain_count * sizeof(float));
-      gm->top = get_long(&param[0]);
-      gm->left = get_long(&param[4]);
-      gm->bottom = get_long(&param[8]);
-      gm->right = get_long(&param[12]);
-      gm->plane = get_long(&param[16]);
-      gm->planes = get_long(&param[20]);
-      gm->row_pitch = get_long(&param[24]);
-      gm->col_pitch = get_long(&param[28]);
-      gm->map_points_v = get_long(&param[32]);
-      gm->map_points_h = get_long(&param[36]);
-      gm->map_spacing_v = get_double(&param[40]);
-      gm->map_spacing_h = get_double(&param[48]);
-      gm->map_origin_v = get_double(&param[56]);
-      gm->map_origin_h = get_double(&param[64]);
-      gm->map_planes = get_long(&param[72]);
-      for(uint32_t i = 0; i < gain_count; i++)
-        gm->map_gain[i] = get_float(&param[76 + 4*i]);
-
-      img->dng_gain_maps = g_list_append(img->dng_gain_maps, gm);
-    }
-    else
-    {
-      dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] OpcodeList2 has unsupported %s opcode %d\n",
-        flags & 1 ? "optional" : "mandatory", opcode_id);
-    }
-
-next:
-    offset += 16 + (uint64_t)param_size;
-    count--;
-  }
+  else if(status == _DNG_OPCODE_ITER_HEADER_TRUNCATED)
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Truncated opcode header in OpcodeList2\n");
+  else if(status == _DNG_OPCODE_ITER_PAYLOAD_TRUNCATED)
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Invalid opcode size in OpcodeList2\n");
 }
 
 #define OPCODE_ID_WARP_RECTILINEAR (1)
