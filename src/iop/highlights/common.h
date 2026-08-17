@@ -190,6 +190,12 @@ typedef struct
 
 // Max unknowns in the dense-Cholesky biharmonic dome before it downsamples (O(N^3)). Larger = finer
 // dome grid (ds->1 = exact full-res) at more cost -- raise it to test if the coarse solve matters.
+// Below this many clipped input pixels there is nothing worth reconstructing: process()/process_cl()
+// copy the input through instead of running a mode. Same idea as filmicrgb's mask_clipped_pixels()
+// bail-out, one order of magnitude more generous because the reconstruction modes here cost far more
+// per frame (region segmentation, sparse solves) than filmic's wavelet pass.
+#define DT_HL_MIN_CLIPPED_PIXELS 25
+
 #define DT_HL_DOME_NMAX 2000
 
 // With the sparse direct solver the dome grid can be MUCH finer at less cost than the dense
@@ -428,7 +434,7 @@ typedef enum dt_atrous_wavelets_scales_t
 typedef struct dt_iop_highlights_params_t
 {
   // params of v1
-  dt_iop_highlights_mode_t mode; // $DEFAULT: DT_IOP_HIGHLIGHTS_CLIP $DESCRIPTION: "method"
+  dt_iop_highlights_mode_t mode; // $DEFAULT: DT_IOP_HIGHLIGHTS_HARMONIC $DESCRIPTION: "method"
   float blendL;                  // unused $DEFAULT: 1.0
   float blendC;                  // unused $DEFAULT: 0.0
   float blendh;                  // unused $DEFAULT: 0.0
@@ -450,6 +456,7 @@ typedef dt_iop_highlights_params_t dt_iop_highlights_data_t;
 typedef struct dt_iop_highlights_global_data_t
 {
   int kernel_highlights_1f_clip;
+  int kernel_highlights_count_clipped;
   int kernel_highlights_1f_lch_bayer;
   int kernel_highlights_1f_lch_xtrans;
   int kernel_highlights_4f_clip;

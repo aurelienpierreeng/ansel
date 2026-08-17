@@ -50,6 +50,7 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 #ifdef HAVE_CONFIG_H
+#include "common/imagebuf.h" // dt_iop_image_copy_by_size(): the early-bypass passthrough
 #include "common/logging.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
@@ -249,6 +250,129 @@ static cl_int _hl_cl_visualize(dt_iop_highlights_global_data_t *gd, const int de
   return err;
 }
 
+// ===== early bypass: nothing worth reconstructing ============================================
+// The clipping threshold the ACTIVE MODE actually tests against, so the bypass counts exactly what
+// that mode would call clipped instead of a conservative envelope of all of them: colour inpainting
+// takes 0.987 of each channel's white point, the two reconstruction modes 0.995, and plain clip /
+// LCh the scalar clip (the smallest channel's white point, which is what they clamp to). Keep these
+// factors in step with the clips[] each case of the mode switch builds below.
+static inline void _hl_count_thresholds(const int mode, const float user_clip,
+                                        const dt_aligned_pixel_t pmax, const float clip,
+                                        dt_aligned_pixel_t thresholds)
+{
+  float factor = 0.f;
+  switch(mode)
+  {
+    case DT_IOP_HIGHLIGHTS_INPAINT:
+      factor = 0.987f;
+      break;
+    case DT_IOP_HIGHLIGHTS_LAPLACIAN:
+    case DT_IOP_HIGHLIGHTS_HARMONIC:
+      factor = 0.995f;
+      break;
+    case DT_IOP_HIGHLIGHTS_LCH:
+    case DT_IOP_HIGHLIGHTS_CLIP:
+    default:
+      factor = 0.f; // no per-channel white point: these test the scalar clip
+      break;
+  }
+  for(int c = 0; c < 3; c++) thresholds[c] = (factor > 0.f) ? factor * user_clip * pmax[c] : clip;
+  thresholds[3] = clip;
+}
+
+// Count the input pixels the active mode would treat as clipped, against those thresholds. A
+// demosaiced pixel counts if any of R/G/B is over its own threshold; a mosaic pixel is one
+// photosite, whose colour would need a CFA lookup (FC / FCxtrans) to pick the matching threshold.
+// This module runs AFTER white balance, so processed_maximum carries the WB coefficients and the
+// three thresholds genuinely differ on raw (measured {2.28, 1.00, 1.60} on a Fuji X-Trans file).
+// The smallest is used instead of the per-photosite one: that OVER-counts -- an R photosite between
+// 0.995 and its own 2.28 threshold is counted as clipped -- so the bypass fires less often than it
+// strictly could, never more. Deliberate: this is a "nothing to do" guard, and a frame quiet enough
+// to bypass has every channel under every threshold anyway. Exactness here would cost a CFA lookup
+// per pixel on both the CPU and the device.
+static size_t _hl_count_clipped(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                                const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t thresholds)
+{
+  const float *const restrict in = (const float *const restrict)ivoid;
+  const size_t n_pixels = (size_t)roi_out->width * roi_out->height;
+  size_t clipped = 0;
+
+  if(piece->dsc_in.filters)
+  {
+    const float raw_threshold = fminf(fminf(thresholds[0], thresholds[1]), thresholds[2]);
+    __OMP_PARALLEL_FOR_SIMD__(reduction(+ : clipped))
+    for(size_t k = 0; k < n_pixels; k++) clipped += (in[k] > raw_threshold);
+  }
+  else
+  {
+    const size_t ch = piece->dsc_in.channels;
+    const size_t n_colours = MIN(ch, (size_t)3);
+    __OMP_PARALLEL_FOR__(reduction(+ : clipped))
+    for(size_t k = 0; k < n_pixels; k++)
+    {
+      int over = 0;
+      for(size_t c = 0; c < n_colours; c++) over |= (in[k * ch + c] > thresholds[c]);
+      clipped += (over != 0);
+    }
+  }
+  return clipped;
+}
+
+// Pure copy input -> output, the bypass result. roi_in == roi_out here (this module declares no
+// modify_roi_*), so the buffers have identical geometry and channel count.
+static void _hl_copy_input(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                           const dt_iop_roi_t *const roi_out)
+{
+  const size_t ch = piece->dsc_in.filters ? 1 : (size_t)piece->dsc_in.channels;
+  dt_iop_image_copy_by_size((float *const)ovoid, (const float *const)ivoid, roi_out->width, roi_out->height,
+                            ch);
+}
+
+#ifdef HAVE_OPENCL
+// Device twin of _hl_count_clipped: one workgroup-local reduction per group, summed here.
+static cl_int _hl_cl_count_clipped(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
+                                   const int width, const int height,
+                                   const dt_aligned_pixel_t thresholds, const int is_raw,
+                                   size_t *const clipped)
+{
+  const int local_size = 64, n_groups = 256;
+  *clipped = 0;
+  cl_mem partial = dt_opencl_alloc_device_buffer(devid, sizeof(uint32_t) * n_groups);
+  cl_mem dev_thresholds = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float),
+                                                                 (float *)thresholds);
+  if(IS_NULL_PTR(partial) || IS_NULL_PTR(dev_thresholds))
+  {
+    dt_opencl_release_mem_object(partial);
+    dt_opencl_release_mem_object(dev_thresholds);
+    return DT_OPENCL_DEFAULT_ERROR;
+  }
+
+  const int kernel = gd->kernel_highlights_count_clipped;
+  size_t sizes[3] = { (size_t)n_groups * local_size, 1, 1 };
+  size_t local[3] = { local_size, 1, 1 };
+  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&partial);
+  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), (void *)&dev_thresholds);
+  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), (void *)&is_raw);
+  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(uint32_t) * local_size, NULL);
+  cl_int err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
+
+  if(err == CL_SUCCESS)
+  {
+    uint32_t partial_host[256];
+    err = dt_opencl_read_buffer_from_device(devid, partial_host, partial, 0, sizeof(uint32_t) * n_groups,
+                                            CL_TRUE);
+    if(err == CL_SUCCESS)
+      for(int group = 0; group < n_groups; group++) *clipped += (size_t)partial_host[group];
+  }
+  dt_opencl_release_mem_object(partial);
+  dt_opencl_release_mem_object(dev_thresholds);
+  return err;
+}
+#endif
+
 // Plain clip. Raw mosaic uses the single-channel kernel (roi-aware); non-raw uses the 4-channel kernel.
 // This is also the fallback for the raw-only reconstruction modes (LCh / colour inpainting) on non-raw.
 static cl_int _hl_cl_clip(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in, cl_mem dev_out,
@@ -387,6 +511,25 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float clip = d->clip * fminf(pmax[0], fminf(pmax[1], pmax[2]));
   const dt_aligned_pixel_t clips
       = { 0.995f * d->clip * pmax[0], 0.995f * d->clip * pmax[1], 0.995f * d->clip * pmax[2], clip };
+
+  // Early bypass: with a negligible clipped area every mode below would pay a full-frame pass (the
+  // reconstruction modes several, plus region segmentation and sparse solves) to move a couple of
+  // dozen pixels. Count first and copy the input through instead. Mirrors process().
+  {
+    dt_aligned_pixel_t count_thresholds;
+    _hl_count_thresholds(d->mode, d->clip, pmax, clip, count_thresholds);
+    size_t n_clipped = 0;
+    err = _hl_cl_count_clipped(gd, devid, dev_in, width, height, count_thresholds, filters != 0, &n_clipped);
+    if(err != CL_SUCCESS) goto error;
+    if(n_clipped < DT_HL_MIN_CLIPPED_PIXELS)
+    {
+      size_t origin[] = { 0, 0, 0 };
+      size_t region[] = { width, height, 1 };
+      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
+      if(err != CL_SUCCESS) goto error;
+      return TRUE;
+    }
+  }
 
   // Mode switch, symmetric to process(). The reconstruction modes run on the GPU for raw and non-raw
   // alike -- the non-raw passthrough drivers use their own device gather/remosaic kernels, no CPU
@@ -583,6 +726,15 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // (LAPLACIAN/HARMONIC reconstruct already-demosaiced RGB via their passthrough gather, CLIP thresholds
   // per channel, LCh/INPAINT have no non-raw path and fall back to _highlights_copy_input).
 
+  // Early bypass, twin of process_cl()'s: nothing worth reconstructing -> copy the input through.
+  dt_aligned_pixel_t count_thresholds;
+  _hl_count_thresholds(data->mode, data->clip, pmax, clip, count_thresholds);
+  if(_hl_count_clipped(piece, ivoid, roi_out, count_thresholds) < DT_HL_MIN_CLIPPED_PIXELS)
+  {
+    _hl_copy_input(piece, ivoid, ovoid, roi_out);
+    return 0;
+  }
+
   switch(data->mode)
   {
     case DT_IOP_HIGHLIGHTS_INPAINT: // a1ex's (magiclantern) idea of color inpainting:
@@ -752,6 +904,7 @@ void init_global(dt_iop_module_so_t *module)
       = (dt_iop_highlights_global_data_t *)malloc(sizeof(dt_iop_highlights_global_data_t));
   module->data = gd;
   gd->kernel_highlights_1f_clip = dt_opencl_create_kernel(program, "highlights_1f_clip");
+  gd->kernel_highlights_count_clipped = dt_opencl_create_kernel(program, "highlights_count_clipped");
   const int harmonic_program = 38; // highlights_harmonic.cl (harmonic transposition, fp32)
   const int sparse_program = 37;   // highlights_sparse.cl (fp64 sparse solvers)
   gd->kernel_sparse_chol_update_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_update_level");
@@ -995,6 +1148,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_highlights_1f_lch_bayer);
   dt_opencl_free_kernel(gd->kernel_highlights_1f_lch_xtrans);
   dt_opencl_free_kernel(gd->kernel_highlights_1f_clip);
+  dt_opencl_free_kernel(gd->kernel_highlights_count_clipped);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_xtrans);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_passthrough);
