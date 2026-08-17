@@ -2755,7 +2755,9 @@ void dt_get_dirname_from_imgid(gchar *dir, const int32_t imgid)
   gchar path[PATH_MAX] = { 0 };
   gboolean from_cache = FALSE;
   dt_image_full_path(imgid, path, sizeof(path), &from_cache, __FUNCTION__);
-  g_strlcpy(dir, g_path_get_dirname(path), sizeof(path));
+  gchar *folder = g_path_get_dirname(path);
+  g_strlcpy(dir, folder, PATH_MAX); // callers all provide a PATH_MAX-sized dir buffer
+  dt_free(folder);
 }
 
 // clang-format off

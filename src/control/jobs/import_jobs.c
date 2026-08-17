@@ -550,21 +550,12 @@ static int32_t _control_import_job_run(dt_job_t *job)
       // collection by hand (issue #860). So always run a collection update afterwards: it
       // re-runs the current query and makes newly-imported matching images appear.
       if(index == 0)
-        dt_collection_load_filmroll(dt_collection_get_global(), imgid, FALSE);
+        dt_collection_load_filmroll(dt_collection_get_global(), imgid, FALSE, TRUE);
 
-      // Throttled: dt_collection_update_query() fully rebuilds memory.collected_images and its
-      // DT_SIGNAL_COLLECTION_CHANGED triggers a full lighttable/thumbtable re-layout on the GUI
-      // thread. Firing it after every single image queued one such redraw per image -- for a
-      // large library each redraw is expensive enough that a multi-hundred-image import kept the
-      // GUI thread permanently busy processing the backlog, appearing fully frozen (no input
-      // handled, and even the background-job progress bar -- created and shown correctly -- never
-      // got an actual repaint) for the whole import.
-      const gint64 now = g_get_monotonic_time();
-      if(now - last_collection_refresh > 250000) // 250ms
-      {
-        dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
-        last_collection_refresh = now;
-      }
+      // known_image_folder is NULL: in copy mode the image's final DB location can be a
+      // completely different, pattern-generated folder from its original source path, which is
+      // all this loop has at hand -- dt_collection_notify_imported() must resolve it fresh.
+      dt_collection_notify_imported(imgid, NULL, &last_collection_refresh);
 
       index++;
     }
@@ -587,7 +578,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   {
     if(data->folder_survey)
       dt_control_log(_("Capture: imported 1 image."));
-    dt_collection_load_filmroll(dt_collection_get_global(), imgid, TRUE);
+    dt_collection_load_filmroll(dt_collection_get_global(), imgid, TRUE, TRUE);
   }
   else
   {

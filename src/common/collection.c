@@ -53,7 +53,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 André Doherty.
-    Copyright (C) 2024-2025 Guillaume Stutin.
+    Copyright (C) 2024-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -916,18 +916,19 @@ static inline void _dt_collection_change_view_after_import(const dt_view_t *curr
     dt_ctl_switch_mode_to("lighttable");
 }
 
-static inline gboolean _collection_can_switch_folder(const int32_t imgid, const dt_view_t *current_atelier)
+// TRUE when there is no folder-browsing grid to talk about at all: neither lighttable nor
+// Studio Capture is the current atelier, or (lighttable only) the Collect module is not showing
+// the "Folders" tab. Factored out of _collection_can_switch_folder() so the atelier/tab
+// eligibility rule has exactly one implementation.
+static inline gboolean _collection_folder_ui_inactive(const dt_view_t *current_atelier)
 {
-  // Go out if the image is unknown.
-  gboolean result = imgid == UNKNOWN_IMAGE;
-
   // Go out if we are not in lighttable or Studio Capture: those are the only two ateliers whose
   // filmstrip/grid should follow newly-imported images into their folder. Studio Capture's own
   // filmstrip is driven by the same dt_collection_get_global() query as lighttable's grid, so without
   // this it never picks up an auto-imported capture that lands outside the currently browsed
   // folder.
-  result |= current_atelier && g_strcmp0(current_atelier->module_name, "lighttable")
-            && g_strcmp0(current_atelier->module_name, "studio_capture");
+  gboolean result = current_atelier && g_strcmp0(current_atelier->module_name, "lighttable")
+                    && g_strcmp0(current_atelier->module_name, "studio_capture");
 
   // Go out if the Collection module is not showing the "Folders" tab. Only applies to
   // lighttable, the only atelier with a Collect module UI exposing that tab: Studio Capture has
@@ -939,72 +940,138 @@ static inline gboolean _collection_can_switch_folder(const int32_t imgid, const 
   return result;
 }
 
-void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image)
+gboolean dt_collection_get_browsed_folder(gchar *folder, size_t len, gboolean *recursive)
+{
+  const dt_view_t *current_atelier = dt_view_manager_get_current_view(dt_view_manager_get_global());
+  if(_collection_folder_ui_inactive(current_atelier))
+    return FALSE;
+
+  // tab == 0 (checked above) guarantees item0 is DT_COLLECTION_PROP_FOLDERS or _FILMROLL: the
+  // Collect module's Folders tab always forces one of the two on rule 0 (libs/collect.c). Only
+  // the Tree view (FOLDERS) supports recursion -- the flat List view (FILMROLL) never appends a
+  // sub-folder wildcard to its query (database/collection_query.c), so recursive0 is meaningless
+  // there even if it's still set from a previous Tree-view session.
+  const gboolean is_folders = dt_conf_get_int("plugins/lighttable/collect/item0") == DT_COLLECTION_PROP_FOLDERS;
+  *recursive = is_folders && dt_conf_get_bool("plugins/lighttable/collect/recursive0");
+
+  gchar *string0 = dt_conf_get_string("plugins/lighttable/collect/string0");
+  const gboolean has_value = string0 && string0[0];
+  if(has_value) g_strlcpy(folder, string0, len);
+  dt_free(string0);
+  return has_value;
+}
+
+void dt_collection_notify_imported(const int32_t imgid, const gchar *known_image_folder, gint64 *last_refresh_us)
+{
+  // Throttled: every import job feeds this one image at a time, and a full
+  // dt_collection_update_query() is expensive enough (rebuilds memory.collected_images, triggers
+  // a full lighttable/thumbtable re-layout on the GUI thread) that firing it after every single
+  // image kept the GUI thread permanently busy processing the backlog on a large import.
+  const gint64 now = g_get_monotonic_time();
+  if(now - *last_refresh_us <= 250000) return; // 250ms
+  *last_refresh_us = now;
+
+  // Read fresh on every throttle-admitted call (so at most 4/s, not per image) rather than once
+  // before the import loop starts: the user can change which folder is browsed while a long
+  // import is still running, and a stale snapshot would keep comparing against wherever they
+  // were looking when the job began, silently going quiet on the folder they navigated to.
+  gchar browsed_folder[PATH_MAX] = { 0 };
+  gboolean browsed_folder_recursive = FALSE;
+  const gboolean has_browsed_folder
+      = dt_collection_get_browsed_folder(browsed_folder, sizeof(browsed_folder), &browsed_folder_recursive);
+
+  // Unknown scope (not browsing a single folder/film-roll): can't tell whether imgid is
+  // relevant, so always do the real thing -- same as before this function existed.
+  gboolean image_in_browsed_folder = TRUE;
+  gchar image_folder_buf[PATH_MAX] = { 0 };
+  if(has_browsed_folder)
+  {
+    const gchar *image_folder = known_image_folder;
+    if(!image_folder)
+    {
+      dt_get_dirname_from_imgid(image_folder_buf, imgid);
+      image_folder = image_folder_buf;
+    }
+    const size_t browsed_len = strlen(browsed_folder);
+    image_in_browsed_folder = !g_strcmp0(image_folder, browsed_folder)
+      || (browsed_folder_recursive && g_str_has_prefix(image_folder, browsed_folder)
+          && image_folder[browsed_len] == G_DIR_SEPARATOR);
+  }
+
+  // Both branches below label the change DT_COLLECTION_CHANGE_BACKGROUND_SYNC: a background
+  // import heartbeat is never the kind of event that should steal the user's scroll/focus or
+  // reset grid/zoom preferences, whether or not it actually touches what's on screen. Listeners
+  // that key off query_change to guard exactly that -- gui/dtgtk/thumbtable.c's
+  // _dt_collection_changed_callback() (skips dt_thumbtable_schedule_focus(), still rebuilds grid
+  // content off its own hash) and libs/tools/lighttable.c's same-named callback (skips its
+  // unconditional zoom-reset entirely) -- both recognize it as "not a real [navigational] change".
+  // query_change never affects dt_collection_update_query()'s own re-sync work, only what it
+  // hands listeners, so this is free to pick regardless of which branch runs.
+  if(image_in_browsed_folder)
+  {
+    // imgid lands in (or, if recursive, under) the browsed folder: a real
+    // dt_collection_update_query() is required so memory.collected_images actually gains the new
+    // image and the grid has something new to show.
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_BACKGROUND_SYNC,
+                               DT_COLLECTION_PROP_UNDEF, NULL);
+    return;
+  }
+
+  // imgid does not concern the folder currently browsed: skip the real re-query (it could not
+  // have shown imgid there anyway) and raise the signal directly instead of going silent. Every
+  // listener that keeps its own counts independently of memory.collected_images -- the Collect
+  // module's tag/camera/lens lists (libs/collect.c queries main.images directly and never reads
+  // memory.collected_images) -- still refreshes. gui/dtgtk/thumbtable.c's own hash (a function of
+  // the query generation and memory.collected_images's row count) is untouched by this path, so
+  // it does not rebuild grid content either.
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
+                                DT_COLLECTION_CHANGE_BACKGROUND_SYNC, DT_COLLECTION_PROP_UNDEF, NULL, -1);
+}
+
+void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image,
+                                 gboolean set_mouse_over)
 {
   const dt_view_t *current_atelier = dt_view_manager_get_current_view(dt_view_manager_get_global());
 
-  // Go out if conditions are not reunited
-  if(_collection_can_switch_folder(imgid, current_atelier))
+  // Without a real image there is nothing to switch to or open.
+  if(imgid == UNKNOWN_IMAGE)
     return;
 
-  gchar first_directory[PATH_MAX] = { 0 };
-  dt_get_dirname_from_imgid(first_directory, imgid);
-
-  const gboolean copy = dt_conf_get_bool("ui_last/import_copy");
-  const dt_collection_properties_t Collection_view = dt_conf_get_int("plugins/lighttable/collect/item0");
-  gchar dir[PATH_MAX] = { 0 };
-
-  // - If user imports images in place and View mode is on "Tree":
-  // - if the user selecter 1 folder in Import:
-  //    - the lighttable displays the contents of that folder.
-  //    - else, the lighttable displays the contents of the folder
-  //        showing in the file explorer in Import.
-  //
-  // - In all other cases, the lighttable displays the first
-  //    imported image's folder.
-
-  if (Collection_view == DT_COLLECTION_PROP_FOLDERS && !copy)
+  // _collection_folder_ui_inactive() also gates on the atelier (only lighttable/Studio Capture
+  // have a folder-browsing grid worth re-pointing at the import). That gate must only cover the
+  // folder-following block below, not the mouse-over/selection/view-switch block that follows
+  // it: those are what actually opens the newly imported image, and must run for every atelier,
+  // darkroom included -- otherwise importing a single image while already in darkroom never
+  // opens it, since dt_control_set_mouse_over_id() below (which darkroom's try_enter() reads to
+  // pick the target image) never runs.
+  if(!_collection_folder_ui_inactive(current_atelier))
   {
-    int nb = dt_conf_get_int("ui_last/import_selection_nb");
-    const gchar *first_selection = dt_conf_get_string_const("ui_last/import_first_selected_str");
+    // Always the folder actually containing imgid (the first successfully imported image), for
+    // every case -- copy or in-place, List or Tree view. This used to special-case in-place
+    // imports in Tree view: if the user had selected exactly one top-level folder to import
+    // recursively, it showed THAT folder (ui_last/import_first_selected_str) instead of drilling
+    // down to wherever the first image actually landed, which is surprising and unpredictable
+    // for a recursive import spanning several sub-folders (the sub-folder that ends up used
+    // depended on file-chooser/last-browsed-directory state left over from a previous, unrelated
+    // import, not on anything about this one).
+    gchar dir[PATH_MAX] = { 0 };
+    dt_get_dirname_from_imgid(dir, imgid);
+    if(!dt_util_dir_exist(dir)) dir[0] = 0;
 
-    if(nb ==1 && dt_util_dir_exist(first_selection))
-    {
-      fprintf(stdout,"Collection: one folder.\n");
-      g_strlcpy(dir, g_strdup(first_selection), sizeof(dir));
-    }
-    else
-    {
-      fprintf(stdout,"Collection: files and folders.\n");
-      const gchar *import_last_dir = dt_conf_get_string("ui_last/import_last_directory");
-      if(dt_util_dir_exist(import_last_dir))
-        g_strlcpy(dir, g_strdup(import_last_dir), sizeof(dir));
-    }
-  }
-  else // in List view or we copy
-  {
-    fprintf(stdout,"Collection: copy or in List view.\n");
+    // Don't append "*": it's the legacy encoding for "recursive" and would silently
+    // override the user's current recursive/sub-folders setting on every import.
+    dt_conf_set_string("plugins/lighttable/collect/string0", dir);
+    dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
 
-    gchar first_img_path[PATH_MAX] = { 0 };
-    dt_get_dirname_from_imgid(first_img_path, imgid);
-
-    if(dt_util_dir_exist(first_img_path))
-    {
-      g_strlcpy(dir, first_img_path, sizeof(dir));
-      fprintf(stdout,"Collection: ID %d, last img path %s.\n", imgid, first_img_path);
-    }
+    // Reload the collection with the current filmroll
+    dt_collection_update_query(collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_FILMROLL, NULL);
   }
 
-  // Don't append "*": it's the legacy encoding for "recursive" and would silently
-  // override the user's current recursive/sub-folders setting on every import.
-  dt_conf_set_string("plugins/lighttable/collect/string0", dir);
-  dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
-
-  // Reload the collection with the current filmroll
-  dt_collection_update_query(collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_FILMROLL, NULL);
-
-  // Necessary to directly open in darkroom if we want to.
-  dt_control_set_mouse_over_id(imgid);
+  // Necessary to directly open in darkroom if we want to. Skippable: a caller that already
+  // pointed mouse_over_id at imgid earlier (e.g. right when it was first known, before a long
+  // import job finishes) does not want it forced back here, possibly clobbering whatever the
+  // user is hovering by now.
+  if(set_mouse_over) dt_control_set_mouse_over_id(imgid);
 
   // To scroll the lighttable automatically to this image,
   // it needs to be selected.

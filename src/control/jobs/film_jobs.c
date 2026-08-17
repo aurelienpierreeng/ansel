@@ -40,7 +40,6 @@
 #include "common/collection.h"
 #include "common/film.h"
 #include <stdlib.h>
-#include "common/times.h"
 #include "common/utility.h"
 #include "gui/application.h"
 
@@ -280,14 +279,19 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   g_snprintf(message, sizeof(message) - 1, ngettext("Importing %d image", "Importing %d images", total), total);
   dt_control_job_set_progress_message(job, message);
 
-  GList *imgs = NULL;
   GList *all_imgs = NULL;
+  gint64 last_collection_refresh = 0;
 
   /* loop thru the images and import to current film roll */
   dt_film_t *cfr = film;
-  int pending = 0;
-  double last_update = dt_get_wtime();
   int32_t imgid = UNKNOWN_IMAGE;
+  // dt_collection_load_filmroll() below must be pointed at the FIRST successfully imported
+  // image, like import_jobs.c's _control_import_job_run() does (its imgid there is the one from
+  // index==0). imgid alone can't be reused for that: the loop overwrites it every iteration, so
+  // by the end it holds the LAST image instead -- for a flat single-folder import both are the
+  // same directory, but for a recursive import spanning several sub-folders they can differ,
+  // making it unpredictable which sub-folder ends up displayed.
+  int32_t first_imgid = UNKNOWN_IMAGE;
   for(GList *image = images; image; image = g_list_next(image))
   {
     gchar *cdn = g_path_get_dirname((const gchar *)image->data);
@@ -318,25 +322,25 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
 
     /* import image */
     imgid = dt_image_import(cfr->id, (const gchar *)image->data, FALSE);
-    pending++;  // we have another image which hasn't been reported yet
+    if(first_imgid <= UNKNOWN_IMAGE && imgid > UNKNOWN_IMAGE)
+    {
+      first_imgid = imgid;
+      // Point mouse_over_id at the first imported image as soon as we know it, not only once the
+      // whole (possibly long, recursive) import finishes -- darkroom's try_enter() reads this to
+      // pick its target image. The dt_collection_load_filmroll() call below is told (via its
+      // set_mouse_over=FALSE argument) not to redo this at the end, so a mouse-over change from
+      // the user during the import is not clobbered once the job completes.
+      dt_control_set_mouse_over_id(first_imgid);
+    }
     fraction += 1.0 / total;
     dt_control_job_set_progress(job, fraction);
 
+    // cfr->dirname is imgid's folder for free: this import path never copies files, so the film
+    // roll it was just inserted into (created/reused a few lines above from the source path's own
+    // dirname) already names its final location -- no need to make notify_imported() re-derive it.
+    dt_collection_notify_imported(imgid, cfr->dirname, &last_collection_refresh);
+
     all_imgs = g_list_prepend(all_imgs, GINT_TO_POINTER(imgid));
-    imgs = g_list_append(imgs, GINT_TO_POINTER(imgid));
-    const double curr_time = dt_get_wtime();
-    // if we've imported at least four images without an update, and it's been at least half a second since the last
-    //   one, update the interface
-    if(pending >= 4 && curr_time - last_update > 0.5)
-    {
-      dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
-                                 g_list_copy(imgs));
-      g_list_free(imgs);
-      imgs = NULL;
-      // restart the update count and timer
-      pending = 0;
-      last_update = curr_time;
-    }
   }
 
   g_list_free_full(images, dt_free_gpointer);
@@ -346,7 +350,20 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   // only redraw at the end, to not spam the cpu with exposure events
   dt_control_queue_redraw_center();
 
-  dt_collection_load_filmroll(dt_collection_get_global(), imgid, g_list_length(all_imgs) == 1);
+  // set_mouse_over = FALSE: already pointed at first_imgid as soon as it was known, above --
+  // do not force it back here and clobber whatever the user may be hovering by now.
+  dt_collection_load_filmroll(dt_collection_get_global(), first_imgid, g_list_length(all_imgs) == 1, FALSE);
+
+  // dt_collection_load_filmroll() silently declines to switch/refresh the collection when it
+  // cannot switch folders -- e.g. the collect module is not on the "Folders" tab, or we are not
+  // in an atelier with a folder-browsing grid (see _collection_folder_ui_inactive() in
+  // common/collection.c). Without this, a recursive folder import (dt_film_import(), reached
+  // from CLI/D-Bus/macOS "open with" while Ansel is already running) never shows up in the
+  // lighttable grid or the Collect module until the user reloads the collection by hand -- the
+  // same issue #860 already fixed for control/jobs/import_jobs.c's import job, which this
+  // legacy, separate import path does not share code with.
+  if(all_imgs)
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
   //QUESTION: should this come after _apply_filmroll_gpx, since that can change geotags again?
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, all_imgs, 0);

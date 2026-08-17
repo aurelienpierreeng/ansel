@@ -197,9 +197,10 @@ static int _grab_focus(dt_thumbtable_t *table)
   return 0;
 }
 
-void dt_thumbtable_schedule_focus(dt_thumbtable_t *table, const gint priority)
+void dt_thumbtable_schedule_focus_real(dt_thumbtable_t *table, const gint priority)
 {
   if(IS_NULL_PTR(table) || table->focus_idle_id) return;
+  dt_print(DT_DEBUG_LIGHTTABLE, "[thumbtable] schedule_focus queued (priority=%d)\n", priority);
   table->focus_idle_id = g_idle_add_full(priority, (GSourceFunc)_grab_focus, table, NULL);
 }
 
@@ -455,7 +456,7 @@ int dt_thumbtable_scroll_to_selection(dt_thumbtable_t *table)
   int id = dt_selection_get_first_id(dt_selection_get_global());
   if(id < 0) id = dt_control_get_keyboard_over_id();
   if(id < 0) id = dt_control_get_mouse_over_id();
-  //fprintf(stdout, "scrolling to %i\n", id);
+  dt_print(DT_DEBUG_LIGHTTABLE, "[thumbtable] scroll_to_selection: id=%d\n", id);
   dt_thumbtable_scroll_to_imgid(table, id);
   return 0;
 }
@@ -1137,7 +1138,12 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
 
   // See if the collection changed
   gboolean grouping_changed = changed_property == DT_COLLECTION_PROP_GROUPING;
-  gboolean changed = _dt_collection_get_hash(table) || collapsing_changed || grouping_changed;
+  gboolean hash_changed = _dt_collection_get_hash(table);
+  gboolean changed = hash_changed || collapsing_changed || grouping_changed;
+  dt_print(DT_DEBUG_LIGHTTABLE,
+          "[thumbtable] collection_changed_callback: query_change=%d changed_property=%d hash_changed=%d "
+          "collapsing_changed=%d grouping_changed=%d -> changed=%d\n",
+          query_change, changed_property, hash_changed, collapsing_changed, grouping_changed, changed);
   if(changed)
   {
     // If groups are collapsed, we add only the group leader image to the collection
@@ -1164,7 +1170,14 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     // Coalesce multiple layout/resize signals that can happen during collection loads.
     dt_thumbtable_queue_update(table);
 
-    dt_thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
+    // DT_COLLECTION_CHANGE_BACKGROUND_SYNC marks a passive background sync (see
+    // dt_collection_notify_imported()): the grid content above must still refresh -- it's driven
+    // by the hash, which is what actually detected new/removed images -- but a background import
+    // dropping images into the browsed folder must not also hijack the user's scroll position
+    // every time it does. A real navigational change (folder switch, filter edit...) always
+    // carries a different query_change and keeps re-centering on the selection as before.
+    if(query_change != DT_COLLECTION_CHANGE_BACKGROUND_SYNC)
+      dt_thumbtable_schedule_focus(table, G_PRIORITY_DEFAULT_IDLE);
   }
 }
 

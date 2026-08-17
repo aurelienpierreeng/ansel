@@ -121,6 +121,15 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
                                             const int next, gpointer user_data)
 {
   if(IS_NULL_PTR(user_data)) return;
+  // DT_COLLECTION_CHANGE_BACKGROUND_SYNC means the signal comes from a passive background sync
+  // (e.g. dt_collection_notify_imported(), called once per imported image for the whole duration
+  // of an import job) rather than the user navigating: nothing below -- column/zoom adjustments
+  // driven by the CURRENT collection's content -- is meaningful to redo on every one of those.
+  // Reacting anyway unconditionally reset thumbnail zoom (full thumbnail reload +
+  // scroll-to-selection) on every such notification, fighting whatever the user was doing in the
+  // grid for the entire duration of the import, whether or not it even touched what was on
+  // screen.
+  if(query_change == DT_COLLECTION_CHANGE_BACKGROUND_SYNC) return;
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
 
   if(dt_gui_get_global()->culling_mode)
