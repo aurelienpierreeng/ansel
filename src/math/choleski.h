@@ -37,6 +37,7 @@
 #include "common/imagebuf.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "system/openmp.h" // dt_omp_in_parallel(): never log a per-thread solver failure
 #include "common/logging.h"
 
 
@@ -298,24 +299,47 @@ static inline int solve_hermitian(const float *const restrict A,
     goto error;
   }
 
+  // Which stage first reported NaNs, or NULL while the solve is still valid. Only the FIRST
+  // failure is reported: the three stages are chained on `valid`, so once the decomposition
+  // fails the descent and ascent are never even run -- printing a line per stage regardless
+  // turned every single failure into three messages.
+  const char *failed_stage = NULL;
+
   // LU decomposition
   valid = (checks) ? choleski_decompose_safe(A, L, n) :
                      choleski_decompose_fast(A, L, n) ;
-  if(!valid) fprintf(stdout, "Cholesky decomposition returned NaNs\n");
+  if(!valid) failed_stage = "decomposition";
 
   // Triangular descent
   if(valid)
+  {
     valid = (checks) ? triangular_descent_safe(L, y, x, n) :
                        triangular_descent_fast(L, y, x, n) ;
-  if(!valid) fprintf(stdout, "Cholesky LU triangular descent returned NaNs\n");
+    if(!valid) failed_stage = "LU triangular descent";
+  }
 
   // Triangular ascent
   if(valid)
+  {
     valid = (checks) ? triangular_ascent_safe(L, x, y, n) :
                        triangular_ascent_fast(L, x, y, n);
-  if(!valid) fprintf(stdout, "Cholesky LU triangular ascent returned NaNs\n");
+    if(!valid) failed_stage = "LU triangular ascent";
+  }
 
-  if(!valid) err = 1;
+  if(!valid)
+  {
+    err = 1;
+    // A non-SPD matrix is the caller's problem to handle -- every caller here checks the return
+    // code and has a fallback -- so this is a diagnostic, not an error report, and it must not
+    // be emitted from inside a parallel loop: one message per thread per pixel-loop iteration
+    // both floods the log and interleaves mid-line with the other threads' output (which is how
+    // issue #1094 reported "- - -" and torn lines). Callers that solve in a loop are expected to
+    // aggregate their own failure count and report it once, outside the parallel region.
+    if(!dt_omp_in_parallel())
+      dt_print(DT_DEBUG_ALWAYS, "[choleski] %s returned NaNs on the %" G_GSIZE_FORMAT
+                                " x %" G_GSIZE_FORMAT " matrix: not positive-definite\n",
+               failed_stage, n, n);
+  }
 
 error:
   dt_free_align(x);

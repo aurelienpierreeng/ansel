@@ -27,6 +27,88 @@
 #include <math.h>
 #include <string.h>
 
+// ===== well-posedness: restrict the solve to the sub-domain enclosed by anchors ===============
+// The restricted biharmonic A = R Delta^2 R' factors as (Delta R')'(Delta R'), hence is positive
+// SEMI-definite -- but only while every one of the 13 stencil taps lands inside the grid. Where a
+// hole cell sits within 2 cells of the grid border its outer taps are CLAMPED back inside, and the
+// clamped 13-point kernel is NOT the square of the clamped Laplacian: the assembled matrix loses
+// positive-definiteness (measured: 6 to 9 non-positive eigenvalues), so the sparse up-looking
+// factorization aborts on a non-positive pivot AND the dense Cholesky returns NaNs, and the dome
+// silently degrades to a flat anchor-mean fill.
+//
+// Callers whose hole is the CLIPPED ZONE never meet this: _segment_clipped_regions pads the region
+// window with valid data, so the hole is enclosed (measured: 0-3% of the grid border). But
+// _chromaticity_gradient's hole is the COMPLEMENT of a sparse anchor set (bright AND fully valid
+// AND clear of the guard ring), which covers essentially the whole border -- measured 88-100% of
+// it on issue #1094's file, where all 90 of its domes failed.
+//
+// The cure is to solve only where the problem is an INTERPOLATION: a cell stays an unknown when an
+// anchor lies at least 2 cells away along each of the four axis directions ("inside the anchor
+// hull"), which puts every tap in range and makes the assembly the true restricted Delta^2. Cells
+// outside the hull are extrapolation; they are demoted to Dirichlet data, keeping their own
+// downsampled value where they have one and taking the anchor mean where they do not (the same
+// last-resort value this function already used for the entire hole when the solve failed). Four
+// running sweeps, O(coarse_pixels). Returns the number of cells demoted.
+static size_t _dome_restrict_to_anchor_hull(uint8_t *const restrict coarse_hole,
+                                           float *const restrict coarse_field, const int coarse_w,
+                                           const int coarse_h, const dt_dev_pixelpipe_t *pipe)
+{
+  const size_t coarse_pixels = (size_t)coarse_w * coarse_h;
+  uint8_t *const restrict hull = (uint8_t *)dt_pixelpipe_cache_alloc_align(coarse_pixels, pipe);
+  if(!hull) return 0; // no scratch: leave the system as it is, the caller's fallbacks still apply
+
+  // hull = AND over the four directions of "an anchor lies >= 2 cells back along this ray"
+  for(size_t i = 0; i < coarse_pixels; i++) hull[i] = 1;
+  for(int y = 0; y < coarse_h; y++)
+  {
+    int seen_left = 0, seen_right = 0;
+    for(int x = 0; x < coarse_w; x++)
+    {
+      if(x >= 2 && !coarse_hole[(size_t)y * coarse_w + x - 2]) seen_left = 1;
+      hull[(size_t)y * coarse_w + x] &= seen_left;
+      const int xr = coarse_w - 1 - x;
+      if(xr + 2 < coarse_w && !coarse_hole[(size_t)y * coarse_w + xr + 2]) seen_right = 1;
+      hull[(size_t)y * coarse_w + xr] &= seen_right;
+    }
+  }
+  for(int x = 0; x < coarse_w; x++)
+  {
+    int seen_up = 0, seen_down = 0;
+    for(int y = 0; y < coarse_h; y++)
+    {
+      if(y >= 2 && !coarse_hole[(size_t)(y - 2) * coarse_w + x]) seen_up = 1;
+      hull[(size_t)y * coarse_w + x] &= seen_up;
+      const int yd = coarse_h - 1 - y;
+      if(yd + 2 < coarse_h && !coarse_hole[(size_t)(yd + 2) * coarse_w + x]) seen_down = 1;
+      hull[(size_t)yd * coarse_w + x] &= seen_down;
+    }
+  }
+
+  double anchor_sum = 0.0;
+  size_t anchor_count = 0;
+  for(size_t i = 0; i < coarse_pixels; i++)
+    if(!coarse_hole[i])
+    {
+      anchor_sum += coarse_field[i];
+      anchor_count++;
+    }
+  const float anchor_mean = anchor_count ? (float)(anchor_sum / (double)anchor_count) : 0.f;
+
+  size_t demoted = 0;
+  for(size_t i = 0; i < coarse_pixels; i++)
+    if(coarse_hole[i] && !hull[i])
+    {
+      coarse_hole[i] = 0;
+      // a coarse cell whose block held no valid pixel at all downsampled to 0 (see the box
+      // downsample); 0 is "no data", not data, and must never become a Dirichlet value
+      if(coarse_field[i] == 0.f) coarse_field[i] = anchor_mean;
+      demoted++;
+    }
+
+  dt_pixelpipe_cache_free_align(hull);
+  return demoted;
+}
+
 __DT_CLONE_TARGETS__
 void _biharmonic_dome(float *const restrict field, const uint8_t *const restrict hole, const int region_w,
                       const int region_h, const int forced_downsample, const dt_dev_pixelpipe_t *pipe)
@@ -90,6 +172,10 @@ void _biharmonic_dome(float *const restrict field, const uint8_t *const restrict
       coarse_hole[coarse_i] = (2 * n_hole_block > n_total) ? 1 : 0;
       coarse_field[coarse_i] = (n_valid > 0) ? (float)(accum / n_valid) : 0.f;
     }
+
+  // keep the solve inside the anchor hull, so the assembled Delta^2 is the true restricted
+  // operator and the direct solvers stay well-posed (see _dome_restrict_to_anchor_hull)
+  _dome_restrict_to_anchor_hull(coarse_hole, coarse_field, coarse_w, coarse_h, pipe);
 
   // enumerate coarse hole unknowns
   int n_unknowns = 0;
@@ -286,7 +372,13 @@ void _biharmonic_dome(float *const restrict field, const uint8_t *const restrict
     if(!solved)
     {
       // last resort (OOM): fill the coarse hole with the anchor mean -- never leave the zeroed
-      // hole cells to be upsampled as a black dome
+      // hole cells to be upsampled as a black dome. Say so: this replaces the dome with a
+      // CONSTANT, which is a visible loss, and it used to be reached silently whenever
+      // n_unknowns exceeded the dense fallback's DT_HL_DOME_NMAX (only the smaller systems ever
+      // reported anything, through the solver's own NaN message -- see issue #1094).
+      dt_print(DT_DEBUG_PIPE,
+               "[highlights] dome: the %d-unknown biharmonic solve failed, filling the hole flat\n",
+               n_unknowns);
       double anchor_sum = 0.0;
       size_t anchor_count = 0;
       for(size_t coarse_i = 0; coarse_i < coarse_pixels; coarse_i++)
@@ -393,6 +485,10 @@ cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, cl_mem 
   if(cl_err != CL_SUCCESS) goto out;
   cl_err = dt_opencl_read_buffer_from_device(devid, coarse_hole, dhole, 0, coarse_pixels, CL_TRUE);
   if(cl_err != CL_SUCCESS) goto out;
+
+  // same well-posedness restriction as the CPU dome, on the same host-side coarse mask, so both
+  // paths assemble the identical system (the device `dhole` is not read again from here on)
+  _dome_restrict_to_anchor_hull(coarse_hole, cf, coarse_w, coarse_h, pipe);
 
   // number the coarse hole cells: these are the unknowns of the linear system
   int unknown_count = 0;
@@ -542,6 +638,9 @@ cl_int _biharmonic_dome_cl(const int devid, void *gd_void, cl_mem field, cl_mem 
         if(!solved)
         {
           // last resort, exactly the CPU dome's: anchor-mean fill (never upsample a black dome)
+          dt_print(DT_DEBUG_PIPE,
+                   "[highlights] dome: the %d-unknown biharmonic solve failed, filling the hole flat\n",
+                   unknown_count);
           double asum = 0.0;
           size_t acnt = 0;
           for(size_t coarse_index = 0; coarse_index < coarse_pixels; coarse_index++)
