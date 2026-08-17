@@ -94,6 +94,19 @@
 #include "widgets/togglebutton.h"
 
 #define INVERSE_SQRT_3 0.5773502691896258f
+
+/* Filmic's own highlights reconstruction is DEPRECATED (issue #1084). It was a first-order,
+ * pre-guided-laplacian attempt from the days when the dedicated highlights module handled neither
+ * X-Trans nor already-demosaiced input; it now handles both, with harmonic transposition as its
+ * default method, so there is no reason to reconstruct here any more. reconstruct_threshold at this
+ * sentinel (its new maximum, and the new default, so every NEW edit gets it) means "deprecated":
+ * gui_changed() hides the whole reconstruct page, and process()/process_cl() skip the entire
+ * highlights path -- no mask pass, no wavelet reconstruction, nothing allocated. Existing edits keep
+ * whatever threshold they stored (all legacy_params paths carry it across untouched) and still get
+ * the old behaviour and the visible tab. The sentinel sits INSIDE the slider range on purpose: a
+ * default above $MAX would be clamped back into range by the first widget update, silently
+ * re-enabling the deprecated path. */
+#define FILMIC_RECONSTRUCT_DEPRECATED 16.0f
 #define SAFETY_MARGIN 0.01f
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(1)
@@ -233,7 +246,7 @@ typedef struct dt_iop_filmicrgb_params_t
   float grey_point_source;     // $MIN: 0 $MAX: 100 $DEFAULT: 18.45 $DESCRIPTION: "middle gray luminance"
   float black_point_source;    // $MIN: -16 $MAX: -0.1 $DEFAULT: -8.0 $DESCRIPTION: "black relative exposure"
   float white_point_source;    // $MIN: 0.1 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "white relative exposure"
-  float reconstruct_threshold; // $MIN: -6.0 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "threshold"
+  float reconstruct_threshold; // $MIN: -6.0 $MAX: 16.0 $DEFAULT: 16.0 $DESCRIPTION: "threshold"
   float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "transition"
   float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "bloom \342\206\224 reconstruct"
   float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray \342\206\224 colorful details"
@@ -320,6 +333,7 @@ typedef struct dt_iop_filmicrgb_gui_data_t
   GtkWidget *noise_level, *noise_distribution;
   GtkWidget *compensate_icc_black;
   GtkNotebook *notebook;
+  GtkWidget *reconstruct_page; // hidden when the deprecated HL path is off (issue #1084)
   GtkDrawingArea *area;
   struct dt_iop_filmic_rgb_spline_t spline DT_ALIGNED_ARRAY;
   gint show_mask;
@@ -2689,16 +2703,26 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   float *restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
-  float *const restrict mask = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, pipe);
-  if(IS_NULL_PTR(mask)) return 1;
+
+  // Deprecated highlights path (issue #1084): bypassed entirely and unconditionally -- not even the
+  // mask buffer is allocated, let alone the full-frame mask pass. See FILMIC_RECONSTRUCT_DEPRECATED.
+  const gboolean hl_deprecated = (data->reconstruct_threshold >= FILMIC_RECONSTRUCT_DEPRECATED);
+
+  float *const restrict mask
+      = hl_deprecated ? NULL
+                      : dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, pipe);
+  if(!hl_deprecated && IS_NULL_PTR(mask)) return 1;
 
   // used to adjuste noise level depending on size. Don't amplify noise if magnified > 100%
   const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
 
   // build a mask of clipped pixels
-  const int recover_highlights = mask_clipped_pixels(in, mask, data->normalize, data->reconstruct_feather, roi_out->width, roi_out->height, 4);
+  const int recover_highlights
+      = hl_deprecated ? FALSE
+                      : mask_clipped_pixels(in, mask, data->normalize, data->reconstruct_feather,
+                                            roi_out->width, roi_out->height, 4);
 
-  // display mask and exit
+  // display mask and exit -- there is no mask to show once the deprecated path is bypassed
   if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL && !IS_NULL_PTR(mask))
   {
     dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
@@ -2711,7 +2735,11 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     }
   }
 
-  float *const restrict reconstructed = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe);
+  // only worth its w*h*4 floats when the reconstruction below will actually run
+  float *const restrict reconstructed
+      = recover_highlights
+            ? dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, pipe)
+            : NULL;
   if(recover_highlights && IS_NULL_PTR(reconstructed))
   {
     dt_pixelpipe_cache_free_align(mask);
@@ -3154,31 +3182,38 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // used to adjust noise level depending on size. Don't amplify noise if magnified > 100%
   const float scale = fmaxf(dt_dev_get_module_scale(pipe, roi_in), 1.f);
 
+  // Deprecated highlights path (issue #1084): bypassed entirely and unconditionally -- no flag
+  // buffer, no mask image, no mask kernel, no readback. See FILMIC_RECONSTRUCT_DEPRECATED.
+  const gboolean hl_deprecated = (d->reconstruct_threshold >= FILMIC_RECONSTRUCT_DEPRECATED);
+
   uint32_t is_clipped = 0;
-  clipped = dt_opencl_alloc_device_buffer(devid, sizeof(uint32_t));
-  err = dt_opencl_write_buffer_to_device(devid, &is_clipped, clipped, 0, sizeof(uint32_t), CL_TRUE);
-  if(err != CL_SUCCESS) goto error;
+  if(!hl_deprecated)
+  {
+    clipped = dt_opencl_alloc_device_buffer(devid, sizeof(uint32_t));
+    err = dt_opencl_write_buffer_to_device(devid, &is_clipped, clipped, 0, sizeof(uint32_t), CL_TRUE);
+    if(err != CL_SUCCESS) goto error;
 
-  // build a mask of clipped pixels
-  mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float));
-  dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 0, sizeof(cl_mem), (void *)&in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 1, sizeof(cl_mem), (void *)&mask);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 4, sizeof(float), (void *)&d->normalize);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 5, sizeof(float), (void *)&d->reconstruct_feather);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 6, sizeof(cl_mem), (void *)&clipped);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_mask, sizes);
-  if(err != CL_SUCCESS) goto error;
+    // build a mask of clipped pixels
+    mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float));
+    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 0, sizeof(cl_mem), (void *)&in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 1, sizeof(cl_mem), (void *)&mask);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 2, sizeof(int), (void *)&width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 3, sizeof(int), (void *)&height);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 4, sizeof(float), (void *)&d->normalize);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 5, sizeof(float), (void *)&d->reconstruct_feather);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_filmic_mask, 6, sizeof(cl_mem), (void *)&clipped);
+    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_filmic_mask, sizes);
+    if(err != CL_SUCCESS) goto error;
 
-  // check for clipped pixels
-  err = dt_opencl_read_buffer_from_device(devid, &is_clipped, clipped, 0, sizeof(uint32_t), CL_TRUE);
-  if(err != CL_SUCCESS) goto error;
-  dt_opencl_release_mem_object(clipped);
-  clipped = NULL;
+    // check for clipped pixels
+    err = dt_opencl_read_buffer_from_device(devid, &is_clipped, clipped, 0, sizeof(uint32_t), CL_TRUE);
+    if(err != CL_SUCCESS) goto error;
+    dt_opencl_release_mem_object(clipped);
+    clipped = NULL;
+  }
 
-  // display mask and exit
-  if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
+  // display mask and exit -- there is no mask to show once the deprecated path is bypassed
+  if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL && !hl_deprecated)
   {
     dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
 
@@ -4115,6 +4150,27 @@ static void toe_shoulder_callback(GtkWidget *slider, gpointer user_data)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+/* Show the deprecated reconstruct page only for edits that actually use it (issue #1084). GtkNotebook
+ * lays out tabs from its visible children only, so hiding the page child hides its tab with it; the
+ * tab label is hidden explicitly as well rather than relying on that. If the hidden page happened to
+ * be the selected one, fall back to the first. */
+static void _filmic_update_hl_deprecation(dt_iop_module_t *self)
+{
+  dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
+  const dt_iop_filmicrgb_params_t *const p = (const dt_iop_filmicrgb_params_t *)self->params;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(g->reconstruct_page) || IS_NULL_PTR(g->notebook)) return;
+
+  const gboolean deprecated = (p->reconstruct_threshold >= FILMIC_RECONSTRUCT_DEPRECATED);
+  const gint page_num = gtk_notebook_page_num(g->notebook, g->reconstruct_page);
+
+  if(deprecated && page_num >= 0 && gtk_notebook_get_current_page(g->notebook) == page_num)
+    gtk_notebook_set_current_page(g->notebook, 0);
+
+  GtkWidget *tab_label = gtk_notebook_get_tab_label(g->notebook, g->reconstruct_page);
+  if(!IS_NULL_PTR(tab_label)) gtk_widget_set_visible(tab_label, !deprecated);
+  gtk_widget_set_visible(g->reconstruct_page, !deprecated);
+}
+
 void gui_update(dt_iop_module_t *self)
 {
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)dt_iop_gui_data(self);
@@ -4133,6 +4189,7 @@ void gui_update(dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->auto_hardness), p->auto_hardness);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->custom_grey), p->custom_grey);
   filmic_gui_sync_toe_shoulder(self);
+  _filmic_update_hl_deprecation(self);
 
   gui_changed(self, NULL, NULL);
 }
@@ -5426,8 +5483,10 @@ void gui_init(dt_iop_module_t *self)
                                                 "fix the global exposure in the exposure module instead.\n"
                                                 "disable to use standard 18.45 %% middle gray."));
 
-  // Page RECONSTRUCT
+  // Page RECONSTRUCT -- deprecated (issue #1084); kept for edits that already use it, hidden for the
+  // rest by _filmic_update_hl_deprecation()
   self->gui->widget = dt_ui_notebook_page(g->notebook, N_("reconstruct"), NULL);
+  g->reconstruct_page = self->gui->widget;
 
   label = dt_ui_section_label_new(_("highlights clipping"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
