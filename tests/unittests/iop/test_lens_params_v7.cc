@@ -21,6 +21,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <fstream>
+#include <iterator>
+#include <string>
+
 #include <cmocka.h>
 
 #include "../../../src/iop/lens_legacy_params.hh"
@@ -216,6 +220,22 @@ static void test_unsupported_pairs_do_not_write(void **)
   assert_memory_equal(&output, &expected, sizeof(output));
 }
 
+static void test_production_legacy_params_delegates_to_shared_converter(void **)
+{
+  const std::string test_source = __FILE__;
+  const std::string test_directory = "/tests/unittests/iop/";
+  const size_t source_root_end = test_source.rfind(test_directory);
+  assert_true(source_root_end != std::string::npos);
+
+  std::ifstream source(test_source.substr(0, source_root_end) + "/src/iop/lens.cc");
+  assert_true(source.good());
+  const std::string contents((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  const char *const delegation = "return dt_iop_lensfun_convert_legacy_params(\n"
+                                "      old_params, old_version, static_cast<const dt_iop_lensfun_params_t *>(self->default_params),\n"
+                                "      static_cast<dt_iop_lensfun_params_t *>(new_params), new_version);";
+  assert_non_null(strstr(contents.c_str(), delegation));
+}
+
 int main()
 {
   const CMUnitTest tests[] = {
@@ -228,6 +248,7 @@ int main()
     cmocka_unit_test(test_v6_embedded_conversion),
     cmocka_unit_test(test_v6_lensfun_conversion),
     cmocka_unit_test(test_unsupported_pairs_do_not_write),
+    cmocka_unit_test(test_production_legacy_params_delegates_to_shared_converter),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);
 }

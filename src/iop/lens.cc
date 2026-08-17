@@ -111,6 +111,34 @@
 
 #include "develop/geometry/geometry.h"
 
+enum class dt_iop_lens_method_t
+{
+  LENSFUN = 0,
+  EMBEDDED_METADATA = 1
+};
+
+typedef struct dt_iop_lensfun_params_t
+{
+  int modify_flags;
+  float scale; // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0
+  float crop;
+  float focal;
+  float aperture;
+  float distance;
+  lfLensType target_geom;
+  char camera[128];    // NOSONAR
+  char lens[128];      // NOSONAR
+  float tca_r; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0
+  float tca_b; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0
+  int has_been_set;
+  dt_iop_lens_correction_source_t vignetting_method;
+  dt_iop_lens_correction_source_t distortion_method;
+  dt_iop_lens_tca_source_t tca_method;
+} dt_iop_lensfun_params_t;
+
+#define DT_IOP_LENSFUN_PARAMS_DECLARED
+#include "lens_legacy_params.hh"
+
 extern "C" {
 
 #if LF_VERSION < ((0 << 24) | (2 << 16) | (9 << 8) | 0)
@@ -122,31 +150,6 @@ extern "C" {
 #endif
 
   DT_MODULE_INTROSPECTION(7, dt_iop_lensfun_params_t)
-
-  enum class dt_iop_lens_method_t
-  {
-    LENSFUN = 0,
-    EMBEDDED_METADATA = 1
-  };
-
-  typedef struct dt_iop_lensfun_params_t
-  {
-    int modify_flags;
-    float scale; // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0
-    float crop;
-    float focal;
-    float aperture;
-    float distance;
-    lfLensType target_geom;
-    char camera[128];    // NOSONAR
-    char lens[128];      // NOSONAR
-    float tca_r; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0
-    float tca_b; // $MIN: 0.99 $MAX: 1.01 $DEFAULT: 1.0
-    int has_been_set;
-    dt_iop_lens_correction_source_t vignetting_method;
-    dt_iop_lens_correction_source_t distortion_method;
-    dt_iop_lens_tca_source_t tca_method;
-  } dt_iop_lensfun_params_t;
 
 static_assert(sizeof(dt_iop_lensfun_params_t) == 308,
               "params_t v7 size changed -- struct-split integrity failure");
@@ -411,238 +414,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
                   void *new_params, const int new_version)
 {
   if(!old_params || !new_params) return 1;
-
-  if(old_version == 2 && new_version == 7)
-  {
-    typedef struct
-    {
-      int modify_flags;
-      int inverse;
-      float scale;
-      float crop;
-      float focal;
-      float aperture;
-      float distance;
-      lfLensType target_geom;
-      char camera[52];
-      char lens[52];
-      int tca_override;
-      float tca_r;
-      float tca_b;
-    } dt_iop_lensfun_params_v2_t;
-
-    const dt_iop_lensfun_params_v2_t *o = (dt_iop_lensfun_params_v2_t *)old_params;
-    dt_iop_lensfun_params_t *n = (dt_iop_lensfun_params_t *)new_params;
-    dt_iop_lensfun_params_t *d = (dt_iop_lensfun_params_t *)self->default_params;
-
-    *n = *d;
-
-    n->modify_flags = o->modify_flags;
-    n->scale = o->scale;
-    n->crop = o->crop;
-    n->focal = o->focal;
-    n->aperture = o->aperture;
-    n->distance = o->distance;
-    n->target_geom = o->target_geom;
-    g_strlcpy(n->camera, o->camera, sizeof(n->camera));
-    g_strlcpy(n->lens, o->lens, sizeof(n->lens));
-    n->has_been_set = 0;
-
-    n->tca_r = o->tca_b;
-    n->tca_b = o->tca_r;
-
-    return 0;
-  }
-  if(old_version == 3 && new_version == 7)
-  {
-    typedef struct
-    {
-      int modify_flags;
-      int inverse;
-      float scale;
-      float crop;
-      float focal;
-      float aperture;
-      float distance;
-      lfLensType target_geom;
-      char camera[128];
-      char lens[128];
-      int tca_override;
-      float tca_r;
-      float tca_b;
-    } dt_iop_lensfun_params_v3_t;
-
-    const dt_iop_lensfun_params_v3_t *o = (dt_iop_lensfun_params_v3_t *)old_params;
-    dt_iop_lensfun_params_t *n = (dt_iop_lensfun_params_t *)new_params;
-    dt_iop_lensfun_params_t *d = (dt_iop_lensfun_params_t *)self->default_params;
-
-    *n = *d;
-
-    n->modify_flags = o->modify_flags;
-    n->scale = o->scale;
-    n->crop = o->crop;
-    n->focal = o->focal;
-    n->aperture = o->aperture;
-    n->distance = o->distance;
-    n->target_geom = o->target_geom;
-    g_strlcpy(n->camera, o->camera, sizeof(n->camera));
-    g_strlcpy(n->lens, o->lens, sizeof(n->lens));
-    n->has_been_set = 0;
-
-    n->tca_r = o->tca_b;
-    n->tca_b = o->tca_r;
-
-    return 0;
-  }
-
-  if(old_version == 4 && new_version == 7)
-  {
-    typedef struct
-    {
-      int modify_flags;
-      int inverse;
-      float scale;
-      float crop;
-      float focal;
-      float aperture;
-      float distance;
-      lfLensType target_geom;
-      char camera[128];
-      char lens[128];
-      int tca_override;
-      float tca_r;
-      float tca_b;
-      int modified;
-    } dt_iop_lensfun_params_v4_t;
-
-    const dt_iop_lensfun_params_v4_t *o = (dt_iop_lensfun_params_v4_t *)old_params;
-    dt_iop_lensfun_params_t *n = (dt_iop_lensfun_params_t *)new_params;
-    dt_iop_lensfun_params_t *d = (dt_iop_lensfun_params_t *)self->default_params;
-
-    *n = *d;
-
-    n->modify_flags = o->modify_flags;
-    n->scale = o->scale;
-    n->crop = o->crop;
-    n->focal = o->focal;
-    n->aperture = o->aperture;
-    n->distance = o->distance;
-    n->target_geom = o->target_geom;
-    g_strlcpy(n->camera, o->camera, sizeof(n->camera));
-    g_strlcpy(n->lens, o->lens, sizeof(n->lens));
-    n->has_been_set = o->modified ? 0 : 1;
-
-    n->tca_r = o->tca_b;
-    n->tca_b = o->tca_r;
-
-    return 0;
-  }
-
-  if(old_version == 5 && new_version == 7)
-  {
-    typedef struct
-    {
-      int modify_flags;
-      int inverse;
-      float scale;
-      float crop;
-      float focal;
-      float aperture;
-      float distance;
-      lfLensType target_geom;
-      char camera[128];
-      char lens[128];
-      gboolean tca_override;
-      float tca_r;
-      float tca_b;
-      int modified;
-    } dt_iop_lensfun_params_v5_t;
-
-    const auto *o = static_cast<const dt_iop_lensfun_params_v5_t *>(old_params);
-    auto n = static_cast<dt_iop_lensfun_params_t *>(new_params);
-    auto d = static_cast<dt_iop_lensfun_params_t *>(self->default_params);
-
-    *n = *d;
-
-    n->modify_flags = o->modify_flags;
-    n->scale = o->scale;
-    n->crop = o->crop;
-    n->focal = o->focal;
-    n->aperture = o->aperture;
-    n->distance = o->distance;
-    n->target_geom = o->target_geom;
-    g_strlcpy(n->camera, o->camera, sizeof(n->camera));
-    g_strlcpy(n->lens, o->lens, sizeof(n->lens));
-    n->has_been_set = o->modified ? 0 : 1;
-
-    n->tca_r = o->tca_b;
-    n->tca_b = o->tca_r;
-
-    return 0;
-  }
-
-  if(old_version == 6 && new_version == 7)
-  {
-    typedef struct
-    {
-      int modify_flags;
-      int inverse;
-      float scale;
-      float crop;
-      float focal;
-      float aperture;
-      float distance;
-      lfLensType target_geom;
-      char camera[128];
-      char lens[128];
-      gboolean tca_override;
-      float tca_r;
-      float tca_b;
-      int has_been_set;
-      dt_iop_lens_method_t method;
-      float cor_dist_ft;
-      float cor_vig_ft;
-      float cor_ca_r_ft;
-      float cor_ca_b_ft;
-      float scale_md;
-    } dt_iop_lensfun_params_v6_t;
-
-    const auto *o = static_cast<const dt_iop_lensfun_params_v6_t *>(old_params);
-    auto n = static_cast<dt_iop_lensfun_params_t *>(new_params);
-    auto d = static_cast<dt_iop_lensfun_params_t *>(self->default_params);
-
-    *n = *d;
-
-    n->modify_flags = o->modify_flags;
-    n->scale = o->scale;
-    n->crop = o->crop;
-    n->focal = o->focal;
-    n->aperture = o->aperture;
-    n->distance = o->distance;
-    n->target_geom = o->target_geom;
-    g_strlcpy(n->camera, o->camera, sizeof(n->camera));
-    g_strlcpy(n->lens, o->lens, sizeof(n->lens));
-    n->tca_r = o->tca_b;
-    n->tca_b = o->tca_r;
-    n->has_been_set = o->has_been_set;
-
-    if(o->method == dt_iop_lens_method_t::EMBEDDED_METADATA)
-    {
-      n->vignetting_method = dt_iop_lens_correction_source_t::EMBEDDED;
-      n->distortion_method  = dt_iop_lens_correction_source_t::EMBEDDED;
-      n->tca_method = dt_iop_lens_tca_source_t::EMBEDDED;
-    }
-    else
-    {
-      n->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
-      n->distortion_method  = dt_iop_lens_correction_source_t::LENSFUN_DB;
-      n->tca_method         = dt_iop_lens_tca_source_t::LENSFUN_DB;
-    }
-
-    return 0;
-  }
-
-  return 1;
+  return dt_iop_lensfun_convert_legacy_params(
+      old_params, old_version, static_cast<const dt_iop_lensfun_params_t *>(self->default_params),
+      static_cast<dt_iop_lensfun_params_t *>(new_params), new_version);
 }
 
 static char *_lens_sanitize(const char *orig_lens)
