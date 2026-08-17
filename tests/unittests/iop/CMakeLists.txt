@@ -16,9 +16,10 @@ add_cmocka_mock_test(test_embedded_lens_vendors
                      MOCKS )
 
 add_cmocka_mock_test(test_lens_params_v7
-                     SOURCES test_lens_params_v7.c
+                     SOURCES test_lens_params_v7.cc
                      LINK_LIBRARIES lib_ansel cmocka
                      MOCKS )
+set_target_properties(test_lens_params_v7 PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
 
 add_cmocka_mock_test(test_lens_predicates
                      SOURCES test_lens_predicates.c
