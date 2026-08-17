@@ -442,7 +442,7 @@ typedef struct dt_iop_highlights_params_t
   float combine;                      // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 2.0 $DESCRIPTION: "combine segments"
   int debugmode;
   // params of v4
-  float solid_color; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "inpaint a flat color"
+  float solid_color; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "inpaint a flat color"
 } dt_iop_highlights_params_t;
 
 typedef dt_iop_highlights_params_t dt_iop_highlights_data_t;
