@@ -40,9 +40,12 @@
 #include <string.h>
 
 #include <cmocka.h>
+#include <glib.h>
 
 #include "../util/assert.h"
 #include "../util/tracing.h"
+
+typedef struct dt_embedded_lens_finetune_t dt_embedded_lens_finetune_t;
 
 #include "iop/embedded_lens/embedded_lens.h"
 
@@ -71,22 +74,78 @@ static void assert_knots_sane(const float *knots, int n)
   }
 }
 
+static void assert_knot_tables_sane(const dt_embedded_lens_knots_t *knots)
+{
+  assert_knots_sane(knots->knots_dist, LENS_MAXKNOTS);
+  assert_knots_sane(knots->knots_vig, LENS_MAXKNOTS);
+  assert_knots_sane(knots->cor_rgb[0], LENS_MAXKNOTS);
+  assert_knots_sane(knots->cor_rgb[1], LENS_MAXKNOTS);
+  assert_knots_sane(knots->cor_rgb[2], LENS_MAXKNOTS);
+  assert_knots_sane(knots->vig, LENS_MAXKNOTS);
+}
+
+static void record_vendor_trace(GChecksum *checksum,
+                                const char *label,
+                                int nc,
+                                float scale,
+                                const dt_embedded_lens_knots_t *knots)
+{
+  const float *tables[] = {
+    knots->knots_dist, knots->knots_vig, knots->cor_rgb[0], knots->cor_rgb[1], knots->cor_rgb[2], knots->vig
+  };
+  char value[G_ASCII_DTOSTR_BUF_SIZE];
+
+  g_checksum_update(checksum, (const guchar *)label, strlen(label));
+  g_checksum_update(checksum, (const guchar *)"\n", 1);
+  g_snprintf(value, sizeof(value), "%d", nc);
+  g_checksum_update(checksum, (const guchar *)value, strlen(value));
+  g_checksum_update(checksum, (const guchar *)"\n", 1);
+  g_ascii_formatd(value, sizeof(value), "%.9g", scale);
+  g_checksum_update(checksum, (const guchar *)value, strlen(value));
+  g_checksum_update(checksum, (const guchar *)"\n", 1);
+
+  for(int table = 0; table < 6; table++)
+    for(int knot = 0; knot < LENS_MAXKNOTS; knot++)
+    {
+      g_ascii_formatd(value, sizeof(value), "%.9g", tables[table][knot]);
+      g_checksum_update(checksum, (const guchar *)value, strlen(value));
+      g_checksum_update(checksum, (const guchar *)"\n", 1);
+    }
+}
+
+static int initialize_vendor_trace(void **state)
+{
+  *state = g_checksum_new(G_CHECKSUM_SHA256);
+  return *state ? 0 : -1;
+}
+
+static int release_vendor_trace(void **state)
+{
+  g_checksum_free(*state);
+  return 0;
+}
+
+static void initialize_sony_metadata(dt_image_t *img)
+{
+  img->exif_correction_data.sony.nc = 16;
+  for(int i = 0; i < 16; i++)
+  {
+    img->exif_correction_data.sony.distortion[i] = (short)(i + 1);
+    img->exif_correction_data.sony.ca_r[i] = (short)(i + 1);
+    img->exif_correction_data.sony.ca_b[i] = (short)(i + 1);
+    img->exif_correction_data.sony.vignetting[i] = (short)(i + 1);
+  }
+}
+
 static void test_sony_valid(void **state)
 {
-  (void)state;
+  GChecksum *trace = *state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
   img.p_height = IMAGE_H;
   img.exif_correction_type = CORRECTION_TYPE_SONY;
-  img.exif_correction_data.sony.nc = 16;
-  for(int i = 0; i < 16; i++)
-  {
-    img.exif_correction_data.sony.distortion[i] = (short)(i + 1);
-    img.exif_correction_data.sony.ca_r[i] = (short)(i + 1);
-    img.exif_correction_data.sony.ca_b[i] = (short)(i + 1);
-    img.exif_correction_data.sony.vignetting[i] = (short)(i + 1);
-  }
+  initialize_sony_metadata(&img);
 
   dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
   dt_embedded_lens_knots_t knots = {};
@@ -96,12 +155,8 @@ static void test_sony_valid(void **state)
   int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, 16);
   assert_true(scale > 1.0f);
-  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
+  assert_knot_tables_sane(&knots);
+  record_vendor_trace(trace, "Sony full data", nc, scale, &knots);
 }
 
 static void test_sony_empty(void **state)
@@ -126,7 +181,7 @@ static void test_sony_empty(void **state)
 
 static void test_fuji_valid(void **state)
 {
-  (void)state;
+  GChecksum *trace = *state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -151,12 +206,8 @@ static void test_fuji_valid(void **state)
   int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, LENS_MAXKNOTS);
   assert_true(scale > 0.0f);
-  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
+  assert_knot_tables_sane(&knots);
+  record_vendor_trace(trace, "Fuji full data", nc, scale, &knots);
 }
 
 static void test_fuji_empty(void **state)
@@ -181,7 +232,7 @@ static void test_fuji_empty(void **state)
 
 static void test_dng_valid(void **state)
 {
-  (void)state;
+  GChecksum *trace = *state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -210,12 +261,8 @@ static void test_dng_valid(void **state)
   int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, LENS_MAXKNOTS);
   assert_true(scale > 0.0f);
-  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
+  assert_knot_tables_sane(&knots);
+  record_vendor_trace(trace, "DNG warp+vignette", nc, scale, &knots);
 }
 
 static void test_dng_empty(void **state)
@@ -241,7 +288,7 @@ static void test_dng_empty(void **state)
 
 static void test_olympus_valid(void **state)
 {
-  (void)state;
+  GChecksum *trace = *state;
   dt_image_t img;
   memset(&img, 0, sizeof(img));
   img.p_width = IMAGE_W;
@@ -268,12 +315,26 @@ static void test_olympus_valid(void **state)
   int nc = dt_embedded_lens_init_coeffs(&img, &ft, &knots, &scale);
   assert_int_equal(nc, LENS_MAXKNOTS);
   assert_true(scale > 0.0f);
-  assert_knots_sane(knots.knots_dist, LENS_MAXKNOTS);
-  assert_knots_sane(knots.knots_vig, LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[0], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[1], LENS_MAXKNOTS);
-  assert_knots_sane(knots.cor_rgb[2], LENS_MAXKNOTS);
-  assert_knots_sane(knots.vig, LENS_MAXKNOTS);
+  assert_knot_tables_sane(&knots);
+  record_vendor_trace(trace, "Olympus dist+ca", nc, scale, &knots);
+}
+
+static void test_vendor_trace_matches_golden(void **state)
+{
+  GChecksum *trace = *state;
+  char *contents = NULL;
+  char *expected;
+  char *source_dir = g_path_get_dirname(__FILE__);
+  char *golden_path = g_build_filename(source_dir, "golden", "embedded_lens_vendors.sha256", NULL);
+
+  assert_true(g_file_get_contents(golden_path, &contents, NULL, NULL));
+  expected = g_strndup(contents, 64);
+  assert_string_equal(g_checksum_get_string(trace), expected);
+
+  g_free(expected);
+  g_free(contents);
+  g_free(golden_path);
+  g_free(source_dir);
 }
 
 static void test_olympus_empty(void **state)
@@ -306,7 +367,7 @@ static void test_none(void **state)
   img.p_height = IMAGE_H;
   img.exif_correction_type = CORRECTION_TYPE_NONE;
 
-  dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
+  struct dt_embedded_lens_finetune_t ft = { 1.0f, 1.0f, 1.0f, 1.0f };
   dt_embedded_lens_knots_t knots = {};
   float scale = -1.0f;
 
@@ -324,14 +385,7 @@ static void test_sony_half_fine_tune(void **state)
   img.p_width = IMAGE_W;
   img.p_height = IMAGE_H;
   img.exif_correction_type = CORRECTION_TYPE_SONY;
-  img.exif_correction_data.sony.nc = 16;
-  for(int i = 0; i < 16; i++)
-  {
-    img.exif_correction_data.sony.distortion[i] = (short)(i + 1);
-    img.exif_correction_data.sony.ca_r[i] = (short)(i + 1);
-    img.exif_correction_data.sony.ca_b[i] = (short)(i + 1);
-    img.exif_correction_data.sony.vignetting[i] = (short)(i + 1);
-  }
+  initialize_sony_metadata(&img);
 
   dt_embedded_lens_knots_t knots_full;
   float scale_full = 0.0f;
@@ -376,9 +430,10 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_olympus_empty),
     cmocka_unit_test(test_none),
     cmocka_unit_test(test_sony_half_fine_tune),
+    cmocka_unit_test(test_vendor_trace_matches_golden),
   };
 
-  return cmocka_run_group_tests(tests, NULL, NULL);
+  return cmocka_run_group_tests(tests, initialize_vendor_trace, release_vendor_trace);
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
