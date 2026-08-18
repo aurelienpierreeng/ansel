@@ -168,9 +168,19 @@ before the next lands. Ratchet: `grep -rc "virtual_pipe" src/` may only fall.
   wired to all rebuild sites, walkers (5 modes + query-time exception), size fold with
   per-module dims for all modules, provider seam type, shadow-mode harness. Chain stays
   non-authoritative (empty roster) — pure scaffolding, behavior identical.
-- **G3 — the simple five**: crop, flip, borders, rotatepixels, rawprepare (all pure
-  functions of committed params + dims) publish records; shared constructors extracted
-  from their commit_params; evaluators extracted from their distort bodies.
+- **G3 — first authority** (PR #1166): crop, flip, rawprepare, demosaic, basebuffer.
+  Composition set by measurement, not by taste: G2's shadow harness named the five modules
+  gating the test image, and three of them (rawprepare, demosaic, basebuffer) are
+  always-enabled infrastructure this plan had scattered across G3 and G6. Nothing can become
+  authoritative without those three, so they came first, with the two simple ones that
+  complete that image. Shadow mode gained five transform probes here, so it compares
+  coordinates and not only sizes; both agree on a cropped+flipped NEF and an X-Trans RAF.
+
+  **What the breadth run then said, and it reorders the rest:** across CR2, ARW and DNG from
+  the test collection the only remaining gate is `lens`, on every one of them. So lens comes
+  next — it buys more than borders, rotatepixels, scalepixels and clipping combined, none of
+  which has gated anything measured so far. The tranches below keep their content; their
+  ORDER should keep following the harness rather than this list.
 - **G4 — the dirty pair**: clipping + scalepixels pure-constructor refactors (trap 3),
   then their records; resolve the ×100 hack with a shadow diff.
 - **G5 — ashift + lens**: ashift's homography record; lens's record with deep lfLens copy
