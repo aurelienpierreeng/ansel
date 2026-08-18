@@ -71,9 +71,16 @@ struct dt_geometry_chain_t
    * reporting "not ready", which would be true and useless. */
   GList *missing;   /**< gchar*, owned */
 
-  /* Query-time GUI state, published by dt_geometry_set_focus(). */
-  const struct dt_iop_module_t *focused;
-  gboolean focus_editing;
+  /* Query-time GUI state, published by dt_geometry_set_focus(). Held BY VALUE, not as a
+   * dt_iop_module_t pointer: the focus outlives individual publications, and a module can be
+   * destroyed (instance removed, image changed, darkroom left) without anyone telling this
+   * chain. A stored pointer would then be dereferenced by the next query. The two things the
+   * exception needs -- who is focused, and what that module filters -- are both immutable for
+   * a given module, so copying them costs nothing and cannot dangle. */
+  char focus_op[32];
+  int focus_instance;
+  int focus_tags_filter;
+  gboolean focus_active;
 };
 
 static gboolean _on_roster(const char *op)
@@ -134,10 +141,9 @@ static gint _by_iop_order(gconstpointer a, gconstpointer b)
  */
 static gboolean _suppressed_by_focus(const dt_geometry_chain_t *chain, const dt_geometry_record_t *record)
 {
-  if(IS_NULL_PTR(chain->focused) || !chain->focus_editing) return FALSE;
-  if(!strcmp(chain->focused->op, record->op) && chain->focused->multi_priority == record->instance)
-    return FALSE;
-  return (chain->focused->operation_tags_filter() & record->operation_tags) != 0;
+  if(!chain->focus_active) return FALSE;
+  if(!strcmp(chain->focus_op, record->op) && chain->focus_instance == record->instance) return FALSE;
+  return (chain->focus_tags_filter & record->operation_tags) != 0;
 }
 
 /**
@@ -205,7 +211,6 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
     record->iop_order = module->iop_order;
     record->enabled = TRUE;
     record->operation_tags = module->operation_tags();
-    record->operation_tags_filter = module->operation_tags_filter();
 
     /* A module that publishes nothing is identity, which is correct for the ~80 modules that
      * do not touch geometry -- their record exists only to carry dimensions. A ROSTER module
@@ -312,8 +317,24 @@ int dt_geometry_backtransform(dt_develop_t *dev, const double iop_order, const i
 void dt_geometry_set_focus(dt_develop_t *dev, const dt_iop_module_t *focused, const gboolean editing)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain)) return;
-  dev->geometry_chain->focused = focused;
-  dev->geometry_chain->focus_editing = editing;
+  dt_geometry_chain_t *chain = dev->geometry_chain;
+
+  if(IS_NULL_PTR(focused) || !editing)
+  {
+    chain->focus_active = FALSE;
+    return;
+  }
+
+  g_strlcpy(chain->focus_op, focused->op, sizeof(chain->focus_op));
+  chain->focus_instance = focused->multi_priority;
+  chain->focus_tags_filter = focused->operation_tags_filter();
+  chain->focus_active = TRUE;
+}
+
+void dt_geometry_clear_focus(dt_develop_t *dev)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain)) return;
+  dev->geometry_chain->focus_active = FALSE;
 }
 
 void dt_geometry_shadow_check_size(dt_develop_t *dev, const int pipe_width, const int pipe_height)
