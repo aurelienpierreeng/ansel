@@ -503,7 +503,7 @@ static const dt_geometry_vtable_t _crop_geometry_vtable = {
   .backtransform = _crop_geometry_backtransform,
 };
 
-gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
 {
   /* Same constructor commit_params() uses, including the edit-mode neutralisation: while the
    * crop GUI is in editing mode the pipe renders the full uncropped frame, and the overlays
@@ -511,7 +511,7 @@ gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
   dt_iop_crop_data_t *data = (dt_iop_crop_data_t *)g_malloc0(sizeof(dt_iop_crop_data_t));
   if(IS_NULL_PTR(data)) return FALSE;
 
-  _crop_resolve(self, (const dt_iop_crop_params_t *)self->params, data);
+  _crop_resolve(self, (const dt_iop_crop_params_t *)params, data);
 
   record->data = data;
   record->free_data = dt_free_gpointer;

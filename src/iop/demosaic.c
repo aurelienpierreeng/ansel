@@ -984,9 +984,9 @@ static const dt_geometry_vtable_t _demosaic_geometry_vtable = {
   .backtransform = NULL,
 };
 
-gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
 {
-  const dt_iop_demosaic_params_t *const p = (const dt_iop_demosaic_params_t *)self->params;
+  const dt_iop_demosaic_params_t *const p = (const dt_iop_demosaic_params_t *)params;
 
   dt_iop_demosaic_geometry_t *data
       = (dt_iop_demosaic_geometry_t *)g_malloc0(sizeof(dt_iop_demosaic_geometry_t));
