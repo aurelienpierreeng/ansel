@@ -335,6 +335,63 @@ services that harvest their users:
   license) is recorded per training tile in the `ansel-denoise` repo. No
   scraped social media, no unconsenting photographers, no user data.
 
+## Same result on CPU and GPU — and what can break that
+
+The module is a fixed function, so CPU and OpenCL must agree. They are checked
+against each other *and* against the training-side reference (PyTorch) on every
+shipped model, both sensor layouts, by `src/apps/ansel-nn-parity`: measured
+$9\times10^{-8}$ to $2\times10^{-7}$ maximum absolute error against a
+$2\times10^{-4}$ tolerance. In real renders CPU and GPU land within 0.002 % of
+each other.
+
+One thing outside Ansel can break that, and it is worth knowing about because
+the symptom looks like a module bug: **the accuracy of your graphics driver's
+own math library**. Ansel used to compile its kernels with
+`-cl-unsafe-math-optimizations`, which permits a driver to substitute a
+low-precision implementation for any standard function. Most do so harmlessly.
+Intel's integrated-GPU driver does not: under that flag its `erf()` returns
+exactly `0.0` for arguments below about $10^{-3}$. The activation function in
+this network is $\tfrac{1}{2}x\,(1 + \mathrm{erf}(x/\sqrt{2}))$, and a
+convolutional network spends most of its activations in precisely that range,
+so the entire model drifted — visibly, as a fine mesh on X-Trans files.
+
+Ansel no longer requests that flag on any vendor (it bought no measurable
+speed: 0.4 % across a whole pipeline, inside run-to-run noise). Two things
+follow for users:
+
+- **Upgrading alone does not fix an affected installation.** The kernel build
+  options live in a per-device `anselrc` key that is written once and never
+  overwritten:
+  `cldevice_v4/<n>/<device-name>/building`. If yours still reads
+  `-cl-fast-relaxed-math … -cl-unsafe-math-optimizations`, replace it with
+  `-cl-mad-enable -cl-no-signed-zeros` and delete the compiled kernel cache
+  (`~/.cache/ansel/cached_kernels_for_*`) so the kernels rebuild.
+- **You can test your own hardware.** `tools/opencl-math-accuracy.c` is a
+  standalone program (it does not link against Ansel) that scores every
+  OpenCL device on your machine, under every build-option set, against a
+  double-precision reference, and prints the exact `anselrc` line for any
+  device that needs one. See `doc/opencl-math-accuracy.md`.
+
+## Choosing a model size, especially on X-Trans
+
+The three sizes are a quality/time trade, and they are **not** interchangeable
+renders of the same function — each is a separately fitted model.
+
+On X-Trans sensors the smaller models leave a residual pattern correlated with
+the 6×6 colour filter array. Measured on a Fuji X100F frame as the strength of
+sensor-lattice structure in a flat area, relative to an undenoised render of
+the same frame: quarter ≈ 970×, half ≈ 84×, large ≈ 16×. This is a capacity
+limit, not a bug in the CPU or GPU code — the two devices agree to three
+significant figures, and the effect falls by a factor of 60 purely by giving
+the network more parameters. A network with fewer parameters has a harder time
+learning to treat all 36 distinct X-Trans site types identically.
+
+Practical guidance: on X-Trans, prefer **large** where the processing time is
+acceptable, and **half** as the reasonable compromise. On Bayer sensors the
+smaller models are much better behaved, the colour filter array having only
+four site types to equalise. Improving the small models on X-Trans is a
+training-side problem, tracked upstream in `ansel-denoise`.
+
 ## What this is not
 
 The public conversation about "AI" is dominated by large language models and
@@ -365,4 +422,7 @@ actually care about: *noise is not detail*.
 | `data/kernels/rawdenoiseai.cl` | OpenCL kernels (convolution, upsampling) |
 | `data/CMakeLists.txt` | build-time hash-verified model fetch (`FETCH_NN_MODELS`) |
 | [ansel-denoise](https://github.com/aurelienpierreeng/ansel-denoise) | training pipeline, data harvesting, published models (`models/`) |
-| `src/tests/nn_model_test.c` | parity selftest against the training-side reference (tolerance $2\times10^{-4}$, measured $\sim 2\times10^{-7}$) |
+| `src/tests/nn_model_test.c` | torch-vs-CPU parity selftest, builds standalone without Ansel (tolerance $2\times10^{-4}$, measured $\sim 2\times10^{-7}$) |
+| `src/apps/ansel-nn-parity` | torch vs CPU vs **OpenCL** on the same fixture; needs lib_ansel because the GPU path wants a compiled program number |
+| `tools/opencl-math-accuracy.c` | standalone probe: scores each OpenCL device's math library per build-option set, prints the `anselrc` line to fix a bad one |
+| `doc/opencl-math-accuracy.md` | the measurements behind the kernel build options, and how to override them per device |
