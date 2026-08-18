@@ -56,6 +56,7 @@
 
 #include <glib.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "colorprofiles/profile_types.h"
 #include "math/matrices.h"
@@ -229,6 +230,28 @@ void dt_colorspaces_apply_conversion_hooked(const dt_colorspaces_conversion_t *c
  * apply on the host. A caller that finds itself running a matrix multiply from
  * dt_colorspaces_conversion_matrix() on the CPU has taken the wrong entry point.
  */
+
+/**
+ * @brief What this conversion IS, as a number: equal for two conversions that render the same
+ * pixels, different otherwise.
+ *
+ * @details For a caller that folds its rendering state into a pipeline cache key. The prepared
+ * conversion is opaque and lives on the heap, so a caller holding one has nothing else to
+ * offer a hash but its ADDRESS -- and an address describes no pixels. It both MISSES (the
+ * allocator hands back a different address for an identical conversion, re-keying the whole
+ * downstream chain to recompute pixels that cannot have moved) and, worse, HITS FALSELY (it
+ * hands back the SAME address for a conversion built from a different profile or intent, and
+ * the cache serves the previous one's pixels under the new key).
+ *
+ * This is the fix for both: it names the profiles the conversion resolved to, the intent and
+ * flags it was built with, the shape it settled on, its matrices, and the colour-management
+ * settings generation -- which is what separates two monitor profiles, since both are called
+ * DT_COLORSPACE_DISPLAY and differ only in their bytes.
+ *
+ * @return 0 for a NULL conversion, which is a legitimate state (a nop module) and must key
+ *         differently from any prepared one.
+ */
+uint64_t dt_colorspaces_conversion_identity(const dt_colorspaces_conversion_t *const conversion);
 
 /**
  * @brief Whether the conversion reduced to matrices and curves, and can therefore be run by a

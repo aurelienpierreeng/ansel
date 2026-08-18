@@ -21,6 +21,7 @@
 #include "colorprofiles/iop_profile.h"
 
 #include "common/colorspaces_inline_conversions.h"
+#include "common/hash.h"
 #include "common/logging.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
@@ -80,6 +81,9 @@ struct dt_colorspaces_conversion_t
    * practice is the quantised soft-proof copy. */
   cmsHPROFILE owned[1];
   int n_owned;
+
+  /* What this conversion IS, as a number: see dt_colorspaces_conversion_identity(). */
+  uint64_t identity;
 };
 
 /* Some built-in profiles carry a parametric TRC, which lcms2 reproduces exactly: a round trip
@@ -124,6 +128,35 @@ static cmsHPROFILE _resolve_endpoint(const dt_colorspaces_endpoint_t *const endp
 
   *entry = found;
   return found->profile;
+}
+
+/* Fold one endpoint's identity into a running hash.
+ *
+ * `entry' is the registered profile the endpoint resolved to, or NULL when the caller supplied
+ * an already-resolved, image-owned profile (dt_colorspaces_endpoint_t::resolved) -- in that case
+ * the endpoint's own type/filename is the only name that profile has. Such a profile belongs to
+ * ONE image, so two images' embedded profiles share a name here; that is harmless because the
+ * rest of a pipeline's cache key already separates two images, and it is the caller's business
+ * either way. */
+static uint64_t _hash_endpoint(uint64_t hash, const dt_colorspaces_endpoint_t *const endpoint,
+                               const dt_colorspaces_color_profile_t *const entry)
+{
+  dt_colorspaces_color_profile_type_t type = DT_COLORSPACE_NONE;
+  const char *filename = "";
+
+  if(!IS_NULL_PTR(entry))
+  {
+    type = entry->type;
+    filename = entry->filename;
+  }
+  else if(!IS_NULL_PTR(endpoint))
+  {
+    type = endpoint->type;
+    if(!IS_NULL_PTR(endpoint->filename)) filename = endpoint->filename;
+  }
+
+  hash = dt_hash(hash, (const char *)&type, sizeof(type));
+  return dt_hash(hash, filename, strlen(filename));
 }
 
 /* lcms2 pixel format for a handle. colorin used to derive this from cmsGetColorSpace() and
@@ -181,6 +214,12 @@ dt_colorspaces_conversion_t *dt_colorspaces_prepare_conversion(const dt_colorspa
 
   dt_colorspaces_conversion_t *conversion = calloc(1, sizeof(dt_colorspaces_conversion_t));
   if(IS_NULL_PTR(conversion)) return NULL;
+
+  /* Read before any profile entry lock is taken, so this never nests the settings lock inside
+   * one. It is folded into the identity below: it is the only thing that distinguishes two
+   * monitor profiles, which share the name DT_COLORSPACE_DISPLAY and differ only in content. */
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
 
   conversion->from_type = from->type;
   conversion->to_type = to->type;
@@ -357,6 +396,54 @@ dt_colorspaces_conversion_t *dt_colorspaces_prepare_conversion(const dt_colorspa
     if(IS_NULL_PTR(conversion->xform)) goto give_up;
   }
 
+  /* The identity of what was actually built -- see dt_colorspaces_conversion_identity(). It is
+   * computed HERE, from the finished object, rather than from the arguments: the branches above
+   * drop proofing when quantising fails and fall back from the matrix path to lcms2, so what the
+   * caller asked for and what it gets are not always the same thing, and it is what it GETS that
+   * decides the pixels.
+   *
+   * The curve LUTs are deliberately not hashed. They run to DT_CONVERSION_LUT_SAMPLES entries
+   * per channel -- 1.5 MB across both stages, on a path that runs once per pipeline resync --
+   * and they are a pure function of the profiles named just above, whose every mutation is
+   * either a new name or a new generation. The matrices are hashed because they are small and
+   * because doing so costs nothing. */
+  {
+    uint64_t identity = 5381;
+    identity = _hash_endpoint(identity, from, from_entry);
+    identity = _hash_endpoint(identity, to, to_entry);
+    identity = _hash_endpoint(identity, clip, clip_entry);
+    identity = _hash_endpoint(identity, proof, proof_entry);
+    identity = dt_hash(identity, (const char *)&intent, sizeof(intent));
+    identity = dt_hash(identity, (const char *)&flags, sizeof(flags));
+    identity = dt_hash(identity, (const char *)&settings.generation, sizeof(settings.generation));
+
+    identity = dt_hash(identity, (const char *)&conversion->is_matrix, sizeof(conversion->is_matrix));
+    identity = dt_hash(identity, (const char *)&conversion->has_clipping, sizeof(conversion->has_clipping));
+    identity = dt_hash(identity, (const char *)&conversion->gamutcheck, sizeof(conversion->gamutcheck));
+    identity = dt_hash(identity, (const char *)&conversion->have_source_matrix,
+                       sizeof(conversion->have_source_matrix));
+    identity = dt_hash(identity, (const char *)conversion->matrix, sizeof(conversion->matrix));
+    identity = dt_hash(identity, (const char *)conversion->clip_matrix, sizeof(conversion->clip_matrix));
+    identity = dt_hash(identity, (const char *)conversion->source_matrix, sizeof(conversion->source_matrix));
+    identity = dt_hash(identity, (const char *)&conversion->nonlinear_source,
+                       sizeof(conversion->nonlinear_source));
+    identity = dt_hash(identity, (const char *)&conversion->nonlinear_target,
+                       sizeof(conversion->nonlinear_target));
+    identity = dt_hash(identity, (const char *)conversion->coeffs_source, sizeof(conversion->coeffs_source));
+    identity = dt_hash(identity, (const char *)conversion->coeffs_target, sizeof(conversion->coeffs_target));
+
+    /* Whether a curve stage exists at all is structure, not content. */
+    for(int c = 0; c < 3; c++)
+    {
+      const gboolean has_source = !IS_NULL_PTR(conversion->lut_source[c]);
+      const gboolean has_target = !IS_NULL_PTR(conversion->lut_target[c]);
+      identity = dt_hash(identity, (const char *)&has_source, sizeof(has_source));
+      identity = dt_hash(identity, (const char *)&has_target, sizeof(has_target));
+    }
+
+    conversion->identity = identity;
+  }
+
   dt_colorspaces_unlock_profile(proof_entry);
   dt_colorspaces_unlock_profile(clip_entry);
   dt_colorspaces_unlock_profile(to_entry);
@@ -372,6 +459,11 @@ give_up:
   dt_colorspaces_unlock_profile(from_entry);
   dt_colorspaces_free_conversion(&conversion);
   return NULL;
+}
+
+uint64_t dt_colorspaces_conversion_identity(const dt_colorspaces_conversion_t *const conversion)
+{
+  return IS_NULL_PTR(conversion) ? 0 : conversion->identity;
 }
 
 void dt_colorspaces_free_conversion(dt_colorspaces_conversion_t **conversion)
