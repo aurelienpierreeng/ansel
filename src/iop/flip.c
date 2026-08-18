@@ -61,6 +61,7 @@
 #include "imageio/imageio_core.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_gui.h"
@@ -225,6 +226,40 @@ static void backtransform(const int32_t *x, int32_t *o, const dt_image_orientati
   }
 }
 
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * The ONE place flip's orientation is resolved and the ONE place its size map is expressed.
+ * commit_params() and modify_roi_out() use them, and so does geometry_record() for the
+ * pixel-less geometry service (develop/geometry/geometry.h).
+ */
+
+/**
+ * @brief The orientation this module will actually apply.
+ *
+ * @details ORIENTATION_NULL means "whatever the file says", which is resolved from the image's
+ * EXIF here rather than stored in params -- so the resolution has to happen identically wherever
+ * the orientation is consumed, or a record would describe a rotation the pipe is not doing.
+ */
+static dt_image_orientation_t _flip_resolve(dt_iop_module_t *self, const dt_iop_flip_params_t *const p)
+{
+  if(p->orientation == ORIENTATION_NULL) return dt_image_orientation(&self->dev->image_storage);
+  return p->orientation;
+}
+
+/** @brief Input rect -> output rect: a swap, or nothing. */
+static void _flip_map_size(const dt_image_orientation_t orientation, const dt_iop_roi_t *const roi_in,
+                           dt_iop_roi_t *roi_out)
+{
+  *roi_out = *roi_in;
+
+  // transform whole buffer roi
+  if(orientation & ORIENTATION_SWAP_XY)
+  {
+    roi_out->width = roi_in->height;
+    roi_out->height = roi_in->width;
+  }
+}
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const restrict points, size_t points_count)
 {
@@ -305,14 +340,7 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
                     const dt_iop_roi_t *roi_in)
 {
   const dt_iop_flip_data_t *d = (dt_iop_flip_data_t *)piece->data;
-  *roi_out = *roi_in;
-
-  // transform whole buffer roi
-  if(d->orientation & ORIENTATION_SWAP_XY)
-  {
-    roi_out->width = roi_in->height;
-    roi_out->height = roi_in->width;
-  }
+  _flip_map_size(d->orientation, roi_in, roi_out);
 }
 
 // 2nd pass: which roi would this operation need as input to fill the given output region?
@@ -423,12 +451,92 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   const dt_iop_flip_params_t *p = (dt_iop_flip_params_t *)p1;
   dt_iop_flip_data_t *d = (dt_iop_flip_data_t *)piece->data;
 
-  if(p->orientation == ORIENTATION_NULL)
-    d->orientation = dt_image_orientation(&self->dev->image_storage);
-  else
-    d->orientation = p->orientation;
+  d->orientation = _flip_resolve(self, p);
 
   if(d->orientation == ORIENTATION_NONE) piece->enabled = 0;
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+typedef struct dt_iop_flip_geometry_t
+{
+  dt_image_orientation_t orientation;
+} dt_iop_flip_geometry_t;
+
+static void _flip_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _flip_map_size(((const dt_iop_flip_geometry_t *)data)->orientation, in, out);
+}
+
+static int _flip_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                    dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_image_orientation_t orientation = ((const dt_iop_flip_geometry_t *)data)->orientation;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    float x = points[i];
+    float y = points[i + 1];
+    if(orientation & ORIENTATION_FLIP_X) x = record->in.width - points[i];
+    if(orientation & ORIENTATION_FLIP_Y) y = record->in.height - points[i + 1];
+    if(orientation & ORIENTATION_SWAP_XY)
+    {
+      const float yy = y;
+      y = x;
+      x = yy;
+    }
+    points[i] = x;
+    points[i + 1] = y;
+  }
+  return 1;
+}
+
+static int _flip_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                        dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_image_orientation_t orientation = ((const dt_iop_flip_geometry_t *)data)->orientation;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    float x = points[i];
+    float y = points[i + 1];
+    if(orientation & ORIENTATION_SWAP_XY)
+    {
+      const float yy = y;
+      y = x;
+      x = yy;
+    }
+    if(orientation & ORIENTATION_FLIP_X) x = record->in.width - x;
+    if(orientation & ORIENTATION_FLIP_Y) y = record->in.height - y;
+    points[i] = x;
+    points[i + 1] = y;
+  }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _flip_geometry_vtable = {
+  .map_size = _flip_geometry_map_size,
+  .transform = _flip_geometry_transform,
+  .backtransform = _flip_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+{
+  const dt_image_orientation_t orientation
+      = _flip_resolve(self, (const dt_iop_flip_params_t *)self->params);
+
+  /* ORIENTATION_NONE is how commit_params() clears piece->enabled: an enabled flip module whose
+   * resolved orientation is a no-op contributes nothing to the pipe, and must contribute nothing
+   * here either. Published (so the roster is satisfied) with no vtable, which the chain reads as
+   * identity -- the same thing a disabled piece is. */
+  if(orientation == ORIENTATION_NONE) return TRUE;
+
+  dt_iop_flip_geometry_t *data = (dt_iop_flip_geometry_t *)g_malloc0(sizeof(dt_iop_flip_geometry_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+  data->orientation = orientation;
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_flip_geometry_vtable;
+  return TRUE;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

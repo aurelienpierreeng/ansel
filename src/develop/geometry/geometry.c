@@ -24,6 +24,7 @@
 #include "develop/imageop.h"
 #include "system/mem_alloc.h"
 
+#include <math.h>
 #include <string.h>
 
 /**
@@ -370,11 +371,51 @@ void dt_geometry_shadow_check_size(dt_develop_t *dev, const int pipe_width, cons
   }
 
   if(chain->processed_width != pipe_width || chain->processed_height != pipe_height)
+  {
     dt_print(DT_DEBUG_DEV, "[geometry] SIZE DIVERGENCE: chain %dx%d, pipe %dx%d\n", chain->processed_width,
              chain->processed_height, pipe_width, pipe_height);
+    return;
+  }
+
+  /* The size fold only exercises map_size. Probe the point transforms too, or the evaluators
+   * that actually move overlays would go unverified until a consumer switched over and a user
+   * noticed a mask sitting in the wrong place.
+   *
+   * Five points spanning the raw frame, forward through everything (iop_order 0, DIR_ALL --
+   * what dt_dev_coordinates_raw_abs_to_image_abs() asks for), then the same through the pipe.
+   * The tolerance is half a pixel: both sides do the same arithmetic in the same order, so they
+   * should agree exactly, but the fold's rects reach the evaluators as ints on one side and
+   * through piece->buf_in on the other, and a rounding difference of that size is not a defect
+   * worth failing on. Anything larger is a real divergence and is printed with the point. */
+  const float w = (float)chain->raw_width;
+  const float h = (float)chain->raw_height;
+  float chain_points[10] = { 0.f, 0.f, w, 0.f, 0.f, h, w, h, 0.5f * w, 0.5f * h };
+  float pipe_points[10];
+  memcpy(pipe_points, chain_points, sizeof(pipe_points));
+
+  if(!dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, chain_points, 5)) return;
+  if(IS_NULL_PTR(dev->virtual_pipe)) return;
+  dt_dev_distort_transform_plus(dev->virtual_pipe, 0.0, DT_DEV_TRANSFORM_DIR_ALL, pipe_points, 5);
+
+  int diverged = 0;
+  for(int i = 0; i < 5; i++)
+  {
+    if(fabsf(chain_points[2 * i] - pipe_points[2 * i]) > 0.5f
+       || fabsf(chain_points[2 * i + 1] - pipe_points[2 * i + 1]) > 0.5f)
+    {
+      dt_print(DT_DEBUG_DEV,
+               "[geometry] TRANSFORM DIVERGENCE at probe %d: chain (%.2f, %.2f), pipe (%.2f, %.2f)\n", i,
+               chain_points[2 * i], chain_points[2 * i + 1], pipe_points[2 * i], pipe_points[2 * i + 1]);
+      diverged++;
+    }
+  }
+
+  if(diverged)
+    dt_print(DT_DEBUG_DEV, "[geometry] size agrees (%dx%d) but %d/5 transform probes diverge\n",
+             chain->processed_width, chain->processed_height, diverged);
   else
-    dt_print(DT_DEBUG_DEV, "[geometry] size agrees with the pipe: %dx%d\n", chain->processed_width,
-             chain->processed_height);
+    dt_print(DT_DEBUG_DEV, "[geometry] agrees with the pipe: size %dx%d, all 5 transform probes\n",
+             chain->processed_width, chain->processed_height);
 }
 
 // clang-format off
