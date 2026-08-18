@@ -966,6 +966,10 @@ add_subdirectory(imageio)
 if(HAVE_OPENCL)
   # have a small test program, to be run as root on some systems to enable the driver to run cl stuff
   add_subdirectory(apps/ansel-cltest)
+  # three-way parity of the .anselnn executor: torch fixture vs CPU vs OpenCL. The GPU half
+  # needs a compiled program number, so unlike src/tests/nn_model_test.c it cannot be built
+  # standalone and has to link lib_ansel.
+  add_subdirectory(apps/ansel-nn-parity)
 endif(HAVE_OPENCL)
 
 # have a command line interface
