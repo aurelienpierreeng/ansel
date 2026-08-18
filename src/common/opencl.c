@@ -2843,6 +2843,29 @@ void dt_opencl_check_tuning(const int devid)
 
   cl->dev[devid].used_available = MAX(0ul, cl->dev[devid].max_global_mem - headroom * 1024 * 1024);
 
+  /* On a host-unified device, `max_global_mem` is SYSTEM RAM -- the same RAM the host side of
+   * the pipeline is already spending -- so handing it out as a device budget double-counts it.
+   * An Intel HD P630 reports 28.75 GiB on a 31 GiB machine; minus the 512 MiB headroom above
+   * that authorises a 28926 MiB working set, every module's full-frame fit check passes, the
+   * tiler is never reached, and the first oversized map dies with CL_OUT_OF_RESOURCES -- which
+   * disables OpenCL for the whole pipe and silently drops it to CPU. That is a fallback caused
+   * purely by over-budgeting: the work fits perfectly well once tiled.
+   *
+   * Bound it by the driver's own single-allocation limit, halved. `max_mem_alloc` is the only
+   * figure a shared-memory device publishes that reflects an allocation limit rather than how
+   * much RAM the machine happens to have, but it is a bound on ONE buffer, not on a working
+   * set: NEO reports min(global/4, 4 GiB), which is a cap, not a promise. Measured on the
+   * P630 with the raw denoiser (factor_cl ~84, so the budget IS the working set): at a 4095
+   * MiB budget the tiler plans a ~4 GiB per-tile working set and process_cl dies with
+   * CL_OUT_OF_RESOURCES mid-tile; at 2048 and 1024 MiB it tiles (3x3 / 4x4) and completes on
+   * device. Half the single-allocation limit is the conservative reading, and the per-device
+   * `forced_headroom` key remains the escape hatch either way.
+   *
+   * Discrete devices are untouched: host_unified_memory is false there, max_global_mem really
+   * is dedicated vRAM, and the existing headroom rule already governs it. */
+  if(cl->dev[devid].host_unified_memory)
+    cl->dev[devid].used_available = MIN(cl->dev[devid].used_available, cl->dev[devid].max_mem_alloc / 2);
+
   dt_print(DT_DEBUG_OPENCL | DT_DEBUG_MEMORY,
       "[dt_opencl_check_tuning] use %" G_GSIZE_FORMAT " MiB on device `%s' id=%i\n",
       cl->dev[devid].used_available / (1024 * 1024),
