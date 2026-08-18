@@ -1701,13 +1701,28 @@ gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module)
 static int dt_dev_distort_backtransform_locked(const dt_dev_pixelpipe_t *pipe, const double iop_order,
                                                const int transf_direction, float *points, size_t points_count);
 
+/* These two are where the geometry service takes over from the pixel-less pipe. They are the
+ * whole of the mask GUI's coordinate handling -- every shape's centre, every handle, every
+ * source position routes through one of them -- and they ask the simplest question there is:
+ * everything, in order, no bound.
+ *
+ * The chain answers when it can and the pipe answers otherwise, which is not a hedge but the
+ * authority rule: the chain refuses unless EVERY enabled module that changes geometry has
+ * published a record, so a fallback happens only when composing from records would mean mixing
+ * them with pipeline pieces. Both paths stay live until the pipe is deleted, and shadow mode
+ * keeps comparing them on every size publication -- including, at iop_order 0 and DIR_ALL,
+ * exactly the question these two ask.
+ */
+
 int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
+  if(dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
   return dt_dev_distort_transform_plus(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
+  if(dt_geometry_backtransform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
   return dt_dev_distort_backtransform_locked(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
