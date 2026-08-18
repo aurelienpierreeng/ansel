@@ -342,13 +342,11 @@ static gboolean _in_bound(const dt_geometry_record_t *record, const double iop_o
   }
 }
 
-int dt_geometry_transform(dt_develop_t *dev, const double iop_order, const int direction, float *points,
-                          const size_t points_count)
+/** @brief The forward fold over a chain, shared by the public entry point and by
+ *  dt_geometry_chain_compose(). Assumes the chain is usable; the callers check. */
+static int _compose_forward(dt_geometry_chain_t *chain, const double iop_order, const int direction,
+                            float *points, const size_t points_count)
 {
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain) || IS_NULL_PTR(points)) return 0;
-  dt_geometry_chain_t *chain = dev->geometry_chain;
-  if(!chain->authoritative) return 0;
-
   for(GList *node = g_list_first(chain->records); node; node = g_list_next(node))
   {
     dt_geometry_record_t *record = (dt_geometry_record_t *)node->data;
@@ -358,6 +356,23 @@ int dt_geometry_transform(dt_develop_t *dev, const double iop_order, const int d
     record->vtable->transform(record->data, record, chain, points, points_count);
   }
   return 1;
+}
+
+int dt_geometry_chain_compose(dt_geometry_chain_t *chain, const double iop_order, const int direction,
+                              float *points, const size_t points_count)
+{
+  if(IS_NULL_PTR(chain) || IS_NULL_PTR(points)) return 0;
+  return _compose_forward(chain, iop_order, direction, points, points_count);
+}
+
+int dt_geometry_transform(dt_develop_t *dev, const double iop_order, const int direction, float *points,
+                          const size_t points_count)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain) || IS_NULL_PTR(points)) return 0;
+  dt_geometry_chain_t *chain = dev->geometry_chain;
+  if(!chain->authoritative) return 0;
+
+  return _compose_forward(chain, iop_order, direction, points, points_count);
 }
 
 int dt_geometry_backtransform(dt_develop_t *dev, const double iop_order, const int direction, float *points,

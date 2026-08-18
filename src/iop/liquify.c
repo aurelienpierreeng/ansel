@@ -60,6 +60,7 @@
 #include "common/collection.h"
 #include "common/conf.h"
 #include "control/control.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/develop.h"
@@ -560,10 +561,23 @@ static void path_delete(dt_iop_liquify_params_t *p, dt_liquify_path_data_t *this
  *
  */
 
+/** @brief What the geometry service's record carries: the parameters, and the module whose
+ *  iop_order bounds the nested composition. */
+typedef struct
+{
+  dt_iop_liquify_params_t params;
+  dt_iop_module_t *self;
+} dt_iop_liquify_geometry_t;
+
 typedef struct
 {
   dt_develop_t *develop;
   const dt_dev_pixelpipe_t *pipe;
+  /* When set, compose through the geometry service instead of a pixel pipe. Exactly one of
+   * `pipe' and `chain' is used: the pipe when a piece is being processed, the chain when the
+   * GUI asks the pixel-less service (develop/geometry/geometry.h). The paths are the same
+   * fold in both cases -- see _distort_paths(). */
+  dt_geometry_chain_t *chain;
   float from_scale;
   float to_scale;
   int transf_direction;
@@ -629,7 +643,21 @@ static void _distort_paths(const struct dt_iop_module_t *module,
       break;
     }
   }
-  if(params->from_distort_transform)
+  if(!IS_NULL_PTR(params->chain))
+  {
+    /* The geometry service's equivalent of the two branches below. The bound is the caller's
+     * own iop_order, exclusive, so this module is not re-entered and the recursion ends. */
+    if(params->transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
+    {
+      dt_geometry_chain_compose(params->chain, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, buffer,
+                                len);
+      dt_geometry_chain_compose(params->chain, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, buffer,
+                                len);
+    }
+    else
+      dt_geometry_chain_compose(params->chain, module->iop_order, params->transf_direction, buffer, len);
+  }
+  else if(params->from_distort_transform)
   {
     if(params->transf_direction == DT_DEV_TRANSFORM_DIR_ALL)
     {
@@ -694,7 +722,17 @@ static void distort_paths_raw_to_piece(const struct dt_iop_module_t *module,
                                         dt_iop_liquify_params_t *p,
                                         const gboolean from_distort_transform)
 {
-  const distort_params_t params = { module->dev, pipe, 1.f, roi_in_scale, DT_DEV_TRANSFORM_DIR_BACK_EXCL, from_distort_transform };
+  const distort_params_t params = { module->dev, pipe, NULL, 1.f, roi_in_scale, DT_DEV_TRANSFORM_DIR_BACK_EXCL, from_distort_transform };
+  _distort_paths(module, &params, p);
+}
+
+/** @brief distort_paths_raw_to_piece() for the geometry service: same fold, no pipe. */
+static void distort_paths_raw_to_piece_chain(const struct dt_iop_module_t *module,
+                                             dt_geometry_chain_t *chain, const float roi_in_scale,
+                                             dt_iop_liquify_params_t *p)
+{
+  const distort_params_t params = { module->dev, NULL, chain, 1.f, roi_in_scale,
+                                    DT_DEV_TRANSFORM_DIR_BACK_EXCL, TRUE };
   _distort_paths(module, &params, p);
 }
 
@@ -1366,10 +1404,20 @@ void modify_roi_in(struct dt_iop_module_t *module, const struct dt_dev_pixelpipe
   cairo_region_destroy(roi_in_region);
 }
 
-static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                               const dt_dev_pixelpipe_iop_t *piece,
-                               float *const restrict points, const size_t points_count,
-                               const gboolean inverted)
+/**
+ * @brief Warp @p points, given this module's parameters brought into its own input space.
+ *
+ * @details The whole of the transform, minus where the parameters come from and minus how the
+ * path nodes are composed out of RAW coordinates. Those two are the caller's: the pixel pipe
+ * takes them from a piece and folds through the pipe, the geometry service takes them from a
+ * record and folds through the chain. Everything after that -- interpolating the paths,
+ * rasterising the warp map over the points' extent, inverting it for the forward direction --
+ * is the same code either way, which is the point.
+ */
+static int _liquify_warp_points(const dt_iop_liquify_params_t *const params_in,
+                                dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
+                                dt_geometry_chain_t *chain, float *const restrict points,
+                                const size_t points_count, const gboolean inverted)
 {
 
   // compute the extent of all points (all computations are done in RAW coordinate)
@@ -1392,9 +1440,12 @@ static int _distort_xtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *
   {
     // copy params
     dt_iop_liquify_params_t copy_params;
-    memcpy(&copy_params, (dt_iop_liquify_params_t *)piece->data, sizeof(dt_iop_liquify_params_t));
+    memcpy(&copy_params, params_in, sizeof(dt_iop_liquify_params_t));
 
-    distort_paths_raw_to_piece(self, pipe, 1.f, &copy_params, TRUE);
+    if(!IS_NULL_PTR(chain))
+      distort_paths_raw_to_piece_chain(self, chain, 1.f, &copy_params);
+    else
+      distort_paths_raw_to_piece(self, pipe, 1.f, &copy_params, TRUE);
 
     // create the distortion map for this extent
 
@@ -1463,13 +1514,69 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 {
   // Recurse on the caller pipe so we reuse the same node list and piece data in preview, export,
   // thumbnail, and mask evaluation paths.
-  return _distort_xtransform(self, pipe, piece, points, points_count, TRUE);
+  return _liquify_warp_points((const dt_iop_liquify_params_t *)piece->data, self, pipe, NULL, points,
+                              points_count, TRUE);
 }
 
 int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                           float *const restrict points, size_t points_count)
 {
-  return _distort_xtransform(self, pipe, piece, points, points_count, FALSE);
+  return _liquify_warp_points((const dt_iop_liquify_params_t *)piece->data, self, pipe, NULL, points,
+                              points_count, FALSE);
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) ---------
+ *
+ * modify_roi_out() is the identity, so there is no size map: liquify moves pixels without
+ * changing how many there are. What it does need is the one thing no other record needs -- the
+ * chain composed around it. Its warps are stored in RAW sensor coordinates, so before it can
+ * rasterise anything it has to push its own path nodes through every module upstream of itself,
+ * which on the pixel pipe means re-entering the pipe walker mid-walk and here means re-entering
+ * the chain (dt_geometry_chain_compose(), bounded BACK_EXCL of this module's own iop_order so
+ * the recursion terminates).
+ *
+ * The cost is inherited, not introduced: each query rasterises a warp map over the extent of
+ * the points it was given, so it is O(area), not O(points), exactly as the pipe's own
+ * distort_transform() has always been.
+ */
+
+static int _liquify_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                       dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_iop_liquify_geometry_t *const g = (const dt_iop_liquify_geometry_t *)data;
+  return _liquify_warp_points(&g->params, g->self, NULL, chain, points, points_count, TRUE);
+}
+
+static int _liquify_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                           dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_iop_liquify_geometry_t *const g = (const dt_iop_liquify_geometry_t *)data;
+  return _liquify_warp_points(&g->params, g->self, NULL, chain, points, points_count, FALSE);
+}
+
+static const dt_geometry_vtable_t _liquify_geometry_vtable = {
+  .map_size = NULL,   // modify_roi_out() is the identity: liquify changes no dimensions
+  .transform = _liquify_geometry_transform,
+  .backtransform = _liquify_geometry_backtransform,
+};
+
+gboolean geometry_record(struct dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  dt_iop_liquify_geometry_t *g
+      = (dt_iop_liquify_geometry_t *)g_malloc0(sizeof(dt_iop_liquify_geometry_t));
+  if(IS_NULL_PTR(g)) return FALSE;
+
+  /* commit_params() is a straight copy of the parameters, so the record carries that copy. The
+   * module pointer is kept because the fold needs its iop_order to bound the recursion and its
+   * dev to reach the paths; it is the same module the chain is being built from, so it cannot
+   * outlive the record. */
+  memcpy(&g->params, params, sizeof(dt_iop_liquify_params_t));
+  g->self = self;
+
+  record->data = g;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_liquify_geometry_vtable;
+  return TRUE;
 }
 
 void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe, struct dt_dev_pixelpipe_iop_t *piece,
@@ -2862,7 +2969,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
   // distort all points
   if(dt_dev_pixelpipe_get_history_hash(develop->virtual_pipe) != dt_dev_get_history_hash(develop))
     dt_dev_pixelpipe_sync_virtual(develop, DT_DEV_PIPE_TOP_CHANGED);
-  const distort_params_t d_params = { develop, develop->virtual_pipe, 1.0, 1.0, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
+  const distort_params_t d_params = { develop, develop->virtual_pipe, NULL, 1.0, 1.0, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
   _distort_paths(module, &d_params, &copy_params);
 
   // You're not supposed to understand this
