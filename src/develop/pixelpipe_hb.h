@@ -345,6 +345,31 @@ typedef struct dt_dev_pixelpipe_t
   // sampling. The processing core reacts to this property instead of branching
   // on pipeline type.
   gboolean gui_observable_source;
+
+  /**
+   * @brief Rasterisation step for drawn masks, in image pixels. Always >= 1.
+   *
+   * @details Brush and polygon subdivide their outline until consecutive samples land within
+   * this many pixels, then paint one radial spoke per sample. At 1 the outline is followed to
+   * pixel accuracy. Above 1 the samples spread out and the spokes leave gaps between them --
+   * invisible when the result is shown well below 1:1, a diagonal hatch across the stroke when
+   * it is not (#1116).
+   *
+   * IT IS SET UPSTREAM AND ONLY READ HERE. Every mask type used to re-derive its own answer
+   * from `dt_dev_pixelpipe_has_preview_output(...) || type == THUMBNAIL' -- six copies across
+   * brush.c and polygon.c, some passing the module's roi and some NULL, so one pipe could be
+   * classified two ways inside a single frame, and an export could be classified as a preview.
+   * How finely a pipe must rasterise is a property OF THE PIPE, decided by whoever configures
+   * it: pipe init, or the darkroom GUI from the zoom level.
+   *
+   * The default is 1 and every init sets it, so a pipe nobody configures -- every headless
+   * export, thumbnail and snapshot -- is pixel-accurate by construction rather than by a
+   * predicate that has to get the answer right.
+   *
+   * It feeds the module hash (dt_pixelpipe_get_global_hash), because two runs at different
+   * steps produce different pixels and must not share a cache line.
+   */
+  int mask_rasterization_step;
   // the final output pixel format this pixelpipe will be converted to
   dt_imageio_levels_t levels;
   // opencl device that has been locked for this pipe.
@@ -491,6 +516,11 @@ char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type);
 
 // inits the pixelpipe with plain passthrough input/output and empty input and default caching settings.
 int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+
+/** @brief Set the drawn-mask rasterisation step for the next frame, in image pixels (clamped
+ *  to >= 1). @see dt_dev_pixelpipe_t::mask_rasterization_step. */
+void dt_dev_pixelpipe_set_mask_rasterization_step(struct dt_dev_pixelpipe_t *pipe, const int step);
+
 // inits the preview pixelpipe with plain passthrough input/output and empty input and default caching
 // settings.
 int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);

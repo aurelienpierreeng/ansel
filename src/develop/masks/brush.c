@@ -734,8 +734,10 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
   const float iwd = pipe->iwidth;
   const float iht = pipe->iheight;
-  const int pixel_threshold = (dt_dev_pixelpipe_has_preview_output(develop, pipe, NULL)
-                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
+  // How far apart consecutive samples of the outline may land, in image pixels. Decided by the
+  // pipe, never here; see dt_dev_pixelpipe_t::mask_rasterization_step. Above 1 the samples
+  // spread out and the radial spokes stamped from them leave gaps between each pair (#1116).
+  const int pixel_threshold = pipe->mask_rasterization_step;
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
 
@@ -2771,9 +2773,8 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     *width = *height = *offset_x = *offset_y = 0;
     return 0;
   }
-  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, NULL)
-                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
-  const int sparse_step = use_sparse ? 4 : 1;
+  const gboolean use_sparse = (pipe->mask_rasterization_step > 1);
+  const int sparse_step = pipe->mask_rasterization_step;
   _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -2924,9 +2925,8 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   const int roi_width = roi->width;
   const int roi_height = roi->height;
   const float roi_scale = roi->scale;
-  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, roi)
-                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
-  const int sparse_step = use_sparse ? 4 : 1;
+  const gboolean use_sparse = (pipe->mask_rasterization_step > 1);
+  const int sparse_step = pipe->mask_rasterization_step;
 
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;

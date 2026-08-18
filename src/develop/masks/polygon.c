@@ -727,8 +727,8 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
   const float input_width = pipe->iwidth;
   const float input_height = pipe->iheight;
-  const int pixel_threshold = (dt_dev_pixelpipe_has_preview_output(develop, pipe, NULL)
-                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
+  // See dt_dev_pixelpipe_t::mask_rasterization_step -- the pipe decides, not each mask type.
+  const int pixel_threshold = pipe->mask_rasterization_step;
   const guint node_count = g_list_length(mask_form->points);
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *intersections = NULL;
@@ -2550,9 +2550,8 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
 
   const int hb = *height;
   const int wb = *width;
-  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, NULL)
-                           || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
-  const int sparse_factor = sparse ? 4 : 1;
+  const gboolean sparse = (pipe->mask_rasterization_step > 1);
+  const int sparse_factor = pipe->mask_rasterization_step;
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
@@ -3135,9 +3134,8 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   const int width = roi->width;
   const int height = roi->height;
   const float scale = roi->scale;
-  const gboolean sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, roi)
-                           || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
-  const int sparse_factor = sparse ? 4 : 1;
+  const gboolean sparse = (pipe->mask_rasterization_step > 1);
+  const int sparse_factor = pipe->mask_rasterization_step;
 
   // we need to take care of four different cases:
   // 1) polygon and feather are outside of roi

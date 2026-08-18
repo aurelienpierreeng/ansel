@@ -1329,6 +1329,18 @@ static void _darkroom_change_rendering_size(GtkWidget *combobox, gpointer user_d
   dt_dev_pixelpipe_resync_history_main(d);
 }
 
+static void _darkroom_change_mask_rasterization(GtkWidget *combobox, gpointer user_data)
+{
+  dt_develop_t *d = (dt_develop_t *)user_data;
+  dt_conf_set_string("plugins/darkroom/masks/rasterization",
+                     (dt_bauhaus_combobox_get(combobox) == 0) ? "auto" : "never");
+  /* The step itself is recomputed by dt_dev_roi_request_publish(), on this thread. Only the
+   * MAIN pipe is affected: the preview's step is always automatic, set from its own ROI, so
+   * this preference cannot change it and resyncing it would be wasted work. */
+  dt_dev_roi_request_publish(d);
+  dt_dev_pixelpipe_resync_history_main(d);
+}
+
 /** end of toolbox */
 
 #if 0
@@ -1664,6 +1676,25 @@ void gui_init(dt_view_t *self)
                                 N_("scaled (default)")
                               );
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(rendering), TRUE, TRUE, 0);
+
+    gchar *rasterization = dt_conf_get_string("plugins/darkroom/masks/rasterization");
+    const int rasterization_index = (!IS_NULL_PTR(rasterization) && !strcmp(rasterization, "never")) ? 1 : 0;
+    g_free(rasterization);
+
+    GtkWidget *mask_rasterization;
+    DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mask_rasterization, NULL,
+                                N_("Fast drawn mask rasterization"),
+                                _("Choose how finely brush and polygon masks are drawn in the darkroom.\n"
+                                  "Auto samples one point per displayed pixel: zoomed out costs less,\n"
+                                  "and at 100% or closer masks are pixel-accurate.\n"
+                                  "Never keeps pixel accuracy at every zoom level, at some cost when zoomed out.\n"
+                                  "Exports, thumbnails and snapshots are always pixel-accurate either way."),
+                                rasterization_index,
+                                _darkroom_change_mask_rasterization, dev,
+                                N_("auto (default)"),
+                                N_("never")
+                              );
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mask_rasterization), TRUE, TRUE, 0);
 
     gtk_box_pack_start(GTK_BOX(vbox), dt_ui_section_label_new(_("Mask preview settings")), FALSE, FALSE, 0);
 
