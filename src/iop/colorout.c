@@ -95,6 +95,15 @@ typedef struct dt_iop_colorout_data_t
 {
   dt_colorspaces_color_profile_type_t type;
   dt_colorspaces_color_mode_t mode;
+  /* Identity of the conversion below, and the only thing in this struct that describes it.
+   * runtime_data_hash() folds this prefix into the pipeline cache key, and the conversion is
+   * opaque heap state whose address says nothing about the pixels it produces -- so the
+   * address is deliberately kept OUT of the hashed prefix and its identity carried here
+   * instead. See dt_colorspaces_conversion_identity(). */
+  uint64_t conversion_id;
+
+  /* --- runtime pointers, deliberately after the hashed prefix (see init_pipe) --- */
+
   /* The whole of "how do we get from the pipeline's working space to the output space" --
    * matrices, tone curves, extrapolation fits, or an lcms2 proofing transform. Built by
    * colorprofiles/conversion.c, which is where the lifetime and locking rules for the
@@ -414,6 +423,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_iop_set_cache_bypass(self, (d->mode != DT_PROFILE_NORMAL));
 
   dt_colorspaces_free_conversion(&d->conversion);
+  /* Cleared here rather than beside each prepare below, so that every path which returns
+   * without building a conversion -- the virtual pipe, a Lab output -- leaves a hashed prefix
+   * that says so. */
+  d->conversion_id = 0;
   piece->process_cl_ready = 1;
 
   /* if we are exporting then check and set usage of override profile */
@@ -577,6 +590,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                                                       softproofing ? &proof : NULL, out_intent, flags);
   }
 
+  /* After BOTH prepare attempts: what the sRGB fallback built is what will render. */
+  d->conversion_id = dt_colorspaces_conversion_identity(d->conversion);
+
   dt_colorspaces_free_image_profile(image_output);
 
   /* Only the vectorised branch has a kernel. The lcms2 one is host-only, and saying so here
@@ -598,7 +614,8 @@ gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pip
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = dt_calloc_align(sizeof(dt_iop_colorout_data_t));
-  piece->data_size = sizeof(dt_iop_colorout_data_t);
+  // Hash the rendering contract, stopping before the runtime pointer.
+  piece->data_size = G_STRUCT_OFFSET(dt_iop_colorout_data_t, conversion);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

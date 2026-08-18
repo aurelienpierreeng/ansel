@@ -180,7 +180,22 @@ OPTIONAL(void, reload_defaults, struct dt_iop_module_t *self);
  */
 DEFAULT(gboolean, has_defaults, struct dt_iop_module_t *self);
 
-/** whether commit_params() seals extra effective runtime state into piece->data that must be part of the cache hash */
+/** whether commit_params() seals extra effective runtime state into piece->data that must be part of the cache hash.
+ *
+ *  Returning TRUE makes dt_iop_commit_params() hash the first piece->data_size bytes of
+ *  piece->data BLINDLY. Those bytes must therefore be CONTENT, and piece->data_size must stop
+ *  before the first pointer in the struct -- keep runtime pointers last and set
+ *  `piece->data_size = G_STRUCT_OFFSET(<data_t>, <first pointer>)` in init_pipe(), as
+ *  iop/colorbalancergb.c and iop/colorout.c both do.
+ *
+ *  A pointer in the hashed prefix is wrong in both directions, and the second one is silent: a
+ *  re-allocation gives a new address for identical state, re-keying the whole downstream chain
+ *  to recompute pixels that cannot have moved; and the allocator handing the SAME address back
+ *  for different state makes the cache serve the previous state's pixels under the new key.
+ *  That is issue #1145: colorout's rendering state moved behind an opaque pointer, its hashed
+ *  prefix became an address, and every darkroom pipeline resync recomputed colorout, dither and
+ *  gamma. A module whose state is opaque must have its owner publish an identity for it
+ *  (dt_colorspaces_conversion_identity()) and hash THAT. */
 DEFAULT(gboolean, runtime_data_hash, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
                                      const struct dt_dev_pixelpipe_iop_t *piece);
 
