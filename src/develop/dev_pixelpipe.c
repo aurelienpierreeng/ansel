@@ -28,6 +28,7 @@
 #include "common/paths.h"
 #include "gui/application.h"
 #include "system/dtpthread.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 #include "caches/pixelpipe_cache.h"
@@ -1795,6 +1796,14 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
   // Mirror the preview-pipe change flags and commit immediately.
   _change_pipe(dev->virtual_pipe, flag);
   dt_dev_pixelpipe_change(dev->virtual_pipe);
+
+  /* The geometry chain answers the same questions and must therefore be exactly as fresh as
+   * this pipe, not fresher and not staler: consumers now read whichever of the two can answer,
+   * and a chain rebuilt only in the size path would lag the pipe on every flag that arrives
+   * between two size publications. It is rebuilt here rather than published here -- this
+   * function raises flags, and nothing downstream may observe geometry before the publication
+   * that goes with it (see the ordering note in dt_dev_get_thumbnail_size). */
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
