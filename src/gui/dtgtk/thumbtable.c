@@ -67,8 +67,10 @@
 #include "gui/drag_and_drop.h"
 #include "views/view.h"
 #include "widgets/bauhaus.h"
+#include "gui/import.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
+#include "osx/osx.h"
 #endif
 
 #include <glib-object.h>
@@ -1350,7 +1352,11 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
   _thumbtable_drag_set_icon(table, context);
 }
 
-GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *elements)
+// Regular files are collected into `files` directly (unfiltered by type, same as always).
+// Folders are collected into `*folders` instead of being rejected: the caller asks the user
+// which file type(s) to pull out of them, then scans them on a background job (see
+// _thumbtable_dnd_scan_folders_and_import()).
+GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *elements, GList **folders)
 {
   if (IS_NULL_PTR(pathname) || IS_NULL_PTR(pathname))
   {
@@ -1371,8 +1377,7 @@ GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *ele
   }
   else if(g_file_test(pathname, G_FILE_TEST_IS_DIR))
   {
-    fprintf(stderr, "DND check: Folders are not allowed");
-    dt_control_log(_("'%s': Please use 'File > Import' to import a folder."), pathname);
+    *folders = g_list_prepend(*folders, g_strdup(pathname));
   }
   else
   {
@@ -1382,11 +1387,200 @@ GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *ele
   return files;
 }
 
+// Response codes for the file-type dialog below, same shape as control_jobs.c's
+// _dt_delete_dialog_choice (a GtkResponseType-typed gtk_dialog_run() return value doesn't fit a
+// 3-way custom choice, so this stands in for it exactly like that one does).
+enum _dt_dnd_import_choice
+{
+  _DT_DND_IMPORT_CHOICE_ALL = 1,
+  _DT_DND_IMPORT_CHOICE_RAW = 2,
+  _DT_DND_IMPORT_CHOICE_RASTER = 3
+};
+
+// State for the background job that recursively scans dropped folders (drag-and-drop) and
+// merges the result with any directly-dropped files before handing everything to
+// dt_control_import(). Mirrors the Import dialog's own recursive scan
+// (_recurse_folder()/_filter_document() in gui/import.c) but without that dialog's
+// generation/cancellation bookkeeping: a drop happens once, atomically, there is no live
+// file-chooser selection that could invalidate a scan already in flight.
+typedef struct dt_dnd_folder_import_t
+{
+  GList *folders;              // owned: char* paths of the dropped folders to recurse into
+  GList *files;                 // owned: char* paths already known (directly-dropped regular files)
+  dt_import_filter_type_t filter_type;
+} dt_dnd_folder_import_t;
+
+static void _dnd_recurse_folder(const char *folder_path, dt_import_filter_type_t filter_type, GList **files,
+                                guint *scan_errors)
+{
+  GFile *folder = g_file_new_for_path(folder_path);
+  GError *error = NULL;
+  GFileEnumerator *children = g_file_enumerate_children(
+      folder, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE, G_FILE_QUERY_INFO_NONE, NULL, &error);
+  if(IS_NULL_PTR(children))
+  {
+    // e.g. permission denied, or the folder vanished mid-scan.
+    if(error)
+    {
+      dt_print(DT_DEBUG_IMPORT, "[import] could not fully scan folder `%s': %s\n", folder_path, error->message);
+      g_error_free(error);
+      (*scan_errors)++;
+    }
+    g_object_unref(folder);
+    return;
+  }
+
+  GFile *child = NULL;
+  GError *iter_error = NULL;
+  while(g_file_enumerator_iterate(children, NULL, &child, NULL, &iter_error))
+  {
+    // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration; an ugly
+    // break is needed here, else infinite loop.
+    if(IS_NULL_PTR(child)) break;
+
+    gchar *pathname = g_file_get_path(child);
+    if(pathname && g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && dt_import_passes_filter(filter_type, pathname))
+    {
+      *files = g_list_prepend(*files, pathname);
+      pathname = NULL;
+    }
+    else if(pathname && g_file_test(pathname, G_FILE_TEST_IS_DIR))
+    {
+      _dnd_recurse_folder(pathname, filter_type, files, scan_errors);
+    }
+    dt_free(pathname);
+    // g_file_enumerator_iterate() returns transfer-none children owned by the enumerator; unref
+    // happens when the enumerator advances or is destroyed.
+    child = NULL;
+  }
+
+  // A FALSE return above without a set error just means "iteration finished normally" -- only
+  // report when GLib actually set one.
+  if(iter_error)
+  {
+    dt_print(DT_DEBUG_IMPORT, "[import] could not fully scan folder `%s': %s\n", folder_path, iter_error->message);
+    g_error_free(iter_error);
+    (*scan_errors)++;
+  }
+
+  g_object_unref(children);
+  g_object_unref(folder);
+}
+
+static int32_t _dnd_folder_import_job_run(dt_job_t *job)
+{
+  dt_dnd_folder_import_t *data = (dt_dnd_folder_import_t *)dt_control_job_get_params(job);
+
+  // Take over the already-collected files; the scan below prepends the matches found in the
+  // dropped folder(s) onto the same list.
+  GList *files = data->files;
+  data->files = NULL;
+
+  guint scan_errors = 0;
+  for(GList *l = data->folders; l; l = g_list_next(l))
+    _dnd_recurse_folder((const char *)l->data, data->filter_type, &files, &scan_errors);
+
+  const int elements = g_list_length(files);
+  if(elements > 0)
+  {
+    dt_control_import_t import_data = {.imgs = files, // ownership transferred to the import job
+                                       .datetime = g_date_time_new_now_local(),
+                                       .copy = FALSE, // we only import in place, like plain-file DnD.
+                                       .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
+                                       .base_folder = dt_conf_get_string("session/base_directory_pattern"),
+                                       .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
+                                       .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                       .target_dir = NULL,
+                                       .elements = elements,
+                                       .discarded = NULL};
+    if(dt_control_import(import_data))
+      dt_control_log(_("Could not start the import job."));
+  }
+  else
+  {
+    g_list_free(files);
+    dt_control_log(_("No matching file found in the dropped folder(s)."));
+  }
+
+  if(scan_errors > 0)
+    dt_control_log(ngettext("%u folder could not be scanned (permission denied?)",
+                           "%u folders could not be scanned (permission denied?)", scan_errors),
+                   scan_errors);
+
+  return elements > 0 ? 0 : 1;
+}
+
+static void _dnd_folder_import_job_cleanup(void *p)
+{
+  dt_dnd_folder_import_t *data = (dt_dnd_folder_import_t *)p;
+  g_list_free_full(data->folders, dt_free_gpointer);
+  // data->files is only non-NULL here if _dnd_folder_import_job_run() never ran (job disposed
+  // before execution): the success path hands the list to dt_control_import(), and the
+  // no-match path frees it itself.
+  if(data->files) g_list_free_full(data->files, dt_free_gpointer);
+  dt_free(data);
+}
+
+// Ask which file type(s) to pull out of the dropped folder(s) (mirrors the Import dialog's
+// All/Raw/Raster filter), then recursively scan them on a background job -- scanning can be slow
+// for a large/deep folder, and this runs from the GUI thread's drag-and-drop handler. The result
+// is merged with `files` (already-known, directly-dropped regular files -- always imported
+// regardless of the chosen filter: the question is about what to pull out of folders, not about
+// re-filtering files the user explicitly picked) before everything is handed to
+// dt_control_import(). Takes ownership of both `folders` and `files`.
+static void _thumbtable_dnd_scan_folders_and_import(GList *folders, GList *files)
+{
+  GtkWidget *dialog = gtk_message_dialog_new(
+      GTK_WINDOW(dt_gui_get_ui()->main_window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
+      GTK_BUTTONS_NONE, "%s",
+      _("The dropped folder(s) will be scanned recursively.\nWhich files should be imported?"));
+#ifdef GDK_WINDOWING_QUARTZ
+  dt_osx_disallow_fullscreen(dialog);
+#endif
+
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("All image files"), _DT_DND_IMPORT_CHOICE_ALL);
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Raw image files"), _DT_DND_IMPORT_CHOICE_RAW);
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Raster image files"), _DT_DND_IMPORT_CHOICE_RASTER);
+
+  gtk_window_set_title(GTK_WINDOW(dialog), _("Import folder"));
+  const gint choice = gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+
+  if(choice != _DT_DND_IMPORT_CHOICE_ALL && choice != _DT_DND_IMPORT_CHOICE_RAW
+     && choice != _DT_DND_IMPORT_CHOICE_RASTER)
+  {
+    // Dialog closed without a choice: treat the whole drop as cancelled, directly-dropped files
+    // included, rather than second-guessing whether the user still wants those imported alone.
+    g_list_free_full(folders, dt_free_gpointer);
+    g_list_free_full(files, dt_free_gpointer);
+    return;
+  }
+
+  dt_job_t *job = dt_control_job_create(&_dnd_folder_import_job_run, "scan dropped folder(s) for import");
+  if(IS_NULL_PTR(job))
+  {
+    g_list_free_full(folders, dt_free_gpointer);
+    g_list_free_full(files, dt_free_gpointer);
+    return;
+  }
+
+  dt_dnd_folder_import_t *data = g_malloc0(sizeof(dt_dnd_folder_import_t));
+  data->folders = folders;
+  data->files = files;
+  data->filter_type = choice == _DT_DND_IMPORT_CHOICE_RAW
+                           ? DT_IMPORT_FILTER_RAW
+                           : choice == _DT_DND_IMPORT_CHOICE_RASTER ? DT_IMPORT_FILTER_RASTER : DT_IMPORT_FILTER_ALL;
+
+  dt_control_job_set_params(job, data, _dnd_folder_import_job_cleanup);
+  dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_BG, job);
+}
+
 static gboolean _thumbtable_dnd_import(GtkSelectionData *selection_data)
 {
   gchar **uris = gtk_selection_data_get_uris(selection_data);
   int elements = 0;
   GList *files = NULL;
+  GList *folders = NULL;
 
   if(uris)
   {
@@ -1395,11 +1589,19 @@ static gboolean _thumbtable_dnd_import(GtkSelectionData *selection_data)
     {
       GFile *filepath = g_vfs_get_file_for_uri(vfs, uris[i]);
       const gchar *pathname = g_strdup(g_file_get_path(filepath));
-      files = _thumbtable_dnd_import_check(files, pathname, &elements);
+      files = _thumbtable_dnd_import_check(files, pathname, &elements, &folders);
       g_object_unref(filepath);
     }
 
-    if(elements > 0)
+    if(folders)
+    {
+      // At least one dropped item is a folder: ask which file type(s) to pull out of it/them,
+      // then scan (background job) and import everything -- folders and any directly-dropped
+      // files together -- once done. Ownership of both lists passes to that flow.
+      _thumbtable_dnd_scan_folders_and_import(folders, files);
+      files = NULL;
+    }
+    else if(elements > 0)
     {
       // WARNING: we copy a Glist of pathes as char*
       // The references to the char* still belong to the original.
