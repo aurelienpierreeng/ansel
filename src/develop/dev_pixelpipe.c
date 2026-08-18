@@ -1450,6 +1450,19 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
     local_hash = dt_hash(local_hash, (const char *)&piece->dsc_in, sizeof(dt_iop_buffer_dsc_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->dsc_out, sizeof(dt_iop_buffer_dsc_t));
 
+    /* The pipe's drawn-mask rasterisation step changes the mask a module blends with, so it
+     * changes that module's pixels. It belongs HERE, with request_mask_display below, and for
+     * the same reason: it is global GUI state that no module's history carries, so
+     * dt_iop_commit_params() would only fold it when that module's own parameters changed --
+     * flipping the preference from auto to never would leave every cached line valid-looking
+     * and stale.
+     *
+     * Only for a module that actually draws a mask: the raw stages upstream cannot carry one,
+     * and rehashing them would cost cache misses for pixels that cannot move. */
+    if((piece->module->blend_params->mask_mode & DEVELOP_MASK_SHAPE)
+       && piece->module->blend_params->mask_id > 0)
+      local_hash = dt_hash(local_hash, (const char *)&pipe->mask_rasterization_step, sizeof(int));
+
 /*
     fprintf(stdout, "start->end : %-17s | ROI in: %4ix%-4i @%2.4f | ROI out: %4ix%-4i @%2.4f\n", piece->module->op,
             piece->buf_in.width, piece->buf_in.height, piece->buf_in.scale, piece->buf_out.width,

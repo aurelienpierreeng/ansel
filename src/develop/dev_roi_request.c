@@ -17,6 +17,7 @@
 */
 
 #include "develop/dev_roi_request.h"
+#include "common/conf.h"
 #include "develop/dev_geometry.h"
 #include "develop/dev_viewport.h"
 #include "develop/develop.h"
@@ -154,6 +155,32 @@ uint64_t dt_dev_roi_request_publish(dt_develop_t *dev)
   // without being invalidated by every republication of identical numbers.
   const uint64_t published = dt_atomic_get_uint64(&dev->roi_request.generation);
   if(_payload_equal(&dev->roi_request.value, &next)) return published;
+
+  /* Drawn-mask rasterisation step, decided HERE because this is the GUI thread and the only
+   * place that knows both scales: the main pipe renders at natural_scale * scaling (the zoom
+   * the user set) and the preview at natural_scale (always fit). It must not be decided in the
+   * pipeline thread -- that would read a user preference and a viewport from a thread that owns
+   * neither, and would recompute per frame what changes only when the viewport does.
+   *
+   * "never" pins both to 1. Absent a GUI, nothing calls this at all, so the pipes keep the
+   * pixel-accurate step their init gave them. */
+  int main_step = 1;
+  int preview_step = 1;
+  if(dev->gui_attached && next.valid && next.natural_scale > 0.f)
+  {
+    /* The preference governs the MAIN pipe only. The preview is always rendered at fit size and
+     * is never what the user inspects for pixel accuracy, so its step follows its own ROI
+     * unconditionally. */
+    gchar *mode = dt_conf_get_string("plugins/darkroom/masks/rasterization");
+    const gboolean fast = IS_NULL_PTR(mode) || strcmp(mode, "never") != 0;
+    g_free(mode);
+
+    const float main_scale = next.natural_scale * next.scaling;
+    if(fast && main_scale > 0.f) main_step = (int)floorf(1.f / main_scale);
+    preview_step = (int)floorf(1.f / next.natural_scale);
+  }
+  dt_dev_pixelpipe_set_mask_rasterization_step(dev->pipe, main_step);
+  dt_dev_pixelpipe_set_mask_rasterization_step(dev->preview_pipe, preview_step);
 
   next.generation = published + 2;   // stays even: the store's counter is the odd/even flag
   dt_atomic_set_uint64(&dev->roi_request.generation, published + 1);

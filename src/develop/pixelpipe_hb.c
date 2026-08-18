@@ -381,6 +381,7 @@ int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, in
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_EXPORT;
   pipe->gui_observable_source = FALSE;
+  pipe->mask_rasterization_step = 1;   // these pixels are the deliverable
   pipe->levels = levels;
   pipe->store_all_raster_masks = store_masks;
   pipe->dev = dev;
@@ -392,6 +393,7 @@ int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
   pipe->no_cache = TRUE;
+  pipe->mask_rasterization_step = 1;   // raised by the GUI only, never on its own
   pipe->dev = dev;
   return res;
 }
@@ -411,6 +413,7 @@ int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_PREVIEW;
   pipe->gui_observable_source = TRUE;
+  pipe->mask_rasterization_step = 1;   // raised by the GUI only, never on its own
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
@@ -418,10 +421,29 @@ int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   return res;
 }
 
+/**
+ * @brief Set the drawn-mask rasterisation step for the frame this pipe is about to run.
+ *
+ * @param step Maximum distance, in image pixels, between consecutive samples of a mask outline.
+ * Clamped to at least 1 (pixel accuracy).
+ *
+ * @details Called by the darkroom, which is the only place that knows both the zoom level and
+ * the user's preference. Nothing else raises it, so a pipe that is never told -- every headless
+ * export, thumbnail and snapshot -- keeps the pixel-accurate default it was initialised with.
+ */
+void dt_dev_pixelpipe_set_mask_rasterization_step(dt_dev_pixelpipe_t *pipe, const int step)
+{
+  if(IS_NULL_PTR(pipe)) return;
+
+  pipe->mask_rasterization_step = MAX(1, step);
+}
+
 int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_FULL;
+  // Raised per frame by the darkroom; see dt_dev_pixelpipe_set_mask_rasterization_step().
+  pipe->mask_rasterization_step = 1;
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;

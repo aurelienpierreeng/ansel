@@ -1636,6 +1636,18 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/masks/rasterization</name>
+    <type>
+      <enum>
+        <option>auto</option>
+        <option>never</option>
+      </enum>
+    </type>
+    <default>auto</default>
+    <shortdescription>fast drawn mask rasterization</shortdescription>
+    <longdescription>how finely drawn masks (brush, polygon) are rasterized in the darkroom. auto: one sample per displayed pixel, so zoomed-out views cost less and 1:1 or closer stays exact. never: always pixel-accurate, at the cost of speed when zoomed out. Exports, thumbnails and snapshots are always pixel-accurate regardless of this setting.</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/darkroom/ui/border_size</name>
     <type>int</type>
     <default>10</default>
