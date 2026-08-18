@@ -391,15 +391,25 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
                                &processed_width, &processed_height);
   dt_dev_geometry_set_processed_size(dev, processed_width, processed_height);
 
+  // Derive and publish everything the pipes plan from, as one record.
+  dt_dev_roi_request_publish(dev);
+
   /* Rebuild the geometry chain from the same modules and history the fold above just used, and
    * hold it against the answer the pipe produced. It publishes nothing and nothing consumes it
    * yet (G2): while its roster is incomplete it reports which modules still owe it a record,
-   * per image, and once complete it reports divergence. Both under `-d dev'. */
+   * per image, and once complete it reports divergence. Both under `-d dev'.
+   *
+   * STRICTLY AFTER the two publications above, and never between them. Those two are one
+   * atomic-looking update to a consumer: the first moves the geometry record to the new
+   * processed size, the second moves the ROI request to match AND flags the pipes to replan
+   * (dt_dev_roi_request_publish, since the fix for #1157). Anything inserted between them
+   * widens the window in which the darkroom worker can latch the OLD request against ALREADY
+   * NEW history -- which is precisely the mixed frame #1157 is about, and this rebuild is not
+   * cheap enough to be invisible there: it costs milliseconds once a module with a real lookup
+   * publishes a record, against a worker that naps in tens of milliseconds. A shadow observer
+   * must not sit inside the update it is observing. */
   dt_geometry_chain_rebuild(dev);
   dt_geometry_shadow_check_size(dev, processed_width, processed_height);
-
-  // Derive and publish everything the pipes plan from, as one record.
-  dt_dev_roi_request_publish(dev);
 
 
   dt_dev_update_mouse_effect_radius(dev);
