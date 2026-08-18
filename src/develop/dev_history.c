@@ -676,6 +676,21 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   // TODO: check if we need to rebuild the full pipeline and do it only if needed
   dt_dev_history_pixelpipe_update(dev, TRUE);
 
+  /* Republish the darkroom geometry, like every other path that replays history in bulk:
+   * dt_dev_pop_history_items() does it, so does the history-row click in libs/history.c, and
+   * so do image load and compress/truncate. This one did not, and undo is the path where it
+   * matters most -- undoing a crop changes the processed size, and without this the geometry
+   * record (hence natural_scale, the preview dimensions, and everything the pipes plan from)
+   * kept describing the pre-undo image until some unrelated later caller happened to refresh
+   * it. dt_dev_history_pixelpipe_update() above rebuilds the virtual pipe, so this only folds
+   * and publishes.
+   *
+   * After the history lock is released, never inside it: dt_dev_get_thumbnail_size() resyncs
+   * the virtual pipe, which takes history_mutex as reader, and the same-thread reentrancy that
+   * makes this survivable is a safety net, not a licence -- the sibling call sites all note the
+   * same ordering constraint. */
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+
   if(dev->gui_module)
   {
     dt_masks_set_edit_mode(dev->gui_module, hist->mask_edit_mode);

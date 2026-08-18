@@ -3196,8 +3196,22 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     float ivec[2] = { points[2] - points[0], points[3] - points[1] };
     float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
-    // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    /* Where do they go? Asked of THIS pipe, the one whose frame we are producing.
+     *
+     * This used to walk the GUI thread's pixel-less clone pipe: a worker thread reading
+     * another thread's node list with no lock, while the GUI can be
+     * resyncing it (dt_dev_pixelpipe_change() rebuilds pipe->nodes from dev->iop). The answer
+     * was also whatever history the virtual pipe happened to hold, not the history this frame
+     * is being rendered from.
+     *
+     * The running pipe answers the same question by construction: every distorting module
+     * downstream of ashift -- liquify, rotatepixels, scalepixels, flip, clipping, crop,
+     * borders -- commits identical params on every darkroom pipe (none of them is pipe-type
+     * dependent), and piece->buf_in/buf_out are full-resolution scale-1.0 dims on every pipe,
+     * because dt_dev_pixelpipe_get_roi_out() seeds its fold from pipe->iwidth/iheight at
+     * scale 1. So the geometry is the same, the ownership is correct, and the answer now
+     * describes the frame in hand. */
+    dt_dev_distort_backtransform_plus(pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3336,8 +3350,22 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const float ivec[2] = { points[2] - points[0], points[3] - points[1] };
     const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
-    // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    /* Where do they go? Asked of THIS pipe, the one whose frame we are producing.
+     *
+     * This used to walk the GUI thread's pixel-less clone pipe: a worker thread reading
+     * another thread's node list with no lock, while the GUI can be
+     * resyncing it (dt_dev_pixelpipe_change() rebuilds pipe->nodes from dev->iop). The answer
+     * was also whatever history the virtual pipe happened to hold, not the history this frame
+     * is being rendered from.
+     *
+     * The running pipe answers the same question by construction: every distorting module
+     * downstream of ashift -- liquify, rotatepixels, scalepixels, flip, clipping, crop,
+     * borders -- commits identical params on every darkroom pipe (none of them is pipe-type
+     * dependent), and piece->buf_in/buf_out are full-resolution scale-1.0 dims on every pipe,
+     * because dt_dev_pixelpipe_get_roi_out() seeds its fold from pipe->iwidth/iheight at
+     * scale 1. So the geometry is the same, the ownership is correct, and the answer now
+     * describes the frame in hand. */
+    dt_dev_distort_backtransform_plus(pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     const float ovec[2] = { points[2] - points[0], points[3] - points[1] };
