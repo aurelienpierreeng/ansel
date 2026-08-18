@@ -60,6 +60,7 @@
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_gui.h"
@@ -239,15 +240,29 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
   return IOP_CS_RGB;
 }
 
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * The border's offset is DERIVED, not a parameter: it is the difference between the output and
+ * input sizes, apportioned by pos_h/pos_v. Both the pixel pipe's distort callbacks and the
+ * geometry service's record (develop/geometry/geometry.h) go through the two helpers below, so
+ * the size map and the offset can never drift apart.
+ */
+
+/** @brief The translation the border applies, from the two rects it sits between. */
+static void _borders_offset(const dt_iop_borders_data_t *const d, const dt_iop_roi_t *const in,
+                            const dt_iop_roi_t *const out, int *left, int *top)
+{
+  *left = (out->width - in->width) * d->pos_h;
+  *top = (out->height - in->height) * d->pos_v;
+}
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const restrict points, size_t points_count)
 {
   dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
 
-  const int border_tot_width = (piece->buf_out.width - piece->buf_in.width);
-  const int border_tot_height = (piece->buf_out.height - piece->buf_in.height);
-  const int border_size_t = border_tot_height * d->pos_v;
-  const int border_size_l = border_tot_width * d->pos_h;
+  int border_size_l = 0, border_size_t = 0;
+  _borders_offset(d, &piece->buf_in, &piece->buf_out, &border_size_l, &border_size_t);
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if (border_size_l == 0 && border_size_t == 0) return 1;
@@ -265,10 +280,8 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 {
   dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
 
-  const int border_tot_width = (piece->buf_out.width - piece->buf_in.width);
-  const int border_tot_height = (piece->buf_out.height - piece->buf_in.height);
-  const int border_size_t = border_tot_height * d->pos_v;
-  const int border_size_l = border_tot_width * d->pos_h;
+  int border_size_l = 0, border_size_t = 0;
+  _borders_offset(d, &piece->buf_in, &piece->buf_out, &border_size_l, &border_size_t);
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if (border_size_l == 0 && border_size_t == 0) return 1;
@@ -311,12 +324,13 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 
 // 1st pass: how large would the output be, given this input roi?
 // this is always called with the full buffer before processing.
-void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
-                    const dt_iop_roi_t *roi_in)
+/** @brief Input rect -> output rect. THE size evaluator: modify_roi_out() below and the
+ *  geometry record both call it, so the frame the pipe renders and the frame the GUI
+ *  measures are the same frame. */
+static void _borders_map_size(const dt_iop_borders_data_t *const d, const dt_iop_roi_t *const roi_in,
+                              dt_iop_roi_t *roi_out)
 {
   *roi_out = *roi_in;
-  const dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
   const float size = fabsf(d->size);
   if(size == 0.0f || size >= 1.0f) return;
 
@@ -361,6 +375,13 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
       roi_out->width  = roi_out->height * aspect;
     }
   }
+}
+
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+                    const dt_iop_roi_t *roi_in)
+{
+  _borders_map_size((const dt_iop_borders_data_t *)piece->data, roi_in, roi_out);
 }
 
 // 2nd pass: which roi would this operation need as input to fill the given output region?
@@ -696,6 +717,61 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_free(module->data);
 }
 
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+static void _borders_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _borders_map_size((const dt_iop_borders_data_t *)data, in, out);
+}
+
+static int _borders_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                       dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  int left = 0, top = 0;
+  _borders_offset((const dt_iop_borders_data_t *)data, &record->in, &record->out, &left, &top);
+  if(left == 0 && top == 0) return 1;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] += left;
+    points[i + 1] += top;
+  }
+  return 1;
+}
+
+static int _borders_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                           dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  int left = 0, top = 0;
+  _borders_offset((const dt_iop_borders_data_t *)data, &record->in, &record->out, &left, &top);
+  if(left == 0 && top == 0) return 1;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] -= left;
+    points[i + 1] -= top;
+  }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _borders_geometry_vtable = {
+  .map_size = _borders_geometry_map_size,
+  .transform = _borders_geometry_transform,
+  .backtransform = _borders_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  /* commit_params() is a straight copy of the parameters into the data struct -- the two are the
+   * same type -- so the record carries that copy and nothing is derived twice. */
+  dt_iop_borders_data_t *data = (dt_iop_borders_data_t *)g_malloc0(sizeof(dt_iop_borders_data_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+  memcpy(data, params, sizeof(dt_iop_borders_params_t));
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_borders_geometry_vtable;
+  return TRUE;
+}
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)

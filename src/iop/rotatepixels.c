@@ -40,6 +40,7 @@
 #include "pixel/interpolation.h"
 #include "math/math.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "iop/iop_api.h"
 
@@ -116,12 +117,17 @@ const char **description(struct dt_iop_module_t *self)
 }
 
 
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * These take the committed data rather than a pipeline piece, so the pixel pipe's distort
+ * callbacks and the geometry service's record (develop/geometry/geometry.h) run the same
+ * arithmetic instead of two copies of it.
+ */
+
 __OMP_DECLARE_SIMD__()
-static void transform(const dt_dev_pixelpipe_iop_t *const piece, const float scale, const float *const x,
+static void transform(const dt_iop_rotatepixels_data_t *const d, const float scale, const float *const x,
                       float *o)
 {
-  dt_iop_rotatepixels_data_t *d = (dt_iop_rotatepixels_data_t *)piece->data;
-
   float pi[2] = { x[0] - d->rx * scale, x[1] - d->ry * scale };
 
   mul_mat_vec_2(d->m, pi, o);
@@ -129,16 +135,43 @@ static void transform(const dt_dev_pixelpipe_iop_t *const piece, const float sca
 
 
 __OMP_DECLARE_SIMD__()
-static void backtransform(const dt_dev_pixelpipe_iop_t *const piece, const float scale, const float *const x,
+static void backtransform(const dt_iop_rotatepixels_data_t *const d, const float scale, const float *const x,
                           float *o)
 {
-  dt_iop_rotatepixels_data_t *d = (dt_iop_rotatepixels_data_t *)piece->data;
-
   float rt[] = { d->m[0], -d->m[1], -d->m[2], d->m[3] };
   mul_mat_vec_2(rt, x, o);
 
   o[0] += d->rx * scale;
   o[1] += d->ry * scale;
+}
+
+/**
+ * @brief Input rect -> output rect: the inner rectangle of the 45-degree rotation.
+ *
+ * @details NOTE the non-parameter input: the output size depends on the user's interpolator
+ * preference, because the margin this trims is the interpolation kernel's width. A record
+ * captures it at publish time, which is correct as long as changing that preference
+ * re-publishes -- it forces a pipeline rebuild, which republishes the geometry.
+ */
+static void _rotatepixels_map_size(const dt_iop_rotatepixels_data_t *const d,
+                                   const dt_iop_roi_t *const roi_in, dt_iop_roi_t *roi_out)
+{
+  *roi_out = *roi_in;
+
+  const float scale = roi_in->scale;
+  const float T = (float)d->ry * scale;
+
+  const float y = sqrtf(2.0f * T * T),
+              x = sqrtf(2.0f * ((float)roi_in->width - T) * ((float)roi_in->width - T));
+
+  const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF);
+  const float IW = (float)interpolation->width * scale;
+
+  roi_out->width = y - IW;
+  roi_out->height = x - IW;
+
+  roi_out->width = MAX(0, roi_out->width & ~1);
+  roi_out->height = MAX(0, roi_out->height & ~1);
 }
 
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
@@ -153,7 +186,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     pi[0] = points[i];
     pi[1] = points[i + 1];
 
-    transform(piece, scale, pi, po);
+    transform((const dt_iop_rotatepixels_data_t *)piece->data, scale, pi, po);
 
     points[i] = po[0];
     points[i + 1] = po[1];
@@ -174,7 +207,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
     pi[0] = points[i];
     pi[1] = points[i + 1];
 
-    backtransform(piece, scale, pi, po);
+    backtransform((const dt_iop_rotatepixels_data_t *)piece->data, scale, pi, po);
 
     points[i] = po[0];
     points[i + 1] = po[1];
@@ -199,44 +232,7 @@ void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_de
                     dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *const roi_in)
 {
-  dt_iop_rotatepixels_data_t *d = (dt_iop_rotatepixels_data_t *)piece->data;
-
-  *roi_out = *roi_in;
-
-  /*
-   * Think of input image as:
-   * 1. Square, containing:
-   * 3. 4x Right triangles (two pairs), located in the Edges of square
-   * 2. Rectangle (rotated 45 degrees), located in between triangles.
-   *
-   * Therefore, output image dimensions, that are sizes of inner Rectangle
-   * can be found using Pythagorean theorem.
-   *
-   * Not precise pseudographics: (width == height + 1)
-   *         height
-   *     _  -------
-   *     |  |1 /\2|
-   * ty  |  | y  \|
-   *     _  |/   /| width
-   *        |\x / |
-   *        |2\/ 1|
-   *        -------
-   */
-
-  const float scale = roi_in->scale;
-  const float T = (float)d->ry * scale;
-
-  const float y = sqrtf(2.0f * T * T),
-              x = sqrtf(2.0f * ((float)roi_in->width - T) * ((float)roi_in->width - T));
-
-  const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF);
-  const float IW = (float)interpolation->width * scale;
-
-  roi_out->width = y - IW;
-  roi_out->height = x - IW;
-
-  roi_out->width = MAX(0, roi_out->width & ~1);
-  roi_out->height = MAX(0, roi_out->height & ~1);
+  _rotatepixels_map_size((const dt_iop_rotatepixels_data_t *)piece->data, roi_in, roi_out);
 }
 
 // 2nd pass: which roi would this operation need as input to fill the given output region?
@@ -259,7 +255,7 @@ void modify_roi_in(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_dev
     // get corner points of roi_out
     get_corner(aabb, c, p);
 
-    backtransform(piece, scale, p, o);
+    backtransform((const dt_iop_rotatepixels_data_t *)piece->data, scale, p, o);
 
     // transform to roi_in space, get aabb.
     adjust_aabb(o, aabb_in);
@@ -311,7 +307,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       pi[0] = roi_out->x + i;
       pi[1] = roi_out->y + j;
 
-      backtransform(piece, scale, pi, po);
+      backtransform((const dt_iop_rotatepixels_data_t *)piece->data, scale, pi, po);
 
       po[0] -= roi_in->x;
       po[1] -= roi_in->y;
@@ -323,23 +319,96 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   return 0;
 }
 
+/** @brief Params -> committed data. THE constructor, shared with geometry_record(). */
+static void _rotatepixels_resolve(const dt_iop_rotatepixels_params_t *const p,
+                                  dt_iop_rotatepixels_data_t *d)
+{
+  d->rx = p->rx;
+  d->ry = p->ry;
+
+  const float angle = p->angle * M_PI / 180.0f;
+
+  const float rt[] = { cosf(angle), sinf(angle), -sinf(angle), cosf(angle) };
+  for(int k = 0; k < 4; k++) d->m[k] = rt[k];
+}
+
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_rotatepixels_params_t *p = (dt_iop_rotatepixels_params_t *)p1;
   dt_iop_rotatepixels_data_t *d = (dt_iop_rotatepixels_data_t *)piece->data;
 
-  d->rx = p->rx;
-  d->ry = p->ry;
-
-  const float angle = p->angle * M_PI / 180.0f;
-
-  float rt[] = { cosf(angle), sinf(angle), -sinf(angle), cosf(angle) };
-  for(int k = 0; k < 4; k++) d->m[k] = rt[k];
+  _rotatepixels_resolve(p, d);
 
   // this should not be used for normal images
   // (i.e. for those, when this iop is off by default)
   if((d->rx == 0u) && (d->ry == 0u)) piece->enabled = 0;
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+static void _rotatepixels_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _rotatepixels_map_size((const dt_iop_rotatepixels_data_t *)data, in, out);
+}
+
+static int _rotatepixels_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                            dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_iop_rotatepixels_data_t *const d = (const dt_iop_rotatepixels_data_t *)data;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    const float pi[2] = { points[i], points[i + 1] };
+    float po[2];
+    transform(d, record->in.scale, pi, po);
+    points[i] = po[0];
+    points[i + 1] = po[1];
+  }
+  return 1;
+}
+
+static int _rotatepixels_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                                dt_geometry_chain_t *chain, float *points,
+                                                size_t points_count)
+{
+  const dt_iop_rotatepixels_data_t *const d = (const dt_iop_rotatepixels_data_t *)data;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    const float pi[2] = { points[i], points[i + 1] };
+    float po[2];
+    backtransform(d, record->in.scale, pi, po);
+    points[i] = po[0];
+    points[i + 1] = po[1];
+  }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _rotatepixels_geometry_vtable = {
+  .map_size = _rotatepixels_geometry_map_size,
+  .transform = _rotatepixels_geometry_transform,
+  .backtransform = _rotatepixels_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  dt_iop_rotatepixels_data_t *data
+      = (dt_iop_rotatepixels_data_t *)g_malloc0(sizeof(dt_iop_rotatepixels_data_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+
+  _rotatepixels_resolve((const dt_iop_rotatepixels_params_t *)params, data);
+
+  /* A zero rotation centre is how commit_params() clears piece->enabled: the module is in the
+   * pipe but does nothing. Published with no vtable, which the chain reads as identity. */
+  if(data->rx == 0u && data->ry == 0u)
+  {
+    g_free(data);
+    return TRUE;
+  }
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_rotatepixels_geometry_vtable;
+  return TRUE;
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
