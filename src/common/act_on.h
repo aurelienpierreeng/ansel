@@ -24,7 +24,6 @@
 
 #include <glib.h>
 #include <stdint.h>
-#include "common/http_server.h"
 // get images to act on for globals change (via libs or accels)
 // The list needs to be freed by the caller
 GList *dt_act_on_get_images();
