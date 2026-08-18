@@ -169,6 +169,22 @@ int dt_geometry_backtransform(struct dt_develop_t *dev, double iop_order, int di
                               size_t points_count);
 
 /**
+ * @brief Compose the chain over @p points, for a record evaluator that needs the transform
+ * stack around its own module.
+ *
+ * @details The nested case, and the reason ::dt_geometry_vtable_t hands every evaluator the
+ * chain. iop/liquify.c is the one that needs it: its warps are stored in RAW sensor
+ * coordinates, so before it can rasterise anything it has to push its own path nodes through
+ * everything upstream of itself. On the pixel pipe it does that by re-entering the pipe walker
+ * mid-walk; here it re-enters this.
+ *
+ * Bounded exactly like the walkers, so BACK_EXCL of the caller's own iop_order excludes the
+ * caller and the recursion terminates. Do not call it with a bound that includes the caller.
+ */
+int dt_geometry_chain_compose(dt_geometry_chain_t *chain, double iop_order, int direction, float *points,
+                              size_t points_count);
+
+/**
  * @brief Publish the focused module and its editing state, for the query-time GUI exception.
  *
  * @details dt_dev_pixelpipe_activemodule_disables_currentmodule() reads the focused module, its
