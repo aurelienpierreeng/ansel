@@ -67,6 +67,7 @@
 #include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "widgets/button.h"
@@ -5555,14 +5556,25 @@ static void _event_process_after_ui_callback(gpointer instance, gpointer user_da
   dt_control_queue_redraw_center();
 }
 
-void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
-                   dt_dev_pixelpipe_iop_t *piece)
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * commit_params() below and the geometry service's record (develop/geometry/geometry.h) both go
+ * through _ashift_resolve(), and both evaluate through homography(), which is already a pure
+ * function of the resolved parameters and the input dimensions. So the correction the pipe
+ * applies and the one the GUI overlays are drawn against are the same one, expressed once.
+ *
+ * The edit-mode branch is why the record cannot be built from history alone: while the ashift
+ * GUI is editing, the effective parameters live in g->new_params -- which never reach history --
+ * and the crop is neutralised so the full transformed frame is visible. A record built from
+ * history would describe a crop nobody is rendering, exactly when the overlays matter most.
+ */
+static void _ashift_resolve(struct dt_iop_module_t *self, const dt_iop_ashift_params_t *const p1,
+                            dt_iop_ashift_data_t *d)
 {
-  dt_iop_ashift_data_t *d = (dt_iop_ashift_data_t *)piece->data;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)dt_iop_gui_data(self);
 
   const gboolean editing = !IS_NULL_PTR(g) && g->editing;
-  dt_iop_ashift_params_t *p = editing ? &g->new_params : (dt_iop_ashift_params_t *)p1;
+  const dt_iop_ashift_params_t *p = editing ? &g->new_params : p1;
 
   d->rotation = p->rotation;
   d->lensshift_v = p->lensshift_v;
@@ -5592,6 +5604,107 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     d->ct = p->ct;
     d->cb = p->cb;
   }
+}
+
+void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
+                   dt_dev_pixelpipe_iop_t *piece)
+{
+  _ashift_resolve(self, (const dt_iop_ashift_params_t *)p1, (dt_iop_ashift_data_t *)piece->data);
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+/** @brief Apply the homography plus the clipping offset, in whichever direction. */
+static int _ashift_geometry_apply(const void *data, const dt_geometry_record_t *const record, float *points,
+                                  size_t points_count, const int direction)
+{
+  const dt_iop_ashift_data_t *const d = (const dt_iop_ashift_data_t *)data;
+  if(isneutral(d)) return 1;
+
+  float DT_ALIGNED_ARRAY h[3][3];
+  homography((float *)h, d->rotation, d->lensshift_v, d->lensshift_h, d->shear, d->f_length_kb, d->orthocorr,
+             d->aspect, record->in.width, record->in.height, direction);
+
+  // clipping offset
+  const float fullwidth = (float)record->out.width / (d->cr - d->cl);
+  const float fullheight = (float)record->out.height / (d->cb - d->ct);
+  const float cx = fullwidth * d->cl;
+  const float cy = fullheight * d->ct;
+
+  const gboolean forward = (direction == ASHIFT_HOMOGRAPH_FORWARD);
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    float DT_ALIGNED_PIXEL pi[3] = { points[i] + (forward ? 0.f : cx), points[i + 1] + (forward ? 0.f : cy),
+                                     1.0f };
+    float DT_ALIGNED_PIXEL po[3];
+    mat3mulv(po, (float *)h, pi);
+    points[i] = po[0] / po[2] - (forward ? cx : 0.f);
+    points[i + 1] = po[1] / po[2] - (forward ? cy : 0.f);
+  }
+  return 1;
+}
+
+static void _ashift_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  const dt_iop_ashift_data_t *const d = (const dt_iop_ashift_data_t *)data;
+  *out = *in;
+  if(isneutral(d)) return;
+
+  float h[3][3];
+  homography((float *)h, d->rotation, d->lensshift_v, d->lensshift_h, d->shear, d->f_length_kb, d->orthocorr,
+             d->aspect, in->width, in->height, ASHIFT_HOMOGRAPH_FORWARD);
+
+  float xm = FLT_MAX, xM = -FLT_MAX, ym = FLT_MAX, yM = -FLT_MAX;
+
+  // the four vertices of the input rect, through the homograph, give the output bounding box
+  for(int y = 0; y < in->height; y += in->height - 1)
+    for(int x = 0; x < in->width; x += in->width - 1)
+    {
+      float pin[3] = { (in->x + x) / in->scale, (in->y + y) / in->scale, 1.0f };
+      float pout[3];
+      mat3mulv(pout, (float *)h, pin);
+      pout[0] = pout[0] / pout[2] * out->scale;
+      pout[1] = pout[1] / pout[2] * out->scale;
+      xm = MIN(xm, pout[0]);
+      xM = MAX(xM, pout[0]);
+      ym = MIN(ym, pout[1]);
+      yM = MAX(yM, pout[1]);
+    }
+
+  // clipping adjustments
+  out->width = floorf((xM - xm + 1) * (d->cr - d->cl));
+  out->height = floorf((yM - ym + 1) * (d->cb - d->ct));
+}
+
+static int _ashift_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                      dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  return _ashift_geometry_apply(data, record, points, points_count, ASHIFT_HOMOGRAPH_FORWARD);
+}
+
+static int _ashift_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                          dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  return _ashift_geometry_apply(data, record, points, points_count, ASHIFT_HOMOGRAPH_INVERTED);
+}
+
+static const dt_geometry_vtable_t _ashift_geometry_vtable = {
+  .map_size = _ashift_geometry_map_size,
+  .transform = _ashift_geometry_transform,
+  .backtransform = _ashift_geometry_backtransform,
+};
+
+gboolean geometry_record(struct dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  dt_iop_ashift_data_t *data = (dt_iop_ashift_data_t *)g_malloc0(sizeof(dt_iop_ashift_data_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+
+  _ashift_resolve(self, (const dt_iop_ashift_params_t *)params, data);
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_ashift_geometry_vtable;
+  return TRUE;
 }
 
 gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
