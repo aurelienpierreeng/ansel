@@ -27,6 +27,7 @@
 #include "common/module_versioning.h"
 #include "caches/mipmap_cache.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "iop/iop_api.h"
 
@@ -72,6 +73,31 @@ void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_de
                     dt_iop_roi_t *roi_out, const dt_iop_roi_t *const roi_in)
 {
   *roi_out = (dt_iop_roi_t){ 0, 0, pipe->iwidth, pipe->iheight, 1.f };
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) ---------
+ *
+ * basebuffer is the first module in the pipe and asserts the full sensor frame at scale 1,
+ * ignoring whatever roi_in it is handed. The geometry chain seeds its fold with exactly that
+ * -- the raw dimensions at scale 1 -- so re-asserting the input rect here reproduces the
+ * callback above for every position this module can occupy. It moves no points.
+ */
+
+static void _basebuffer_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  *out = (dt_iop_roi_t){ 0, 0, in->width, in->height, 1.f };
+}
+
+static const dt_geometry_vtable_t _basebuffer_geometry_vtable = {
+  .map_size = _basebuffer_geometry_map_size,
+  .transform = NULL,
+  .backtransform = NULL,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+{
+  record->vtable = &_basebuffer_geometry_vtable;
+  return TRUE;
 }
 
 

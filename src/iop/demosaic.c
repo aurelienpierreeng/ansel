@@ -77,6 +77,7 @@
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "pixel/format.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
@@ -933,14 +934,14 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   dt_interpolation_resample_roi_1c(itor, out, roi_out, in, roi_in);
 }
 
-void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
-                    const dt_iop_roi_t *const roi_in)
+/** @brief Input rect -> output rect. THE size evaluator: modify_roi_out() below and the
+ *  geometry service's record (develop/geometry/geometry.h) are its only two callers. */
+static void _demosaic_map_size(const gboolean downsamples, const dt_iop_roi_t *const roi_in,
+                               dt_iop_roi_t *roi_out)
 {
   *roi_out = *roi_in;
 
-  dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
-  if(_is_downsample_method(data->demosaicing_method))
+  if(downsamples)
   {
     roi_out->width = (roi_in->width + 1) / 2;
     roi_out->height = (roi_in->height + 1) / 2;
@@ -949,6 +950,53 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
   // snap to start of mosaic block:
   roi_out->x = 0; // MAX(0, roi_out->x & ~1);
   roi_out->y = 0; // MAX(0, roi_out->y & ~1);
+}
+
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+                    const dt_iop_roi_t *const roi_in)
+{
+  dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
+  _demosaic_map_size(_is_downsample_method(data->demosaicing_method), roi_in, roi_out);
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) ---------
+ *
+ * Demosaic is on the roster for its SIZE only: the downsampling methods halve the frame, and
+ * nothing downstream would otherwise know. It publishes no point transform because it has none
+ * -- consumers of coordinates work in the post-demosaic frame and normalise against the
+ * per-module dimensions the chain's fold records.
+ */
+
+typedef struct dt_iop_demosaic_geometry_t
+{
+  gboolean downsamples;
+} dt_iop_demosaic_geometry_t;
+
+static void _demosaic_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _demosaic_map_size(((const dt_iop_demosaic_geometry_t *)data)->downsamples, in, out);
+}
+
+static const dt_geometry_vtable_t _demosaic_geometry_vtable = {
+  .map_size = _demosaic_geometry_map_size,
+  .transform = NULL,
+  .backtransform = NULL,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+{
+  const dt_iop_demosaic_params_t *const p = (const dt_iop_demosaic_params_t *)self->params;
+
+  dt_iop_demosaic_geometry_t *data
+      = (dt_iop_demosaic_geometry_t *)g_malloc0(sizeof(dt_iop_demosaic_geometry_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+  data->downsamples = _is_downsample_method(p->demosaicing_method);
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_demosaic_geometry_vtable;
+  return TRUE;
 }
 
 // which roi input is needed to process to this output?
