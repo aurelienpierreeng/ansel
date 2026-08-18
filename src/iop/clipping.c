@@ -86,6 +86,7 @@
 #include "control/input.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
@@ -489,6 +490,11 @@ static inline void transform(float *x, float *o, const float *m, const float t_h
   o[0] *= (1.0f + o[1] * t_v);
 }
 
+/* Defined below, next to modify_roi_out() whose body it is: the distort callbacks need the
+ * size-dependent state it settles before they can use it. */
+static void _clipping_derive(dt_iop_clipping_data_t *d, const dt_iop_roi_t *const roi_in_orig,
+                             dt_iop_roi_t *roi_out);
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const restrict points, size_t points_count)
 {
@@ -498,13 +504,11 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL)) factor = 100.0f;
   // we first need to be sure that all data values are computed
   // this is done in modify_roi_out fct, so we create tmp roi
-  dt_dev_pixelpipe_iop_t piece_copy = *piece;
+  dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
   dt_iop_roi_t roi_out, roi_in;
   roi_in.width = piece->buf_in.width * factor;
   roi_in.height = piece->buf_in.height * factor;
-  self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
-
-  dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
+  _clipping_derive(d, &roi_in, &roi_out);
 
   const float rx = piece->buf_in.width;
   const float ry = piece->buf_in.height;
@@ -550,7 +554,7 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   {
     roi_in.width = piece->buf_in.width;
     roi_in.height = piece->buf_in.height;
-    self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
+    _clipping_derive(d, &roi_in, &roi_out);
   }
 
   return 1;
@@ -564,13 +568,11 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   if(dt_dev_pixelpipe_has_preview_output(self->dev, pipe, NULL)) factor = 100.0f;
   // we first need to be sure that all data values are computed
   // this is done in modify_roi_out fct, so we create tmp roi
-  dt_dev_pixelpipe_iop_t piece_copy = *piece;
+  dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
   dt_iop_roi_t roi_out, roi_in;
   roi_in.width = piece->buf_in.width * factor;
   roi_in.height = piece->buf_in.height * factor;
-  self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
-
-  dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
+  _clipping_derive(d, &roi_in, &roi_out);
 
   const float rx = piece->buf_in.width;
   const float ry = piece->buf_in.height;
@@ -616,7 +618,7 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   {
     roi_in.width = piece->buf_in.width;
     roi_in.height = piece->buf_in.height;
-    self->modify_roi_out(self, pipe, &piece_copy, &roi_out, &roi_in);
+    _clipping_derive(d, &roi_in, &roi_out);
   }
 
   return 1;
@@ -723,14 +725,29 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
 
 // 1st pass: how large would the output be, given this input roi?
 // this is always called with the full buffer before processing.
-void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
-                    const dt_iop_roi_t *roi_in_orig)
+/**
+ * @brief Derive this module's whole geometric state, and the output rect, from the committed
+ * parameters and the input dimensions. THE constructor and THE size evaluator at once.
+ *
+ * @details This is modify_roi_out()'s body, unchanged, with the one line that reached into a
+ * pipeline piece removed. It was already self-contained -- nothing else in those ~190 lines
+ * touched `piece', `self' or `pipe' -- which is what makes lifting it out safe.
+ *
+ * It WRITES into @p d: the rotation matrix and its inverse, the resolution-corrected keystone
+ * factors, the rotation centre, the crop window on the output, the enlargement and the flip are
+ * all functions of the input size and cannot be settled until that size is known. Callers who
+ * need those fields without planning a ROI -- the distort callbacks, and the geometry service's
+ * record (develop/geometry/geometry.h) -- must therefore run this first. They used to do it by
+ * calling modify_roi_out() through the module's own vtable on a SHALLOW COPY of the piece whose
+ * `data' pointer still aliased the real one, so the writes landed where they were wanted.
+ * Calling this directly says the same thing without the disguise.
+ */
+static void _clipping_derive(dt_iop_clipping_data_t *d, const dt_iop_roi_t *const roi_in_orig,
+                             dt_iop_roi_t *roi_out)
 {
   dt_iop_roi_t roi_in_d = *roi_in_orig;
   dt_iop_roi_t *roi_in = &roi_in_d;
 
-  dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
 
   // use whole-buffer roi information to create matrix and inverse.
   float rt[] = { cosf(d->angle), sinf(d->angle), -sinf(d->angle), cosf(d->angle) };
@@ -910,6 +927,13 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
   d->ciy = roi_out->y;
 }
 
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+                    const dt_iop_roi_t *roi_in_orig)
+{
+  _clipping_derive((dt_iop_clipping_data_t *)piece->data, roi_in_orig, roi_out);
+}
+
 // 2nd pass: which roi would this operation need as input to fill the given output region?
 void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                    struct dt_dev_pixelpipe_iop_t *piece,
@@ -1061,11 +1085,25 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 }
 
 
-void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
-                   dt_dev_pixelpipe_iop_t *piece)
+/**
+ * @brief Parameters -> committed data. THE constructor.
+ *
+ * @details commit_params()'s body, unchanged, minus the two lines that fetched the parameters
+ * and the piece. Like _clipping_derive() below it was already self-contained, and the geometry
+ * record needs it for the same reason: it has parameters and no pipeline piece to put them in.
+ *
+ * It reads ONE thing that is not a parameter: gui_has_focus(), which neutralises the crop while
+ * this module is the focused one so the darkroom shows the whole frame to drag the crop over.
+ * That is GUI state and never reaches history, which is why a record cannot be built from
+ * history alone and why this takes @p self.
+ *
+ * Note what this does NOT settle -- everything that depends on the input size (the matrices,
+ * the keystone factors corrected by resolution, the rotation centre, the crop on the output).
+ * That is _clipping_derive()'s job, and it has to run afterwards.
+ */
+static void _clipping_resolve(struct dt_iop_module_t *self, const dt_iop_clipping_params_t *const p,
+                              dt_iop_clipping_data_t *d)
 {
-  dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)p1;
-  dt_iop_clipping_data_t *d = (dt_iop_clipping_data_t *)piece->data;
 
   // reset all values to be sure everything is initialized
   d->m[0] = d->m[3] = 1.0f;
@@ -1224,9 +1262,15 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(d->cx != p->cx || d->cy != p->cy || d->cw != fabsf(p->cw) || d->ch != fabsf(p->ch))
     {
       fprintf(stderr, "[crop&rotate] invalid crop data for %d : x=%0.04f y=%0.04f w=%0.04f h=%0.04f\n",
-              pipe->dev->image_storage.id, p->cx, p->cy, p->cw, p->ch);
+              self->dev->image_storage.id, p->cx, p->cy, p->cw, p->ch);
     }
   }
+}
+
+void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
+                   dt_dev_pixelpipe_iop_t *piece)
+{
+  _clipping_resolve(self, (const dt_iop_clipping_params_t *)p1, (dt_iop_clipping_data_t *)piece->data);
 }
 
 static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *self)
@@ -1287,6 +1331,144 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   dt_dev_get_thumbnail_size(self->dev);
 }
 
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) ---------
+ *
+ * The record carries the PARAMETER-derived half of the state (what _clipping_resolve() settles)
+ * and re-derives the size-dependent half per call, into a local copy, because that half is a
+ * function of the rectangle it is handed and the chain hands a different one to the size fold
+ * than a consumer may ask a transform about. Deriving into a local keeps the evaluators pure
+ * and the record immutable, at the cost of running the derivation per query -- it is arithmetic
+ * on a dozen floats, and the alternative is a record that mutates while being read.
+ *
+ * Note the factor: the pipe's distort callbacks multiply the input size by 100 for preview
+ * pipes, to get around dt_iop_roi_t being integral. The chain does not, because the pipe the
+ * GUI walks today -- the virtual one -- is not the preview pipe by that test either, so factor
+ * 1 is what these coordinates are already computed with. Changing it would be an improvement to
+ * make deliberately, with shadow mode watching, not a side effect of this tranche.
+ */
+
+static void _clipping_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  dt_iop_clipping_data_t local = *(const dt_iop_clipping_data_t *)data;
+  _clipping_derive(&local, in, out);
+}
+
+/** @brief The keystone matrix and the scaled quadrilateral, which both directions need. */
+static void _clipping_keystone(const dt_iop_clipping_data_t *const d, const float rx, const float ry,
+                               dt_boundingbox_t k_space, float *kxa, float *kya, float *ma, float *mb,
+                               float *md, float *me, float *mg, float *mh)
+{
+  k_space[0] = d->k_space[0] * rx;
+  k_space[1] = d->k_space[1] * ry;
+  k_space[2] = d->k_space[2] * rx;
+  k_space[3] = d->k_space[3] * ry;
+
+  *kxa = d->kxa * rx;
+  *kya = d->kya * ry;
+  if(d->k_apply == 1)
+    keystone_get_matrix(k_space, d->kxa * rx, d->kxb * rx, d->kxc * rx, d->kxd * rx, d->kya * ry,
+                        d->kyb * ry, d->kyc * ry, d->kyd * ry, ma, mb, md, me, mg, mh);
+}
+
+static int _clipping_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                        dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  dt_iop_clipping_data_t d = *(const dt_iop_clipping_data_t *)data;
+  dt_iop_roi_t out;
+  _clipping_derive(&d, &record->in, &out);
+
+  const float rx = record->in.width, ry = record->in.height;
+  dt_boundingbox_t k_space;
+  float kxa = 0.f, kya = 0.f, ma = 0.f, mb = 0.f, md = 0.f, me = 0.f, mg = 0.f, mh = 0.f;
+  _clipping_keystone(&d, rx, ry, k_space, &kxa, &kya, &ma, &mb, &md, &me, &mg, &mh);
+
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    float pi[2] = { points[i], points[i + 1] }, po[2];
+
+    if(d.k_apply == 1) keystone_transform(pi, k_space, ma, mb, md, me, mg, mh, kxa, kya);
+
+    pi[0] -= d.tx;
+    pi[1] -= d.ty;
+    transform(pi, po, d.inv_m, d.k_h, d.k_v);
+
+    if(d.flip)
+    {
+      po[1] += d.tx;
+      po[0] += d.ty;
+    }
+    else
+    {
+      po[0] += d.tx;
+      po[1] += d.ty;
+    }
+
+    points[i] = po[0] - (d.cix - d.enlarge_x);
+    points[i + 1] = po[1] - (d.ciy - d.enlarge_y);
+  }
+  return 1;
+}
+
+static int _clipping_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                            dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  dt_iop_clipping_data_t d = *(const dt_iop_clipping_data_t *)data;
+  dt_iop_roi_t out;
+  _clipping_derive(&d, &record->in, &out);
+
+  const float rx = record->in.width, ry = record->in.height;
+  dt_boundingbox_t k_space;
+  float kxa = 0.f, kya = 0.f, ma = 0.f, mb = 0.f, md = 0.f, me = 0.f, mg = 0.f, mh = 0.f;
+  _clipping_keystone(&d, rx, ry, k_space, &kxa, &kya, &ma, &mb, &md, &me, &mg, &mh);
+
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    float pi[2], po[2];
+    pi[0] = -(d.enlarge_x - d.cix) + points[i];
+    pi[1] = -(d.enlarge_y - d.ciy) + points[i + 1];
+
+    if(d.flip)
+    {
+      pi[1] -= d.tx;
+      pi[0] -= d.ty;
+    }
+    else
+    {
+      pi[0] -= d.tx;
+      pi[1] -= d.ty;
+    }
+
+    backtransform(pi, po, d.m, d.k_h, d.k_v);
+
+    po[0] += d.tx;
+    po[1] += d.ty;
+    if(d.k_apply == 1) keystone_backtransform(po, k_space, ma, mb, md, me, mg, mh, kxa, kya);
+
+    points[i] = po[0];
+    points[i + 1] = po[1];
+  }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _clipping_geometry_vtable = {
+  .map_size = _clipping_geometry_map_size,
+  .transform = _clipping_geometry_transform,
+  .backtransform = _clipping_geometry_backtransform,
+};
+
+gboolean geometry_record(struct dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  dt_iop_clipping_data_t *data = (dt_iop_clipping_data_t *)g_malloc0(sizeof(dt_iop_clipping_data_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+
+  _clipping_resolve(self, (const dt_iop_clipping_params_t *)params, data);
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_clipping_geometry_vtable;
+  return TRUE;
+}
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {

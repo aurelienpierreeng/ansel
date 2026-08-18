@@ -38,6 +38,7 @@
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "pixel/interpolation.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/tiling.h"
 
@@ -115,17 +116,44 @@ static void transform(const dt_dev_pixelpipe_iop_t *const piece, float *p)
   }
 }
 
+/**
+ * @brief The axis scales this module applies, from its one parameter. THE constructor.
+ *
+ * @details These used to be obtained by calling modify_roi_in() on a SHALLOW COPY of the piece
+ * with roi_out set to the full input size -- a copy whose `data' pointer still aliased the real
+ * one, so the callback's writes landed in the real piece. Working the algebra through shows the
+ * dimensions cancel and the result is a pure function of the pixel aspect ratio:
+ *
+ *   hw = { H, W } transformed  ->  par < 1 : { H, W/par },  par >= 1 : { H*par, W }
+ *   reduction    = max(hw[0]/H, hw[1]/W)  ->  par < 1 : 1/par,  par >= 1 : par
+ *   both divided by reduction ->  par < 1 : { H*par, W },  par >= 1 : { H, W/par }
+ *   x_scale = width/W, y_scale = height/H
+ *
+ * so x_scale = 1, y_scale = par below one, and x_scale = 1/par, y_scale = 1 at or above it.
+ * Same numbers, no aliased copy, and one place that says what the scaling is -- which is what
+ * the geometry record needs, having no piece to fake.
+ */
+static void _scalepixels_scales(const float pixel_aspect_ratio, float *x_scale, float *y_scale)
+{
+  if(pixel_aspect_ratio < 1.0f)
+  {
+    *x_scale = 1.0f;
+    *y_scale = pixel_aspect_ratio;
+  }
+  else
+  {
+    *x_scale = 1.0f / pixel_aspect_ratio;
+    *y_scale = 1.0f;
+  }
+}
+
 static void precalculate_scale(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *piece)
 {
-  // Since the scaling is calculated by modify_roi_in use that to get them
-  // This doesn't seem strictly needed but since clipping.c also does it we try
-  // and avoid breaking any assumptions elsewhere in the code
-  dt_dev_pixelpipe_iop_t piece_copy = *piece;
-  dt_iop_roi_t roi_out, roi_in;
-  roi_out.width = piece->buf_in.width;
-  roi_out.height = piece->buf_in.height;
-  self->modify_roi_in(self, pipe, &piece_copy, &roi_out, &roi_in);
+  /* Writes into the piece, as it always has: process() reads these two fields, and the distort
+   * callbacks below deliberately reset them to the full-frame values before using them. */
+  dt_iop_scalepixels_data_t *d = (dt_iop_scalepixels_data_t *)piece->data;
+  _scalepixels_scales(d->pixel_aspect_ratio, &d->x_scale, &d->y_scale);
 }
 
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
@@ -261,6 +289,84 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 
   if(isnan(p->pixel_aspect_ratio) || p->pixel_aspect_ratio <= 0.0f || p->pixel_aspect_ratio == 1.0f)
     piece->enabled = 0;
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+typedef struct dt_iop_scalepixels_geometry_t
+{
+  float x_scale, y_scale;
+} dt_iop_scalepixels_geometry_t;
+
+static void _scalepixels_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  const dt_iop_scalepixels_geometry_t *const g = (const dt_iop_scalepixels_geometry_t *)data;
+  *out = *in;
+
+  /* modify_roi_out() runs the aspect transform on the origin and on the size; expressed through
+   * the scales, that is a division, since transform() maps input to output and the scales are
+   * the input-over-output ratio. */
+  out->x = (int)floorf(in->x / g->x_scale);
+  out->y = (int)floorf(in->y / g->y_scale);
+  out->width = (int)ceilf(in->width / g->x_scale);
+  out->height = (int)ceilf(in->height / g->y_scale);
+
+  // sanity check.
+  if(out->x < 0) out->x = 0;
+  if(out->y < 0) out->y = 0;
+  if(out->width < 1) out->width = 1;
+  if(out->height < 1) out->height = 1;
+}
+
+static int _scalepixels_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                           dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_iop_scalepixels_geometry_t *const g = (const dt_iop_scalepixels_geometry_t *)data;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] /= g->x_scale;
+    points[i + 1] /= g->y_scale;
+  }
+  return 1;
+}
+
+static int _scalepixels_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                               dt_geometry_chain_t *chain, float *points,
+                                               size_t points_count)
+{
+  const dt_iop_scalepixels_geometry_t *const g = (const dt_iop_scalepixels_geometry_t *)data;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] *= g->x_scale;
+    points[i + 1] *= g->y_scale;
+  }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _scalepixels_geometry_vtable = {
+  .map_size = _scalepixels_geometry_map_size,
+  .transform = _scalepixels_geometry_transform,
+  .backtransform = _scalepixels_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  const dt_iop_scalepixels_params_t *const p = (const dt_iop_scalepixels_params_t *)params;
+
+  /* The same disabling condition commit_params() applies: a ratio of one, or a nonsensical one,
+   * means this module does nothing. Published as identity. */
+  if(isnan(p->pixel_aspect_ratio) || p->pixel_aspect_ratio <= 0.0f || p->pixel_aspect_ratio == 1.0f)
+    return TRUE;
+
+  dt_iop_scalepixels_geometry_t *data
+      = (dt_iop_scalepixels_geometry_t *)g_malloc0(sizeof(dt_iop_scalepixels_geometry_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+  _scalepixels_scales(p->pixel_aspect_ratio, &data->x_scale, &data->y_scale);
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_scalepixels_geometry_vtable;
+  return TRUE;
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
