@@ -223,33 +223,6 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-#ifdef HAVE_OPENCL
-
-// The per-mode OpenCL helpers below carry the kernel-argument boilerplate so process_cl() reads as a
-// clean mode switch, symmetric to process(). Each returns a cl_int (CL_SUCCESS or an error to bubble up).
-
-// Clip-visualization false-colour quad (raw only; the caller sets mask_display/bypass_blendif on success).
-static cl_int _hl_cl_visualize(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
-                               cl_mem dev_out, const int width, const int height,
-                               const dt_iop_roi_t *const roi_out, const uint32_t filters,
-                               const dt_aligned_pixel_t clips)
-{
-  cl_mem dev_clips = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)clips);
-  if(IS_NULL_PTR(dev_clips)) return DT_OPENCL_DEFAULT_ERROR;
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 4, sizeof(int), (void *)&roi_out->x);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 5, sizeof(int), (void *)&roi_out->y);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 6, sizeof(int), (void *)&filters);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 7, sizeof(cl_mem), (void *)&dev_clips);
-  const cl_int err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
-  dt_opencl_release_mem_object(dev_clips);
-  return err;
-}
-
 // ===== early bypass: nothing worth reconstructing ============================================
 // The clipping threshold the ACTIVE MODE actually tests against, so the bypass counts exactly what
 // that mode would call clipped instead of a conservative envelope of all of them: colour inpainting
@@ -329,6 +302,32 @@ static void _hl_copy_input(const dt_dev_pixelpipe_iop_t *piece, const void *cons
 }
 
 #ifdef HAVE_OPENCL
+
+// The per-mode OpenCL helpers below carry the kernel-argument boilerplate so process_cl() reads as a
+// clean mode switch, symmetric to process(). Each returns a cl_int (CL_SUCCESS or an error to bubble up).
+
+// Clip-visualization false-colour quad (raw only; the caller sets mask_display/bypass_blendif on success).
+static cl_int _hl_cl_visualize(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
+                               cl_mem dev_out, const int width, const int height,
+                               const dt_iop_roi_t *const roi_out, const uint32_t filters,
+                               const dt_aligned_pixel_t clips)
+{
+  cl_mem dev_clips = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float), (float *)clips);
+  if(IS_NULL_PTR(dev_clips)) return DT_OPENCL_DEFAULT_ERROR;
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 4, sizeof(int), (void *)&roi_out->x);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 5, sizeof(int), (void *)&roi_out->y);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 6, sizeof(int), (void *)&filters);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 7, sizeof(cl_mem), (void *)&dev_clips);
+  const cl_int err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
+  dt_opencl_release_mem_object(dev_clips);
+  return err;
+}
+
 // Device twin of _hl_count_clipped: one workgroup-local reduction per group, summed here.
 static cl_int _hl_cl_count_clipped(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
                                    const int width, const int height,
@@ -371,7 +370,6 @@ static cl_int _hl_cl_count_clipped(dt_iop_highlights_global_data_t *gd, const in
   dt_opencl_release_mem_object(dev_thresholds);
   return err;
 }
-#endif
 
 // Plain clip. Raw mosaic uses the single-channel kernel (roi-aware); non-raw uses the 4-channel kernel.
 // This is also the fallback for the raw-only reconstruction modes (LCh / colour inpainting) on non-raw.
