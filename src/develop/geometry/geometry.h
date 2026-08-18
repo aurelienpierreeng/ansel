@@ -97,10 +97,10 @@ typedef struct dt_geometry_record_t
   double iop_order;        /**< position in the pipe; the walkers' ordering and bound */
   gboolean enabled;
 
-  /* Cached so the query-time GUI exception can be evaluated without touching dt_iop_module_t
-   * from a consumer. See dt_geometry_set_focus(). */
+  /* The candidate half of the query-time GUI exception: the FOCUSED module's tag filter is
+   * tested against this. The focused module's own filter is not stored per record -- it is one
+   * value for the whole query, and it lives on the chain. See dt_geometry_set_focus(). */
   int operation_tags;
-  int operation_tags_filter;
 
   const dt_geometry_vtable_t *vtable;   /**< NULL: this module is geometrically identity */
   void *data;                           /**< module-owned blob, freed by ::free_data */
@@ -171,6 +171,11 @@ int dt_geometry_backtransform(struct dt_develop_t *dev, double iop_order, int di
  */
 void dt_geometry_set_focus(struct dt_develop_t *dev, const struct dt_iop_module_t *focused,
                            gboolean editing);
+
+/** @brief Forget the focused module. Call before any module list teardown -- see the note on
+ *  dt_geometry_set_focus(): the chain keeps the focus by VALUE precisely so a stale publication
+ *  cannot dereference a destroyed module, but clearing it at teardown keeps the state honest. */
+void dt_geometry_clear_focus(struct dt_develop_t *dev);
 
 /**
  * @brief Shadow mode: compare the chain against the pipe that still owns the answer.
