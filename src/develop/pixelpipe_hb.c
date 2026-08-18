@@ -381,7 +381,6 @@ int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, in
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_EXPORT;
   pipe->gui_observable_source = FALSE;
-  pipe->mask_rasterization_step = 1;   // these pixels are the deliverable
   pipe->levels = levels;
   pipe->store_all_raster_masks = store_masks;
   pipe->dev = dev;
@@ -393,7 +392,6 @@ int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
   pipe->no_cache = TRUE;
-  pipe->mask_rasterization_step = 1;   // raised by the GUI only, never on its own
   pipe->dev = dev;
   return res;
 }
@@ -413,7 +411,6 @@ int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_PREVIEW;
   pipe->gui_observable_source = TRUE;
-  pipe->mask_rasterization_step = 1;   // raised by the GUI only, never on its own
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
@@ -442,8 +439,6 @@ int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_FULL;
-  // Raised per frame by the darkroom; see dt_dev_pixelpipe_set_mask_rasterization_step().
-  pipe->mask_rasterization_step = 1;
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
@@ -460,6 +455,16 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->roi_request.value = dt_dev_roi_request_neutral();
   pipe->devid = -1;
   pipe->last_devid = -1;
+
+  /* Pixel accuracy, the safe default: only the darkroom ever raises this, from the GUI thread.
+   * It is set HERE, in the one function every pipe init calls, and not in each of them: the
+   * per-type version of this missed dt_dev_pixelpipe_init_dummy(), which gui/dtgtk/focus.h uses
+   * for the focus-ring overlay, and left it at the memset's 0. Zero does not divide by anything
+   * -- `use_sparse' is `step > 1' and the interpolation loop is `for(k = 1; k < step; k++)', so
+   * both are simply skipped -- but it makes _is_within_pxl_threshold() test `< 0', which is
+   * never true, so the outline subdivides until `tmax - tmin < 0.0001' instead of stopping at
+   * one pixel: thousands of samples per segment, on an overlay that wanted the cheap path. */
+  pipe->mask_rasterization_step = 1;
   dt_dev_pixelpipe_set_changed(pipe, DT_DEV_PIPE_UNCHANGED);
   dt_dev_pixelpipe_set_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_dev_pixelpipe_set_history_hash(pipe, DT_PIXELPIPE_CACHE_HASH_INVALID);
