@@ -338,7 +338,8 @@ void dt_geometry_clear_focus(dt_develop_t *dev)
   dev->geometry_chain->focus_active = FALSE;
 }
 
-void dt_geometry_shadow_check_size(dt_develop_t *dev, const int pipe_width, const int pipe_height)
+void dt_geometry_shadow_check(dt_develop_t *dev, const int pipe_width, const int pipe_height,
+                              const double chain_ms)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain)) return;
   if(!(dt_get_debug_flags() & DT_DEBUG_DEV)) return;
@@ -447,6 +448,11 @@ void dt_geometry_shadow_check_size(dt_develop_t *dev, const int pipe_width, cons
     dt_print(DT_DEBUG_DEV,
              "[geometry] agrees with the pipe: size %dx%d, 5/5 forward probes, 5/5 round-trips\n",
              chain->processed_width, chain->processed_height);
+
+  /* The cost, which is the reason this service exists. Compare against `-d perf's "pipeline
+   * resync with history ... for pipe virtual-preview" line: that is the same product, computed
+   * the way this replaces. */
+  dt_print(DT_DEBUG_DEV, "[geometry] chain rebuilt in %.2f ms\n", chain_ms);
 }
 
 // clang-format off

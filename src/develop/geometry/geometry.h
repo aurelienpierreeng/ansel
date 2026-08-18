@@ -49,6 +49,15 @@
 
 #include "develop/pixelpipe_hb.h"   // dt_iop_roi_t
 
+/* C linkage: geometry.c is a C translation unit and iop/lens.cc -- the first module to publish
+ * a record -- is a C++ one. Without this its calls and its vtable would name mangled symbols
+ * nothing defines. Linux would still link the plugin (a shared object may carry undefined
+ * symbols and resolve them at dlopen time) and fail at runtime; macOS and Windows fail the
+ * build. Same reason control/user_message.h carries these guards. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct dt_develop_t;
 struct dt_iop_module_t;
 struct dt_geometry_record_t;
@@ -180,12 +189,23 @@ void dt_geometry_clear_focus(struct dt_develop_t *dev);
 /**
  * @brief Shadow mode: compare the chain against the pipe that still owns the answer.
  *
- * @details Called from the size path with whatever the virtual pipe just produced. While the
- * roster is incomplete this reports exactly which enabled modules are still missing a record --
- * measured per image, rather than assumed from a source audit -- and once it is complete it
- * reports any divergence. Both under `-d dev'. It never changes behaviour.
+ * @details Called from the size path with whatever the virtual pipe just produced, and with
+ * what each side cost. While the roster is incomplete this reports exactly which enabled
+ * modules are still missing a record -- measured per image, rather than assumed from a source
+ * audit -- and once it is complete it reports any divergence in size, in forward transforms and
+ * in round trips, together with the two costs. Both under `-d dev'. It never changes behaviour.
+ *
+ * @param chain_ms what the rebuild cost. The virtual pipe's counterpart is NOT measured here:
+ * its work is done in _sync_virtual_pipe(), off this path, and is already reported by `-d perf'
+ * as "pipeline resync with history ... for pipe virtual-preview". Timing it here would only ever
+ * catch a resync that had nothing to do, and report ~0 ms for the side that is expensive.
  */
-void dt_geometry_shadow_check_size(struct dt_develop_t *dev, int pipe_width, int pipe_height);
+void dt_geometry_shadow_check(struct dt_develop_t *dev, int pipe_width, int pipe_height,
+                              double chain_ms);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DT_DEVELOP_GEOMETRY_GEOMETRY_H
 

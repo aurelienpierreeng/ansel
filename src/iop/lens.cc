@@ -103,6 +103,8 @@
 #include "widgets/widget_style.h"
 #include "control/signal.h"
 
+#include "develop/geometry/geometry.h"
+
 extern "C" {
 
 #if LF_VERSION < ((0 << 24) | (2 << 16) | (9 << 8) | 0)
@@ -1175,28 +1177,41 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
   delete modifier;
 }
 
-void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
-                   dt_dev_pixelpipe_iop_t *piece)
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * lens resolves its effective parameters and then builds a lensfun state out of them, and both
+ * halves are needed twice: once for the pixel pipe, once for the record the geometry service
+ * composes GUI coordinates from (develop/geometry/geometry.h). Expressed once here.
+ *
+ * Note what lens does NOT contribute: modify_roi_out() is the identity, so this module changes
+ * no dimensions. It is on the geometry roster purely for its point transforms.
+ */
+
+/**
+ * @brief Which parameters are actually in force.
+ *
+ * @details p->modified == 0 means "auto": the user never touched the GUI after autodetection,
+ * and the parameters that describe the correction are the module's DEFAULTS, filled in by
+ * reload_defaults() from the image's EXIF -- not the ones in history. A record built from
+ * history alone would describe a correction the pipe is not applying, on exactly the images
+ * where lens correction is automatic, which is most of them.
+ */
+static const dt_iop_lensfun_params_t *_lens_effective_params(dt_iop_module_t *self,
+                                                             const dt_iop_lensfun_params_t *const p)
 {
-  dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)p1;
+  return (p->modified == 0) ? (const dt_iop_lensfun_params_t *)self->default_params : p;
+}
 
-  // FIXME: this is utter shit and should be made into a GUI "mode".
-  // If p->modified == 0, mode = auto and hide all controls
-  // if p->modidified == 1, mode = manual and show all controls.
-  if(p->modified == 0)
-  {
-    /*
-     * user did not modify anything in gui after autodetection - let's
-     * use current default_params as params - for presets and mass-export
-     */
-    p = (dt_iop_lensfun_params_t *)self->default_params;
-
-    // Temporary fix pending GUI unfucking
-    dt_iop_compute_module_hash(self, self->dev->forms);
-  }
-
-  dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
-
+/**
+ * @brief Build the lensfun state from resolved parameters. THE constructor.
+ *
+ * @details @p d is zeroed or already owns a lens; either way it owns a fresh deep copy of the
+ * database's lfLens on return, and the caller must delete it (see _lens_free_data() and
+ * cleanup_pipe()). The database lookups take the plugin mutex, as they always have.
+ */
+static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_t *const p,
+                             dt_iop_lensfun_data_t *d)
+{
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
   lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
   const lfCamera *camera = NULL;
@@ -1284,8 +1299,120 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
     d->do_nan_checks = FALSE;
   }
+}
+
+/** @brief The lensfun modify mask this image allows: monochrome sensors get no TCA correction. */
+static int _lens_used_mask(dt_iop_module_t *self)
+{
+  return dt_image_is_monochrome(&self->dev->image_storage) ? (LF_MODIFY_ALL & ~LF_MODIFY_TCA)
+                                                           : LF_MODIFY_ALL;
+}
+
+void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
+                   dt_dev_pixelpipe_iop_t *piece)
+{
+  const dt_iop_lensfun_params_t *p = _lens_effective_params(self, (dt_iop_lensfun_params_t *)p1);
+
+  // FIXME: this is utter shit and should be made into a GUI "mode".
+  // If p->modified == 0, mode = auto and hide all controls
+  // if p->modidified == 1, mode = manual and show all controls.
+  if(((dt_iop_lensfun_params_t *)p1)->modified == 0)
+  {
+    // Temporary fix pending GUI unfucking
+    dt_iop_compute_module_hash(self, self->dev->forms);
+  }
+
+  _lens_build_data(self, p, (dt_iop_lensfun_data_t *)piece->data);
 
   piece->cache_output_on_ram = TRUE;
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) ---------
+ *
+ * The one record in the service whose payload is not plain data: evaluating a lens correction
+ * needs a live lfLens, a C++ object with heap-allocated calibration lists, so the record owns a
+ * deep copy and frees it. That is what dt_geometry_record_t::free_data exists for.
+ */
+
+typedef struct dt_iop_lens_geometry_t
+{
+  dt_iop_lensfun_data_t data;   /**< owns its own lfLens, exactly like a pipe piece does */
+  int used_lf_mask;
+} dt_iop_lens_geometry_t;
+
+static void _lens_free_data(void *ptr)
+{
+  dt_iop_lens_geometry_t *g = (dt_iop_lens_geometry_t *)ptr;
+  if(!g) return;
+  if(g->data.lens) delete g->data.lens;
+  free(g);
+}
+
+/** @brief Apply the correction to points. @p inverse selects the direction, as get_modifier()
+ *  means it: distort_transform() passes TRUE, distort_backtransform() passes FALSE. */
+static int _lens_geometry_apply(const void *data, const dt_geometry_record_t *const record,
+                                float *points, size_t points_count, gboolean inverse)
+{
+  const dt_iop_lens_geometry_t *const g = (const dt_iop_lens_geometry_t *)data;
+  const dt_iop_lensfun_data_t *const d = &g->data;
+
+  if(!d->lens || !d->lens->Maker || d->crop <= 0.0f) return 0;
+  if(record->in.width <= 0 || record->in.height <= 0) return 0;
+
+  int modflags = 0;
+  const lfModifier *modifier
+      = get_modifier(&modflags, record->in.width, record->in.height, d, g->used_lf_mask, inverse);
+  if(!modifier) return 0;
+
+  if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
+  {
+    for(size_t i = 0; i < points_count * 2; i += 2)
+    {
+      float DT_ALIGNED_ARRAY buf[6];
+      modifier->ApplySubpixelGeometryDistortion(points[i], points[i + 1], 1, 1, buf);
+      // green channel, like distort_transform() and distort_mask() do, so x and y come from the
+      // same colour channel's distortion field instead of mixing red's x with green's y.
+      points[i] = buf[2];
+      points[i + 1] = buf[3];
+    }
+  }
+
+  delete modifier;
+  return 1;
+}
+
+static int _lens_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                    dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  return _lens_geometry_apply(data, record, points, points_count, TRUE);
+}
+
+static int _lens_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                        dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  return _lens_geometry_apply(data, record, points, points_count, FALSE);
+}
+
+static const dt_geometry_vtable_t _lens_geometry_vtable = {
+  /* .map_size = */ NULL,   // modify_roi_out() is the identity: lens changes no dimensions
+  /* .transform = */ _lens_geometry_transform,
+  /* .backtransform = */ _lens_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+{
+  dt_iop_lens_geometry_t *g = (dt_iop_lens_geometry_t *)calloc(1, sizeof(dt_iop_lens_geometry_t));
+  if(!g) return FALSE;
+
+  const dt_iop_lensfun_params_t *p
+      = _lens_effective_params(self, (const dt_iop_lensfun_params_t *)self->params);
+  _lens_build_data(self, p, &g->data);
+  g->used_lf_mask = _lens_used_mask(self);
+
+  record->data = g;
+  record->free_data = _lens_free_data;
+  record->vtable = &_lens_geometry_vtable;
+  return TRUE;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
