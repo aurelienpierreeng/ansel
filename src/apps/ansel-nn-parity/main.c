@@ -43,6 +43,10 @@
 #include <glib/gstdio.h>
 #include <json-glib/json-glib.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
