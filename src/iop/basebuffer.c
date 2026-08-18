@@ -94,7 +94,7 @@ static const dt_geometry_vtable_t _basebuffer_geometry_vtable = {
   .backtransform = NULL,
 };
 
-gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
 {
   record->vtable = &_basebuffer_geometry_vtable;
   return TRUE;
