@@ -54,6 +54,7 @@
 #include "common/startup_progress.h"
 #include "common/utility.h"   // dt_util_str_replace, used under __APPLE__ only
 #include "system/capabilities.h"
+#include "system/sys_resources.h"
 #include "pixel/bilateralcl.h"
 #include "darktable.h"
 #include "common/dlopencl.h"
@@ -2843,29 +2844,6 @@ void dt_opencl_check_tuning(const int devid)
 
   cl->dev[devid].used_available = MAX(0ul, cl->dev[devid].max_global_mem - headroom * 1024 * 1024);
 
-  /* On a host-unified device, `max_global_mem` is SYSTEM RAM -- the same RAM the host side of
-   * the pipeline is already spending -- so handing it out as a device budget double-counts it.
-   * An Intel HD P630 reports 28.75 GiB on a 31 GiB machine; minus the 512 MiB headroom above
-   * that authorises a 28926 MiB working set, every module's full-frame fit check passes, the
-   * tiler is never reached, and the first oversized map dies with CL_OUT_OF_RESOURCES -- which
-   * disables OpenCL for the whole pipe and silently drops it to CPU. That is a fallback caused
-   * purely by over-budgeting: the work fits perfectly well once tiled.
-   *
-   * Bound it by the driver's own single-allocation limit, halved. `max_mem_alloc` is the only
-   * figure a shared-memory device publishes that reflects an allocation limit rather than how
-   * much RAM the machine happens to have, but it is a bound on ONE buffer, not on a working
-   * set: NEO reports min(global/4, 4 GiB), which is a cap, not a promise. Measured on the
-   * P630 with the raw denoiser (factor_cl ~84, so the budget IS the working set): at a 4095
-   * MiB budget the tiler plans a ~4 GiB per-tile working set and process_cl dies with
-   * CL_OUT_OF_RESOURCES mid-tile; at 2048 and 1024 MiB it tiles (3x3 / 4x4) and completes on
-   * device. Half the single-allocation limit is the conservative reading, and the per-device
-   * `forced_headroom` key remains the escape hatch either way.
-   *
-   * Discrete devices are untouched: host_unified_memory is false there, max_global_mem really
-   * is dedicated vRAM, and the existing headroom rule already governs it. */
-  if(cl->dev[devid].host_unified_memory)
-    cl->dev[devid].used_available = MIN(cl->dev[devid].used_available, cl->dev[devid].max_mem_alloc / 2);
-
   dt_print(DT_DEBUG_OPENCL | DT_DEBUG_MEMORY,
       "[dt_opencl_check_tuning] use %" G_GSIZE_FORMAT " MiB on device `%s' id=%i\n",
       cl->dev[devid].used_available / (1024 * 1024),
@@ -2877,7 +2855,44 @@ cl_ulong dt_opencl_get_device_available(const int devid)
   if(!(_opencl && _opencl->inited) || devid < 0) return 0;
   const cl_ulong limit = _opencl->dev[devid].used_available;
   const size_t in_use = _opencl->dev[devid].memory_in_use;
-  return (limit > in_use) ? (limit - in_use) : 0;
+  cl_ulong available = (limit > in_use) ? (limit - in_use) : 0;
+
+  /* A host-unified device is bounded by two DIFFERENT things, and they must not be conflated.
+   *
+   * 1. Free space. Its "vRAM" is system RAM, shared with every other process and with the host
+   *    side of our own pipeline, so max_global_mem is the size of the machine rather than a
+   *    budget -- a P630 reports 28.75 GiB on a 31 GiB box. dt_get_system_available_mem() already
+   *    measures what is actually left (free plus reclaimable, cgroup limits included), so clamp
+   *    to it. A 0 return means the platform will not say; that is "no information", not "no
+   *    memory", so the device's own accounting stands.
+   *
+   * 2. How much the driver can have in flight at once, which is NOT a free-space question and
+   *    does not get better when RAM is free. Measured on the P630 with 22 GiB genuinely
+   *    available: an ~8 GiB working set fails, the pipe loses OpenCL entirely and drops to CPU;
+   *    ~4 GiB fails mid-tile; ~2 GiB completes. The ceiling is the GPU aperture / address space
+   *    per context, which OpenCL publishes no query for. max_mem_alloc is the closest thing it
+   *    does publish -- NEO reports min(global/4, 4 GiB), which tracks that aperture -- so half
+   *    of it is used as a working-set ceiling. It is a proxy chosen to match the measurement,
+   *    not a measurement of anything, and it is written here as its own clamp so it cannot be
+   *    misread as free space.
+   *
+   * This lives in the reader rather than in dt_opencl_check_tuning() because the tilers and the
+   * fit checks call it while deciding: limit 1 is then re-probed at each decision instead of
+   * frozen once per pipe run, before any of the allocations it governs. The probe caches for
+   * tens of milliseconds, which is what makes that affordable.
+   *
+   * Discrete devices never enter here: their max_global_mem really is dedicated vRAM. */
+  if(_opencl->dev[devid].host_unified_memory)
+  {
+    const size_t reserved = (size_t)_opencl->dev[devid].forced_headroom * 1024 * 1024;
+
+    const size_t system_available = dt_get_system_available_mem();
+    if(system_available > 0)
+      available = MIN(available, (cl_ulong)((system_available > reserved) ? system_available - reserved : 0));
+
+    available = MIN(available, (cl_ulong)(_opencl->dev[devid].max_mem_alloc / 2));
+  }
+  return available;
 }
 
 static cl_ulong _opencl_get_device_memalloc(const int devid)
