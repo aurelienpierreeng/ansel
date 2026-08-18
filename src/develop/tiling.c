@@ -943,6 +943,17 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
       height -= halign;
   }
 
+  /* The loop above subtracts whole multiples of the alignment, which preserves alignment only
+     if the value it started from was already aligned. That is not guaranteed here: the
+     alignment step further up is deliberately skipped while a dimension still spans the whole
+     image -- correct as long as it stays that way, but this loop is free to shrink such a
+     dimension below the image size, and it then carries the image's own arbitrary size as a
+     permanent phase error. Tile origins step by (dimension - 2 * overlap), so one unaligned
+     dimension puts every tile after the first off-lattice, and with it every lattice a module
+     anchors to its own tile origin -- CFA phase, superpixel binning, pyramid levels. */
+  if(width < roi_in->width) width = _max((int)walign, _align_down(width, walign));
+  if(height < roi_in->height) height = _max((int)halign, _align_down(height, halign));
+
   /* also make sure that overlap follows alignment rules by making it wider when needed */
   const int overlap = tiling.overlap % xyalign != 0 ? (tiling.overlap / xyalign + 1) * xyalign
                                                     : tiling.overlap;
@@ -1171,6 +1182,12 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
     else
       height -= xyalign;
   }
+
+  /* Same re-alignment as in the pixel-perfect tiler above: this loop only preserves the
+     alignment it was handed, and the branches that set it are all conditional, so a tile that
+     took none of them reaches here still carrying the raw image dimensions. */
+  if(width < _max(roi_in->width, roi_out->width)) width = _max((int)xyalign, _align_down(width, xyalign));
+  if(height < _max(roi_in->height, roi_out->height)) height = _max((int)xyalign, _align_down(height, xyalign));
 
   int tiles_x = 1, tiles_y = 1;
 
