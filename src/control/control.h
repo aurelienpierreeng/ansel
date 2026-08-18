@@ -190,7 +190,6 @@ void dt_control_hinter_message(const struct dt_control_t *s, const char *message
 typedef struct dt_control_t
 {
   // gui related stuff
-  double tabborder;
   int32_t width, height;
   pthread_t gui_thread;
   double button_x, button_y;

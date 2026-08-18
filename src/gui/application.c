@@ -1268,10 +1268,19 @@ void dt_gui_gtk_run(dt_gui_gtk_t *gui)
 
   darktable.gui->surface
       = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, allocation.width, allocation.height);
-  // need to pre-configure views to avoid crash caused by draw coming before configure-event
-  dt_control_get_global()->tabborder = 8;
-  const int tb = dt_control_get_global()->tabborder;
-  dt_view_manager_configure(darktable.view_manager, allocation.width - 2 * tb, allocation.height - 2 * tb);
+  /* Pre-configure the views so a draw arriving before the first configure-event has a valid
+   * size to work with.
+   *
+   * The size handed over must be THE SAME size the configure-event handler will report for the
+   * same widget, and it was not: this passed the allocation minus twice an 8 px `tabborder',
+   * while dt_control_configure() passes the event's width and height untouched. Two callers,
+   * one widget, two answers 16 px apart -- so the view was configured at one size here and at
+   * another as soon as GTK delivered an allocation, and a view that recomputes on a size change
+   * (the darkroom pipeline does) paid for both.
+   *
+   * The border was not drawn by anything: `tabborder' was written on the line above and read on
+   * the line below, and nowhere else in the program. It is gone. */
+  dt_view_manager_configure(darktable.view_manager, allocation.width, allocation.height);
 #ifdef MAC_INTEGRATION
 #ifdef GTK_TYPE_OSX_APPLICATION
   gtk_osxapplication_ready(g_object_new(GTK_TYPE_OSX_APPLICATION, NULL));
