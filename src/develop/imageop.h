@@ -82,6 +82,12 @@ struct dt_dev_pixelpipe_iop_t;
 struct dt_develop_blend_params_t;
 struct dt_develop_tiling_t;
 struct dt_iop_color_picker_t;
+/* develop/geometry/geometry.h -- named by the geometry_record() vtable entry. Declared HERE,
+ * not only in iop_api.h: that header's forward declarations live inside its FULL_API_H block,
+ * which the struct-body expansion of the X-macro does not compile, so the first mention would
+ * otherwise be inside a function prototype -- C scopes that to the prototype and the resulting
+ * type is distinct from every other declaration of the same name. */
+struct dt_geometry_record_t;
 
 typedef enum dt_iop_module_header_icons_t
 {
