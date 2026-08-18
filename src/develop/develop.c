@@ -680,19 +680,41 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       // The resync stage above synchronized history, planned the ROI and advertised the matching
       // final global hash. We process the exact state it committed, using pipe_roi[i]: that is what
       // dt_dev_pixelpipe_process() recomputes its hash from, so the cacheline it publishes always
-      // carries the hash already announced to GUI consumers. A change that landed after the resync
-      // (zoom/pan, a fresh history commit) does NOT invalidate this run — it always also raised the
-      // killswitch (`_change_pipe()` sets shutdown together with the changed flag), so the run below
-      // aborts cleanly and the next loop iteration resyncs, re-advertises and reprocesses the new
-      // state. We must NOT skip on a set changed flag here: every darkroom configure-event flags the
-      // preview pipe ZOOMED, so on an image switch (which re-lays-out the view) skipping would starve
-      // the preview and leave navigation/scopes blank.
+      // carries the hash already announced to GUI consumers. A change that lands after this point
+      // raises the killswitch together with its changed flag (`_change_pipe()`, and
+      // dt_dev_roi_request_publish() does the same on a payload change), so the run below aborts
+      // and the next loop iteration resyncs, re-advertises and reprocesses the new state. We must
+      // NOT skip on a set changed flag here: every darkroom configure-event flags the preview pipe
+      // ZOOMED, so on an image switch (which re-lays-out the view) skipping would starve the
+      // preview and leave navigation/scopes blank.
+      //
+      // A change that landed BETWEEN this iteration's latch and this point is another matter, and
+      // the check below is the second half of the #1157 fix. The resync's while(changed) loop
+      // spans 100-400 ms and consumes whatever flags land inside it, syncing their history -- but
+      // the ROI was then planned from THIS ITERATION'S latch, taken before any of it. Their
+      // killswitch does not save the run either, since the reset a few lines down would swallow
+      // it. Rendering the consumed history into the stale latched geometry is how a crop Apply
+      // produced a border-clamped smear that nothing ever corrected. So: if the published record
+      // has moved past the latch, this plan is dead. Re-flag (the flag may have been consumed) and
+      // skip the run; the next iteration re-latches and replans from the current record. This
+      // cannot starve: the generation only advances when a GUI publish actually changed the
+      // payload, so a quiet viewport lets the very next iteration through.
+      const dt_dev_roi_request_t current_request = dt_dev_roi_request_get(dev);
+      if(current_request.generation != latched.generation)
+      {
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_ZOOMED);
+        continue;
+      }
+
       dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
 
-      // We are starting fresh, reset the killswitch signal.
+      // We are starting fresh, reset the killswitch signal. Safe only because the staleness
+      // check above ran after the resync: any killswitch this discards belonged to a change
+      // whose flag either survives (raised after the resync loop exited) or whose publish
+      // moved the generation (caught above). Do not move this reset earlier.
       dt_atomic_set_int(&pipe->shutdown, FALSE);
 
       /**
