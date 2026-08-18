@@ -1399,13 +1399,13 @@ static const dt_geometry_vtable_t _lens_geometry_vtable = {
   /* .backtransform = */ _lens_geometry_backtransform,
 };
 
-gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
 {
   dt_iop_lens_geometry_t *g = (dt_iop_lens_geometry_t *)calloc(1, sizeof(dt_iop_lens_geometry_t));
   if(!g) return FALSE;
 
   const dt_iop_lensfun_params_t *p
-      = _lens_effective_params(self, (const dt_iop_lensfun_params_t *)self->params);
+      = _lens_effective_params(self, (const dt_iop_lensfun_params_t *)params);
   _lens_build_data(self, p, &g->data);
   g->used_lf_mask = _lens_used_mask(self);
 

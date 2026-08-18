@@ -20,6 +20,7 @@
 
 #include "common/logging.h"
 #include "develop/dev_geometry.h"
+#include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "system/mem_alloc.h"
@@ -184,6 +185,51 @@ static void _fold_sizes(dt_geometry_chain_t *chain)
   chain->sized = (chain->raw_width > 0 && chain->raw_height > 0);
 }
 
+/**
+ * @brief What will this module be committed with? Mirrors the pipe's own resolution.
+ *
+ * @details dt_dev_pixelpipe_change() decides a piece's parameters and its enabled state in two
+ * ways, and the chain has to reproduce both or it describes a geometry the pipes are not
+ * rendering:
+ *
+ *  - IOP_FLAGS_NO_HISTORY_STACK modules are committed from their DEFAULTS
+ *    (dt_dev_pixelpipe_sync_no_history), because they enable and disable themselves;
+ *  - every other module takes the last history item at or before history_end, falling back to
+ *    its defaults when it has none (_sync_pipe_nodes_from_history).
+ *
+ * What it must NOT read is module->params and module->enabled. Those are the GUI thread's live
+ * values, and dt_dev_add_history_item() is throttled, so between an edit and its commit they
+ * are ahead of what any pipe has been told -- which shadow mode caught as a size divergence
+ * while the crop module's piece was mid-transition.
+ *
+ * @param params out: the blob to hand geometry_record(). Borrowed, valid while history_mutex
+ * is held.
+ * @return the enabled state the pipe will use.
+ */
+static gboolean _resolve_from_history(dt_develop_t *dev, dt_iop_module_t *module,
+                                      const int32_t history_end, const void **params)
+{
+  if(module->flags() & IOP_FLAGS_NO_HISTORY_STACK)
+  {
+    *params = module->default_params;
+    return module->default_enabled;
+  }
+
+  *params = module->default_params;
+  gboolean enabled = module->default_enabled;
+
+  for(GList *item = g_list_nth(dev->history, history_end - 1); item; item = g_list_previous(item))
+  {
+    const dt_dev_history_item_t *const hist = (const dt_dev_history_item_t *)item->data;
+    if(IS_NULL_PTR(hist) || hist->module != module) continue;
+    *params = hist->params;
+    enabled = hist->enabled;
+    break;
+  }
+
+  return enabled;
+}
+
 void dt_geometry_chain_rebuild(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain)) return;
@@ -199,10 +245,17 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
 
   gboolean complete = TRUE;
 
+  /* Resolve each module the way the pipe will, from HISTORY -- see _resolve_from_history(). The
+   * read lock is what dt_dev_pixelpipe_change() takes for the same walk; it is same-thread
+   * recursive, so a caller that already holds it (a history commit republishing geometry) is
+   * fine. */
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  const int32_t history_end = dt_dev_get_history_end_ext(dev);
+
   for(GList *node = g_list_first(dev->iop); node; node = g_list_next(node))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)node->data;
-    if(IS_NULL_PTR(module) || !module->enabled) continue;
+    if(IS_NULL_PTR(module)) continue;
 
     dt_geometry_record_t *record = (dt_geometry_record_t *)g_malloc0(sizeof(dt_geometry_record_t));
     if(IS_NULL_PTR(record)) continue;
@@ -210,16 +263,24 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
     g_strlcpy(record->op, module->op, sizeof(record->op));
     record->instance = module->multi_priority;
     record->iop_order = module->iop_order;
-    record->enabled = TRUE;
     record->operation_tags = module->operation_tags();
 
-    /* A module that publishes nothing is identity, which is correct for the ~80 modules that
-     * do not touch geometry -- their record exists only to carry dimensions. A ROSTER module
-     * that publishes nothing is a gap, and the chain must not be trusted until it closes. */
-    const gboolean published = !IS_NULL_PTR(module->geometry_record)
-                               && module->geometry_record(module, record);
+    const void *params = NULL;
+    record->enabled = _resolve_from_history(dev, module, history_end, &params);
 
-    if(!published && _on_roster(module->op))
+    /* A record exists for EVERY module, enabled or not, because the fold this mirrors writes
+     * per-piece dimensions for disabled pieces too and consumers read them. A disabled module
+     * simply publishes nothing and is identity.
+     *
+     * A module that publishes nothing is also correct for the ~80 that do not touch geometry.
+     * A ROSTER module that publishes nothing is a gap, and the chain must not be trusted until
+     * it closes -- but only while it is ENABLED: a disabled lens owes this service nothing, and
+     * asking it for a record would build a lensfun modifier for a correction nobody applies. */
+    gboolean published = FALSE;
+    if(record->enabled && !IS_NULL_PTR(module->geometry_record))
+      published = module->geometry_record(module, params, record);
+
+    if(record->enabled && !published && _on_roster(module->op))
     {
       complete = FALSE;
       chain->missing = g_list_prepend(chain->missing,
@@ -228,6 +289,8 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
 
     chain->records = g_list_insert_sorted(chain->records, record, _by_iop_order);
   }
+
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   _fold_sizes(chain);
   chain->authoritative = complete && chain->sized;

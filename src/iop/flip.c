@@ -518,10 +518,10 @@ static const dt_geometry_vtable_t _flip_geometry_vtable = {
   .backtransform = _flip_geometry_backtransform,
 };
 
-gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
 {
   const dt_image_orientation_t orientation
-      = _flip_resolve(self, (const dt_iop_flip_params_t *)self->params);
+      = _flip_resolve(self, (const dt_iop_flip_params_t *)params);
 
   /* ORIENTATION_NONE is how commit_params() clears piece->enabled: an enabled flip module whose
    * resolved orientation is a no-op contributes nothing to the pipe, and must contribute nothing
