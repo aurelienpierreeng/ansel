@@ -463,6 +463,12 @@ typedef struct dt_develop_t
   gboolean mask_lock;
 
   cairo_surface_t *image_surface;
+
+  /* Composed geometry, GUI thread only: what dev->virtual_pipe is walked for today, as data.
+   * Appended at the end of this struct deliberately -- IOP plugins are compiled against this
+   * layout, so a field inserted anywhere else silently shifts what they read. See
+   * develop/geometry/geometry.h and doc/geometry-service.md. NULL on non-gui devs. */
+  struct dt_geometry_chain_t *geometry_chain;
 } dt_develop_t;
 
 static inline uint64_t dt_dev_get_history_hash(const dt_develop_t *dev)

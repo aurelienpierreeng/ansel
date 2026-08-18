@@ -86,6 +86,7 @@
 #include "develop/masks.h"
 #include "caches/pixelpipe_cache.h"
 #include "gui/application.h"
+#include "develop/geometry/geometry.h"
 #include "develop/gui_throttle.h"
 #include "libs/colorpicker.h"
 #include "widgets/label.h"
@@ -149,6 +150,11 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
     dt_dev_pixelpipe_init(dev->pipe, dev);
     dt_dev_pixelpipe_init_preview(dev->preview_pipe, dev);
     dt_dev_pixelpipe_init_preview(dev->virtual_pipe, dev);
+
+    /* The geometry chain runs beside the virtual pipe and will replace it (G2 skeleton --
+     * doc/geometry-service.md). GUI devs only: it answers GUI questions and is GUI-thread
+     * state, so a headless dev has nothing to do with one. */
+    dev->geometry_chain = dt_geometry_chain_new();
   }
 
   dt_dev_set_backbuf(&dev->raw_histogram, 0, 0, 0, -1, -1);
@@ -245,6 +251,8 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dt_dev_pixelpipe_cleanup(dev->virtual_pipe);
     dt_free(dev->virtual_pipe);
   }
+  dt_geometry_chain_free(dev->geometry_chain);
+  dev->geometry_chain = NULL;
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   while(dev->history)
@@ -382,6 +390,13 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, raw_width, raw_height,
                                &processed_width, &processed_height);
   dt_dev_geometry_set_processed_size(dev, processed_width, processed_height);
+
+  /* Rebuild the geometry chain from the same modules and history the fold above just used, and
+   * hold it against the answer the pipe produced. It publishes nothing and nothing consumes it
+   * yet (G2): while its roster is incomplete it reports which modules still owe it a record,
+   * per image, and once complete it reports divergence. Both under `-d dev'. */
+  dt_geometry_chain_rebuild(dev);
+  dt_geometry_shadow_check_size(dev, processed_width, processed_height);
 
   // Derive and publish everything the pipes plan from, as one record.
   dt_dev_roi_request_publish(dev);

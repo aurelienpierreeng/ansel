@@ -183,6 +183,7 @@ FILE(GLOB SOURCE_FILES
   "control/signal.c"
   "develop/develop.c"
   "develop/dev_geometry.c"
+  "develop/geometry/geometry.c"
   "develop/dev_viewport.c"
   "develop/dev_roi_request.c"
   "develop/gui_throttle.c"
