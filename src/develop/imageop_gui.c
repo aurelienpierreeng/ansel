@@ -2147,12 +2147,15 @@ void dt_bauhaus_value_changed_default_callback(GtkWidget *widget)
 }
 void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module)
 {
-  if(module->gui) dt_pthread_mutex_lock(&module->gui->gui_lock);
+  // conditional on module->gui and paired with a dt_iop_gui_leave_critical_section() call at
+  // an unrelated call site, which the thread-safety analyzer can't model -- same reason
+  // dt_opencl_reserve_device_by_id()/dt_opencl_release_device() use the BAD variants.
+  if(module->gui) dt_pthread_mutex_BAD_lock(&module->gui->gui_lock);
 }
 
 void dt_iop_gui_leave_critical_section(dt_iop_module_t *const module)
 {
-  if(module->gui) dt_pthread_mutex_unlock(&module->gui->gui_lock);
+  if(module->gui) dt_pthread_mutex_BAD_unlock(&module->gui->gui_lock);
 }
 
 GtkWidget *dt_iop_gui_get_off(dt_iop_module_t *module)

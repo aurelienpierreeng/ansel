@@ -1736,7 +1736,10 @@ void dt_opencl_reserve_device_by_id(const int devid)
   dt_opencl_t *cl = _opencl;
   if(!cl->inited) return;
   if(devid < 0 || devid >= cl->num_devs) return;
-  dt_pthread_mutex_lock(&cl->dev[devid].lock);
+  // paired with dt_opencl_release_device()'s dt_pthread_mutex_BAD_unlock(): the lock is held
+  // across this function boundary and released by a different function, which the analyzer
+  // can't model -- same reason dt_opencl_try_reserve_device_by_id() already uses the BAD variant.
+  dt_pthread_mutex_BAD_lock(&cl->dev[devid].lock);
 }
 
 int dt_opencl_try_reserve_device_by_id(const int devid)
