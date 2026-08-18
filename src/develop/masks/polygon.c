@@ -727,8 +727,28 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
   const float input_width = pipe->iwidth;
   const float input_height = pipe->iheight;
-  // See dt_dev_pixelpipe_t::mask_rasterization_step -- the pipe decides, not each mask type.
-  const int pixel_threshold = pipe->mask_rasterization_step;
+  /* One pixel, always, and NOT dt_dev_pixelpipe_t::mask_rasterization_step.
+   *
+   * The border produced here is fed to _polygon_find_self_intersection(), which is a PIXEL-GRID
+   * algorithm: it traces the border into a grid one cell per pixel, joining consecutive samples
+   * with straight chords via _polygon_fill_gaps(), and treats a revisited cell as the polygon's
+   * offset curve folding over itself. That inference is only sound while the chords follow the
+   * true curve, i.e. while consecutive samples are about a pixel apart. Sample more coarsely and
+   * the chords cut across cells the real curve never enters, two distant parts of the contour
+   * collide in the grid, and a self-intersection is reported where there is none.
+   *
+   * The cost of getting it wrong is not a slightly rough outline: the reported range is written
+   * back into the border as a NaN jump marker, and every consumer -- including the scale/shift
+   * loop in _polygon_get_mask_roi() -- skips it. Measured on issue #1116's polygon at threshold
+   * 2 and 3: one spurious marker spanning the whole contour, 4121 of 4131 border points never
+   * scaled into ROI space, so the feather was drawn from image-space coordinates that land
+   * outside the buffer and vanished, leaving only the solid core and one stray scaled point.
+   * Threshold 4 happened to find no collision and looked correct, which is what made the
+   * failure look non-monotonic.
+   *
+   * The step still applies to what this costs to PAINT -- see `sparse' in the rasterisers below,
+   * which is where the expensive per-pixel work is. Only the geometry has to stay exact. */
+  const int pixel_threshold = 1;
   const guint node_count = g_list_length(mask_form->points);
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *intersections = NULL;
@@ -2550,8 +2570,13 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
 
   const int hb = *height;
   const int wb = *width;
-  const gboolean sparse = (pipe->mask_rasterization_step > 1);
-  const int sparse_factor = pipe->mask_rasterization_step;
+  /* Nothing left to interpolate: the outline above is sampled at one pixel whatever the pipe's
+   * step, because the self-intersection detector needs it that way, so consecutive falloff
+   * segments are already adjacent. Interpolating between them would only stamp the same pixels
+   * again. Polygon therefore buys no speed from a coarse step today -- making it do so means
+   * decimating the PAINTING while keeping the geometry exact, which is a separate change. */
+  const gboolean sparse = FALSE;
+  const int sparse_factor = 1;
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
@@ -3134,8 +3159,13 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   const int width = roi->width;
   const int height = roi->height;
   const float scale = roi->scale;
-  const gboolean sparse = (pipe->mask_rasterization_step > 1);
-  const int sparse_factor = pipe->mask_rasterization_step;
+  /* Nothing left to interpolate: the outline above is sampled at one pixel whatever the pipe's
+   * step, because the self-intersection detector needs it that way, so consecutive falloff
+   * segments are already adjacent. Interpolating between them would only stamp the same pixels
+   * again. Polygon therefore buys no speed from a coarse step today -- making it do so means
+   * decimating the PAINTING while keeping the geometry exact, which is a separate change. */
+  const gboolean sparse = FALSE;
+  const int sparse_factor = 1;
 
   // we need to take care of four different cases:
   // 1) polygon and feather are outside of roi
