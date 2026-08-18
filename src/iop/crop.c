@@ -46,6 +46,7 @@
 #include "control/input.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
@@ -293,13 +294,71 @@ static gboolean _set_max_clip(dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *
   return TRUE;
 }
 
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * These three are the ONLY place crop's geometry is expressed. commit_params() and the
+ * pipeline's distort/roi callbacks call them, and so does geometry_record() for the pixel-less
+ * geometry service (develop/geometry/geometry.h). One constructor and one evaluator per fact:
+ * a second derivation of the same crop would drift from this one, and the drift would show up
+ * as the crop overlay sitting somewhere the cropped image is not.
+ */
+
+/** @brief Resolve the effective crop rectangle. THE constructor -- see the note above. */
+static void _crop_resolve(dt_iop_module_t *self, const dt_iop_crop_params_t *const p,
+                          dt_iop_crop_data_t *out)
+{
+  const dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
+
+  if(!IS_NULL_PTR(g) && g->editing)
+  {
+    // In editing mode, we need to see the full uncropped image to setup the frame.
+    out->cx = 0.0f;
+    out->cy = 0.0f;
+    out->cw = 1.0f;
+    out->ch = 1.0f;
+  }
+  else
+  {
+    out->cx = CLAMPF(p->cx, 0.0f, 0.9f);
+    out->cy = CLAMPF(p->cy, 0.0f, 0.9f);
+    out->cw = CLAMPF(p->cw, 0.1f, 1.0f);
+    out->ch = CLAMPF(p->ch, 0.1f, 1.0f);
+  }
+}
+
+/** @brief Input rect -> output rect. THE size evaluator. */
+static void _crop_map_size(const dt_iop_crop_data_t *const d, const dt_iop_roi_t *const roi_in,
+                           dt_iop_roi_t *roi_out)
+{
+  *roi_out = *roi_in;
+
+  roi_out->width = roi_in->width * (d->cw - d->cx);
+  roi_out->height = roi_in->height * (d->ch - d->cy);
+  roi_out->x = roi_in->width * d->cx;
+  roi_out->y = roi_in->height * d->cy;
+
+  // sanity check.
+  if(roi_out->x < 0) roi_out->x = 0;
+  if(roi_out->y < 0) roi_out->y = 0;
+  if(roi_out->width < 5) roi_out->width = 5;
+  if(roi_out->height < 5) roi_out->height = 5;
+}
+
+/** @brief The translation the crop applies, in the input rect's own pixels. */
+static void _crop_offset(const dt_iop_crop_data_t *const d, const dt_iop_roi_t *const roi_in, float *left,
+                         float *top)
+{
+  *left = roi_in->width * d->cx;
+  *top = roi_in->height * d->cy;
+}
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const restrict points, size_t points_count)
 {
   dt_iop_crop_data_t *d = (dt_iop_crop_data_t *)piece->data;
 
-  const float crop_top = piece->buf_in.height * d->cy;
-  const float crop_left = piece->buf_in.width * d->cx;
+  float crop_left = 0.f, crop_top = 0.f;
+  _crop_offset(d, &piece->buf_in, &crop_left, &crop_top);
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if(crop_top == 0 && crop_left == 0) return 1;
@@ -318,8 +377,8 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 {
   dt_iop_crop_data_t *d = (dt_iop_crop_data_t *)piece->data;
 
-  const float crop_top = piece->buf_in.height * d->cy;
-  const float crop_left = piece->buf_in.width * d->cx;
+  float crop_left = 0.f, crop_top = 0.f;
+  _crop_offset(d, &piece->buf_in, &crop_left, &crop_top);
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if(crop_top == 0 && crop_left == 0) return 1;
@@ -349,19 +408,7 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
                     struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *roi_in)
 {
-  *roi_out = *roi_in;
-  dt_iop_crop_data_t *d = (dt_iop_crop_data_t *)piece->data;
-
-  roi_out->width = roi_in->width * (d->cw - d->cx);
-  roi_out->height = roi_in->height * (d->ch - d->cy);
-  roi_out->x = roi_in->width * d->cx;
-  roi_out->y = roi_in->height * d->cy;
-
-  // sanity check.
-  if(roi_out->x < 0) roi_out->x = 0;
-  if(roi_out->y < 0) roi_out->y = 0;
-  if(roi_out->width < 5) roi_out->width = 5;
-  if(roi_out->height < 5) roi_out->height = 5;
+  _crop_map_size((dt_iop_crop_data_t *)piece->data, roi_in, roi_out);
 }
 
 // 2nd pass: which roi would this operation need as input to fill the given output region?
@@ -412,26 +459,64 @@ error:
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)p1;
-  dt_iop_crop_data_t *d = (dt_iop_crop_data_t *)piece->data;
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
+  _crop_resolve(self, (dt_iop_crop_params_t *)p1, (dt_iop_crop_data_t *)piece->data);
+}
 
-  if(!IS_NULL_PTR(g) && g->editing)
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+static void _crop_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _crop_map_size((const dt_iop_crop_data_t *)data, in, out);
+}
+
+static int _crop_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                    dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  float left = 0.f, top = 0.f;
+  _crop_offset((const dt_iop_crop_data_t *)data, &record->in, &left, &top);
+  if(left == 0.f && top == 0.f) return 1;
+  for(size_t i = 0; i < points_count * 2; i += 2)
   {
-    // In editing mode, we need to see the full uncropped image
-    // to setup the frame.
-    d->cx = 0.0f;
-    d->cy = 0.0f;
-    d->cw = 1.0f;
-    d->ch = 1.0f;
+    points[i] -= left;
+    points[i + 1] -= top;
   }
-  else
+  return 1;
+}
+
+static int _crop_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                        dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  float left = 0.f, top = 0.f;
+  _crop_offset((const dt_iop_crop_data_t *)data, &record->in, &left, &top);
+  if(left == 0.f && top == 0.f) return 1;
+  for(size_t i = 0; i < points_count * 2; i += 2)
   {
-    d->cx = CLAMPF(p->cx, 0.0f, 0.9f);
-    d->cy = CLAMPF(p->cy, 0.0f, 0.9f);
-    d->cw = CLAMPF(p->cw, 0.1f, 1.0f);
-    d->ch = CLAMPF(p->ch, 0.1f, 1.0f);
+    points[i] += left;
+    points[i + 1] += top;
   }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _crop_geometry_vtable = {
+  .map_size = _crop_geometry_map_size,
+  .transform = _crop_geometry_transform,
+  .backtransform = _crop_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, dt_geometry_record_t *record)
+{
+  /* Same constructor commit_params() uses, including the edit-mode neutralisation: while the
+   * crop GUI is in editing mode the pipe renders the full uncropped frame, and the overlays
+   * have to be told the same story or they would sit on a crop nobody is displaying. */
+  dt_iop_crop_data_t *data = (dt_iop_crop_data_t *)g_malloc0(sizeof(dt_iop_crop_data_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+
+  _crop_resolve(self, (const dt_iop_crop_params_t *)self->params, data);
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_crop_geometry_vtable;
+  return TRUE;
 }
 
 gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
