@@ -161,6 +161,9 @@ cmsCIEXYZTRIPLE Rec709_Primaries_Prequantized;
  * notification is dropped -- correct for a headless run, where nothing is watching a monitor. */
 static dt_colorspaces_profile_changed_handler_t _profile_changed_handler = NULL;
 
+/* Defined next to the counter it advances, in the settings block below. */
+static void _advance_settings_generation(void);
+
 void dt_colorspaces_set_profile_changed_handler(dt_colorspaces_profile_changed_handler_t handler)
 {
   _profile_changed_handler = handler;
@@ -173,6 +176,15 @@ static void _notify_profile_changed(void)
    * monitor's matrices and tone curves indefinitely -- silently, since every hash and ROI
    * in the chain stayed consistent. */
   dt_colorspaces_invalidate_display_profile_memo();
+
+  /* The DISPLAY entry's identity -- DT_COLORSPACE_DISPLAY, no filename -- is exactly what it
+   * was a moment ago; only the bytes behind that name changed. So a consumer keyed on the
+   * profile's NAME cannot tell that anything happened, and would go on serving pixels rendered
+   * through the previous monitor's profile. The generation is the one thing that can say
+   * "same name, different profile", which is why a prepared conversion folds it into its
+   * identity (colorprofiles/conversion.c) and why the counter is advanced here and not only
+   * by the setters. */
+  _advance_settings_generation();
 
   if(_profile_changed_handler) _profile_changed_handler();
 }
@@ -1263,6 +1275,15 @@ static dt_colorspaces_t *dt_colorspaces_get_global(void)
 
 static pthread_rwlock_t _settings_lock = PTHREAD_RWLOCK_INITIALIZER;
 static uint64_t _settings_generation = 0;
+
+/* Both callers of _notify_profile_changed() release _transforms_lock before calling it, so this
+ * takes no lock but its own -- and the settings lock is the INNER one either way. */
+static void _advance_settings_generation(void)
+{
+  pthread_rwlock_wrlock(&_settings_lock);
+  _settings_generation++;
+  pthread_rwlock_unlock(&_settings_lock);
+}
 
 void dt_colorprofiles_get_settings(dt_colorprofiles_settings_t *const out)
 {
