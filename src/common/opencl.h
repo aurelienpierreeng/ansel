@@ -87,10 +87,52 @@ extern "C" {
 #define DT_OPENCL_BPP_IS_RGBA8(bpp) ((((unsigned int)(bpp)) & DT_OPENCL_BPP_TAG_RGBA8) != 0u)
 #define DT_OPENCL_BPP_DECODE(bpp) ((int)(((unsigned int)(bpp)) & ~DT_OPENCL_BPP_TAG_RGBA8))
 
-#define DT_OPENCL_DEFAULT_COMPILE_INTEL ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
-#define DT_OPENCL_DEFAULT_COMPILE_AMD ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
-#define DT_OPENCL_DEFAULT_COMPILE_NVIDIA ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
-#define DT_OPENCL_DEFAULT_COMPILE ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
+/* Per-vendor kernel build options. The per-device conf key
+ * `cldevice_v4/<n>/<cname>/building` overrides these and is what a user edits in anselrc; these
+ * are only the value written there on first sight of a device.
+ *
+ * `-cl-unsafe-math-optimizations` (and `-cl-fast-relaxed-math`, which implies it) lets the
+ * driver substitute a low-precision implementation for any libm function. That is a per-vendor
+ * gamble, not a uniform speedup, and Intel loses it badly: measured on an HD Graphics P630
+ * (NEO 24.35, max relative error of erf() against a double-precision host reference over
+ * x in [-8, 8])
+ *
+ *     safe flags   1.39e-07      correct to float precision
+ *     unsafe       1.00e+00      erf() returns exactly 0.0 for |x| < ~1e-3, and is 22 % low
+ *                                at 1e-2
+ *
+ * `iop/rawdenoiseai.c`'s GELU is 0.5*x*(1+erf(x/sqrt(2))) and a convolutional net spends most
+ * of its activations in exactly that small-|x| band, so the whole denoiser drifts: the same
+ * export differs from the CPU path by 0.78 % mean / 3.1 % p99 with the flag, and by 0.0023 %
+ * without it -- the latter being bit-for-bit what NVIDIA produces. It is visible, and it is
+ * what users report as a grid or mesh on X-Trans (discussion #1104).
+ *
+ * And it buys nothing to pay for that. Measured wall-clock, same image, kernels already cached:
+ *
+ *     P630, denoiser export          96.8 s unsafe   93.9 s safe
+ *     Quadro M2200, denoiser export   8.10 s unsafe   8.14 s safe
+ *     Quadro M2200, whole pipeline
+ *       with the denoiser OFF, so
+ *       every other module dominates  5.38/4.81/4.84 unsafe   5.27/4.92/4.89 safe
+ *
+ * i.e. a 0.4 % spread, inside run-to-run noise, on hardware old enough to show a real
+ * difference if there were one. Dropping the flag also barely moves the existing NVIDIA render
+ * (0.00024 % mean over the whole pipeline), so this is not a visual change for users who were
+ * already getting correct output.
+ *
+ * So every vendor gets the same conservative set. `-cl-mad-enable` keeps the fused multiply-add
+ * that actually matters for convolution throughput, `-cl-no-signed-zeros` is free, and neither
+ * licenses a substitute libm. NVIDIA happens to keep erf() exact under the unsafe flag
+ * (7.97e-08) but still degrades log(), and AMD has never been measured here at all -- there is
+ * no reason to keep taking a per-driver gamble for a speedup that does not show up.
+ *
+ * The per-vendor macros are kept separate rather than collapsed: they are the natural place to
+ * record a future measurement that justifies diverging again. Run tools/opencl-math-accuracy.c
+ * to regenerate every number above on any machine; see doc/opencl-math-accuracy.md. */
+#define DT_OPENCL_DEFAULT_COMPILE_INTEL ("-cl-mad-enable -cl-no-signed-zeros")
+#define DT_OPENCL_DEFAULT_COMPILE_AMD ("-cl-mad-enable -cl-no-signed-zeros")
+#define DT_OPENCL_DEFAULT_COMPILE_NVIDIA ("-cl-mad-enable -cl-no-signed-zeros")
+#define DT_OPENCL_DEFAULT_COMPILE ("-cl-mad-enable -cl-no-signed-zeros")
 #define DT_CLDEVICE_HEAD ("cldevice_v4")
 
 typedef enum dt_opencl_memory_t
