@@ -410,11 +410,42 @@ void dt_geometry_shadow_check_size(dt_develop_t *dev, const int pipe_width, cons
     }
   }
 
-  if(diverged)
-    dt_print(DT_DEBUG_DEV, "[geometry] size agrees (%dx%d) but %d/5 transform probes diverge\n",
-             chain->processed_width, chain->processed_height, diverged);
+  /* And the inverse. Comparing forward against the pipe leaves every backtransform evaluator
+   * unverified -- they are only ever exercised by GUI consumers that have not switched over yet
+   * -- so round-trip the same probes through the chain and require the identity back.
+   *
+   * This is the check that decides a real question about flip, whose forward flips against the
+   * input dimensions and THEN swaps the axes. Its inverse un-swaps and unflips against those
+   * same dimensions, in the pre-swap frame where they are the right ones; swapping the
+   * dimensions as well -- which the neighbouring modify_roi_in helper legitimately does, in its
+   * own rectangle-mapping convention -- would break exactly the 90-degree orientations this
+   * probe covers. Composed here rather than argued. */
+  float roundtrip[10] = { 0.f, 0.f, w, 0.f, 0.f, h, w, h, 0.5f * w, 0.5f * h };
+  const float origin[10] = { 0.f, 0.f, w, 0.f, 0.f, h, w, h, 0.5f * w, 0.5f * h };
+
+  dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, roundtrip, 5);
+  dt_geometry_backtransform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, roundtrip, 5);
+
+  int not_identity = 0;
+  for(int i = 0; i < 5; i++)
+  {
+    if(fabsf(roundtrip[2 * i] - origin[2 * i]) > 0.5f
+       || fabsf(roundtrip[2 * i + 1] - origin[2 * i + 1]) > 0.5f)
+    {
+      dt_print(DT_DEBUG_DEV,
+               "[geometry] ROUND-TRIP DIVERGENCE at probe %d: (%.2f, %.2f) came back as (%.2f, %.2f)\n", i,
+               origin[2 * i], origin[2 * i + 1], roundtrip[2 * i], roundtrip[2 * i + 1]);
+      not_identity++;
+    }
+  }
+
+  if(diverged || not_identity)
+    dt_print(DT_DEBUG_DEV,
+             "[geometry] size agrees (%dx%d) but %d/5 forward probes and %d/5 round-trips diverge\n",
+             chain->processed_width, chain->processed_height, diverged, not_identity);
   else
-    dt_print(DT_DEBUG_DEV, "[geometry] agrees with the pipe: size %dx%d, all 5 transform probes\n",
+    dt_print(DT_DEBUG_DEV,
+             "[geometry] agrees with the pipe: size %dx%d, 5/5 forward probes, 5/5 round-trips\n",
              chain->processed_width, chain->processed_height);
 }
 
