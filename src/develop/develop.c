@@ -145,15 +145,12 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   {
     dev->pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
     dev->preview_pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
-    // Virtual pipe mirrors preview_pipe for geometry, but is never processed.
-    dev->virtual_pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
     dt_dev_pixelpipe_init(dev->pipe, dev);
     dt_dev_pixelpipe_init_preview(dev->preview_pipe, dev);
-    dt_dev_pixelpipe_init_preview(dev->virtual_pipe, dev);
 
-    /* The geometry chain runs beside the virtual pipe and will replace it (G2 skeleton --
-     * doc/geometry-service.md). GUI devs only: it answers GUI questions and is GUI-thread
-     * state, so a headless dev has nothing to do with one. */
+    /* Where the GUI gets sizes and coordinates from (doc/geometry-service.md). GUI devs only:
+     * it answers GUI questions and is GUI-thread state, so a headless dev has nothing to do with
+     * one -- which is also what makes the NULL chain the guard on every entry point. */
     dev->geometry_chain = dt_geometry_chain_new();
   }
 
@@ -244,12 +241,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
   {
     dt_dev_pixelpipe_cleanup(dev->preview_pipe);
     dt_free(dev->preview_pipe);
-  }
-  if(dev->virtual_pipe)
-  {
-    // Virtual pipe has nodes and committed params but no pixel buffers.
-    dt_dev_pixelpipe_cleanup(dev->virtual_pipe);
-    dt_free(dev->virtual_pipe);
   }
   dt_geometry_chain_free(dev->geometry_chain);
   dev->geometry_chain = NULL;
@@ -356,28 +347,9 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 {
   if(!dt_dev_geometry_raw_inited(dev) || !dt_dev_viewport_configured(dev)) return 1;
 
-  // Keep the virtual pipe synced so ROI computations on the GUI thread
-  // always use up-to-date history and input sizes.
   const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
   const int32_t raw_width = geometry.raw_width;
   const int32_t raw_height = geometry.raw_height;
-
-  if(dev->virtual_pipe->imgid != dev->image_storage.id
-      || dev->virtual_pipe->iwidth != raw_width
-      || dev->virtual_pipe->iheight != raw_height
-      || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
-    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
-                                raw_width, raw_height, 1.0f, DT_MIPMAP_FULL);
-
-  if(!dev->virtual_pipe->nodes)
-    dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_REMOVE);
-  else if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
-  {
-    if(dt_dev_pixelpipe_get_realtime(dev->pipe))
-      dt_dev_pixelpipe_set_history_hash(dev->virtual_pipe, dt_dev_get_history_hash(dev));
-    else
-      dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_SYNCH);
-  }
 
   /* The chain is rebuilt BEFORE the size is decided now, because it is what decides it. It is
    * cheap -- small derivations of already-committed parameters, no LUT, no colour transform, no
@@ -386,41 +358,12 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   dt_geometry_chain_rebuild(dev);
   const double chain_ms = (dt_get_wtime() - chain_start) * 1000.0;
 
-  /* Resync the pixel-less pipe only when something will actually read it: when the chain cannot
-   * answer and the fallbacks will therefore be taken, or when shadow mode is on and there would
-   * be nothing to compare against otherwise. This is where the cost of this service's absence
-   * was: measured on darkroom entry, a resync is ~0.105 s against the chain's 0.03-5 ms, and it
-   * ran on the GUI thread at every history commit.
-   *
-   * Skipping it leaves the pipe FLAGGED but not rebuilt, which is the invariant the fallbacks
-   * rely on: they run only while the chain is not authoritative, and in exactly that case the
-   * resync below has run. dt_dev_virtual_pipe_ensure_synced() is there for anything that needs
-   * to consult the pipe outside that arrangement. */
-  const gboolean chain_answers = dt_geometry_chain_authoritative(dev->geometry_chain);
-  const gboolean want_shadow = (dt_get_debug_flags() & DT_DEBUG_DEV) != 0;
-
-  if((!chain_answers || want_shadow)
-     && dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
-    dt_dev_pixelpipe_change(dev->virtual_pipe);
-
-  // Compute the virtual full-res output. This needs an inited history.
-  // raw_width/raw_height come from the single coherent read at the top of this function:
-  // nothing between here and there republishes the raw geometry.
+  /* The developed size, folded from the geometry records. Nothing is rebuilt to obtain it: that
+   * is what this service replaced, and what it cost is recorded in doc/geometry-service.md. */
   int processed_width = 0;
   int processed_height = 0;
-  int pipe_width = 0;
-  int pipe_height = 0;
-
-  if(!chain_answers || want_shadow)
-    dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, raw_width, raw_height, &pipe_width, &pipe_height);
-
-  if(chain_answers)
-    dt_geometry_chain_processed_size(dev->geometry_chain, &processed_width, &processed_height);
-  else
-  {
-    processed_width = pipe_width;
-    processed_height = pipe_height;
-  }
+  if(!dt_geometry_chain_processed_size(dev->geometry_chain, &processed_width, &processed_height))
+    return 1;
 
   dt_dev_geometry_set_processed_size(dev, processed_width, processed_height);
 
@@ -434,7 +377,7 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
    * request to match AND flagging the pipes to replan. Anything inserted between them widens the
    * window in which the darkroom worker latches the OLD request against ALREADY NEW history,
    * which is the mixed frame of #1157. An observer must not sit inside the update it observes. */
-  if(want_shadow) dt_geometry_shadow_check(dev, pipe_width, pipe_height, chain_ms);
+  dt_geometry_self_check(dev, chain_ms);
 
 
   dt_dev_update_mouse_effect_radius(dev);
@@ -490,7 +433,7 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_d
   // GUI buffer on portrait images, breaking structure detection and manual drawing (#710).
   //
   // Tolerate a couple of pixels of slack on the dimensions. `dev->roi.preview_*` is derived from the
-  // virtual pipe at scale 1.0, whereas `roi` is produced at `natural_scale`; geometric modules
+  // composed geometry at scale 1.0, whereas `roi` is produced at `natural_scale`; geometric modules
   // (ashift, lens) round their transformed bounding box with floorf() independently at each scale,
   // so the two legitimately disagree by ~1px for the very same full image. The real discriminators
   // are the origin and scale tests below: a zoomed or panned ROI has a non-zero x/y and a scale
@@ -983,7 +926,7 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
   // Publish what the read actually produced. `ok' is FALSE when the mipmap cache handed back
   // no buffer or a 0-sized one; claiming raw_inited in that case told every later reader that
   // 0x0 was a measured fact about the image, and dt_dev_geometry_refresh()'s own guard
-  // (dt_dev_geometry_raw_inited) then let the virtual pipe run on it.
+  // (dt_dev_geometry_raw_inited) then let the size fold run on it.
   dt_dev_geometry_set_raw_size(dev, ok ? buf.width : 0, ok ? buf.height : 0, ok);
 
   dt_mipmap_cache_release(&buf);
@@ -1722,39 +1665,25 @@ gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module)
 static int dt_dev_distort_backtransform_locked(const dt_dev_pixelpipe_t *pipe, const double iop_order,
                                                const int transf_direction, float *points, size_t points_count);
 
-/* These two are where the geometry service takes over from the pixel-less pipe. They are the
- * whole of the mask GUI's coordinate handling -- every shape's centre, every handle, every
- * source position routes through one of them -- and they ask the simplest question there is:
- * everything, in order, no bound.
- *
- * The chain answers when it can and the pipe answers otherwise, which is not a hedge but the
- * authority rule: the chain refuses unless EVERY enabled module that changes geometry has
- * published a record, so a fallback happens only when composing from records would mean mixing
- * them with pipeline pieces. Both paths stay live until the pipe is deleted, and shadow mode
- * keeps comparing them on every size publication -- including, at iop_order 0 and DIR_ALL,
- * exactly the question these two ask.
+/* These two are the whole of the mask GUI's coordinate handling -- every shape's centre, every
+ * handle, every source position routes through one of them -- and they ask the geometry service
+ * the simplest question there is: everything, in order, no bound.
  */
 
 /**
- * @brief The GUI's bounded transform folds: ask the geometry service, fall back to the pipe.
+ * @brief The GUI's bounded transform folds, composed by the geometry service.
  *
  * @details Same contract as dt_dev_distort_transform_plus() -- the iop_order bound and the five
- * direction modes mean exactly what they mean there -- but stated in terms of the dev rather
- * than a pipe, because which of the two answers is not the caller's business. The chain answers
- * when every enabled geometry module has published a record; otherwise the pixel-less pipe does,
- * as it always has.
- *
- * A module GUI must not reach for dev->virtual_pipe itself. That pipe is going away, and a call
- * site naming it is a call site that will not compile then -- which is the point of routing
- * every one of them through here first.
+ * direction modes mean exactly what they mean there -- but stated in terms of the dev rather than
+ * a pipe, because a GUI has no pipe of its own to name. It used to fall back to a pixel-less
+ * clone of the pipeline when the chain could not answer; that clone is deleted, so a chain that
+ * cannot answer returns 0 and leaves @p points untouched.
  */
 int dt_dev_distort_transform_gui(dt_develop_t *dev, const double iop_order, const int transf_direction,
                                  float *points, size_t points_count)
 {
   if(IS_NULL_PTR(dev)) return 0;
-  if(dt_geometry_transform(dev, iop_order, transf_direction, points, points_count)) return 1;
-  dt_dev_virtual_pipe_ensure_synced(dev);
-  return dt_dev_distort_transform_plus(dev->virtual_pipe, iop_order, transf_direction, points, points_count);
+  return dt_geometry_transform(dev, iop_order, transf_direction, points, points_count);
 }
 
 /** @brief The inverse of dt_dev_distort_transform_gui(), same rules. */
@@ -1762,32 +1691,30 @@ int dt_dev_distort_backtransform_gui(dt_develop_t *dev, const double iop_order, 
                                      float *points, size_t points_count)
 {
   if(IS_NULL_PTR(dev)) return 0;
-  if(dt_geometry_backtransform(dev, iop_order, transf_direction, points, points_count)) return 1;
-  dt_dev_virtual_pipe_ensure_synced(dev);
-  return dt_dev_distort_backtransform_plus(dev->virtual_pipe, iop_order, transf_direction, points,
-                                           points_count);
+  return dt_geometry_backtransform(dev, iop_order, transf_direction, points, points_count);
 }
 
 /**
  * @brief One module's own input and output rectangles, at full resolution.
  *
- * @details What a module GUI used to get by resolving its piece on the pixel-less pipe and
- * reading piece->buf_in / piece->buf_out. Those rectangles are a product of the size fold, and
+ * @details What a module GUI used to get by resolving its piece on a pixel-less clone of the
+ * pipeline and reading piece->buf_in / piece->buf_out. Those rectangles are a product of the
+ * size fold, and
  * the geometry service performs that fold over records for EVERY module -- not only the ones
  * that change geometry, because not only those read the result: iop/graduatednd.c has no
  * geometry callbacks at all and normalises its overlay against its own output rectangle.
  *
- * @return FALSE when neither source can answer, in which case @p in and @p out are untouched
+ * @return FALSE when the service cannot answer, in which case @p in and @p out are untouched
  * and the caller must not draw. A module that is disabled or absent has no rectangles.
  */
 /**
  * @brief The developed image's full-resolution size, for a GUI caller.
  *
- * @details Three sources, in order of freshness, which is why this exists rather than a plain
- * read of the geometry record: the chain and the pixel-less pipe are both recomputed the moment
- * the module stack changes, while the record is only republished when the size path runs. Code
- * that needed the newest answer used to reach into the pipe's field to get it, and had to keep
- * its own fallback for the case where the pipe had none.
+ * @details Two sources, in order of freshness, which is why this exists rather than a plain
+ * read of the geometry record: the chain is recomputed the moment the module stack changes,
+ * while the record is only republished when the size path runs. Code that needed the newest
+ * answer used to reach into a pipe's processed_width field to get it, and had to keep its own
+ * fallback for the case where that pipe had none.
  *
  * @return FALSE when no source has a usable size, leaving the out-params untouched.
  */
@@ -1805,15 +1732,6 @@ gboolean dt_dev_processed_size_gui(dt_develop_t *dev, int *width, int *height)
     return TRUE;
   }
 
-  dt_dev_virtual_pipe_ensure_synced(dev);
-  if(!IS_NULL_PTR(dev->virtual_pipe) && dev->virtual_pipe->processed_width > 0
-     && dev->virtual_pipe->processed_height > 0)
-  {
-    if(!IS_NULL_PTR(width)) *width = dev->virtual_pipe->processed_width;
-    if(!IS_NULL_PTR(height)) *height = dev->virtual_pipe->processed_height;
-    return TRUE;
-  }
-
   const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
   if(geometry.processed_width <= 0 || geometry.processed_height <= 0) return FALSE;
   if(!IS_NULL_PTR(width)) *width = geometry.processed_width;
@@ -1828,33 +1746,21 @@ gboolean dt_dev_module_geometry_gui(dt_develop_t *dev, dt_iop_module_t *module, 
 
   const dt_geometry_record_t *const record
       = dt_geometry_chain_find(dev->geometry_chain, module->op, module->multi_priority);
-  if(dt_geometry_chain_authoritative(dev->geometry_chain) && !IS_NULL_PTR(record))
-  {
-    if(!IS_NULL_PTR(in)) *in = record->in;
-    if(!IS_NULL_PTR(out)) *out = record->out;
-    return TRUE;
-  }
+  if(IS_NULL_PTR(record) || !dt_geometry_chain_authoritative(dev->geometry_chain)) return FALSE;
 
-  dt_dev_virtual_pipe_ensure_synced(dev);
-  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_distort_get_iop_pipe(dev->virtual_pipe, module);
-  if(IS_NULL_PTR(piece)) return FALSE;
-  if(!IS_NULL_PTR(in)) *in = piece->buf_in;
-  if(!IS_NULL_PTR(out)) *out = piece->buf_out;
+  if(!IS_NULL_PTR(in)) *in = record->in;
+  if(!IS_NULL_PTR(out)) *out = record->out;
   return TRUE;
 }
 
 int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
-  if(dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
-  dt_dev_virtual_pipe_ensure_synced(dev);
-  return dt_dev_distort_transform_plus(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
+  return dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
-  if(dt_geometry_backtransform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
-  dt_dev_virtual_pipe_ensure_synced(dev);
-  return dt_dev_distort_backtransform_locked(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
+  return dt_geometry_backtransform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 // only call directly or indirectly from dt_dev_distort_transform_plus, so that it runs with the history locked

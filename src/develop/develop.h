@@ -215,7 +215,6 @@ typedef struct dt_develop_t
   // Virtual preview-like pipeline used for geometry/ROI computations on the GUI thread.
   // It mirrors preview_pipe history/nodes but never processes pixels.
   // It is meant for fast access from the GUI mainthread without waiting for threads to return.
-  struct dt_dev_pixelpipe_t *virtual_pipe;
 
   // image under consideration, which
   // is copied each time an image is changed. this means we have some information
@@ -464,7 +463,7 @@ typedef struct dt_develop_t
 
   cairo_surface_t *image_surface;
 
-  /* Composed geometry, GUI thread only: what dev->virtual_pipe is walked for today, as data.
+  /* Composed geometry, GUI thread only: where the GUI gets sizes and coordinates from.
    * Appended at the end of this struct deliberately -- IOP plugins are compiled against this
    * layout, so a field inserted anywhere else silently shifts what they read. See
    * develop/geometry/geometry.h and doc/geometry-service.md. NULL on non-gui devs. */
@@ -649,8 +648,7 @@ int dt_dev_distort_backtransform_plus(const struct dt_dev_pixelpipe_t *pipe, con
  * @brief GUI-side bounded transform folds. Ask the geometry service, fall back to the pixel-less
  * pipe. Same iop_order bound and direction modes as dt_dev_distort_transform_plus().
  *
- * Module GUIs use THESE, never dev->virtual_pipe directly: that pipe is being removed, and a
- * caller that names it is a caller that has not been migrated.
+ * The only way a GUI asks for a composed transform.
  */
 int dt_dev_distort_transform_gui(struct dt_develop_t *dev, const double iop_order,
                                  const int transf_direction, float *points, size_t points_count);
@@ -659,18 +657,18 @@ int dt_dev_distort_backtransform_gui(struct dt_develop_t *dev, const double iop_
 
 /**
  * @brief One module's own input and output rectangles at full resolution, from the geometry
- * service or, until it can answer, from the pixel-less pipe.
+ * service.
  *
- * Replaces resolving a piece and reading piece->buf_in / piece->buf_out. Returns FALSE when
- * neither source has them, leaving the out-params untouched -- a disabled or absent module has
- * no rectangles, and a caller that draws anyway draws somewhere arbitrary.
+ * Replaces resolving a piece and reading piece->buf_in / piece->buf_out. Returns FALSE when the
+ * service has none, leaving the out-params untouched -- a disabled or absent module has no
+ * rectangles, and a caller that draws anyway draws somewhere arbitrary.
  */
 gboolean dt_dev_module_geometry_gui(struct dt_develop_t *dev, struct dt_iop_module_t *module,
                                     dt_iop_roi_t *in, dt_iop_roi_t *out);
 
 /**
- * @brief The developed image's full-resolution size for a GUI caller: the geometry service, the
- * pixel-less pipe, or the published record, in that order of freshness. FALSE when none has one.
+ * @brief The developed image's full-resolution size for a GUI caller: the geometry service,
+ * then the published record, in that order of freshness. FALSE when neither has one.
  */
 gboolean dt_dev_processed_size_gui(struct dt_develop_t *dev, int *width, int *height);
 

@@ -1,11 +1,16 @@
 # GUI sizing without a full pixel-less pipeline — analysis and plan
 
 Written while fixing #1157, whose root cause is entangled with the virtual pipe's cost.
-Status: analysis + recommendation. Nothing here is implemented except where noted.
 
-## What the virtual pipe is, and what it costs
+**Status: superseded by what was actually built.** The maintainer picked option C, and
+`doc/geometry-service.md` is the canonical record of it: the virtual pipe no longer exists, and
+the GUI composes sizes and coordinates from published per-module records. This file is kept for
+the measurements and the consumer audit that produced that decision — everything below describes
+the tree as it was, in the present tense it was written in.
 
-`dev->virtual_pipe` is a full clone of the module stack — every one of the ~95 IOPs gets a
+## What the virtual pipe was, and what it cost
+
+`dev->virtual_pipe` was a full clone of the module stack — every one of the ~95 IOPs gets a
 node, params committed from history — that never processes a pixel. It exists so the GUI
 thread can answer two questions synchronously, without waiting for a worker pipe:
 

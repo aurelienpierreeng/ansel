@@ -2966,10 +2966,16 @@ void gui_post_expose(struct dt_iop_module_t *module,
   memcpy(&copy_params, &g->params, sizeof(dt_iop_liquify_params_t));
   dt_iop_gui_leave_critical_section(module);
 
-  // distort all points
-  if(dt_dev_pixelpipe_get_history_hash(develop->virtual_pipe) != dt_dev_get_history_hash(develop))
-    dt_dev_pixelpipe_sync_virtual(develop, DT_DEV_PIPE_TOP_CHANGED);
-  const distort_params_t d_params = { develop, develop->virtual_pipe, NULL, 1.0, 1.0, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
+  /* Distort all points, through the geometry service. Nothing is resynchronised first: the
+   * chain is rebuilt wherever a pipe flag is raised, and this fold excludes the module itself
+   * (BACK_EXCL then FORW_EXCL), so the live params being dragged are not what it reads. If the
+   * chain cannot answer, its compose leaves the points in RAW coordinates -- which would draw
+   * the whole path in the wrong place -- so draw nothing instead. */
+  if(!dt_geometry_chain_authoritative(develop->geometry_chain))
+    return;
+
+  const distort_params_t d_params = { develop, NULL, develop->geometry_chain, 1.0, 1.0,
+                                      DT_DEV_TRANSFORM_DIR_ALL, FALSE };
   _distort_paths(module, &d_params, &copy_params);
 
   // You're not supposed to understand this
