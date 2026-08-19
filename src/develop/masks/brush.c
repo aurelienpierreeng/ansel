@@ -44,6 +44,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/conf.h"
 #include "develop/imageop.h"
+#include "develop/masks/masks_distort.h"
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
@@ -717,7 +718,7 @@ static inline int _brush_cyclic_cursor(int n, int nb)
 // This means that it record the main line twice (up and down) while the border only once (around).
 static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                  const double iop_order, const int transform_direction,
-                                 dt_dev_pixelpipe_t *pipe, float **point_buffer, int *point_count,
+                                 const dt_masks_distort_t *const dist, float **point_buffer, int *point_count,
                                  float **border_buffer, int *border_count, float **payload_buffer,
                                  int *payload_count, int use_source)
 {
@@ -732,12 +733,12 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
-  const float iwd = pipe->iwidth;
-  const float iht = pipe->iheight;
+  const float iwd = dist->iwidth;
+  const float iht = dist->iheight;
   // How far apart consecutive samples of the outline may land, in image pixels. Decided by the
   // pipe, never here; see dt_dev_pixelpipe_t::mask_rasterization_step. Above 1 the samples
   // spread out and the radial spokes stamped from them leave gaps between each pair (#1116).
-  const int pixel_threshold = pipe->mask_rasterization_step;
+  const int pixel_threshold = dist->rasterization_step;
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
 
@@ -1033,14 +1034,14 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   {
     // we transform with all distortion that happen *before* the module
     // so we have now the TARGET points in module input reference
-    if(dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+    if(dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                      *point_buffer, *point_count))
     {
       // now we move all the points by the shift
       // so we have now the SOURCE points in module input reference
       float pts[2] = { mask_form->source[0], mask_form->source[1] };
       dt_dev_coordinates_raw_norm_to_raw_abs(develop, pts, 1);
-      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
+      if(!dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
         goto fail;
 
       dx = pts[0] - (*point_buffer)[2];
@@ -1054,7 +1055,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
       // we apply the rest of the distortions (those after the module)
       // so we have now the SOURCE points in final image reference
-      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+      if(!dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                         *point_buffer, *point_count))
         goto fail;
     }
@@ -1065,11 +1066,11 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     return 0;
   }
-  else if(dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
+  else if(dt_masks_distort_transform(dist, iop_order, transform_direction,
                                         *point_buffer, *point_count))
   {
     if(!border_buffer
-       || dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
+       || dt_masks_distort_transform(dist, iop_order, transform_direction,
                                         *border_buffer, *border_count))
     {
       if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1242,8 +1243,9 @@ static int _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask
 {
   if(use_source && IS_NULL_PTR(module)) return 1;
   const double ioporder = (module) ? module->iop_order : 0.0f;
+  const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
   return _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
-                               develop->virtual_pipe, point_buffer, point_count, border_buffer,
+                               &gui_dist, point_buffer, point_count, border_buffer,
                                border_count, NULL, NULL, use_source);
 }
 
@@ -2658,7 +2660,8 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                            &points, &points_count, &border, &border_count, NULL, NULL, include_source) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
@@ -2745,7 +2748,8 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
   int points_count, border_count, payload_count;
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                            &points, &points_count,
                                &border, &border_count, &payload, &payload_count, 0) != 0)
   {
@@ -2933,7 +2937,8 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
 
   int points_count, border_count, payload_count;
 
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                            &points, &points_count, &border, &border_count, &payload, &payload_count, 0) != 0)
   {
     dt_pixelpipe_cache_free_align(points);

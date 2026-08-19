@@ -49,6 +49,7 @@
 #include "widgets/gdkkeys.h"
 #include "common/conf.h"
 #include "develop/imageop.h"
+#include "develop/masks/masks_distort.h"
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
@@ -712,7 +713,7 @@ static int _polygon_range_cmp(const void *a, const void *b)
  */
 static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                    const double iop_order, const int transform_direction,
-                                   dt_dev_pixelpipe_t *pipe, float **point_buffer, int *point_count,
+                                   const dt_masks_distort_t *const dist, float **point_buffer, int *point_count,
                                    float **border_buffer, int *border_count, gboolean source)
 {
   *point_buffer = NULL;
@@ -725,8 +726,8 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
-  const float input_width = pipe->iwidth;
-  const float input_height = pipe->iheight;
+  const float input_width = dist->iwidth;
+  const float input_height = dist->iheight;
   /* One pixel, always, and NOT dt_dev_pixelpipe_t::mask_rasterization_step.
    *
    * The border produced here is fed to _polygon_find_self_intersection(), which is a PIXEL-GRID
@@ -967,13 +968,13 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   {
     // we transform with all distortion that happen *before* the module
     // so we have now the TARGET points in module input reference
-    if(dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+    if(dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                      *point_buffer, *point_count))
     {
       // now we move all the points by the shift
       // so we have now the SOURCE points in module input reference
       float pts[2] = { mask_form->source[0] * input_width, mask_form->source[1] * input_height };
-      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
+      if(!dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
         goto fail;
 
       dx = pts[0] - (*point_buffer)[2];
@@ -987,7 +988,7 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
 
       // we apply the rest of the distortions (those after the module)
       // so we have now the SOURCE points in final image reference
-      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+      if(!dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                         *point_buffer, *point_count))
         goto fail;
     }
@@ -1000,11 +1001,11 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
     dt_pixelpipe_cache_free_align(border_init);
     return 0;
   }
-  else if(dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
+  else if(dt_masks_distort_transform(dist, iop_order, transform_direction,
                                         *point_buffer, *point_count))
   {
     if(!border_buffer
-       || dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
+       || dt_masks_distort_transform(dist, iop_order, transform_direction,
                                         *border_buffer, *border_count))
     {
       if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1235,8 +1236,9 @@ static int _polygon_get_points_border(dt_develop_t *develop, dt_masks_form_t *ma
 {
   if(source && IS_NULL_PTR(module)) return 1;
   const double ioporder = (module) ? module->iop_order : 0.0f;
+  const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
   return _polygon_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
-                                 develop->virtual_pipe, point_buffer, point_count,
+                                 &gui_dist, point_buffer, point_count,
                                  border_buffer, border_count, source);
 }
 
@@ -2471,7 +2473,8 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   int point_count = 0;
   int border_count = 0;
 
-  if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
+  if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                              &point_buffer, &point_count, &border_buffer, &border_count, get_source) != 0)
   {
     dt_pixelpipe_cache_free_align(point_buffer);
@@ -2547,8 +2550,9 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpi
   float *border_buffer = NULL;
   int point_count = 0;
   int border_count = 0;
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order,
-                             DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe, &point_buffer, &point_count,
+                             DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist, &point_buffer, &point_count,
                              &border_buffer, &border_count, FALSE) != 0)
   {
     dt_pixelpipe_cache_free_align(point_buffer);
@@ -3179,8 +3183,9 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pix
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count = 0, border_count = 0;
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
   if(_polygon_get_pts_border(module->dev, mask_form, module->iop_order,
-                             DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+                             DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                              &points, &points_count, &border, &border_count, FALSE) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
