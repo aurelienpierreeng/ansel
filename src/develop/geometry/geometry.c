@@ -79,6 +79,32 @@ struct dt_geometry_chain_t
   dt_develop_t *dev;
 };
 
+/**
+ * @brief A/B switch for bisecting this service against the pipe it replaces.
+ *
+ * @details Every migrated consumer falls back to dev->virtual_pipe when the chain is not
+ * authoritative, so refusing authority puts the whole GUI back on the pipeline path without
+ * rebuilding or reverting anything. Set ANSEL_GEOMETRY_DISABLE=1: a symptom that persists is
+ * not this service's doing, one that disappears is.
+ *
+ * It clears the authority FLAG rather than intercepting the accessor, because the walkers and
+ * the shadow harness read that field directly -- an accessor-only switch would have left the
+ * transform paths live, which is exactly the half a bisection needs to move.
+ */
+static gboolean _geometry_disabled(void)
+{
+  static int disabled = -1;
+  if(disabled < 0)
+  {
+    const char *const env = g_getenv("ANSEL_GEOMETRY_DISABLE");
+    disabled = (!IS_NULL_PTR(env) && env[0] == '1') ? 1 : 0;
+    if(disabled)
+      fprintf(stderr, "[geometry] ANSEL_GEOMETRY_DISABLE=1: the chain declines every query; "
+                      "every consumer falls back to the pixel-less pipe\n");
+  }
+  return disabled == 1;
+}
+
 static gboolean _on_roster(const char *op)
 {
   if(IS_NULL_PTR(op)) return FALSE;
@@ -298,7 +324,7 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   _fold_sizes(chain);
-  chain->authoritative = complete && chain->sized;
+  chain->authoritative = complete && chain->sized && !_geometry_disabled();
 }
 
 gboolean dt_geometry_chain_authoritative(const dt_geometry_chain_t *chain)
