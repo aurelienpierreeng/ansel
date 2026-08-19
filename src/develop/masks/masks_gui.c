@@ -3323,6 +3323,7 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
 void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery)
 {
+  const double post_expose_start = dt_get_wtime();
   dt_develop_t *develop = dev;
   if(IS_NULL_PTR(develop)) return;
   dt_masks_form_t *mask_form = dt_masks_get_visible_form(develop);
@@ -3337,17 +3338,27 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
   if(buffer_width < 1.0 || buffer_height < 1.0) return;
   const float zoom_scale = dt_dev_get_zoom_level(develop);
 
-  // Create a surface to draw the mask, so that we can apply
-  // operation that does not affect the main context
-  cairo_surface_t *overlay = NULL;
-  cairo_t *mask_draw = NULL;
-  cairo_surface_t *target = cairo_get_target(cr);
-  double sx = 1.0, sy = 1.0;
-  cairo_surface_get_device_scale(target, &sx, &sy);
-  overlay = cairo_surface_create_similar(target, CAIRO_CONTENT_COLOR_ALPHA, (int)ceil(width * sx),
-                                         (int)ceil(height * sy));
-  cairo_surface_set_device_scale(overlay, sx, sy);
-  mask_draw = cairo_create(overlay);
+  /* Draw into an isolated group, so that overlapping shapes composite once against the view
+   * instead of once each.
+   *
+   * This used to allocate a full-window ARGB surface with cairo_surface_create_similar() on EVERY
+   * expose and destroy it again at the end -- at ppd 2 that is a four-byte-per-pixel buffer of
+   * four times the window's area, created, cleared, composited and freed per frame, and on an
+   * X11 or GL target it is a server-side pixmap each time. Measured on #1158: the expose stage
+   * that contains it costs 0.44 s while the mask drawing inside it costs 0.0014 s, and it grows
+   * across a session -- 11 ms, 137, 221, 310 -- which is what repeated large allocation and
+   * release looks like.
+   *
+   * cairo_push_group() is the same isolation with none of that: cairo sizes the group to the
+   * current CLIP rather than the window, and takes it from its own scratch pool instead of
+   * allocating. Every path out of here must pop what it pushed. */
+  const double group_start = dt_get_wtime();
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    dt_print(DT_DEBUG_MASKS, "[masks] overlay preamble took %0.04f sec\n", group_start - post_expose_start);
+  cairo_push_group(cr);
+  cairo_t *const mask_draw = cr;
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    dt_print(DT_DEBUG_MASKS, "[masks] overlay group pushed in %0.04f sec\n", dt_get_wtime() - group_start);
 
   // Apply the same transformation to the mask drawing context
   /*cairo_matrix_t m;
@@ -3360,8 +3371,7 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
   if(dt_dev_rescale_roi_to_input(develop, mask_draw, width, height))
   {
     cairo_restore(mask_draw);
-    cairo_destroy(mask_draw);
-    cairo_surface_destroy(overlay);
+    cairo_pattern_destroy(cairo_pop_group(cr));   // discard: nothing was drawn
     return;
   }
 
@@ -3376,7 +3386,11 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
   if(dt_get_debug_flags() & DT_DEBUG_MASKS)
     dt_show_times(&rebuild_start, "[masks] overlay outline refresh");
 
+  const double session_start = dt_get_wtime();
   _masks_draw_creation_session_forms(develop, module, mask_draw, zoom_scale, mask_gui);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    dt_print(DT_DEBUG_MASKS, "[masks] creation session (%d shapes) drawn in %0.04f sec\n",
+             g_list_length(mask_gui->creation_formids), dt_get_wtime() - session_start);
 
   // Draw form
   const dt_times_t draw_start = { 0 };
@@ -3395,15 +3409,15 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
   if(dt_get_debug_flags() & DT_DEBUG_MASKS)
     dt_show_times(&draw_start, "[masks] overlay drawn");
 
-  // Draw the overlay with the same transformation as the main context
-  cairo_save(cr);
-  cairo_identity_matrix(cr);
-  cairo_set_source_surface(cr, overlay, 0.0, 0.0);
+  /* Composite the group. pop_group_to_source() hands back a pattern already carrying the matrix
+   * that was in effect at push time, so a plain paint reproduces exactly what the explicit
+   * full-window surface did -- the save/restore pair above balances the one taken after the
+   * push. */
+  const double composite_start = dt_get_wtime();
+  cairo_pop_group_to_source(cr);
   cairo_paint(cr);
-  cairo_restore(cr);
-
-  cairo_destroy(mask_draw);
-  cairo_surface_destroy(overlay);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF)
+    dt_print(DT_DEBUG_MASKS, "[masks] overlay composited in %0.04f sec\n", dt_get_wtime() - composite_start);
 }
 
 void dt_masks_clear_form_gui(dt_develop_t *develop)
