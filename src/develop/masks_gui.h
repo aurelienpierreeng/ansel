@@ -169,7 +169,15 @@ typedef struct dt_masks_form_gui_t
 
   // ids
   int formid;
-  uint64_t pipe_hash;
+  /* Which composed geometry the cached outlines in ::points were built against
+   * (dt_geometry_chain_generation()). Zero means "nothing cached".
+   *
+   * This used to be the PREVIEW PIPE'S BACKBUFFER HASH, which made it a pixel identity standing in
+   * for a geometric one: every republished preview frame invalidated outlines whose inputs had not
+   * changed, and while a brush is dragged the preview republishes continuously. That is #1158 --
+   * the outlines of every shape in the group rebuilt on every mouse move, and the 1/60 s throttle
+   * in dt_masks_gui_form_create_throttled() bypassed by its own force_rebuild clause. */
+  uint64_t geometry_generation;
 } dt_masks_form_gui_t;
 
 /** Reset a form GUI state and bind it to its owning develop instance (gui->dev). */

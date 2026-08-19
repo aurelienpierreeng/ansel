@@ -74,6 +74,9 @@ struct dt_geometry_chain_t
   /** Every roster module that is enabled has published a record. See the header. */
   gboolean authoritative;
 
+  /** Advanced once per rebuild. See dt_geometry_chain_generation(). */
+  uint64_t generation;
+
   /* What the last rebuild could not get. Kept so shadow mode can name it instead of just
    * reporting "not ready", which would be true and useless. */
   GList *missing;   /**< gchar*, owned */
@@ -109,6 +112,8 @@ static void _chain_clear(dt_geometry_chain_t *chain)
   chain->authoritative = FALSE;
   chain->sized = FALSE;
   chain->processed_width = chain->processed_height = 0;
+  // `generation' is deliberately NOT reset here: clearing is a change like any other, and a
+  // consumer holding the old number must see a different one afterwards, not the same one again.
 }
 
 dt_geometry_chain_t *dt_geometry_chain_new(void)
@@ -304,6 +309,16 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
 
   _fold_sizes(chain);
   chain->authoritative = complete && chain->sized;
+
+  /* Last, so a consumer that samples the generation and then reads the chain cannot pair a new
+   * number with geometry still being folded -- this all runs on the GUI thread, but the ordering
+   * is what makes the key mean "everything below is settled". */
+  chain->generation++;
+}
+
+uint64_t dt_geometry_chain_generation(const dt_geometry_chain_t *chain)
+{
+  return IS_NULL_PTR(chain) ? 0 : chain->generation;
 }
 
 gboolean dt_geometry_chain_authoritative(const dt_geometry_chain_t *chain)

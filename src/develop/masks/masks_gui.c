@@ -32,6 +32,7 @@
 #include "control/control.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "develop/geometry/geometry.h"   // dt_geometry_chain_generation()
 #include "develop/masks.h"
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
@@ -1305,7 +1306,7 @@ void dt_masks_gui_init(dt_develop_t *dev)
 
   dt_masks_clear_form_gui(dev);
   dt_masks_set_visible_form(dev, NULL);
-  dev->form_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dev->form_gui->geometry_generation = 0;
   dev->form_gui->formid = 0;
 }
 
@@ -1857,7 +1858,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
          != 0)
         return;
     }
-    mask_gui->pipe_hash = dt_dev_backbuf_get_hash(&mask_gui->dev->preview_pipe->backbuf);
+    mask_gui->geometry_generation = dt_geometry_chain_generation(mask_gui->dev->geometry_chain);
     mask_gui->formid = mask_form->formid;
     mask_gui->type = mask_form->type;
 
@@ -1882,9 +1883,13 @@ gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *mask_form, dt_masks
   const double now = dt_get_wtime();
   const double min_delta_time = 1.0 / 60.0;
   const float min_dist2 = 4.0f;
+  /* Bypass the throttle only when the GEOMETRY moved -- the outlines would then be drawn in the
+   * wrong place, which no amount of throttling makes acceptable. It used to bypass on the preview
+   * pipe's backbuffer hash instead, so a republished frame counted as a reason: dragging a brush
+   * republishes continuously, the clause was therefore true on essentially every mouse move, and
+   * the throttle below never ran. #1158. */
   const gboolean force_rebuild
-      = (develop->preview_pipe
-         && mask_gui->pipe_hash != dt_dev_backbuf_get_hash(&develop->preview_pipe->backbuf));
+      = (mask_gui->geometry_generation != dt_geometry_chain_generation(develop->geometry_chain));
 
   if(!force_rebuild && mask_gui->last_rebuild_ts > 0.0)
   {
@@ -2278,7 +2283,7 @@ void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
 {
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  mask_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  mask_gui->geometry_generation = 0;
   mask_gui->formid = 0;
 
   if(!IS_NULL_PTR(gui_points))
@@ -2296,12 +2301,12 @@ void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
 void dt_masks_gui_form_test_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui,
                                    dt_iop_module_t *module)
 {
-  // we test if the image has changed
-  if(mask_gui->pipe_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
+  // we test if the geometry the cached outlines were built against has moved
+  if(mask_gui->geometry_generation != 0)
   {
-    if(mask_gui->pipe_hash != dt_dev_backbuf_get_hash(&mask_gui->dev->preview_pipe->backbuf))
+    if(mask_gui->geometry_generation != dt_geometry_chain_generation(mask_gui->dev->geometry_chain))
     {
-      mask_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+      mask_gui->geometry_generation = 0;
       mask_gui->formid = 0;
       g_list_free_full(mask_gui->points, dt_masks_form_gui_points_free);
       mask_gui->points = NULL;
@@ -2309,7 +2314,7 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *mask_form, dt_masks_form_gui
   }
 
   // we create the form if needed
-  if(mask_gui->pipe_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+  if(mask_gui->geometry_generation == 0)
   {
     if(mask_form->type & DT_MASKS_GROUP)
     {
@@ -2464,7 +2469,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
     dt_masks_dynbuf_free(mask_gui->guipoints_payload);
     mask_gui->guipoints_payload = NULL;
     mask_gui->guipoints_count = 0;
-    mask_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    mask_gui->geometry_generation = 0;
     mask_gui->formid = 0;
     mask_gui->creation_closing_form = FALSE;
     dt_masks_soft_reset_form_gui(mask_gui);
@@ -3172,41 +3177,100 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
  * stored in creation_formids are therefore drawn explicitly here, so only the
  * shapes created in this session stay visible until creation mode is exited.
  */
+/* The creation session's own outline cache.
+ *
+ * GUI-thread state, like every other dt_masks_form_gui_t. It is static because the shapes it
+ * describes outlive a single expose and nothing else owns them: `creation_formids' is a list of
+ * ids, and the outlines built from them used to live in a STACK LOCAL that was initialised fresh
+ * every expose, with its cache key forced to zero after each shape. That defeated the cache by
+ * construction -- every shape drawn since creation mode was entered was re-derived and thrown away
+ * on every frame.
+ *
+ * Measured on #1158, with the list length as the variable: 0 shapes 0.0000 s, 1 shape 0.1141 s,
+ * 2 shapes 0.2431 s, 3 shapes 0.3189 s, 4 shapes 0.4444 s -- about 110 ms per shape per expose,
+ * while the mask GROUP, whose outlines ARE cached, drew all of its shapes in 0.0020 s. Everything
+ * else in that stage measured zero: the predicates, the preamble, the group push, the outline
+ * refresh, the composite, the hit test.
+ */
+static dt_masks_form_gui_t _session_gui = { 0 };
+static gboolean _session_gui_inited = FALSE;
+static uint64_t _session_gui_generation = 0;
+static int _session_gui_count = 0;
+
+/** @brief Drop the session outlines. Safe to call when nothing is cached. */
+static void _session_gui_reset(void)
+{
+  if(!_session_gui_inited) return;
+  g_list_free_full(_session_gui.points, dt_masks_form_gui_points_free);
+  _session_gui.points = NULL;
+  _session_gui_generation = 0;
+  _session_gui_count = 0;
+}
+
 static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_module_t *module,
                                                cairo_t *cr, const float zoom_scale,
                                                const dt_masks_form_gui_t *creation_gui)
 {
-  if(!creation_gui->creation || IS_NULL_PTR(creation_gui->creation_formids)) return;
+  if(!creation_gui->creation || IS_NULL_PTR(creation_gui->creation_formids))
+  {
+    _session_gui_reset();
+    return;
+  }
 
-  dt_masks_form_gui_t draw_gui;
-  dt_masks_init_form_gui(develop, &draw_gui);
-  draw_gui.edit_mode = creation_gui->edit_mode;
-  draw_gui.group_selected = -1;
-  draw_gui.pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  const int count = g_list_length(creation_gui->creation_formids);
+  const uint64_t live_generation = dt_geometry_chain_generation(develop->geometry_chain);
+
+  if(!_session_gui_inited)
+  {
+    dt_masks_init_form_gui(develop, &_session_gui);
+    _session_gui_inited = TRUE;
+    _session_gui_generation = 0;
+    _session_gui_count = 0;
+  }
+  _session_gui.dev = develop;
+  _session_gui.edit_mode = creation_gui->edit_mode;
+  _session_gui.group_selected = -1;
+
+  /* Rebuild only when the composed geometry moved or the session gained a shape -- the same rule
+   * the mask group's outlines follow. A shape's own content changing commits history, which
+   * rebuilds the chain, which advances the generation. */
+  const gboolean rebuild = (_session_gui_generation != live_generation) || (_session_gui_count != count);
+  if(rebuild)
+  {
+    g_list_free_full(_session_gui.points, dt_masks_form_gui_points_free);
+    _session_gui.points = NULL;
+  }
 
   // Iterate over the ids saved in this creation session. Other masks stay
   // hidden while creation is active, even if they belong to the same module.
+  int index = 0;
   for(GList *formid_node = creation_gui->creation_formids; formid_node; formid_node = g_list_next(formid_node))
   {
     const int formid = GPOINTER_TO_INT(formid_node->data);
     dt_masks_form_t *session_form = dt_masks_get_from_id(develop, formid);
     if(IS_NULL_PTR(session_form)) continue;
 
-    dt_masks_gui_form_test_create(session_form, &draw_gui, module);
+    /* Built at `index', not at 0: one slot per shape, so they can all be kept. The old loop wrote
+     * every shape into slot 0 and freed it again, which is why none of them could be cached. */
+    if(rebuild) dt_masks_gui_form_create(session_form, &_session_gui, index, module);
+
     if(session_form->functions && session_form->functions->post_expose)
     {
       const guint point_count = g_list_length(session_form->points);
-      draw_gui.type = session_form->type;
-      session_form->functions->post_expose(cr, zoom_scale, &draw_gui, 0, point_count);
+      _session_gui.type = session_form->type;
+      session_form->functions->post_expose(cr, zoom_scale, &_session_gui, index, point_count);
     }
 
     // Keep the saved-session shape path from being connected to the active
     // creation cursor drawn right after this loop.
     cairo_new_path(cr);
-    g_list_free_full(draw_gui.points, dt_masks_form_gui_points_free);
-    draw_gui.points = NULL;
-    draw_gui.pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
-    draw_gui.formid = 0;
+    index++;
+  }
+
+  if(rebuild)
+  {
+    _session_gui_generation = live_generation;
+    _session_gui_count = count;
   }
 }
 
@@ -3286,6 +3350,7 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
 
 void dt_masks_clear_form_gui(dt_develop_t *develop)
 {
+  _session_gui_reset();
   if(IS_NULL_PTR(develop->form_gui)) return;
   g_list_free_full(develop->form_gui->points, dt_masks_form_gui_points_free);
   develop->form_gui->points = NULL;
@@ -3294,7 +3359,7 @@ void dt_masks_clear_form_gui(dt_develop_t *develop)
   dt_masks_dynbuf_free(develop->form_gui->guipoints_payload);
   develop->form_gui->guipoints_payload = NULL;
   develop->form_gui->guipoints_count = 0;
-  develop->form_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  develop->form_gui->geometry_generation = 0;
   develop->form_gui->formid = 0;
   develop->form_gui->delta[0] = develop->form_gui->delta[1] = 0.0f;
   develop->form_gui->scrollx = develop->form_gui->scrolly = 0.0f;
