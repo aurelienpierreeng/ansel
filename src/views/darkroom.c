@@ -1103,6 +1103,8 @@ void expose(
     const gboolean display_masks = (dev->gui_module && dev->gui_module->enabled)
                                  || dt_lib_gui_get_expanded(dt_lib_get_module("masks"));
 
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] overlay predicates");
+
     if(dt_masks_get_visible_form(dev) && display_masks)
       dt_masks_events_post_expose(dev, dev->gui_module, cri, width, height, pointerx, pointery);
       
