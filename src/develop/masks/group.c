@@ -133,8 +133,29 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
   dt_masks_form_t *selected_form = _group_get_child_at(gui->dev, form, pos, NULL);
   if(selected_form && selected_form->functions && selected_form->functions->post_expose)
   {
+    /* Timed per shape, with the size of what is being stroked.
+     *
+     * The overlay redraw is the expensive half of a mask-heavy darkroom and nothing measured it:
+     * on the #1158 logs the darkroom expose runs 270-390 ms with only ~15 ms of it accounted for
+     * by the outline rebuilds around it, and the unaccounted time falls BETWEEN consecutive
+     * shapes -- which is this call. Whether that is the cairo stroking, and whether it scales
+     * with the point count or with the node count (dt_masks_draw_path_seg_by_seg() strokes once
+     * per node), is exactly what these two numbers separate. */
+    const dt_times_t start = { 0 };
+    dt_get_times((dt_times_t *)&start);
+
     gui->type = selected_form->type;
     selected_form->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(selected_form->points));
+
+    if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+    {
+      const dt_masks_form_gui_points_t *const gui_points
+          = (const dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, pos);
+      dt_show_times_f(&start, "[masks]", "shape %d (%s) drawn: %d outline points, %d border points, %d nodes",
+                      pos, selected_form->name, IS_NULL_PTR(gui_points) ? -1 : gui_points->points_count,
+                      IS_NULL_PTR(gui_points) ? -1 : gui_points->border_count,
+                      g_list_length(selected_form->points));
+    }
   }
 }
 

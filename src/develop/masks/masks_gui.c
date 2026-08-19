@@ -1848,8 +1848,20 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
 
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  if(dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->points, &gui_points->points_count,
-                                &gui_points->border, &gui_points->border_count, 0, NULL) == 0)
+  const int border_status
+      = dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->points, &gui_points->points_count,
+                                   &gui_points->border, &gui_points->border_count, 0, NULL);
+
+  /* A shape that fails here leaves the cache key UNSET, so the next expose rebuilds the whole
+   * group again -- and the one after that, forever. An empty shape mid-creation is the obvious
+   * candidate and it is invisible in a log otherwise: say so. */
+  if(border_status != 0 && (dt_get_debug_flags() & DT_DEBUG_MASKS))
+    dt_print(DT_DEBUG_MASKS,
+             "[masks] outline build FAILED for %s (index %d, %d nodes): the cache key stays unset,"
+             " so every later expose rebuilds this whole group\n",
+             mask_form->name, form_index, g_list_length(mask_form->points));
+
+  if(border_status == 0)
   {
     if(mask_form->type & DT_MASKS_CLONE)
     {
@@ -2302,9 +2314,17 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *mask_form, dt_masks_form_gui
                                    dt_iop_module_t *module)
 {
   // we test if the geometry the cached outlines were built against has moved
+  const uint64_t live_generation = dt_geometry_chain_generation(mask_gui->dev->geometry_chain);
+  if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+    dt_print(DT_DEBUG_MASKS, "[masks] outline cache: held for geometry %lu, live %lu -> %s\n",
+             (unsigned long)mask_gui->geometry_generation, (unsigned long)live_generation,
+             (mask_gui->geometry_generation == 0)
+                 ? "REBUILD (nothing cached)"
+                 : ((mask_gui->geometry_generation != live_generation) ? "REBUILD (geometry moved)" : "reuse"));
+
   if(mask_gui->geometry_generation != 0)
   {
-    if(mask_gui->geometry_generation != dt_geometry_chain_generation(mask_gui->dev->geometry_chain))
+    if(mask_gui->geometry_generation != live_generation)
     {
       mask_gui->geometry_generation = 0;
       mask_gui->formid = 0;
@@ -2636,7 +2656,23 @@ static void _dt_masks_events_set_current_pos(const double x, const double y, dt_
   dt_dev_coordinates_image_abs_to_raw_abs(mask_gui->dev, mask_gui->raw_pos, 1);
 }
 
+static int _dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x,
+                                       double y, double pressure, int which);
+
 int dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure, int which)
+{
+  /* Timed because it is the other thing that scales with the number of shapes and is not part of
+   * the expose: hit-testing walks every shape in the group and, for a brush, every point of it.
+   * The #1158 logs show the darkroom redraw growing to 400 ms with only 1.5 ms of mask overlay in
+   * it, so whatever grows is either here or in the expose's earlier stages -- both are now timed. */
+  dt_times_t moved_start = { 0 };
+  dt_get_times(&moved_start);
+  const int moved_result = _dt_masks_events_mouse_moved(dev, module, x, y, pressure, which);
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&moved_start, "[masks] mouse moved");
+  return moved_result;
+}
+
+static int _dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure, int which)
 {
   // This assume that if this event is generated, the mouse is over the center window.
   // record mouse position even if there are no masks visible
@@ -3252,7 +3288,9 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
 
     /* Built at `index', not at 0: one slot per shape, so they can all be kept. The old loop wrote
      * every shape into slot 0 and freed it again, which is why none of them could be cached. */
+    const double shape_start = dt_get_wtime();
     if(rebuild) dt_masks_gui_form_create(session_form, &_session_gui, index, module);
+    const double built = dt_get_wtime();
 
     if(session_form->functions && session_form->functions->post_expose)
     {
@@ -3260,6 +3298,14 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
       _session_gui.type = session_form->type;
       session_form->functions->post_expose(cr, zoom_scale, &_session_gui, index, point_count);
     }
+
+    /* Which half costs: rebuilding an outline, or stroking it. The session is 15.9 ms of a 25.7 ms
+     * redraw, about 5 ms per shape, while the shape being drawn -- same stroker, cached outline --
+     * costs 1.4 ms. Either the cache is not holding here or the draw is genuinely dearer, and
+     * those want opposite fixes. */
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      dt_print(DT_DEBUG_MASKS, "[masks] session shape %d: %s %0.04f sec, drawn %0.04f sec\n", index,
+               rebuild ? "rebuilt in" : "cached,", built - shape_start, dt_get_wtime() - built);
 
     // Keep the saved-session shape path from being connected to the active
     // creation cursor drawn right after this loop.
@@ -3321,12 +3367,21 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
 
   // We update the form if needed
   // Add preview when creating a circle, ellipse and gradient
+  const dt_times_t rebuild_start = { 0 };
+  dt_get_times((dt_times_t *)&rebuild_start);
+
   if(!((mask_form->type & DT_MASKS_IS_PRIMITIVE_SHAPE) && mask_gui->creation))
     dt_masks_gui_form_test_create(mask_form, mask_gui, module);
+
+  if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+    dt_show_times(&rebuild_start, "[masks] overlay outline refresh");
 
   _masks_draw_creation_session_forms(develop, module, mask_draw, zoom_scale, mask_gui);
 
   // Draw form
+  const dt_times_t draw_start = { 0 };
+  dt_get_times((dt_times_t *)&draw_start);
+
   if(mask_form->type & DT_MASKS_GROUP)
     dt_group_events_post_expose(mask_draw, zoom_scale, mask_form, mask_gui);
   else if(mask_form->functions && mask_form->functions->post_expose)
@@ -3336,6 +3391,9 @@ void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *modu
     mask_form->functions->post_expose(mask_draw, zoom_scale, mask_gui, 0, point_count);
   }
   cairo_restore(mask_draw);
+
+  if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+    dt_show_times(&draw_start, "[masks] overlay drawn");
 
   // Draw the overlay with the same transformation as the main context
   cairo_save(cr);
