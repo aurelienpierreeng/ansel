@@ -399,7 +399,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
 
   // we transform with all distortion that happen *before* the module
   // so we have now the TARGET points in module input reference
-  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                     *points, *points_count))
     goto error;
 
@@ -407,7 +407,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
   // so we have now the SOURCE points in module input reference
   float pts[2] = { xs, ys };
   dt_dev_coordinates_raw_norm_to_raw_abs(dev, pts, 1);
-  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                     pts, 1))
     goto error;
 
@@ -426,7 +426,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
 
   // we apply the rest of the distortions (those after the module)
   // so we have now the SOURCE points in final image reference
-  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+  if(!dt_dev_distort_transform_gui(dev, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                     *points, *points_count))
     goto error;
 

@@ -222,7 +222,7 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
 
   dt_boundingbox_t points = { bbox_left, bbox_top, bbox_right, bbox_bottom };
 
-  if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+  if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                        DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
     //dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);

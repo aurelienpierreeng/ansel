@@ -645,6 +645,18 @@ int dt_dev_distort_transform_locked(const struct dt_dev_pixelpipe_t *pipe, const
 int dt_dev_distort_backtransform_plus(const struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                       float *points, size_t points_count);
 
+/**
+ * @brief GUI-side bounded transform folds. Ask the geometry service, fall back to the pixel-less
+ * pipe. Same iop_order bound and direction modes as dt_dev_distort_transform_plus().
+ *
+ * Module GUIs use THESE, never dev->virtual_pipe directly: that pipe is being removed, and a
+ * caller that names it is a caller that has not been migrated.
+ */
+int dt_dev_distort_transform_gui(struct dt_develop_t *dev, const double iop_order,
+                                 const int transf_direction, float *points, size_t points_count);
+int dt_dev_distort_backtransform_gui(struct dt_develop_t *dev, const double iop_order,
+                                     const int transf_direction, float *points, size_t points_count);
+
 /** get the iop_pixelpipe instance corresponding to the iop in the given pipe */
 struct dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(struct dt_dev_pixelpipe_t *pipe,
                                                            struct dt_iop_module_t *module);

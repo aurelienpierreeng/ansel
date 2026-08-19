@@ -1714,6 +1714,37 @@ static int dt_dev_distort_backtransform_locked(const dt_dev_pixelpipe_t *pipe, c
  * exactly the question these two ask.
  */
 
+/**
+ * @brief The GUI's bounded transform folds: ask the geometry service, fall back to the pipe.
+ *
+ * @details Same contract as dt_dev_distort_transform_plus() -- the iop_order bound and the five
+ * direction modes mean exactly what they mean there -- but stated in terms of the dev rather
+ * than a pipe, because which of the two answers is not the caller's business. The chain answers
+ * when every enabled geometry module has published a record; otherwise the pixel-less pipe does,
+ * as it always has.
+ *
+ * A module GUI must not reach for dev->virtual_pipe itself. That pipe is going away, and a call
+ * site naming it is a call site that will not compile then -- which is the point of routing
+ * every one of them through here first.
+ */
+int dt_dev_distort_transform_gui(dt_develop_t *dev, const double iop_order, const int transf_direction,
+                                 float *points, size_t points_count)
+{
+  if(IS_NULL_PTR(dev)) return 0;
+  if(dt_geometry_transform(dev, iop_order, transf_direction, points, points_count)) return 1;
+  return dt_dev_distort_transform_plus(dev->virtual_pipe, iop_order, transf_direction, points, points_count);
+}
+
+/** @brief The inverse of dt_dev_distort_transform_gui(), same rules. */
+int dt_dev_distort_backtransform_gui(dt_develop_t *dev, const double iop_order, const int transf_direction,
+                                     float *points, size_t points_count)
+{
+  if(IS_NULL_PTR(dev)) return 0;
+  if(dt_geometry_backtransform(dev, iop_order, transf_direction, points, points_count)) return 1;
+  return dt_dev_distort_backtransform_plus(dev->virtual_pipe, iop_order, transf_direction, points,
+                                           points_count);
+}
+
 int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
   if(dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
