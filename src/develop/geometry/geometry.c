@@ -389,6 +389,32 @@ static int _compose_forward(dt_geometry_chain_t *chain, const double iop_order, 
   return 1;
 }
 
+int dt_geometry_module_transform(dt_develop_t *dev, const dt_iop_module_t *module, float *points,
+                                 const size_t points_count)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(points)) return 0;
+
+  dt_geometry_chain_t *const chain = dev->geometry_chain;
+  if(IS_NULL_PTR(chain) || !chain->authoritative) return 0;
+
+  dt_geometry_record_t *record = NULL;
+  for(GList *node = g_list_first(chain->records); node; node = g_list_next(node))
+  {
+    dt_geometry_record_t *const candidate = (dt_geometry_record_t *)node->data;
+    if(!strcmp(candidate->op, module->op) && candidate->instance == module->multi_priority)
+    {
+      record = candidate;
+      break;
+    }
+  }
+
+  if(IS_NULL_PTR(record) || !record->enabled) return 0;
+  if(IS_NULL_PTR(record->vtable) || IS_NULL_PTR(record->vtable->transform)) return 0;
+  if(_suppressed_by_focus(chain, record)) return 0;
+
+  return record->vtable->transform(record->data, record, chain, points, points_count);
+}
+
 int dt_geometry_chain_compose(dt_geometry_chain_t *chain, const double iop_order, const int direction,
                               float *points, const size_t points_count)
 {

@@ -263,22 +263,24 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
  * @param self the current module data
  * @return gboolean TRUE on success, FALSE otherwise 
  */
-static gboolean _set_max_clip(dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self)
+/* Takes no pipe: both callers passed dev->virtual_pipe, so this was never the dual-use fold it
+ * resembled -- it is GUI-only, and asks the dev like every other GUI geometry query. */
+static gboolean _set_max_clip(struct dt_iop_module_t *self)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(pipe, self);
-  if(IS_NULL_PTR(piece)) return FALSE;
+  dt_iop_roi_t mod_out;
+  if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return FALSE;
 
-  float wp = piece->buf_out.width;
-  float hp = piece->buf_out.height;
+  float wp = mod_out.width;
+  float hp = mod_out.height;
   float points[8] = { 0.0f, 0.0f, wp, hp, p->cx * wp, p->cy * hp, p->cw * wp, p->ch * hp };
-  if(!dt_dev_distort_transform_plus(pipe, self->iop_order,
-                                    DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
+  if(!dt_dev_distort_transform_gui(self->dev, self->iop_order,
+                                   DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return FALSE;
-  dt_dev_coordinates_preview_abs_to_image_norm(pipe->dev, points, 4);
+  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, points, 4);
 
   g->clip_max_x = fmaxf(points[0], 0.0f);
   g->clip_max_y = fmaxf(points[1], 0.0f);
@@ -1500,7 +1502,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   float pzy = pzxpy[1];
   cairo_set_line_width(cr, border_width);
 
-  if(_set_max_clip(self->dev->virtual_pipe, self))
+  if(_set_max_clip(self))
   {
     cairo_set_source_rgba(cr, .1, .1, .1, .8);
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
@@ -1612,7 +1614,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, border, g->wd, g->ht);
 
-  _set_max_clip(self->dev->virtual_pipe, self);
+  _set_max_clip(self);
 
   if(g->dragging)
   {
