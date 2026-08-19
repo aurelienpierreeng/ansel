@@ -695,10 +695,10 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece)) return 0;
+  dt_iop_roi_t mod_out;
+  if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return 0;
 
-  float wp = piece->buf_out.width, hp = piece->buf_out.height;
+  float wp = mod_out.width, hp = mod_out.height;
   const float cx = CLAMPF(p->cx, 0.0f, 0.9f);
   const float cy = CLAMPF(p->cy, 0.0f, 0.9f);
   const float cw = CLAMPF(fabsf(p->cw), 0.1f, 1.0f);
@@ -1502,10 +1502,10 @@ static float _ratio_get_aspect(dt_iop_module_t *self, GtkWidget *combo)
   }
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece)) return 0.0f;
+  dt_iop_roi_t mod_in;
+  if(!dt_dev_module_geometry_gui(self->dev, self, &mod_in, NULL)) return 0.0f;
 
-  const int iwd = piece->buf_in.width, iht = piece->buf_in.height;
+  const int iwd = mod_in.width, iht = mod_in.height;
 
   // if we do not have yet computed the aspect ratio, let's do it now
   if(p->ratio_d == -2 && p->ratio_n == -2)
@@ -2597,10 +2597,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->k_show == 1 && p->k_type > 0)
   {
     // points in screen space
-    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-    if(IS_NULL_PTR(piece)) return;
+    dt_iop_roi_t mod_out;
+    if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return;
 
-    const float wp = piece->buf_out.width, hp = piece->buf_out.height;
+    const float wp = mod_out.width, hp = mod_out.height;
     float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,
                      p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
     if(dt_dev_distort_transform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4))
@@ -2865,8 +2865,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     {
       float pts[2] = { pzx * wd, pzy * ht };
       dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
-      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-      const float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
+      dt_iop_roi_t mod_out;
+      if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return FALSE;
+      const float xx = pts[0] / (float)mod_out.width, yy = pts[1] / (float)mod_out.height;
       if(g->k_selected == 0)
       {
         if(p->k_sym == 1 || p->k_sym == 3)
@@ -3139,8 +3140,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     {
       float pts[2] = { pzx * wd, pzy * ht };
       dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
-      dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-      float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
+      dt_iop_roi_t mod_out;
+      if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return FALSE;
+      float xx = pts[0] / (float)mod_out.width, yy = pts[1] / (float)mod_out.height;
       // are we near a keystone point ?
       g->k_selected = -1;
       g->k_selected_segment = -1;
@@ -3306,8 +3308,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         float pzx = pzxpy[0];
         float pzy = pzxpy[1];
 
-        dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(dev->virtual_pipe, self);
-        const float wp = piece->buf_out.width, hp = piece->buf_out.height;
+        dt_iop_roi_t mod_out;
+        if(!dt_dev_module_geometry_gui(dev, self, NULL, &mod_out)) return 0;
+        const float wp = mod_out.width, hp = mod_out.height;
         float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,
                          p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
         dt_dev_distort_transform_gui(dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4);

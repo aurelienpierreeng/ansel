@@ -2550,11 +2550,11 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   // ashift's process() to populate g->buf. ashift's roi_in is crop-dependent, while buf_in is the
   // stable full input geometry required by the fit.
   int crop_width = 0, crop_height = 0;
-  const dt_dev_pixelpipe_iop_t *crop_piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(!IS_NULL_PTR(crop_piece) && crop_piece->buf_in.width > 0 && crop_piece->buf_in.height > 0)
+  dt_iop_roi_t crop_in;
+  if(dt_dev_module_geometry_gui(self->dev, self, &crop_in, NULL) && crop_in.width > 0 && crop_in.height > 0)
   {
-    crop_width = crop_piece->buf_in.width;
-    crop_height = crop_piece->buf_in.height;
+    crop_width = crop_in.width;
+    crop_height = crop_in.height;
   }
   else
   {
@@ -3011,14 +3011,17 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   // Manual line drawing only needs the module input geometry, never the pixel buffer (unlike
   // auto-detection). Tying it to g->buf used to block all manual input whenever the preview buffer
   // was momentarily unavailable, e.g. when the module already had parameters set (#710).
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece) || piece->iwidth <= 0 || piece->iheight <= 0) return;
+  /* piece->iwidth/iheight was the PIPE's input size, which is the raw geometry -- not anything
+   * this module derives -- so it is read from where that fact lives. */
+  int32_t raw_width = 0, raw_height = 0;
+  if(!dt_dev_geometry_get_raw_size(self->dev, &raw_width, &raw_height)) return;
+  if(raw_width <= 0 || raw_height <= 0) return;
 
   _do_clean_structure(self, p, TRUE);
 
   g->current_structure_method = ASHIFT_METHOD_LINES;
-  g->lines_in_width = piece->iwidth;
-  g->lines_in_height = piece->iheight;
+  g->lines_in_width = raw_width;
+  g->lines_in_height = raw_height;
   g->lines_x_off = 0;
   g->lines_y_off = 0;
 
@@ -3037,8 +3040,11 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
 
   // The manual perspective rectangle only needs the module input geometry, never the pixel buffer
   // (unlike auto-detection), so it must not wait for the preview input buffer (#710).
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece) || piece->iwidth <= 0 || piece->iheight <= 0) return;
+  /* piece->iwidth/iheight was the PIPE's input size, which is the raw geometry -- not anything
+   * this module derives -- so it is read from where that fact lives. */
+  int32_t raw_width = 0, raw_height = 0;
+  if(!dt_dev_geometry_get_raw_size(self->dev, &raw_width, &raw_height)) return;
+  if(raw_width <= 0 || raw_height <= 0) return;
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3073,8 +3079,8 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
       // get real line type (they may be wrong due to image rotation)
       for(int i = 0; i < 4; i++) _draw_retrieve_line_type(&g->lines[i]);
 
-      g->lines_in_width = piece->iwidth;
-      g->lines_in_height = piece->iheight;
+      g->lines_in_width = raw_width;
+      g->lines_in_height = raw_height;
       g->lines_x_off = 0;
       g->lines_y_off = 0;
       g->vertical_count = 2;
@@ -3879,16 +3885,16 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we draw the cropping area; use the input ROI from the virtual pipe piece
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece))
+  dt_iop_roi_t mod_in;
+  if(!dt_dev_module_geometry_gui(self->dev, self, &mod_in, NULL))
   {
     cairo_restore(cr);
     return;
   }
-  const float iwd = piece->buf_in.width;
-  const float iht = piece->buf_in.height;
-  const float ixo = piece->buf_in.x;
-  const float iyo = piece->buf_in.y;
+  const float iwd = mod_in.width;
+  const float iht = mod_in.height;
+  const float ixo = mod_in.x;
+  const float iyo = mod_in.y;
 
   // The four corners of the inner image polygon
   float V[4][2] = { { ixo,        iyo       },

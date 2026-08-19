@@ -1745,6 +1745,39 @@ int dt_dev_distort_backtransform_gui(dt_develop_t *dev, const double iop_order, 
                                            points_count);
 }
 
+/**
+ * @brief One module's own input and output rectangles, at full resolution.
+ *
+ * @details What a module GUI used to get by resolving its piece on the pixel-less pipe and
+ * reading piece->buf_in / piece->buf_out. Those rectangles are a product of the size fold, and
+ * the geometry service performs that fold over records for EVERY module -- not only the ones
+ * that change geometry, because not only those read the result: iop/graduatednd.c has no
+ * geometry callbacks at all and normalises its overlay against its own output rectangle.
+ *
+ * @return FALSE when neither source can answer, in which case @p in and @p out are untouched
+ * and the caller must not draw. A module that is disabled or absent has no rectangles.
+ */
+gboolean dt_dev_module_geometry_gui(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_roi_t *in,
+                                    dt_iop_roi_t *out)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return FALSE;
+
+  const dt_geometry_record_t *const record
+      = dt_geometry_chain_find(dev->geometry_chain, module->op, module->multi_priority);
+  if(dt_geometry_chain_authoritative(dev->geometry_chain) && !IS_NULL_PTR(record))
+  {
+    if(!IS_NULL_PTR(in)) *in = record->in;
+    if(!IS_NULL_PTR(out)) *out = record->out;
+    return TRUE;
+  }
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_distort_get_iop_pipe(dev->virtual_pipe, module);
+  if(IS_NULL_PTR(piece)) return FALSE;
+  if(!IS_NULL_PTR(in)) *in = piece->buf_in;
+  if(!IS_NULL_PTR(out)) *out = piece->buf_out;
+  return TRUE;
+}
+
 int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
   if(dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
