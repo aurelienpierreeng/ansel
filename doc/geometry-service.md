@@ -161,10 +161,8 @@ happened, because the order changed three times and each change was a measuremen
 preference. Reading the old list as a map of the work would mislead.
 
 Each is one PR. Shadow mode must be silent on the exercised paths before the next lands.
-Ratchet: `grep -rc "virtual_pipe" src/` may only fall — it stays flat while both paths are
-live and falls at deletion.
-
-**Landed for review**
+Ratchet: `grep -rc "virtual_pipe" src/` may only fall — it stayed flat while both paths were
+live and fell to 0 at G16.
 
 - **G1 — pre-fixes** (#1164). ashift's `process()`/`process_cl()` stop backtransforming
   through the GUI's pixel-less pipe from the worker thread (trap 8); `_pop_undo()` publishes
@@ -212,28 +210,49 @@ live and falls at deletion.
   coordinate handling — read the chain, falling back to the pipe when it declines.
   `_sync_virtual_pipe()` rebuilds the chain alongside the pipe so the two cannot differ in
   freshness.
+- **G10 — every bounded GUI transform fold** (#1175). The `_gui` wrappers become the only way
+  a module GUI asks for a composed transform: ashift, clipping, crop, liquify, drawlayer and
+  the mask shapes stop naming a pipe. The wrappers still fall back, so nothing changes yet —
+  what changes is that there is one place left to change.
+- **G11 — the mask outline builders** (#1176). brush and polygon run from BOTH the GUI and the
+  worker, so they got a supplier (`develop/masks/masks_distort.h`) rather than a repoint: the
+  worker's keeps its pieces, the GUI's composes the chain. Two suppliers are a seam; three are
+  a fork, which is why nothing else may implement it.
+- **G12 — per-module dimensions** (#1177). `dt_dev_module_geometry_gui()` replaces resolving a
+  piece to read `buf_in`/`buf_out`. The chain publishes those rects for EVERY module, which is
+  what `graduatednd` — no geometry callbacks at all — needs.
+- **G13 — drawlayer, liquify and clipping's last reads** (#1179). drawlayer's raw
+  `virtual_pipe->processed_*` reads, deferred all the way back at G1 because they preferred the
+  pipe's field as the FRESHER of the two: with one source, the question dissolved exactly as
+  predicted.
+- **G14 — the three consumers that needed more than a repoint** (#1181). ashift's own-module
+  transform (no direction bound expresses "this module and nothing else" — hence
+  `dt_geometry_module_transform()`), lens's committed-data read, and the natural-scale path.
+- **G15 — the size path** (#1183). `dt_dev_get_thumbnail_size()` folds the chain, and the pipe
+  stops being resynced. This is where the measured difference stops being a table and becomes
+  something a user feels: **5 resyncs at 0.104–0.141 s per darkroom entry, on the GUI thread,
+  became 0 at 0.000 s** — and #1157's residual window closes by construction, the virtual
+  resync finally leaving the history-commit path.
+- **G16 — deletion** (#1184). `dev->virtual_pipe`, `_sync_virtual_pipe()`,
+  `dt_dev_virtual_pipe_ensure_synced()`, every fallback, the teardown in darkroom's and
+  studio_capture's `leave()`, colorout's virtual-pipe early return, dev_history's bookkeeping
+  entry, and `ANSEL_GEOMETRY_DISABLE` — which could only turn the GUI off once there was
+  nothing to fall back to. Ratchet 110 → 0.
+  Shadow mode becomes `dt_geometry_self_check()`: the round trip and the bound partition, both
+  identities the chain must satisfy alone. A chain that is *self-consistently* wrong no longer
+  has a check — that one needed a second implementation, and keeping a pipeline alive to be one
+  is the cost this series removed.
 
-**Remaining**
+**Three fixes outside the numbering**, each one a bug the series exposed rather than caused:
 
-- **G10 — module GUIs and per-module dimensions.** ~75 sites: ashift (27), clipping (16),
-  drawlayer and drawlayer/coordinates (12), crop (6), liquify (4), graduatednd (4), lens (1).
-  Most resolve their own piece through `dt_dev_distort_get_iop_pipe()` to read `buf_in`/
-  `buf_out`; the chain already publishes per-module in/out rects for EVERY module, so those
-  are repoints. `graduatednd` is the standing reminder that this is not only geometry modules.
-  `lens.cc`'s `gui_update()` is the one site that reads a committed data blob rather than
-  dimensions — served by the record, which is that data.
-- **G11 — the dual-use folds.** brush, polygon, circle, ellipse (8 sites). These take a pipe
-  as a parameter and run with BOTH the virtual pipe (GUI) and the worker's own pipe (mask
-  rasterisation), so they need the provider seam rather than a repoint: one implementation
-  backed by pieces for workers, one backed by the chain for the GUI.
-- **G12 — the size path.** `dt_dev_get_thumbnail_size()` still folds the virtual pipe for the
-  processed size. Only when every consumer above has moved can the resync be dropped — and
-  that is where the measured cost difference stops being a table and becomes something a user
-  feels, and where #1157's residual window closes by construction, the virtual resync finally
-  leaving the history-commit path.
-- **G13 — deletion.** `dev->virtual_pipe`, `_sync_virtual_pipe()`, the teardown boilerplate in
-  darkroom's and studio_capture's `leave()`, the realtime hash fast-forward special case, and
-  the fallbacks in the migrated consumers. Ratchet target: 0.
+- #1168 — the darkroom's startup configure disagreed with GTK by 16 px, so the main image was
+  computed at one size and immediately recomputed at another. Its own PR, on master.
+- the focused-module exception (a commit on G10's branch): the chain had a setter for it that
+  nothing ever called, so it composed modules the pipe was suppressing — ashift's detected-lines
+  overlay drawn against a different module stack than the image under it. It reads
+  `dev->gui_module` live now, and there is deliberately no setter.
+- the backbuffer diagnostics: `BACKBUF TOO SMALL` and `BACKBUF SHAPE MISMATCH`, which is how the
+  stride/zebra report was localised to an advertised ROI that did not match `tail->roi_out`.
 
 ## What the measurements changed, and why that matters
 
@@ -244,11 +263,19 @@ the audit did not. Keep ordering the remaining tranches the same way.
 
 ## The verification gap, stated plainly
 
-Everything so far rests on export A/B, shadow agreement and darkroom-open runs. None of that
+Everything here rests on export A/B, shadow agreement and darkroom-open runs. None of that
 covers what a user would notice first: a mask drawn, dragged, and landing where it was put.
 From G9 onward the migrated consumers are GUI-side, and an export never calls them — so the
-bit-identical exports say only that nothing ELSE regressed. Interactive verification is owed,
-and it gets more load-bearing with every further tranche.
+bit-identical exports say only that nothing ELSE regressed.
+
+That gap is not theoretical. Three regressions in this series were found by the maintainer in
+the darkroom and by nothing else: the ashift overlay drawn against the wrong module stack, a
+stride error on re-entering ashift's edit mode with a keystone already defined, and the
+detected lines not carrying an existing transform. Each passed every automated check.
+
+Interactive verification was done at G10 (crop, ashift, drawn masks) and at G13
+(drawlayer, liquify). G15 and G16 are owed one — and G16 in particular, because it deletes
+the fallbacks that made `ANSEL_GEOMETRY_DISABLE` a working bisection switch.
 
 ## 5. Out of scope, recorded so nobody rediscovers them
 
