@@ -69,16 +69,10 @@ typedef struct dt_import_scan_state_t
   gboolean closing;
 } dt_import_scan_state_t;
 
-// Mirrors the 3 GtkFileFilter entries built by _file_filters(). The recursive folder scan
-// runs on a worker thread and must not touch GtkFileFilter (Gtk objects are not thread-safe),
-// so the active filter is resolved to one of these plain values on the GUI thread, once, in
-// dt_import_init().
-typedef enum dt_import_filter_type_t
-{
-  DT_IMPORT_FILTER_ALL = 0,
-  DT_IMPORT_FILTER_RAW,
-  DT_IMPORT_FILTER_RASTER
-} dt_import_filter_type_t;
+// dt_import_filter_type_t (gui/import.h) mirrors the 3 GtkFileFilter entries built by
+// _file_filters(). The recursive folder scan runs on a worker thread and must not touch
+// GtkFileFilter (Gtk objects are not thread-safe), so the active filter is resolved to one of
+// those plain values on the GUI thread, once, in dt_import_init().
 
 typedef struct dt_import_t {
   // User-selected folders and files from the Gtk file chooser,
@@ -201,8 +195,10 @@ static void _gtk_label_set_and_free(GtkWidget *widget, gchar *label)
 }
 
 // dt_image_ext_is_gui_raw()/is_gui_raster() (common/image_extensions.c) are shared with
-// _file_filters() below so the GtkFileFilter patterns and this recursive-scan check can never drift.
-static gboolean _import_passes_filter(const dt_import_filter_type_t filter_type, const gchar *pathname)
+// _file_filters() below so the GtkFileFilter patterns and this recursive-scan check can never
+// drift. Public (gui/import.h): the drag-and-drop folder-import path (gui/dtgtk/thumbtable.c)
+// reuses this exact function rather than re-deriving the same "does this file match" logic.
+gboolean dt_import_passes_filter(const dt_import_filter_type_t filter_type, const gchar *pathname)
 {
   if(!dt_supported_image(pathname)) return FALSE;
   if(filter_type == DT_IMPORT_FILTER_ALL) return TRUE;
@@ -227,7 +223,7 @@ static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
   // We must not call GtkFileFilter from worker threads because Gtk objects are not thread-safe,
   // so import->filter_type (a plain enum snapshotted on the GUI thread, see dt_import_init())
   // stands in for the live GtkFileFilter here.
-  if(pathname && g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && _import_passes_filter(import->filter_type, pathname))
+  if(pathname && g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && dt_import_passes_filter(import->filter_type, pathname))
   {
     import->files = g_list_prepend(import->files, pathname);
     // prepend is more efficient than append. Import control reorders alphabetically anyway.
@@ -583,7 +579,7 @@ static void _file_filters(dt_lib_import_t *d)
 
   // Enumerate every extension Ansel knows about (common/image_extensions.c) instead of
   // hand-maintaining a copy here -- keeps this GUI filter and the recursive-scan check in
-  // _import_passes_filter() from ever drifting apart again.
+  // dt_import_passes_filter() from ever drifting apart again.
   const char *const *lists[] = { dt_image_ext_raw_list(), dt_image_ext_ldr_list(), dt_image_ext_hdr_list() };
   const int n_lists = sizeof(lists) / sizeof(lists[0]);
 

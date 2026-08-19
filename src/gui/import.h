@@ -30,6 +30,7 @@
 #ifndef DT_GUI_IMPORT_H
 #define DT_GUI_IMPORT_H
 
+#include <glib.h>
 
 /** Open the image importer popup and process user input **/
 struct dt_variables_params_t;
@@ -37,6 +38,22 @@ void dt_images_import();
 
 /** @brief Register the GUI-side import handlers (the discarded-files recap dialog). */
 void dt_gui_import_init_handlers(void);
+
+/** Mirrors the 3 GtkFileFilter entries built by _file_filters() in gui/import.c: the file-type
+ * choice offered by the Import dialog, and reused wherever else the app needs to ask the same
+ * question (e.g. importing a dropped folder via drag-and-drop). */
+typedef enum dt_import_filter_type_t
+{
+  DT_IMPORT_FILTER_ALL = 0,
+  DT_IMPORT_FILTER_RAW,
+  DT_IMPORT_FILTER_RASTER
+} dt_import_filter_type_t;
+
+/** TRUE if pathname is a supported image file matching filter_type. The single source of truth
+ * for that question -- shared with the Import dialog's own recursive scan -- so a caller adding
+ * a second filtered folder-scan (e.g. drag-and-drop) can never drift from what the dialog itself
+ * considers a match. */
+gboolean dt_import_passes_filter(const dt_import_filter_type_t filter_type, const gchar *pathname);
 
 #endif // DT_GUI_IMPORT_H
 
