@@ -3072,8 +3072,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
       if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
       {
-        dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-        if(!IS_NULL_PTR(piece))
+        dt_iop_roi_t mod_out;
+        if(dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out))
         {
           // only update the sliders, not the dt_iop_clipping_params_t structure, so that the call to
           // dt_control_queue_redraw_center below doesn't go rerun the pixelpipe because it thinks that
@@ -3212,13 +3212,13 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
       = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
   if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
-    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-    if(!IS_NULL_PTR(piece))
+    dt_iop_roi_t mod_out;
+    if(dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out))
     {
-      p->cx = CLAMPF(points[0] / (float)piece->buf_out.width, 0.0f, 0.9f);
-      p->cy = CLAMPF(points[1] / (float)piece->buf_out.height, 0.0f, 0.9f);
-      p->cw = copysignf(CLAMPF(points[2] / (float)piece->buf_out.width, 0.1f, 1.0f), p->cw);
-      p->ch = copysignf(CLAMPF(points[3] / (float)piece->buf_out.height, 0.1f, 1.0f), p->ch);
+      p->cx = CLAMPF(points[0] / (float)mod_out.width, 0.0f, 0.9f);
+      p->cy = CLAMPF(points[1] / (float)mod_out.height, 0.0f, 0.9f);
+      p->cw = copysignf(CLAMPF(points[2] / (float)mod_out.width, 0.1f, 1.0f), p->cw);
+      p->ch = copysignf(CLAMPF(points[3] / (float)mod_out.height, 0.1f, 1.0f), p->ch);
     }
   }
   g->applied = 1;
