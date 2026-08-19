@@ -705,7 +705,7 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   const float ch = CLAMPF(fabsf(p->ch), 0.1f, 1.0f);
 
   float points[8] = { 0.0f, 0.0f, wp, hp, cx * wp, cy * hp, cw * wp, ch * hp };
-  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
+  if(!dt_dev_distort_transform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return 0;
   dt_dev_coordinates_preview_abs_to_image_norm(self->dev, points, 4);
 
@@ -2603,7 +2603,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     const float wp = piece->buf_out.width, hp = piece->buf_out.height;
     float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,
                      p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
-    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4))
+    if(dt_dev_distort_transform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4))
     {
       if(p->k_type == 3)
       {
@@ -2864,7 +2864,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     if(g->k_drag == TRUE && g->k_selected >= 0)
     {
       float pts[2] = { pzx * wd, pzy * ht };
-      dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
+      dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
       dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
       const float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
       if(g->k_selected == 0)
@@ -3069,7 +3069,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       float points[4]
           = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
 
-      if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
+      if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
       {
         dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
         if(!IS_NULL_PTR(piece))
@@ -3138,7 +3138,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     if(g->k_show == 1 && g->k_drag == FALSE)
     {
       float pts[2] = { pzx * wd, pzy * ht };
-      dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
+      dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
       dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
       float xx = pts[0] / (float)piece->buf_out.width, yy = pts[1] / (float)piece->buf_out.height;
       // are we near a keystone point ?
@@ -3208,7 +3208,7 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
   const float ht = dt_dev_roi_request_preview_height(self->dev);
   float points[4]
       = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
-  if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
+  if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
     dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
     if(!IS_NULL_PTR(piece))
@@ -3235,7 +3235,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   {
     // adjust the line with possible current angle and flip on this module
     dt_boundingbox_t pts = { x, y, g->button_down_x, g->button_down_y };
-    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
+    dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
 
     float dx = pts[0] - pts[2];
     float dy = pts[1] - pts[3];
@@ -3310,7 +3310,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         const float wp = piece->buf_out.width, hp = piece->buf_out.height;
         float pts[8] = { p->kxa * wp, p->kya * hp, p->kxb * wp, p->kyb * hp,
                          p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
-        dt_dev_distort_transform_plus(dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4);
+        dt_dev_distort_transform_gui(dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4);
 
         float point[2] = { pzx, pzy };
         dt_dev_coordinates_image_norm_to_preview_abs(dev, point, 1);
