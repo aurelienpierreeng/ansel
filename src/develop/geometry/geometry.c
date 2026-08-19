@@ -73,16 +73,10 @@ struct dt_geometry_chain_t
    * reporting "not ready", which would be true and useless. */
   GList *missing;   /**< gchar*, owned */
 
-  /* Query-time GUI state, published by dt_geometry_set_focus(). Held BY VALUE, not as a
-   * dt_iop_module_t pointer: the focus outlives individual publications, and a module can be
-   * destroyed (instance removed, image changed, darkroom left) without anyone telling this
-   * chain. A stored pointer would then be dereferenced by the next query. The two things the
-   * exception needs -- who is focused, and what that module filters -- are both immutable for
-   * a given module, so copying them costs nothing and cannot dangle. */
-  char focus_op[32];
-  int focus_instance;
-  int focus_tags_filter;
-  gboolean focus_active;
+  /* The dev this chain belongs to. Owned by it and freed with it, so it cannot dangle, and it
+   * is what lets the focus exception below be evaluated the way the pipe evaluates it: live,
+   * at query time, from whatever the GUI currently is. */
+  dt_develop_t *dev;
 };
 
 static gboolean _on_roster(const char *op)
@@ -143,9 +137,19 @@ static gint _by_iop_order(gconstpointer a, gconstpointer b)
  */
 static gboolean _suppressed_by_focus(const dt_geometry_chain_t *chain, const dt_geometry_record_t *record)
 {
-  if(!chain->focus_active) return FALSE;
-  if(!strcmp(chain->focus_op, record->op) && chain->focus_instance == record->instance) return FALSE;
-  return (chain->focus_tags_filter & record->operation_tags) != 0;
+  dt_develop_t *const dev = chain->dev;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached) return FALSE;
+
+  dt_iop_module_t *const focused = dev->gui_module;
+  if(IS_NULL_PTR(focused)) return FALSE;
+
+  // the focused module never suppresses itself
+  if(!strcmp(focused->op, record->op) && focused->multi_priority == record->instance) return FALSE;
+
+  // cache bypass is the hint that the focused module is in an editing mode
+  if(!dt_iop_get_cache_bypass(focused)) return FALSE;
+
+  return (focused->operation_tags_filter() & record->operation_tags) != 0;
 }
 
 /**
@@ -236,6 +240,7 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
 
   dt_geometry_chain_t *chain = dev->geometry_chain;
   _chain_clear(chain);
+  chain->dev = dev;
 
   int32_t raw_width = 0;
   int32_t raw_height = 0;
@@ -393,29 +398,6 @@ int dt_geometry_backtransform(dt_develop_t *dev, const double iop_order, const i
   return 1;
 }
 
-void dt_geometry_set_focus(dt_develop_t *dev, const dt_iop_module_t *focused, const gboolean editing)
-{
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain)) return;
-  dt_geometry_chain_t *chain = dev->geometry_chain;
-
-  if(IS_NULL_PTR(focused) || !editing)
-  {
-    chain->focus_active = FALSE;
-    return;
-  }
-
-  g_strlcpy(chain->focus_op, focused->op, sizeof(chain->focus_op));
-  chain->focus_instance = focused->multi_priority;
-  chain->focus_tags_filter = focused->operation_tags_filter();
-  chain->focus_active = TRUE;
-}
-
-void dt_geometry_clear_focus(dt_develop_t *dev)
-{
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain)) return;
-  dev->geometry_chain->focus_active = FALSE;
-}
-
 void dt_geometry_shadow_check(dt_develop_t *dev, const int pipe_width, const int pipe_height,
                               const double chain_ms)
 {
@@ -518,13 +500,56 @@ void dt_geometry_shadow_check(dt_develop_t *dev, const int pipe_width, const int
     }
   }
 
-  if(diverged || not_identity)
+  /* The bounds the module GUIs actually use.
+   *
+   * Everything above probes iop_order 0 and DIR_ALL, which is what the coordinate converters
+   * ask -- and nothing else does. A module GUI asks for its OWN iop_order with FORW_INCL,
+   * FORW_EXCL or BACK_EXCL, and those compose a different subset of the chain: a divergence
+   * confined to one of them is invisible to a DIR_ALL probe. That is exactly how a chain that
+   * never applied the focused-module exception passed every check here while drawing ashift's
+   * detected lines against the wrong module stack.
+   *
+   * So probe each roster record at its own iop_order, in the three bounds the GUIs use, against
+   * the pipe doing the same. Cheap -- one point, a handful of records -- and it covers the
+   * question the migrated call sites actually ask. */
+  static const int bounds[3] = { DT_DEV_TRANSFORM_DIR_FORW_INCL, DT_DEV_TRANSFORM_DIR_FORW_EXCL,
+                                 DT_DEV_TRANSFORM_DIR_BACK_EXCL };
+  static const char *const bound_names[3] = { "FORW_INCL", "FORW_EXCL", "BACK_EXCL" };
+  int bound_diverged = 0;
+
+  for(const GList *node = g_list_first(chain->records); node; node = g_list_next(node))
+  {
+    const dt_geometry_record_t *const record = (const dt_geometry_record_t *)node->data;
+    if(!record->enabled || IS_NULL_PTR(record->vtable)) continue;
+
+    for(int b = 0; b < 3; b++)
+    {
+      float cp[2] = { 0.37f * w, 0.61f * h };
+      float pp[2] = { cp[0], cp[1] };
+
+      dt_geometry_transform(dev, record->iop_order, bounds[b], cp, 1);
+      dt_dev_distort_transform_plus(dev->virtual_pipe, record->iop_order, bounds[b], pp, 1);
+
+      if(fabsf(cp[0] - pp[0]) > 0.5f || fabsf(cp[1] - pp[1]) > 0.5f)
+      {
+        dt_print(DT_DEBUG_DEV,
+                 "[geometry] BOUND DIVERGENCE at %s.%d %s: chain (%.2f, %.2f), pipe (%.2f, %.2f)\n",
+                 record->op, record->instance, bound_names[b], cp[0], cp[1], pp[0], pp[1]);
+        bound_diverged++;
+      }
+    }
+  }
+
+  if(bound_diverged)
+    dt_print(DT_DEBUG_DEV, "[geometry] %d module-relative bound probe(s) diverge\n", bound_diverged);
+
+  if(diverged || not_identity || bound_diverged)
     dt_print(DT_DEBUG_DEV,
-             "[geometry] size agrees (%dx%d) but %d/5 forward probes and %d/5 round-trips diverge\n",
-             chain->processed_width, chain->processed_height, diverged, not_identity);
+             "[geometry] size agrees (%dx%d) but %d/5 forward, %d/5 round-trips, %d bounds diverge\n",
+             chain->processed_width, chain->processed_height, diverged, not_identity, bound_diverged);
   else
     dt_print(DT_DEBUG_DEV,
-             "[geometry] agrees with the pipe: size %dx%d, 5/5 forward probes, 5/5 round-trips\n",
+             "[geometry] agrees with the pipe: size %dx%d, 5/5 forward, 5/5 round-trips, all bounds\n",
              chain->processed_width, chain->processed_height);
 
   /* The cost, which is the reason this service exists. Compare against `-d perf's "pipeline
