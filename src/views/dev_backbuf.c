@@ -126,7 +126,12 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
   if(!IS_NULL_PTR(wait))
     dt_dev_pixelpipe_cache_wait_set_owner(wait, wait_owner_tag, dev);
 
-  const uint64_t hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
+  /* ONE read of the publication. The hash names the cacheline this surface will be built on and
+   * the dimensions say what shape its pixels are; reading them separately lets a republication
+   * land in between and pairs a cacheline with the next frame's width -- which is a wrong cairo
+   * stride, i.e. diagonal striping. See dt_backbuf_t. */
+  const dt_backbuf_state_t published = dt_dev_backbuf_snapshot(&pipe->backbuf);
+  const uint64_t hash = published.hash;
   if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return keep_previous_on_fail && (!IS_NULL_PTR(locked->surface));
 
   /* Fast-path reuse is only valid if the cacheline identity/data pointer are
@@ -137,12 +142,18 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
   if(!IS_NULL_PTR(locked->surface) && locked->hash == hash
      && dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &live_data, &live_entry, wait,
                                         _dev_backbuf_restart_cache_wait, dev)
-     && live_entry == locked->entry && live_data == locked->data)
+     && live_entry == locked->entry && live_data == locked->data
+     && locked->width == (int)published.width && locked->height == (int)published.height)
   {
-    locked->width = pipe->backbuf.width;
-    locked->height = pipe->backbuf.height;
     return TRUE;
   }
+
+  /* Note what this fast path must NOT do: assign the published dimensions to `locked' and keep
+   * the existing surface. That surface was created with a stride baked in from the dimensions it
+   * was built at, so writing new ones over it describes the cairo surface falsely -- and it also
+   * defeats the slow path's own shape check below, which compares against exactly these fields.
+   * A publication that changes the shape must build a new surface, which is what falling through
+   * to the slow path does. */
 
   struct dt_pixel_cache_entry_t *entry = NULL;
   /* GUI surfaces only borrow the currently published backbuffer. They rely on the backbuffer keepalive ref
@@ -161,8 +172,8 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
     return FALSE;
   }
 
-  const int width = pipe->backbuf.width;
-  const int height = pipe->backbuf.height;
+  const int width = (int)published.width;
+  const int height = (int)published.height;
   const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
   const size_t required_size = (size_t)stride * (size_t)height;
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);

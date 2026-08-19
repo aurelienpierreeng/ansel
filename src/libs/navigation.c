@@ -276,8 +276,12 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
     dt_dev_pixelpipe_cache_rdlock_entry(TRUE, cache_entry);
 
-    wd = dev->preview_pipe->backbuf.width;
-    ht = dev->preview_pipe->backbuf.height;
+    /* One read of the publication: the cacheline just resolved and the shape its pixels are in
+     * have to come from the same frame, or the stride below is computed from the next frame's
+     * width and this paints diagonal striping. See dt_backbuf_t. */
+    const dt_backbuf_state_t published = dt_dev_backbuf_snapshot(&dev->preview_pipe->backbuf);
+    wd = published.width;
+    ht = published.height;
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
 
     /* Can this cacheline hold an image of those dimensions at all?
@@ -303,7 +307,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     scale = fminf(width / (float)wd, height / (float)ht);
     cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
 
-    image_hash = dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf);
+    image_hash = published.hash;
 
     cairo_t *cri = cairo_create(d->image_surface);
     cairo_rectangle(cri, 0, 0, width, height);

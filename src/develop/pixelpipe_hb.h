@@ -190,6 +190,31 @@ typedef enum dt_dev_pixelpipe_cache_request_t
  * for previews and full blits to cairo and for
  * the export function.
  */
+/**
+ * @brief What the pipeline last published: which cacheline, and what shape its pixels are in.
+ *
+ * @details These five fields are ONE fact and must be read as one. `hash' names a cacheline and
+ * `width'/`height' say what shape the pixels in it are -- a cacheline records how many BYTES it
+ * holds and nothing about their layout, so a consumer that pairs a hash from one publication with
+ * dimensions from the next has no way to notice. It computes a cairo stride from the wrong width
+ * and paints the diagonal striping of a stride error, or writes a mis-shaped thumbnail into the
+ * mipmap cache. The published entry is routinely LARGER than width x height x bpp (aligned
+ * allocation, pool reuse), so a size check does not catch it either.
+ *
+ * That was reachable: `hash' was atomic and the dimensions were plain fields, so a GUI thread
+ * could read the hash, resolve its entry, and then read dimensions the worker had republished in
+ * between. It needs a publication whose SHAPE changes to become visible, which is why entering a
+ * clipping module's edit mode -- where the crop is neutralised and the frame jumps to the full
+ * transformed image -- is where it was reported.
+ *
+ * So the record carries a seqlock, exactly as dt_dev_geometry_store_t does (develop/dev_geometry.h),
+ * and ::dt_dev_backbuf_snapshot is how a consumer reads it. Do not read the fields directly to
+ * pair them with pixels; a bare read is fine only for something that pairs with nothing.
+ *
+ * WRITERS ARE SERIALISED BY CONVENTION, not by a lock: each backbuffer belongs to one pipe and is
+ * published by the thread that runs it, with the view's leave() joining that thread before it
+ * touches anything. A second concurrent publisher needs a real lock, not a second odd counter.
+ */
 typedef struct dt_backbuf_t
 {
   size_t bpp;            // bits per pixel
@@ -197,7 +222,60 @@ typedef struct dt_backbuf_t
   size_t height;         // pixel size of image
   dt_atomic_uint64 hash;         // data checksum/integrity hash, for example to connect to a cacheline
   dt_atomic_uint64 history_hash; // arbitrary state hash
+
+  /** Odd while a publication is in flight, even once it has settled. See ::dt_dev_backbuf_snapshot. */
+  dt_atomic_uint64 generation;
 } dt_backbuf_t;
+
+/** @brief One coherent publication, by value. */
+typedef struct dt_backbuf_state_t
+{
+  size_t bpp;
+  size_t width;
+  size_t height;
+  uint64_t hash;
+  uint64_t history_hash;
+} dt_backbuf_state_t;
+
+static inline void dt_dev_backbuf_publish_begin(dt_backbuf_t *backbuf)
+{
+  dt_atomic_set_uint64(&backbuf->generation, dt_atomic_get_uint64(&backbuf->generation) + 1);
+}
+
+static inline void dt_dev_backbuf_publish_end(dt_backbuf_t *backbuf)
+{
+  dt_atomic_set_uint64(&backbuf->generation, dt_atomic_get_uint64(&backbuf->generation) + 1);
+}
+
+/**
+ * @brief Read the whole record as one publication.
+ *
+ * @details Retries until a settled generation is read twice with no write in between. A
+ * publication is five stores between two counter bumps, so this converges immediately unless a
+ * writer is running right now; there is no waiting and no lock to order against anything.
+ */
+static inline dt_backbuf_state_t dt_dev_backbuf_snapshot(const dt_backbuf_t *backbuf)
+{
+  dt_backbuf_state_t state = { 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID };
+  if(IS_NULL_PTR(backbuf)) return state;
+
+  for(;;)
+  {
+    const uint64_t before = dt_atomic_get_uint64(&backbuf->generation);
+    if(before & 1) continue;   // publication in flight
+
+    state.bpp = backbuf->bpp;
+    state.width = backbuf->width;
+    state.height = backbuf->height;
+    state.hash = dt_atomic_get_uint64(&backbuf->hash);
+    state.history_hash = dt_atomic_get_uint64(&backbuf->history_hash);
+
+    const uint64_t after = dt_atomic_get_uint64(&backbuf->generation);
+    if(before == after) break;
+  }
+
+  return state;
+}
 
 static inline uint64_t dt_dev_backbuf_get_hash(const dt_backbuf_t *backbuf)
 {
@@ -206,7 +284,9 @@ static inline uint64_t dt_dev_backbuf_get_hash(const dt_backbuf_t *backbuf)
 
 static inline void dt_dev_backbuf_set_hash(dt_backbuf_t *backbuf, const uint64_t hash)
 {
+  dt_dev_backbuf_publish_begin(backbuf);
   dt_atomic_set_uint64(&backbuf->hash, hash);
+  dt_dev_backbuf_publish_end(backbuf);
 }
 
 static inline uint64_t dt_dev_backbuf_get_history_hash(const dt_backbuf_t *backbuf)
@@ -216,7 +296,9 @@ static inline uint64_t dt_dev_backbuf_get_history_hash(const dt_backbuf_t *backb
 
 static inline void dt_dev_backbuf_set_history_hash(dt_backbuf_t *backbuf, const uint64_t history_hash)
 {
+  dt_dev_backbuf_publish_begin(backbuf);
   dt_atomic_set_uint64(&backbuf->history_hash, history_hash);
+  dt_dev_backbuf_publish_end(backbuf);
 }
 
 typedef struct dt_dev_pixelpipe_t

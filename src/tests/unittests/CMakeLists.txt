@@ -12,9 +12,10 @@ set(DATABASE_UNIT_TESTS
   test_preset_repository
   test_tag_selection_metadata
   test_metadata_notify
-  # Not a database test, but it wants the same standalone-binary-linking-lib_ansel treatment,
+  # Not database tests, but they want the same standalone-binary-linking-lib_ansel treatment,
   # and splitting the list to say so would be more ceremony than it is worth.
   test_pipe_cache_policy
+  test_backbuf_publish
 )
 
 foreach(test ${DATABASE_UNIT_TESTS})
