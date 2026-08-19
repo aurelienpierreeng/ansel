@@ -842,7 +842,16 @@ void expose(
   const uint64_t zoom_hash = _darkroom_zoom_hash(dev);
   const gboolean roi_changed = !_darkroom_locked_main_valid_for_zoom(&expose_state, zoom_hash);
 
+  /* The expose is timed as a whole and nothing inside it is, which is why a redraw that grows
+   * from 11 ms to 400 ms across a drawing session cannot be attributed: the mask overlay reports
+   * 1.5 ms of it and the rest is dark. Three stages, so the next log says which. */
+  dt_times_t stage = { 0 };
+  dt_get_times(&stage);
+
   _darkroom_prepare_image_surface(dev, width, height, &expose_state);
+
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] surface prepared");
+  dt_get_times(&stage);
 
   cairo_t *cr = cairo_create(dev->image_surface);
   const int full_width = dt_dev_roi_request_preview_width(dev);
@@ -1076,6 +1085,9 @@ void expose(
     cairo_restore(cri);
   }
 
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] image painted");
+  dt_get_times(&stage);
+
   const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
 
   // draw colorpicker for in focus module or execute module callback hook
@@ -1094,9 +1106,17 @@ void expose(
     if(dt_masks_get_visible_form(dev) && display_masks)
       dt_masks_events_post_expose(dev, dev->gui_module, cri, width, height, pointerx, pointery);
       
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] overlays drawn");
+    dt_get_times(&stage);
+
     // module
     if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->gui_post_expose)
+    {
       dev->gui_module->gui_post_expose(dev->gui_module, cri, width, height, pointerx, pointery);
+
+      if(dt_get_debug_flags() & DT_DEBUG_PERF)
+        dt_show_times_f(&stage, "[darkroom]", "module %s gui_post_expose", dev->gui_module->op);
+    }
   }
 
   // indicate if we are in gamut check or softproof mode
