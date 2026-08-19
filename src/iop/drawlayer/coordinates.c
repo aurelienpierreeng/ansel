@@ -24,11 +24,11 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
   if(!IS_NULL_PTR(layer_height)) *layer_height = 0;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
 
-  /* GUI coordinate mapping should prefer the virtual pipe geometry because it
-   * tracks the currently committed distortion stack even before the global
-   * darkroom ROI bookkeeping is fully refreshed. Falling back to `dev->roi`
-   * too early makes the first displayed layer appear stretched until the next
-   * display-pipe refresh catches up. */
+  /* GUI coordinate mapping should prefer the composed geometry because it tracks
+   * the currently committed distortion stack even before the global darkroom ROI
+   * bookkeeping is fully refreshed. Falling back to `dev->roi` too early makes the
+   * first displayed layer appear stretched until the next display-pipe refresh
+   * catches up. */
   int resolved_width = 0;
   int resolved_height = 0;
   dt_dev_processed_size_gui(self->dev, &resolved_width, &resolved_height);

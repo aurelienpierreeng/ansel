@@ -39,8 +39,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-// Keep a preview-like virtual pipe in sync with history without running pixels.
-static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
 static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
@@ -162,9 +160,7 @@ static gboolean _module_feeds_color_picker(const dt_dev_pixelpipe_t *pipe,
 
 static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
 {
-  if(!IS_NULL_PTR(dev) && !IS_NULL_PTR(pipe) && dev->virtual_pipe == pipe)
-    return g_strdup("virtual-preview");
-
+  (void)dev;
   return g_strdup(dt_pixelpipe_get_pipe_name(!IS_NULL_PTR(pipe) ? pipe->type : DT_DEV_PIXELPIPE_NONE));
 }
 
@@ -404,7 +400,10 @@ void dt_dev_pixelpipe_rebuild_all_real(dt_develop_t *dev)
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_REMOVE);
   _change_pipe(dev->pipe, DT_DEV_PIPE_REMOVE);
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_REMOVE);
+  /* Rebuilt here, and deliberately not PUBLISHED here: these are the flag-raising paths, and
+   * nothing may observe geometry before the publication that belongs with it -- the ordering
+   * rule from the fix for #1157. */
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_resync_history_main_real(dt_develop_t *dev)
@@ -417,8 +416,7 @@ void dt_dev_pixelpipe_resync_history_preview_real(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_SYNCH);
-  // Virtual pipe mirrors preview history for GUI coordinate transforms.
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_SYNCH);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_resync_history_all_real(dt_develop_t *dev)
@@ -438,8 +436,7 @@ void dt_dev_pixelpipe_update_history_preview_real(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_TOP_CHANGED);
-  // Virtual pipe mirrors preview history for GUI coordinate transforms.
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_TOP_CHANGED);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_update_history_all_real(dt_develop_t *dev)
@@ -453,8 +450,7 @@ void dt_dev_pixelpipe_update_zoom_preview_real(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_ZOOMED);
-  // Keep the virtual pipe aligned with preview ROI/zoom changes for GUI transforms.
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_ZOOMED);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
@@ -466,7 +462,7 @@ void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
    * best-effort backbuffer policy. */
   dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
   _change_pipe(dev->pipe, DT_DEV_PIPE_ZOOMED);
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_ZOOMED);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
@@ -568,8 +564,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   // upstream in the pipeline for proper pipeline cache invalidation, so we need to browse the pipeline
   // backwards.
 
-  // The virtual pipe is expected to be ready before calling this.
-  // This function no longer supports NULL pipes or ad-hoc temp nodes.
+  // This function does not support NULL pipes or ad-hoc temp nodes.
 
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
@@ -1492,8 +1487,8 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
 
       // bypass_cache_variant (see dt_iop_module_t.bypass_cache_variant) is, like
       // request_mask_display above, module-owned GUI state whose real effect a module such as
-      // retouch applies only to this main/FULL pipe -- never to preview/virtual-preview, which
-      // always render as if none of these toggles were active. But the field itself lives on
+      // retouch applies only to this main/FULL pipe -- never to the preview pipe, which always
+      // renders as if none of these toggles were active. But the field itself lives on
       // the shared dt_iop_module_t, so it reads the same non-zero value from every pipe type. Left
       // ungated, a preview-pipe run with the same ROI/params (e.g. at zoom == fit) can compute the
       // exact same hash chain as the FULL pipe despite publishing different pixels, and either
@@ -1703,8 +1698,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
     _refresh_pipe_detail_mask_state(pipe);
 
   // A call chain that already holds history_mutex as writer on this same thread can re-enter
-  // here (e.g. history-commit paths that resync the virtual pipe while still holding the write
-  // lock). dt_pthread_rwlock_rdlock is same-thread-recursive for this exact case (see
+  // here (e.g. history-commit paths that resync a pipe while still holding the write lock). dt_pthread_rwlock_rdlock is same-thread-recursive for this exact case (see
   // dtpthread.h), so this proceeds immediately instead of deadlocking or deferring the sync.
   const double _history_mutex_hold_start = dt_get_wtime();
   dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
@@ -1773,60 +1767,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
   dt_free(type);
-}
-
-static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
-{
-  // Virtual pipe exists only for GUI geometry (ROI/mask transforms) and never processes pixels.
-  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->virtual_pipe)) return;
-  int32_t raw_width = 0;
-  int32_t raw_height = 0;
-  if(!dt_dev_geometry_get_raw_size(dev, &raw_width, &raw_height) || dev->image_storage.id <= 0) return;
-
-  // Ensure its input image metadata matches the current dev state.
-  if(dev->virtual_pipe->imgid != dev->image_storage.id
-     || dev->virtual_pipe->iwidth != raw_width
-     || dev->virtual_pipe->iheight != raw_height
-     || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
-  {
-    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
-                               raw_width, raw_height, 1.0f, DT_MIPMAP_FULL);
-  }
-
-  // Mirror the preview-pipe change flags.
-  _change_pipe(dev->virtual_pipe, flag);
-
-  /* The geometry chain answers the same questions and must be exactly as fresh as the pipe it
-   * replaces -- consumers read whichever of the two can answer, and a chain rebuilt only in the
-   * size path would lag on every flag arriving between two size publications. Rebuilt here, and
-   * deliberately not PUBLISHED here: this function raises flags, and nothing may observe
-   * geometry before the publication that belongs with it (the ordering rule from #1157). */
-  dt_geometry_chain_rebuild(dev);
-
-  /* And the pipe itself only when something will read it. This is the expensive half of this
-   * function -- a full resync commits every module's parameters and costs ~0.1 s on the GUI
-   * thread, measured at darkroom entry -- and it is exactly what the geometry service exists to
-   * stop paying. The flag above stays raised either way, so a later
-   * dt_dev_virtual_pipe_ensure_synced() still has everything it needs to catch the pipe up if a
-   * fallback does end up consulting it. */
-  if(!dt_geometry_chain_authoritative(dev->geometry_chain))
-    dt_dev_pixelpipe_change(dev->virtual_pipe);
-}
-
-void dt_dev_virtual_pipe_ensure_synced(dt_develop_t *dev)
-{
-  /* Catch the pixel-less pipe up with the flags raised while the geometry service was answering
-   * for it. Cheap when it is already current -- the flags are cleared by a resync -- and the
-   * only thing standing between "we stopped resyncing it eagerly" and a consumer reading a pipe
-   * that history moved out from under. */
-  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->virtual_pipe)) return;
-  if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) == DT_DEV_PIPE_UNCHANGED) return;
-  dt_dev_pixelpipe_change(dev->virtual_pipe);
-}
-
-void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
-{
-  _sync_virtual_pipe(dev, flag);
 }
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe)

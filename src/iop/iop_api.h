@@ -200,8 +200,8 @@ DEFAULT(gboolean, has_defaults, struct dt_iop_module_t *self);
 DEFAULT(gboolean, runtime_data_hash, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
                                      const struct dt_dev_pixelpipe_iop_t *piece);
 
-/** Publish this module's geometry as data, for develop/geometry (the service replacing the
- *  pixel-less virtual pipe -- see doc/geometry-service.md).
+/** Publish this module's geometry as data, for develop/geometry (the service that replaced the
+ *  GUI's pixel-less clone of the pipeline -- see doc/geometry-service.md).
  *
  *  Fill @p record's vtable/data and return TRUE; return FALSE (the default) for a module that
  *  does not change geometry. Called on the GUI thread.

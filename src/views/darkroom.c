@@ -1968,7 +1968,6 @@ void leave(dt_view_t *self)
   dev->exit = 1;
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-  if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
   dev->pipelines_started = FALSE;
 
   /* dev->exit / the shutdown atomics above are only checked by the darkroom worker thread
@@ -2050,13 +2049,6 @@ void leave(dt_view_t *self)
   dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
-
-  dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
-  dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
-  dt_dev_set_backbuf(&dev->virtual_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
-                     DT_PIXELPIPE_CACHE_HASH_INVALID);
-  dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
 
   /* Device-side cache payloads are only an acceleration layer. Once darkroom
    * leaves, drop the cl_mem objects these pipes produced -- but only on the

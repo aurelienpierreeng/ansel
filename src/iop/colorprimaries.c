@@ -118,7 +118,7 @@ typedef struct dt_iop_colorprimaries_global_data_t
 {
   // Truly global, read-only-after-init state only. Do NOT add a shared LUT/params cache
   // here: this struct is the same instance for every module instance, every piece, and
-  // every pipe (full/preview/thumbnail/export/virtual-preview) of colorprimaries in the
+  // every pipe (full/preview/thumbnail/export) of colorprimaries in the
   // whole application -- there is exactly one of it, not one per instance. A memoized LUT
   // stored here can only ever hold one instance's content at a time, and gets silently
   // overwritten by whichever piece/instance last committed -- including disabled instances,

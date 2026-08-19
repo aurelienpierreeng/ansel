@@ -53,7 +53,7 @@ typedef struct dt_dev_image_geometry_t
   /** TRUE once the raw pair has been published from a successful mipmap read. */
   gboolean raw_inited;
 
-  /** TRUE once the processed pair has been published from the virtual pipe. There is no
+  /** TRUE once the processed pair has been published from the size fold. There is no
    *  headless producer for it today, so a caller that gets FALSE must not read 0x0 as though
    *  it were an answer -- that is the raw_width mistake, one field over. */
   gboolean processed_inited;
@@ -84,7 +84,7 @@ void dt_dev_geometry_init(struct dt_develop_t *dev);
 void dt_dev_geometry_set_raw_size(struct dt_develop_t *dev, int32_t width, int32_t height,
                                   gboolean valid);
 
-/** Publish the processed pair. GUI thread only: its producer runs the virtual pipe. */
+/** Publish the processed pair. GUI thread only: its producer is the geometry service's fold. */
 void dt_dev_geometry_set_processed_size(struct dt_develop_t *dev, int32_t width, int32_t height);
 
 /** Coherent copy of the whole record, by value -- the ordinary way to read it:

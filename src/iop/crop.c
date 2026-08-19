@@ -225,29 +225,12 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
   if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                        DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
-    //dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-    //if(piece)
-    //{
-      //fprintf(stderr, "buf_out size: %dx%d\n", piece->buf_out.width, piece->buf_out.height);
+    if(mod_out.width < 1 || mod_out.height < 1) return;
 
-      if(mod_out.width < 1 || mod_out.height < 1) return;
-      /*p->cx = CLAMPF(points[0] / (float)piece->buf_out.width, 0.0f, 0.9f);
-      p->cy = CLAMPF(points[1] / (float)piece->buf_out.height, 0.0f, 0.9f);
-      p->cw = CLAMPF(points[2] / (float)piece->buf_out.width, 0.1f, 1.0f);
-      p->ch = CLAMPF(points[3] / (float)piece->buf_out.height, 0.1f, 1.0f);
-      */
-      p->cx = CLAMPF(points[0] / wd, 0.0f, 0.9f);
-      p->cy = CLAMPF(points[1] / ht, 0.0f, 0.9f);
-      p->cw = CLAMPF(points[2] / wd, 0.1f, 1.0f);
-      p->ch = CLAMPF(points[3] / ht, 0.1f, 1.0f);
-
-      /*fprintf(stderr, "Divisions: cx=%.1f/%d=%.4f, cy=%.1f/%d=%.4f, cw=%.1f/%d=%.4f, ch=%.1f/%d=%.4f\n",
-        points[0], piece->buf_out.width, p->cx,
-        points[1], piece->buf_out.height, p->cy,
-        points[2], piece->buf_out.width, p->cw,
-        points[3], piece->buf_out.height, p->ch);
-        */
-    //}
+    p->cx = CLAMPF(points[0] / wd, 0.0f, 0.9f);
+    p->cy = CLAMPF(points[1] / ht, 0.0f, 0.9f);
+    p->cw = CLAMPF(points[2] / wd, 0.1f, 1.0f);
+    p->ch = CLAMPF(points[3] / ht, 0.1f, 1.0f);
   }
 
   //fprintf(stderr, "_commit_box: cx:%.4f cy:%.4f cw:%.4f ch:%.4f\n", p->cx, p->cy, p->cw, p->ch);
@@ -263,8 +246,9 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
  * @param self the current module data
  * @return gboolean TRUE on success, FALSE otherwise 
  */
-/* Takes no pipe: both callers passed dev->virtual_pipe, so this was never the dual-use fold it
- * resembled -- it is GUI-only, and asks the dev like every other GUI geometry query. */
+/* Takes no pipe: both callers passed the GUI's own pixel-less pipe, so this was never the
+ * dual-use fold it resembled -- it is GUI-only, and asks the dev like every other GUI geometry
+ * query. */
 static gboolean _set_max_clip(struct dt_iop_module_t *self)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)dt_iop_gui_data(self);
