@@ -2537,7 +2537,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
     g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     if(g->editing)
     {
-      dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+      dt_geometry_chain_rebuild(self->dev);
       dt_dev_get_thumbnail_size(self->dev);
       dt_dev_pixelpipe_resync_history_all(self->dev);
     }
@@ -2545,9 +2545,9 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   }
 
   // Auto-crop is a purely geometric fit: it only needs ashift's *full* (uncropped) input size, not
-  // pixel data. Read it from the virtual-pipe piece, which is synchronized on the GUI thread and
-  // remains available when the preview worker exact-hits downstream cache entries without running
-  // ashift's process() to populate g->buf. ashift's roi_in is crop-dependent, while buf_in is the
+  // pixel data. Read it from the geometry record, which is GUI-thread state and remains available
+  // when the preview worker exact-hits downstream cache entries without running ashift's process()
+  // to populate g->buf. ashift's roi_in is crop-dependent, while buf_in is the
   // stable full input geometry required by the fit.
   int crop_width = 0, crop_height = 0;
   dt_iop_roi_t crop_in;
@@ -2710,7 +2710,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
 
   if(g->editing)
   {
-    dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+    dt_geometry_chain_rebuild(self->dev);
     dt_dev_get_thumbnail_size(self->dev);
     dt_dev_pixelpipe_resync_history_all(self->dev);
   }
@@ -2830,7 +2830,12 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return FALSE;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
+  /* The saved lines are in the raw frame, and so is the size they are measured against -- what
+   * used to be read off a pipe piece's iwidth/iheight, which is the pipe's own input size. Ask
+   * the dev for it, the same way _do_get_structure_lines() below does. */
+  int32_t raw_width = 0;
+  int32_t raw_height = 0;
+  if(!dt_dev_geometry_get_raw_size(self->dev, &raw_width, &raw_height)) return FALSE;
 
   if(method == ASHIFT_METHOD_QUAD
      && p->last_quad_lines[0] > 0.0f && p->last_quad_lines[1] > 0.0f
@@ -2865,8 +2870,8 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
       g->horizontal_count = 2;
       g->vertical_weight = 2.0;
       g->horizontal_weight = 2.0;
-      g->lines_in_width = piece->iwidth;
-      g->lines_in_height = piece->iheight;
+      g->lines_in_width = raw_width;
+      g->lines_in_height = raw_height;
       g->current_structure_method = method;
       return TRUE;
     }
@@ -2909,8 +2914,8 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
       g->horizontal_count = hnb;
       g->vertical_weight = (float)vnb;
       g->horizontal_weight = (float)hnb;
-      g->lines_in_width = piece->iwidth;
-      g->lines_in_height = piece->iheight;
+      g->lines_in_width = raw_width;
+      g->lines_in_height = raw_height;
       g->current_structure_method = method;
       return TRUE;
     }
@@ -3755,34 +3760,21 @@ error:
   return FALSE;
 }
 
-/* this function replaces this sentence, it calls distort_transform() for this module on the pipe
-if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->priority, self->priority + 1,
-      (float *)V, 4))
-*/
-static int call_distort_transform(dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self,
-                                  float *points, size_t points_count)
+/* This module's own transform and nothing else -- no direction bound expresses that, since
+ * FORW_INCL at this module's own iop_order includes everything after it too.
+ *
+ * It used to be done by resolving this module's piece on the GUI's pixel-less pipe and invoking
+ * its distort_transform() by hand, with the focused-module exception applied around it. The
+ * geometry service expresses the whole thing directly and applies the same exception, so what is
+ * left is the call.
+ *
+ * The old hand-rolled version deliberately did NOT test piece->enabled: it is FALSE for exactly
+ * the first mouse_moved following a button_pressed while ASHIFT_CROP_ASPECT is active, which drew
+ * one frame of the centre image without the crop overlay. Records carry their enabled state from
+ * history rather than from a piece mid-commit, so that flicker has no equivalent here. */
+static int call_distort_transform(struct dt_iop_module_t *self, float *points, size_t points_count)
 {
-  /* This module's own transform and nothing else. The geometry service expresses that directly;
-   * the pipe cannot, which is why the piece has to be resolved and its callback invoked by hand
-   * below. Both honour the focused-module exception, so the two agree on when this contributes
-   * nothing at all. */
-  if(dt_geometry_module_transform(self->dev, self, points, points_count)) return 1;
-
-  int ret = 0;
-  if(pipe == self->dev->virtual_pipe) dt_dev_virtual_pipe_ensure_synced(self->dev);
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(pipe, self);
-  if(IS_NULL_PTR(piece)) return ret;
-  if(piece->module == self && /*piece->enabled && */  //see note below
-     !dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, piece->module))
-  {
-    if(piece->module->distort_transform)
-    ret = piece->module->distort_transform(piece->module, pipe, piece, points, points_count);
-  }
-  return ret;
-  //NOTE: piece->enabled is FALSE for exactly the first mouse_moved event following a button_pressed event
-  //  when ASHIFT_CROP_ASPECT is active, which causes the first gui_post_expose call on starting to resize
-  //  the crop box to draw the center image without the crop overlay, resulting in an annoying visual glitch.
-  //  Removing the check appears to have no adverse effects and eliminates the glitch.
+  return dt_geometry_module_transform(self->dev, self, points, points_count);
 }
 
 void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t height,
@@ -3891,7 +3883,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_dev_clip_roi(dev, cr, width, height);
   dt_dev_rescale_roi(dev, cr, width, height);
 
-  // we draw the cropping area; use the input ROI from the virtual pipe piece
+  // we draw the cropping area; use this module's own input rectangle
   dt_iop_roi_t mod_in;
   if(!dt_dev_module_geometry_gui(self->dev, self, &mod_in, NULL))
   {
@@ -3910,7 +3902,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { ixo + iwd,  iyo       } };
 
   // convert coordinates of corners to coordinates of this module's output
-  if(!call_distort_transform(self->dev->virtual_pipe, self, (float *)V, 4))
+  if(!call_distort_transform(self, (float *)V, 4))
     return;
 
   // get x/y-offset as well as width and height of output buffer
@@ -3927,10 +3919,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // Paint black outside area when not in editing mode then returns.
   if(!g->editing)
   {
-    if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
+    if(!dt_dev_distort_transform_gui(self->dev, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
       return;
-    const float scale_factor = dt_dev_get_natural_scale(dev, dev->virtual_pipe);
+    const float scale_factor = dt_dev_get_natural_scale(dev, dev->preview_pipe);
     for(size_t i = 0; i < 4; i++)
     {
       V[i][0] *= scale_factor;
@@ -4025,12 +4017,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // no structural data or visibility switched off? -> stop here
   if(g->fitting || IS_NULL_PTR(g->lines) || IS_NULL_PTR(g->buf) || !self->enabled) return;
 
-  // ensure virtual pipe params are in sync so distortions use current settings
-  if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
-    dt_dev_pixelpipe_sync_virtual(dev, DT_DEV_PIPE_TOP_CHANGED);
-
-  // get hash value that changes if distortions from here to the end of the pixelpipe changed
-  // virtual_pipe doesn't process pixels, so its hash isn't reliable for invalidation.
+  // get hash value that changes if distortions from here to the end of the pixelpipe changed.
+  // The composed geometry has no hash of its own -- it is rebuilt wherever a pipe flag is raised,
+  // so it cannot be stale here -- and the preview pipe's is what actually tracks the distortions
+  // these points are drawn against.
   const uint64_t hash = dt_dev_pixelpipe_get_hash(dev->preview_pipe);
   // get hash value that changes if coordinates of lines have changed
   const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
@@ -5416,12 +5406,12 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
     gtk_widget_set_sensitive(g->commit_button, FALSE);
   }
 
-  // Entering or leaving edit mode changes ashift's runtime crop contract. Settle that contract on
-  // the virtual pipe first, then publish the resulting full-image dimensions before waking either
-  // pixel worker. Resyncing first and queuing separate ZOOMED updates afterwards let a worker start
+  // Entering or leaving edit mode changes ashift's runtime crop contract. Settle the composed
+  // geometry first, then publish the resulting full-image dimensions before waking either pixel
+  // worker. Resyncing first and queuing separate ZOOMED updates afterwards let a worker start
   // with the previous ROI, get killed by the next update, and repeatedly feed slightly different
   // preview dimensions back into the GUI geometry.
-  dt_dev_pixelpipe_sync_virtual(self->dev, DT_DEV_PIPE_SYNCH);
+  dt_geometry_chain_rebuild(self->dev);
   dt_dev_get_thumbnail_size(self->dev);
   dt_dev_pixelpipe_resync_history_all(self->dev);
 }

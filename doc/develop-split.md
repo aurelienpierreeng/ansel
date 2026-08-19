@@ -236,9 +236,10 @@ in place.
   `_backend_worker_process_sample` → `_process_backend_input` →
   `dt_drawlayer_paint_interpolate_path` → the `layer_to_widget` callback →
   `dt_dev_coordinates_image_norm_to_widget()`, which reads `roi.orig_width`/`orig_height`
-  (develop.c:1100-1101) and calls `dt_dev_distort_transform_plus(self->dev->virtual_pipe, …)`
-  — a pipe documented as owned by the GUI main thread. It runs once per dab, so a window
-  resize or panel toggle during a stroke races it.
+  (develop.c:1100-1101) and composes the GUI's own geometry — at the time of writing, a
+  pixel-less pipe owned by the GUI main thread; since the geometry service replaced it
+  (`doc/geometry-service.md`), the GUI-thread-only geometry chain. Either way it runs once per
+  dab, so a window resize or panel toggle during a stroke races it.
 * `dt_focus_draw_clusters()` (gui/dtgtk/focus.h:288) reads
   `dt_dev_get_global()->roi.border_size` from `_get_image_buffer`, a `dt_control_job` body
   (thumbnail.c:657). A lighttable thumbnail render job thus reads darkroom viewport state

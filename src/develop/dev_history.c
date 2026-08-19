@@ -1185,7 +1185,7 @@ dt_dev_history_item_t *dt_dev_history_cow_touch(dt_develop_t *dev, dt_dev_histor
   // dt_dev_pixelpipe_synch_top to bound the resync range). dt_dev_pixelpipe_change() holds
   // history_mutex for its whole resync, same as this splice, so a plain compare-and-assign is
   // enough -- no concurrent access is possible.
-  dt_dev_pixelpipe_t *const pipes[] = { dev->pipe, dev->preview_pipe, dev->virtual_pipe };
+  dt_dev_pixelpipe_t *const pipes[] = { dev->pipe, dev->preview_pipe };
   for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
     if(pipes[i] && pipes[i]->last_history_item == hist)
       pipes[i]->last_history_item = clone;
@@ -1410,7 +1410,7 @@ void dt_apply_dev_history_update(dt_develop_t *dev)
   dt_dev_reload_history_items(dev, dev->image_storage.id);
   dt_dev_history_gui_update(dev);
   // Re-derive dev->roi.processed_{width,height} (and the natural scale) from the new
-  // history through the virtual pipe. Without this, a history change that alters the
+  // history, through the geometry service's size fold. Without this, a history change that alters the
   // final image geometry (e.g. removing a crop/ashift step) still renders at the old,
   // stale ROI -- same fix as _history_apply_history_end() in libs/history.c.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);

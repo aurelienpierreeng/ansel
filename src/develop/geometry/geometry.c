@@ -51,7 +51,12 @@
  *   - useless: the module template, not built.
  *
  * A module added to this list without a geometry_record() implementation keeps the chain
- * non-authoritative forever, which is the safe direction: consumers go on using the pipe.
+ * non-authoritative forever. That used to be the safe direction because consumers fell back to
+ * the pixel-less pipe; there is no fallback now, so it is instead the LOUD direction -- sizes
+ * come back FALSE and the darkroom cannot lay itself out, with the missing modules named under
+ * `-d dev'. Wholesale authority is still the rule it enforces: composing some modules from
+ * records and the rest from somewhere else interleaves two states, and the result is wrong in a
+ * way that looks plausible.
  */
 static const char *const _roster[] = {
   "rawprepare", "basebuffer", "demosaic", "lens",     "ashift",  "liquify", "rotatepixels",
@@ -78,32 +83,6 @@ struct dt_geometry_chain_t
    * at query time, from whatever the GUI currently is. */
   dt_develop_t *dev;
 };
-
-/**
- * @brief A/B switch for bisecting this service against the pipe it replaces.
- *
- * @details Every migrated consumer falls back to dev->virtual_pipe when the chain is not
- * authoritative, so refusing authority puts the whole GUI back on the pipeline path without
- * rebuilding or reverting anything. Set ANSEL_GEOMETRY_DISABLE=1: a symptom that persists is
- * not this service's doing, one that disappears is.
- *
- * It clears the authority FLAG rather than intercepting the accessor, because the walkers and
- * the shadow harness read that field directly -- an accessor-only switch would have left the
- * transform paths live, which is exactly the half a bisection needs to move.
- */
-static gboolean _geometry_disabled(void)
-{
-  static int disabled = -1;
-  if(disabled < 0)
-  {
-    const char *const env = g_getenv("ANSEL_GEOMETRY_DISABLE");
-    disabled = (!IS_NULL_PTR(env) && env[0] == '1') ? 1 : 0;
-    if(disabled)
-      fprintf(stderr, "[geometry] ANSEL_GEOMETRY_DISABLE=1: the chain declines every query; "
-                      "every consumer falls back to the pixel-less pipe\n");
-  }
-  return disabled == 1;
-}
 
 static gboolean _on_roster(const char *op)
 {
@@ -324,7 +303,7 @@ void dt_geometry_chain_rebuild(dt_develop_t *dev)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   _fold_sizes(chain);
-  chain->authoritative = complete && chain->sized && !_geometry_disabled();
+  chain->authoritative = complete && chain->sized;
 }
 
 gboolean dt_geometry_chain_authoritative(const dt_geometry_chain_t *chain)
@@ -450,8 +429,33 @@ int dt_geometry_backtransform(dt_develop_t *dev, const double iop_order, const i
   return 1;
 }
 
-void dt_geometry_shadow_check(dt_develop_t *dev, const int pipe_width, const int pipe_height,
-                              const double chain_ms)
+/**
+ * @brief What the shadow harness became once there was nothing left to shadow.
+ *
+ * @details It used to compare every answer against the pixel-less pipe, which was the right check
+ * while the pipe still owned them -- it is what caught the chain composing modules the pipe was
+ * suppressing, and it is why the focus exception is evaluated live. That reference is gone with
+ * the pipe, so what is left has to test the chain against ITSELF, and only identities that a
+ * wrong chain can actually fail are worth printing.
+ *
+ * Two of them are:
+ *
+ *   - the round trip. transform then backtransform over the whole chain must return the point it
+ *     started from. Every evaluator's inverse is exercised, and an inverse derived in the wrong
+ *     frame fails it -- which is the question flip's 90-degree orientations pose.
+ *
+ *   - the partition. The bounds are a cut of the same ordered list, so composing the two halves
+ *     must equal composing all of it: FORW_INCL(x) after BACK_EXCL(x) is DIR_ALL, and so is
+ *     FORW_EXCL(x) after BACK_INCL(x), for x at every module's own iop_order. This is the bound
+ *     bookkeeping the module GUIs depend on -- they ask for their own iop_order, never DIR_ALL --
+ *     and an off-by-one in _in_bound() drops or repeats exactly one module here.
+ *
+ * What it can no longer catch is a chain that is self-consistently wrong: both halves of a
+ * partition composing the same wrong subset still add up. That check needed a second
+ * implementation, and keeping a whole pipeline alive to be one was the cost this service exists
+ * to remove. Under `-d dev'; never changes behaviour.
+ */
+void dt_geometry_self_check(dt_develop_t *dev, const double chain_ms)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->geometry_chain)) return;
   if(!(dt_get_debug_flags() & DT_DEBUG_DEV)) return;
@@ -483,60 +487,17 @@ void dt_geometry_shadow_check(dt_develop_t *dev, const int pipe_width, const int
     return;
   }
 
-  if(chain->processed_width != pipe_width || chain->processed_height != pipe_height)
-  {
-    dt_print(DT_DEBUG_DEV, "[geometry] SIZE DIVERGENCE: chain %dx%d, pipe %dx%d\n", chain->processed_width,
-             chain->processed_height, pipe_width, pipe_height);
-    return;
-  }
-
-  /* The size fold only exercises map_size. Probe the point transforms too, or the evaluators
-   * that actually move overlays would go unverified until a consumer switched over and a user
-   * noticed a mask sitting in the wrong place.
-   *
-   * Five points spanning the raw frame, forward through everything (iop_order 0, DIR_ALL --
-   * what dt_dev_coordinates_raw_abs_to_image_abs() asks for), then the same through the pipe.
-   * The tolerance is half a pixel: both sides do the same arithmetic in the same order, so they
-   * should agree exactly, but the fold's rects reach the evaluators as ints on one side and
-   * through piece->buf_in on the other, and a rounding difference of that size is not a defect
-   * worth failing on. Anything larger is a real divergence and is printed with the point. */
+  /* Five points spanning the raw frame. The tolerance is half a pixel throughout: every identity
+   * below composes the same evaluators in the same order, so they should agree exactly, but the
+   * fold's rects reach them as ints and a rounding difference of that size is not a defect worth
+   * failing on. Anything larger is real and is printed with the point. */
   const float w = (float)chain->raw_width;
   const float h = (float)chain->raw_height;
-  float chain_points[10] = { 0.f, 0.f, w, 0.f, 0.f, h, w, h, 0.5f * w, 0.5f * h };
-  float pipe_points[10];
-  memcpy(pipe_points, chain_points, sizeof(pipe_points));
-
-  if(!dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, chain_points, 5)) return;
-  if(IS_NULL_PTR(dev->virtual_pipe)) return;
-  dt_dev_distort_transform_plus(dev->virtual_pipe, 0.0, DT_DEV_TRANSFORM_DIR_ALL, pipe_points, 5);
-
-  int diverged = 0;
-  for(int i = 0; i < 5; i++)
-  {
-    if(fabsf(chain_points[2 * i] - pipe_points[2 * i]) > 0.5f
-       || fabsf(chain_points[2 * i + 1] - pipe_points[2 * i + 1]) > 0.5f)
-    {
-      dt_print(DT_DEBUG_DEV,
-               "[geometry] TRANSFORM DIVERGENCE at probe %d: chain (%.2f, %.2f), pipe (%.2f, %.2f)\n", i,
-               chain_points[2 * i], chain_points[2 * i + 1], pipe_points[2 * i], pipe_points[2 * i + 1]);
-      diverged++;
-    }
-  }
-
-  /* And the inverse. Comparing forward against the pipe leaves every backtransform evaluator
-   * unverified -- they are only ever exercised by GUI consumers that have not switched over yet
-   * -- so round-trip the same probes through the chain and require the identity back.
-   *
-   * This is the check that decides a real question about flip, whose forward flips against the
-   * input dimensions and THEN swaps the axes. Its inverse un-swaps and unflips against those
-   * same dimensions, in the pre-swap frame where they are the right ones; swapping the
-   * dimensions as well -- which the neighbouring modify_roi_in helper legitimately does, in its
-   * own rectangle-mapping convention -- would break exactly the 90-degree orientations this
-   * probe covers. Composed here rather than argued. */
-  float roundtrip[10] = { 0.f, 0.f, w, 0.f, 0.f, h, w, h, 0.5f * w, 0.5f * h };
   const float origin[10] = { 0.f, 0.f, w, 0.f, 0.f, h, w, h, 0.5f * w, 0.5f * h };
 
-  dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, roundtrip, 5);
+  float roundtrip[10];
+  memcpy(roundtrip, origin, sizeof(roundtrip));
+  if(!dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, roundtrip, 5)) return;
   dt_geometry_backtransform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, roundtrip, 5);
 
   int not_identity = 0;
@@ -552,21 +513,13 @@ void dt_geometry_shadow_check(dt_develop_t *dev, const int pipe_width, const int
     }
   }
 
-  /* The bounds the module GUIs actually use.
-   *
-   * Everything above probes iop_order 0 and DIR_ALL, which is what the coordinate converters
-   * ask -- and nothing else does. A module GUI asks for its OWN iop_order with FORW_INCL,
-   * FORW_EXCL or BACK_EXCL, and those compose a different subset of the chain: a divergence
-   * confined to one of them is invisible to a DIR_ALL probe. That is exactly how a chain that
-   * never applied the focused-module exception passed every check here while drawing ashift's
-   * detected lines against the wrong module stack.
-   *
-   * So probe each roster record at its own iop_order, in the three bounds the GUIs use, against
-   * the pipe doing the same. Cheap -- one point, a handful of records -- and it covers the
-   * question the migrated call sites actually ask. */
-  static const int bounds[3] = { DT_DEV_TRANSFORM_DIR_FORW_INCL, DT_DEV_TRANSFORM_DIR_FORW_EXCL,
-                                 DT_DEV_TRANSFORM_DIR_BACK_EXCL };
-  static const char *const bound_names[3] = { "FORW_INCL", "FORW_EXCL", "BACK_EXCL" };
+  // The whole chain, once: what both halves of every partition below must add up to.
+  float whole[2] = { 0.37f * w, 0.61f * h };
+  dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, whole, 1);
+
+  static const int back[2] = { DT_DEV_TRANSFORM_DIR_BACK_EXCL, DT_DEV_TRANSFORM_DIR_BACK_INCL };
+  static const int forw[2] = { DT_DEV_TRANSFORM_DIR_FORW_INCL, DT_DEV_TRANSFORM_DIR_FORW_EXCL };
+  static const char *const cut_names[2] = { "BACK_EXCL|FORW_INCL", "BACK_INCL|FORW_EXCL" };
   int bound_diverged = 0;
 
   for(const GList *node = g_list_first(chain->records); node; node = g_list_next(node))
@@ -574,39 +527,32 @@ void dt_geometry_shadow_check(dt_develop_t *dev, const int pipe_width, const int
     const dt_geometry_record_t *const record = (const dt_geometry_record_t *)node->data;
     if(!record->enabled || IS_NULL_PTR(record->vtable)) continue;
 
-    for(int b = 0; b < 3; b++)
+    for(int c = 0; c < 2; c++)
     {
-      float cp[2] = { 0.37f * w, 0.61f * h };
-      float pp[2] = { cp[0], cp[1] };
+      float cut[2] = { 0.37f * w, 0.61f * h };
+      dt_geometry_transform(dev, record->iop_order, back[c], cut, 1);
+      dt_geometry_transform(dev, record->iop_order, forw[c], cut, 1);
 
-      dt_geometry_transform(dev, record->iop_order, bounds[b], cp, 1);
-      dt_dev_distort_transform_plus(dev->virtual_pipe, record->iop_order, bounds[b], pp, 1);
-
-      if(fabsf(cp[0] - pp[0]) > 0.5f || fabsf(cp[1] - pp[1]) > 0.5f)
+      if(fabsf(cut[0] - whole[0]) > 0.5f || fabsf(cut[1] - whole[1]) > 0.5f)
       {
         dt_print(DT_DEBUG_DEV,
-                 "[geometry] BOUND DIVERGENCE at %s.%d %s: chain (%.2f, %.2f), pipe (%.2f, %.2f)\n",
-                 record->op, record->instance, bound_names[b], cp[0], cp[1], pp[0], pp[1]);
+                 "[geometry] BOUND DIVERGENCE at %s.%d %s: cut (%.2f, %.2f), whole (%.2f, %.2f)\n",
+                 record->op, record->instance, cut_names[c], cut[0], cut[1], whole[0], whole[1]);
         bound_diverged++;
       }
     }
   }
 
-  if(bound_diverged)
-    dt_print(DT_DEBUG_DEV, "[geometry] %d module-relative bound probe(s) diverge\n", bound_diverged);
-
-  if(diverged || not_identity || bound_diverged)
-    dt_print(DT_DEBUG_DEV,
-             "[geometry] size agrees (%dx%d) but %d/5 forward, %d/5 round-trips, %d bounds diverge\n",
-             chain->processed_width, chain->processed_height, diverged, not_identity, bound_diverged);
+  if(not_identity || bound_diverged)
+    dt_print(DT_DEBUG_DEV, "[geometry] size %dx%d, %d/5 round-trips and %d bound cut(s) diverge\n",
+             chain->processed_width, chain->processed_height, not_identity, bound_diverged);
   else
-    dt_print(DT_DEBUG_DEV,
-             "[geometry] agrees with the pipe: size %dx%d, 5/5 forward, 5/5 round-trips, all bounds\n",
+    dt_print(DT_DEBUG_DEV, "[geometry] consistent: size %dx%d, 5/5 round-trips, all bound cuts\n",
              chain->processed_width, chain->processed_height);
 
-  /* The cost, which is the reason this service exists. Compare against `-d perf's "pipeline
-   * resync with history ... for pipe virtual-preview" line: that is the same product, computed
-   * the way this replaces. */
+  /* The cost, which is the reason this service exists. Its predecessor's counterpart is in the
+   * git history of this file and in doc/geometry-service.md: `-d perf's "pipeline resync with
+   * history ... for pipe virtual-preview", 0.10 to 0.33 s, on this same thread. */
   dt_print(DT_DEBUG_DEV, "[geometry] chain rebuilt in %.2f ms\n", chain_ms);
 }
 

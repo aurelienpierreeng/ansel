@@ -108,7 +108,7 @@ typedef struct dt_iop_colorout_data_t
    * matrices, tone curves, extrapolation fits, or an lcms2 proofing transform. Built by
    * colorprofiles/conversion.c, which is where the lifetime and locking rules for the
    * profiles behind it are written down and enforced. NULL when the module is a nop
-   * (Lab output, or the virtual pipe, which never processes pixels). */
+   * (a Lab output). */
   dt_colorspaces_conversion_t *conversion;
 } dt_iop_colorout_data_t;
 
@@ -376,8 +376,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_colorout_data_t *const d = (dt_iop_colorout_data_t *)piece->data;
 
-  /* Lab output is a nop -- the pipe already carries Lab -- and so is the virtual pipe, which
-   * commits module contracts but never processes pixels. Both leave `conversion` NULL. */
+  /* Lab output is a nop -- the pipe already carries Lab -- and leaves `conversion` NULL. */
   if(d->type == DT_COLORSPACE_LAB || IS_NULL_PTR(d->conversion))
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, 4);
   else
@@ -424,8 +423,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   dt_colorspaces_free_conversion(&d->conversion);
   /* Cleared here rather than beside each prepare below, so that every path which returns
-   * without building a conversion -- the virtual pipe, a Lab output -- leaves a hashed prefix
-   * that says so. */
+   * without building a conversion -- a Lab output -- leaves a hashed prefix that says so. */
   d->conversion_id = 0;
   piece->process_cl_ready = 1;
 
@@ -483,17 +481,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // when the output type is Lab then process is a nop, so we can avoid creating a transform
   // and the subsequent error messages
   d->type = out_type;
-  /* The virtual pipe mirrors history only for GUI geometry queries. It must
-   * still commit module contracts so ROI transforms see the same enabled
-   * modules, but creating an LCMS output transform for a pipe that will never
-   * process pixels only adds lifetime coupling to display/softproof profiles. */
-  if(!IS_NULL_PTR(pipe->dev) && pipe->dev->virtual_pipe == pipe)
-  {
-    d->type = DT_COLORSPACE_LAB;
-    piece->process_cl_ready = 0;
-    return;
-  }
-
   if(out_type == DT_COLORSPACE_LAB)
     return;
 

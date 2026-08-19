@@ -21,24 +21,20 @@
  * @brief Where things are on the image, answered without a pipeline.
  *
  * @details The GUI constantly needs two geometric facts: how big the developed image is, and
- * where a point on it lands after the distorting modules have had their say. Today both are
- * answered by `dev->virtual_pipe' -- a complete, pixel-less clone of all ~95 IOP modules, their
- * history committed into real pipeline nodes, resynchronised on the GUI thread at every history
- * commit for 0.10 to 0.33 s. It renders nothing. It exists only to be walked.
+ * where a point on it lands after the distorting modules have had their say. Both used to be
+ * answered by a complete, pixel-less clone of all ~95 IOP modules -- their history committed
+ * into real pipeline nodes, resynchronised on the GUI thread at every history commit for 0.10 to
+ * 0.33 s. It rendered nothing. It existed only to be walked.
  *
- * This module replaces that with the data the walk actually consumes. Each module that changes
- * geometry publishes a small record -- its transform as values, not as a node -- and the GUI
- * composes sizes and coordinates from the ordered list. See doc/geometry-service.md for the
- * decision, the survey behind it, and the tranche plan; the traps section there is not
- * optional reading.
+ * This module is the data that walk actually consumed. Each module that changes geometry
+ * publishes a small record -- its transform as values, not as a node -- and the GUI composes
+ * sizes and coordinates from the ordered list. See doc/geometry-service.md for the decision, the
+ * survey behind it, and what each tranche moved; the traps section there is not optional reading.
  *
  * THREADING. This is GUI-thread state and takes no locks. Nothing else may touch it. The pixel
  * pipelines keep their own piece-based modify_roi and distort callbacks for rendering, and the
- * two must never be crossed: a worker that needs geometry asks its own pieces.
- *
- * STATUS: skeleton (tranche G2). No module publishes a record yet, so the chain is never
- * authoritative and nothing consumes it; it runs beside the virtual pipe and reports what it
- * would need in order to take over. Shadow mode is the whole point of this tranche.
+ * two must never be crossed: a worker that needs geometry asks its own pieces. That separation
+ * is the whole design: the GUI's copy of the module stack is gone, not shared.
  */
 
 #ifndef DT_DEVELOP_GEOMETRY_GEOMETRY_H
@@ -116,8 +112,8 @@ typedef struct dt_geometry_record_t
   void (*free_data)(void *data);        /**< NULL when ::data needs no teardown */
 
   /* Filled by the chain's own size fold, at full resolution and scale 1 -- the same numbers
-   * dt_dev_pixelpipe_get_roi_out() writes into piece->buf_in/buf_out today, which is what
-   * consumers actually read off the virtual pipe. */
+   * dt_dev_pixelpipe_get_roi_out() writes into a piece's buf_in/buf_out, which is what GUI
+   * consumers used to resolve a piece in order to read. */
   dt_iop_roi_t in;
   dt_iop_roi_t out;
 } dt_geometry_record_t;
@@ -131,10 +127,10 @@ void dt_geometry_chain_free(dt_geometry_chain_t *chain);
 /**
  * @brief Rebuild the chain from the dev's current modules and history. GUI thread only.
  *
- * @details Called wherever the virtual pipe is resynchronised today. Cheap by construction --
- * a record is a small derivation of already-committed params, with no LUT, no colour transform
- * and no disk access -- which is the point: it can run in the same step as the history write,
- * where the virtual pipe's 0.1-0.3 s could not.
+ * @details Called wherever the pixel-less pipe used to be resynchronised. Cheap by construction
+ * -- a record is a small derivation of already-committed params, with no LUT, no colour transform
+ * and no disk access -- which is the point: it runs in the same step as the history write, where
+ * its predecessor's 0.1-0.3 s could not.
  */
 void dt_geometry_chain_rebuild(struct dt_develop_t *dev);
 
@@ -142,10 +138,14 @@ void dt_geometry_chain_rebuild(struct dt_develop_t *dev);
  * @brief Can this chain answer questions yet?
  *
  * @details TRUE only when every enabled module the roster names has published a record.
- * Authority is WHOLESALE: composing some modules from records and the rest from pipeline
- * pieces would interleave two states, and the result would be wrong in a way that looks
- * plausible. Until the last roster module lands, this stays FALSE and every consumer keeps
- * using the pipe.
+ * Authority is WHOLESALE: composing some modules from records and the rest from pipeline pieces
+ * would interleave two states, and the result would be wrong in a way that looks plausible.
+ *
+ * There is no longer anything to fall back TO -- the pipe this replaced is deleted -- so a FALSE
+ * here is not a degraded mode, it is the GUI declining to answer: sizes come back FALSE, the
+ * transforms return 0 and leave their points untouched. Before an image is loaded that is simply
+ * the truth. After one is, it is a defect, and ::dt_geometry_self_check names which module owes
+ * a record.
  */
 gboolean dt_geometry_chain_authoritative(const dt_geometry_chain_t *chain);
 
@@ -180,7 +180,7 @@ int dt_geometry_backtransform(struct dt_develop_t *dev, double iop_order, int di
  * by whatever is being edited contributes nothing, exactly as it would in a full walk.
  *
  * @return 0 when the chain cannot answer -- not authoritative, no record, or that module has no
- * transform -- in which case @p points is untouched and the caller should use the pipe.
+ * transform -- in which case @p points is untouched.
  */
 int dt_geometry_module_transform(struct dt_develop_t *dev, const struct dt_iop_module_t *module,
                                  float *points, size_t points_count);
@@ -215,21 +215,17 @@ int dt_geometry_chain_compose(dt_geometry_chain_t *chain, double iop_order, int 
  */
 
 /**
- * @brief Shadow mode: compare the chain against the pipe that still owns the answer.
+ * @brief Check the chain against itself, and report what the rebuild cost.
  *
- * @details Called from the size path with whatever the virtual pipe just produced, and with
- * what each side cost. While the roster is incomplete this reports exactly which enabled
- * modules are still missing a record -- measured per image, rather than assumed from a source
- * audit -- and once it is complete it reports any divergence in size, in forward transforms and
- * in round trips, together with the two costs. Both under `-d dev'. It never changes behaviour.
+ * @details What the shadow harness became. It compared every answer against the pipe while the
+ * pipe still owned them; with the pipe gone the only checks left are identities the chain must
+ * satisfy on its own -- the round trip, and the bound partition. See the comment on the
+ * definition for what that does and does not still catch. Under `-d dev'; never changes
+ * behaviour.
  *
- * @param chain_ms what the rebuild cost. The virtual pipe's counterpart is NOT measured here:
- * its work is done in _sync_virtual_pipe(), off this path, and is already reported by `-d perf'
- * as "pipeline resync with history ... for pipe virtual-preview". Timing it here would only ever
- * catch a resync that had nothing to do, and report ~0 ms for the side that is expensive.
+ * @param chain_ms what the rebuild cost.
  */
-void dt_geometry_shadow_check(struct dt_develop_t *dev, int pipe_width, int pipe_height,
-                              double chain_ms);
+void dt_geometry_self_check(struct dt_develop_t *dev, double chain_ms);
 
 #ifdef __cplusplus
 }

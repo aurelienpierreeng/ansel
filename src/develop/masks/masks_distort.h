@@ -25,9 +25,10 @@
  * can grab; the pixel pipeline calls them, on a worker thread, to rasterise the mask a module
  * actually blends with. They are the same geometry either way, which is why they are one
  * function, and the difference between the two callers used to be expressed by handing them a
- * different `dt_dev_pixelpipe_t *`: the GUI passed `dev->virtual_pipe`, the worker passed its own.
+ * different `dt_dev_pixelpipe_t *`: the GUI passed a pixel-less clone of the pipeline, the worker
+ * passed its own.
  *
- * That stops working when the virtual pipe goes away, and the fix is not to give the GUI a
+ * That stopped working when the clone was deleted, and the fix was not to give the GUI a
  * different pipe but to name what the builders were reading out of one. It is three things: the
  * full-resolution image size, how finely to sample the outline, and a way to compose the module
  * stack around a given iop_order. This record supplies all three, and there are exactly two
@@ -38,7 +39,7 @@
  * -- not some other view of the same history.
  *
  * THE GUI SUPPLIER composes through develop/geometry/geometry.h, which answers from published
- * records and falls back to the pixel-less pipe until every geometry module has published one.
+ * records.
  *
  * Nothing else may implement this. Two suppliers are a seam; three are a fork.
  */
@@ -93,7 +94,7 @@ static inline dt_masks_distort_t dt_masks_distort_for_pipe(dt_dev_pixelpipe_t *p
  * @brief The GUI supplier: compose through the geometry service, at full resolution, one pixel
  * at a time.
  *
- * @details The step is 1 because that is what the GUI has always had: the virtual pipe this
+ * @details The step is 1 because that is what the GUI has always had: the pixel-less pipe this
  * replaces was never given a rasterisation step, so it kept the one its init set, and outlines
  * the user drags are drawn pixel-accurate. The size is the raw geometry, which is what that
  * pipe's input was set from.

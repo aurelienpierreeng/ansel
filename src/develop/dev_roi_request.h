@@ -59,7 +59,7 @@ typedef struct dt_dev_roi_request_t
    * i.e. "all three inputs of this record have been published at least once".
    *
    * It is NOT a statement about which image those numbers describe. Between an image change
-   * republishing the raw pair and dt_dev_get_thumbnail_size() rerunning the virtual pipe,
+   * republishing the raw pair and dt_dev_get_thumbnail_size() refolding the composed geometry,
    * processed_* -- and everything derived from it -- still measures the PREVIOUS image, with
    * valid TRUE throughout. On the darkroom's own image-change path that window contains no
    * running worker (views/darkroom.c's leave() joins it before the new raw geometry is

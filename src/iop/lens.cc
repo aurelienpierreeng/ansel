@@ -2668,26 +2668,16 @@ void gui_update(struct dt_iop_module_t *self)
   // Which corrections are actually available/applied only depends on the current camera+lens+params
   // combo, not on process() having just run -- so don't gate the label on the pixel pipe having
   // (re)executed (it may not: a pixelpipe cache hit skips process() entirely, e.g. after undo/redo
-  // to a recently-rendered history state, leaving the label blank forever otherwise). commit_params()
-  // already wrote this exact lensfun data into the synced piece regardless of that; read it back the
-  // same GUI-thread-safe way ashift reads piece->buf_in from the virtual pipe.
+  // to a recently-rendered history state, leaving the label blank forever otherwise).
   /* The geometry record IS this data -- geometry_record() builds it with the same constructor
-   * commit_params() uses -- so ask the service for it, and the synced piece only while the
-   * service cannot answer. This is the one consumer in the migration that wants a module's
-   * committed state rather than a rectangle. */
+   * commit_params() uses -- so ask the service for it. This is the one consumer in the migration
+   * that wants a module's committed state rather than a rectangle. */
   const dt_iop_lensfun_data_t *lens_d = NULL;
   const dt_geometry_record_t *const lens_record
       = dt_geometry_chain_find(self->dev->geometry_chain, self->op, self->multi_priority);
   if(dt_geometry_chain_authoritative(self->dev->geometry_chain) && !IS_NULL_PTR(lens_record)
      && !IS_NULL_PTR(lens_record->data))
     lens_d = &((const dt_iop_lens_geometry_t *)lens_record->data)->data;
-  else
-  {
-    dt_dev_virtual_pipe_ensure_synced(self->dev);
-    const dt_dev_pixelpipe_iop_t *const lens_piece
-        = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-    if(!IS_NULL_PTR(lens_piece)) lens_d = (const dt_iop_lensfun_data_t *)lens_piece->data;
-  }
 
   dt_iop_roi_t lens_in;
   const gboolean have_dims = dt_dev_module_geometry_gui(self->dev, self, &lens_in, NULL);
