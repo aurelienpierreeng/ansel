@@ -1397,6 +1397,28 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
                "%zu; hash %" PRIu64 "\n",
                dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height, pixels * 4, entry_size,
                (uint64_t)entry_hash);
+
+    /* And the shape itself. `roi' is what this run ASKED the pipe for; the pixels in the
+     * cacheline are whatever the last node actually produced, which is its roi_out. Those are
+     * supposed to be the same rectangle, and the backbuffer advertises the former while handing
+     * consumers the latter -- so if they differ, every display path computes its cairo stride
+     * from a width the data does not have, and draws the diagonal striping of a stride error.
+     *
+     * The cache cannot answer this on its own: an entry records how many BYTES it holds and not
+     * what shape they are in, so a cacheline reused at another size is indistinguishable from a
+     * correct one by size alone -- large-but-wrong passes every check a consumer can make. The
+     * last node's planned output is the only place the true shape survives. */
+    const GList *const last = g_list_last(pipe->nodes);
+    if(!IS_NULL_PTR(last))
+    {
+      const dt_dev_pixelpipe_iop_t *const tail = (const dt_dev_pixelpipe_iop_t *)last->data;
+      if(tail->roi_out.width != roi.width || tail->roi_out.height != roi.height)
+        dt_print(DT_DEBUG_ALWAYS,
+                 "[pixelpipe] BACKBUF SHAPE MISMATCH on pipe %s: advertising %dx%d but %s produced "
+                 "%dx%d; hash %" PRIu64 "\n",
+                 dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height, tail->module->op,
+                 tail->roi_out.width, tail->roi_out.height, (uint64_t)entry_hash);
+    }
   }
 
   // Always refresh backbuf geometry/state, even when the cache key is unchanged.
