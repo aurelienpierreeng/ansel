@@ -169,6 +169,23 @@ int dt_geometry_backtransform(struct dt_develop_t *dev, double iop_order, int di
                               size_t points_count);
 
 /**
+ * @brief Apply ONE module's own transform, and nothing else.
+ *
+ * @details No direction bound expresses this: FORW_INCL at a module's own iop_order includes
+ * everything after it as well. iop/ashift.c wants exactly its own homography applied to the
+ * corners of its input, to work out where its output lands, and reached it by resolving its
+ * piece and calling its own distort_transform() through the module vtable.
+ *
+ * Honours the focused-module exception like every other composition here, so a module suppressed
+ * by whatever is being edited contributes nothing, exactly as it would in a full walk.
+ *
+ * @return 0 when the chain cannot answer -- not authoritative, no record, or that module has no
+ * transform -- in which case @p points is untouched and the caller should use the pipe.
+ */
+int dt_geometry_module_transform(struct dt_develop_t *dev, const struct dt_iop_module_t *module,
+                                 float *points, size_t points_count);
+
+/**
  * @brief Compose the chain over @p points, for a record evaluator that needs the transform
  * stack around its own module.
  *
