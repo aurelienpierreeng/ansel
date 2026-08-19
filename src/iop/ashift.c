@@ -3769,6 +3769,7 @@ static int call_distort_transform(dt_dev_pixelpipe_t *pipe, struct dt_iop_module
   if(dt_geometry_module_transform(self->dev, self, points, points_count)) return 1;
 
   int ret = 0;
+  if(pipe == self->dev->virtual_pipe) dt_dev_virtual_pipe_ensure_synced(self->dev);
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(pipe, self);
   if(IS_NULL_PTR(piece)) return ret;
   if(piece->module == self && /*piece->enabled && */  //see note below

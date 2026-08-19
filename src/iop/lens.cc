@@ -2683,6 +2683,7 @@ void gui_update(struct dt_iop_module_t *self)
     lens_d = &((const dt_iop_lens_geometry_t *)lens_record->data)->data;
   else
   {
+    dt_dev_virtual_pipe_ensure_synced(self->dev);
     const dt_dev_pixelpipe_iop_t *const lens_piece
         = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
     if(!IS_NULL_PTR(lens_piece)) lens_d = (const dt_iop_lensfun_data_t *)lens_piece->data;

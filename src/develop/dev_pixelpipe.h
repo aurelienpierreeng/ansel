@@ -113,6 +113,16 @@ gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_
 void dt_dev_pixelpipe_change(struct dt_dev_pixelpipe_t *pipe);
 void dt_dev_pixelpipe_sync_virtual(struct dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
 
+/**
+ * @brief Bring the pixel-less pipe up to date with the flags raised since it was last resynced.
+ *
+ * @details It is no longer resynced eagerly: while the geometry service can answer, the flags
+ * are raised and the ~0.1 s resync is skipped. Anything that consults the pipe directly -- the
+ * fallbacks taken when the service declines, and shadow mode -- calls this first. A no-op when
+ * the pipe is already current.
+ */
+void dt_dev_virtual_pipe_ensure_synced(struct dt_develop_t *dev);
+
 // Get the global hash of a pipe node (piece), or a fallback if none.
 uint64_t dt_dev_pixelpipe_node_hash(struct dt_dev_pixelpipe_t *pipe, 
                                     const struct dt_dev_pixelpipe_iop_t *piece, 
