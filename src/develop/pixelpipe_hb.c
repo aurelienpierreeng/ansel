@@ -1393,10 +1393,11 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
     /* 4 bytes per pixel: this is the final, display-encoded backbuffer. */
     if(entry_size < pixels * 4)
       dt_print(DT_DEBUG_ALWAYS,
-               "[pixelpipe] BACKBUF TOO SMALL on pipe %s: roi %dx%d needs %zu bytes, cacheline holds "
-               "%zu; hash %" PRIu64 "\n",
-               dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height, pixels * 4, entry_size,
-               (uint64_t)entry_hash);
+               // %llu, not %zu: MinGW's printf does not implement the C99 length modifier.
+               "[pixelpipe] BACKBUF TOO SMALL on pipe %s: roi %dx%d needs %llu bytes, cacheline holds "
+               "%llu; hash %" PRIu64 "\n",
+               dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height,
+               (unsigned long long)(pixels * 4), (unsigned long long)entry_size, (uint64_t)entry_hash);
 
     /* And the shape itself. `roi' is what this run ASKED the pipe for; the pixels in the
      * cacheline are whatever the last node actually produced, which is its roi_out. Those are
