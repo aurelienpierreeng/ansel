@@ -149,6 +149,32 @@ void dt_geometry_chain_rebuild(struct dt_develop_t *dev);
  */
 gboolean dt_geometry_chain_authoritative(const dt_geometry_chain_t *chain);
 
+/**
+ * @brief How many times this chain has been rebuilt. A GUI cache key for anything derived from
+ * the composed geometry.
+ *
+ * @details A consumer that caches something it composed through this service -- a mask outline in
+ * image coordinates, say -- needs to know when to throw that cache away. The answer is "when the
+ * geometry moved", and this counter is that, cheaply: it advances once per rebuild, and a rebuild
+ * happens exactly where a pipe flag is raised, i.e. where the module stack or the history changed.
+ *
+ * It is deliberately NOT a content hash. A rebuild that lands on identical geometry still advances
+ * it, which costs a consumer one redundant recompute; the alternative -- hashing each record's
+ * module-owned data blob, whose size this service does not know -- would have to guess, and a
+ * missed change here is an overlay drawn in the wrong place. Over-invalidating is the safe
+ * direction for a key.
+ *
+ * What it must NOT be replaced by is a PIXEL identity. Keying an outline cache on a pipe's
+ * backbuffer hash, which is what iop/masks did before, ties a geometric fact to a rendering event:
+ * every republished preview frame -- continuous while a brush is being dragged -- then invalidates
+ * outlines whose inputs did not change. Measured on the report in #1158: 566 rebuilds of two brush
+ * outlines in 80 seconds, ~2 s of coordinate transform, gravity centres recomputed bit-identical
+ * every time, and a darkroom expose growing from 23 ms to 137 ms as strokes accumulated.
+ *
+ * @return 0 for a chain that has never been built, which no live generation can equal.
+ */
+uint64_t dt_geometry_chain_generation(const dt_geometry_chain_t *chain);
+
 /** @brief The developed image's full-resolution size, from the chain's own fold. */
 gboolean dt_geometry_chain_processed_size(const dt_geometry_chain_t *chain, int *width, int *height);
 
