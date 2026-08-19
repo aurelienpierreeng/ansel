@@ -1359,9 +1359,45 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
     dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
   }
 
+  /* The backbuf advertises the ROI THIS RUN ASKED FOR, paired with whatever cacheline it
+   * resolved. Those two are supposed to describe the same image, and every consumer trusts that
+   * they do: the display paths compute a cairo stride from the width and walk the cacheline with
+   * it. When they disagree the picture is drawn with the wrong row length -- the diagonal
+   * striping of a stride error -- and nothing downstream can detect it, because a cacheline is
+   * just bytes and carries no shape of its own.
+   *
+   * They can disagree. Cache entries are reused in place by rekeying rather than reallocated
+   * (caches/pixelpipe_cache.c), so an entry produced at one ROI can be handed back under a key
+   * planned at another.
+   *
+   * The invariant worth checking is that the cacheline is BIG ENOUGH for the advertised
+   * dimensions -- not that it is exactly that size. Buffers come from an aligned allocator and
+   * from a reuse pool, so a cacheline is routinely larger than width x height x bpp: measured on
+   * an ordinary darkroom entry, the display buffers run about 0.2 % over and a thumbnail's can
+   * be several times over. That slack is why `bpp' below, a division by the requested pixel
+   * count, is not a pixel size and should not be read as one -- nothing does; the field exists
+   * for a consumer that no longer has one.
+   *
+   * Too SMALL is the dangerous direction, and the only one a consumer cannot survive: every
+   * display path computes a cairo stride from the width and walks that many rows, so a short
+   * cacheline is an out-of-bounds read, and a wrong width is the diagonal striping of a stride
+   * error. Report it; do not try to repair it here, where neither the true shape of the entry nor
+   * the reason it was selected is known. */
   int bpp = 0;
   if(roi.width > 0 && roi.height > 0)
-    bpp = (int)(dt_pixel_cache_entry_get_size(entry) / ((size_t)roi.width * (size_t)roi.height));
+  {
+    const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
+    const size_t pixels = (size_t)roi.width * (size_t)roi.height;
+    bpp = (int)(entry_size / pixels);
+
+    /* 4 bytes per pixel: this is the final, display-encoded backbuffer. */
+    if(entry_size < pixels * 4)
+      dt_print(DT_DEBUG_ALWAYS,
+               "[pixelpipe] BACKBUF TOO SMALL on pipe %s: roi %dx%d needs %zu bytes, cacheline holds "
+               "%zu; hash %" PRIu64 "\n",
+               dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height, pixels * 4, entry_size,
+               (uint64_t)entry_hash);
+  }
 
   // Always refresh backbuf geometry/state, even when the cache key is unchanged.
   // Realtime drawing can update pixels in-place in the same cacheline, so width/height/history

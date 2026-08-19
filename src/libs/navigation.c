@@ -48,6 +48,7 @@
 #include "common/module_versioning.h"
 #include "common/times.h"
 #include "control/control.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 
@@ -277,8 +278,29 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
     wd = dev->preview_pipe->backbuf.width;
     ht = dev->preview_pipe->backbuf.height;
-    scale = fminf(width / (float)wd, height / (float)ht);
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
+
+    /* Can this cacheline hold an image of those dimensions at all?
+     *
+     * The centre view asks the same question before it paints (dt_dev_lock_pipe_surface); this
+     * widget did not, and handed cairo a buffer to walk with a stride computed from a width the
+     * data need not have. When they disagree the thumbnail is striped diagonally, and the read
+     * runs past the allocation whenever the recorded dimensions are the larger pair -- the
+     * buffer and its dimensions are fetched separately here, from state a worker owns and can
+     * republish at a new size in between.
+     *
+     * Keep the previous thumbnail and come back on the next expose rather than draw garbage.
+     * This does not FIX a mismatch -- only the pipe that published it can -- but it stops this
+     * widget turning one into an out-of-bounds read. */
+    const size_t required_size = (size_t)stride * (size_t)ht;
+    if(wd <= 0 || ht <= 0 || dt_pixel_cache_entry_get_size(cache_entry) < required_size
+       || dt_pixel_cache_entry_get_data(cache_entry) != data)
+    {
+      dt_dev_pixelpipe_cache_rdlock_entry(FALSE, cache_entry);
+      return TRUE;
+    }
+
+    scale = fminf(width / (float)wd, height / (float)ht);
     cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
 
     image_hash = dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf);
