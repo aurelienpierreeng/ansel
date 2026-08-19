@@ -55,7 +55,7 @@ gboolean dt_drawlayer_widget_points_to_layer_coords(dt_iop_module_t *self, float
   dt_dev_coordinates_widget_to_image_norm(self->dev, pts, count);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
 
-  if(!dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                         DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count))
     return FALSE;
   dt_dev_coordinates_preview_abs_to_image_norm(self->dev, pts, count);
@@ -70,7 +70,7 @@ gboolean dt_drawlayer_layer_points_to_widget_coords(dt_iop_module_t *self, float
   dt_dev_coordinates_image_abs_to_image_norm(self->dev, pts, count);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
 
-  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_gui(self->dev, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, count))
     return FALSE;
 

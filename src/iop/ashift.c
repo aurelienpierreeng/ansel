@@ -2789,7 +2789,7 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
     float pts[8] = { g->lines[0].p1[0], g->lines[0].p1[1], g->lines[0].p2[0],
                      g->lines[0].p2[1], g->lines[1].p1[0], g->lines[1].p1[1],
                      g->lines[1].p2[0], g->lines[1].p2[1] };
-    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       for(int i = 0; i < 8; i++) p->last_quad_lines[i] = pts[i];
@@ -2814,7 +2814,7 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
         if(p->last_drawn_lines_count >= MAX_SAVED_LINES) break;
       }
     }
-    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_BACK_EXCL, p->last_drawn_lines,
                                       p->last_drawn_lines_count * 2);
   }
@@ -2840,7 +2840,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
                      p->last_quad_lines[2], p->last_quad_lines[3],
                      p->last_quad_lines[4], p->last_quad_lines[5],
                      p->last_quad_lines[6], p->last_quad_lines[7] };
-    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_gui(self->dev, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       if(g->lines)
@@ -2879,7 +2879,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
     for(int i = 0; i < p->last_drawn_lines_count * 4; i++)
       pts[i] = p->last_drawn_lines[i];
 
-    if(dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_transform_gui(self->dev, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, p->last_drawn_lines_count * 2))
     {
       if(g->lines)
@@ -3054,7 +3054,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
     const float wd = geometry.processed_width;
     const float ht = geometry.processed_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
-    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
     {
       g->current_structure_method = ASHIFT_METHOD_QUAD;
@@ -3718,9 +3718,9 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   }
 
   // third step: transform all points
-  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, my_points, total_points))
+  if(!dt_dev_distort_transform_gui(dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, my_points, total_points))
     goto error;
-  if(!dt_dev_distort_transform_plus(dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+  if(!dt_dev_distort_transform_gui(dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                     my_extremas, 2 * lines_count))
     goto error;
 
@@ -3976,10 +3976,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { xmin + p->cr * owd, ymin + p->ct * oht } };
 
   // convert clipping corners to final output image
-  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_gui(self->dev, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)C, 4))
     return;
-  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_gui(self->dev, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
     return;
 
@@ -4300,7 +4300,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     const float pd_w = geometry.processed_width;
     const float pd_h = geometry.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       // first we move the point
@@ -4367,7 +4367,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     const float pd_w = geometry.processed_width;
     const float pd_h = geometry.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    if(dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       const float dx = (pts[0] - g->draw_pointmove_x);
@@ -4607,7 +4607,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         const float pd_w = geometry.processed_width;
         const float pd_h = geometry.processed_height;
         float pts[2] = { pzx * pd_w, pzy * pd_h };
-        dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+        dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                           DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
         g->draw_line_move = n;
         g->draw_pointmove_x = pts[0];
@@ -4708,7 +4708,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     const float pd_w = geometry.processed_width;
     const float pd_h = geometry.processed_height;
     float pts[2] = { pzx * pd_w, pzy * pd_h };
-    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order,
+    dt_dev_distort_backtransform_gui(self->dev, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
@@ -4780,7 +4780,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     const float pd_w = geometry.processed_width;
     const float pd_h = geometry.processed_height;
     float pts[4] = { pzx * pd_w, pzy * pd_h, g->lastx * pd_w, g->lasty * pd_h };
-    dt_dev_distort_backtransform_plus(self->dev->virtual_pipe,
+    dt_dev_distort_backtransform_gui(self->dev,
                                       self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
 
