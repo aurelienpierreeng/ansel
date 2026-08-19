@@ -379,7 +379,28 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
       dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_SYNCH);
   }
 
-  if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
+  /* The chain is rebuilt BEFORE the size is decided now, because it is what decides it. It is
+   * cheap -- small derivations of already-committed parameters, no LUT, no colour transform, no
+   * disk -- which is the whole point of the exercise: the resync below is not. */
+  const double chain_start = dt_get_wtime();
+  dt_geometry_chain_rebuild(dev);
+  const double chain_ms = (dt_get_wtime() - chain_start) * 1000.0;
+
+  /* Resync the pixel-less pipe only when something will actually read it: when the chain cannot
+   * answer and the fallbacks will therefore be taken, or when shadow mode is on and there would
+   * be nothing to compare against otherwise. This is where the cost of this service's absence
+   * was: measured on darkroom entry, a resync is ~0.105 s against the chain's 0.03-5 ms, and it
+   * ran on the GUI thread at every history commit.
+   *
+   * Skipping it leaves the pipe FLAGGED but not rebuilt, which is the invariant the fallbacks
+   * rely on: they run only while the chain is not authoritative, and in exactly that case the
+   * resync below has run. dt_dev_virtual_pipe_ensure_synced() is there for anything that needs
+   * to consult the pipe outside that arrangement. */
+  const gboolean chain_answers = dt_geometry_chain_authoritative(dev->geometry_chain);
+  const gboolean want_shadow = (dt_get_debug_flags() & DT_DEBUG_DEV) != 0;
+
+  if((!chain_answers || want_shadow)
+     && dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
     dt_dev_pixelpipe_change(dev->virtual_pipe);
 
   // Compute the virtual full-res output. This needs an inited history.
@@ -387,33 +408,33 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   // nothing between here and there republishes the raw geometry.
   int processed_width = 0;
   int processed_height = 0;
-  dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, raw_width, raw_height,
-                               &processed_width, &processed_height);
+  int pipe_width = 0;
+  int pipe_height = 0;
+
+  if(!chain_answers || want_shadow)
+    dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, raw_width, raw_height, &pipe_width, &pipe_height);
+
+  if(chain_answers)
+    dt_geometry_chain_processed_size(dev->geometry_chain, &processed_width, &processed_height);
+  else
+  {
+    processed_width = pipe_width;
+    processed_height = pipe_height;
+  }
+
   dt_dev_geometry_set_processed_size(dev, processed_width, processed_height);
 
   // Derive and publish everything the pipes plan from, as one record.
   dt_dev_roi_request_publish(dev);
 
-  /* Rebuild the geometry chain from the same modules and history the fold above just used, and
-   * hold it against the answer the pipe produced. It publishes nothing and nothing consumes it
-   * yet: while its roster is incomplete it reports which modules still owe it a record, per
-   * image, and once complete it reports divergence and the cost of each side. Both under
-   * `-d dev'.
-   *
-   * STRICTLY AFTER the two publications above, and never between them. Those two are one
-   * atomic-looking update to a consumer: the first moves the geometry record to the new
-   * processed size, the second moves the ROI request to match AND flags the pipes to replan
-   * (dt_dev_roi_request_publish, since the fix for #1157). Anything inserted between them
-   * widens the window in which the darkroom worker can latch the OLD request against ALREADY
-   * NEW history -- which is precisely the mixed frame #1157 is about, and this rebuild is not
-   * cheap enough to be invisible there: the lens record's database lookups alone cost 2-5 ms,
-   * against a worker that naps in tens of milliseconds. A shadow observer must not sit inside
-   * the update it is observing. */
-  const double chain_start = dt_get_wtime();
-  dt_geometry_chain_rebuild(dev);
-  const double chain_ms = (dt_get_wtime() - chain_start) * 1000.0;
-
-  dt_geometry_shadow_check(dev, processed_width, processed_height, chain_ms);
+  /* Shadow mode compares against the pipe's own fold, which only exists when the pipe was
+   * resynced above -- so it is asked for, and paid for, under `-d dev' and nowhere else. It runs
+   * STRICTLY AFTER both publications and never between them: those two are one atomic-looking
+   * update, the first moving the geometry record to the new size and the second moving the ROI
+   * request to match AND flagging the pipes to replan. Anything inserted between them widens the
+   * window in which the darkroom worker latches the OLD request against ALREADY NEW history,
+   * which is the mixed frame of #1157. An observer must not sit inside the update it observes. */
+  if(want_shadow) dt_geometry_shadow_check(dev, pipe_width, pipe_height, chain_ms);
 
 
   dt_dev_update_mouse_effect_radius(dev);
@@ -1732,6 +1753,7 @@ int dt_dev_distort_transform_gui(dt_develop_t *dev, const double iop_order, cons
 {
   if(IS_NULL_PTR(dev)) return 0;
   if(dt_geometry_transform(dev, iop_order, transf_direction, points, points_count)) return 1;
+  dt_dev_virtual_pipe_ensure_synced(dev);
   return dt_dev_distort_transform_plus(dev->virtual_pipe, iop_order, transf_direction, points, points_count);
 }
 
@@ -1741,6 +1763,7 @@ int dt_dev_distort_backtransform_gui(dt_develop_t *dev, const double iop_order, 
 {
   if(IS_NULL_PTR(dev)) return 0;
   if(dt_geometry_backtransform(dev, iop_order, transf_direction, points, points_count)) return 1;
+  dt_dev_virtual_pipe_ensure_synced(dev);
   return dt_dev_distort_backtransform_plus(dev->virtual_pipe, iop_order, transf_direction, points,
                                            points_count);
 }
@@ -1782,6 +1805,7 @@ gboolean dt_dev_processed_size_gui(dt_develop_t *dev, int *width, int *height)
     return TRUE;
   }
 
+  dt_dev_virtual_pipe_ensure_synced(dev);
   if(!IS_NULL_PTR(dev->virtual_pipe) && dev->virtual_pipe->processed_width > 0
      && dev->virtual_pipe->processed_height > 0)
   {
@@ -1811,6 +1835,7 @@ gboolean dt_dev_module_geometry_gui(dt_develop_t *dev, dt_iop_module_t *module, 
     return TRUE;
   }
 
+  dt_dev_virtual_pipe_ensure_synced(dev);
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_distort_get_iop_pipe(dev->virtual_pipe, module);
   if(IS_NULL_PTR(piece)) return FALSE;
   if(!IS_NULL_PTR(in)) *in = piece->buf_in;
@@ -1821,12 +1846,14 @@ gboolean dt_dev_module_geometry_gui(dt_develop_t *dev, dt_iop_module_t *module, 
 int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
   if(dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
+  dt_dev_virtual_pipe_ensure_synced(dev);
   return dt_dev_distort_transform_plus(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
   if(dt_geometry_backtransform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count)) return 1;
+  dt_dev_virtual_pipe_ensure_synced(dev);
   return dt_dev_distort_backtransform_locked(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 

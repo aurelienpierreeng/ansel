@@ -1793,17 +1793,35 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
                                raw_width, raw_height, 1.0f, DT_MIPMAP_FULL);
   }
 
-  // Mirror the preview-pipe change flags and commit immediately.
+  // Mirror the preview-pipe change flags.
   _change_pipe(dev->virtual_pipe, flag);
-  dt_dev_pixelpipe_change(dev->virtual_pipe);
 
-  /* The geometry chain answers the same questions and must therefore be exactly as fresh as
-   * this pipe, not fresher and not staler: consumers now read whichever of the two can answer,
-   * and a chain rebuilt only in the size path would lag the pipe on every flag that arrives
-   * between two size publications. It is rebuilt here rather than published here -- this
-   * function raises flags, and nothing downstream may observe geometry before the publication
-   * that goes with it (see the ordering note in dt_dev_get_thumbnail_size). */
+  /* The geometry chain answers the same questions and must be exactly as fresh as the pipe it
+   * replaces -- consumers read whichever of the two can answer, and a chain rebuilt only in the
+   * size path would lag on every flag arriving between two size publications. Rebuilt here, and
+   * deliberately not PUBLISHED here: this function raises flags, and nothing may observe
+   * geometry before the publication that belongs with it (the ordering rule from #1157). */
   dt_geometry_chain_rebuild(dev);
+
+  /* And the pipe itself only when something will read it. This is the expensive half of this
+   * function -- a full resync commits every module's parameters and costs ~0.1 s on the GUI
+   * thread, measured at darkroom entry -- and it is exactly what the geometry service exists to
+   * stop paying. The flag above stays raised either way, so a later
+   * dt_dev_virtual_pipe_ensure_synced() still has everything it needs to catch the pipe up if a
+   * fallback does end up consulting it. */
+  if(!dt_geometry_chain_authoritative(dev->geometry_chain))
+    dt_dev_pixelpipe_change(dev->virtual_pipe);
+}
+
+void dt_dev_virtual_pipe_ensure_synced(dt_develop_t *dev)
+{
+  /* Catch the pixel-less pipe up with the flags raised while the geometry service was answering
+   * for it. Cheap when it is already current -- the flags are cleared by a resync -- and the
+   * only thing standing between "we stopped resyncing it eagerly" and a consumer reading a pipe
+   * that history moved out from under. */
+  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->virtual_pipe)) return;
+  if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) == DT_DEV_PIPE_UNCHANGED) return;
+  dt_dev_pixelpipe_change(dev->virtual_pipe);
 }
 
 void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
