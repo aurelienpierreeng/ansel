@@ -1757,6 +1757,46 @@ int dt_dev_distort_backtransform_gui(dt_develop_t *dev, const double iop_order, 
  * @return FALSE when neither source can answer, in which case @p in and @p out are untouched
  * and the caller must not draw. A module that is disabled or absent has no rectangles.
  */
+/**
+ * @brief The developed image's full-resolution size, for a GUI caller.
+ *
+ * @details Three sources, in order of freshness, which is why this exists rather than a plain
+ * read of the geometry record: the chain and the pixel-less pipe are both recomputed the moment
+ * the module stack changes, while the record is only republished when the size path runs. Code
+ * that needed the newest answer used to reach into the pipe's field to get it, and had to keep
+ * its own fallback for the case where the pipe had none.
+ *
+ * @return FALSE when no source has a usable size, leaving the out-params untouched.
+ */
+gboolean dt_dev_processed_size_gui(dt_develop_t *dev, int *width, int *height)
+{
+  if(IS_NULL_PTR(dev)) return FALSE;
+
+  int w = 0;
+  int h = 0;
+  if(dt_geometry_chain_processed_size(dev->geometry_chain, &w, &h)
+     && dt_geometry_chain_authoritative(dev->geometry_chain) && w > 0 && h > 0)
+  {
+    if(!IS_NULL_PTR(width)) *width = w;
+    if(!IS_NULL_PTR(height)) *height = h;
+    return TRUE;
+  }
+
+  if(!IS_NULL_PTR(dev->virtual_pipe) && dev->virtual_pipe->processed_width > 0
+     && dev->virtual_pipe->processed_height > 0)
+  {
+    if(!IS_NULL_PTR(width)) *width = dev->virtual_pipe->processed_width;
+    if(!IS_NULL_PTR(height)) *height = dev->virtual_pipe->processed_height;
+    return TRUE;
+  }
+
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  if(geometry.processed_width <= 0 || geometry.processed_height <= 0) return FALSE;
+  if(!IS_NULL_PTR(width)) *width = geometry.processed_width;
+  if(!IS_NULL_PTR(height)) *height = geometry.processed_height;
+  return TRUE;
+}
+
 gboolean dt_dev_module_geometry_gui(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_roi_t *in,
                                     dt_iop_roi_t *out)
 {

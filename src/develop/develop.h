@@ -668,6 +668,12 @@ int dt_dev_distort_backtransform_gui(struct dt_develop_t *dev, const double iop_
 gboolean dt_dev_module_geometry_gui(struct dt_develop_t *dev, struct dt_iop_module_t *module,
                                     dt_iop_roi_t *in, dt_iop_roi_t *out);
 
+/**
+ * @brief The developed image's full-resolution size for a GUI caller: the geometry service, the
+ * pixel-less pipe, or the published record, in that order of freshness. FALSE when none has one.
+ */
+gboolean dt_dev_processed_size_gui(struct dt_develop_t *dev, int *width, int *height);
+
 /** get the iop_pixelpipe instance corresponding to the iop in the given pipe */
 struct dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(struct dt_dev_pixelpipe_t *pipe,
                                                            struct dt_iop_module_t *module);

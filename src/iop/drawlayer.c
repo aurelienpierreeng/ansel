@@ -387,17 +387,9 @@ static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt
   {
     return FALSE;
   }
-  else if(self->dev->virtual_pipe && self->dev->virtual_pipe->processed_width > 0
-          && self->dev->virtual_pipe->processed_height > 0)
+  else if(!dt_dev_processed_size_gui(self->dev, &resolved_width, &resolved_height))
   {
-    resolved_width = self->dev->virtual_pipe->processed_width;
-    resolved_height = self->dev->virtual_pipe->processed_height;
-  }
-  else
-  {
-    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
-    resolved_width = geometry.processed_width;
-    resolved_height = geometry.processed_height;
+    return FALSE;
   }
 
   if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;

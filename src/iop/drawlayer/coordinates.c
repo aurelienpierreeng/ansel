@@ -31,18 +31,7 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
    * display-pipe refresh catches up. */
   int resolved_width = 0;
   int resolved_height = 0;
-  if(self->dev->virtual_pipe && self->dev->virtual_pipe->processed_width > 0
-     && self->dev->virtual_pipe->processed_height > 0)
-  {
-    resolved_width = self->dev->virtual_pipe->processed_width;
-    resolved_height = self->dev->virtual_pipe->processed_height;
-  }
-  else
-  {
-    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
-    resolved_width = geometry.processed_width;
-    resolved_height = geometry.processed_height;
-  }
+  dt_dev_processed_size_gui(self->dev, &resolved_width, &resolved_height);
   if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
   if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;
   return resolved_width > 0 && resolved_height > 0;
@@ -50,7 +39,7 @@ static gboolean _virtual_piece_layer_geometry(dt_iop_module_t *self, int *layer_
 
 gboolean dt_drawlayer_widget_points_to_layer_coords(dt_iop_module_t *self, float *pts, const int count)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(pts) || count <= 0) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(pts) || count <= 0) return FALSE;
 
   dt_dev_coordinates_widget_to_image_norm(self->dev, pts, count);
   dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, count);
@@ -137,7 +126,7 @@ gboolean dt_drawlayer_layer_bounds_to_widget_bounds(dt_iop_module_t *self, const
 float dt_drawlayer_widget_brush_radius(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab,
                                        const float fallback)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(self->dev->virtual_pipe) || IS_NULL_PTR(dab)) return fallback;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(dab)) return fallback;
 
   float pts[6] = {
     dab->x, dab->y, dab->x + dab->radius, dab->y, dab->x, dab->y + dab->radius,
