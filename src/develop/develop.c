@@ -515,8 +515,10 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
 {
   const int32_t imgid = pipe->dev->image_storage.id;
 
-  // Get the mip size that is at most as big as our pipeline backbuf
-  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(pipe->backbuf.width, pipe->backbuf.height, imgid);
+  // Get the mip size that is at most as big as our pipeline backbuf. One read: these dimensions
+  // are handed to the mipmap cache alongside the payload below, so they must describe it.
+  const dt_backbuf_state_t published = dt_dev_backbuf_snapshot(&pipe->backbuf);
+  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(published.width, published.height, imgid);
   
   // Flush backup to mipmap_cache. This runs after dt_dev_pixelpipe_process() released the OpenCL device
   // lock, so we must NOT pass pipe->devid (now stale/unlocked): a device-only payload would otherwise be
@@ -530,7 +532,7 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
     dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
     dt_colorprofiles_settings_t settings;
     dt_colorprofiles_get_settings(&settings);
-    dt_mipmap_cache_swap_at_size(imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height,
+    dt_mipmap_cache_swap_at_size(imgid, mip, data, published.width, published.height,
                                  settings.display_type);
     dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
@@ -2125,11 +2127,16 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 
                         const int64_t hash, const int64_t history_hash)
 {
+  /* One publication: the shape and the cacheline it describes settle together, so no consumer
+   * can pair a hash with dimensions from a different frame. The atomics are written directly
+   * rather than through the single-field setters, which bracket the counter themselves. */
+  dt_dev_backbuf_publish_begin(backbuf);
   backbuf->height = height;
   backbuf->width = width;
-  dt_dev_backbuf_set_hash(backbuf, hash);
   backbuf->bpp = bpp;
-  dt_dev_backbuf_set_history_hash(backbuf, history_hash);
+  dt_atomic_set_uint64(&backbuf->hash, (uint64_t)hash);
+  dt_atomic_set_uint64(&backbuf->history_hash, (uint64_t)history_hash);
+  dt_dev_backbuf_publish_end(backbuf);
 }
 
 // clang-format off

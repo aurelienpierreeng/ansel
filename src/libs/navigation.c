@@ -276,8 +276,12 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
     dt_dev_pixelpipe_cache_rdlock_entry(TRUE, cache_entry);
 
-    wd = dev->preview_pipe->backbuf.width;
-    ht = dev->preview_pipe->backbuf.height;
+    /* One read of the publication: the cacheline just resolved and the shape its pixels are in
+     * have to come from the same frame, or the stride below is computed from the next frame's
+     * width and this paints diagonal striping. See dt_backbuf_t. */
+    const dt_backbuf_state_t published = dt_dev_backbuf_snapshot(&dev->preview_pipe->backbuf);
+    wd = published.width;
+    ht = published.height;
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
 
     /* Can this cacheline hold an image of those dimensions at all?
@@ -285,13 +289,13 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
      * The centre view asks the same question before it paints (dt_dev_lock_pipe_surface); this
      * widget did not, and handed cairo a buffer to walk with a stride computed from a width the
      * data need not have. When they disagree the thumbnail is striped diagonally, and the read
-     * runs past the allocation whenever the recorded dimensions are the larger pair -- the
-     * buffer and its dimensions are fetched separately here, from state a worker owns and can
-     * republish at a new size in between.
+     * runs past the allocation whenever the recorded dimensions are the larger pair.
      *
-     * Keep the previous thumbnail and come back on the next expose rather than draw garbage.
-     * This does not FIX a mismatch -- only the pipe that published it can -- but it stops this
-     * widget turning one into an out-of-bounds read. */
+     * The way they came to disagree -- a hash resolved from one publication paired with
+     * dimensions from the next -- is closed by the snapshot above. This stays because it answers
+     * a different question: whether the cacheline this hash names is big enough at all, which
+     * neither the snapshot nor the cache can tell. Keep the previous thumbnail and come back on
+     * the next expose rather than draw garbage. */
     const size_t required_size = (size_t)stride * (size_t)ht;
     if(wd <= 0 || ht <= 0 || dt_pixel_cache_entry_get_size(cache_entry) < required_size
        || dt_pixel_cache_entry_get_data(cache_entry) != data)
@@ -303,7 +307,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     scale = fminf(width / (float)wd, height / (float)ht);
     cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
 
-    image_hash = dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf);
+    image_hash = published.hash;
 
     cairo_t *cri = cairo_create(d->image_surface);
     cairo_rectangle(cri, 0, 0, width, height);
