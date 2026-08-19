@@ -3026,9 +3026,9 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   float pts[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(module->dev, pts, 1);
   dt_dev_coordinates_image_norm_to_image_abs(module->dev, pts, 1);
-  dt_dev_distort_backtransform_plus(module->dev->virtual_pipe,
+  dt_dev_distort_backtransform_gui(module->dev,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
-  dt_dev_distort_backtransform_plus(module->dev->virtual_pipe,
+  dt_dev_distort_backtransform_gui(module->dev,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1);
 
   *scale = get_zoom_scale(module->dev);
