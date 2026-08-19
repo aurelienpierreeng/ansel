@@ -365,32 +365,22 @@ static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt
   if(!IS_NULL_PTR(origin_x)) *origin_x = 0;
   if(!IS_NULL_PTR(origin_y)) *origin_y = 0;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
-  /* Layer geometry must follow authored image-space pixels at the current
-   * module stage, not merely the size of the working buffer currently attached
-   * to the pipe. Thumbnail/export pipes may start from a downscaled mipmap, so
-   * `piece->buf_out` alone is smaller than the layer canvas and must be
-   * lifted back through `roi_out.scale` to recover the full stage geometry. */
+  /* The canvas has the RAW image's dimensions, in this image's own orientation, and is centred
+   * on the module's frame -- the same for every pipe, every zoom and every crop, which is the
+   * point of anchoring to it: a crop changes which window of the canvas a render reads, not
+   * where the paint sits. See iop/drawlayer/coordinates.h.
+   *
+   * It used to be the module's own stage frame, lifted back through roi_out.scale. That size
+   * moves with every crop, and the authored raster was then fitted onto the new frame -- the
+   * paint moved and stretched with the crop.
+   *
+   * Thumbnail and export pipes may start from a downscaled mipmap; that shrinks the module's
+   * frame, not the canvas, and the placement's scale absorbs it. */
   int resolved_width = 0;
   int resolved_height = 0;
+  if(!dt_drawlayer_layer_canvas_for_pipe(self, pipe, &resolved_width, &resolved_height)) return FALSE;
 
-  if(!IS_NULL_PTR(piece) && piece->buf_out.width > 0 && piece->buf_out.height > 0 && piece->roi_out.scale > 0.0)
-  {
-    resolved_width = (int)lround((double)piece->buf_out.width * piece->roi_out.scale);
-    resolved_height = (int)lround((double)piece->buf_out.height * piece->roi_out.scale);
-  }
-  else if(!IS_NULL_PTR(pipe) && pipe->processed_width > 0 && pipe->processed_height > 0)
-  {
-    resolved_width = pipe->processed_width;
-    resolved_height = pipe->processed_height;
-  }
-  else if(!IS_NULL_PTR(pipe) || !IS_NULL_PTR(piece))
-  {
-    return FALSE;
-  }
-  else if(!dt_dev_processed_size_gui(self->dev, &resolved_width, &resolved_height))
-  {
-    return FALSE;
-  }
+  (void)piece;
 
   if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
   if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;
@@ -553,21 +543,17 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
   int layer_height = 0;
   const gboolean have_pipe_geometry = _resolve_layer_geometry(self, pipe, piece, &layer_width, &layer_height, NULL, NULL);
 
-  /* Thumbnail/export pipes render a downscaled final image, but drawlayer
-   * sidecars stay authored in full image-space coordinates. Reinterpreting an
-   * existing TIFF page at thumbnail size recenters/crops it through the TIFF
-   * offset math and produces the apparent scale mismatch on first export. */
-  if(pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL || pipe->type == DT_DEV_PIXELPIPE_EXPORT)
-  {
-    if(info.found && info.width > 0 && info.height > 0)
-    {
-      layer_width = (int)info.width;
-      layer_height = (int)info.height;
-    }
-    else if(!have_pipe_geometry)
-      return FALSE;
-  }
-  else if(!have_pipe_geometry)
+  /* The canvas is the raw frame in every pipe, so the stored page's own dimensions are no longer
+   * consulted to decide it -- they used to be, because a thumbnail or export pipe resolved a
+   * SMALLER canvas than the darkroom did (both followed the module's stage frame, and those pipes
+   * render downscaled), and reinterpreting the page at that size recentred it. Anchoring removes
+   * the divergence rather than papering over it: one canvas size for every pipe, and the pipe's
+   * own scale is absorbed by the placement.
+   *
+   * A page authored before this change was written in the post-crop frame and will be read as
+   * though it were raw, so it appears shifted until repainted. That was the agreed trade; the
+   * alternative was a versioned sidecar and a migration pass. */
+  if(!have_pipe_geometry)
   {
     if(info.found && info.width > 0 && info.height > 0)
     {
@@ -1591,7 +1577,7 @@ static inline __attribute__((always_inline)) gboolean _update_runtime_state(cons
 
   if(process && process->cache_valid && process->base_patch.pixels && process->cache_imgid == pipe->dev->image_storage.id)
   {
-    const dt_iop_roi_t process_roi = request->roi_out ? *request->roi_out : *request->roi_in;
+    dt_iop_roi_t process_roi = request->roi_out ? *request->roi_out : *request->roi_in;
     const dt_iop_roi_t source_full_roi = {
       .x = 0,
       .y = 0,
@@ -1599,6 +1585,31 @@ static inline __attribute__((always_inline)) gboolean _update_runtime_state(cons
       .height = process->base_patch.height,
       .scale = 1.0f,
     };
+
+    /* The canvas has the raw image's dimensions and this module's frame is a window into it, at
+     * the position the size fold gives that window (piece->buf_in.x/y -- a crop records itself
+     * there). So the window this render reads is the requested output window shifted by that
+     * origin -- and by nothing else. No scale: canvas and frame share the pixel pitch. No
+     * rotation: the flip is already in the canvas's orientation.
+     *
+     * dt_interpolation_resample() reads source pixel ((x + i) / scale) for output column i, and
+     * target_roi->x is in those same scaled units, which is why the offset is multiplied by the
+     * render's own scale here and by nothing else.
+     *
+     * Before this the canvas WAS the module's frame and target_roi indexed it directly -- so the
+     * canvas changed size with every crop and the authored raster was re-fitted onto the new
+     * frame. The paint moved and stretched with the crop; that is the bug this fixes.
+     *
+     * KNOWN LIMIT: when the frame is LARGER than the canvas (a perspective correction expands it)
+     * the offset goes negative and the resampler clamps to the canvas edge instead of reading
+     * transparency, so paint touching the very edge of the canvas smears outward into the added
+     * margin. Paint that does not reach the edge is unaffected. */
+    dt_drawlayer_raw_placement_t placement;
+    if(dt_drawlayer_raw_placement_for_frame(request->self, pipe, &request->piece->buf_in, &placement))
+    {
+      process_roi.x += (int)lroundf((float)placement.offset_x * process_roi.scale);
+      process_roi.y += (int)lroundf((float)placement.offset_y * process_roi.scale);
+    }
     source->kind = DT_DRAWLAYER_SOURCE_BASE_PATCH;
     source->pixels = process->base_patch.pixels;
     source->cache_entry = process->base_patch.cache_entry;
