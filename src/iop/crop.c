@@ -209,11 +209,11 @@ static void _params_to_gui(dt_iop_crop_params_t *p, dt_iop_crop_gui_data_t *g)
 
 static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop_crop_params_t *p)
 {
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece)) return;
+  dt_iop_roi_t mod_out;
+  if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return;
   // we want value in iop space
-  const float wd = (float)piece->buf_out.width; //dt_dev_roi_request_preview_width(self->dev);
-  const float ht = (float)piece->buf_out.height; //dt_dev_roi_request_preview_height(self->dev);
+  const float wd = (float)mod_out.width;
+  const float ht = (float)mod_out.height;
 
   const float bbox_left   = g->clip_x * wd;
   const float bbox_top    = g->clip_y * ht;
@@ -230,7 +230,7 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
     //{
       //fprintf(stderr, "buf_out size: %dx%d\n", piece->buf_out.width, piece->buf_out.height);
 
-      if(piece->buf_out.width < 1 || piece->buf_out.height < 1) return;
+      if(mod_out.width < 1 || mod_out.height < 1) return;
       /*p->cx = CLAMPF(points[0] / (float)piece->buf_out.width, 0.0f, 0.9f);
       p->cy = CLAMPF(points[1] / (float)piece->buf_out.height, 0.0f, 0.9f);
       p->cw = CLAMPF(points[2] / (float)piece->buf_out.width, 0.1f, 1.0f);
@@ -560,10 +560,10 @@ static float _aspect_ratio_get(dt_iop_module_t *self, GtkWidget *combo)
   }
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece)) return 0.0f;
+  dt_iop_roi_t mod_in;
+  if(!dt_dev_module_geometry_gui(self->dev, self, &mod_in, NULL)) return 0.0f;
 
-  const int iwd = piece->buf_in.width, iht = piece->buf_in.height;
+  const int iwd = mod_in.width, iht = mod_in.height;
 
   // if we do not have yet computed the aspect ratio, let's do it now
   if(p->ratio_d == -2 && p->ratio_n == -2)

@@ -657,6 +657,17 @@ int dt_dev_distort_transform_gui(struct dt_develop_t *dev, const double iop_orde
 int dt_dev_distort_backtransform_gui(struct dt_develop_t *dev, const double iop_order,
                                      const int transf_direction, float *points, size_t points_count);
 
+/**
+ * @brief One module's own input and output rectangles at full resolution, from the geometry
+ * service or, until it can answer, from the pixel-less pipe.
+ *
+ * Replaces resolving a piece and reading piece->buf_in / piece->buf_out. Returns FALSE when
+ * neither source has them, leaving the out-params untouched -- a disabled or absent module has
+ * no rectangles, and a caller that draws anyway draws somewhere arbitrary.
+ */
+gboolean dt_dev_module_geometry_gui(struct dt_develop_t *dev, struct dt_iop_module_t *module,
+                                    dt_iop_roi_t *in, dt_iop_roi_t *out);
+
 /** get the iop_pixelpipe instance corresponding to the iop in the given pipe */
 struct dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(struct dt_dev_pixelpipe_t *pipe,
                                                            struct dt_iop_module_t *module);

@@ -292,11 +292,12 @@ static int set_grad_from_points(struct dt_iop_module_t *self, const grad_point_t
   float pts[4] = { a->x, a->y, b->x, b->y };
   dt_dev_coordinates_image_norm_to_image_abs(self->dev, pts, 2);
   dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  pts[0] /= (float)piece->buf_out.width;
-  pts[2] /= (float)piece->buf_out.width;
-  pts[1] /= (float)piece->buf_out.height;
-  pts[3] /= (float)piece->buf_out.height;
+  dt_iop_roi_t mod_out;
+  if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return 0;
+  pts[0] /= (float)mod_out.width;
+  pts[2] /= (float)mod_out.width;
+  pts[1] /= (float)mod_out.height;
+  pts[3] /= (float)mod_out.height;
 
   // directly compute the line angle from segment AB and keep one representative modulo PI
   const float eps = .0001f;
@@ -326,9 +327,9 @@ static int set_points_from_grad(struct dt_iop_module_t *self, grad_point_t *a, g
   const float eps = 1e-6f;
   dt_boundingbox_t pts;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece)) return 0;
-  float wp = piece->buf_out.width, hp = piece->buf_out.height;
+  dt_iop_roi_t mod_out;
+  if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return 0;
+  float wp = mod_out.width, hp = mod_out.height;
 
   const float off = offset / 100.0f;
 
