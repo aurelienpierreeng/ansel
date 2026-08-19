@@ -3168,6 +3168,23 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
   int current_segment_index = 0;
   cairo_move_to(cr, points[node_count * 6], points[node_count * 6 + 1]);
 
+  /* Emit at screen resolution, not at the resolution the outline was built with.
+   *
+   * The outline is sampled one point per RAW pixel along the path -- measured on #1158, a mean of
+   * 89 150 points per shape and a maximum of 208 095, for a mean of 11.9 nodes -- while the view
+   * it is drawn into is a fraction of that: at the zoom in those logs, roughly four outline points
+   * land inside every device pixel. Issuing a cairo_line_to() for each of them costs 93 ms per
+   * shape and draws a curve indistinguishable from the one below, which is 14.87 s of a 30.45 s
+   * session spent on segments shorter than a pixel.
+   *
+   * Points nearer than half a device pixel to the last EMITTED one are dropped -- not skipped in
+   * the walk: every point is still tested for a segment boundary below, and a boundary always
+   * emits, so the strokes still start and end exactly where the nodes are. */
+  const double min_step = dt_draw_min_emit_step(cr);
+  const double min_step2 = min_step * min_step;
+  double last_x = points[node_count * 6];
+  double last_y = points[node_count * 6 + 1];
+
   for(int point_index = node_count * 3; point_index < points_count; point_index++)
   {
     const int coord_index = point_index * 2;
@@ -3175,7 +3192,16 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
 
     const double coord_x = points[coord_index];
     const double coord_y = points[coord_index + 1];
-    cairo_line_to(cr, coord_x, coord_y);
+
+    const double step_x = coord_x - last_x;
+    const double step_y = coord_y - last_y;
+    const gboolean far_enough = (step_x * step_x + step_y * step_y) >= min_step2;
+    if(far_enough)
+    {
+      cairo_line_to(cr, coord_x, coord_y);
+      last_x = coord_x;
+      last_y = coord_y;
+    }
 
     const int segment_coord_index = show_segment_index * 6;
     if((segment_coord_index + 3) >= total_coords) continue;
@@ -3184,6 +3210,15 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
     const double segment_y = points[segment_coord_index + 3];
     if(coord_x == segment_x && coord_y == segment_y)
     {
+      // a segment ends exactly on a node: emit it even when it was too near to the last one,
+      // or the stroke would stop short of the handle it belongs to
+      if(!far_enough)
+      {
+        cairo_line_to(cr, coord_x, coord_y);
+        last_x = coord_x;
+        last_y = coord_y;
+      }
+
       const gboolean seg_is_selected = group_selected
                                        && (dt_masks_gui_selected_segment_index(mask_gui)
                                            == current_segment_index);
@@ -3199,6 +3234,9 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
 
       show_segment_index = (show_segment_index + 1) % node_count;
       current_segment_index++;
+
+      // dt_draw_stroke_line() consumed the path; the next one starts here
+      cairo_move_to(cr, coord_x, coord_y);
     }
 
     if(mask_gui->creation && current_segment_index >= node_count - 1) break;

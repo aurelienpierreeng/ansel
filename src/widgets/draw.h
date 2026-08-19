@@ -835,6 +835,27 @@ static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_d
  * @param selected TRUE if the shape is selected
  * @param zoom_scale the current zoom scale of the image
  */
+/**
+ * @brief The shortest user-space step worth emitting into @p cr, in user units.
+ *
+ * @details Outlines are sampled at the resolution they were BUILT at -- for a mask, one point per
+ * raw image pixel along the path -- and drawn into a view that is a fraction of that. Measured on
+ * ansel#1158: a mean of 89 150 points per brush shape (max 208 095) for a mean of 11.9 nodes, with
+ * roughly four of them landing inside every device pixel, costing 93 ms per shape per frame to
+ * stroke a curve indistinguishable from the decimated one.
+ *
+ * Half a device pixel, converted through the context's own matrix rather than through a zoom
+ * factor a caller happens to know: that picks up the device scale (HiDPI) and any transform in
+ * effect, and needs nothing passed in. Returns 0 for a degenerate matrix, which decimates nothing.
+ */
+static inline double dt_draw_min_emit_step(cairo_t *cr)
+{
+  double dx = 0.5, dy = 0.5;
+  cairo_device_to_user_distance(cr, &dx, &dy);
+  const double step = fmin(fabs(dx), fabs(dy));
+  return isfinite(step) ? step : 0.0;
+}
+
 static inline void dt_draw_stroke_line(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr,
                           const gboolean selected, const float zoom_scale, const cairo_line_cap_t line_cap)
 {
