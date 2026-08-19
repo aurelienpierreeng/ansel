@@ -2160,11 +2160,35 @@ static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float
 
     // We don't want to draw the plain line twice, adapt the end index accordingly
     const int end_idx = border ? points_count : 0.5 * points_count;
-    
+
+    /* One line_to per point sampled at RAW resolution is several per device pixel; emit at the
+     * resolution the context can actually show. See dt_draw_min_emit_step(). */
+    const double min_step = dt_draw_min_emit_step(cr);
+    const double min_step2 = min_step * min_step;
+    double last_x = points[start_idx * 2];
+    double last_y = points[start_idx * 2 + 1];
+
     for(int i = start_idx + 1; i < end_idx; i++)
     {
-      if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
-        cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
+      const double x = points[i * 2];
+      const double y = points[i * 2 + 1];
+      if(isnan(x) || isnan(y)) continue;
+
+      const double step_x = x - last_x;
+      const double step_y = y - last_y;
+      if((step_x * step_x + step_y * step_y) < min_step2) continue;
+
+      cairo_line_to(cr, x, y);
+      last_x = x;
+      last_y = y;
+    }
+
+    // the last point always lands, so the outline closes where the shape does
+    if(end_idx > start_idx + 1)
+    {
+      const double x = points[(end_idx - 1) * 2];
+      const double y = points[(end_idx - 1) * 2 + 1];
+      if(!isnan(x) && !isnan(y) && (x != last_x || y != last_y)) cairo_line_to(cr, x, y);
     }
   }
 }
