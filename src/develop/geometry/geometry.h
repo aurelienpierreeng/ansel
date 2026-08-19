@@ -184,23 +184,18 @@ int dt_geometry_backtransform(struct dt_develop_t *dev, double iop_order, int di
 int dt_geometry_chain_compose(dt_geometry_chain_t *chain, double iop_order, int direction, float *points,
                               size_t points_count);
 
-/**
- * @brief Publish the focused module and its editing state, for the query-time GUI exception.
+/* THE FOCUS EXCEPTION is not an entry point, deliberately. It used to be one -- a setter the GUI
+ * was supposed to call when the focused module or its editing state changed -- and nothing ever
+ * called it, so the chain composed every module while the pipe was skipping the ones the focused
+ * module's tag filter disables. The visible result was ashift's detected-lines overlay drawn
+ * against a different module stack than the image under it.
  *
- * @details dt_dev_pixelpipe_activemodule_disables_currentmodule() reads the focused module, its
- * operation_tags_filter() and its live cache-bypass flag, and disables matching modules for the
- * duration of a walk -- and, in the size fold, for the resulting processed size too. That is
- * view state: it changes when the user clicks into crop's edit mode, with no history commit
- * anywhere. It therefore cannot be baked into records; the chain reads it at query time, from
- * whatever the GUI last published here.
+ * A published copy of view state has to be refreshed to stay true and is wrong in between; that
+ * is the same lesson control/input.h records about the stored mouse-button state. So the chain
+ * now reads it where the pipe reads it -- dev->gui_module, its operation_tags_filter() and its
+ * live cache-bypass flag, at query time -- and the two cannot drift because there is nothing to
+ * keep in step. Do not reintroduce a setter for this.
  */
-void dt_geometry_set_focus(struct dt_develop_t *dev, const struct dt_iop_module_t *focused,
-                           gboolean editing);
-
-/** @brief Forget the focused module. Call before any module list teardown -- see the note on
- *  dt_geometry_set_focus(): the chain keeps the focus by VALUE precisely so a stale publication
- *  cannot dereference a destroyed module, but clearing it at teardown keeps the state honest. */
-void dt_geometry_clear_focus(struct dt_develop_t *dev);
 
 /**
  * @brief Shadow mode: compare the chain against the pipe that still owns the answer.
