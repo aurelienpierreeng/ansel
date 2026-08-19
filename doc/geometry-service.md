@@ -154,48 +154,101 @@ geometry-roster instance in the current history has a record — wholesale, neve
    tables reproduce this; nothing new — but it is why dims, not just transforms, are part
    of the service contract.
 
-## 4. Tranches
+## 4. Tranches — as executed
 
-Each is one PR; shadow mode must be silent (zero divergence on the exercised paths)
-before the next lands. Ratchet: `grep -rc "virtual_pipe" src/` may only fall.
+The original plan is preserved in this file's history; what follows is what actually
+happened, because the order changed three times and each change was a measurement, not a
+preference. Reading the old list as a map of the work would mislead.
 
-- **G1 — pre-fixes** (independently landable, shrink the surface):
-  a. ashift worker-thread virtual-pipe reads → own pipe's pieces (trap 8);
-  b. drawlayer's raw `virtual_pipe->processed_*` field reads → geometry-record accessors
-     (drawlayer.c:381-400, coordinates.c:34-44);
-  c. `_pop_undo` publishes sizes like every other bulk path (trap 6).
-- **G2 — skeleton**: `src/develop/geometry/`; record + chain types, rebuild entry point
-  wired to all rebuild sites, walkers (5 modes + query-time exception), size fold with
-  per-module dims for all modules, provider seam type, shadow-mode harness. Chain stays
-  non-authoritative (empty roster) — pure scaffolding, behavior identical.
-- **G3 — first authority** (PR #1166): crop, flip, rawprepare, demosaic, basebuffer.
-  Composition set by measurement, not by taste: G2's shadow harness named the five modules
-  gating the test image, and three of them (rawprepare, demosaic, basebuffer) are
-  always-enabled infrastructure this plan had scattered across G3 and G6. Nothing can become
-  authoritative without those three, so they came first, with the two simple ones that
-  complete that image. Shadow mode gained five transform probes here, so it compares
-  coordinates and not only sizes; both agree on a cropped+flipped NEF and an X-Trans RAF.
+Each is one PR. Shadow mode must be silent on the exercised paths before the next lands.
+Ratchet: `grep -rc "virtual_pipe" src/` may only fall — it stays flat while both paths are
+live and falls at deletion.
 
-  **What the breadth run then said, and it reorders the rest:** across CR2, ARW and DNG from
-  the test collection the only remaining gate is `lens`, on every one of them. So lens comes
-  next — it buys more than borders, rotatepixels, scalepixels and clipping combined, none of
-  which has gated anything measured so far. The tranches below keep their content; their
-  ORDER should keep following the harness rather than this list.
-- **G4 — the dirty pair**: clipping + scalepixels pure-constructor refactors (trap 3),
-  then their records; resolve the ×100 hack with a shadow diff.
-- **G5 — ashift + lens**: ashift's homography record; lens's record with deep lfLens copy
-  + `free_fn` (lens.cc:1204-1229's copy-assign is the model), the plugin-mutex
-  inconsistency resolved (get_modifier locked in process paths, unlocked in transform
-  paths today — lens.cc:475 vs :962), and `gui_update` repointed at the record.
-- **G6 — liquify + demosaic**: nested composition proves out on liquify; demosaic's
-  DOWNSAMPLE size record; enabled-policy for the raw domain (trap 9).
-- **G7 — consumer migration**: coordinate converters, mask GUI wrappers, module GUIs,
-  dims readers, and the size path (`dt_dev_get_thumbnail_size` → chain rebuild + derive)
-  — the virtual resync leaves the history drain here, and #1157's residual window dies.
-  Dual-use folds get the provider seam.
-- **G8 — deletion**: `dev->virtual_pipe`, `_sync_virtual_pipe`, the teardown boilerplate
-  in darkroom/studio_capture `leave()`, the realtime hash-fast-forward special case.
-  Ratchet target: zero references.
+**Landed for review**
+
+- **G1 — pre-fixes** (#1164). ashift's `process()`/`process_cl()` stop backtransforming
+  through the GUI's pixel-less pipe from the worker thread (trap 8); `_pop_undo()` publishes
+  the geometry like every other bulk history path — a real bug on its own, since undoing a
+  crop left the fit scale describing the pre-undo image.
+  *Dropped from this tranche:* drawlayer's raw `virtual_pipe->processed_*` reads. They are
+  not a redundant duplicate of the geometry record — they prefer the pipe's field as the
+  FRESHER of the two, and `_pop_undo` proves that was rational. Deferred to the consumer
+  migration, where one source exists and the question dissolves.
+- **G2 — skeleton** (#1165). `src/develop/geometry/`: record, chain, the two walkers with all
+  five direction modes, the size fold, the query-time focus exception, the `geometry_record()`
+  module API, the roster, and shadow mode. Non-authoritative; behaviour identical.
+  Shadow mode is what makes an otherwise dead skeleton verifiable: it names, per image, which
+  roster modules still owe a record.
+- **G3 — first authority** (#1166): crop, flip, rawprepare, demosaic, basebuffer.
+  **Composition chosen by the harness, not by this plan.** It named the five modules gating
+  the test image, three of them always-enabled infrastructure the plan had scattered across
+  two later tranches — and nothing can become authoritative without those three. Shadow mode
+  gained five transform probes here, so it compares coordinates and not only sizes.
+- **G4 — lens + the cost** (#1167). Lens jumped the queue because after G3 it was the ONLY
+  module still gating every CR2, ARW and DNG tried. Its record is the one that is not plain
+  data (a deep `lfLens` copy with a `free_fn`), which is why measuring the cost with it in is
+  the honest test. Measured, five images: virtual pipe ~0.105 s against chain 0.03–5 ms, i.e.
+  20× to 3500×, the worst case being images where lens is active — its lensfun database
+  lookups are the whole of that 2–5 ms and are a memo waiting to happen.
+- **G5 — records read history** (#1169). Not in the original plan at all: shadow mode caught
+  the chain and the pipe disagreeing while crop's piece was mid-transition. Every
+  `geometry_record()` was reading `self->params` and the rebuild was filtering on
+  `module->enabled` — GUI-thread live values, ahead of the pipes across the 200 ms commit
+  throttle. The chain now resolves each module exactly as the pipe does, and a disabled roster
+  module owes nothing.
+- **G6 — rotatepixels, borders, ashift** (#1170). The three that are pure functions of their
+  parameters and the rectangle handed to them.
+- **G7 — clipping and scalepixels** (#1171). The two that derived state inside their ROI
+  callbacks and reached it, from paths that plan no ROI, through a shallow piece copy whose
+  `data` pointer still aliased the real one. scalepixels turned out to need no piece at all —
+  the dimensions cancel and its scales are a pure function of the pixel aspect ratio.
+- **G8 — liquify** (#1172). The roster is complete. The only module needing the chain composed
+  around itself: its warps live in RAW coordinates, so it re-enters the chain
+  (`dt_geometry_chain_compose()`, bounded `BACK_EXCL` of its own iop_order) exactly as it
+  re-enters the pipe walker. This is the first and only caller of the `chain` argument every
+  evaluator has carried since G2.
+- **G9 — the coordinate converters** (#1173). First consumer migration.
+  `dt_dev_coordinates_raw_abs_to_image_abs()` and its inverse — the whole of the mask GUI's
+  coordinate handling — read the chain, falling back to the pipe when it declines.
+  `_sync_virtual_pipe()` rebuilds the chain alongside the pipe so the two cannot differ in
+  freshness.
+
+**Remaining**
+
+- **G10 — module GUIs and per-module dimensions.** ~75 sites: ashift (27), clipping (16),
+  drawlayer and drawlayer/coordinates (12), crop (6), liquify (4), graduatednd (4), lens (1).
+  Most resolve their own piece through `dt_dev_distort_get_iop_pipe()` to read `buf_in`/
+  `buf_out`; the chain already publishes per-module in/out rects for EVERY module, so those
+  are repoints. `graduatednd` is the standing reminder that this is not only geometry modules.
+  `lens.cc`'s `gui_update()` is the one site that reads a committed data blob rather than
+  dimensions — served by the record, which is that data.
+- **G11 — the dual-use folds.** brush, polygon, circle, ellipse (8 sites). These take a pipe
+  as a parameter and run with BOTH the virtual pipe (GUI) and the worker's own pipe (mask
+  rasterisation), so they need the provider seam rather than a repoint: one implementation
+  backed by pieces for workers, one backed by the chain for the GUI.
+- **G12 — the size path.** `dt_dev_get_thumbnail_size()` still folds the virtual pipe for the
+  processed size. Only when every consumer above has moved can the resync be dropped — and
+  that is where the measured cost difference stops being a table and becomes something a user
+  feels, and where #1157's residual window closes by construction, the virtual resync finally
+  leaving the history-commit path.
+- **G13 — deletion.** `dev->virtual_pipe`, `_sync_virtual_pipe()`, the teardown boilerplate in
+  darkroom's and studio_capture's `leave()`, the realtime hash fast-forward special case, and
+  the fallbacks in the migrated consumers. Ratchet target: 0.
+
+## What the measurements changed, and why that matters
+
+Three times the harness overruled this document: G3's composition, lens jumping the queue,
+and G5 existing at all. That is the design working as intended — shadow mode was built so the
+source audit could be checked against reality per image, and each time reality had something
+the audit did not. Keep ordering the remaining tranches the same way.
+
+## The verification gap, stated plainly
+
+Everything so far rests on export A/B, shadow agreement and darkroom-open runs. None of that
+covers what a user would notice first: a mask drawn, dragged, and landing where it was put.
+From G9 onward the migrated consumers are GUI-side, and an export never calls them — so the
+bit-identical exports say only that nothing ELSE regressed. Interactive verification is owed,
+and it gets more load-bearing with every further tranche.
 
 ## 5. Out of scope, recorded so nobody rediscovers them
 
