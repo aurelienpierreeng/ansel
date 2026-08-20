@@ -37,9 +37,15 @@ modules in (see `static-iop.md`), which is the other half of the number:
 |---|---|---|---|
 | startup | 0.293–0.340 s | 0.206–0.211 s | **0.097–0.112 s** |
 
-The 90-odd ms does not disappear, it moves to the first image that needs a lens — where a raw
-decode already dwarfs it. If that hitch ever matters, the next step is to warm the database on
-a background thread at startup; the accessor is already thread-safe, so that is a few lines.
+The 90-odd ms does not disappear, but it is not left on the critical path either:
+`init_global()` starts `_lensfun_db_warm()` on a background thread, so the parse overlaps the
+rest of startup and is normally done before any image asks. Whoever arrives first builds it
+and the other waits on the same lock — there is one construction either way, and the accessor
+was already thread-safe. The thread is **joined** in `cleanup_global()`, not detached: it must
+not still be parsing when the database it is writing gets freed.
+
+Measured with the pre-warm in place, 5 interleaved runs: startup 0.109–0.115 s against
+master's 0.345–0.356 s — i.e. the background parse costs the startup path nothing.
 
 ## 2. The same lookup was repeated on every pipe resync
 
