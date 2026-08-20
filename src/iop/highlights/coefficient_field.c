@@ -23,10 +23,13 @@
 #include "system/target_clones.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "iop/highlights/blur.h"
+#include "iop/highlights/knee.h"
+#include "iop/highlights/pde.h" // _region_blur1_cl(): single-channel device gaussian for the guide // _knee_blur(): single-channel gaussian for the edge-aware guide
 #include "iop/highlights/chroma.h"
 #include "iop/highlights/coefficient_field.h"
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 
 // Variance-adaptive steering tensor: a continuous blend between the isophote
 // tensor (transport along level lines, correct where a HARD EDGE crosses the zone: the content
@@ -661,6 +664,13 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
                                                 // pixel; floor/cap bound samples/cost
   const float cf_fmin = 0.05f;
 
+  // Edge-aware transport of the fit windows (see _region_edge_blur): guide = the region's own
+  // luminance, so a silhouette stops the moments from crossing it; range scale is a fraction of the
+  // blown zone's plateau, so it follows exposure like every other threshold here.
+  float *const restrict cf_guide = ctx->cg_tmp1;      // group-B scratch, free at this point
+  float *const restrict cf_step_x = ctx->cg_tmp2;     // domain-transform warp rates
+  float *const restrict cf_step_y = ctx->cg_residual;
+
   // region luminance + the blown zone's plateau level, for the occlusion-aware fills
   HL_PFOR()
   for(size_t i = 0; i < region_pixels; i++)
@@ -727,6 +737,22 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
   // untouched by construction.
   const float cf_binv = (cf_lref > 1e-9f) ? 1.f / (0.35f * cf_lref) : 0.f;
 
+  // The warp rate is 1 + (sigma_s/sigma_r)|grad guide|, so ANY gradient shrinks the window --
+  // including sensor noise and the sky's own smooth glow, which would cost reconstruction strength
+  // everywhere for nothing. Smooth the guide first: noise stops inflating distances while a
+  // silhouette, which is a step orders of magnitude larger, still stops the transport dead.
+  float *const restrict cf_guide_raw = ctx->cg_dir; // scratch, free until the CG solver runs
+  HL_PFOR()
+  for(size_t i = 0; i < region_pixels; i++) cf_guide_raw[i] = lum_accum[i];
+  float cf_guide_smooth = CF_EDGE_GUIDE_SIGMA;
+  { const char *o = getenv("HL_CF_GUIDE"); if(o) cf_guide_smooth = (float)atof(o); }
+  if(cf_guide_smooth > 0.f)
+    _knee_blur(cf_guide_raw, cf_guide, region_w, region_h, cf_guide_smooth);
+  else
+    memcpy(cf_guide, cf_guide_raw, region_pixels * sizeof(float));
+  float cf_sigma_r = CF_EDGE_RANGE * fmaxf(cf_lref, 1e-9f);
+  { const char *o = getenv("HL_CF_RANGE"); if(o) cf_sigma_r = (float)atof(o) * fmaxf(cf_lref, 1e-9f); }
+
   // broad-anchor mask for the model-quality plane (bounded even where the fit degenerates)
   uint8_t *const restrict hole2
       = (uint8_t *)dt_pixelpipe_cache_alloc_align(sizeof(uint8_t) * region_pixels, ctx->pipe);
@@ -757,7 +783,8 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
     blur_in[i * 4 + 3] = weight * (estimate[i * 4 + 2] - channel_means[2]); // Sum w*(B-Bbar) -> centred mean of B
   }
 
-  _region_blur(blur_in, prev_scale, region_w, region_h, cf_sigma);
+  _region_edge_blur(blur_in, prev_scale, cf_guide, cf_step_x, cf_step_y, region_w, region_h,
+                    cf_sigma, cf_sigma_r);
 
   HL_PFOR()
   for(size_t i = 0; i < region_pixels; i++)
@@ -776,7 +803,8 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
     blur_in[i * 4 + 3] = weight * val_r * val_g;                // -> Cov(R,G)
   }
 
-  _region_blur(blur_in, plane1, region_w, region_h, cf_sigma);
+  _region_edge_blur(blur_in, plane1, cf_guide, cf_step_x, cf_step_y, region_w, region_h,
+                    cf_sigma, cf_sigma_r);
 
   HL_PFOR()
   for(size_t i = 0; i < region_pixels; i++)
@@ -795,7 +823,8 @@ void _cf_reconstruct(_hl_region_ctx_t *const ctx)
     blur_in[i * 4 + 3] = 0.f;
   }
 
-  _region_blur(blur_in, plane3, region_w, region_h, cf_sigma);
+  _region_edge_blur(blur_in, plane3, cf_guide, cf_step_x, cf_step_y, region_w, region_h,
+                    cf_sigma, cf_sigma_r);
 
   // second-moment plane lookup: diag (c,c) -> s1 slot c; off-diag (a,b) -> slot 2+a+b,
   // where slots 3 = RG (s1), 4 = RB (s3[0]), 5 = GB (s3[1])
@@ -2198,11 +2227,37 @@ cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
   moments[0] = moment0;
   moments[1] = moment1;
   moments[2] = moment2;
-  if(!packed || !moment0 || !moment1 || !moment2)
+  // edge-aware transport of the windows (see _region_edge_blur): buffers for the recursive sweeps,
+  // plus the guide, smoothed ONCE here rather than once per moment plane
+  const size_t region_pixels_cl = (size_t)region_w * region_h;
+  cl_mem dt_data = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels_cl * 4);
+  cl_mem dt_step_x = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels_cl);
+  cl_mem dt_step_y = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels_cl);
+  cl_mem dt_guide = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels_cl);
+  cl_mem dt_guide_img = dt_opencl_alloc_device(devid, size[0], size[1], sizeof(float));
+  cl_mem dt_guide_blur = dt_opencl_alloc_device(devid, size[0], size[1], sizeof(float));
+  if(!packed || !moment0 || !moment1 || !moment2 || !dt_data || !dt_step_x || !dt_step_y || !dt_guide
+     || !dt_guide_img || !dt_guide_blur)
   {
     cl_err = DT_OPENCL_DEFAULT_ERROR;
     goto out;
   }
+  {
+    const size_t origin[] = { 0, 0, 0 };
+    const size_t reg[] = { (size_t)region_w, (size_t)region_h, 1 };
+    cl_err = dt_opencl_enqueue_copy_buffer_to_image(devid, luminance, dt_guide_img, 0, (size_t *)origin,
+                                                    (size_t *)reg);
+    if(cl_err == CL_SUCCESS)
+      cl_err = _region_blur1_cl(devid, dt_guide_img, dt_guide_blur, region_w, region_h, CF_EDGE_GUIDE_SIGMA);
+    if(cl_err == CL_SUCCESS)
+      cl_err = dt_opencl_enqueue_copy_image_to_buffer(devid, dt_guide_blur, dt_guide, (size_t *)origin,
+                                                      (size_t *)reg, 0);
+    if(cl_err != CL_SUCCESS) goto out;
+  }
+  // cf_binv = 1/(0.35 * plateau) on the host side, so recover the plateau the same way the CPU
+  // scales its range: both sides must key the transport on the same luminance reference
+  const float cf_lref_cl = (cf_binv > 0.f) ? 1.f / (0.35f * cf_binv) : 0.f;
+  const float cf_sigma_r_cl = CF_EDGE_RANGE * fmaxf(cf_lref_cl, 1e-9f);
   // three modes = the ten centred moment planes: mode 0 -> [n, wR, wG, wB], mode 1 -> [wRR, wGG, wBB, wRG],
   // mode 2 -> [wRB, wGB, unweighted-n, 0]; each packed product image is Gaussian-blurred to a windowed moment
   for(int mode = 0; mode < 3 && cl_err == CL_SUCCESS; mode++)
@@ -2221,8 +2276,8 @@ cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
     dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(float), &channel_means[2]);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
     if(cl_err == CL_SUCCESS)
-      cl_err = gaussian ? dt_gaussian_blur_cl(gaussian, packed, moments[mode])
-                        : _region_blur_cl(devid, packed, moments[mode], region_w, region_h, cf_sigma);
+      cl_err = _region_edge_blur_cl(devid, gd_void, packed, moments[mode], dt_guide, dt_data, dt_step_x,
+                                    dt_step_y, region_w, region_h, cf_sigma, cf_sigma_r_cl);
   }
   if(cl_err != CL_SUCCESS) goto out;
 
@@ -2328,6 +2383,12 @@ cl_int _cf_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem vali
   }
 
 out:
+  dt_opencl_release_mem_object(dt_data);
+  dt_opencl_release_mem_object(dt_step_x);
+  dt_opencl_release_mem_object(dt_step_y);
+  dt_opencl_release_mem_object(dt_guide);
+  dt_opencl_release_mem_object(dt_guide_img);
+  dt_opencl_release_mem_object(dt_guide_blur);
   dt_opencl_release_mem_object(packed);
   dt_opencl_release_mem_object(moment0);
   dt_opencl_release_mem_object(moment1);

@@ -198,6 +198,15 @@ typedef struct
 // chromaticity-gradient stage's value-continuation pass (a3) is allowed to act. That pass erases the
 // seam the saturation floor prints at the contour, and is only sound close to it -- see the comment
 // at its hole test. Scaled by the pipe scale so a preview matches the full-resolution render.
+// Range scale of the coefficient-field's edge-aware fit windows, as a fraction of the blown zone's
+// plateau luminance: a guide step of this size halves the transport across it. Small enough to stop
+// a silhouette, large enough that a smooth sky gradient is still one window.
+#define CF_EDGE_RANGE 0.15f
+
+// Pre-smoothing of that guide, in pixels: enough to take sensor noise out of the warp rate, far
+// below the scale of any silhouette it has to stop.
+#define CF_EDGE_GUIDE_SIGMA 3.f
+
 #define DT_HL_A3_COLLAR_PX 24.f
 
 #define DT_HL_MIN_CLIPPED_PIXELS 25
@@ -464,6 +473,9 @@ typedef struct dt_iop_highlights_global_data_t
 {
   int kernel_highlights_1f_clip;
   int kernel_highlights_count_clipped;
+  int kernel_hl_dt_warp;
+  int kernel_hl_dt_rows;
+  int kernel_hl_dt_cols;
   int kernel_highlights_1f_lch_bayer;
   int kernel_highlights_1f_lch_xtrans;
   int kernel_highlights_4f_clip;

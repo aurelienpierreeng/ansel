@@ -1004,6 +1004,9 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_hl_pyr_putc = dt_opencl_create_kernel(harmonic_program, "hl_pyr_putc");
   gd->kernel_hl_aniso_iter = dt_opencl_create_kernel(harmonic_program, "hl_aniso_iter");
   gd->kernel_hl_aniso_iter_block = dt_opencl_create_kernel(harmonic_program, "hl_aniso_iter_block");
+  gd->kernel_hl_dt_warp = dt_opencl_create_kernel(harmonic_program, "hl_dt_warp");
+  gd->kernel_hl_dt_rows = dt_opencl_create_kernel(harmonic_program, "hl_dt_rows");
+  gd->kernel_hl_dt_cols = dt_opencl_create_kernel(harmonic_program, "hl_dt_cols");
   gd->kernel_hl_aniso_splat = dt_opencl_create_kernel(harmonic_program, "hl_aniso_splat");
   gd->kernel_highlights_1f_lch_bayer = dt_opencl_create_kernel(program, "highlights_1f_lch_bayer");
   gd->kernel_highlights_1f_lch_xtrans = dt_opencl_create_kernel(program, "highlights_1f_lch_xtrans");
@@ -1147,6 +1150,9 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_highlights_1f_lch_xtrans);
   dt_opencl_free_kernel(gd->kernel_highlights_1f_clip);
   dt_opencl_free_kernel(gd->kernel_highlights_count_clipped);
+  dt_opencl_free_kernel(gd->kernel_hl_dt_warp);
+  dt_opencl_free_kernel(gd->kernel_hl_dt_rows);
+  dt_opencl_free_kernel(gd->kernel_hl_dt_cols);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_xtrans);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_passthrough);

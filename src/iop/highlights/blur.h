@@ -31,6 +31,15 @@ dt_gaussian_t *_hl_gauss_get(const int width, const int height, const int channe
 
 void _hl_gauss_cache_flush(void);
 
+// Edge-aware replacement for _region_blur on the coefficient-field fit windows: a domain-transform
+// recursive filter, so the windowed moments are not transported across a silhouette. `guide` is a
+// single-channel image whose edges stop the transport; step_x/step_y are region-sized scratch.
+// See the implementation for why a per-sample photometric test cannot do this job.
+void _region_edge_blur(const float *const restrict in, float *const restrict out,
+                       const float *const restrict guide, float *const restrict step_x,
+                       float *const restrict step_y, const int region_w, const int region_h,
+                       const float sigma_s, const float sigma_r);
+
 static inline void _region_blur(const float *const restrict in, float *const restrict out, const int region_w,
                                 const int region_h, const float sigma)
 {
@@ -48,6 +57,10 @@ static inline void _region_blur(const float *const restrict in, float *const res
 #ifdef HAVE_OPENCL
 // GPU counterpart of _region_blur: the exact same Young-van-Vliet recursive gaussian, through
 // the existing dt_gaussian OpenCL implementation. in/out are 4-channel image2d of the region.
+cl_int _region_edge_blur_cl(const int devid, void *gd_void, cl_mem in_image, cl_mem out_image,
+                            cl_mem guide, cl_mem data, cl_mem step_x, cl_mem step_y, const int region_w,
+                            const int region_h, const float sigma_s, const float sigma_r);
+
 dt_gaussian_cl_t *_region_blur_handle(const int devid, const int region_w, const int region_h, const float sigma);
 
 // One-shot gaussian blur of a 4-channel region image on the GPU (init + blur + free).

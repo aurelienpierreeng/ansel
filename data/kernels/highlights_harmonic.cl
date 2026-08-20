@@ -2848,3 +2848,61 @@ hl_aniso_splat(global float *chroma, global const float *valid_anchor, global co
     chroma[fine_index * 4 + c] = top_row * (1.f - frac_y) + bottom_row * frac_y;
   }
 }
+
+/* ===== edge-aware transport of the coefficient-field fit windows (domain transform) ===========
+ * Device twin of _region_edge_blur (see the CPU implementation for why the fit windows must not
+ * carry samples across a silhouette). The recursive filter is sequential along each row and then
+ * each column, so these run one work-item per LINE and read/write buffers -- an OpenCL 1.2 image
+ * cannot be read and written by the same kernel, and a sweep needs exactly that. */
+kernel void
+hl_dt_warp(global const float *guide, global float *step_x, global float *step_y,
+           const int width, const int height, const float range_scale)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const float dx = (x > 0) ? fabs(guide[i] - guide[i - 1]) : 0.f;
+  const float dy = (y > 0) ? fabs(guide[i] - guide[i - width]) : 0.f;
+  step_x[i] = 1.f + range_scale * dx;   // warp rate: 1 where flat, large across an edge
+  step_y[i] = 1.f + range_scale * dy;
+}
+
+kernel void
+hl_dt_rows(global float *data, global const float *step_x, const int width, const int height,
+           const float feedback)
+{
+  const int y = get_global_id(0);
+  if(y >= height) return;
+  global float *row = data + (size_t)y * width * 4;
+  global const float *a_row = step_x + (size_t)y * width;
+  for(int x = 1; x < width; x++)
+  {
+    const float a = pow(feedback, a_row[x]);
+    for(int c = 0; c < 4; c++) row[x * 4 + c] += a * (row[(x - 1) * 4 + c] - row[x * 4 + c]);
+  }
+  for(int x = width - 2; x >= 0; x--)
+  {
+    const float a = pow(feedback, a_row[x + 1]);
+    for(int c = 0; c < 4; c++) row[x * 4 + c] += a * (row[(x + 1) * 4 + c] - row[x * 4 + c]);
+  }
+}
+
+kernel void
+hl_dt_cols(global float *data, global const float *step_y, const int width, const int height,
+           const float feedback)
+{
+  const int x = get_global_id(0);
+  if(x >= width) return;
+  for(int y = 1; y < height; y++)
+  {
+    const size_t i = (size_t)y * width + x;
+    const float a = pow(feedback, step_y[i]);
+    for(int c = 0; c < 4; c++) data[i * 4 + c] += a * (data[(i - width) * 4 + c] - data[i * 4 + c]);
+  }
+  for(int y = height - 2; y >= 0; y--)
+  {
+    const size_t i = (size_t)y * width + x;
+    const float a = pow(feedback, step_y[i + width]);
+    for(int c = 0; c < 4; c++) data[i * 4 + c] += a * (data[(i + width) * 4 + c] - data[i * 4 + c]);
+  }
+}
