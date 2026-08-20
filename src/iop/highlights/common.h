@@ -207,6 +207,12 @@ typedef struct
 // below the scale of any silhouette it has to stop.
 #define CF_EDGE_GUIDE_SIGMA 3.f
 
+// A 1-clip channel whose model predicted below its own saturation level comes out pinned AT the
+// floor, carrying the floor's chroma instead of the material's. This is the lift, relative to
+// clip0, by which such a pixel is considered to have been reconstructed on its own merits: at 1.0
+// the fit said nothing, by this value it has spoken and is left alone. Ramped, never a threshold.
+#define CF_AUTHORED_RAMP 1.12f
+
 #define DT_HL_A3_COLLAR_PX 24.f
 
 #define DT_HL_MIN_CLIPPED_PIXELS 25

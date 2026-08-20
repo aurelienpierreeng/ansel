@@ -625,8 +625,37 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx)
     const int clip_g = valid[i * 4 + 1] < 0.5f;
     const int clip_b = valid[i * 4 + 2] < 0.5f;
     const int n_clip = clip_r + clip_g + clip_b;
-    if(n_clip < 2) continue; // 1-clip pixels: measured-correct where the fit spoke; the
-                             // floor-authored ones are handled by PASS 2 below (core-anchored field)
+    // 1-clip pixels are trusted where the fit SPOKE -- but where it did not, the model predicted
+    // below the pixel's own saturation level and fmaxf(pred, clip0) pinned the channel AT the floor,
+    // which is the minimum compatible value and prints the floor's own chroma. Measured on
+    // DSC_1267.NEF along a ridge: 96.5% of the 1-clip-G pixels 4-6 px from the rock, and 90.4% at
+    // 8-12 px, come out of the whole chain still at their floor (median lift 1.000) against 27.9%
+    // far from it -- a magenta rim exactly where the sky dims toward the ridge and drags the guides,
+    // and with them the prediction, below clip0. Those pixels have the same information as a partial
+    // multi-clip pixel -- two measured channels and a surround chromaticity -- so they get the same
+    // survivor-anchored reprojection, which is what the floor-authored band needed all along. The
+    // gate still arbitrates it, and the joint floor still vetoes any prediction that would sit below
+    // saturation (which is how this stays inert where the surround is the wrong reference).
+    // How much the fit failed to speak, as a RAMP and not a test: 1 where the channel sits exactly at
+    // its floor, fading to 0 by the time the fit has lifted it CF_AUTHORED_RAMP above saturation. A
+    // hard threshold here prints its own contour -- the boundary between mostly-floored pixels near
+    // the ridge and mostly-lifted ones further out becomes a visible edge, which is the same seam a3
+    // exists to avoid.
+    float authored_w = 1.f;
+    if(n_clip == 1)
+    {
+      // WB'd clips only. At unit WB every channel saturates at the same level, so a floored channel
+      // carries a NEUTRAL chroma that is already ~ the truth -- reprojecting it there replaces a
+      // correct value with a surround guess and is a pure loss (measured: the unit-WB bench cases
+      // regress up to +140% RMSE ungated). Same clip-asymmetry gate the floor sites themselves use.
+      if(ctx->floor_gate <= 1e-6f) continue;
+      const int cc = clip_r ? 0 : (clip_g ? 1 : 2);
+      const float lift = estimate[i * 4 + cc] / fmaxf(clip0[i * 4 + cc], 1e-9f);
+      const float over = (lift - 1.f) / (CF_AUTHORED_RAMP - 1.f);
+      authored_w = 1.f - CLAMP(over * over * (3.f - 2.f * over), 0.f, 1.f); // smoothstep, inverted
+      authored_w *= ctx->floor_gate; // blend in with the same asymmetry ramp as every floor site
+      if(authored_w <= 1e-4f) continue; // the fit spoke here: leave the pixel to it
+    }
 
     // diffused agreement weight, shrunk toward the region-level ring vote as local evidence thins
     const float gate_lambda = 0.05f;
@@ -656,10 +685,11 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx)
       // arbitrarily bright reprojections; cap the implied pixel magnitude at 4x its current one
       const float scale
           = fminf(sv_est / sv_share, 4.f * (estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2]));
+      const float reproject_w = gate_w * authored_w; // 1 for multi-clip; ramped for 1-clip
       for(int c = 0; c < 3; c++)
         if(valid[i * 4 + c] < 0.5f)
-          estimate[i * 4 + c]
-              = gate_w * (scale * (plane2[i * 4 + c] / share_sum)) + (1.f - gate_w) * estimate[i * 4 + c];
+          estimate[i * 4 + c] = reproject_w * (scale * (plane2[i * 4 + c] / share_sum))
+                                + (1.f - reproject_w) * estimate[i * 4 + c];
     }
     else
     {
@@ -1659,6 +1689,9 @@ cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem es
     dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), &region_h);
     dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(float), &epsilon);
     dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(float), &gate_vote);
+    const float authored_ramp = CF_AUTHORED_RAMP;
+    dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(float), &authored_ramp);
+    dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(float), &floor_gate);
     cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
   }
 

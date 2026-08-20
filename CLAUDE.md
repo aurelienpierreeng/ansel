@@ -439,6 +439,39 @@ Diagnostics that settle this class of bug in one pass: dump the module's raw out
 bucket per-CFA-channel means by "own channel clipped" vs the per-channel `clips[]` — if the output
 means sit at the clip levels, the floors are authoring the color, not the solver.
 
+### Highlights (harmonic): a 1-clip pixel is only "measured" if the fit actually lifted it
+
+Third failure family, on a blown sky meeting a dark ridge (DSC_1267.NEF): a magenta rim hugging the
+mountain's edge. The cgrad stage's survivor-anchored reprojection deliberately skipped 1-clip pixels
+as "measured-correct where the fit spoke" — but *the fit does not always speak*. Where the sky dims
+toward an occluder it drags the guides, the colour-line prediction lands **below** the pixel's own
+saturation level, and `fmaxf(pred, clip0)` pins the channel AT the floor — the minimum compatible
+value, carrying the floor's chroma (i.e. the WB coefficients: magenta) instead of the material's.
+Measured: **96.5%** of the 1-clip-G pixels 4–6 px from the rock, and 90.4% at 8–12 px, exit the whole
+chain still at their floor (median lift 1.000), against 27.9% far from it.
+
+Such a pixel holds exactly what a *partial multi-clip* pixel holds — two measured channels plus a
+surround chromaticity — so it takes the same survivor-anchored reprojection. Ring profile (R+B)/2G by
+distance from the ridge: 1.032 / **1.046** / 1.030 → 1.004 / **1.005** / 1.007.
+
+**Two traps, both paid for in a full bench round each:**
+
+*Never a hard threshold.* The first version admitted pixels via `est <= 1.03 * clip0`. Every metric
+went flat and the render grew a NEW hard-edged pink region — the test printing its own contour along
+the boundary between mostly-floored and mostly-lifted pixels. It is now an inverted smoothstep on the
+lift (`CF_AUTHORED_RAMP`). The numbers alone would have shipped the bad version; only the picture
+caught it.
+
+*Anything that imports surround chroma MUST be gated on `_hl_floor_gate(clips)`.* Ungated, this
+regressed the whole unit-WB bench — pk1synth +140% RMSE, balls +26%, occluded +18% — because at
+unit WB every channel saturates at the same level, so a floored channel's chroma is NEUTRAL ≈ truth
+and reprojecting it replaces a correct value with a guess. This is the SECOND time this exact
+omission cost a bench round (the joint floor's first attempt, documented above, died the same way).
+Gated, the six unit-WB cases return **bit-identical** to baseline (A = 1.145 vs a ramp starting at
+1.25 → gate exactly 0) while real raws (A ≈ 2–2.6) keep the full fix. Note the same function already
+consulted `floor_gate` to decide which pixels may *vote* — consulting it for the voters and not for
+the pixels being *acted on* is the shape of the mistake.
+
 ### Highlights (harmonic): value-continuing estimators inherit the fence-band chromaticity — blotches
 
 Second failure family, found on a blown sunrise laced with branches (Brandon Woods RW2): blotchy

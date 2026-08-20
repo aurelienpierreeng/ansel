@@ -1884,7 +1884,8 @@ hl_cgrad_gate(global const float *estimate, global const float *valid, global co
 kernel void
 hl_cgrad_reproject(global float *estimate, global const float *valid, global const float *clip0,
              global const float *shares, read_only image2d_t gate_wgt, read_only image2d_t gate_nrm,
-             const int width, const int height, const float epsilon, const float gate_vote)
+             const int width, const int height, const float epsilon, const float gate_vote,
+             const float authored_ramp, const float floor_gate)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
@@ -1893,8 +1894,22 @@ hl_cgrad_reproject(global float *estimate, global const float *valid, global con
   const int clip_g = valid[i * 4 + 1] < 0.5f;
   const int clip_b = valid[i * 4 + 2] < 0.5f;
   const int n_clip = clip_r + clip_g + clip_b;
-  if(n_clip < 2) return; // 1-clip: measured-correct where the fit spoke; floor-authored ones are
-                         // handled by the pass-2 kernels (hl_cgrad_hole1c/hl_cgrad_write1c)
+  // 1-clip pixels are trusted where the fit SPOKE; where it did not, fmax(pred, clip0) pinned the
+  // channel AT its floor and printed the floor's own chroma (see the CPU stage for the measurement).
+  // How much the fit failed to speak, as a RAMP and not a test -- a hard threshold prints its own
+  // contour along the boundary between mostly-floored and mostly-lifted pixels.
+  float authored_w = 1.f;
+  if(n_clip == 1)
+  {
+    // WB'd clips only (see the CPU stage): at unit WB the floor imprint is neutral ~ truth
+    if(floor_gate <= 1e-6f) return;
+    const int cc = clip_r ? 0 : (clip_g ? 1 : 2);
+    const float lift = estimate[i * 4 + cc] / fmax(clip0[i * 4 + cc], 1e-9f);
+    const float over = (lift - 1.f) / (authored_ramp - 1.f);
+    authored_w = 1.f - clamp(over * over * (3.f - 2.f * over), 0.f, 1.f); // smoothstep, inverted
+    authored_w *= floor_gate; // blend in with the same asymmetry ramp as every floor site
+    if(authored_w <= 1e-4f) return; // the fit spoke here: leave the pixel to it
+  }
 
   // diffused agreement weight, shrunk toward the region-level ring vote as local evidence thins
   const float gate_lambda = 0.05f;
@@ -1919,10 +1934,11 @@ hl_cgrad_reproject(global float *estimate, global const float *valid, global con
     // survivor-anchored scale, bounded (mirror of the CPU stability cap)
     const float scale
         = fmin(sv_est / sv_share, 4.f * (estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2]));
+    const float reproject_w = gate_w * authored_w; // 1 for multi-clip; ramped for 1-clip
     for(int c = 0; c < 3; c++)
       if(valid[i * 4 + c] < 0.5f)
-        estimate[i * 4 + c]
-            = gate_w * (scale * (shares[i * 4 + c] / share_sum)) + (1.f - gate_w) * estimate[i * 4 + c];
+        estimate[i * 4 + c] = reproject_w * (scale * (shares[i * 4 + c] / share_sum))
+                              + (1.f - reproject_w) * estimate[i * 4 + c];
   }
   else
   {
