@@ -414,6 +414,11 @@ static inline __m128 sinf_fast_sse(__m128 t)
  */
 static inline int ipow(int base, int exp)
 {
+  // Shifting a negative exponent right never reaches zero, so the loop below would spin
+  // forever. There is no integer answer for one anyway; callers use this for decimal
+  // precision, where "fewer than zero digits" is just "no fractional part".
+  if(exp <= 0) return 1;
+
   int result = 1;
   for(;;)
   {

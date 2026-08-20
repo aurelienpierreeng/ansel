@@ -5426,9 +5426,11 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->white_preserving_##var##_rotation), "value-changed",                           \
                    G_CALLBACK(_channelmixerrgb_white_preserving_slider_callback), self);                      \
   g->white_preserving_##var##_inset = dt_bauhaus_slider_new_with_range(                                       \
-      dt_bauhaus_get_global(), DT_GUI_MODULE(self), -0.9f, 0.9f, 0, 0, 1);                                    \
+      dt_bauhaus_get_global(), DT_GUI_MODULE(self), -0.9f, 0.9f, 0, 0, 3);                                    \
   dt_bauhaus_widget_set_label(g->white_preserving_##var##_inset, inset_label);                                \
-  dt_bauhaus_slider_set_factor(g->white_preserving_##var##_inset, 100.f);                                     \
+  /* On a range under 10, a "%" format makes bauhaus scale by 100 and take two digits off by     */           \
+  /* itself. Do not also set a factor, and leave it enough digits to take : it subtracts them    */           \
+  /* unconditionally, and a negative digit count used to hang the whole GUI in ipow().           */           \
   dt_bauhaus_slider_set_format(g->white_preserving_##var##_inset, "%");                                       \
   gtk_widget_set_tooltip_text(g->white_preserving_##var##_inset, inset_tooltip);                              \
   gtk_box_pack_start(GTK_BOX(mixer_white_preserving), GTK_WIDGET(g->white_preserving_##var##_inset), FALSE,   \

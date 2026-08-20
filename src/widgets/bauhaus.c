@@ -3408,7 +3408,10 @@ void dt_bauhaus_slider_set_format(GtkWidget *widget, const char *format)
   if(strstr(format,"%") && fabsf(d->hard_max) <= 10)
   {
     if(d->factor == 1.0f) d->factor = 100;
-    d->digits -= 2;
+    // Scaling by 100 costs two decimals, but a slider declared with fewer than two must not end
+    // up with a negative digit count : it is a decimal exponent, fed to ipow() on every value
+    // change and every redraw, and there is no such thing as fewer than zero decimals.
+    d->digits = MAX(d->digits - 2, 0);
   }
 }
 
