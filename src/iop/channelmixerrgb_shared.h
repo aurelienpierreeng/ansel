@@ -58,24 +58,25 @@ typedef struct dt_iop_channelmixer_shared_primaries_params_t
 } dt_iop_channelmixer_shared_primaries_params_t;
 
 /**
- * @brief White-preserving primaries model : per-primary rotation and inset, no white freedom.
+ * @brief White-preserving primaries model : per-primary rotation and saturation, no white freedom.
  *
  * Each primary is the chromaticity of one column of the mixer matrix, expressed in the affine
- * plane of the current mixer basis. `rotation` turns it around the basis white, `inset` contracts
- * it toward that white (negative values expand it away). The three column magnitudes are then
- * SOLVED, not chosen, so that the basis white maps to itself : that constraint is what removes the
- * three remaining degrees of freedom of a 3x3 matrix, and is why six parameters describe the whole
+ * plane of the current mixer basis. `rotation` turns it around the basis white, and `saturation`
+ * scales its distance to that white by `1 + saturation` : -1 collapses the primary onto the white,
+ * 0 leaves it untouched, +1 doubles its distance. The three column magnitudes are then SOLVED, not
+ * chosen, so that the basis white maps to itself : that constraint is what removes the three
+ * remaining degrees of freedom of a 3x3 matrix, and is why six parameters describe the whole
  * white-preserving submanifold exactly. All-zero parameters are the identity matrix, and a uniform
- * inset is the classic desaturation matrix toward the basis white.
+ * saturation is the classic saturation matrix around the basis white.
  */
 typedef struct dt_iop_channelmixer_shared_white_preserving_params_t
 {
   float red_rotation;
-  float red_inset;
+  float red_saturation;
   float green_rotation;
-  float green_inset;
+  float green_saturation;
   float blue_rotation;
-  float blue_inset;
+  float blue_saturation;
 } dt_iop_channelmixer_shared_white_preserving_params_t;
 
 float dt_iop_channelmixer_shared_wrap_pi(float angle);

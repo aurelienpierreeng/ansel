@@ -125,11 +125,11 @@ void dt_iop_channelmixer_shared_white_preserving_from_sliders(
     GtkWidget *const widgets[6], dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving)
 {
   white_preserving->red_rotation = dt_bauhaus_slider_get(widgets[0]) * (float)M_PI_2;
-  white_preserving->red_inset = dt_bauhaus_slider_get(widgets[1]);
+  white_preserving->red_saturation = dt_bauhaus_slider_get(widgets[1]);
   white_preserving->green_rotation = dt_bauhaus_slider_get(widgets[2]) * (float)M_PI_2;
-  white_preserving->green_inset = dt_bauhaus_slider_get(widgets[3]);
+  white_preserving->green_saturation = dt_bauhaus_slider_get(widgets[3]);
   white_preserving->blue_rotation = dt_bauhaus_slider_get(widgets[4]) * (float)M_PI_2;
-  white_preserving->blue_inset = dt_bauhaus_slider_get(widgets[5]);
+  white_preserving->blue_saturation = dt_bauhaus_slider_get(widgets[5]);
 }
 
 void dt_iop_channelmixer_shared_white_preserving_to_sliders(
@@ -137,11 +137,11 @@ void dt_iop_channelmixer_shared_white_preserving_to_sliders(
     GtkWidget *const widgets[6])
 {
   dt_bauhaus_slider_set(widgets[0], CLAMP(white_preserving->red_rotation / (float)M_PI_2, -1.f, 1.f));
-  dt_bauhaus_slider_set(widgets[1], white_preserving->red_inset);
+  dt_bauhaus_slider_set(widgets[1], white_preserving->red_saturation);
   dt_bauhaus_slider_set(widgets[2], CLAMP(white_preserving->green_rotation / (float)M_PI_2, -1.f, 1.f));
-  dt_bauhaus_slider_set(widgets[3], white_preserving->green_inset);
+  dt_bauhaus_slider_set(widgets[3], white_preserving->green_saturation);
   dt_bauhaus_slider_set(widgets[4], CLAMP(white_preserving->blue_rotation / (float)M_PI_2, -1.f, 1.f));
-  dt_bauhaus_slider_set(widgets[5], white_preserving->blue_inset);
+  dt_bauhaus_slider_set(widgets[5], white_preserving->blue_saturation);
 }
 
 gboolean dt_iop_channelmixer_shared_rows_are_normalized(const gboolean normalize[3])
@@ -490,30 +490,30 @@ static gboolean _affine_polar_from_point(const float white_normalized[3], const 
 }
 
 /**
- * @brief Place one white-preserving primary from its rotation and inset.
+ * @brief Place one white-preserving primary from its rotation and saturation.
  *
  * Unlike the generalized primaries model, the radius is measured against the REFERENCE primary
- * itself rather than against the gamut footprint edge, so `inset` reads as darktable's does :
- * 0 keeps the basis primary, positive contracts it toward the white, negative expands it away.
+ * itself rather than against the gamut footprint edge, so the control reads as a saturation :
+ * 0 keeps the basis primary, -1 collapses it onto the white, +1 doubles its distance to it.
  *
  * @param[in] white_normalized Basis white, normalized in the affine plane.
  * @param[in] reference_primaries Affine coordinates of the three basis primaries.
  * @param[in] reference_index Which primary is being placed.
  * @param[in] rotation Rotation around the white, in radians.
- * @param[in] inset Radial contraction toward the white, 0 being the untouched primary.
+ * @param[in] saturation Radial scaling of the distance to the white, by 1 + saturation.
  * @param[out] point_normalized Resulting chromaticity, normalized in the affine plane.
  * @return FALSE when the reference primary is degenerate.
  */
 static gboolean _white_preserving_point_from_polar(const float white_normalized[3],
                                                    const float reference_primaries[3][2],
                                                    const int reference_index, const float rotation,
-                                                   const float inset, float point_normalized[3])
+                                                   const float saturation, float point_normalized[3])
 {
   const float *const reference = reference_primaries[reference_index];
   const float reference_radius = hypotf(reference[0], reference[1]);
   if(reference_radius < DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS) return FALSE;
 
-  const float scale = 1.f - inset;
+  const float scale = 1.f + saturation;
   float rotated[2] = { 0.f };
   float difference[3] = { 0.f };
 
@@ -527,21 +527,21 @@ static gboolean _white_preserving_point_from_polar(const float white_normalized[
 }
 
 /**
- * @brief Read back the rotation and inset of one white-preserving primary.
+ * @brief Read back the rotation and saturation of one white-preserving primary.
  *
  * @param[in] white_normalized Basis white, normalized in the affine plane.
  * @param[in] reference_primaries Affine coordinates of the three basis primaries.
  * @param[in] reference_index Which primary is being read.
  * @param[in] point_normalized Chromaticity of the mixer column, normalized in the affine plane.
  * @param[out] rotation Rotation around the white, in radians.
- * @param[out] inset Radial contraction toward the white.
+ * @param[out] saturation Radial scaling of the distance to the white, minus one.
  * @return FALSE when the reference primary is degenerate.
  */
 static gboolean _white_preserving_polar_from_point(const float white_normalized[3],
                                                    const float reference_primaries[3][2],
                                                    const int reference_index,
                                                    const float point_normalized[3], float *rotation,
-                                                   float *inset)
+                                                   float *saturation)
 {
   const float *const reference = reference_primaries[reference_index];
   const float reference_radius = hypotf(reference[0], reference[1]);
@@ -560,12 +560,12 @@ static gboolean _white_preserving_polar_from_point(const float white_normalized[
   {
     // The column collapsed onto the white : the rotation carries no information any more.
     *rotation = 0.f;
-    *inset = 1.f;
+    *saturation = -1.f;
     return TRUE;
   }
 
   *rotation = dt_iop_channelmixer_shared_wrap_pi(atan2f(uv[1], uv[0]) - reference_angle);
-  *inset = 1.f - radius / reference_radius;
+  *saturation = radius / reference_radius - 1.f;
   return TRUE;
 }
 
@@ -694,13 +694,13 @@ static float _affine_triangle_area(const float vertices[3][2])
 /**
  * @brief Build the mixer matrix of a white-preserving primaries state.
  *
- * The three rotated/inset chromaticities give the DIRECTION of each mixer column. Their
+ * The three rotated and rescaled chromaticities give the DIRECTION of each mixer column. Their
  * magnitudes are then solved from the single constraint that the basis white maps to itself :
  * with `t = P^-1 . w` (P holding the chromaticities in columns), column c of the matrix is
  * `t_c / w_c` times chromaticity c, and `M . w == w` holds by construction.
  *
  * @param[in] basis Affine basis the mixer operates in, from the module's adaptation.
- * @param[in] white_preserving Per-primary rotations and insets.
+ * @param[in] white_preserving Per-primary rotations and saturations.
  * @param[out] M Resulting mixer matrix.
  * @return FALSE when the displaced primaries are degenerate or the basis white has a null channel.
  */
@@ -710,8 +710,8 @@ gboolean dt_iop_channelmixer_shared_white_preserving_to_matrix(
 {
   const float rotations[3] = { white_preserving->red_rotation, white_preserving->green_rotation,
                                white_preserving->blue_rotation };
-  const float insets[3] = { white_preserving->red_inset, white_preserving->green_inset,
-                            white_preserving->blue_inset };
+  const float saturations[3] = { white_preserving->red_saturation, white_preserving->green_saturation,
+                                 white_preserving->blue_saturation };
   float white_reference[3] = { 0.f };
   float white_reference_normalized[3] = { 0.f };
   float reference_primaries[3][2] = { { 0.f } };
@@ -727,7 +727,7 @@ gboolean dt_iop_channelmixer_shared_white_preserving_to_matrix(
   for(int primary = 0; primary < 3; primary++)
   {
     if(!_white_preserving_point_from_polar(white_reference_normalized, reference_primaries, primary,
-                                           rotations[primary], insets[primary], custom_primaries[primary]))
+                                           rotations[primary], saturations[primary], custom_primaries[primary]))
       return FALSE;
 
     const float difference[3] = { custom_primaries[primary][0] - white_reference_normalized[0],
@@ -778,7 +778,7 @@ gboolean dt_iop_channelmixer_shared_white_preserving_to_matrix(
  *
  * @param[in] basis Affine basis the mixer operates in, from the module's adaptation.
  * @param[in] M Mixer matrix.
- * @param[out] white_preserving Per-primary rotations and insets.
+ * @param[out] white_preserving Per-primary rotations and saturations.
  * @return FALSE when a column has a null affine sum or the basis is degenerate.
  */
 gboolean dt_iop_channelmixer_shared_white_preserving_from_matrix(
@@ -799,12 +799,12 @@ gboolean dt_iop_channelmixer_shared_white_preserving_from_matrix(
     float *rotation = primary == 0 ? &white_preserving->red_rotation
                                    : primary == 1 ? &white_preserving->green_rotation
                                                   : &white_preserving->blue_rotation;
-    float *inset = primary == 0 ? &white_preserving->red_inset
-                                : primary == 1 ? &white_preserving->green_inset
-                                               : &white_preserving->blue_inset;
+    float *saturation = primary == 0 ? &white_preserving->red_saturation
+                                     : primary == 1 ? &white_preserving->green_saturation
+                                                    : &white_preserving->blue_saturation;
 
     if(!_white_preserving_polar_from_point(white_reference_normalized, reference_primaries, primary,
-                                           custom_primary_normalized, rotation, inset))
+                                           custom_primary_normalized, rotation, saturation))
       return FALSE;
   }
 
@@ -1216,19 +1216,19 @@ void dt_iop_channelmixer_shared_paint_white_preserving_sliders(
           probe.red_rotation = value * (float)M_PI_2;
           break;
         case 1:
-          probe.red_inset = value;
+          probe.red_saturation = value;
           break;
         case 2:
           probe.green_rotation = value * (float)M_PI_2;
           break;
         case 3:
-          probe.green_inset = value;
+          probe.green_saturation = value;
           break;
         case 4:
           probe.blue_rotation = value * (float)M_PI_2;
           break;
         case 5:
-          probe.blue_inset = value;
+          probe.blue_saturation = value;
           break;
         default:
           break;
