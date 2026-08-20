@@ -194,9 +194,9 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   GtkWidget *simple_theta, *simple_psi, *simple_stretch_1, *simple_stretch_2, *simple_coupling_1, *simple_coupling_2;
   GtkWidget *primaries_achromatic_hue, *primaries_achromatic_purity, *primaries_red_hue, *primaries_red_purity;
   GtkWidget *primaries_green_hue, *primaries_green_purity, *primaries_blue_hue, *primaries_blue_purity, *primaries_gain;
-  GtkWidget *white_preserving_red_rotation, *white_preserving_red_inset;
-  GtkWidget *white_preserving_green_rotation, *white_preserving_green_inset;
-  GtkWidget *white_preserving_blue_rotation, *white_preserving_blue_inset;
+  GtkWidget *white_preserving_red_rotation, *white_preserving_red_saturation;
+  GtkWidget *white_preserving_green_rotation, *white_preserving_green_saturation;
+  GtkWidget *white_preserving_blue_rotation, *white_preserving_blue_saturation;
   GtkWidget *illuminant, *temperature, *adaptation, *gamut, *clip;
   GtkWidget *illum_fluo, *illum_led, *illum_x, *illum_y, *approx_cct, *illum_color;
   GtkWidget *scale_red_R, *scale_red_G, *scale_red_B;
@@ -3369,18 +3369,18 @@ static void _channelmixerrgb_update_primaries_colors(dt_iop_module_t *self)
  * @brief Collect the six white-preserving mode widgets.
  *
  * @param[in] g Current module GUI data.
- * @param[out] widgets Rotation/inset pairs, in red, green, blue order.
+ * @param[out] widgets Rotation/saturation pairs, in red, green, blue order.
  * @return FALSE while the widgets have not been created yet, which happens during gui_init().
  */
 static gboolean _channelmixerrgb_white_preserving_widgets(const dt_iop_channelmixer_rgb_gui_data_t *const g,
                                                           GtkWidget *widgets[6])
 {
   widgets[0] = g->white_preserving_red_rotation;
-  widgets[1] = g->white_preserving_red_inset;
+  widgets[1] = g->white_preserving_red_saturation;
   widgets[2] = g->white_preserving_green_rotation;
-  widgets[3] = g->white_preserving_green_inset;
+  widgets[3] = g->white_preserving_green_saturation;
   widgets[4] = g->white_preserving_blue_rotation;
-  widgets[5] = g->white_preserving_blue_inset;
+  widgets[5] = g->white_preserving_blue_saturation;
 
   for(int widget = 0; widget < 6; widget++)
     if(IS_NULL_PTR(widgets[widget])) return FALSE;
@@ -4426,9 +4426,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
         || w == g->primaries_red_purity || w == g->primaries_green_hue || w == g->primaries_green_purity
         || w == g->primaries_blue_hue || w == g->primaries_blue_purity || w == g->primaries_gain;
   const gboolean white_preserving_widget
-      = w == g->white_preserving_red_rotation || w == g->white_preserving_red_inset
-        || w == g->white_preserving_green_rotation || w == g->white_preserving_green_inset
-        || w == g->white_preserving_blue_rotation || w == g->white_preserving_blue_inset;
+      = w == g->white_preserving_red_rotation || w == g->white_preserving_red_saturation
+        || w == g->white_preserving_green_rotation || w == g->white_preserving_green_saturation
+        || w == g->white_preserving_blue_rotation || w == g->white_preserving_blue_saturation;
   GtkWidget *white_preserving_widgets[6] = { NULL };
   // Bauhaus setters emit gui_changed() from gui_init(), before this page has been built.
   const gboolean white_preserving_ready = _channelmixerrgb_white_preserving_widgets(g, white_preserving_widgets);
@@ -5234,7 +5234,7 @@ void gui_init(struct dt_iop_module_t *self)
                                 "simple rebuilds the normalized mixer as an exact chroma-plane rotation,\n"
                                 "two signed stretches and two neutral couplings.\n"
                                 "primaries rebuilds the mixer as a generalized primaries, white tint and gain model.\n"
-                                "white-preserving rotates and contracts each primary around the white,\n"
+                                "white-preserving rotates and saturates each primary around the white,\n"
                                 "which stays exactly where it is."));
   gtk_box_pack_start(GTK_BOX(mixer_page), GTK_WIDGET(g->mixer_mode), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->mixer_mode), "value-changed", G_CALLBACK(_channelmixerrgb_mixer_mode_callback), self);
@@ -5413,7 +5413,8 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *mixer_white_preserving = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_stack_add_named(GTK_STACK(g->mixer_stack), mixer_white_preserving, "white-preserving");
 
-#define WHITE_PRESERVING_PRIMARY(var, section, rotation_label, rotation_tooltip, inset_label, inset_tooltip)   \
+#define WHITE_PRESERVING_PRIMARY(var, section, rotation_label, rotation_tooltip, saturation_label,             \
+                                 saturation_tooltip)                                                          \
   gtk_box_pack_start(GTK_BOX(mixer_white_preserving), dt_ui_section_label_new(section), FALSE, FALSE, 0);      \
   g->white_preserving_##var##_rotation                                                                        \
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0, 3);    \
@@ -5425,37 +5426,41 @@ void gui_init(struct dt_iop_module_t *self)
                      FALSE, 0);                                                                               \
   g_signal_connect(G_OBJECT(g->white_preserving_##var##_rotation), "value-changed",                           \
                    G_CALLBACK(_channelmixerrgb_white_preserving_slider_callback), self);                      \
-  g->white_preserving_##var##_inset = dt_bauhaus_slider_new_with_range(                                       \
-      dt_bauhaus_get_global(), DT_GUI_MODULE(self), -0.9f, 0.9f, 0, 0, 3);                                    \
-  dt_bauhaus_widget_set_label(g->white_preserving_##var##_inset, inset_label);                                \
+  /* -100%/+100% is the travel this control is meant to be used over, but a matrix hand-built  */           \
+  /* in complete mode can legitimately push a primary further out. Keep the hard range wider so */           \
+  /* the page reports such a matrix instead of clamping and quietly lying about it.             */           \
+  g->white_preserving_##var##_saturation                                                                      \
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -4.f, 4.f, 0, 0, 3);    \
+  dt_bauhaus_slider_set_soft_range(g->white_preserving_##var##_saturation, -1.f, 1.f);                        \
+  dt_bauhaus_widget_set_label(g->white_preserving_##var##_saturation, saturation_label);                      \
   /* On a range under 10, a "%" format makes bauhaus scale by 100 and take two digits off by     */           \
   /* itself. Do not also set a factor, and leave it enough digits to take : it subtracts them    */           \
   /* unconditionally, and a negative digit count used to hang the whole GUI in ipow().           */           \
-  dt_bauhaus_slider_set_format(g->white_preserving_##var##_inset, "%");                                       \
-  gtk_widget_set_tooltip_text(g->white_preserving_##var##_inset, inset_tooltip);                              \
-  gtk_box_pack_start(GTK_BOX(mixer_white_preserving), GTK_WIDGET(g->white_preserving_##var##_inset), FALSE,   \
-                     FALSE, 0);                                                                               \
-  g_signal_connect(G_OBJECT(g->white_preserving_##var##_inset), "value-changed",                              \
+  dt_bauhaus_slider_set_format(g->white_preserving_##var##_saturation, "%");                                  \
+  gtk_widget_set_tooltip_text(g->white_preserving_##var##_saturation, saturation_tooltip);                    \
+  gtk_box_pack_start(GTK_BOX(mixer_white_preserving), GTK_WIDGET(g->white_preserving_##var##_saturation),      \
+                     FALSE, FALSE, 0);                                                                        \
+  g_signal_connect(G_OBJECT(g->white_preserving_##var##_saturation), "value-changed",                         \
                    G_CALLBACK(_channelmixerrgb_white_preserving_slider_callback), self);
 
   WHITE_PRESERVING_PRIMARY(red, _("red primary"), N_("red rotation"),
                            _("rotate the red primary around the white of the current mixer basis.\n"
                              "the white itself is left exactly where it is."),
-                           N_("red inset"),
-                           _("contract the red primary toward the white of the current mixer basis.\n"
-                             "negative values push it away instead."))
+                           N_("red saturation"),
+                           _("scale the red primary's distance to the white of the current mixer basis.\n"
+                             "-100% collapses it onto the white, +100% doubles it."))
   WHITE_PRESERVING_PRIMARY(green, _("green primary"), N_("green rotation"),
                            _("rotate the green primary around the white of the current mixer basis.\n"
                              "the white itself is left exactly where it is."),
-                           N_("green inset"),
-                           _("contract the green primary toward the white of the current mixer basis.\n"
-                             "negative values push it away instead."))
+                           N_("green saturation"),
+                           _("scale the green primary's distance to the white of the current mixer basis.\n"
+                             "-100% collapses it onto the white, +100% doubles it."))
   WHITE_PRESERVING_PRIMARY(blue, _("blue primary"), N_("blue rotation"),
                            _("rotate the blue primary around the white of the current mixer basis.\n"
                              "the white itself is left exactly where it is."),
-                           N_("blue inset"),
-                           _("contract the blue primary toward the white of the current mixer basis.\n"
-                             "negative values push it away instead."))
+                           N_("blue saturation"),
+                           _("scale the blue primary's distance to the white of the current mixer basis.\n"
+                             "-100% collapses it onto the white, +100% doubles it."))
 
 #undef WHITE_PRESERVING_PRIMARY
 
