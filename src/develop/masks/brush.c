@@ -2488,8 +2488,12 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw path
   if(node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw
   {
+    // Rounded, not flat: a brush stroke is a paintbrush, not a ruled polygon edge, and a butt
+    // cap on the outline shown here (the node-to-node centerline, not the painted falloff)
+    // looked cut off square at its two open ends. Only the two true ends of the whole stroke,
+    // not every node's own joint -- see dt_masks_draw_path_seg_by_seg().
     dt_masks_draw_path_seg_by_seg(cr, mask_gui, index, gui_points->points, 0.5f * gui_points->points_count,
-                                  node_count, zoom_scale);
+                                  node_count, zoom_scale, TRUE);
   }
 
   if(0)

@@ -3154,7 +3154,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int 
 
 void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int form_index,
                                    const float *points, const int points_count, const int node_count,
-                                   const float zoom_scale)
+                                   const float zoom_scale, const gboolean round_ends)
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(points) || IS_NULL_PTR(mask_gui)) return;
   if(node_count <= 0 || points_count <= node_count * 3 + 6) return;
@@ -3163,6 +3163,42 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
   if(total_coords <= (node_count * 6 + 1)) return;
 
   const gboolean group_selected = (mask_gui->group_selected == form_index);
+
+  /* Round only the OUTWARD side of the two true ends of the WHOLE path (e.g. a brush stroke), not
+   * every segment's own two ends -- that would also round every interior node joint, which is a
+   * line JOIN, not a cap, and looks like a bump at each node instead of the intended smooth stroke
+   * tip. cairo_line_cap is a property of the whole stroke() call, and each segment below is
+   * stroked independently with CAIRO_LINE_CAP_BUTT (so that per-segment selection/dash state
+   * works AND consecutive segments join flush, without a cap bump at every node), so there is no
+   * single stroke covering just the two true ends to set a cap on.
+   *
+   * Instead: paint a full disc (radius = half the line width) at each true end FIRST, before any
+   * segment is stroked. The first and last segments below then get their normal, unchanged
+   * BUTT-capped stroke painted OVER these discs -- flush at the true end, extending only inward --
+   * which exactly covers the inward half of each disc (same centerline, same width, same colour
+   * passes) and leaves only the outward half showing: precisely what CAIRO_LINE_CAP_ROUND draws
+   * for a real one-sided cap. Node positions come straight from the node header (points[i*6+2/+3]
+   * is node i's own coordinate), not the tessellated tail, so this needs no walk of the outline
+   * and no assumption about whether that tail wraps back to node 0. */
+  if(round_ends)
+  {
+    const gboolean all_selected = group_selected
+                                  && dt_masks_is_anything_selected(mask_gui)
+                                  && (mask_gui->form_selected || mask_gui->form_dragging);
+
+    const double start_x = points[2];
+    const double start_y = points[3];
+    const double end_x = points[(node_count - 1) * 6 + 2];
+    const double end_y = points[(node_count - 1) * 6 + 3];
+
+    cairo_move_to(cr, start_x, start_y);
+    cairo_line_to(cr, start_x, start_y);
+    dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
+
+    cairo_move_to(cr, end_x, end_y);
+    cairo_line_to(cr, end_x, end_y);
+    dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
+  }
 
   int show_segment_index = 1;
   int current_segment_index = 0;
@@ -3240,7 +3276,7 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
     }
 
     if(mask_gui->creation && current_segment_index >= node_count - 1) break;
-  } 
+  }
 }
 
 /**
@@ -3328,8 +3364,7 @@ static int _session_sigs_count = 0;
 
 static void _session_sigs_reset(void)
 {
-  dt_free(_session_sigs);
-  _session_sigs = NULL;
+  dt_free_align(_session_sigs);
   _session_sigs_count = 0;
 }
 
@@ -3521,7 +3556,7 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
 
     if(!IS_NULL_PTR(sigs))
     {
-      dt_free(_session_sigs);
+      dt_free_align(_session_sigs);
       _session_sigs = sigs;
       _session_sigs_count = taken;
     }
@@ -3556,10 +3591,16 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
 
   _session_pattern_reset();
 
-  /* Bound the group to what the previous render occupied. The outlines are already built by the
-   * time this matters -- the very first render of a session has no bbox yet and takes the whole
-   * clip, once. */
-  const gboolean clipped = _session_clip(cr, zoom_scale);
+  /* Bound the group to what the previous render occupied -- but ONLY when the shapes being drawn
+   * into it are the same ones that bbox was measured from (rebuild == FALSE: nothing but the
+   * matrix moved). On a rebuild the bbox is stale by construction -- it describes the PREVIOUS
+   * shape set, recomputed from the fresh one only AFTER this group is painted -- so clipping to it
+   * here would cut off exactly the part of a newly added or changed shape that falls outside what
+   * the old shapes occupied. That clipped result is what gets cached as `_session_pattern`, so the
+   * shape stays silently truncated on every following "painted from cache" replay, not just this
+   * one frame. A brush/polygon stroke reaching outside the old bbox is the visible case: part or
+   * all of its outline never gets recorded into the group in the first place. */
+  const gboolean clipped = !rebuild && _session_clip(cr, zoom_scale);
   cairo_push_group(cr);
 
   // Iterate over the ids saved in this creation session. Other masks stay

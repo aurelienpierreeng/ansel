@@ -649,6 +649,11 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
 {
   cairo_save(cr);
 
+  // See dt_draw_rounded_rectangle_path() for the same guard: cairo_arc() appends a line from
+  // whatever current point a caller's unrelated, unclosed path left behind. cairo_new_sub_path(),
+  // not cairo_new_path(): starts fresh without discarding a path a caller may still be building.
+  cairo_new_sub_path(cr);
+
   const float node_width = (selected || point_action) ? DT_DRAW_RADIUS_NODE_SELECTED / zoom_scale : DT_DRAW_RADIUS_NODE / zoom_scale;
   // square for corner nodes, circle for others (curve)
   if(square)
@@ -728,6 +733,10 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt[2], const float zo
   // Draw the control handle (1/4 smaller than a node)
   const float handle_radius = 0.75 * (selected ? DT_DRAW_RADIUS_NODE_SELECTED / zoom_scale
                                        : DT_DRAW_RADIUS_NODE / zoom_scale);
+
+  // Same guard as dt_draw_node(): when pt is NULL the tail above is skipped, so nothing has
+  // cleared a caller's dangling current point yet before this cairo_arc(). See there for why.
+  cairo_new_sub_path(cr);
 
   if(square)
   {

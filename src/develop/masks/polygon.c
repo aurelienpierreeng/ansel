@@ -2298,7 +2298,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(gui_points->points && node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw
   {
     dt_masks_draw_path_seg_by_seg(cr, mask_gui, form_index, gui_points->points, gui_points->points_count,
-                                  node_count, zoom_scale);
+                                  node_count, zoom_scale, FALSE);
   }
 
   if(mask_gui->group_selected == form_index)
