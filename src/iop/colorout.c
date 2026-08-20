@@ -421,7 +421,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // we need to bypass the cache entirely in these modes.
   dt_iop_set_cache_bypass(self, (d->mode != DT_PROFILE_NORMAL));
 
-  dt_colorspaces_free_conversion(&d->conversion);
+  /* Detach-then-free, and build through a local below: same discipline as colorin, for the
+   * same reason (issues #1212/#1216 -- a mid-commit clobber of the published field). */
+  dt_colorspaces_conversion_t *stale_conversion = d->conversion;
+  d->conversion = NULL;
+  dt_colorspaces_free_conversion(&stale_conversion);
   /* Cleared here rather than beside each prepare below, so that every path which returns
    * without building a conversion -- a Lab output -- leaves a hashed prefix that says so. */
   d->conversion_id = 0;
@@ -558,10 +562,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(force_lcms2) flags |= DT_CONVERSION_FORCE_LCMS2;
   if(d->mode == DT_PROFILE_GAMUTCHECK) flags |= DT_CONVERSION_GAMUTCHECK;
 
-  d->conversion = dt_colorspaces_prepare_conversion(&source, &target, NULL,
-                                                    softproofing ? &proof : NULL, out_intent, flags);
+  dt_colorspaces_conversion_t *conversion
+      = dt_colorspaces_prepare_conversion(&source, &target, NULL,
+                                          softproofing ? &proof : NULL, out_intent, flags);
 
-  if(IS_NULL_PTR(d->conversion))
+  if(IS_NULL_PTR(conversion))
   {
     /* Whatever the user asked for, we cannot render it. sRGB is the fallback that has always
      * been here; saying so out loud is the point, since the exported file will not be in the
@@ -573,20 +578,22 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     target.filename = "";
     target.resolved = NULL;
     if(work_type == DT_COLORSPACE_NONE) source = target;
-    d->conversion = dt_colorspaces_prepare_conversion(&source, &target, NULL,
-                                                      softproofing ? &proof : NULL, out_intent, flags);
+    conversion = dt_colorspaces_prepare_conversion(&source, &target, NULL,
+                                                   softproofing ? &proof : NULL, out_intent, flags);
   }
 
   /* After BOTH prepare attempts: what the sRGB fallback built is what will render. */
-  d->conversion_id = dt_colorspaces_conversion_identity(d->conversion);
+  d->conversion_id = dt_colorspaces_conversion_identity(conversion);
 
   dt_colorspaces_free_image_profile(image_output);
 
   /* Only the vectorised branch has a kernel. The lcms2 one is host-only, and saying so here
    * is the whole of what `process_cl_ready` needs to know. */
-  if(!dt_colorspaces_conversion_is_matrix(d->conversion)) piece->process_cl_ready = 0;
+  if(!dt_colorspaces_conversion_is_matrix(conversion)) piece->process_cl_ready = 0;
 
   dt_ioppr_set_pipe_output_profile_info(self->dev, pipe, d->type, out_filename, p->intent);
+
+  d->conversion = conversion; // single publication, after the conversion is complete
 }
 
 gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,

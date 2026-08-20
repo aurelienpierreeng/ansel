@@ -47,8 +47,18 @@
  * are stored, because that is what dt_ioppr_eval_trc() and the OpenCL kernels read. The
  * difference is that they are now read here and by the kernels, not by module logic.
  */
+/* First field, deliberately. Issues #1212/#1216: two field crashes handed accessors a
+ * conversion pointer whose FIRST bytes were readable but which was not (or no longer) a
+ * conversion -- the fault only fired on a deeper member. A tag at offset zero is checkable
+ * on exactly the memory those pointers could read, so the accessors can refuse and name the
+ * pointer instead of dereferencing into the unmapped part. */
+#define DT_CONVERSION_MAGIC_LIVE 0xC0117E51u
+#define DT_CONVERSION_MAGIC_DEAD 0xDEADC017u
+
 struct dt_colorspaces_conversion_t
 {
+  uint32_t magic;
+
   dt_colorspaces_color_profile_type_t from_type;
   dt_colorspaces_color_profile_type_t to_type;
 
@@ -214,6 +224,7 @@ dt_colorspaces_conversion_t *dt_colorspaces_prepare_conversion(const dt_colorspa
 
   dt_colorspaces_conversion_t *conversion = calloc(1, sizeof(dt_colorspaces_conversion_t));
   if(IS_NULL_PTR(conversion)) return NULL;
+  conversion->magic = DT_CONVERSION_MAGIC_LIVE;
 
   /* Read before any profile entry lock is taken, so this never nests the settings lock inside
    * one. It is folded into the identity below: it is the only thing that distinguishes two
@@ -461,15 +472,47 @@ give_up:
   return NULL;
 }
 
+/**
+ * @brief Is this pointer a live conversion?
+ *
+ * @details NULL is an ordinary, quiet "no conversion" -- every accessor already treated it
+ * that way. A dead tag is a use-after-free caught while the page is still mapped; anything
+ * else is a pointer that never was a conversion (issues #1212/#1216 observed the module's
+ * conversion field clobbered with a foreign pointer mid-commit). Both are reported by
+ * address so the next field report carries the value instead of a signal name.
+ */
+static gboolean _conversion_valid(const dt_colorspaces_conversion_t *const conversion, const char *caller)
+{
+  if(IS_NULL_PTR(conversion)) return FALSE;
+  if(conversion->magic == DT_CONVERSION_MAGIC_LIVE) return TRUE;
+
+  if(conversion->magic == DT_CONVERSION_MAGIC_DEAD)
+    dt_print(DT_DEBUG_ALWAYS, "[colorprofiles] %s was handed a FREED conversion %p -- refusing\n",
+             caller, (void *)conversion);
+  else
+    dt_print(DT_DEBUG_ALWAYS, "[colorprofiles] %s was handed %p which is NOT a conversion"
+             " (tag 0x%08x) -- refusing\n", caller, (void *)conversion, conversion->magic);
+  return FALSE;
+}
+
 uint64_t dt_colorspaces_conversion_identity(const dt_colorspaces_conversion_t *const conversion)
 {
-  return IS_NULL_PTR(conversion) ? 0 : conversion->identity;
+  return _conversion_valid(conversion, "conversion_identity") ? conversion->identity : 0;
 }
 
 void dt_colorspaces_free_conversion(dt_colorspaces_conversion_t **conversion)
 {
   if(IS_NULL_PTR(conversion) || IS_NULL_PTR(*conversion)) return;
   dt_colorspaces_conversion_t *c = *conversion;
+
+  if(!_conversion_valid(c, "free_conversion"))
+  {
+    /* Freeing a pointer that is not a live conversion CORRUPTS THE HEAP -- it is how a
+     * clobbered field turns into a crash three modules away. Drop the reference instead. */
+    *conversion = NULL;
+    return;
+  }
+  c->magic = DT_CONVERSION_MAGIC_DEAD;
 
   _free_curves(c->lut_source);
   _free_curves(c->lut_target);
@@ -697,7 +740,13 @@ void dt_colorspaces_apply_conversion_hooked(const dt_colorspaces_conversion_t *c
                                             const float *const in, float *const out, const size_t width,
                                             const size_t height, const dt_colorspaces_conversion_hook_t hook)
 {
-  if(IS_NULL_PTR(conversion) || IS_NULL_PTR(in) || IS_NULL_PTR(out)) return;
+  if(IS_NULL_PTR(in) || IS_NULL_PTR(out)) return;
+  if(!_conversion_valid(conversion, "apply_conversion"))
+  {
+    /* Passthrough, not garbage: the caller owns a destination buffer that WILL be consumed. */
+    if(in != out) memcpy(out, in, width * height * 4 * sizeof(float));
+    return;
+  }
 
   if(conversion->is_matrix)
     _apply_matrix(conversion, in, out, width * height, hook);
@@ -715,18 +764,18 @@ void dt_colorspaces_apply_conversion(const dt_colorspaces_conversion_t *const co
 
 gboolean dt_colorspaces_conversion_is_matrix(const dt_colorspaces_conversion_t *const conversion)
 {
-  return !IS_NULL_PTR(conversion) && conversion->is_matrix;
+  return _conversion_valid(conversion, "conversion_is_matrix") && conversion->is_matrix;
 }
 
 gboolean dt_colorspaces_conversion_has_clipping(const dt_colorspaces_conversion_t *const conversion)
 {
-  return !IS_NULL_PTR(conversion) && conversion->has_clipping;
+  return _conversion_valid(conversion, "conversion_has_clipping") && conversion->has_clipping;
 }
 
 gboolean dt_colorspaces_conversion_matrix(const dt_colorspaces_conversion_t *const conversion,
                                           dt_colormatrix_t matrix)
 {
-  if(IS_NULL_PTR(conversion) || !conversion->is_matrix) return FALSE;
+  if(!_conversion_valid(conversion, "conversion_matrix") || !conversion->is_matrix) return FALSE;
   memcpy(matrix, conversion->matrix, sizeof(dt_colormatrix_t));
   return TRUE;
 }
@@ -734,7 +783,7 @@ gboolean dt_colorspaces_conversion_matrix(const dt_colorspaces_conversion_t *con
 gboolean dt_colorspaces_conversion_source_matrix(const dt_colorspaces_conversion_t *const conversion,
                                                  dt_colormatrix_t matrix)
 {
-  if(IS_NULL_PTR(conversion) || !conversion->have_source_matrix) return FALSE;
+  if(!_conversion_valid(conversion, "conversion_source_matrix") || !conversion->have_source_matrix) return FALSE;
   memcpy(matrix, conversion->source_matrix, sizeof(dt_colormatrix_t));
   return TRUE;
 }
@@ -742,7 +791,7 @@ gboolean dt_colorspaces_conversion_source_matrix(const dt_colorspaces_conversion
 gboolean dt_colorspaces_conversion_clip_matrix(const dt_colorspaces_conversion_t *const conversion,
                                                dt_colormatrix_t matrix)
 {
-  if(IS_NULL_PTR(conversion) || !conversion->is_matrix || !conversion->has_clipping) return FALSE;
+  if(!_conversion_valid(conversion, "conversion_clip_matrix") || !conversion->is_matrix || !conversion->has_clipping) return FALSE;
   memcpy(matrix, conversion->clip_matrix, sizeof(dt_colormatrix_t));
   return TRUE;
 }
@@ -750,26 +799,26 @@ gboolean dt_colorspaces_conversion_clip_matrix(const dt_colorspaces_conversion_t
 const float *dt_colorspaces_conversion_source_curve(const dt_colorspaces_conversion_t *const conversion,
                                                     const int channel)
 {
-  if(IS_NULL_PTR(conversion) || channel < 0 || channel > 2) return NULL;
+  if(!_conversion_valid(conversion, "conversion_source_curve") || channel < 0 || channel > 2) return NULL;
   return conversion->lut_source[channel];
 }
 
 const float *dt_colorspaces_conversion_target_curve(const dt_colorspaces_conversion_t *const conversion,
                                                     const int channel)
 {
-  if(IS_NULL_PTR(conversion) || channel < 0 || channel > 2) return NULL;
+  if(!_conversion_valid(conversion, "conversion_target_curve") || channel < 0 || channel > 2) return NULL;
   return conversion->lut_target[channel];
 }
 
 const float *dt_colorspaces_conversion_source_coeffs(const dt_colorspaces_conversion_t *const conversion)
 {
-  if(IS_NULL_PTR(conversion) || IS_NULL_PTR(conversion->lut_source[0])) return NULL;
+  if(!_conversion_valid(conversion, "conversion_source_coeffs") || IS_NULL_PTR(conversion->lut_source[0])) return NULL;
   return &conversion->coeffs_source[0][0];
 }
 
 const float *dt_colorspaces_conversion_target_coeffs(const dt_colorspaces_conversion_t *const conversion)
 {
-  if(IS_NULL_PTR(conversion) || IS_NULL_PTR(conversion->lut_target[0])) return NULL;
+  if(!_conversion_valid(conversion, "conversion_target_coeffs") || IS_NULL_PTR(conversion->lut_target[0])) return NULL;
   return &conversion->coeffs_target[0][0];
 }
 
