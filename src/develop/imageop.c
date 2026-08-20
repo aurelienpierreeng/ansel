@@ -432,12 +432,34 @@ int default_iop_focus(dt_gui_module_t *m, gboolean toggle)
   return 1;
 }
 
-int dt_iop_load_module_so(void *m, const char *libname, const char *module_name)
+/**
+ * @brief Bind one statically-linked IOP module into its @ref dt_iop_module_so_t.
+ *
+ * @details IOP modules are compiled into lib_ansel, not dlopen'd: the set of them is fixed
+ * at build time, and both develop/iop_order.c's order tables and develop/geometry's roster
+ * are written against that same fixed set, so a module discovered on disk could never be
+ * anything but a disagreement with them -- which is exactly what
+ * dt_ioppr_check_so_iop_order() used to abort startup over. See doc/static-iop.md.
+ *
+ * This replaces the g_module_symbol() sweep. Two halves, and they cannot be merged:
+ * @p entry->fill_so() runs in the MODULE's translation unit, where the plain API names
+ * resolve to that module's own asm-labelled symbols, and stores NULL for every entry point
+ * it does not define; the DEFAULT fallbacks are applied here instead, because default_<fn>
+ * is static to this file.
+ *
+ * @param module Zeroed module descriptor to fill.
+ * @param entry Registry entry naming the module and its generated binder.
+ * @return 0 on success, 1 if the module must not be used.
+ */
+static int _iop_load_module_static(dt_iop_module_so_t *module,
+                                   const dt_iop_module_static_entry_t *const entry)
 {
-  dt_iop_module_so_t *module = (dt_iop_module_so_t *)m;
+  const char *const module_name = entry->op;
   g_strlcpy(module->op, module_name, sizeof(module->op));
 
-#define INCLUDE_API_FROM_MODULE_LOAD "iop_load_module"
+  entry->fill_so(module);
+
+#define INCLUDE_API_FROM_MODULE_STATIC_DEFAULTS
 #include "iop/iop_api.h"
 
   if(IS_NULL_PTR(module->init)) module->init = dt_iop_default_init;
@@ -467,7 +489,12 @@ int dt_iop_load_module_so(void *m, const char *libname, const char *module_name)
          module->get_f == default_get_f ||
          module->get_introspection_linear == default_get_introspection_linear ||
          module->get_introspection == default_get_introspection)
-        goto api_h_error;
+      {
+        fprintf(stderr,
+                "[iop_load_module] `%s' claims introspection but did not replace the default"
+                " accessors\n", module_name);
+        return 1;
+      }
     }
     else
       fprintf(stderr, "[iop_load_module] failed to initialize introspection for operation `%s'\n", module_name);
@@ -511,8 +538,6 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
   module->raster_mask.sink.source = NULL;
   module->raster_mask.sink.id = 0;
 
-  // only reference cached results of dlopen:
-  module->module = so->module;
   module->so = so;
 
 #define INCLUDE_API_FROM_MODULE_LOAD_BY_SO
@@ -920,8 +945,28 @@ void dt_iop_load_modules_so(void)
 {
   // Batch presets initialization in a single transaction to avoid per-module BEGIN/COMMIT overhead.
   dt_database_begin_transaction_batch();
-  darktable.iop = dt_module_load_modules("/plugins", sizeof(dt_iop_module_so_t), dt_iop_load_module_so,
-                                         _init_module_so, NULL);
+
+  GList *modules = NULL;
+  for(int k = 0; k < dt_iop_static_modules_count; k++)
+  {
+    const dt_iop_module_static_entry_t *const entry = &dt_iop_static_modules[k];
+    dt_iop_module_so_t *module = (dt_iop_module_so_t *)calloc(1, sizeof(dt_iop_module_so_t));
+
+    if(_iop_load_module_static(module, entry))
+    {
+      dt_free(module);
+      continue;
+    }
+
+    modules = g_list_prepend(modules, module);
+    _init_module_so(module);
+  }
+
+  // The registry is emitted in a stable (alphabetical) order; keep it, rather than the
+  // arbitrary readdir() order the directory scan used to produce. Pipe order comes from
+  // iop_order and does not depend on this list's order at all.
+  darktable.iop = g_list_reverse(modules);
+
   dt_database_end_transaction_batch();
 }
 
@@ -992,7 +1037,6 @@ void dt_iop_unload_modules_so()
   {
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)darktable.iop->data;
     if(module->cleanup_global) module->cleanup_global(module);
-    if(module->module) g_module_close(module->module);
     dt_free(darktable.iop->data);
     darktable.iop = g_list_delete_link(darktable.iop, darktable.iop);
   }

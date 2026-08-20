@@ -43,9 +43,10 @@
 #include "iop/channelmixerrgb_shared.h"
 #include "iop/iop_api.h"
 
-// Keep the shared implementation in this translation unit to avoid
-// duplicate globals from a separate compiled object.
-#include "channelmixerrgb_shared.c"
+// The shared implementation is its own translation unit, compiled once and linked
+// into the single IOP object set. It used to be textually included here, once per
+// consuming module, because two shared objects could not each carry a copy of its
+// globals; with the modules linked statically there is exactly one link and one copy.
 
 #include <gtk/gtk.h>
 #include <math.h>
