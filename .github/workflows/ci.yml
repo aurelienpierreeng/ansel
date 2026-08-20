@@ -256,7 +256,7 @@ jobs:
         include:
           - btype: Release
             compiler: { compiler: LLVM, CC: clang, CXX: clang++ }
-            eco: -DUSE_XMLLINT=OFF
+            eco: -DUSE_XMLLINT=OFF -DCMAKE_C_FLAGS=-g -DCMAKE_CXX_FLAGS=-g
             target: skiptest
             generator: Ninja
             msystem: UCRT64
@@ -296,17 +296,28 @@ jobs:
         run: |
           $(cygpath ${INSTALL_PREFIX})/bin/ansel.exe --version || true
           $(cygpath ${INSTALL_PREFIX})/bin/ansel-cli.exe --version || true
-          echo "Testing RUN!"
-          $(cygpath ${INSTALL_PREFIX})/bin/ansel-cli.exe \
-                 --verbose \
-                 --width 2048 --height 2048 \
-                 --apply-custom-presets false \
-                 $(cygpath ${SRC_DIR})/data/pixmaps/256x256/ansel.png \
-                 output.png \
+          echo "Testing RUN under gdb, up to 12 attempts (intermittent)"
+          for i in $(seq 1 12); do
+            echo "--- attempt $i ---"
+            gdb --batch \
+                -ex "set pagination off" -ex "set confirm off" \
+                -ex "handle SIGSEGV stop nopass" -ex run \
+                -ex "echo \n===== FRAME 0 =====\n" -ex "info frame" -ex "info registers rax rbx rcx rdx rsi rdi rbp rsp" \
+                -ex "echo \n===== BACKTRACE =====\n" -ex "bt full" \
+                -ex "echo \n===== SOURCE =====\n" -ex "list" \
+                -ex "echo \n===== DISASM AROUND PC =====\n" -ex "x/12i \$pc-24" \
+                --args $(cygpath ${INSTALL_PREFIX})/bin/ansel-cli.exe \
+                 --verbose --width 2048 --height 2048 --apply-custom-presets false \
+                 $(cygpath ${SRC_DIR})/data/pixmaps/256x256/ansel.png output_$i.png \
                  --core --disable-opencl --conf host_memory_limit=8192 \
                  --conf worker_threads=4 -t 4 \
                  --conf plugins/lighttable/export/force_lcms2=FALSE \
-                 --conf plugins/lighttable/export/iccintent=0
+                 --conf plugins/lighttable/export/iccintent=0 2>&1 | tee g_$i.log
+            if grep -q "received signal SIGSEGV" g_$i.log; then
+              echo "### REPRODUCED ON ATTEMPT $i ###"; exit 1
+            fi
+          done
+          echo "### 12/12 clean ###" 
 
   macOS:
     name: macOS.${{ matrix.compiler.compiler }}.${{ matrix.build.xcode }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
