@@ -611,8 +611,8 @@ void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t 
   if(piece->data_size > 0 && IS_NULL_PTR(piece->data))
   {
     dt_print(DT_DEBUG_ALWAYS,
-             "[dt_iop_init_pipe] `%s' could not allocate its %zu bytes of node storage;"
-             " the node stays disabled\n", module->op, piece->data_size);
+             "[dt_iop_init_pipe] `%s' could not allocate its %" G_GSIZE_FORMAT
+             " bytes of node storage; the node stays disabled\n", module->op, piece->data_size);
     piece->data_size = 0;
     piece->enabled = 0;
   }
@@ -1442,8 +1442,8 @@ static gboolean _iop_piece_is_committable(dt_iop_module_t *module, dt_dev_pixelp
   if(piece->data_size > 0 && IS_NULL_PTR(piece->data))
   {
     dt_print(DT_DEBUG_ALWAYS,
-             "[dt_iop_commit_params] `%s' node claims %zu bytes of private data but has none,"
-             " skipping commit\n", module->op, piece->data_size);
+             "[dt_iop_commit_params] `%s' node claims %" G_GSIZE_FORMAT
+             " bytes of private data but has none, skipping commit\n", module->op, piece->data_size);
     return FALSE;
   }
 
