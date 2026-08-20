@@ -296,7 +296,34 @@ jobs:
         run: |
           $(cygpath ${INSTALL_PREFIX})/bin/ansel.exe --version || true
           $(cygpath ${INSTALL_PREFIX})/bin/ansel-cli.exe --version || true
-          echo "Testing RUN!"
+          echo "Testing RUN (under gdb, up to 6 attempts -- the crash is intermittent)!"
+          for i in 1 2 3 4 5 6; do
+            echo "=================== attempt $i ==================="
+            gdb --batch \
+                -ex "set pagination off" \
+                -ex "set confirm off" \
+                -ex "handle SIGSEGV stop nopass" \
+                -ex run \
+                -ex "echo \n===== BACKTRACE (crashing thread) =====\n" \
+                -ex "bt full" \
+                -ex "echo \n===== ALL THREADS =====\n" \
+                -ex "thread apply all bt" \
+                --args $(cygpath ${INSTALL_PREFIX})/bin/ansel-cli.exe \
+                 --verbose \
+                 --width 2048 --height 2048 \
+                 --apply-custom-presets false \
+                 $(cygpath ${SRC_DIR})/data/pixmaps/256x256/ansel.png \
+                 output_$i.png \
+                 --core --disable-opencl --conf host_memory_limit=8192 \
+                 --conf worker_threads=4 -t 4 \
+                 --conf plugins/lighttable/export/force_lcms2=FALSE \
+                 --conf plugins/lighttable/export/iccintent=0 2>&1 | tee gdb_$i.log
+            if grep -q "SIGSEGV\|Program received signal" gdb_$i.log; then
+              echo "### CRASHED ON ATTEMPT $i -- backtrace above ###"
+              exit 1
+            fi
+          done
+          echo "### 6 attempts, no crash ###"
           $(cygpath ${INSTALL_PREFIX})/bin/ansel-cli.exe \
                  --verbose \
                  --width 2048 --height 2048 \
