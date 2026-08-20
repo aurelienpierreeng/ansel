@@ -593,11 +593,38 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
   return 0;
 }
 
+/**
+ * @brief Build one pixelpipe node's module-owned storage.
+ *
+ * @details Establishes what _iop_piece_is_committable() later relies on. init_pipe is OPTIONAL
+ * in the module API, so a module that allocates nothing is legitimate and leaves data NULL with
+ * data_size 0; what is never legitimate is claiming a size without the storage, which is how a
+ * failed allocation would otherwise reach 61 modules that dereference piece->data unchecked.
+ */
 void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                       struct dt_dev_pixelpipe_iop_t *piece)
 {
-  module->init_pipe(module, pipe, piece);
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(piece)) return;
+
+  if(!IS_NULL_PTR(module->init_pipe)) module->init_pipe(module, pipe, piece);
+
+  if(piece->data_size > 0 && IS_NULL_PTR(piece->data))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[dt_iop_init_pipe] `%s' could not allocate its %zu bytes of node storage;"
+             " the node stays disabled\n", module->op, piece->data_size);
+    piece->data_size = 0;
+    piece->enabled = 0;
+  }
+
   piece->blendop_data = dt_calloc_align(sizeof(dt_develop_blend_params_t));
+  if(IS_NULL_PTR(piece->blendop_data))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[dt_iop_init_pipe] `%s' could not allocate blend storage; the node stays disabled\n",
+             module->op);
+    piece->enabled = 0;
+  }
 }
 
 /**
@@ -1354,10 +1381,103 @@ void dt_iop_compute_module_hash(dt_iop_module_t *module, GList *masks)
   module->hash = hash;
 }
 
+/**
+ * @brief Is this pipeline node safe to dispatch module code on?
+ *
+ * @details The mirror of the validation dt_iop_cleanup_pipe() already performs, and for the
+ * same reason it gives: a pipe can be walked while holding a node whose backing storage is no
+ * longer trustworthy, and "calling the descriptor callback with that same instance would only
+ * move the use-after-free into the module cleanup code". Commit is the other door into module
+ * code, and it was unguarded -- it memcpy'd into piece->blendop_data before reading anything,
+ * so a stale node corrupted memory before any callback could object.
+ *
+ * Every check here is an invariant the pipeline establishes itself, never a guess:
+ *
+ *  - dt_dev_pixelpipe_create_nodes() calloc's the node, sets piece->module, and calls
+ *    dt_iop_init_pipe(), which allocates piece->blendop_data. A node reaching commit without
+ *    those did not come from there.
+ *  - piece->module is the module the node was built for. Committing module A's params through
+ *    node B reinterprets B's private data_size bytes as A's parameter struct.
+ *  - All 89 modules that define init_pipe() set piece->data_size when they allocate
+ *    piece->data, so `data_size > 0 && data == NULL' is never a legitimate state -- it is
+ *    either a failed allocation or storage that has already been torn down. 61 modules
+ *    dereference piece->data in commit_params() without checking it, which is fine as long as
+ *    this holds, and a guaranteed SIGSEGV the moment it does not.
+ *
+ * @return TRUE when the node may be dispatched on. Reports and refuses otherwise.
+ */
+static gboolean _iop_piece_is_committable(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                                          dt_dev_pixelpipe_iop_t *piece)
+{
+  if(IS_NULL_PTR(piece)) return FALSE;
+
+  if(IS_NULL_PTR(module))
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[dt_iop_commit_params] missing module, skipping commit\n");
+    return FALSE;
+  }
+
+  if(IS_NULL_PTR(pipe))
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[dt_iop_commit_params] missing pipe for `%s', skipping commit\n",
+             module->op);
+    return FALSE;
+  }
+
+  if(piece->module != module)
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[dt_iop_commit_params] node belongs to `%s' but `%s' is committing, skipping\n",
+             IS_NULL_PTR(piece->module) ? "(none)" : piece->module->op, module->op);
+    return FALSE;
+  }
+
+  if(IS_NULL_PTR(piece->blendop_data))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[dt_iop_commit_params] `%s' node has no blend storage, skipping commit\n", module->op);
+    return FALSE;
+  }
+
+  if(piece->data_size > 0 && IS_NULL_PTR(piece->data))
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[dt_iop_commit_params] `%s' node claims %zu bytes of private data but has none,"
+             " skipping commit\n", module->op, piece->data_size);
+    return FALSE;
+  }
+
+  if(IS_NULL_PTR(module->commit_params))
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[dt_iop_commit_params] `%s' has no commit_params, skipping\n",
+             module->op);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
                           dt_develop_blend_params_t *blendop_params, dt_dev_pixelpipe_t *pipe,
                           dt_dev_pixelpipe_iop_t *piece)
 {
+  /* Before the memcpy below, not after: an untrustworthy node has already been written through
+   * by the time a callback could reject it. A refused node stays disabled rather than running
+   * with parameters that were never committed. */
+  if(!_iop_piece_is_committable(module, pipe, piece))
+  {
+    if(!IS_NULL_PTR(piece)) piece->enabled = 0;
+    return;
+  }
+
+  if(IS_NULL_PTR(params) || IS_NULL_PTR(blendop_params))
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[dt_iop_commit_params] `%s' committed with no parameters,"
+             " skipping\n", module->op);
+    piece->enabled = 0;
+    return;
+  }
+
   // We need to commit also modules that are disabled because some of them
   // may self-enabled at commit time, depending on image input.
   // 1. commit params

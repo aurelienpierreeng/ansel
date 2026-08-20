@@ -654,6 +654,20 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
                          piece->module->op, piece->module->multi_priority, piece->module->iop_order,
                          pipe->type, pipe->imgid);
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
+
+    /* Clear the node before releasing it. A freed node whose fields still read as a live one is
+     * exactly what makes this class of bug land far from its cause: a walker that outlives the
+     * teardown finds a plausible module pointer and a plausible private-data pointer, and the
+     * crash surfaces inside whichever module's commit_params() dereferences them. Zeroed, the
+     * same node is rejected by _iop_piece_is_committable() and reported by name.
+     * This does not make use-after-free safe -- the allocator may hand the bytes out again --
+     * it removes the window where the node is stale but still self-consistent. */
+    piece->module = NULL;
+    piece->data = NULL;
+    piece->data_size = 0;
+    piece->blendop_data = NULL;
+    piece->enabled = 0;
+
     dt_free(piece);
   }
   g_list_free(pipe->nodes);
