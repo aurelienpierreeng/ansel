@@ -37,15 +37,44 @@ modules in (see `static-iop.md`), which is the other half of the number:
 |---|---|---|---|
 | startup | 0.293–0.340 s | 0.206–0.211 s | **0.097–0.112 s** |
 
-The 90-odd ms does not disappear, but it is not left on the critical path either:
-`init_global()` starts `_lensfun_db_warm()` on a background thread, so the parse overlaps the
-rest of startup and is normally done before any image asks. Whoever arrives first builds it
-and the other waits on the same lock — there is one construction either way, and the accessor
-was already thread-safe. The thread is **joined** in `cleanup_global()`, not detached: it must
-not still be parsing when the database it is writing gets freed.
+The 90-odd ms does not disappear, it moves to the first image that needs a lens — where a raw
+decode already dwarfs it.
 
-Measured with the pre-warm in place, 5 interleaved runs: startup 0.109–0.115 s against
-master's 0.345–0.356 s — i.e. the background parse costs the startup path nothing.
+### Do not pre-warm it on a background thread
+
+That was tried, shipped, and reverted. `init_global()` started a thread that built the database
+so the parse would overlap the rest of startup. It looked safe — the accessor is mutex-guarded,
+the thread was joined in `cleanup_global()`, and it passed CI once — and it is not:
+
+**`liblensfun` calls `setlocale()`.** `lfDatabase::Load()` switches `LC_NUMERIC` to `"C"` so it
+can parse decimal points, then puts it back. `setlocale()` is process-global and not thread-safe.
+Running it on a background thread while the main thread is still initialising GTK, imageio and
+GraphicsMagick is a data race on the process locale, and it is invisible on glibc:
+
+```
+[empty history stack]
+0.238865 [rawdenoiseai] loaded ...denoise-quarter-multi-v1.anselnn
+Magick: abort due to signal 11 (SIGSEGV) "Segmentation Fault"...
+```
+
+That is the Windows Release CI job, on master, roughly 0.24 s in — inside the window where the
+pre-warm thread was parsing. The same job had passed on the pull request, which is what a race
+looks like.
+
+It also bought nothing measurable. Startup was 0.097–0.112 s with the lazy load alone and
+0.109–0.115 s with the pre-warm on top: thread creation and CPU contention cost slightly more
+than the overlap saved, and the end-to-end export time was a wash. So this is not a trade to
+re-litigate with better synchronisation — there is nothing on the other side of it.
+
+A caveat on "safe", so nobody reads too much into the revert: `dt_control_jobs_init()` runs at
+`darktable.c:1567`, before `dt_iop_load_modules_so()` at 1724, so the worker pool has always been
+alive when `Load()` ran — the `setlocale()` exposure predates all of this and is a property of
+lensfun, not of when we call it. What the pre-warm changed was the overlap: from "idle workers
+waiting on a job queue" to "the main thread actively initialising locale-sensitive libraries".
+That is the difference between a hazard nobody has hit and a crash.
+
+If the first-image hitch ever does matter, the only safe shape is to build the database on the
+**main** thread at a point where nothing else is running, not to move it onto another one.
 
 ## 2. The same lookup was repeated on every pipe resync
 

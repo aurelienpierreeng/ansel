@@ -179,8 +179,6 @@ typedef struct dt_iop_lensfun_global_data_t
    *  _lensfun_db(), never directly. */
   lfDatabase *db;
   gboolean db_tried;
-  /** Pre-warm thread, see _lensfun_db_warm(). Joined by cleanup_global(). */
-  GThread *db_warm;
   int kernel_lens_distort_bilinear;
   int kernel_lens_distort_bicubic;
   int kernel_lens_distort_mitchell;
@@ -194,11 +192,6 @@ typedef struct dt_iop_lensfun_global_data_t
  * this module is switched on per image by reload_defaults() (workflow_enabled), so the
  * first possible consumer is an image being loaded, and by then the cost is amortised
  * against a pipeline run rather than added to the splash screen.
- *
- * It is not left to chance either: init_global() starts _lensfun_db_warm() to build it on a
- * background thread, so the work overlaps the rest of startup and is normally finished before
- * any image asks. Whoever gets there first builds it and the other waits -- there is one lock
- * and one construction either way.
  *
  * _lensfun_db_lock covers the construction only, and is never held while the plugin mutex
  * is taken, so the two cannot deadlock against each other. db_tried makes a failed load
@@ -220,22 +213,6 @@ static GHashTable *_lensfun_lens_memo = NULL;
 
 /** @brief Build the database. Call once, under _lensfun_db_lock. */
 static lfDatabase *_lensfun_db_create(void);
-static lfDatabase *_lensfun_db(dt_iop_lensfun_global_data_t *gd);
-
-/**
- * @brief Build the database off the startup path.
- *
- * @details Pure pre-warm: it takes the same accessor everything else does, so if an image
- * gets there first this simply waits on the lock and returns. It touches nothing but the
- * database, so there is nothing here for the GUI thread to race against -- but it must not
- * still be running when cleanup_global() frees the database, which is why the thread is
- * joined there rather than detached.
- */
-static gpointer _lensfun_db_warm(gpointer data)
-{
-  (void)_lensfun_db((dt_iop_lensfun_global_data_t *)data);
-  return NULL;
-}
 
 /**
  * @brief The lensfun database, built on first use.
@@ -1572,8 +1549,7 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_lens_distort_mitchell = dt_opencl_create_kernel(program, "lens_distort_mitchell");
   gd->kernel_lens_vignette = dt_opencl_create_kernel(program, "lens_vignette");
 
-  // The database is NOT built on this thread -- see _lensfun_db() and _lensfun_db_warm().
-  gd->db_warm = g_thread_new("lensfun-db", _lensfun_db_warm, gd);
+  // The database is NOT built here -- see _lensfun_db(). calloc() already left it NULL.
 }
 
 static lfDatabase *_lensfun_db_create(void)
@@ -1747,13 +1723,6 @@ void reload_defaults(dt_iop_module_t *module)
 void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)module->data;
-
-  /* Before anything is freed: the pre-warm thread may still be building the database. */
-  if(!IS_NULL_PTR(gd->db_warm))
-  {
-    g_thread_join(gd->db_warm);
-    gd->db_warm = NULL;
-  }
 
   /* The memos hold pointers INTO the database, so they go first. Both may be NULL: a session
    * that never opened an image never built any of this. */
