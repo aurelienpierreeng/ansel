@@ -175,12 +175,124 @@ typedef struct dt_iop_lensfun_gui_data_t
 
 typedef struct dt_iop_lensfun_global_data_t
 {
+  /** The lensfun database. NULL until something actually asks for a lens: read it through
+   *  _lensfun_db(), never directly. */
   lfDatabase *db;
+  gboolean db_tried;
   int kernel_lens_distort_bilinear;
   int kernel_lens_distort_bicubic;
   int kernel_lens_distort_mitchell;
   int kernel_lens_vignette;
 } dt_iop_lensfun_global_data_t;
+
+/* Building the lensfun database means parsing ~8 MB of XML into 1051 cameras and 1562
+ * lenses: measured 89-102 ms and +4 MB RSS on a stock Fedora database plus the user's
+ * updates. init_global() did it at startup, in EVERY session -- including every
+ * lighttable-only session that never corrects a lens. Nothing can need it that early:
+ * this module is switched on per image by reload_defaults() (workflow_enabled), so the
+ * first possible consumer is an image being loaded, and by then the cost is amortised
+ * against a pipeline run rather than added to the splash screen.
+ *
+ * _lensfun_db_lock covers the construction only, and is never held while the plugin mutex
+ * is taken, so the two cannot deadlock against each other. db_tried makes a failed load
+ * final: retrying it per lookup would turn a broken installation into a slow one. */
+static GMutex _lensfun_db_lock;
+
+/* Resolved (maker, model) -> lfCamera and (camera, lens name) -> lfLens.
+ *
+ * FindCamerasExt() is a fuzzy scan over every camera in the database and costs 0.35-0.42 ms;
+ * FindLenses() costs 0.06 ms when it hits and 0.84 ms when it misses, because a miss scans
+ * the lot. commit_params() resolves both on every pipe resync, for every pipe, and it asks
+ * the same question every time -- the camera and lens of an image do not change while it is
+ * open. The answers are pointers INTO the database, which is built once and never reloaded,
+ * so they stay valid for the process's life.
+ *
+ * Guarded by the plugin mutex, which the lookups already took. */
+static GHashTable *_lensfun_camera_memo = NULL;
+static GHashTable *_lensfun_lens_memo = NULL;
+
+/** @brief Build the database. Call once, under _lensfun_db_lock. */
+static lfDatabase *_lensfun_db_create(void);
+
+/**
+ * @brief The lensfun database, built on first use.
+ * @return The database, or NULL if it could not be loaded (already reported).
+ */
+static lfDatabase *_lensfun_db(dt_iop_lensfun_global_data_t *gd)
+{
+  if(IS_NULL_PTR(gd)) return NULL;
+
+  g_mutex_lock(&_lensfun_db_lock);
+  if(!gd->db_tried)
+  {
+    gd->db_tried = TRUE;
+    gd->db = _lensfun_db_create();
+  }
+  lfDatabase *db = gd->db;
+  g_mutex_unlock(&_lensfun_db_lock);
+
+  return db;
+}
+
+/**
+ * @brief Memoised lfDatabase::FindCamerasExt().
+ * @details Caller must hold the plugin mutex. The returned camera belongs to the database.
+ */
+static const lfCamera *_lensfun_find_camera(lfDatabase *db, const char *maker, const char *model)
+{
+  if(IS_NULL_PTR(db) || IS_NULL_PTR(model) || !model[0]) return NULL;
+
+  gchar *key = g_strdup_printf("%s\x1f%s", maker ? maker : "", model);
+
+  if(IS_NULL_PTR(_lensfun_camera_memo))
+    _lensfun_camera_memo = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
+
+  gpointer found = NULL;
+  if(g_hash_table_lookup_extended(_lensfun_camera_memo, key, NULL, &found))
+  {
+    dt_free(key);
+    return (const lfCamera *)found;
+  }
+
+  const lfCamera **cameras = db->FindCamerasExt(maker, model, 0);
+  const lfCamera *camera = (!IS_NULL_PTR(cameras)) ? cameras[0] : NULL;
+  if(!IS_NULL_PTR(cameras)) lf_free(cameras);
+
+  // A miss is cached too: it costs a full scan to establish, and it will not change.
+  g_hash_table_insert(_lensfun_camera_memo, key, (gpointer)camera);
+
+  return camera;
+}
+
+/**
+ * @brief Memoised lfDatabase::FindLenses().
+ * @details Caller must hold the plugin mutex. The returned lens belongs to the database.
+ */
+static const lfLens *_lensfun_find_lens(lfDatabase *db, const lfCamera *camera, const char *lens_name)
+{
+  if(IS_NULL_PTR(db) || IS_NULL_PTR(lens_name) || !lens_name[0]) return NULL;
+
+  gchar *key = g_strdup_printf("%s\x1f%s", (!IS_NULL_PTR(camera) && camera->Model) ? camera->Model : "",
+                               lens_name);
+
+  if(IS_NULL_PTR(_lensfun_lens_memo))
+    _lensfun_lens_memo = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
+
+  gpointer found = NULL;
+  if(g_hash_table_lookup_extended(_lensfun_lens_memo, key, NULL, &found))
+  {
+    dt_free(key);
+    return (const lfLens *)found;
+  }
+
+  const lfLens **lenses = db->FindLenses(camera, NULL, lens_name, 0);
+  const lfLens *lens = (!IS_NULL_PTR(lenses)) ? lenses[0] : NULL;
+  if(!IS_NULL_PTR(lenses)) lf_free(lenses);
+
+  g_hash_table_insert(_lensfun_lens_memo, key, (gpointer)lens);
+
+  return lens;
+}
 
 typedef struct dt_iop_lensfun_data_t
 {
@@ -1213,9 +1325,8 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
                              dt_iop_lensfun_data_t *d)
 {
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-  lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  lfDatabase *dt_iop_lensfun_db = _lensfun_db(gd);
   const lfCamera *camera = NULL;
-  const lfCamera **cam = NULL;
   if(d->lens)
   {
     delete d->lens;
@@ -1223,26 +1334,21 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
   }
   d->lens = new lfLens;
 
-  if(p->camera[0])
+  if(p->camera[0] && !IS_NULL_PTR(dt_iop_lensfun_db))
   {
     dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-    cam = dt_iop_lensfun_db->FindCamerasExt(NULL, p->camera, 0);
-    if(cam)
-    {
-      camera = cam[0];
-      d->crop = cam[0]->CropFactor;
-    }
+    camera = _lensfun_find_camera(dt_iop_lensfun_db, NULL, p->camera);
     dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+    if(!IS_NULL_PTR(camera)) d->crop = camera->CropFactor;
   }
-  if(p->lens[0])
+  if(p->lens[0] && !IS_NULL_PTR(dt_iop_lensfun_db))
   {
     dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-    const lfLens **lens
-        = dt_iop_lensfun_db->FindLenses(camera, NULL, p->lens, 0);
+    const lfLens *lens = _lensfun_find_lens(dt_iop_lensfun_db, camera, p->lens);
     dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
-    if(lens)
+    if(!IS_NULL_PTR(lens))
     {
-      *d->lens = *lens[0];
+      *d->lens = *lens;
       if(p->tca_override)
       {
 #ifdef LF_0395
@@ -1272,10 +1378,8 @@ static void _lens_build_data(dt_iop_module_t *self, const dt_iop_lensfun_params_
         d->lens->AddCalibTCA(&tca);
 #endif
       }
-      lf_free(lens);
     }
   }
-  lf_free(cam);
   d->modify_flags = p->modify_flags;
   if(dt_image_is_monochrome(&self->dev->image_storage)) d->modify_flags &= ~LF_MODIFY_TCA;
   d->inverse = p->inverse;
@@ -1445,8 +1549,12 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_lens_distort_mitchell = dt_opencl_create_kernel(program, "lens_distort_mitchell");
   gd->kernel_lens_vignette = dt_opencl_create_kernel(program, "lens_vignette");
 
+  // The database is NOT built here -- see _lensfun_db(). calloc() already left it NULL.
+}
+
+static lfDatabase *_lensfun_db_create(void)
+{
   lfDatabase *dt_iop_lensfun_db = new lfDatabase;
-  gd->db = (lfDatabase *)dt_iop_lensfun_db;
 
 #if defined(__MACH__) || defined(__APPLE__)
 #else
@@ -1497,6 +1605,8 @@ void init_global(dt_iop_module_so_t *module)
 #endif
     dt_free(path);
   }
+
+  return dt_iop_lensfun_db;
 }
 
 static float get_autoscale(dt_iop_module_t *self, dt_iop_lensfun_params_t *p, const lfCamera *camera);
@@ -1538,15 +1648,16 @@ void reload_defaults(dt_iop_module_t *module)
     dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)module->global_data;
 
     // just to be sure
-    if(IS_NULL_PTR(gd) || IS_NULL_PTR(gd->db)) return;
+    lfDatabase *db = _lensfun_db(gd);
+    if(IS_NULL_PTR(db)) return;
 
     dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-    const lfCamera **cam = gd->db->FindCamerasExt(img->exif_maker, img->exif_model, 0);
+    const lfCamera **cam = db->FindCamerasExt(img->exif_maker, img->exif_model, 0);
     dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
     if(cam)
     {
       dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-      const lfLens **lens = gd->db->FindLenses(cam[0], NULL, d->lens, 0);
+      const lfLens **lens = db->FindLenses(cam[0], NULL, d->lens, 0);
       dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
 
       if(!lens && islower(cam[0]->Mount[0]))
@@ -1561,7 +1672,7 @@ void reload_defaults(dt_iop_module_t *module)
         g_strlcpy(d->lens, "", sizeof(d->lens));
 
         dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-        lens = gd->db->FindLenses(cam[0], NULL, d->lens, 0);
+        lens = db->FindLenses(cam[0], NULL, d->lens, 0);
         dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
       }
 
@@ -1612,8 +1723,23 @@ void reload_defaults(dt_iop_module_t *module)
 void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)module->data;
+
+  /* The memos hold pointers INTO the database, so they go first. Both may be NULL: a session
+   * that never opened an image never built any of this. */
+  if(!IS_NULL_PTR(_lensfun_camera_memo))
+  {
+    g_hash_table_destroy(_lensfun_camera_memo);
+    _lensfun_camera_memo = NULL;
+  }
+  if(!IS_NULL_PTR(_lensfun_lens_memo))
+  {
+    g_hash_table_destroy(_lensfun_lens_memo);
+    _lensfun_lens_memo = NULL;
+  }
+
   lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
-  delete dt_iop_lensfun_db;
+  if(!IS_NULL_PTR(dt_iop_lensfun_db)) delete dt_iop_lensfun_db;
+  gd->db = NULL;
 
   dt_opencl_free_kernel(gd->kernel_lens_distort_bilinear);
   dt_opencl_free_kernel(gd->kernel_lens_distort_bicubic);
@@ -1858,7 +1984,7 @@ static void camera_menusearch_clicked(GtkWidget *button, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-  lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  lfDatabase *dt_iop_lensfun_db = _lensfun_db(gd);
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
 
   (void)button;
@@ -1877,7 +2003,7 @@ static void camera_autosearch_clicked(GtkWidget *button, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-  lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  lfDatabase *dt_iop_lensfun_db = _lensfun_db(gd);
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
   char make[200], model[200];
   const gchar *txt = (const gchar *)((dt_iop_lensfun_params_t *)self->default_params)->camera;
@@ -2204,7 +2330,7 @@ static void lens_menusearch_clicked(GtkWidget *button, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-  lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  lfDatabase *dt_iop_lensfun_db = _lensfun_db(gd);
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
   const lfLens **lenslist;
 
@@ -2224,7 +2350,7 @@ static void lens_autosearch_clicked(GtkWidget *button, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-  lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  lfDatabase *dt_iop_lensfun_db = _lensfun_db(gd);
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)dt_iop_gui_data(self);
   const lfLens **lenslist;
   char model[200];
@@ -2302,7 +2428,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 static float get_autoscale(dt_iop_module_t *self, dt_iop_lensfun_params_t *p, const lfCamera *camera)
 {
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-  lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  lfDatabase *dt_iop_lensfun_db = _lensfun_db(gd);
   float scale = 1.0;
   if(p->lens[0] != '\0')
   {
@@ -2602,7 +2728,7 @@ void gui_update(struct dt_iop_module_t *self)
   }
 
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
-  lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
+  lfDatabase *dt_iop_lensfun_db = _lensfun_db(gd);
   // these are the wrong (untranslated) strings in general but that's ok, they will be overwritten further
   // down
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(g->camera_model))), p->camera);
