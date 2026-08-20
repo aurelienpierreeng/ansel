@@ -151,6 +151,16 @@ A note on finding these: counting duplicate symbol names across the *pre-LTO* ob
 of a partial build undercounts badly — it reported 37 names, mostly the shared-implementation
 file, and missed `common/colorchecker.h` entirely. The link is the only reliable census.
 
+**And the Release link is not census enough either.** Giving a header-defined object internal
+linkage silences the duplicate but creates an *unused* one in every translation unit that does
+not read it, which `-Werror=unused-variable` rejects — and `-Werror` is on in Debug only, where
+LTO is off. Three dead `dummy` variables (`initialscale`, `finalscale`, `rotatepixels`) turned
+out to be referenced by nothing at all, since `IOP_GUI_ALLOC()` only takes `sizeof` of the type,
+and were deleted; `CGATS_types` and `colorchecker_material_types` had exactly one consumer each
+and moved into `common/colorchecker.c`, which is where they should have been. **Build BOTH
+configurations before pushing**: Release is the only one with LTO, Debug the only one with
+`-Werror`, and each hides a different half of this.
+
 ## Does it make pixel processing faster? No.
 
 The interesting hypothesis was that folding the modules into `lib_ansel` lets LTO inline

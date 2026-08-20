@@ -87,6 +87,21 @@ typedef struct cht_box_F_t {
 
 #define TWO_SQRT2f 2.8284271247461900976f // sqrt(2) * 2
 
+/* The only consumers of these two tables live in this file. They used to be defined in
+ * common/colorchecker.h, i.e. once per translation unit that included it -- which was
+ * invisible while every IOP was its own shared object, and a duplicate definition once
+ * the modules were linked into lib_ansel. A header declares; it does not define. */
+static const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
+  "IT8.7/1", // transparent 
+  "IT8.7/2", // opaque
+  "CTI3"     // opaque
+};
+
+static const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
+  "Transparent",
+  "Opaque"
+};
+
 static void _dt_colorchecker_copy_patch(dt_color_checker_patch *dest, const dt_color_checker_patch *src)
 {
   if(IS_NULL_PTR(dest) || IS_NULL_PTR(src)) return;

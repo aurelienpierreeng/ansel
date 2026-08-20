@@ -216,7 +216,6 @@ void cleanup(dt_iop_module_t *self)
 typedef struct dt_iop_finalscale_gui_data_t
 { } dt_iop_finalscale_gui_data_t;
 
-static dt_iop_finalscale_gui_data_t dummy;
 
 void gui_init(dt_iop_module_t *self)
 {
