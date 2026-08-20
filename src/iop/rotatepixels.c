@@ -65,7 +65,6 @@ typedef struct dt_iop_rotatepixels_data_t
   float m[4];      // rotation matrix
 } dt_iop_rotatepixels_data_t;
 
-static dt_iop_rotatepixels_gui_data_t dummy;
 
 // helper to count corners in for loops:
 static void get_corner(const float *aabb, const int i, float *p)

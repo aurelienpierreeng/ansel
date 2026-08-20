@@ -410,23 +410,12 @@ typedef enum dt_colorchecker_CGATS_types
   CGATS_TYPE_UNKOWN  = 3
 } dt_colorchecker_CGATS_types;
 
-static const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
-  "IT8.7/1", // transparent 
-  "IT8.7/2", // opaque
-  "CTI3"     // opaque
-};
-
 typedef enum dt_colorchecker_material_types
 {
   COLOR_CHECKER_MATERIAL_TRANSPARENT = 0,
   COLOR_CHECKER_MATERIAL_OPAQUE = 1,
   COLOR_CHECKER_MATERIAL_UNKNOWN = 2
 } dt_colorchecker_material_types;
-
-static const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
-  "Transparent",
-  "Opaque"
-};
 
 typedef struct dt_colorchecker_CGATS_label_make_name_t 
 {
