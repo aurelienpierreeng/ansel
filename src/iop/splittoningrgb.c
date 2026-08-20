@@ -991,7 +991,11 @@ static void _white_preserving_slider_callback(GtkWidget *widget, gpointer user_d
   if(!dt_iop_channelmixer_shared_white_preserving_to_matrix(DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB,
                                                             &white_preserving, M))
   {
+    // Three primaries collapsed onto the neutral have no transform to describe. Snap the sliders
+    // back to the last representable state rather than leaving the page showing a setting the
+    // params do not hold.
     dt_control_log(_("white-preserving mixer mode requires non-degenerate primaries."));
+    _sync_white_preserving_from_params(self, point, NULL);
     return;
   }
 
