@@ -151,6 +151,57 @@ A note on finding these: counting duplicate symbol names across the *pre-LTO* ob
 of a partial build undercounts badly — it reported 37 names, mostly the shared-implementation
 file, and missed `common/colorchecker.h` entirely. The link is the only reliable census.
 
+## Does it make pixel processing faster? No.
+
+The interesting hypothesis was that folding the modules into `lib_ansel` lets LTO inline
+across a boundary it could not cross before. Measured, `ansel-cli` full-resolution export,
+`--disable-opencl -t 8`, master and this branch interleaved run-by-run to cancel thermal
+drift, `-d perf` for the pipeline's own timing (no startup, no I/O):
+
+**Default pipeline, 15 runs per side** (medians, Mann-Whitney two-sided p):
+
+| | master | static | delta | p |
+|---|---|---|---|---|
+| **TOTAL pipeline** | 6.738 s | 6.524 s | **-3.2%** | **0.59** |
+| Highlight reconstruction | 2.917 | 2.807 | -3.8% | 0.19 |
+| Filmic | 1.478 | 1.404 | -5.0% | 0.007 |
+| Lens correction | 0.797 | 0.863 | +8.3% | 0.004 |
+| Color calibration | 0.563 | 0.565 | +0.4% | 0.84 |
+| Demosaic | 0.187 | 0.178 | -4.8% | 0.04 |
+
+**Heavy sidecar, 3 runs per side** (a different module set):
+
+| | master | static | delta |
+|---|---|---|---|
+| **TOTAL pipeline** | 70.48 s | 71.23 s | **+1.1%** |
+| Diffuse or sharpen | 64.71 | 65.65 | +1.4% |
+| Color calibration | 0.613 | 0.490 | -20.1% |
+| Horizon and perspective | 0.314 | 0.259 | -17.5% |
+| Color calibration 1 | 0.541 | 0.475 | -12.2% |
+| Color balance | 1.794 | 1.631 | -9.1% |
+| Filmic | 0.871 | 0.802 | -7.9% |
+| Lens correction | 0.972 | 1.017 | +4.6% |
+
+**The whole-pipeline number does not move.** -3.2% on one workload with p = 0.59 is noise;
++1.1% on the other. Individual modules move by real amounts in *both* directions, and they
+cancel — and in each workload the total is dominated by one module (`highlights`, then
+`diffuse`) that barely moved.
+
+The likely reason there is nothing to win: this codebase already inlines the hot paths
+through headers. `pixel/colorspaces_inline_conversions.h`, `math/*.h`, `pixel/*.h` are full
+of `static inline`, so a module's pixel loop had already inlined everything it calls before
+LTO was ever asked. What crossing the boundary newly exposes is mostly cold glue.
+
+Two caveats on reading the per-module rows. First, this branch also changed the linkage of a
+few shared helpers (`pair_min`, `local_laplacian`, `channelmixerrgb_shared.c` becoming a real
+translation unit), so a per-module delta is this branch's net effect and not attributable to
+LTO alone. Second, **`lens` is consistently slower** — +8.3% (p = 0.004, n = 15) and +4.6% on
+the other workload. It is the C++ module; nobody has looked at why. On the default pipeline
+that is about 66 ms of a 6.5 s export.
+
+So: take this change for the startup time, the failure mode it removes and the honesty of the
+module boundary. Do not take it expecting faster pixels.
+
 ## What this costs
 
 Editing one module used to relink one small `.so`. It now relinks `lib_ansel`, which takes
