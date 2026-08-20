@@ -775,7 +775,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   g_strlcpy(d->filename_work, p->filename_work, sizeof(d->filename_work));
   d->blue_mapping = p->blue_mapping;
 
-  dt_colorspaces_free_conversion(&d->conversion);
+  /* Detach before freeing, and never re-read the published field below: both crashes in
+   * issues #1212/#1216 caught this function using a d->conversion that no longer held what
+   * this same call had stored moments earlier. Build through a local, publish once at the
+   * end -- the commit is then immune to a mid-commit clobber of the field, and the final
+   * store overwrites whatever landed there. */
+  dt_colorspaces_conversion_t *stale_conversion = d->conversion;
+  d->conversion = NULL;
+  dt_colorspaces_free_conversion(&stale_conversion);
   piece->process_cl_ready = 1;
 
   // commit and resolve working profile first, it is the target output profile of this module
@@ -837,11 +844,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
    * stage for the output side, so a non-linear working profile goes through lcms2. */
   const dt_colorspaces_conversion_flags_t flags = DT_CONVERSION_SOURCE_CURVES;
 
-  d->conversion = dt_colorspaces_prepare_conversion(&source, &target,
-                                                    clip_type == DT_COLORSPACE_NONE ? NULL : &clip,
-                                                    NULL, p->intent, flags);
+  dt_colorspaces_conversion_t *conversion
+      = dt_colorspaces_prepare_conversion(&source, &target,
+                                          clip_type == DT_COLORSPACE_NONE ? NULL : &clip,
+                                          NULL, p->intent, flags);
 
-  if(IS_NULL_PTR(d->conversion))
+  if(IS_NULL_PTR(conversion))
   {
     /* Whatever the user asked for cannot be rendered. Linear Rec709 is the fallback that has
      * always been here; the clipping detour goes with the profile that needed it. */
@@ -857,7 +865,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     source.type = type;
     source.filename = "";
     source.resolved = NULL;
-    d->conversion = dt_colorspaces_prepare_conversion(&source, &target, NULL, NULL, p->intent, flags);
+    conversion = dt_colorspaces_prepare_conversion(&source, &target, NULL, NULL, p->intent, flags);
   }
 
   _set_input_profile_metadata(d, p, type);
@@ -867,7 +875,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                  dt_image_is_matrix_correction_supported(&pipe->dev->image_storage),
                  requested_type, type, d->blue_mapping);
 
-  if(IS_NULL_PTR(d->conversion))
+  if(IS_NULL_PTR(conversion))
   {
     dt_print(DT_DEBUG_COLORPROFILE, "[colorin] input profile could not be generated!\n");
     dt_control_log(_("input profile could not be generated!"));
@@ -877,12 +885,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   // Only the vectorised branch has a kernel; the lcms2 one is host-only.
-  if(!dt_colorspaces_conversion_is_matrix(d->conversion)) piece->process_cl_ready = 0;
+  if(!dt_colorspaces_conversion_is_matrix(conversion)) piece->process_cl_ready = 0;
 
   /* The pipe records what space it is being handed, which is the input profile's own
    * RGB -> XYZ, uncomposed -- not the conversion this module runs. */
   dt_colormatrix_t input_matrix_for_pipe = { { NAN } };
-  dt_colorspaces_conversion_source_matrix(d->conversion, input_matrix_for_pipe);
+  dt_colorspaces_conversion_source_matrix(conversion, input_matrix_for_pipe);
 
   dt_ioppr_set_pipe_input_profile_info(self->dev, pipe, d->type, d->filename, p->intent,
                                        input_matrix_for_pipe);
@@ -891,6 +899,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
    * copied out everything it needed, so the container's job ended when the conversion was
    * built. */
   dt_colorspaces_free_image_profile(image_profile);
+
+  d->conversion = conversion; // single publication, after the conversion is complete
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
