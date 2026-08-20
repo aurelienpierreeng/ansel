@@ -151,7 +151,7 @@ static void _region_composite(_hl_region_ctx_t *const ctx)
 void _region_guided_filter(float *const restrict interp, const float *const restrict mask,
                            const float *const restrict depth, const int width, const _hl_region_t *const region,
                            const dt_dev_pixelpipe_t *pipe, const float solid_color, const int max_iter,
-                           const float noise_level, const float floor_gate)
+                           const float noise_level, const float floor_gate, const float module_scale)
 {
   const int region_w = region->rx1 - region->rx0 + 1;
   const int region_h = region->ry1 - region->ry0 + 1;
@@ -238,6 +238,7 @@ void _region_guided_filter(float *const restrict interp, const float *const rest
     .region_h = region_h,
     .region_pixels = region_pixels,
     .extent = extent,
+    .scale = module_scale,
     .epsilon = epsilon,
     .max_cg_iter = max_cg_iter,
     .solid_color = solid_color,
@@ -335,7 +336,7 @@ void _region_guided_filter(float *const restrict interp, const float *const rest
 cl_int _region_cpu_offload_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                               const int width, const _hl_region_t *const region, const dt_dev_pixelpipe_t *pipe,
                               const float solid_color, const int max_iter, const float noise_level,
-                              const float floor_gate)
+                              const float floor_gate, const float module_scale)
 {
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const int region_w = region->rx1 - region->rx0 + 1;
@@ -384,7 +385,7 @@ cl_int _region_cpu_offload_cl(const int devid, void *gd_void, cl_mem interp, cl_
     translated_region.ry0 = 0;
 
     _region_guided_filter(hw_interp, hw_mask, hw_depth, region_w, &translated_region, pipe, solid_color, max_iter,
-                          noise_level, floor_gate);
+                          noise_level, floor_gate, module_scale);
   }
 
   cl_err = dt_opencl_write_buffer_to_device(devid, host, staging, 0, sizeof(float) * region_pixels * 4, CL_TRUE);
@@ -410,7 +411,7 @@ out:
 
 cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                                 const int width, const _hl_region_t *const region, const dt_dev_pixelpipe_t *pipe,
-                                const float solid_color, const float floor_gate)
+                                const float solid_color, const float floor_gate, const float module_scale)
 {
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const int region_w = region->rx1 - region->rx0 + 1;
@@ -605,8 +606,8 @@ cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, c
   if(cl_err != CL_SUCCESS) goto out;
 
   // Step 9: gradient-extending chroma (chromaticity-gradient continuation, article addendum)
-  cl_err = _chromaticity_gradient_stage_cl(devid, gd_void, estimate, valid, clip0, region_w, region_h,
-                                           region->radius, floor_gate, pipe);
+  cl_err = _chromaticity_gradient_stage_cl(devid, gd_void, estimate, valid, clip0, clip_depth, region_w,
+                                           region_h, region->radius, floor_gate, module_scale, pipe);
   if(cl_err == CL_SUCCESS) dt_opencl_finish(devid);
   if(cl_err != CL_SUCCESS) goto out;
 

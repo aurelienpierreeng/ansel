@@ -700,9 +700,12 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx)
   // operator the luminance dome already trusts.
   if(ctx->floor_gate > 1e-6f)
   {
+    // width of that collar, in pixels of the buffer being rendered
+    const float a3_collar = DT_HL_A3_COLLAR_PX / fmaxf(ctx->scale, 1e-6f);
     for(int c = 0; c < 3; c++)
     {
       size_t n_hole_c = 0;
+      float *const restrict authored = gate_src; // free after the vote; 1 where this pass may write
       HL_PFOR(reduction(+ : n_hole_c))
       for(size_t i = 0; i < region_pixels; i++)
       {
@@ -710,9 +713,30 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx)
         const int clip_g = valid[i * 4 + 1] < 0.5f;
         const int clip_b = valid[i * 4 + 2] < 0.5f;
         const int cc = clip_r ? 0 : (clip_g ? 1 : 2);
+        // A COLLAR, not a plateau. This pass exists to erase the SEAM the floor prints at the clip
+        // contour, and it is only sound where its stated anchoring -- measured data just outside,
+        // multi-clip reconstruction just inside -- actually exists within reach. Measured on
+        // DSC_1267.NEF (Nikon: G's WB multiplier is 1.0, so G saturates first and 99.5% of the blown
+        // zone is 1-clip-G): the authored band was 566969 px, median 72 px from any valid pixel and
+        // 232 px from any multi-clip pixel, with none at all within 500 px of the worst area. The
+        // dome then interpolated G across hundreds of pixels from unrelated distant anchors and
+        // landed at ~2x the neutral G/B, i.e. a saturated green bloom over a grey sky. Requiring the
+        // pixel to sit within a collar of the measured contour keeps the seam fix and drops the
+        // extrapolation. Scale-relative so a downscaled preview matches the full-resolution render.
         const int is_hole = (clip_r + clip_g + clip_b == 1) && (cc == c)
+                            && (ctx->clip_depth[i] <= a3_collar)
                             && (estimate[i * 4 + c] <= 1.03f * fmaxf(clip0[i * 4 + c], 1e-9f));
-        hole[i] = is_hole;
+        authored[i] = is_hole ? 1.f : 0.f;
+        // DARK valid content must not anchor this dome. The share anchors above already exclude it
+        // (dark unrelated material carries near-neutral noise chroma); the value pass needs it even
+        // more badly, because a dark intrusion INSIDE a bright blown zone -- birds against a blown
+        // sky, on DSC_1267.NEF -- pins the dome at a near-zero value and the extension around it
+        // swings wildly. Such pixels join the solve's domain so the dome interpolates ACROSS them,
+        // but they are never written back: only `authored` pixels are, so their measured value
+        // survives untouched.
+        const float lum = estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2];
+        const int too_dark_to_anchor = !is_hole && (lum < lum_anchor_min);
+        hole[i] = is_hole || too_dark_to_anchor;
         solver_field[i] = estimate[i * 4 + c];
         n_hole_c += is_hole;
       }
@@ -720,7 +744,7 @@ void _chromaticity_gradient(_hl_region_ctx_t *const ctx)
       _biharmonic_dome(solver_field, hole, region_w, region_h, 0, pipe);
       HL_PFOR()
       for(size_t i = 0; i < region_pixels; i++)
-        if(hole[i]) estimate[i * 4 + c] = fmaxf(solver_field[i], clip0[i * 4 + c]);
+        if(authored[i] > 0.5f) estimate[i * 4 + c] = fmaxf(solver_field[i], clip0[i * 4 + c]);
     }
   }
 
@@ -1438,9 +1462,9 @@ out:
 // the bail decision and the dome's downsample factor, same auto formula as the CPU dome) -> three
 // biharmonic share extensions -> reprojection + joint floor. Re-validate with HL_CGRADCL_TEST.
 cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid,
-                                       cl_mem clip0, const int region_w, const int region_h,
+                                       cl_mem clip0, cl_mem clip_depth, const int region_w, const int region_h,
                                        const float reg_radius, const float floor_gate,
-                                       const dt_dev_pixelpipe_t *pipe)
+                                       const float module_scale, const dt_dev_pixelpipe_t *pipe)
 {
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const size_t region_pixels = (size_t)region_w * region_h;
@@ -1455,12 +1479,14 @@ cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem es
   cl_mem gate_wgt = dt_opencl_alloc_device(devid, region_w, region_h, sizeof(float));   // image (gaussian)
   cl_mem gate_nrm = dt_opencl_alloc_device(devid, region_w, region_h, sizeof(float));   // image (gaussian)
   cl_mem hole = dt_opencl_alloc_device_buffer(devid, region_pixels);
+  // pass 2 solves over `hole` (authored + dark intrusions) but writes only `authored`
+  cl_mem authored = dt_opencl_alloc_device_buffer(devid, region_pixels);
   cl_mem field = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem shares = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem partial_sums = NULL;
   uint8_t *hole_host = (uint8_t *)dt_pixelpipe_cache_alloc_align(region_pixels, pipe);
-  if(!guard_src || !guard_blur || !gate_src || !gate_msk || !gate_wgt || !gate_nrm || !hole || !field || !shares
-     || !hole_host)
+  if(!guard_src || !guard_blur || !gate_src || !gate_msk || !gate_wgt || !gate_nrm || !hole || !authored
+     || !field || !shares || !hole_host)
     goto out;
 
   // --- 1. plateau luminance over the any-clip pixels (device partials, host finish) ---
@@ -1641,6 +1667,8 @@ cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem es
   // biharmonically over the authored collar, anchored on both sides, floored at saturation.
   if(floor_gate > 1e-6f)
   {
+    // same collar as the CPU twin: full-resolution pixels converted to this buffer's pixels
+    const float a3_collar = DT_HL_A3_COLLAR_PX / fmaxf(module_scale, 1e-6f);
     for(int c = 0; c < 3; c++)
     {
       {
@@ -1648,27 +1676,40 @@ cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem es
         dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
         dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &valid);
         dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &clip0);
-        dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &hole);
-        dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &field);
-        dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), &region_w);
-        dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(int), &region_h);
-        dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), &c);
+        dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &clip_depth);
+        dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), &hole);
+        dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(cl_mem), &authored);
+        dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(cl_mem), &field);
+        dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(int), &region_w);
+        dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(int), &region_h);
+        dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(int), &c);
+        dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(float), &a3_collar);
+        dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(float), &lum_anchor_min);
         cl_err = dt_opencl_enqueue_kernel_2d(devid, kernel, size);
         if(cl_err != CL_SUCCESS) goto out;
       }
-      // the dome's auto downsample mirrors the CPU: count this channel's hole
+      // Nothing authored for this channel -> nothing to fill (the dark pixels that merely join the
+      // solve are not this pass's business).
+      cl_err = dt_opencl_read_buffer_from_device(devid, hole_host, authored, 0, region_pixels, CL_TRUE);
+      if(cl_err != CL_SUCCESS) goto out;
+      size_t n_authored_c = 0;
+      for(size_t i = 0; i < region_pixels; i++) n_authored_c += (hole_host[i] != 0);
+      if(n_authored_c == 0) continue;
+      // The dome's auto downsample must be sized on the SOLVE DOMAIN, which is the union -- that is
+      // what the CPU twin gets when it passes forced_downsample = 0 and the dome counts the mask it
+      // was handed. Sizing it on the authored count alone would pick a finer grid than the CPU and
+      // silently break CPU/GPU parity on any region with dark intrusions.
       cl_err = dt_opencl_read_buffer_from_device(devid, hole_host, hole, 0, region_pixels, CL_TRUE);
       if(cl_err != CL_SUCCESS) goto out;
       size_t n_hole_c = 0;
       for(size_t i = 0; i < region_pixels; i++) n_hole_c += (hole_host[i] != 0);
-      if(n_hole_c == 0) continue;
       const int downsample_c = MAX(1, (int)ceilf(sqrtf((float)n_hole_c / (float)DT_HL_DOME_NMAX_SPARSE)));
       cl_err = _biharmonic_dome_cl(devid, gd_void, field, hole, region_w, region_h, downsample_c, pipe);
       if(cl_err != CL_SUCCESS) goto out;
       {
         const int kernel = global_data->kernel_hl_cgrad_write1c;
         dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &estimate);
-        dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &hole);
+        dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &authored);
         dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(cl_mem), &field);
         dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(cl_mem), &clip0);
         dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(int), &region_w);
@@ -1688,6 +1729,7 @@ out:
   dt_opencl_release_mem_object(gate_wgt);
   dt_opencl_release_mem_object(gate_nrm);
   dt_opencl_release_mem_object(hole);
+  dt_opencl_release_mem_object(authored);
   dt_opencl_release_mem_object(field);
   dt_opencl_release_mem_object(shares);
   dt_opencl_release_mem_object(partial_sums);

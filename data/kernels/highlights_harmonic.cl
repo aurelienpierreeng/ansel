@@ -1953,7 +1953,9 @@ hl_cgrad_reproject(global float *estimate, global const float *valid, global con
 // across the hole from BOTH sides (multi-clip reconstruction inside, measured data outside).
 kernel void
 hl_cgrad_hole1c(global const float *estimate, global const float *valid, global const float *clip0,
-                global uchar *hole, global float *field, const int width, const int height, const int c)
+                global const float *clip_depth, global uchar *hole, global uchar *authored,
+                global float *field, const int width, const int height, const int c,
+                const float a3_collar, const float lum_anchor_min)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
@@ -1962,22 +1964,28 @@ hl_cgrad_hole1c(global const float *estimate, global const float *valid, global 
   const int clip_g = valid[i * 4 + 1] < 0.5f;
   const int clip_b = valid[i * 4 + 2] < 0.5f;
   const int cc = clip_r ? 0 : (clip_g ? 1 : 2);
-  const int is_hole = (clip_r + clip_g + clip_b == 1) && (cc == c)
+  // a COLLAR around the measured contour, not a plateau, and DARK valid content may not anchor the
+  // dome -- see the CPU twin in _chromaticity_gradient() for what each condition is worth
+  const int is_hole = (clip_r + clip_g + clip_b == 1) && (cc == c) && (clip_depth[i] <= a3_collar)
                       && (estimate[i * 4 + c] <= 1.03f * fmax(clip0[i * 4 + c], 1e-9f));
-  hole[i] = is_hole;
+  const float lum = estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2];
+  const int too_dark_to_anchor = !is_hole && (lum < lum_anchor_min);
+  authored[i] = is_hole;                       // written back
+  hole[i] = is_hole || too_dark_to_anchor;     // solved over (dark pixels are interpolated ACROSS)
   field[i] = estimate[i * 4 + c];
 }
 
 // PASS 2 = a3 write-back: the filled value replaces the floor-authored pixel's clipped channel,
 // floored at saturation (the fill approaches clip0 at the outer contour by construction).
 kernel void
-hl_cgrad_write1c(global float *estimate, global const uchar *hole, global const float *field,
+hl_cgrad_write1c(global float *estimate, global const uchar *authored, global const float *field,
                  global const float *clip0, const int width, const int height, const int c)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
-  if(!hole[i]) return;
+  // only the authored pixels: a dark pixel that merely joined the solve keeps its measured value
+  if(!authored[i]) return;
   estimate[i * 4 + c] = fmax(field[i], clip0[i * 4 + c]);
 }
 

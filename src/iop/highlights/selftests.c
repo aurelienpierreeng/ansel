@@ -1863,15 +1863,22 @@ void _chromaticity_gradient_stage_cl_selftest(const int devid, void *gd_void, co
     cl_mem dest = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
     cl_mem dvld = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
     cl_mem dclip = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
+    // clip depth for pass 2's collar test: all-zero, i.e. every authored pixel sits AT the
+    // contour, so the collar admits them all and this leg keeps exercising the authored path
+    cl_mem ddepth = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
+    float *const zero_depth = dt_calloc_align_float(region_pixels);
     float max_diff = -1.f;
-    if(dest && dvld && dclip
+    if(dest && dvld && dclip && ddepth && zero_depth
+       && dt_opencl_write_buffer_to_device(devid, zero_depth, ddepth, 0, sizeof(float) * region_pixels,
+                                           CL_TRUE)
+              == CL_SUCCESS
        && dt_opencl_write_buffer_to_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
               == CL_SUCCESS
        && dt_opencl_write_buffer_to_device(devid, valid, dvld, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
               == CL_SUCCESS
        && dt_opencl_write_buffer_to_device(devid, clip0, dclip, 0, sizeof(float) * region_pixels * 4, CL_TRUE)
               == CL_SUCCESS
-       && _chromaticity_gradient_stage_cl(devid, gd_void, dest, dvld, dclip, region_w, region_h, 120.f, 1.f /* exercise the authored-1-clip path */, pipe)
+       && _chromaticity_gradient_stage_cl(devid, gd_void, dest, dvld, dclip, ddepth, region_w, region_h, 120.f, 1.f /* exercise the authored-1-clip path */, 1.f, pipe)
               == CL_SUCCESS
        && dt_opencl_read_buffer_from_device(devid, estimate_gpu, dest, 0, sizeof(float) * region_pixels * 4,
                                             CL_TRUE)
@@ -1886,6 +1893,8 @@ void _chromaticity_gradient_stage_cl_selftest(const int devid, void *gd_void, co
             region_h, max_diff);
     dt_opencl_release_mem_object(dest);
     dt_opencl_release_mem_object(dvld);
+    dt_opencl_release_mem_object(ddepth);
+    dt_free_align(zero_depth);
     dt_opencl_release_mem_object(dclip);
   }
 
@@ -1957,7 +1966,7 @@ void _region_guided_filter_cl_selftest(const int devid, void *gd_void, const dt_
   region.radius = 52.f;
   const float solid_color = 0.3f;
 
-  _region_guided_filter(interp, mask, depth, width, &region, pipe, solid_color, 30, 0.f, 0.7f);
+  _region_guided_filter(interp, mask, depth, width, &region, pipe, solid_color, 30, 0.f, 0.7f, 1.f);
 
   {
     cl_mem interp_device = dt_opencl_alloc_device_buffer(devid, sizeof(float) * n_pixels * 4);
@@ -1973,7 +1982,7 @@ void _region_guided_filter_cl_selftest(const int devid, void *gd_void, const dt_
        && dt_opencl_write_buffer_to_device(devid, depth, depth_device, 0, sizeof(float) * n_pixels, CL_TRUE)
               == CL_SUCCESS
        && _region_guided_filter_cl(devid, gd_void, interp_device, mask_device, depth_device, width, &region, pipe,
-                                   solid_color, 0.7f)
+                                   solid_color, 0.7f, 1.f)
               == CL_SUCCESS
        && dt_opencl_read_buffer_from_device(devid, interp_gpu, interp_device, 0, sizeof(float) * n_pixels * 4,
                                             CL_TRUE)

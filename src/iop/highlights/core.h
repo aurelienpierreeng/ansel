@@ -98,9 +98,9 @@ cl_int _joint_core_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_
 // Mirrors the CPU stage: any change here must be mirrored there and re-validated with the
 // HL_CGRADCL_TEST self-test (_chromaticity_gradient_stage_cl_selftest).
 cl_int _chromaticity_gradient_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid,
-                                       cl_mem clip0, const int region_w, const int region_h,
+                                       cl_mem clip0, cl_mem clip_depth, const int region_w, const int region_h,
                                        const float reg_radius, const float floor_gate,
-                                       const dt_dev_pixelpipe_t *pipe);
+                                       const float module_scale, const dt_dev_pixelpipe_t *pipe);
 
 #endif
 #endif // DT_IOP_HIGHLIGHTS_CORE_H
