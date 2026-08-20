@@ -161,7 +161,7 @@ void cleanup(dt_iop_module_t *self)
 typedef struct dt_iop_initialscale_gui_data_t
 { } dt_iop_initialscale_gui_data_t;
 
-dt_iop_initialscale_gui_data_t dummy;
+static dt_iop_initialscale_gui_data_t dummy;
 
 void gui_init(dt_iop_module_t *self)
 {

@@ -220,7 +220,9 @@ typedef enum dt_dev_request_colorpick_flags_t
  * space, which is a layer-2 concept, and colorprofiles/iop_profile.h needs it. */
 
 
-/** part of the module which only contains the cached dlopen stuff. */
+/** The per-operation half of a module: everything that exists once, whatever the image.
+ *  Modules are linked into lib_ansel and bound at startup by dt_iop_load_modules_so();
+ *  there is no dlopen handle to cache any more. See doc/static-iop.md. */
 typedef struct dt_iop_module_so_t
 {
   // Needs to stay on top for casting
@@ -229,8 +231,6 @@ typedef struct dt_iop_module_so_t
 #define INCLUDE_API_FROM_MODULE_H
 #include "iop/iop_api.h"
 
-  /** opened module. */
-  GModule *module;
   /** string identifying this operation. */
   dt_dev_operation_t op;
   /** other stuff that may be needed by the module, not only in gui mode. inited only once, has to be
@@ -255,8 +255,6 @@ typedef struct dt_iop_module_t
 #define INCLUDE_API_FROM_MODULE_H
 #include "iop/iop_api.h"
 
-  /** opened module. */
-  GModule *module;
   /** string identifying this operation. */
   dt_dev_operation_t op;
   /** used to identify this module in the history stack. */
@@ -378,9 +376,27 @@ typedef struct dt_iop_module_t
 
 } dt_iop_module_t;
 
-/** loads and inits the modules in the plugins/ directory. */
+/**
+ * @brief One IOP module built into this binary, and the generated function that binds it.
+ *
+ * @details IOP modules are linked in, not dlopen'd. The table below is generated from
+ * src/iop/CMakeLists.txt by tools/generate_iop_static.py -- the same list develop/iop_order.c
+ * and develop/geometry/geometry.c are written against, so the three cannot drift the way a
+ * directory scan could. @p fill_so lives in the module's own translation unit, which is the
+ * only place its entry points are reachable by their plain names.
+ */
+typedef struct dt_iop_module_static_entry_t
+{
+  const char *op;                                 /**< operation name, e.g. "exposure" */
+  void (*fill_so)(dt_iop_module_so_t *module);    /**< generated; binds this module's API */
+} dt_iop_module_static_entry_t;
+
+extern const dt_iop_module_static_entry_t dt_iop_static_modules[];
+extern const int dt_iop_static_modules_count;
+
+/** loads and inits every module in dt_iop_static_modules. */
 void dt_iop_load_modules_so(void);
-/** cleans up the dlopen refs. */
+/** tears down the module descriptors built by dt_iop_load_modules_so(). */
 void dt_iop_unload_modules_so(void);
 /** load a module for a given .so */
 int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, struct dt_develop_t *dev);

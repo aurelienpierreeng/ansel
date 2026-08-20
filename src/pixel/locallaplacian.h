@@ -68,7 +68,7 @@ int local_laplacian_internal(
     // the following is just needed for clipped roi with boundary conditions from coarse buffer (can be 0)
     local_laplacian_boundary_t *b);
 
-int local_laplacian(
+static inline int local_laplacian(
     const float *const input,   // input buffer in some Labx or yuvx format
     float *const out,           // output buffer with colour
     const int wd,               // width and
