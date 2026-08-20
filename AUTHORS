@@ -1,10 +1,6 @@
 * developers:
 Aurélien PIERRE
 Guillaume Stutin
-Pascal Obry
-Aldric Renaudin
-parafin
-Roman Lebedev
 
 * translators:
 Pascal Obry
@@ -37,7 +33,9 @@ cotacot
 篠崎亮　Ryo Shinozaki
 
 * contributors (at least 4 commits):
+Pascal Obry
 Hanno Schwalm
+Aldric Renaudin
 Philippe Weyland
 Diederik Ter Rahe
 Alynx Zhou
@@ -55,6 +53,7 @@ Martin Straeten
 Maurizio Paglia
 lologor
 Ralf Brown
+parafin
 Serkan ÖNDER
 sentry[bot]
 starapo7348
@@ -292,6 +291,5 @@ xyz1001
 zhaowq32
 
 * Sub-module samples contributors (at least 1 commit):
-Guillaume Stutin
 
 And all those of you that made previous releases possible

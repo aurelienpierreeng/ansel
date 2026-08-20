@@ -18,16 +18,6 @@
 #   You should have received a copy of the GNU General Public License
 #   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 #   
-#   
-#   
-#   
-#   
-#   
-#   
-#   
-#   
-#   
-#   
 CDPATH=
 BASE=$1
 HEAD=${2:-HEAD}
@@ -42,26 +32,7 @@ TRANSLATOR_THRESHOLD=1
 CONTRIBUTOR_THRESHOLD=4
 
 # these will not be shown in contributors section.
-ALL_DEVELOPERS=("Aldric Renaudin"
-                "Alexandre Prokoudine"
-                "Christian Tellefsen"
-                "Edouard Gomez"
-                "Henrik Andersson"
-                "James C. McPherson"
-                "José Carlos García Sogo"
-                "Jérémy Rosen"
-                "Pascal Obry"
-                "Pascal de Bruijn"
-                "Pedro Côrte-Real"
-                "Peter Budai"
-                "Roman Lebedev"
-                "Simon Spannagel"
-                "Stefan Schöfegger"
-                "Tobias Ellinghaus"
-                "Ulrich Pegelow"
-                "johannes hanika"
-                "parafin"
-                "Aurélien PIERRE"
+ALL_DEVELOPERS=("Aurélien PIERRE"
                 "Guillaume Stutin")
 
 # Echo a revision range that is actually computable in the current
