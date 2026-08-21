@@ -18,6 +18,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "gui/screen_metrics.h"
 #include "common/anonymous_ids.h"
 #include "system/sys_resources.h"
 #endif
@@ -33,7 +34,6 @@
 #include "common/image.h"
 #include "common/opencl.h"
 #include "common/conf.h"
-#include "gui/gtk.h"
 
 #include <sentry.h>
 
@@ -41,7 +41,6 @@
 #include <string.h> // for strrchr, strcmp
 
 #if defined(__linux__)
-#include <fcntl.h>      // for open flags
 #include <sys/prctl.h>  // for PR_SET_PTRACER
 #include <sys/wait.h>   // for waitpid
 #include <unistd.h>     // for fork, getpid
@@ -400,18 +399,18 @@ static void _sentry_set_context(void)
 
 #ifdef HAVE_OPENCL
   // Device enumeration fields (num_devs/dev) only exist in HAVE_OPENCL builds.
-  if(dt_opencl_get_global() && dt_opencl_is_inited() && dt_opencl_get_global()->num_devs > 0 && dt_opencl_get_global()->dev)
+  if(dt_opencl_get_num_devices() > 0)
   {
     sentry_value_t gpus = sentry_value_new_list();
-    for(int i = 0; i < dt_opencl_get_global()->num_devs; i++)
+    for(int i = 0; i < dt_opencl_get_num_devices(); i++)
     {
-      const char *name = dt_opencl_get_global()->dev[i].name;
+      const char *name = dt_opencl_get_device_name(i);
       if(name) sentry_value_append(gpus, sentry_value_new_string(name));
     }
     sentry_value_set_by_key(device, "opencl_devices", gpus);
 
     // Tag with the first device so events are filterable by GPU.
-    if(dt_opencl_get_global()->dev[0].name) sentry_set_tag("opencl_device", dt_opencl_get_global()->dev[0].name);
+    if(dt_opencl_get_device_name(0)) sentry_set_tag("opencl_device", dt_opencl_get_device_name(0));
   }
 #endif
   sentry_set_context("device", device);
@@ -445,12 +444,12 @@ static void _sentry_set_context(void)
   // from the GUI, already computed during dt_gui_gtk_init(). The window size is
   // read from conf, which holds the restored/last geometry and is kept up to date
   // live on every resize - more reliable than the not-yet-mapped window here.
-  if(dt_gui_get_global())
+  if(dt_screen_metrics_probed())
   {
     sentry_value_t scr = sentry_value_new_object();
-    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(dt_gui_get_global()->dpi));
-    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(dt_gui_get_global()->dpi_factor));
-    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(dt_gui_get_global()->ppd));
+    sentry_value_set_by_key(scr, "dpi", sentry_value_new_double(dt_screen_dpi()));
+    sentry_value_set_by_key(scr, "dpi_factor", sentry_value_new_double(dt_screen_dpi_factor()));
+    sentry_value_set_by_key(scr, "ppd", sentry_value_new_double(dt_screen_ppd()));
 
     const int win_w = dt_conf_get_int("ui_last/window_width");
     const int win_h = dt_conf_get_int("ui_last/window_height");

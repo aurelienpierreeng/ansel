@@ -56,10 +56,8 @@ function tumbleweed_function
 	gettext-tools
 	git
 	gstreamer
-	GraphicsMagick
 	gnome-keyring-devel
 	graphviz
-	GraphicsMagick-devel
 	gdk-pixbuf-devel
 	gtk2-devel
 	gtk3-devel
@@ -81,7 +79,6 @@ function tumbleweed_function
 	libpng16-devel
 	libraw-devel
 	librsvg-devel
-	libsecret-devel
 	libsoup2-devel
 	libtiff-devel
 	libwebp-devel
@@ -153,10 +150,8 @@ function leap_function
 	gettext-tools
 	git
 	gstreamer
-	GraphicsMagick
 	gnome-keyring-devel
 	graphviz
-	GraphicsMagick-devel
 	gdk-pixbuf-devel
 	gtk2-devel
 	gtk3-devel
@@ -177,7 +172,6 @@ function leap_function
 	libpng16-devel
 	libraw-devel
 	librsvg-devel
-	libsecret-devel
 	libsoup2-devel
 	libtiff-devel
 	libwebp-devel

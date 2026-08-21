@@ -106,6 +106,7 @@ static inline int dwt_interleave_rows(const int rowid, const int height, const i
 
 
 #ifdef HAVE_OPENCL
+#include <CL/cl.h>   // cl_mem, cl_int: used below, so declared here rather than left to includers
 typedef struct dt_dwt_cl_global_t
 {
   int kernel_dwt_add_img_to_layer;
@@ -132,8 +133,8 @@ typedef struct dwt_params_cl_t
 
 typedef cl_int(_dwt_layer_func_cl)(cl_mem layer, dwt_params_cl_t *const p, const int scale);
 
-dt_dwt_cl_global_t *dt_dwt_init_cl_global(void);
-void dt_dwt_free_cl_global(dt_dwt_cl_global_t *g);
+void dt_dwt_init_cl_global(void);
+void dt_dwt_free_cl_global(void);
 
 dwt_params_cl_t *dt_dwt_init_cl(const int devid, cl_mem image, const int width, const int height, const int scales,
                                 const int return_layer, const int merge_from_scale, void *user_data,

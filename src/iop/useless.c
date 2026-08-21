@@ -35,12 +35,12 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "config.h"
 #endif
 // our includes go first:
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
@@ -48,7 +48,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>
@@ -397,21 +396,21 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        dt_pixelpipe_cache_get_global(), mask_hash, mask_size, "useless raster mask",
+        mask_hash, mask_size, "useless raster mask",
         pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
         dt_dev_pixelpipe_cache_wrlock_entry(
-            dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+            FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
         dt_dev_pixelpipe_cache_ref_count_entry(
-            dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+            FALSE, mask_entry);
         if(created)
           dt_dev_pixelpipe_cache_remove(
-              dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
+              TRUE, mask_entry);
       }
       dt_pixelpipe_cache_free_align(mask);
       return 1;
@@ -421,7 +420,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     {
       memcpy(cache_data, mask, mask_size);
       dt_dev_pixelpipe_cache_wrlock_entry(
-          dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+          FALSE, mask_entry);
     }
     dt_dev_pixelpipe_t *mutable_pipe = (dt_dev_pixelpipe_t *)pipe;
     g_array_append_val(mutable_pipe->raster_mask_hashes, mask_hash);

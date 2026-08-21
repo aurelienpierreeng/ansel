@@ -54,33 +54,33 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "develop/masks_gui.h"
 #include <assert.h>
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
 #include "math/math.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
-#include "develop/tiling.h"
+#include "develop/masks.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "widgets/draw.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
@@ -105,7 +105,7 @@ typedef struct dt_iop_graduatednd_global_data_t
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   dt_gui_presets_add_generic(_("neutral gray ND2 (soft)"), self->op, self->version(),
                              &(dt_iop_graduatednd_params_t){ 1, 0, 0, 50, 0, 0 },
@@ -153,7 +153,7 @@ void init_presets(dt_iop_module_so_t *self)
                              &(dt_iop_graduatednd_params_t){ 2, 0, 0, 50, 0.082927, 0.25 },
                              sizeof(dt_iop_graduatednd_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 typedef struct grad_point_t
@@ -291,12 +291,13 @@ static int set_grad_from_points(struct dt_iop_module_t *self, const grad_point_t
   // we want absolute preview positions
   float pts[4] = { a->x, a->y, b->x, b->y };
   dt_dev_coordinates_image_norm_to_image_abs(self->dev, pts, 2);
-  dt_dev_distort_backtransform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  pts[0] /= (float)piece->buf_out.width;
-  pts[2] /= (float)piece->buf_out.width;
-  pts[1] /= (float)piece->buf_out.height;
-  pts[3] /= (float)piece->buf_out.height;
+  dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
+  dt_iop_roi_t mod_out;
+  if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return 0;
+  pts[0] /= (float)mod_out.width;
+  pts[2] /= (float)mod_out.width;
+  pts[1] /= (float)mod_out.height;
+  pts[3] /= (float)mod_out.height;
 
   // directly compute the line angle from segment AB and keep one representative modulo PI
   const float eps = .0001f;
@@ -326,9 +327,9 @@ static int set_points_from_grad(struct dt_iop_module_t *self, grad_point_t *a, g
   const float eps = 1e-6f;
   dt_boundingbox_t pts;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->virtual_pipe, self);
-  if(IS_NULL_PTR(piece)) return 0;
-  float wp = piece->buf_out.width, hp = piece->buf_out.height;
+  dt_iop_roi_t mod_out;
+  if(!dt_dev_module_geometry_gui(self->dev, self, NULL, &mod_out)) return 0;
+  float wp = mod_out.width, hp = mod_out.height;
 
   const float off = offset / 100.0f;
 
@@ -389,7 +390,7 @@ static int set_points_from_grad(struct dt_iop_module_t *self, grad_point_t *a, g
   }
   // now we want that points to take care of distort modules
 
-  if(!dt_dev_distort_transform_plus(self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2))
+  if(!dt_dev_distort_transform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2))
     return 0;
   dt_dev_coordinates_image_abs_to_image_norm(self->dev, pts, 2);
   a->x = pts[0];
@@ -408,7 +409,7 @@ static inline void update_saturation_slider_end_color(GtkWidget *slider, float h
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
 
   // convert picker RGB 2 HSL
@@ -442,11 +443,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointerx, int32_t pointery)
 {
   dt_develop_t *dev = self->dev;
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
-  const float zoom_scale = dev->roi.scaling;
+  const float zoom_scale = dt_dev_viewport_scaling(dev);
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we get the extremities of the line
@@ -490,7 +491,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
   float pzx = pzxpy[0];
@@ -558,7 +559,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 int button_pressed(struct dt_iop_module_t *self, double x, double y, double pressure, int which, int type,
                    uint32_t state)
 {
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
   float pzx = pzxpy[0];
@@ -589,7 +590,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
 int button_released(struct dt_iop_module_t *self, double x, double y, int which, uint32_t state)
 {
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
   if(g->dragging > 0)
   {
@@ -621,8 +622,14 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
 int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 {
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
+
+  // A drawn mask being edited (anywhere on canvas, not just hovered directly -- that case
+  // already wins via dt_masks_events_mouse_scrolled in views/darkroom.c) must not leak
+  // Ctrl/Shift+scroll into this module's density/hardness adjustment.
+  if(self->dev->form_gui && dt_masks_get_visible_form(self->dev)) return 0;
+
   if(dt_modifier_is(state, GDK_CONTROL_MASK))
   {
     float dens;
@@ -852,7 +859,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   if(w == g->rotation)
   {
     set_points_from_grad(self, &g->a, &g->b, p->rotation, p->offset);
@@ -898,7 +905,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
+  dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);

@@ -45,16 +45,16 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "develop/iop_profile.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
 
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "gui/gtk.h"
 #include "control/control.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "math/math.h"
@@ -64,6 +64,8 @@
 
 #include "gui/color_picker_proxy.h"
 #include "develop/tiling.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_basicadj_params_t)
 
@@ -193,7 +195,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 
 static void _turn_select_region_off(struct dt_iop_module_t *self)
 {
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g))
   {
     g->button_down = g->draw_selected_region = 0;
@@ -221,12 +223,12 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_request_focus(self);
-  if(self->off)
+  if(self->gui->off)
   {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), 1);
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
@@ -247,12 +249,12 @@ static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_io
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_request_focus(self);
-  if(self->off)
+  if(self->gui->off)
   {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), 1);
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 
@@ -274,7 +276,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_basicadj_params_t *p = (dt_iop_basicadj_params_t *)self->params;
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
   if(IS_NULL_PTR(g)) return;
 
@@ -314,7 +316,7 @@ static void _signal_profile_user_changed(gpointer instance, uint8_t profile_type
     if(!self->enabled) return;
 
     dt_iop_basicadj_params_t *def = (dt_iop_basicadj_params_t *)self->default_params;
-    dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+    dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
     const dt_iop_order_iccprofile_info_t *const work_profile
         = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
@@ -340,7 +342,7 @@ static void _signal_profile_user_changed(gpointer instance, uint8_t profile_type
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   int handled = 0;
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g) && g->draw_selected_region && g->button_down && self->enabled)
   {
     float point[2] = { (float)x, (float)y };
@@ -361,7 +363,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 int button_released(struct dt_iop_module_t *self, double x, double y, int which, uint32_t state)
 {
   int handled = 0;
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g) && g->draw_selected_region && self->enabled)
   {
     if(fabsf(g->posx_from - g->posx_to) > 1 && fabsf(g->posy_from - g->posy_to) > 1)
@@ -390,7 +392,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   int handled = 0;
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g) && g->draw_selected_region && self->enabled)
   {
     if((which == 3) || (which == 1 && type == GDK_2BUTTON_PRESS))
@@ -420,14 +422,14 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t pointerx,
                      int32_t pointery)
 {
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || !self->enabled) return;
   if(!g->draw_selected_region || !g->button_down) return;
   if(g->posx_from == g->posx_to && g->posy_from == g->posy_to) return;
 
   dt_develop_t *dev = self->dev;
-  //const float wd = dev->roi.preview_width;
-  //const float ht = dev->roi.preview_height;
+  //const float wd = dt_dev_roi_request_preview_width(dev);
+  //const float ht = dt_dev_roi_request_preview_height(dev);
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   const float posx_from = fmin(g->posx_from, g->posx_to);
@@ -441,7 +443,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   //cairo_translate(cr, width / 2.0, height / 2.0f);
   //cairo_scale(cr, zoom_scale, zoom_scale);
-  //cairo_translate(cr, -.5f * wd - dev->roi.x * wd, -.5f * ht - dev->roi.y * ht);
+  //cairo_translate(cr, -.5f * wd - dt_dev_viewport_center_x(dev) * wd, -.5f * ht - dt_dev_viewport_center_y(dev) * ht);
   dt_dev_rescale_roi(dev, cr, width, height);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
@@ -463,7 +465,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   (void)piece;
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_basicadj_params_t *p = (dt_iop_basicadj_params_t *)self->params;
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
   p->middle_grey = (work_profile) ? (dt_ioppr_get_rgb_matrix_luminance(self->picked_color,
@@ -561,7 +563,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_select_region), g->draw_selected_region);
 }
@@ -573,7 +575,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
 void change_image(struct dt_iop_module_t *self)
 {
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
   g->call_auto_exposure = 0;
   g->draw_selected_region = 0;
@@ -588,7 +590,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   change_image(self);
 
-  self->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  self->gui->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   g->sl_black_point = dt_bauhaus_slider_from_params(self, "black_point");
   dt_bauhaus_slider_set_soft_range(g->sl_black_point, -0.1, 0.1);
@@ -645,7 +647,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->bt_select_region), "toggled", G_CALLBACK(_select_region_toggled_callback), self);
   gtk_box_pack_start(GTK_BOX(autolevels_box), g->bt_select_region, TRUE, TRUE, 0);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), autolevels_box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), autolevels_box, TRUE, TRUE, 0);
 
   g->sl_clip = dt_bauhaus_slider_from_params(self, N_("clip"));
   dt_bauhaus_slider_set_digits(g->sl_clip, 3);
@@ -1289,7 +1291,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int ch = piece->dsc_in.channels;
   dt_iop_basicadj_data_t *d = (dt_iop_basicadj_data_t *)piece->data;
   dt_iop_basicadj_params_t *p = (dt_iop_basicadj_params_t *)&d->params;
-  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
+  dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)dt_iop_gui_data(self);
 
   // process auto levels
   if(!IS_NULL_PTR(g) && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))

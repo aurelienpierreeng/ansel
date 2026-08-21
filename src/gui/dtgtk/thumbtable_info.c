@@ -18,18 +18,13 @@
 
 #include "gui/dtgtk/thumbtable_info.h"
 
-#include "common/database.h"
-#include "common/debug.h"
 #include "common/image.h"
-#include "common/image_cache.h"
-#include "common/macros.h"
+#include "caches/image_cache.h"
+#include "system/macros.h"
 
 #include <glib.h>
 #include <glib/gi18n.h>
-#include <math.h>
 #include <string.h>
-
-static sqlite3_stmt *_thumbtable_collection_stmt = NULL;
 
 void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *const img)
 {
@@ -42,55 +37,11 @@ void dt_thumbtable_info_seed_image_cache(const dt_image_t *info)
 {
   if(IS_NULL_PTR(info) || info->id <= 0) return;
 
-  if(IS_NULL_PTR(dt_image_cache_get_global())) return;
+  if(!dt_image_cache_is_ready()) return;
 
-  dt_image_cache_seed(dt_image_cache_get_global(), info);
+  dt_image_cache_seed(info);
 }
 
-sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
-{
-  if(IS_NULL_PTR(_thumbtable_collection_stmt))
-  {
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get_sqlite3_global(),
-        // Batch-fetch thumbnail metadata in one SQL query to avoid one query per image
-        // through the image cache. This keeps scrolling lightweight and predictable.
-        "SELECT im.id, im.group_id, "
-        "(SELECT COUNT(id) FROM main.images WHERE group_id=im.group_id), "
-        "(SELECT COUNT(imgid) FROM main.history WHERE imgid=c.imgid), "
-        "COALESCE((SELECT current_hash FROM main.history_hash WHERE imgid=im.id), -1), "
-        "COALESCE((SELECT mipmap_hash FROM main.history_hash WHERE imgid=im.id), -1), "
-        "im.film_id, im.version, im.width, im.height, im.orientation, "
-        "im.flags, "
-        "im.import_timestamp, im.change_timestamp, im.export_timestamp, im.print_timestamp, "
-        "im.exposure, im.exposure_bias, im.aperture, im.iso, im.focal_length, im.focus_distance, "
-        "im.datetime_taken, "
-        "im.longitude, im.latitude, im.altitude, "
-        "im.filename, fr.folder || '" G_DIR_SEPARATOR_S "' || im.filename, "
-        "im.maker, im.model, im.lens, fr.folder, "
-        "COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=im.id), 0), "
-        "im.crop, im.raw_parameters, im.color_matrix, im.colorspace, "
-        "im.raw_black, im.raw_maximum, im.aspect_ratio, im.output_width, im.output_height "
-        "FROM main.images AS im "
-        "JOIN memory.collected_images AS c ON im.id = c.imgid "
-        "LEFT JOIN main.film_rolls AS fr ON fr.id = im.film_id "
-        "ORDER BY c.rowid ASC",
-        -1, &_thumbtable_collection_stmt, NULL);
-  }
-
-  sqlite3_reset(_thumbtable_collection_stmt);
-  sqlite3_clear_bindings(_thumbtable_collection_stmt);
-  return _thumbtable_collection_stmt;
-}
-
-void dt_thumbtable_info_cleanup(void)
-{
-  if(_thumbtable_collection_stmt)
-  {
-    sqlite3_finalize(_thumbtable_collection_stmt);
-    _thumbtable_collection_stmt = NULL;
-  }
-}
 
 #ifndef NDEBUG
 static gboolean _thumbtable_float_equal(const float a, const float b)
@@ -107,12 +58,12 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)
 {
   if(IS_NULL_PTR(sql_info) || sql_info->id <= 0) return;
 
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), sql_info->id, 'r');
+  const dt_image_t *img = dt_image_cache_get(sql_info->id, 'r');
   if(IS_NULL_PTR(img)) return;
 
   dt_image_t cache_info = {0};
   dt_thumbtable_copy_image(&cache_info, img);
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   g_assert_cmpint(sql_info->id, ==, cache_info.id);
   g_assert_cmpint(sql_info->film_id, ==, cache_info.film_id);

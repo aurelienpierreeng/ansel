@@ -54,23 +54,22 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "darktable.h"
+#include "common/logging.h"
 #include "control/control.h"
 #include "develop/develop.h"
 
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 
 #include <assert.h>
 #include <gdk/gdkkeysyms.h>
 #include <glib/gstdio.h>
-#include <lcms2.h>
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
+#include "gui/screen_metrics.h"
+#include "control/signal.h"
 
 static dt_control_pointer_input_t _pointer_input = { 0 };
 
@@ -117,8 +116,6 @@ void dt_control_init(dt_control_t *s)
   // start threads
   dt_control_jobs_init(s);
 
-  s->button_down = 0;
-  s->button_down_which = 0;
   s->mouse_over_id = -1;
   s->keyboard_over_id = -1;
   s->cursor.lock = FALSE;
@@ -477,9 +474,9 @@ void dt_control_shutdown(dt_control_t *s)
 
 void dt_control_cleanup(dt_control_t *s)
 {
-  // vacuum TODO: optional?
-  // DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "PRAGMA incremental_vacuum(0)", NULL, NULL, NULL);
-  // DT_DEBUG_SQLITE3_EXEC(dt_database_get_sqlite3_global(), "vacuum", NULL, NULL, NULL);
+  // A vacuum used to be contemplated here. It belongs to whoever owns the connection, and
+  // src/database now does it -- VACUUM + ANALYZE on both schemas, on the maintenance policy
+  // the user configured. Nothing for the control layer to decide.
   dt_control_jobs_cleanup(s);
   g_free(s->cursor.shape_str);
   g_free(s->cursor.current_shape_str);
@@ -522,7 +519,11 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   layout = pango_cairo_create_layout(cr);
   pango_layout_set_font_description(layout, desc);
-  pango_layout_set_text(layout, darktable.main_message ? darktable.main_message : _("Working..."), -1);
+  // A COPY: a worker thread frees this string on the next dt_set_main_message(), which the
+  // pipeline issues once per module per frame while the darkroom renders.
+  char *const message = dt_get_main_message_copy();
+  pango_layout_set_text(layout, !IS_NULL_PTR(message) ? message : _("Working..."), -1);
+  dt_free(message);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   if(ink.width > width * 0.98)
   {
@@ -533,12 +534,35 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
   cairo_move_to(cr, xc - wd, yc + 1. / 3. * fontsize - fontsize);
   pango_cairo_layout_path(cr, layout);
   cairo_set_line_width(cr, 2.0);
-  dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_BG);
+  dt_widget_set_source_rgb(cr, DT_GUI_COLOR_LOG_BG);
   cairo_stroke_preserve(cr);
-  dt_gui_gtk_set_source_rgb(cr, DT_GUI_COLOR_LOG_FG);
+  dt_widget_set_source_rgb(cr, DT_GUI_COLOR_LOG_FG);
   cairo_fill(cr);
   pango_font_description_free(desc);
   g_object_unref(layout);
+}
+
+gboolean dt_control_button_down(int which)
+{
+  // The mask is device state, so any of our windows answers the same thing; the centre widget
+  // is the one every caller is dragging over.
+  GtkWidget *center = dt_gui_center_widget();
+  GdkWindow *window = IS_NULL_PTR(center) ? NULL : gtk_widget_get_window(center);
+  GdkDisplay *display = IS_NULL_PTR(window) ? NULL : gdk_window_get_display(window);
+  GdkSeat *seat = IS_NULL_PTR(display) ? NULL : gdk_display_get_default_seat(display);
+  GdkDevice *pointer = IS_NULL_PTR(seat) ? NULL : gdk_seat_get_pointer(seat);
+  if(IS_NULL_PTR(window) || IS_NULL_PTR(pointer)) return FALSE;
+
+  GdkModifierType mask = 0;
+  gdk_window_get_device_position(window, pointer, NULL, NULL, &mask);
+
+  switch(which)
+  {
+    case 1:  return (mask & GDK_BUTTON1_MASK) != 0;
+    case 2:  return (mask & GDK_BUTTON2_MASK) != 0;
+    case 3:  return (mask & GDK_BUTTON3_MASK) != 0;
+    default: return FALSE;
+  }
 }
 
 void *dt_control_expose(void *voidptr)
@@ -633,16 +657,12 @@ void dt_control_key_pressed(GdkEventKey *event)
 
 void dt_control_button_released(double x, double y, int which, uint32_t state)
 {
-  darktable.control->button_down = 0;
-  darktable.control->button_down_which = 0;
 
   dt_view_manager_button_released(darktable.view_manager, x, y, which, state);
 }
 
 static void _dt_ctl_switch_mode_prepare()
 {
-  darktable.control->button_down = 0;
-  darktable.control->button_down_which = 0;
   dt_gui_get_global()->center_tooltip = 0;
   GtkWidget *widget = dt_gui_center_widget();
   gtk_widget_set_tooltip_text(widget, "");
@@ -715,9 +735,6 @@ static gboolean _dt_ctl_toast_message_timeout_callback(gpointer data)
 
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state)
 {
-  darktable.control->button_down = 1;
-  darktable.control->button_down_which = which;
-  darktable.control->button_type = type;
   darktable.control->button_x = x;
   darktable.control->button_y = y;
   // adding pressure to this data structure is not needed right now. should the need ever arise: here is the

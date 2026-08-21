@@ -24,20 +24,23 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "control/settings.h"
-#include "gui/dtgtk/togglebutton.h"
-#include "gui/dtgtk/paint.h"
+#include "widgets/togglebutton.h"
+#include "widgets/paint.h"
 #include "common/collection.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"
-#include "common/map_locations.h"
+#include "metadata/map_locations.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 
 #include "libs/lib.h"
 #include "views/view.h"
+#include "gui/window_manager.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 // map position module uses the tag dictionary with dt_geo_tag_root as a prefix.
 // Synonym field is used to store positions coordinates in ascii format.

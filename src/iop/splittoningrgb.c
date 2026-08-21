@@ -20,38 +20,42 @@
 #include "config.h"
 #include "common/conf.h"
 #endif
+#include "develop/imageop_gui.h"
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/chromatic_adaptation.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "pixel/illuminants.h"
 #include "math/matrices.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "math/openmp_maths.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "iop/channelmixerrgb_shared.h"
 #include "iop/iop_api.h"
 
-// Keep the shared implementation in this translation unit to avoid
-// duplicate globals from a separate compiled object.
-#include "channelmixerrgb_shared.c"
+// The shared implementation is its own translation unit, compiled once and linked
+// into the single IOP object set. It used to be textually included here, once per
+// consuming module, because two shared objects could not each carry a copy of its
+// globals; with the modules linked statically there is exactly one link and one copy.
 
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "gui/screen_metrics.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_splittoning_rgb_params_t)
 
@@ -70,6 +74,7 @@ typedef enum dt_iop_splittoning_rgb_mixer_mode_t
   DT_SPLITTONING_RGB_MIXER_COMPLETE = 0,
   DT_SPLITTONING_RGB_MIXER_SIMPLE = 1,
   DT_SPLITTONING_RGB_MIXER_PRIMARIES = 2,
+  DT_SPLITTONING_RGB_MIXER_WHITE_PRESERVING = 3,
 } dt_iop_splittoning_rgb_mixer_mode_t;
 
 typedef struct dt_iop_splittoning_rgb_params_t
@@ -121,6 +126,12 @@ typedef struct dt_iop_splittoning_rgb_point_gui_t
   GtkWidget *primaries_blue_hue;
   GtkWidget *primaries_blue_purity;
   GtkWidget *primaries_gain;
+  GtkWidget *white_preserving_red_rotation;
+  GtkWidget *white_preserving_red_saturation;
+  GtkWidget *white_preserving_green_rotation;
+  GtkWidget *white_preserving_green_saturation;
+  GtkWidget *white_preserving_blue_rotation;
+  GtkWidget *white_preserving_blue_saturation;
 } dt_iop_splittoning_rgb_point_gui_t;
 
 typedef struct dt_iop_splittoning_rgb_gui_data_t
@@ -245,6 +256,7 @@ static void _set_point_mixer_mode(dt_iop_splittoning_rgb_gui_data_t *g, const in
   gtk_stack_set_visible_child_name(GTK_STACK(g->point[point].mixer_stack),
                                    mode == DT_SPLITTONING_RGB_MIXER_SIMPLE ? "simple"
                                    : mode == DT_SPLITTONING_RGB_MIXER_PRIMARIES ? "primaries"
+                                   : mode == DT_SPLITTONING_RGB_MIXER_WHITE_PRESERVING ? "white-preserving"
                                    : "complete");
   gtk_widget_queue_resize(g->point[point].mixer_stack);
   gtk_widget_queue_resize(g->point[point].page);
@@ -377,7 +389,7 @@ static inline __attribute__((always_inline)) void _get_split_matrix(const float 
 
 static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point, float *error)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   GtkWidget *const widgets[6]
       = { g->point[point].simple_theta, g->point[point].simple_psi, g->point[point].simple_stretch_1,
@@ -410,7 +422,7 @@ static gboolean _sync_simple_from_params(dt_iop_module_t *self, const int point,
 
 static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int point, float *error)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   GtkWidget *const widgets[9]
       = { g->point[point].primaries_achromatic_hue, g->point[point].primaries_achromatic_purity,
@@ -445,9 +457,75 @@ static gboolean _sync_primaries_from_params(dt_iop_module_t *self, const int poi
   return isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
 }
 
+/**
+ * @brief Collect the six white-preserving widgets of one keyframe.
+ *
+ * @param[in] g Current module GUI data.
+ * @param[in] point Shadow or highlight keyframe.
+ * @param[out] widgets Rotation/saturation pairs, in red, green, blue order.
+ * @return FALSE while the widgets have not been created yet, which happens during gui_init().
+ */
+static gboolean _white_preserving_widgets(const dt_iop_splittoning_rgb_gui_data_t *const g, const int point,
+                                          GtkWidget *widgets[6])
+{
+  widgets[0] = g->point[point].white_preserving_red_rotation;
+  widgets[1] = g->point[point].white_preserving_red_saturation;
+  widgets[2] = g->point[point].white_preserving_green_rotation;
+  widgets[3] = g->point[point].white_preserving_green_saturation;
+  widgets[4] = g->point[point].white_preserving_blue_rotation;
+  widgets[5] = g->point[point].white_preserving_blue_saturation;
+
+  for(int widget = 0; widget < 6; widget++)
+    if(IS_NULL_PTR(widgets[widget])) return FALSE;
+
+  return TRUE;
+}
+
+/**
+ * @brief Synchronize the white-preserving GUI of one keyframe from its effective mixer matrix.
+ *
+ * @param[in] self Current module instance.
+ * @param[in] point Shadow or highlight keyframe.
+ * @param[out] error Largest coefficient error after a full roundtrip, relative to the matrix.
+ * @return TRUE when the effective matrix leaves white unchanged and is representable.
+ */
+static gboolean _sync_white_preserving_from_params(dt_iop_module_t *self, const int point, float *error)
+{
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
+  GtkWidget *widgets[6] = { NULL };
+  float rows[3][3] = { { 0.f } };
+  gboolean normalize[3] = { FALSE, FALSE, FALSE };
+  float M[3][3] = { { 0.f } };
+  float roundtrip[3][3] = { { 0.f } };
+  dt_iop_channelmixer_shared_white_preserving_params_t white_preserving;
+
+  if(!IS_NULL_PTR(error)) *error = INFINITY;
+
+  if(!_white_preserving_widgets(g, point, widgets)) return FALSE;
+
+  _get_point_rows(p, point, rows, normalize);
+  if(!dt_iop_channelmixer_shared_get_matrix(rows, normalize, FALSE, M)) return FALSE;
+  if(!dt_iop_channelmixer_shared_white_preserving_from_matrix(DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB, M,
+                                                              &white_preserving))
+    return FALSE;
+  if(!dt_iop_channelmixer_shared_white_preserving_to_matrix(DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB,
+                                                            &white_preserving, roundtrip))
+    return FALSE;
+
+  const float roundtrip_error = dt_iop_channelmixer_shared_roundtrip_error_relative(M, roundtrip);
+  if(!IS_NULL_PTR(error)) *error = roundtrip_error;
+
+  dt_gui_freeze_begin();
+  dt_iop_channelmixer_shared_white_preserving_to_sliders(&white_preserving, widgets);
+  dt_gui_freeze_end();
+
+  return isfinite(roundtrip_error) && roundtrip_error <= DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS;
+}
+
 static void _queue_preview_redraw(dt_iop_module_t *self)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   if(g && g->preview) gtk_widget_queue_draw(g->preview);
 }
 
@@ -465,7 +543,7 @@ static void _queue_preview_redraw(dt_iop_module_t *self)
 static void _pipe_finished_callback(gpointer instance, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
 
   if(IS_NULL_PTR(g)) return;
 
@@ -494,7 +572,7 @@ static void _pipe_finished_callback(gpointer instance, gpointer user_data)
  */
 static void _update_point_slider_colors(dt_iop_module_t *self, const int point)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const dt_iop_order_iccprofile_info_t *work_profile = self->dev && self->dev->pipe
                                                            ? dt_ioppr_get_pipe_work_profile_info(self->dev->pipe)
@@ -535,11 +613,22 @@ static void _update_point_slider_colors(dt_iop_module_t *self, const int point)
   dt_iop_channelmixer_shared_paint_primaries_sliders(DT_ADAPTATION_RGB, work_profile, display_profile,
                                                      DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB, &primaries,
                                                      primaries_widgets);
+
+  GtkWidget *white_preserving_widgets[6] = { NULL };
+  if(_white_preserving_widgets(g, point, white_preserving_widgets))
+  {
+    dt_iop_channelmixer_shared_white_preserving_params_t white_preserving;
+
+    dt_iop_channelmixer_shared_white_preserving_from_sliders(white_preserving_widgets, &white_preserving);
+    dt_iop_channelmixer_shared_paint_white_preserving_sliders(DT_ADAPTATION_RGB, work_profile, display_profile,
+                                                              DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB,
+                                                              &white_preserving, white_preserving_widgets);
+  }
 }
 
 static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget *changed)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
 
   const dt_iop_splittoning_rgb_mixer_mode_t active_mode = dt_bauhaus_combobox_get(g->point[point].mixer_mode);
@@ -555,8 +644,14 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
   {
     float simple_error = INFINITY;
     float primaries_error = INFINITY;
+    float white_preserving_error = INFINITY;
     const gboolean simple_ok = _sync_simple_from_params(self, point, &simple_error);
     const gboolean primaries_ok = _sync_primaries_from_params(self, point, &primaries_error);
+    GtkWidget *white_preserving_widgets[6] = { NULL };
+    // Guard the kick-out below : a sync that only failed because gui_init() has not built this
+    // page yet must not push the user out of a mode they legitimately saved.
+    const gboolean white_preserving_ready = _white_preserving_widgets(g, point, white_preserving_widgets);
+    const gboolean white_preserving_ok = _sync_white_preserving_from_params(self, point, &white_preserving_error);
 
     if(active_mode == DT_SPLITTONING_RGB_MIXER_SIMPLE && !simple_ok)
     {
@@ -576,6 +671,16 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
       dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
       dt_control_log(_("primaries mixer mode requires a non-singular 3x3 matrix with non-zero affine sums."));
     }
+    else if(active_mode == DT_SPLITTONING_RGB_MIXER_WHITE_PRESERVING && white_preserving_ready
+            && !white_preserving_ok)
+    {
+      dt_gui_freeze_begin();
+      dt_bauhaus_combobox_set(g->point[point].mixer_mode, DT_SPLITTONING_RGB_MIXER_COMPLETE);
+      dt_gui_freeze_end();
+      _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
+      dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
+      dt_control_log(_("white-preserving mixer mode requires a matrix that leaves white unchanged."));
+    }
   }
 
   dt_gui_freeze_begin();
@@ -586,7 +691,7 @@ static void _update_point_gui(dt_iop_module_t *self, const int point, GtkWidget 
 
 static void _commit_gui_change(dt_iop_module_t *self, GtkWidget *changed)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(changed), "split-point"));
 
   _update_point_slider_colors(self, point);
@@ -678,7 +783,7 @@ static void _render_preview_surface(dt_iop_module_t *self, cairo_surface_t *surf
 static gboolean _preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   GtkAllocation allocation;
 
   gtk_widget_get_allocation(widget, &allocation);
@@ -705,7 +810,7 @@ static void _general_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   gboolean changed_complete = FALSE;
@@ -743,7 +848,7 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   const dt_iop_splittoning_rgb_mixer_mode_t mode = dt_bauhaus_combobox_get(widget);
@@ -778,6 +883,20 @@ static void _mixer_mode_callback(GtkWidget *widget, gpointer user_data)
       return;
     }
   }
+  else if(mode == DT_SPLITTONING_RGB_MIXER_WHITE_PRESERVING)
+  {
+    float error = INFINITY;
+    if(!_sync_white_preserving_from_params(self, point, &error))
+    {
+      dt_control_log(_("white-preserving mixer mode requires a matrix that leaves white unchanged."));
+      dt_gui_freeze_begin();
+      dt_bauhaus_combobox_set(widget, DT_SPLITTONING_RGB_MIXER_COMPLETE);
+      dt_gui_freeze_end();
+      _set_point_mixer_mode(g, point, DT_SPLITTONING_RGB_MIXER_COMPLETE);
+      dt_conf_set_int(_mode_conf[point], DT_SPLITTONING_RGB_MIXER_COMPLETE);
+      return;
+    }
+  }
 
   if(mode == DT_SPLITTONING_RGB_MIXER_SIMPLE)
     for(int row = 0; row < 3; row++) p->normalize[point][row] = TRUE;
@@ -794,7 +913,7 @@ static void _simple_slider_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   GtkWidget *const widgets[6]
@@ -813,6 +932,7 @@ static void _simple_slider_callback(GtkWidget *widget, gpointer user_data)
   dt_gui_freeze_begin();
   _set_point_complete_widgets(g, p, point);
   _sync_primaries_from_params(self, point, NULL);
+  _sync_white_preserving_from_params(self, point, NULL);
   dt_gui_freeze_end();
 
   _commit_gui_change(self, widget);
@@ -823,7 +943,7 @@ static void _primaries_slider_callback(GtkWidget *widget, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
   GtkWidget *const widgets[9]
@@ -847,6 +967,44 @@ static void _primaries_slider_callback(GtkWidget *widget, gpointer user_data)
 
   dt_gui_freeze_begin();
   _set_point_complete_widgets(g, p, point);
+  _sync_white_preserving_from_params(self, point, NULL);
+  dt_gui_freeze_end();
+
+  _commit_gui_change(self, widget);
+}
+
+static void _white_preserving_slider_callback(GtkWidget *widget, gpointer user_data)
+{
+  if(dt_gui_widgets_suppressed()) return;
+
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
+  const int point = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "split-point"));
+  GtkWidget *widgets[6] = { NULL };
+  dt_iop_channelmixer_shared_white_preserving_params_t white_preserving;
+  float M[3][3] = { { 0.f } };
+
+  if(!_white_preserving_widgets(g, point, widgets)) return;
+
+  dt_iop_channelmixer_shared_white_preserving_from_sliders(widgets, &white_preserving);
+  if(!dt_iop_channelmixer_shared_white_preserving_to_matrix(DT_IOP_CHANNELMIXER_SHARED_PRIMARIES_BASIS_RGB,
+                                                            &white_preserving, M))
+  {
+    // Three primaries collapsed onto the neutral have no transform to describe. Snap the sliders
+    // back to the last representable state rather than leaving the page showing a setting the
+    // params do not hold.
+    dt_control_log(_("white-preserving mixer mode requires non-degenerate primaries."));
+    _sync_white_preserving_from_params(self, point, NULL);
+    return;
+  }
+
+  _set_point_rows(p, point, M);
+  for(int row = 0; row < 3; row++) p->normalize[point][row] = FALSE;
+
+  dt_gui_freeze_begin();
+  _set_point_complete_widgets(g, p, point);
+  _sync_primaries_from_params(self, point, NULL);
   dt_gui_freeze_end();
 
   _commit_gui_change(self, widget);
@@ -1025,7 +1183,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
   const dt_iop_module_t *const sampled_module = piece && piece->module ? piece->module : self;
   const dt_iop_order_iccprofile_info_t *const work_profile
@@ -1060,7 +1218,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_rgb_params_t *p = (dt_iop_splittoning_rgb_params_t *)self->params;
 
   dt_gui_freeze_begin();
@@ -1073,8 +1231,10 @@ void gui_update(struct dt_iop_module_t *self)
 
     float simple_error = INFINITY;
     float primaries_error = INFINITY;
+    float white_preserving_error = INFINITY;
     const gboolean simple_ok = _sync_simple_from_params(self, point, &simple_error);
     const gboolean primaries_ok = _sync_primaries_from_params(self, point, &primaries_error);
+    const gboolean white_preserving_ok = _sync_white_preserving_from_params(self, point, &white_preserving_error);
     const dt_iop_splittoning_rgb_mixer_mode_t requested_mode = dt_conf_key_exists(_mode_conf[point])
                                                                    ? dt_conf_get_int(_mode_conf[point])
                                                                    : DT_SPLITTONING_RGB_MIXER_SIMPLE;
@@ -1083,7 +1243,9 @@ void gui_update(struct dt_iop_module_t *self)
               ? DT_SPLITTONING_RGB_MIXER_SIMPLE
               : requested_mode == DT_SPLITTONING_RGB_MIXER_PRIMARIES && primaries_ok
                     ? DT_SPLITTONING_RGB_MIXER_PRIMARIES
-                    : DT_SPLITTONING_RGB_MIXER_COMPLETE;
+                    : requested_mode == DT_SPLITTONING_RGB_MIXER_WHITE_PRESERVING && white_preserving_ok
+                          ? DT_SPLITTONING_RGB_MIXER_WHITE_PRESERVING
+                          : DT_SPLITTONING_RGB_MIXER_COMPLETE;
 
     dt_bauhaus_combobox_set(g->point[point].mixer_mode, mode);
     _set_point_mixer_mode(g, point, mode);
@@ -1265,10 +1427,57 @@ static void _build_primaries_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gu
   }
 }
 
+static void _build_white_preserving_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui_data_t *g,
+                                      const int point, GtkWidget *container)
+{
+#define SPLITTONING_WHITE_PRESERVING_PRIMARY(var, rotation_label, saturation_label)                             \
+  g->point[point].white_preserving_##var##_rotation                                                             \
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);    \
+  dt_bauhaus_widget_set_label(g->point[point].white_preserving_##var##_rotation, rotation_label);               \
+  dt_bauhaus_slider_set_factor(g->point[point].white_preserving_##var##_rotation, 90.f);                        \
+  dt_bauhaus_slider_set_format(g->point[point].white_preserving_##var##_rotation, "\302\260");                  \
+  /* -100%/+100% is the intended travel ; the wider hard range lets the page report a matrix   */               \
+  /* hand-built in complete mode that pushes a primary further out, instead of clamping it.     */               \
+  g->point[point].white_preserving_##var##_saturation                                                           \
+      = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -4.f, 4.f, 0, 0.f, 3);    \
+  dt_bauhaus_slider_set_soft_range(g->point[point].white_preserving_##var##_saturation, -1.f, 1.f);              \
+  dt_bauhaus_widget_set_label(g->point[point].white_preserving_##var##_saturation, saturation_label);           \
+  /* A "%" format on a range under 10 applies the 100x factor and takes two digits off by itself. */             \
+  dt_bauhaus_slider_set_format(g->point[point].white_preserving_##var##_saturation, "%");
+
+  SPLITTONING_WHITE_PRESERVING_PRIMARY(red, N_("red rotation"), N_("red saturation"))
+  SPLITTONING_WHITE_PRESERVING_PRIMARY(green, N_("green rotation"), N_("green saturation"))
+  SPLITTONING_WHITE_PRESERVING_PRIMARY(blue, N_("blue rotation"), N_("blue saturation"))
+
+#undef SPLITTONING_WHITE_PRESERVING_PRIMARY
+
+  GtkWidget *widgets[] = {
+    dt_ui_section_label_new(_("red primary")),
+    g->point[point].white_preserving_red_rotation,
+    g->point[point].white_preserving_red_saturation,
+    dt_ui_section_label_new(_("green primary")),
+    g->point[point].white_preserving_green_rotation,
+    g->point[point].white_preserving_green_saturation,
+    dt_ui_section_label_new(_("blue primary")),
+    g->point[point].white_preserving_blue_rotation,
+    g->point[point].white_preserving_blue_saturation,
+  };
+
+  for(size_t i = 0; i < G_N_ELEMENTS(widgets); i++)
+  {
+    if(i % 3 != 0)
+    {
+      _tag_widget(widgets[i], point);
+      g_signal_connect(G_OBJECT(widgets[i]), "value-changed", G_CALLBACK(_white_preserving_slider_callback), self);
+    }
+    gtk_box_pack_start(GTK_BOX(container), widgets[i], FALSE, FALSE, 0);
+  }
+}
+
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_splittoning_rgb_gui_data_t *g = IOP_GUI_ALLOC(splittoning_rgb);
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->preview_surface = NULL;
   g->preview_width = 0;
   g->preview_height = 0;
@@ -1276,11 +1485,11 @@ void gui_init(struct dt_iop_module_t *self)
   g->preview = GTK_WIDGET(gtk_drawing_area_new());
   gtk_widget_set_size_request(g->preview, -1, DT_PIXEL_APPLY_DPI(DT_SPLITTONING_RGB_PREVIEW_HEIGHT));
   g_signal_connect(G_OBJECT(g->preview), "draw", G_CALLBACK(_preview_draw), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->preview, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->preview, FALSE, FALSE, 0);
 
   g->tabs = dt_ui_notebook_new();
   dt_ui_notebook_set_picker_owner(g->tabs, self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->tabs), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->tabs), FALSE, FALSE, 0);
 
   for(int point = 0; point < DT_SPLITTONING_RGB_POINT_COUNT; point++)
   {
@@ -1312,6 +1521,7 @@ void gui_init(struct dt_iop_module_t *self)
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Complete"));
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Simple"));
     dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("Primaries"));
+    dt_bauhaus_combobox_add(g->point[point].mixer_mode, _("White-preserving"));
     _tag_widget(g->point[point].mixer_mode, point);
     g_signal_connect(G_OBJECT(g->point[point].mixer_mode), "value-changed", G_CALLBACK(_mixer_mode_callback), self);
     gtk_box_pack_start(GTK_BOX(page), g->point[point].mixer_mode, FALSE, FALSE, 0);
@@ -1325,13 +1535,16 @@ void gui_init(struct dt_iop_module_t *self)
     GtkWidget *complete = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     GtkWidget *simple = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     GtkWidget *primaries = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+    GtkWidget *white_preserving = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_stack_add_named(GTK_STACK(g->point[point].mixer_stack), complete, "complete");
     gtk_stack_add_named(GTK_STACK(g->point[point].mixer_stack), simple, "simple");
     gtk_stack_add_named(GTK_STACK(g->point[point].mixer_stack), primaries, "primaries");
+    gtk_stack_add_named(GTK_STACK(g->point[point].mixer_stack), white_preserving, "white-preserving");
 
     _build_complete_ui(self, g, point, complete);
     _build_simple_ui(self, g, point, simple);
     _build_primaries_ui(self, g, point, primaries);
+    _build_white_preserving_ui(self, g, point, white_preserving);
   }
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
@@ -1344,7 +1557,7 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_rgb_gui_data_t *g = (dt_iop_splittoning_rgb_gui_data_t *)dt_iop_gui_data(self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_pipe_finished_callback), self);
   if(g->preview_surface) cairo_surface_destroy(g->preview_surface);
   IOP_GUI_FREE;

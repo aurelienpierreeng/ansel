@@ -42,7 +42,7 @@ static void _layerio_log_errors(GString *errors)
 
 static void _populate_layer_list(dt_iop_module_t *self)
 {
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g)) return;
   // Scope guard: the freeze spans the rest of the function, which has an early return; the
@@ -129,7 +129,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
    * The low-level TIFF read/write primitives live in drawlayer/io.c, while this
    * function stays here because it orchestrates cache lifetime, widget state,
    * prompting, and history/UI side effects around those I/O operations. */
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
@@ -141,8 +141,9 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   const gboolean ui_thread = ui_ctx && g_main_context_is_owner(ui_ctx);
   if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
-    layer_width = self->dev->roi.raw_width;
-    layer_height = self->dev->roi.raw_height;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
+    layer_width = geometry.raw_width;
+    layer_height = geometry.raw_height;
   }
   if(imgid <= 0 || layer_width <= 0 || layer_height <= 0) return FALSE;
   if(!_layer_name_non_empty(params->layer_name))
@@ -357,7 +358,7 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
 
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
 {
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_drawlayer_params_t *params = (const dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || !g->process.cache_valid || !g->process.cache_dirty || IS_NULL_PTR(g->process.base_patch.pixels)) return TRUE;
   if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return TRUE;
@@ -402,7 +403,7 @@ gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
 
 static gboolean _ensure_widget_cache(dt_iop_module_t *self)
 {
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
   drawlayer_view_patch_info_t view = { 0 };
@@ -430,9 +431,9 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
 
   if(same_view)
   {
-    g->session.last_view_x = self->dev->roi.x;
-    g->session.last_view_y = self->dev->roi.y;
-    g->session.last_view_scale = self->dev->roi.scaling;
+    g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
+    g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
+    g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
     return TRUE;
   }
 
@@ -441,9 +442,9 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
   g->session.preview_rect = preview_rect;
 
   dt_drawlayer_worker_reset_backend_path(g->stroke.worker);
-  g->session.last_view_x = self->dev->roi.x;
-  g->session.last_view_y = self->dev->roi.y;
-  g->session.last_view_scale = self->dev->roi.scaling;
+  g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
+  g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
+  g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
   return TRUE;
 }
 
@@ -467,7 +468,7 @@ void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboole
 
 gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self)
 {
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return FALSE;
 
   _pause_worker(self, g->stroke.worker);

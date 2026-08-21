@@ -13,6 +13,7 @@
     GNU General Public License for more details.
 */
 
+#include "system/mem_alloc.h"
 #include "common/folder_survey.h"
 #include "control/settings.h"
 #include <glib/gstdio.h>
@@ -24,11 +25,10 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/jobs/import_jobs.h"
-#include "gui/gtk.h"
-#include "views/view.h"
 
 #include <gio/gio.h>
 #include "common/utility.h"
+#include "common/logging.h"
 
 #define DT_FOLDER_SURVEY_STATE_FILE "folder-survey-state.ini"
 
@@ -625,7 +625,7 @@ char *dt_folder_survey_destination_preview()
     }
 
     char datetime_check[DT_DATETIME_LENGTH] = { 0 };
-    dt_image_t *img = malloc(sizeof(dt_image_t));
+    dt_image_t *img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
     if(dt_datetime_entry_to_exif(datetime_check, sizeof(datetime_check), date) && !IS_NULL_PTR(img))
     {
       dt_image_init(img);
@@ -679,7 +679,7 @@ char *dt_folder_survey_destination_preview()
       dt_free(example);
       dt_control_import_data_free(&data);
     }
-    dt_free(img);
+    dt_free_align(img);
   }
 
   dt_free(folder);
@@ -810,55 +810,39 @@ void dt_folder_survey_init()
   dt_free(base_dir);
 }
 
-/**
- * @brief Ask whether images already sitting in the source folder should be
- * imported right away, instead of being silently absorbed into the
- * baseline.
- *
- * Runs every time monitoring starts: a plain Start on a never-before-
- * surveyed folder would otherwise treat its existing content as the
- * baseline without importing it, and a resumed session would otherwise
- * import files that appeared while the application was closed without
- * asking. Declining absorbs every currently observed file into the
- * baseline so a later scan does not import it behind the user's back.
- * Accepting on a folder with no baseline yet seeds an initialized, empty
- * one so the next scan treats those files as new pending imports instead
- * of silently absorbing them.
- */
+static dt_folder_survey_confirm_import_handler_t _confirm_import_handler = NULL;
+
+void dt_folder_survey_set_confirm_import_handler(dt_folder_survey_confirm_import_handler_t handler)
+{
+  _confirm_import_handler = handler;
+}
+
 static void _folder_survey_offer_pending_import()
 {
   const int new_files = dt_folder_survey_count_new_files();
   if(new_files <= 0) return;
 
-  GtkWindow *parent = GTK_WINDOW(dt_gui_main_window());
-  GtkWidget *dialog = gtk_message_dialog_new(
-      parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-      ngettext("%d image in the surveyed folder is not in the library yet.\nImport it now?",
-               "%d images in the surveyed folder are not in the library yet.\nImport them now?",
-               new_files),
-      new_files);
-
-  GtkWidget *delete_check
-      = gtk_check_button_new_with_label(_("Delete the originals after verifying the complete copies"));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(delete_check),
-                               dt_conf_get_bool("studio_capture/delete_source"));
-  gtk_widget_set_sensitive(delete_check, dt_conf_get_bool("studio_capture/copy"));
-  gtk_box_pack_start(GTK_BOX(gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog))), delete_check,
-                     FALSE, FALSE, DT_GUI_BOX_SPACING);
-  gtk_widget_show_all(dialog);
-
-  const int import_now = gtk_dialog_run(GTK_DIALOG(dialog));
-  if(import_now == GTK_RESPONSE_YES && dt_conf_get_bool("studio_capture/copy"))
-    dt_conf_set_bool("studio_capture/delete_source",
-                     gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(delete_check)));
-  gtk_widget_destroy(dialog);
-
-  if(import_now != GTK_RESPONSE_YES)
+  if(IS_NULL_PTR(_confirm_import_handler))
   {
+    // Nobody registered to ask. Do NOT absorb: absorbing is the answer to a question that
+    // was never put, and it would silently make these files invisible to every later scan.
+    // Leaving the state untouched keeps them pending, to be offered whenever someone can ask.
+    dt_print(DT_DEBUG_CONTROL,
+             "[folder_survey] %d new file(s) pending, but no handler to ask about importing them\n",
+             new_files);
+    return;
+  }
+
+  if(!_confirm_import_handler(new_files))
+  {
+    // Declined: absorb every currently observed file into the baseline so a later scan does
+    // not import it behind the user's back.
     dt_folder_survey_absorb_new_files();
     return;
   }
 
+  // Accepted on a folder with no baseline yet: seed an initialized, empty one so the next
+  // scan treats those files as new pending imports instead of silently absorbing them.
   dt_pthread_mutex_lock(&_folder_survey.lock);
   if(!_folder_survey.baseline_initialized)
   {
@@ -1037,40 +1021,20 @@ void dt_folder_survey_absorb_new_files()
   g_hash_table_destroy(observed);
 }
 
-gboolean dt_folder_survey_propose_resume()
+gboolean dt_folder_survey_take_session_marker()
 {
-  if(!dt_folder_survey_session_was_active()) return G_SOURCE_REMOVE;
+  // Consumed, not merely read: the resume question must be asked at most once per start,
+  // whatever the answer, so clearing here is the point rather than a side effect.
+  if(!dt_folder_survey_session_was_active()) return FALSE;
   _folder_survey.was_active_last_session = FALSE;
+  return TRUE;
+}
 
-  char *folder = dt_conf_get_string("studio_capture/folder");
-  GtkWindow *parent = GTK_WINDOW(dt_gui_main_window());
-
-  GtkWidget *dialog = gtk_message_dialog_new(
-      parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-      _("A studio capture session was monitoring `%s` when Ansel was last closed.\n"
-        "Resume the session?"),
-      folder ? folder : "");
-  const int resume = gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_widget_destroy(dialog);
-
-  if(resume != GTK_RESPONSE_YES)
-  {
-    // Clear the persisted marker so the question is not asked again.
-    dt_pthread_mutex_lock(&_folder_survey.lock);
-    _folder_survey_save_locked();
-    dt_pthread_mutex_unlock(&_folder_survey.lock);
-    dt_free(folder);
-    return G_SOURCE_REMOVE;
-  }
-
-  dt_view_manager_switch(dt_view_manager_get_global(), "studio_capture");
-
-  // dt_folder_survey_start() itself offers to import any images already
-  // sitting in the folder, covering files that appeared while Ansel was
-  // closed the same way it covers a plain session start.
-  dt_folder_survey_start();
-  dt_free(folder);
-  return G_SOURCE_REMOVE;
+void dt_folder_survey_forget_session()
+{
+  dt_pthread_mutex_lock(&_folder_survey.lock);
+  _folder_survey_save_locked();
+  dt_pthread_mutex_unlock(&_folder_survey.lock);
 }
 
 void dt_folder_survey_cleanup()

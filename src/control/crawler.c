@@ -33,22 +33,21 @@
 
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <sqlite3.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "common/logging.h"
 #include "common/history_actions.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "common/paths.h"
-#include "common/database.h"
-#include "common/debug.h"
-#include "common/history.h"
+#include "database/database.h"
+#include "database/image_repository.h"
 #include "common/image.h"
 #include "common/utility.h"
 #include "crawler.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -121,146 +120,126 @@ static void _set_modification_time(char *filename,
   if(info) g_clear_object(&info);
 }
 
-GList *dt_control_crawler_run(void)
+/* One row of the library walk: everything below used to be the body of a cursor loop over
+ * main.images joined to main.film_rolls, with a second statement writing the flags back. */
+static void _crawl_image(const int32_t id,
+                         const int64_t timestamp,
+                         const int version,
+                         const char *image_path,
+                         const int flags,
+                         void *user_data)
 {
-  sqlite3_stmt *stmt, *inner_stmt;
-  GList *result = NULL;
+  GList **result = (GList **)user_data;
 
-  // clang-format off
-  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
-                     "SELECT i.id, write_timestamp, version,"
-                     "       folder || '" G_DIR_SEPARATOR_S "' || filename, flags"
-                     " FROM main.images i, main.film_rolls f"
-                     " ON i.film_id = f.id"
-                     " ORDER BY f.id, filename",
-                     -1, &stmt, NULL);
-  // clang-format on
-  sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
-                     "UPDATE main.images SET flags = ?1 WHERE id = ?2", -1,
-                     &inner_stmt, NULL);
-
-  // let's wrap this into a transaction, it might make it a little faster.
-  dt_database_start_transaction(dt_database_get_global());
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  // if the image is missing we ignore it.
+  if(!g_file_test(image_path, G_FILE_TEST_EXISTS))
   {
-    const int id = sqlite3_column_int(stmt, 0);
-    const time_t timestamp = sqlite3_column_int(stmt, 1);
-    const int version = sqlite3_column_int(stmt, 2);
-    const gchar *image_path = (char *)sqlite3_column_text(stmt, 3);
-    int flags = sqlite3_column_int(stmt, 4);
-
-    // if the image is missing we ignore it.
-    if(!g_file_test(image_path, G_FILE_TEST_EXISTS))
-    {
-      dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' (id: %d) is missing.\n", image_path, id);
-      continue;
-    }
-
-    // construct the xmp filename for this image
-    gchar xmp_path[PATH_MAX] = { 0 };
-    g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
-    dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
-    size_t len = strlen(xmp_path);
-    if(len + 4 >= PATH_MAX) continue;
-    xmp_path[len++] = '.';
-    xmp_path[len++] = 'x';
-    xmp_path[len++] = 'm';
-    xmp_path[len++] = 'p';
-    xmp_path[len] = '\0';
-
-    // on Windows the encoding might not be UTF8
-    gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
-    int stat_res = -1;
-#ifdef _WIN32
-    // UTF8 paths fail in this context, but converting to UTF16 works
-    struct _stati64 statbuf;
-    if(xmp_path_locale) // in Windows dt_util_normalize_path returns
-                        // NULL if file does not exist
-    {
-      wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
-      stat_res = _wstati64(wfilename, &statbuf);
-      dt_free(wfilename);
-    }
-#else
-    struct stat statbuf;
-    stat_res = stat(xmp_path_locale, &statbuf);
-#endif
-    dt_free(xmp_path_locale);
-    if(stat_res) continue; // TODO: shall we report these?
-
-    // step 1: check if the xmp is newer than our db entry
-    // FIXME: allow for a few seconds difference?
-    if(timestamp < statbuf.st_mtime)
-    {
-      dt_control_crawler_result_t *item
-          = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
-      item->id = id;
-      item->timestamp_xmp = statbuf.st_mtime;
-      item->timestamp_db = timestamp;
-      item->image_path = g_strdup(image_path);
-      item->xmp_path = g_strdup(xmp_path);
-
-      result = g_list_prepend(result, item);
-      dt_print(DT_DEBUG_CONTROL,
-                "[crawler] `%s' (id: %d) is a newer XMP file.\n", xmp_path, id);
-    }
-    // older timestamps are the case for all images after the db
-    // upgrade. better not report these
-
-    // step 2: check if the image has associated files (.txt, .wav)
-    len = strlen(image_path);
-    const char *c = image_path + len;
-    while((c > image_path) && (*c != '.')) c--;
-    len = c - image_path + 1;
-
-    char *txt_path = dt_image_get_text_path_from_path(image_path);
-    gboolean has_txt = !IS_NULL_PTR(txt_path);
-    dt_free(txt_path);
-
-    char *extra_path = (char *)calloc(len + 3 + 1, sizeof(char));
-    g_strlcpy(extra_path, image_path, len + 1);
-
-    extra_path[len] = 'w';
-    extra_path[len + 1] = 'a';
-    extra_path[len + 2] = 'v';
-    gboolean has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
-
-    if(!has_wav)
-    {
-      extra_path[len] = 'W';
-      extra_path[len + 1] = 'A';
-      extra_path[len + 2] = 'V';
-      has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
-    }
-
-    // TODO: decide if we want to remove the flag for images that lost
-    // their extra file. currently we do (the else cases)
-    int new_flags = flags;
-    if(has_txt)
-      new_flags |= DT_IMAGE_HAS_TXT;
-    else
-      new_flags &= ~DT_IMAGE_HAS_TXT;
-    if(has_wav)
-      new_flags |= DT_IMAGE_HAS_WAV;
-    else
-      new_flags &= ~DT_IMAGE_HAS_WAV;
-    if(flags != new_flags)
-    {
-      sqlite3_bind_int(inner_stmt, 1, new_flags);
-      sqlite3_bind_int(inner_stmt, 2, id);
-      sqlite3_step(inner_stmt);
-      sqlite3_reset(inner_stmt);
-      sqlite3_clear_bindings(inner_stmt);
-    }
-
-    dt_free(extra_path);
+    dt_print(DT_DEBUG_CONTROL, "[crawler] `%s' (id: %d) is missing.\n", image_path, id);
+    return;
   }
 
-  dt_database_release_transaction(dt_database_get_global());
+  // construct the xmp filename for this image
+  gchar xmp_path[PATH_MAX] = { 0 };
+  g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
+  dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
+  size_t len = strlen(xmp_path);
+  if(len + 4 >= PATH_MAX) return;
+  xmp_path[len++] = '.';
+  xmp_path[len++] = 'x';
+  xmp_path[len++] = 'm';
+  xmp_path[len++] = 'p';
+  xmp_path[len] = '\0';
 
-  sqlite3_finalize(stmt);
-  sqlite3_finalize(inner_stmt);
+  // on Windows the encoding might not be UTF8
+  gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
+  int stat_res = -1;
+#ifdef _WIN32
+  // UTF8 paths fail in this context, but converting to UTF16 works
+  struct _stati64 statbuf;
+  if(xmp_path_locale) // in Windows dt_util_normalize_path returns
+                      // NULL if file does not exist
+  {
+    wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
+    stat_res = _wstati64(wfilename, &statbuf);
+    dt_free(wfilename);
+  }
+#else
+  struct stat statbuf;
+  stat_res = stat(xmp_path_locale, &statbuf);
+#endif
+  dt_free(xmp_path_locale);
+  if(stat_res) return; // TODO: shall we report these?
+
+  // step 1: check if the xmp is newer than our db entry
+  // FIXME: allow for a few seconds difference?
+  if(timestamp < statbuf.st_mtime)
+  {
+    dt_control_crawler_result_t *item
+        = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
+    item->id = id;
+    item->timestamp_xmp = statbuf.st_mtime;
+    item->timestamp_db = timestamp;
+    item->image_path = g_strdup(image_path);
+    item->xmp_path = g_strdup(xmp_path);
+
+    *result = g_list_prepend(*result, item);
+    dt_print(DT_DEBUG_CONTROL,
+              "[crawler] `%s' (id: %d) is a newer XMP file.\n", xmp_path, id);
+  }
+  // older timestamps are the case for all images after the db
+  // upgrade. better not report these
+
+  // step 2: check if the image has associated files (.txt, .wav)
+  len = strlen(image_path);
+  const char *c = image_path + len;
+  while((c > image_path) && (*c != '.')) c--;
+  len = c - image_path + 1;
+
+  char *txt_path = dt_image_get_text_path_from_path(image_path);
+  gboolean has_txt = !IS_NULL_PTR(txt_path);
+  dt_free(txt_path);
+
+  char *extra_path = (char *)calloc(len + 3 + 1, sizeof(char));
+  g_strlcpy(extra_path, image_path, len + 1);
+
+  extra_path[len] = 'w';
+  extra_path[len + 1] = 'a';
+  extra_path[len + 2] = 'v';
+  gboolean has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+
+  if(!has_wav)
+  {
+    extra_path[len] = 'W';
+    extra_path[len + 1] = 'A';
+    extra_path[len + 2] = 'V';
+    has_wav = g_file_test(extra_path, G_FILE_TEST_EXISTS);
+  }
+
+  // TODO: decide if we want to remove the flag for images that lost
+  // their extra file. currently we do (the else cases)
+  int new_flags = flags;
+  if(has_txt)
+    new_flags |= DT_IMAGE_HAS_TXT;
+  else
+    new_flags &= ~DT_IMAGE_HAS_TXT;
+  if(has_wav)
+    new_flags |= DT_IMAGE_HAS_WAV;
+  else
+    new_flags &= ~DT_IMAGE_HAS_WAV;
+  if(flags != new_flags)
+    dt_image_repository_set_flags(id, new_flags);
+
+  dt_free(extra_path);
+}
+
+GList *dt_control_crawler_run(void)
+{
+  GList *result = NULL;
+
+  // let's wrap this into a transaction, it might make it a little faster.
+  dt_database_start_transaction();
+  dt_image_repository_foreach_with_path(_crawl_image, &result);
+  dt_database_release_transaction();
 
   return g_list_reverse(result); // list was built in reverse order, so un-reverse it
 }
@@ -350,22 +329,6 @@ static void _select_invert_callback(GtkButton *button, gpointer user_data)
 }
 
 
-static void _db_update_timestamp(const int id, const time_t timestamp)
-{
-  // Update DB writing timestamp with XMP file timestamp
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2
-    (dt_database_get_sqlite3_global(),
-     "UPDATE main.images"
-     " SET write_timestamp = ?2"
-     " WHERE id = ?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, timestamp);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-}
-
-
 static void _get_crawler_entry_from_model(GtkTreeModel *model,
                                           GtkTreeIter *iter,
                                           dt_control_crawler_result_t *entry)
@@ -424,7 +387,8 @@ static void sync_xmp_to_db(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { 0 };
   _get_crawler_entry_from_model(model, iter, &entry);
-  _db_update_timestamp(entry.id, entry.timestamp_xmp);
+  // the DB writing timestamp becomes the XMP file's
+    dt_image_repository_set_write_timestamp(entry.id, entry.timestamp_xmp);
 
   const int error =
     dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0);  // success = 0, fail = 1
@@ -489,7 +453,8 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
   if(entry.timestamp_xmp > entry.timestamp_db)
   {
     // WRITE XMP in DB
-    _db_update_timestamp(entry.id, entry.timestamp_xmp);
+    // the DB writing timestamp becomes the XMP file's
+    dt_image_repository_set_write_timestamp(entry.id, entry.timestamp_xmp);
     error = dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0);
     if(error)
     {
@@ -559,7 +524,8 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
   if(entry.timestamp_xmp < entry.timestamp_db)
   {
     // WRITE XMP in DB
-    _db_update_timestamp(entry.id, entry.timestamp_xmp);
+    // the DB writing timestamp becomes the XMP file's
+    dt_image_repository_set_write_timestamp(entry.id, entry.timestamp_xmp);
     error = dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0);
     if(error)
     {

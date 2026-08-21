@@ -527,7 +527,7 @@ typedef struct pair
   float temperature;
 } pair;
 
-struct pair pair_min(struct pair r, struct pair n)
+static inline struct pair pair_min(struct pair r, struct pair n)
 {
   // r is the current min value, n in the value to compare against it
   if(n.radius < r.radius) return n;

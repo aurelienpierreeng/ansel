@@ -48,31 +48,32 @@
 */
 #include "common/collection.h"
 #include "common/act_on.h"
-#include "gui/dtgtk/togglebutton.h"
+#include "widgets/togglebutton.h"
 #include "common/selection.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "common/utility.h"
-#include "gui/gdkkeys.h"
-#include "common/tags.h"
+#include "widgets/gdkkeys.h"
+#include "metadata/tags.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "gui/bauhaus.h"
-#include "gui/dtgtk/button.h"
-#include "gui/dtgtk/icon_cell_renderer.h"
+#include "widgets/bauhaus.h"
+#include "widgets/button.h"
+#include "widgets/icon_cell_renderer.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/drag_and_drop.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
-#include "views/view.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
 #include <gdk/gdkkeysyms.h>
-#include <math.h>
+#include "widgets/dialog.h"
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
 
 #define FLOATING_ENTRY_WIDTH DT_PIXEL_APPLY_DPI(150)
 

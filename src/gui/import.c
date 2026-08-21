@@ -20,26 +20,25 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/bauhaus.h"
-#include "common/cache.h"
+#include "system/mem_alloc.h"
 #include "common/film.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "gui/import.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_core.h"
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 #include "common/datetime.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
+#include "control/jobs/control_jobs.h"   // dt_control_image_enumerator_t
 #include "control/jobs/import_jobs.h"
 
-#include "gui/draw.h"
-#include "gui/gtkentry.h"
+#include "widgets/gtkentry.h"
 
 #include <gio/gio.h>
 
@@ -49,9 +48,14 @@
 #ifdef _WIN32
 //MSVCRT does not have strptime implemented
 #endif
-#include <strings.h>
 #include <librsvg/rsvg.h>
 #include "common/utility.h"
+#include "common/logging.h"
+#include "gui/application.h"
+#include "widgets/accelerators.h"
+#include "widgets/popup.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 // ugh, ugly hack. why do people break stuff all the time?
 #ifndef RSVG_CAIRO_H
 #include <librsvg/rsvg-cairo.h>
@@ -66,16 +70,10 @@ typedef struct dt_import_scan_state_t
   gboolean closing;
 } dt_import_scan_state_t;
 
-// Mirrors the 3 GtkFileFilter entries built by _file_filters(). The recursive folder scan
-// runs on a worker thread and must not touch GtkFileFilter (Gtk objects are not thread-safe),
-// so the active filter is resolved to one of these plain values on the GUI thread, once, in
-// dt_import_init().
-typedef enum dt_import_filter_type_t
-{
-  DT_IMPORT_FILTER_ALL = 0,
-  DT_IMPORT_FILTER_RAW,
-  DT_IMPORT_FILTER_RASTER
-} dt_import_filter_type_t;
+// dt_import_filter_type_t (gui/import.h) mirrors the 3 GtkFileFilter entries built by
+// _file_filters(). The recursive folder scan runs on a worker thread and must not touch
+// GtkFileFilter (Gtk objects are not thread-safe), so the active filter is resolved to one of
+// those plain values on the GUI thread, once, in dt_import_init().
 
 typedef struct dt_import_t {
   // User-selected folders and files from the Gtk file chooser,
@@ -198,8 +196,10 @@ static void _gtk_label_set_and_free(GtkWidget *widget, gchar *label)
 }
 
 // dt_image_ext_is_gui_raw()/is_gui_raster() (common/image_extensions.c) are shared with
-// _file_filters() below so the GtkFileFilter patterns and this recursive-scan check can never drift.
-static gboolean _import_passes_filter(const dt_import_filter_type_t filter_type, const gchar *pathname)
+// _file_filters() below so the GtkFileFilter patterns and this recursive-scan check can never
+// drift. Public (gui/import.h): the drag-and-drop folder-import path (gui/dtgtk/thumbtable.c)
+// reuses this exact function rather than re-deriving the same "does this file match" logic.
+gboolean dt_import_passes_filter(const dt_import_filter_type_t filter_type, const gchar *pathname)
 {
   if(!dt_supported_image(pathname)) return FALSE;
   if(filter_type == DT_IMPORT_FILTER_ALL) return TRUE;
@@ -224,7 +224,7 @@ static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
   // We must not call GtkFileFilter from worker threads because Gtk objects are not thread-safe,
   // so import->filter_type (a plain enum snapshotted on the GUI thread, see dt_import_init())
   // stands in for the live GtkFileFilter here.
-  if(pathname && g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && _import_passes_filter(import->filter_type, pathname))
+  if(pathname && g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && dt_import_passes_filter(import->filter_type, pathname))
   {
     import->files = g_list_prepend(import->files, pathname);
     // prepend is more efficient than append. Import control reorders alphabetically anyway.
@@ -308,17 +308,6 @@ static void _recurse_selection(GSList *selection, dt_import_t *const import)
     _filter_document(vfs, file, import);
     g_object_unref(file);
   }
-
-  // get the unsorted filtered path of the first selected element in file explorer.
-  GFile *filepath = g_vfs_get_file_for_uri(vfs, (const char *)selection->data);
-  gchar *first_element = g_file_get_path(filepath);
-  g_object_unref(filepath);
-
-  if(first_element) dt_conf_set_string("ui_last/import_first_selected_str", first_element);
-  dt_free(first_element);
-
-  // get the number of selected elements
-  dt_conf_set_int("ui_last/import_selection_nb", g_slist_length(selection));
 
   import->files = g_list_sort(import->files, (GCompareFunc) g_strcmp0);
 }
@@ -414,7 +403,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
   int32_t th_height;
   char *mime_type = NULL;
   const char *const extension = g_strrstr(filename, ".");
-  const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
+  const dt_image_flags_t file_type = extension ? dt_image_flags_from_extension(extension + 1) : 0u;
   dt_colorspaces_color_profile_type_t color_space;
   if(!dt_image_is_hdr(img)
      && !dt_imageio_large_thumbnail(filename, &buffer, &th_width, &th_height, &color_space, width, height))
@@ -463,15 +452,12 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
 
     if(use_internal_loader)
     {
-      dt_cache_entry_t cache_entry = { 0 };
       dt_mipmap_buffer_t mipbuf = { 0 };
-      mipbuf.size = DT_MIPMAP_FULL;
-      mipbuf.cache_entry = &cache_entry;
 
       /* If embedded preview extraction failed, non-RAW files should still get a preview by
        * decoding the real image through Ansel instead of relying on the desktop pixbuf stack.
        * RAWs stay excluded here because the import dialog only wants a lightweight fallback. */
-      if(dt_imageio_open(img, filename, &mipbuf) == DT_IMAGEIO_OK
+      if(dt_imageio_open_standalone(img, filename, &mipbuf) == DT_IMAGEIO_OK
          && !IS_NULL_PTR(mipbuf.buf) && mipbuf.width > 0 && mipbuf.height > 0)
       {
         const size_t pixels = (size_t)mipbuf.width * mipbuf.height;
@@ -501,8 +487,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
         }
       }
 
-      dt_free_align(cache_entry.data);
-      cache_entry.data = NULL;
+      dt_imageio_close_standalone(&mipbuf);
     }
   }
 
@@ -595,7 +580,7 @@ static void _file_filters(dt_lib_import_t *d)
 
   // Enumerate every extension Ansel knows about (common/image_extensions.c) instead of
   // hand-maintaining a copy here -- keeps this GUI filter and the recursive-scan check in
-  // _import_passes_filter() from ever drifting apart again.
+  // dt_import_passes_filter() from ever drifting apart again.
   const char *const *lists[] = { dt_image_ext_raw_list(), dt_image_ext_ldr_list(), dt_image_ext_hdr_list() };
   const int n_lists = sizeof(lists) / sizeof(lists[0]);
 
@@ -712,12 +697,12 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   if(have_file)
   {
     const char *const extension = g_strrstr(filename, ".");
-    const dt_image_flags_t file_type = extension ? dt_imageio_get_type_from_extension(extension + 1) : 0u;
+    const dt_image_flags_t file_type = extension ? dt_image_flags_from_extension(extension + 1) : 0u;
 
     dt_free(d->path_file);
     d->path_file = g_strdup(filename);
 
-    img = malloc(sizeof(dt_image_t));
+    img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
     dt_image_init(img);
     if(!(file_type & DT_IMAGE_HDR))
       valid_exif = dt_exif_read(img, filename);
@@ -775,11 +760,11 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   char path[512] = { 0 };
   if(imgid > UNKNOWN_IMAGE)
   {
-    dt_image_t *lib_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    dt_image_t *lib_img = dt_image_cache_get(imgid, 'r');
     if(lib_img)
     {
       dt_image_film_roll_directory(lib_img, path, sizeof(path));
-      dt_image_cache_read_release(dt_image_cache_get_global(), lib_img);
+      dt_image_cache_read_release(lib_img);
     }
   }
 
@@ -804,7 +789,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
 
   dt_free(filename);
   dt_free(uri);
-  dt_free(img);
+  dt_free_align(img);
 }
 
 static void _update_directory(GtkWidget *file_chooser, dt_lib_import_t *d)
@@ -871,7 +856,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
     gboolean free_after = FALSE;
     if(IS_NULL_PTR(img))
     {
-      img = malloc(sizeof(dt_image_t));
+      img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
       dt_image_init(img);
 
       // Generate file I/O only if the pattern is using EXIF variables.
@@ -890,7 +875,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 
     if(free_after)
     {
-      dt_free(img);
+      dt_free_align(img);
     }
 
     if(fake_path && fake_path[0] != 0)
@@ -1713,6 +1698,96 @@ static void dt_import_cleanup(void *data)
   }
   dt_pthread_mutex_destroy(&import->lock);
   dt_free(import);
+}
+
+/* Shows what an import left behind. Lived in control/jobs/import_jobs.c -- the only GUI
+ * code in that job file; the job invokes it through the registered handler and this
+ * function owns freeing the enumerator params and import data, as the contract says. */
+static int _import_discarded_files_popup(dt_control_image_enumerator_t *params)
+{
+  dt_control_import_t *data = params->data;
+
+  // Create the window
+  GtkWidget *dialog = gtk_dialog_new_with_buttons("Message",
+    GTK_WINDOW(dt_gui_main_window()),
+    GTK_DIALOG_DESTROY_WITH_PARENT,
+    _("_OK"),
+    GTK_RESPONSE_NONE,
+    NULL);
+  gtk_window_set_title(GTK_WINDOW(dialog), _("Some files have not been copied"));
+  gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PIXEL_APPLY_DPI(800), DT_PIXEL_APPLY_DPI(800));
+
+  // Create the label
+  GtkWidget *label = gtk_label_new(_("The following source files have not been copied "
+    "because similarly-named files already exist on the destination. "
+    "This may be because the files have already been imported "
+    "or the naming pattern leads to non-unique file names."));
+  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+
+  // Create the scrolled window internal container
+  GtkWidget *scrolled_window = gtk_scrolled_window_new (NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC,
+  GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled_window), TRUE);
+
+  // Create the treeview model from the list of discarded file pathes
+  GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
+  GtkTreeIter iter;
+  for(GList *file = g_list_first(data->discarded); file; file = g_list_next(file))
+  {
+    if(file->data)
+    {
+      gtk_list_store_append(store, &iter);
+      gtk_list_store_set(store, &iter, 0, (char *)file->data, -1);
+    }
+  }
+
+  // Create the treeview view. Sooooo verbose... it's only a flat list.
+  GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+  GtkTreeViewColumn *col = gtk_tree_view_column_new();
+  gtk_tree_view_column_set_title(col, _("Origin path"));
+  GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+  gtk_tree_view_column_pack_start(col, renderer, TRUE);
+  gtk_tree_view_column_set_attributes(col, renderer, "text", 0, NULL);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
+  g_object_unref(store);
+
+  // Pack widgets to an unified box
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
+  dt_gui_add_class(scrolled_window, "dt_recessed_scroll");
+  gtk_container_add(GTK_CONTAINER(scrolled_window), view);
+
+  // Pack the box to the dialog internal container
+  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_add(GTK_CONTAINER(content_area), box);
+  gtk_widget_show_all(dialog);
+
+#ifdef GDK_WINDOWING_QUARTZ
+  dt_osx_disallow_fullscreen(dialog);
+#endif
+
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+
+  dt_control_import_data_free(data);
+  dt_free(data);
+  dt_control_image_enumerator_cleanup(params);
+
+  return 0;
+}
+
+/* Runs on the import worker thread: hop to the GUI main loop, where the dialog lives.
+ * The popup owns freeing params, per the handler contract. */
+static void _import_discarded_files_schedule(dt_control_image_enumerator_t *params)
+{
+  g_main_context_invoke(NULL, (GSourceFunc)_import_discarded_files_popup, params);
+}
+
+void dt_gui_import_init_handlers(void)
+{
+  dt_control_import_set_discarded_files_handler(_import_discarded_files_schedule);
 }
 
 // clang-format off

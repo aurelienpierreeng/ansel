@@ -18,17 +18,18 @@
 
 #include "develop/dev_snapshot.h"
 
-#include "common/history.h"
-#include "common/iop_order.h"
-#include "common/mipmap_cache.h"
+#include "develop/iop_order.h"
+#include "caches/mipmap_cache.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "develop/dev_history.h"
 #include "develop/develop.h"
+#include "develop/masks/masks_history.h"
 #include "develop/pixelpipe_hb.h"
 #include "views/dev_backbuf.h"
 
 #include <math.h>
+#include "gui/application.h"
 
 // Real state behind a dt_dev_snapshot_t handle. Heap-allocated and refcounted so that copying a
 // dt_dev_snapshot_t (e.g. libs/snapshots.c shuffling its fixed-size slot array) only ever copies a
@@ -145,24 +146,24 @@ gboolean dt_dev_snapshot_is_valid(const dt_dev_snapshot_t *snap)
 }
 
 // Mirrors _update_darkroom_roi()'s main-pipe branch (develop/develop.c), substituting `pipe`'s
-// own processed size for dev->roi.processed_width/height -- the snapshot's own image may have
+// own processed size for dt_dev_geometry_processed_width(dev)/height -- the snapshot's own image may have
 // different dimensions than the one currently open in darkroom. Deliberately ignores the caller's
 // clip rect: only dev's pan/zoom (dev->roi) drives what gets processed, so resizing/dragging a
 // compare split line never triggers a reprocess.
 static gboolean _compute_main_roi(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, dt_iop_roi_t *roi)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(roi)) return FALSE;
-  if(!dev->roi.output_inited || dev->roi.width <= 0 || dev->roi.height <= 0) return FALSE;
+  if(!dt_dev_roi_request_valid(dev) || dt_dev_viewport_box_width(dev) <= 0 || dt_dev_viewport_box_height(dev) <= 0) return FALSE;
   if(pipe->processed_width <= 0 || pipe->processed_height <= 0) return FALSE;
 
-  const float scale = dev->roi.natural_scale * dev->roi.scaling;
+  const float scale = dt_dev_roi_request_natural_scale(dev) * dt_dev_viewport_scaling(dev);
   const int roi_width = (int)roundf(scale * pipe->processed_width);
   const int roi_height = (int)roundf(scale * pipe->processed_height);
 
-  roi->width = MAX(1, MIN(roi_width, dev->roi.width));
-  roi->height = MAX(1, MIN(roi_height, dev->roi.height));
-  roi->x = (int)roundf(dev->roi.x * roi_width - roi->width * .5f);
-  roi->y = (int)roundf(dev->roi.y * roi_height - roi->height * .5f);
+  roi->width = MAX(1, MIN(roi_width, dt_dev_viewport_box_width(dev)));
+  roi->height = MAX(1, MIN(roi_height, dt_dev_viewport_box_height(dev)));
+  roi->x = (int)roundf(dt_dev_viewport_center_x(dev) * roi_width - roi->width * .5f);
+  roi->y = (int)roundf(dt_dev_viewport_center_y(dev) * roi_height - roi->height * .5f);
   roi->scale = scale;
   return TRUE;
 }
@@ -172,10 +173,10 @@ static gboolean _compute_main_roi(const dt_develop_t *dev, const dt_dev_pixelpip
 static gboolean _compute_preview_roi(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe, dt_iop_roi_t *roi)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || IS_NULL_PTR(roi)) return FALSE;
-  if(!dev->roi.output_inited) return FALSE;
+  if(!dt_dev_roi_request_valid(dev)) return FALSE;
   if(pipe->processed_width <= 0 || pipe->processed_height <= 0) return FALSE;
 
-  const float scale = dev->roi.natural_scale;
+  const float scale = dt_dev_roi_request_natural_scale(dev);
   roi->width = MAX(1, (int)roundf(scale * pipe->processed_width));
   roi->height = MAX(1, (int)roundf(scale * pipe->processed_height));
   roi->x = 0;
@@ -321,11 +322,11 @@ static void _draw_preview_fallback(dt_dev_snapshot_engine_t *engine, dt_develop_
   const float ppd = dt_gui_get_global()->ppd;
   const float preview_wd = engine->preview_locked.width / ppd;
   const float preview_ht = engine->preview_locked.height / ppd;
-  const float preview_scale = dev->roi.scaling;
-  const float tx = 0.5f * width - dev->roi.x * preview_wd * preview_scale;
-  const float ty = 0.5f * height - dev->roi.y * preview_ht * preview_scale;
+  const float preview_scale = dt_dev_viewport_scaling(dev);
+  const float tx = 0.5f * width - dt_dev_viewport_center_x(dev) * preview_wd * preview_scale;
+  const float ty = 0.5f * height - dt_dev_viewport_center_y(dev) * preview_ht * preview_scale;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, engine->preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, engine->preview_locked.entry);
   cairo_surface_set_device_scale(engine->preview_locked.surface, ppd, ppd);
   cairo_save(cr);
   cairo_translate(cr, tx, ty);
@@ -334,7 +335,7 @@ static void _draw_preview_fallback(dt_dev_snapshot_engine_t *engine, dt_develop_
   cairo_set_source_surface(cr, engine->preview_locked.surface, 0, 0);
   cairo_fill(cr);
   cairo_restore(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, engine->preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, engine->preview_locked.entry);
 }
 
 gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int32_t imgid,
@@ -390,16 +391,36 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
       }
     }
 
+    // Forms (mask geometry) aren't part of a history item's own params blob -- they're
+    // snapshotted per-commit as hist->forms (see dt_dev_pop_history_items_ext() and
+    // doc/masks_history_dedup.md). Replacing frozen->history above left frozen->forms
+    // untouched, still holding whatever dt_dev_load_image() read from this image's *saved*
+    // main.masks_history a few lines up -- not this override's live, possibly-uncommitted
+    // shapes. Re-derive it with the same accumulation rule dt_dev_pop_history_items_ext()
+    // uses: walk up to history_end_override, keep the last non-NULL hist->forms. Without
+    // this, a module needing mask history (retouch, drawn-mask blending) resolves its
+    // blend_params->mask_id against a group that pipe->forms doesn't contain, and its
+    // shapes silently fail to render in the snapshot.
+    GList *forms = NULL;
+    int hist_pos = 0;
+    for(GList *history = g_list_first(frozen->history); history && hist_pos < history_end_override;
+        history = g_list_next(history), hist_pos++)
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+      if(hist->forms) forms = hist->forms;
+    }
+    dt_masks_replace_current_forms(frozen, forms);
+
     dt_dev_set_history_end_ext(frozen, history_end_override);
     dt_dev_set_history_hash(frozen, dt_dev_history_compute_hash(frozen));
   }
 
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, frozen->image_storage.id, DT_MIPMAP_FULL,
+  dt_mipmap_cache_get(&buf, frozen->image_storage.id, DT_MIPMAP_FULL,
                       DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf) || buf.width <= 0 || buf.height <= 0)
   {
     dt_print(DT_DEBUG_DEV, "[dev_snapshot] capture failed: mipmap full unavailable for imgid=%d\n", imgid);
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     dt_dev_cleanup(frozen);
     dt_free(frozen);
     goto fail;
@@ -408,7 +429,7 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
   engine = (dt_dev_snapshot_engine_t *)calloc(1, sizeof(dt_dev_snapshot_engine_t));
   if(IS_NULL_PTR(engine))
   {
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     dt_dev_cleanup(frozen);
     dt_free(frozen);
     goto fail;
@@ -421,7 +442,7 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
   engine->preview_pipe = (dt_dev_pixelpipe_t *)calloc(1, sizeof(dt_dev_pixelpipe_t));
   if(IS_NULL_PTR(engine->pipe) || IS_NULL_PTR(engine->preview_pipe))
   {
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     if(engine->pipe) dt_free(engine->pipe);
     if(engine->preview_pipe) dt_free(engine->preview_pipe);
     dt_pthread_mutex_destroy(&engine->lock);
@@ -440,7 +461,7 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
   if(!pipe_inited || !preview_inited)
   {
     dt_print(DT_DEBUG_DEV, "[dev_snapshot] capture failed: pixelpipe init failed for imgid=%d\n", imgid);
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     if(pipe_inited) dt_dev_pixelpipe_cleanup(engine->pipe);
     dt_free(engine->pipe);
     if(preview_inited) dt_dev_pixelpipe_cleanup(engine->preview_pipe);
@@ -475,7 +496,7 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
     dt_dev_pixelpipe_get_roi_out(p, p->iwidth, p->iheight, &p->processed_width, &p->processed_height);
   }
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   engine->frozen = frozen; // ownership transferred: pipe nodes reference frozen->iop instances.
 
@@ -539,7 +560,7 @@ void dt_dev_snapshot_draw(dt_dev_snapshot_t *snap, cairo_t *cri, struct dt_devel
   {
     if(dt_dev_lock_pipe_surface(dev, engine->pipe, &engine->locked, &engine->wait, "snapshot", FALSE)
        && !IS_NULL_PTR(engine->locked.surface))
-      dt_dev_render_locked_surface(cri, dev, &engine->locked, width, height, dev->roi.border_size, bg_color);
+      dt_dev_render_locked_surface(cri, dev, &engine->locked, width, height, dt_dev_viewport_border_size(dev), bg_color);
   }
   else
   {

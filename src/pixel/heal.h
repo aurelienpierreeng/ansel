@@ -41,8 +41,8 @@ typedef struct heal_params_cl_t
   int devid;
 } heal_params_cl_t;
 
-dt_heal_cl_global_t *dt_heal_init_cl_global(void);
-void dt_heal_free_cl_global(dt_heal_cl_global_t *g);
+void dt_heal_init_cl_global(void);
+void dt_heal_free_cl_global(void);
 
 heal_params_cl_t *dt_heal_init_cl(const int devid);
 void dt_heal_free_cl(heal_params_cl_t *p);

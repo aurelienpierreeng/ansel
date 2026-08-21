@@ -17,28 +17,28 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/widget_settings.h"
 #include "common/conf.h"
-#include "common/macros.h"
+#include "system/macros.h"
+#include "develop/pipe_cache_policy.h"
 #include "system/mem_alloc.h"
 #include "common/hash.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/paths.h"
-#include "gui/gtk.h"
-#include "common/dtpthread.h"
+#include "gui/application.h"
+#include "system/dtpthread.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/supervisor.h"
 #include "develop/blend.h"
-#include "gui/color_picker_proxy.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include <stdint.h>
 #include <stdlib.h>
 
-// Keep a preview-like virtual pipe in sync with history without running pixels.
-static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
 static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe,
                                                     const uint32_t history_end, GList *start_node,
                                                     const char *debug_label);
@@ -49,32 +49,17 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
                                                         const guint64 producer_node_key,
                                                         gpointer user_data);
 
-typedef struct dt_dev_pixelpipe_cache_wait_record_t
-{
-  dt_dev_pixelpipe_cache_wait_t *wait;
-  uint64_t request_id;
-  int64_t queued_at_us;
-} dt_dev_pixelpipe_cache_wait_record_t;
-
-typedef struct dt_dev_pixelpipe_cache_wait_manager_t
-{
-  dt_pthread_mutex_t lock;
-  GList *pending;
-  gboolean connected;
-  gboolean wait_cursor_active;
-  uint64_t next_request_id;
-  uint64_t queued_requests;
-  uint64_t served_requests;
-  uint64_t cancelled_requests;
-  uint64_t immediate_hits;
-  uint64_t misses;
-} dt_dev_pixelpipe_cache_wait_manager_t;
-
-static dt_dev_pixelpipe_cache_wait_manager_t _cache_wait_manager
-    = { .lock = { PTHREAD_MUTEX_INITIALIZER }, .pending = NULL, .connected = FALSE,
-        .wait_cursor_active = FALSE,
-        .next_request_id = 1, .queued_requests = 0, .served_requests = 0,
-        .cancelled_requests = 0, .immediate_hits = 0, .misses = 0 };
+/* What stays here is the TRANSPORT and the PRESENTATION of the wait queue, not the queue:
+ * whether we are currently subscribed to the ready signal, and whether the busy cursor is up.
+ * The queue, its lock, its counters and its matching rule are cache state and live in
+ * caches/pixelpipe_cache_wait.{h,c}.
+ *
+ * Both flags are GUI-thread-only, like every accessor below: DT_SIGNAL_CACHELINE_READY is
+ * declared asynchronous (control/signal.c), so its handler is marshalled to the main loop, and
+ * every enqueue site is an expose, a widget callback or an idle. That asynchrony is load-bearing
+ * and must not be optimised away -- see the file comment in caches/pixelpipe_cache_wait.h. */
+static gboolean _cache_wait_connected = FALSE;
+static gboolean _cache_wait_cursor_active = FALSE;
 
 static gboolean _cache_wait_cursor_progress(gpointer user_data)
 {
@@ -95,60 +80,35 @@ static gboolean _cache_wait_cursor_restore(gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
-static dt_dev_pixelpipe_cache_wait_record_t *_cache_wait_manager_remove_wait_locked(dt_dev_pixelpipe_cache_wait_t *wait)
+static void _dump_one_pending(const dt_dev_pixelpipe_cache_wait_t *wait, const int64_t age_us,
+                              gpointer user_data)
 {
-  for(GList *iter = _cache_wait_manager.pending; iter; iter = g_list_next(iter))
-  {
-    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
-    if(!IS_NULL_PTR(record) && record->wait == wait)
-    {
-      _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
-      return record;
-    }
-  }
-
-  return NULL;
+  (void)user_data;
+  dt_print(DT_DEBUG_PIPECACHE,
+           "[cache-wait] pending id=%" PRIu64 " owner=%s hash=%" PRIu64
+           " target=%s connected=%d age_ms=%" PRId64 "\n",
+           wait->request_id,
+           !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
+           wait->hash,
+           !IS_NULL_PTR(wait->module) ? wait->module_op : "backbuf",
+           wait->connected,
+           MAX(age_us / 1000, 0));
 }
 
 void dt_dev_pixelpipe_cache_wait_dump_pending(const char *reason)
 {
   const char *context = !IS_NULL_PTR(reason) ? reason : "unspecified";
-  const int64_t now_us = g_get_monotonic_time();
 
-  // This is a diagnostic snapshot only. Skip it rather than stalling GUI teardown
-  // behind a cache-ready callback that is already updating the same wait list.
-  if(dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
-  {
-    dt_print(DT_DEBUG_PIPECACHE, "[cache-wait] dump reason=%s skipped=lock-busy\n", context);
-    return;
-  }
+  uint64_t queued = 0, served = 0, cancelled = 0, immediate = 0, misses = 0;
+  dt_pixelpipe_cache_wait_get_stats(&queued, &served, &cancelled, &immediate, &misses);
 
-  const guint pending_count = g_list_length(_cache_wait_manager.pending);
   dt_print(DT_DEBUG_PIPECACHE,
            "[cache-wait] dump reason=%s pending=%u queued=%" PRIu64 " served=%" PRIu64
            " cancelled=%" PRIu64 " immediate=%" PRIu64 " misses=%" PRIu64 "\n",
-           context, pending_count, _cache_wait_manager.queued_requests,
-           _cache_wait_manager.served_requests, _cache_wait_manager.cancelled_requests,
-           _cache_wait_manager.immediate_hits, _cache_wait_manager.misses);
+           context, dt_pixelpipe_cache_wait_pending_count(), queued, served, cancelled,
+           immediate, misses);
 
-  for(GList *iter = _cache_wait_manager.pending; iter; iter = g_list_next(iter))
-  {
-    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
-    dt_dev_pixelpipe_cache_wait_t *wait = !IS_NULL_PTR(record) ? record->wait : NULL;
-    if(IS_NULL_PTR(wait) || IS_NULL_PTR(record)) continue;
-
-    const int64_t age_ms = MAX((now_us - record->queued_at_us) / 1000, 0);
-    dt_print(DT_DEBUG_PIPECACHE,
-             "[cache-wait] pending id=%" PRIu64 " owner=%s hash=%" PRIu64
-             " target=%s connected=%d age_ms=%" PRId64 "\n",
-             wait->request_id,
-             !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
-             wait->hash,
-             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf",
-             wait->connected,
-             age_ms);
-  }
-  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
+  dt_pixelpipe_cache_wait_foreach_pending(_dump_one_pending, NULL);
 }
 
 static gboolean _module_requires_global_histogram_output_cache(const dt_dev_pixelpipe_t *pipe,
@@ -173,11 +133,34 @@ static gboolean _module_requires_global_histogram_input_cache(const dt_dev_pixel
   return !strcmp(module->op, "gamma");
 }
 
+/**
+ * @brief Is @p module the one a picker samples, or the one feeding it?
+ *
+ * @details A picker reads its module's OUTPUT and the output of the enabled module before it
+ * (its own input), so both must keep a host copy. @p picker_module is the identity the caller
+ * sampled once for the whole walk, not the live dev field -- and it is only ever compared here,
+ * never followed, so a module torn down since the sample cannot be dereferenced through it.
+ *
+ * This was dt_iop_color_picker_force_cache() in gui/color_picker_proxy.c, which read
+ * pipe->dev->color_picker.module itself. Nothing about it was GUI code: it walks pipe nodes and
+ * compares module identities, and the seal was its only caller.
+ */
+static gboolean _module_feeds_color_picker(const dt_dev_pixelpipe_t *pipe,
+                                           const dt_iop_module_t *module,
+                                           const dt_iop_module_t *picker_module)
+{
+  if(IS_NULL_PTR(picker_module) || IS_NULL_PTR(module)) return FALSE;
+  if(module == picker_module) return TRUE;
+
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, picker_module);
+  const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
+
+  return !IS_NULL_PTR(previous_piece) && previous_piece->module == module;
+}
+
 static gchar *_get_debug_pipe_name(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
 {
-  if(!IS_NULL_PTR(dev) && !IS_NULL_PTR(pipe) && dev->virtual_pipe == pipe)
-    return g_strdup("virtual-preview");
-
+  (void)dev;
   return g_strdup(dt_pixelpipe_get_pipe_name(!IS_NULL_PTR(pipe) ? pipe->type : DT_DEV_PIXELPIPE_NONE));
 }
 
@@ -346,6 +329,15 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
   // realtime drawing, where it is pure overhead.
   const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
 
+  // ONE read each, for the whole walk. Both belong to the GUI thread, and both were read LIVE at
+  // every node: a focus change or a picker toggle landing mid-walk gave the early nodes one
+  // answer and the later nodes another, so the sealed pipe described no single moment. Sampling
+  // them here does not make the pipeline the owner of these facts -- having the GUI publish them
+  // instead needs the layer flip, since gui/ may not reach up into develop/ today -- but it does
+  // make one resync describe one moment.
+  const dt_iop_module_t *const focused_module = pipe->dev->gui_module;
+  const dt_iop_module_t *const picker_module = pipe->dev->color_picker.module;
+
   gboolean current_output_must_cache_host = TRUE;
 
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
@@ -367,7 +359,7 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
     const gboolean user_requested_cache = dt_conf_get_bool(string);
     dt_free(string);
 
-    const gboolean color_picker_on = dt_iop_color_picker_force_cache(pipe, module);
+    const gboolean color_picker_on = _module_feeds_color_picker(pipe, module, picker_module);
     const gboolean global_hist_output_on
         = !realtime && _module_requires_global_histogram_output_cache(pipe, module);
     const gboolean global_hist_input_on
@@ -380,25 +372,26 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
            && (piece->request_histogram & DT_REQUEST_ON));
     const gboolean active_in_gui
         = (pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-           && pipe->dev->gui_module == module;
+           && focused_module == module;
 
     const gboolean has_autoset = pipe->autoset && !IS_NULL_PTR(module->autoset);
 
-    const gboolean previous_output_must_cache_host
-        = !supports_opencl || active_in_gui || module_hist_on || global_hist_input_on || has_autoset;
+    // The decision is a pure function of these nine facts (develop/pipe_cache_policy.h), pinned
+    // by src/tests/unittests/test_pipe_cache_policy.c. What stays here is GATHERING them, which
+    // is the part that needs a pipe and a dev to look at.
+    const dt_dev_pipe_cache_policy_inputs_t inputs = { .authored_cache = authored_cache,
+                                                       .user_requested_cache = user_requested_cache,
+                                                       .supports_opencl = supports_opencl,
+                                                       .color_picker_on = color_picker_on,
+                                                       .global_hist_output_on = global_hist_output_on,
+                                                       .global_hist_input_on = global_hist_input_on,
+                                                       .module_hist_on = module_hist_on,
+                                                       .active_in_gui = active_in_gui,
+                                                       .has_autoset = has_autoset };
 
     piece->cache_output_on_ram
-        = authored_cache || user_requested_cache || color_picker_on
-          || global_hist_output_on
-          || current_output_must_cache_host;
-
-    // A GPU-capable module that itself needs no host copy of its input must not erase a host
-    // requirement inherited from further downstream (e.g. a CPU-only module reached through it,
-    // or through a module that is disabled right now but was enabled a moment ago and left a
-    // stale host-less cacheline behind). Once established, the requirement has to keep
-    // propagating upstream, module after module, or an intermediate GPU module silently resets
-    // it and the module before it skips the readback that a later, non-adjacent consumer needs.
-    current_output_must_cache_host = previous_output_must_cache_host || current_output_must_cache_host;
+        = dt_dev_pipe_cache_policy_decide(&inputs, current_output_must_cache_host,
+                                          &current_output_must_cache_host);
   }
 }
 
@@ -407,7 +400,10 @@ void dt_dev_pixelpipe_rebuild_all_real(dt_develop_t *dev)
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_REMOVE);
   _change_pipe(dev->pipe, DT_DEV_PIPE_REMOVE);
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_REMOVE);
+  /* Rebuilt here, and deliberately not PUBLISHED here: these are the flag-raising paths, and
+   * nothing may observe geometry before the publication that belongs with it -- the ordering
+   * rule from the fix for #1157. */
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_resync_history_main_real(dt_develop_t *dev)
@@ -420,8 +416,7 @@ void dt_dev_pixelpipe_resync_history_preview_real(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_SYNCH);
-  // Virtual pipe mirrors preview history for GUI coordinate transforms.
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_SYNCH);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_resync_history_all_real(dt_develop_t *dev)
@@ -441,8 +436,7 @@ void dt_dev_pixelpipe_update_history_preview_real(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_TOP_CHANGED);
-  // Virtual pipe mirrors preview history for GUI coordinate transforms.
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_TOP_CHANGED);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_update_history_all_real(dt_develop_t *dev)
@@ -456,8 +450,7 @@ void dt_dev_pixelpipe_update_zoom_preview_real(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev) || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_ZOOMED);
-  // Keep the virtual pipe aligned with preview ROI/zoom changes for GUI transforms.
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_ZOOMED);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
@@ -469,12 +462,12 @@ void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
    * best-effort backbuffer policy. */
   dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
   _change_pipe(dev->pipe, DT_DEV_PIPE_ZOOMED);
-  _sync_virtual_pipe(dev, DT_DEV_PIPE_ZOOMED);
+  dt_geometry_chain_rebuild(dev);
 }
 
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
-  dt_dev_pixelpipe_cache_flush(dt_pixelpipe_cache_get_global(), -1);
+  dt_dev_pixelpipe_cache_flush(-1);
   if(dt_gui_widgets_suppressed() || IS_NULL_PTR(dev) || !dev->gui_attached) return;
   dt_dev_pixelpipe_rebuild_all(dev);
 }
@@ -571,8 +564,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   // upstream in the pipeline for proper pipeline cache invalidation, so we need to browse the pipeline
   // backwards.
 
-  // The virtual pipe is expected to be ready before calling this.
-  // This function no longer supports NULL pipes or ad-hoc temp nodes.
+  // This function does not support NULL pipes or ad-hoc temp nodes.
 
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
@@ -743,29 +735,17 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
   // entry is reported as a miss, so the request below waits for the pipeline to publish a host copy
   // (modules whose output the GUI samples, e.g. initialscale, already cache to RAM).
   if(display_hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dt_dev_pixelpipe_cache_peek(dt_pixelpipe_cache_get_global(), display_hash, &buffer, &entry, -1, NULL)
+     && dt_dev_pixelpipe_cache_peek(display_hash, &buffer, &entry, -1, NULL)
      &&  !IS_NULL_PTR(buffer) && !IS_NULL_PTR(entry))
   {
-    // These counters are only diagnostic; cache consumers should not wait for
-    // queue lifecycle updates before reopening an already available cacheline.
-    if(!dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
-    {
-      _cache_wait_manager.immediate_hits++;
-      dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
-    }
+    dt_pixelpipe_cache_wait_count_immediate_hit();
     dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-immediate-hit");
     if(!IS_NULL_PTR(data)) *data = buffer;
     if(!IS_NULL_PTR(cache_entry)) *cache_entry = entry;
     return TRUE;
   }
 
-  // A missed GUI peek already requests cache publication below. The miss counter
-  // is diagnostic, so it must not block redraw/picker paths under contention.
-  if(!dt_pthread_mutex_trylock(&_cache_wait_manager.lock))
-  {
-    _cache_wait_manager.misses++;
-    dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
-  }
+  dt_pixelpipe_cache_wait_count_miss();
 
   gboolean request_cacheline = TRUE;
   if(!IS_NULL_PTR(wait) && !IS_NULL_PTR(restart) && hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
@@ -781,6 +761,24 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
       dt_dev_pixelpipe_cache_wait_cleanup(wait, "peek-gui-target-changed");
       wait->pipe = pipe;
       wait->module = !IS_NULL_PTR(piece) ? piece->module : NULL;
+
+      // Copy the labels now, while both objects are certainly alive. The queue never reads
+      // through the two identity pointers above; everything it reports about a waiter comes
+      // from here.
+      const dt_iop_module_t *target_module = !IS_NULL_PTR(piece) ? piece->module : NULL;
+      if(!IS_NULL_PTR(target_module))
+      {
+        g_strlcpy(wait->module_op, target_module->op, sizeof(wait->module_op));
+        wait->module_multi_priority = target_module->multi_priority;
+      }
+      else
+      {
+        wait->module_op[0] = '\0';
+        wait->module_multi_priority = 0;
+      }
+      wait->pipe_type = (int)pipe->type;
+      wait->pipe_imgid = pipe->imgid;
+
       wait->hash = hash;
       // Record the producing node identity so CACHELINE_READY can serve this waiter by
       // its target module even if the exact awaited hash drifts before publish (§8). A
@@ -798,26 +796,24 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
         wait->owner_object = restart_data;
       wait->connected = TRUE;
 
-      dt_pthread_mutex_lock(&_cache_wait_manager.lock);
-      wait->request_id = _cache_wait_manager.next_request_id++;
-      _cache_wait_manager.queued_requests++;
-      dt_dev_pixelpipe_cache_wait_record_t *record = calloc(1, sizeof(*record));
-      record->wait = wait;
-      record->request_id = wait->request_id;
-      record->queued_at_us = g_get_monotonic_time();
-      _cache_wait_manager.pending = g_list_prepend(_cache_wait_manager.pending, record);
-      if(!_cache_wait_manager.connected)
+      // The queue assigns the request id and reports whether it just went from empty to
+      // non-empty; the subscription and the cursor are ours, and both hang off exactly that
+      // transition -- which is why they were one flag each in the old manager.
+      const gboolean queue_became_busy = dt_pixelpipe_cache_wait_enqueue(wait);
+      if(queue_became_busy)
       {
-        DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
-                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
-        _cache_wait_manager.connected = TRUE;
+        if(!_cache_wait_connected)
+        {
+          DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY,
+                                          G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
+          _cache_wait_connected = TRUE;
+        }
+        if(!_cache_wait_cursor_active)
+        {
+          _cache_wait_cursor_active = TRUE;
+          activate_wait_cursor = TRUE;
+        }
       }
-      if(!_cache_wait_manager.wait_cursor_active)
-      {
-        _cache_wait_manager.wait_cursor_active = TRUE;
-        activate_wait_cursor = TRUE;
-      }
-      dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
       if(activate_wait_cursor)
         g_main_context_invoke(NULL, _cache_wait_cursor_progress, NULL);
 
@@ -826,12 +822,12 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
                wait->request_id,
                !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
                wait->hash,
-               !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf");
+               !IS_NULL_PTR(wait->module) ? wait->module_op : "backbuf");
 
       if(dt_supervisor_active())
         dt_supervisor_cache_wait(DT_SV_CREATE, wait->request_id, wait->hash, wait->owner_tag,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
+                                 !IS_NULL_PTR(wait->module) ? wait->module_op : NULL,
+                                 wait->module_multi_priority,
                                  (int)pipe->type, pipe->imgid, TRUE, NULL);
     }
     else
@@ -847,8 +843,8 @@ gboolean dt_dev_pixelpipe_cache_peek_gui(dt_dev_pixelpipe_t *pipe, const dt_dev_
        * finishes" signature. */
       if(dt_supervisor_active())
         dt_supervisor_cache_wait(DT_SV_READ, wait->request_id, wait->hash, wait->owner_tag,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
-                                 !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
+                                 !IS_NULL_PTR(wait->module) ? wait->module_op : NULL,
+                                 wait->module_multi_priority,
                                  (int)pipe->type, pipe->imgid, FALSE, "dedup-poll");
     }
   }
@@ -900,42 +896,25 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
                                                         const guint64 producer_node_key,
                                                         gpointer user_data)
 {
-  GList *to_restart = NULL;
   gboolean restore_wait_cursor = FALSE;
-  const gboolean node_key_valid
-      = producer_node_key != 0 && producer_node_key != DT_PIXELPIPE_CACHE_HASH_INVALID;
+  gboolean drained = FALSE;
 
-  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
-  for(GList *iter = _cache_wait_manager.pending; iter; )
-  {
-    GList *next = g_list_next(iter);
-    dt_dev_pixelpipe_cache_wait_record_t *record = iter->data;
-    dt_dev_pixelpipe_cache_wait_t *wait = !IS_NULL_PTR(record) ? record->wait : NULL;
-    const gboolean node_match = node_key_valid && !IS_NULL_PTR(wait)
-                                && wait->target_node_key == producer_node_key;
-    if(!IS_NULL_PTR(wait) && wait->connected && (wait->hash == hash || node_match))
-    {
-      _cache_wait_manager.pending = g_list_delete_link(_cache_wait_manager.pending, iter);
-      _cache_wait_manager.served_requests++;
-      wait->connected = FALSE;
-      to_restart = g_list_prepend(to_restart, wait);
-      dt_free(record);
-    }
-    iter = next;
-  }
+  // The queue decides who this publication satisfies and hands them back; running their
+  // callbacks is ours, and stays OUTSIDE any queue lock, because a restart handler queues
+  // redraws and asks for new cachelines.
+  GList *to_restart = dt_pixelpipe_cache_wait_take_matching(hash, producer_node_key, &drained);
 
-  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
+  if(drained && _cache_wait_connected)
   {
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
-    _cache_wait_manager.connected = FALSE;
+    _cache_wait_connected = FALSE;
   }
-  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.wait_cursor_active)
+  if(drained && _cache_wait_cursor_active)
   {
-    _cache_wait_manager.wait_cursor_active = FALSE;
+    _cache_wait_cursor_active = FALSE;
     restore_wait_cursor = TRUE;
   }
-  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
   if(restore_wait_cursor)
     g_main_context_invoke(NULL, _cache_wait_cursor_restore, NULL);
 
@@ -955,15 +934,15 @@ static void _dt_dev_pixelpipe_cache_wait_ready_callback(gpointer instance, const
              wait->request_id,
              !IS_NULL_PTR(wait->owner_tag) ? wait->owner_tag : "(unknown)",
              wait->hash, hash,
-             !IS_NULL_PTR(wait->module) ? wait->module->op : "backbuf",
+             !IS_NULL_PTR(wait->module) ? wait->module_op : "backbuf",
              drift_serve ? " (drift: node-key)" : "");
 
     if(dt_supervisor_active())
       dt_supervisor_cache_wait(DT_SV_DELETE, wait->request_id, wait->hash, wait->owner_tag,
-                               !IS_NULL_PTR(wait->module) ? wait->module->op : NULL,
-                               !IS_NULL_PTR(wait->module) ? wait->module->multi_priority : 0,
-                               !IS_NULL_PTR(wait->pipe) ? (int)wait->pipe->type : -1,
-                               !IS_NULL_PTR(wait->pipe) ? wait->pipe->imgid : -1, FALSE,
+                               !IS_NULL_PTR(wait->module) ? wait->module_op : NULL,
+                               wait->module_multi_priority,
+                               !IS_NULL_PTR(wait->pipe) ? (int)wait->pipe_type : -1,
+                               !IS_NULL_PTR(wait->pipe) ? wait->pipe_imgid : -1, FALSE,
                                drift_serve ? "served (drift: node-key)" : "served");
 
     wait->pipe = NULL;
@@ -983,45 +962,47 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
 {
   if(IS_NULL_PTR(wait) || !wait->connected) return;
   gboolean restore_wait_cursor = FALSE;
-  int64_t queued_at_us = 0;
   const uint64_t request_id = wait->request_id;
   const uint64_t hash = wait->hash;
   const char *owner_tag = wait->owner_tag;
-  const dt_iop_module_t *module = wait->module;
-  const dt_dev_pixelpipe_t *cancel_pipe = wait->pipe;
+  // Snapshot the identity and its labels together, before the reset below clears them. Nothing
+  // here dereferences the module or the pipe: the labels were copied when the wait was queued,
+  // precisely because either object can be gone by the time a wait is cancelled.
+  const gboolean had_module = !IS_NULL_PTR(wait->module);
+  const gboolean had_pipe = !IS_NULL_PTR(wait->pipe);
+  const char *module_op = had_module ? wait->module_op : NULL;
+  const int module_multi_priority = wait->module_multi_priority;
+  const int cancel_pipe_type = wait->pipe_type;
+  const int32_t cancel_pipe_imgid = wait->pipe_imgid;
   const char *cancel_reason = !IS_NULL_PTR(reason) ? reason : "unspecified";
 
-  dt_pthread_mutex_lock(&_cache_wait_manager.lock);
-  dt_dev_pixelpipe_cache_wait_record_t *record = _cache_wait_manager_remove_wait_locked(wait);
-  if(!IS_NULL_PTR(record))
-  {
-    queued_at_us = record->queued_at_us;
-    dt_free(record);
-  }
-  _cache_wait_manager.cancelled_requests++;
-  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.connected)
+  gboolean drained = FALSE;
+  dt_pixelpipe_cache_wait_cancel(wait, &drained);
+
+  if(drained && _cache_wait_connected)
   {
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
                                        G_CALLBACK(_dt_dev_pixelpipe_cache_wait_ready_callback), NULL);
-    _cache_wait_manager.connected = FALSE;
+    _cache_wait_connected = FALSE;
   }
-  if(IS_NULL_PTR(_cache_wait_manager.pending) && _cache_wait_manager.wait_cursor_active)
+  if(drained && _cache_wait_cursor_active)
   {
-    _cache_wait_manager.wait_cursor_active = FALSE;
+    _cache_wait_cursor_active = FALSE;
     restore_wait_cursor = TRUE;
   }
-  dt_pthread_mutex_unlock(&_cache_wait_manager.lock);
   if(restore_wait_cursor)
     g_main_context_invoke(NULL, _cache_wait_cursor_restore, NULL);
 
-  const int64_t age_ms = queued_at_us > 0 ? MAX((g_get_monotonic_time() - queued_at_us) / 1000, 0) : -1;
+  // -1: the queue owns the enqueue timestamp, and a cancellation is not worth an extra query
+  // into it. The dump reports real ages for everything still pending.
+  const int64_t age_ms = -1;
   dt_print(DT_DEBUG_PIPECACHE,
            "[cache-wait] cancelled id=%" PRIu64 " owner=%s hash=%" PRIu64
            " target=%s age_ms=%" PRId64 " reason=%s\n",
            request_id,
            !IS_NULL_PTR(owner_tag) ? owner_tag : "(unknown)",
            hash,
-           !IS_NULL_PTR(module) ? module->op : "backbuf",
+           had_module ? module_op : "backbuf",
            age_ms,
            cancel_reason);
 
@@ -1030,10 +1011,9 @@ void dt_dev_pixelpipe_cache_wait_cleanup(dt_dev_pixelpipe_cache_wait_t *wait, co
     char note[64];
     g_snprintf(note, sizeof(note), "cancelled: %s", cancel_reason);
     dt_supervisor_cache_wait(DT_SV_DELETE, request_id, hash, owner_tag,
-                             !IS_NULL_PTR(module) ? module->op : NULL,
-                             !IS_NULL_PTR(module) ? module->multi_priority : 0,
-                             !IS_NULL_PTR(cancel_pipe) ? (int)cancel_pipe->type : -1,
-                             !IS_NULL_PTR(cancel_pipe) ? cancel_pipe->imgid : -1, FALSE, note);
+                             module_op, module_multi_priority,
+                             had_pipe ? cancel_pipe_type : -1,
+                             had_pipe ? cancel_pipe_imgid : -1, FALSE, note);
   }
 
   wait->pipe = NULL;
@@ -1444,11 +1424,40 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
 
     // Panning and zooming change the ROI. Some GUI modes (crop in editing mode) too.
     // dt_dev_get_roi_in() should have run before
+    //
+    // These two folds are ALSO how the darkroom viewport reaches this hash, which is why the
+    // pipe's latched dt_dev_roi_request_t (pixelpipe_hb.h) deliberately does NOT contribute its
+    // generation here. Every field of that record reaches the ROI by construction, in
+    // _update_darkroom_roi(): zoom and the fit scale become roi.scale (their product), the
+    // centre becomes roi.x/roi.y, the box and the processed size become roi.width/height. Even
+    // finalscale's piece->enabled -- the one consumer that reads the record rather than the ROI
+    // -- is a function of that same product, and a disabled piece is skipped above, so a toggle
+    // changes the chain anyway.
+    //
+    // Folding the generation on top would therefore add no discriminating power and would only
+    // over-invalidate: a republication that advances the generation while producing identical
+    // ROIs (a sub-pixel pan that rounds to the same roi.x, a box change the fminf clamp absorbs)
+    // would rekey the whole FULL-pipe cache chain for pixels that are bit-identical. Content,
+    // not version, is the right key here -- unlike mask_preview_settings_revision below, which
+    // hashes a revision precisely because its state reaches no ROI at all.
     local_hash = dt_hash(local_hash, (const char *)&piece->roi_in, sizeof(dt_iop_roi_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->roi_out, sizeof(dt_iop_roi_t));
 
     local_hash = dt_hash(local_hash, (const char *)&piece->dsc_in, sizeof(dt_iop_buffer_dsc_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->dsc_out, sizeof(dt_iop_buffer_dsc_t));
+
+    /* The pipe's drawn-mask rasterisation step changes the mask a module blends with, so it
+     * changes that module's pixels. It belongs HERE, with request_mask_display below, and for
+     * the same reason: it is global GUI state that no module's history carries, so
+     * dt_iop_commit_params() would only fold it when that module's own parameters changed --
+     * flipping the preference from auto to never would leave every cached line valid-looking
+     * and stale.
+     *
+     * Only for a module that actually draws a mask: the raw stages upstream cannot carry one,
+     * and rehashing them would cost cache misses for pixels that cannot move. */
+    if((piece->module->blend_params->mask_mode & DEVELOP_MASK_SHAPE)
+       && piece->module->blend_params->mask_id > 0)
+      local_hash = dt_hash(local_hash, (const char *)&pipe->mask_rasterization_step, sizeof(int));
 
 /*
     fprintf(stdout, "start->end : %-17s | ROI in: %4ix%-4i @%2.4f | ROI out: %4ix%-4i @%2.4f\n", piece->module->op,
@@ -1478,8 +1487,8 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
 
       // bypass_cache_variant (see dt_iop_module_t.bypass_cache_variant) is, like
       // request_mask_display above, module-owned GUI state whose real effect a module such as
-      // retouch applies only to this main/FULL pipe -- never to preview/virtual-preview, which
-      // always render as if none of these toggles were active. But the field itself lives on
+      // retouch applies only to this main/FULL pipe -- never to the preview pipe, which always
+      // renders as if none of these toggles were active. But the field itself lives on
       // the shared dt_iop_module_t, so it reads the same non-zero value from every pipe type. Left
       // ungated, a preview-pipe run with the same ROI/params (e.g. at zoom == fit) can compute the
       // exact same hash chain as the FULL pipe despite publishing different pixels, and either
@@ -1689,8 +1698,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
     _refresh_pipe_detail_mask_state(pipe);
 
   // A call chain that already holds history_mutex as writer on this same thread can re-enter
-  // here (e.g. history-commit paths that resync the virtual pipe while still holding the write
-  // lock). dt_pthread_rwlock_rdlock is same-thread-recursive for this exact case (see
+  // here (e.g. history-commit paths that resync a pipe while still holding the write lock). dt_pthread_rwlock_rdlock is same-thread-recursive for this exact case (see
   // dtpthread.h), so this proceeds immediately instead of deadlocking or deferring the sync.
   const double _history_mutex_hold_start = dt_get_wtime();
   dt_pthread_rwlock_rdlock(&pipe->dev->history_mutex);
@@ -1759,32 +1767,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
   dt_free(type);
-}
-
-static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
-{
-  // Virtual pipe exists only for GUI geometry (ROI/mask transforms) and never processes pixels.
-  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->virtual_pipe)) return;
-  if(!dev->roi.raw_inited || dev->image_storage.id <= 0) return;
-
-  // Ensure its input image metadata matches the current dev state.
-  if(dev->virtual_pipe->imgid != dev->image_storage.id
-     || dev->virtual_pipe->iwidth != dev->roi.raw_width
-     || dev->virtual_pipe->iheight != dev->roi.raw_height
-     || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
-  {
-    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
-                               dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
-  }
-
-  // Mirror the preview-pipe change flags and commit immediately.
-  _change_pipe(dev->virtual_pipe, flag);
-  dt_dev_pixelpipe_change(dev->virtual_pipe);
-}
-
-void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
-{
-  _sync_virtual_pipe(dev, flag);
 }
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe)

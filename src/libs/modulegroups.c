@@ -45,21 +45,25 @@
 */
 
 
-#include "gui/bauhaus.h"
-#include "common/iop_order.h"
+#include "develop/imageop_gui.h"
+#include "widgets/widget_settings.h"
+#include "develop/iop_order.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/usermanual_url.h"
 #include "common/conf.h"
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 
 #include <glib/gstdio.h>
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
+#include "gui/screen_metrics.h"
 
 DT_MODULE(1)
 
@@ -163,9 +167,9 @@ static void _modulegroups_sync_section_label_margins(dt_lib_modulegroups_t *d)
   for(const GList *modules = g_list_first(dt_dev_get_global()->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-    if(!dt_iop_is_hidden(module) && module->expander)
+    if(!dt_iop_is_hidden(module) && module->gui && module->gui->expander)
     {
-      reference = module->expander;
+      reference = module->gui->expander;
       break;
     }
   }
@@ -206,9 +210,9 @@ static void _modulegroups_clear_drop_state(dt_lib_modulegroups_t *d)
   for(const GList *modules = g_list_last(dt_dev_get_global()->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
-    if(!module->expander) continue;
-    dt_gui_remove_class(module->expander, "iop_drop_after");
-    dt_gui_remove_class(module->expander, "iop_drop_before");
+    if(!module->gui || !module->gui->expander) continue;
+    dt_gui_remove_class(module->gui->expander, "iop_drop_after");
+    dt_gui_remove_class(module->gui->expander, "iop_drop_before");
   }
 }
 
@@ -295,7 +299,7 @@ static dt_iop_module_t *_modulegroups_get_dnd_dest_module(GtkWidget *page, const
   if(!GTK_IS_WIDGET(page) || !module_src) return NULL;
 
   GtkAllocation source_allocation = { 0 };
-  gtk_widget_get_allocation(module_src->header, &source_allocation);
+  gtk_widget_get_allocation(module_src->gui->header, &source_allocation);
   const int y_slop = source_allocation.height / 2;
   gboolean after_src = TRUE;
   dt_iop_module_t *module_dest = NULL;
@@ -307,7 +311,7 @@ static dt_iop_module_t *_modulegroups_get_dnd_dest_module(GtkWidget *page, const
   for(GList *l = children; l; l = g_list_next(l))
   {
     GtkWidget *w = GTK_WIDGET(l->data);
-    if(w == module_src->expander) after_src = FALSE;
+    if(w == module_src->gui->expander) after_src = FALSE;
 
     int widget_x = 0;
     int widget_y = 0;
@@ -506,7 +510,8 @@ static GtkWidget *_get_target_container(dt_lib_module_t *self, const dt_iop_modu
  */
 static void _modulegroups_setup_drag_source(dt_lib_module_t *self, dt_iop_module_t *module)
 {
-  GtkWidget *widget = module->expander;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->expander)) return;
+  GtkWidget *widget = module->gui->expander;
   g_object_set_data(G_OBJECT(widget), "dt-module", module);
 
   if(g_object_get_data(G_OBJECT(widget), "modulegroups-dnd")) return;
@@ -537,10 +542,11 @@ static gboolean _modulegroups_reorder_target(GtkWidget *target)
   for(GList *modules = g_list_last(dt_dev_get_global()->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-    if(dt_iop_is_hidden(module) || !module->expander || !gtk_widget_get_visible(module->expander)) continue;
-    if(gtk_widget_get_parent(module->expander) != target) continue;
+    if(dt_iop_is_hidden(module) || !module->gui || !module->gui->expander
+       || !gtk_widget_get_visible(module->gui->expander)) continue;
+    if(gtk_widget_get_parent(module->gui->expander) != target) continue;
 
-    gtk_box_reorder_child(GTK_BOX(target), module->expander, position++);
+    gtk_box_reorder_child(GTK_BOX(target), module->gui->expander, position++);
     has_visible = TRUE;
   }
 
@@ -557,19 +563,19 @@ static void _modulegroups_drag_begin(GtkWidget *widget, GdkDragContext *context,
   _modulegroups_clear_drop_state(d);
   g_object_set_data(G_OBJECT(widget), "dt-module-dragged", GINT_TO_POINTER(TRUE));
 
-  if(!module_src || !module_src->header) return;
+  if(!module_src || !module_src->gui->header) return;
 
-  GdkWindow *window = gtk_widget_get_parent_window(module_src->header);
+  GdkWindow *window = gtk_widget_get_parent_window(module_src->gui->header);
   if(IS_NULL_PTR(window)) return;
 
   GtkAllocation allocation = { 0 };
-  gtk_widget_get_allocation(module_src->header, &allocation);
+  gtk_widget_get_allocation(module_src->gui->header, &allocation);
   cairo_surface_t *surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, allocation.width, allocation.height);
   cairo_t *cr = cairo_create(surface);
 
-  dt_gui_add_class(module_src->header, "iop_drag_icon");
-  gtk_widget_draw(module_src->header, cr);
-  dt_gui_remove_class(module_src->header, "iop_drag_icon");
+  dt_gui_add_class(module_src->gui->header, "iop_drag_icon");
+  gtk_widget_draw(module_src->gui->header, cr);
+  dt_gui_remove_class(module_src->gui->header, "iop_drag_icon");
 
   cairo_surface_set_device_offset(surface, -allocation.width * dt_gui_get_global()->ppd / 2,
                                   -allocation.height * dt_gui_get_global()->ppd / 2);
@@ -631,12 +637,12 @@ static gboolean _modulegroups_drag_motion(GtkWidget *widget, GdkDragContext *dc,
   }
 
   if(module_src->iop_order < module_dest->iop_order)
-    dt_gui_add_class(module_dest->expander, "iop_drop_after");
+    dt_gui_add_class(module_dest->gui->expander, "iop_drop_after");
   else
-    dt_gui_add_class(module_dest->expander, "iop_drop_before");
+    dt_gui_add_class(module_dest->gui->expander, "iop_drop_before");
 
-  d->drag_highlight = module_dest->expander;
-  gtk_drag_highlight(module_dest->expander);
+  d->drag_highlight = module_dest->gui->expander;
+  gtk_drag_highlight(module_dest->gui->expander);
   gdk_drag_status(dc, GDK_ACTION_COPY, time);
   return TRUE;
 }
@@ -793,7 +799,7 @@ static gboolean _focus_previous_module(GtkAccelGroup *accel_group, GObject *acce
     for(const GList *module = g_list_first((GList *)children); module; module = g_list_next(module))
     {
       GtkWidget *widget = GTK_WIDGET(module->data);
-      if(widget == focused->expander) break;
+      if(widget == focused->gui->expander) break;
       target = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module");
     }
     if(IS_NULL_PTR(target))
@@ -841,7 +847,7 @@ static gboolean _focus_next_module(GtkAccelGroup *accel_group, GObject *accelera
     for(const GList *module = g_list_last((GList *)children); module; module = g_list_previous(module))
     {
       GtkWidget *widget = GTK_WIDGET(module->data);
-      if(widget == focused->expander) break;
+      if(widget == focused->gui->expander) break;
       target = (dt_iop_module_t *)g_object_get_data(G_OBJECT(widget), "dt-module");
     }
     if(IS_NULL_PTR(target))
@@ -935,7 +941,7 @@ static GList *_find_previous_visible_widget(GList *widgets)
 static void _focus_widget(GtkWidget *widget)
 {
   gtk_widget_grab_focus(widget);
-  dt_gui_get_global()->has_scroll_focus = widget;
+  dt_widget_set_scroll_focus(widget);
 }
 
 
@@ -945,7 +951,7 @@ static gboolean _focus_next_control()
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
-  GtkWidget *current_widget = dt_gui_get_global()->has_scroll_focus;
+  GtkWidget *current_widget = dt_widget_scroll_focus();
   GList *first_item = _find_next_visible_widget(g_list_first(m->widget_list));
 
   if(!current_widget && first_item)
@@ -975,7 +981,7 @@ static gboolean _focus_previous_control()
   dt_gui_module_t *m = DT_GUI_MODULE(focused);
   if(!focused || !m->widget_list) return FALSE;
 
-  GtkWidget *current_widget = dt_gui_get_global()->has_scroll_focus;
+  GtkWidget *current_widget = dt_widget_scroll_focus();
   GList *last_item = _find_previous_visible_widget(g_list_last(m->widget_list));
 
   if(!current_widget && last_item)
@@ -1046,7 +1052,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_notebook_set_scrollable(GTK_NOTEBOOK(d->notebook), TRUE);
   g_signal_connect(G_OBJECT(d->notebook), "switch_page", G_CALLBACK(_switch_page), self);
   g_signal_connect(G_OBJECT(d->notebook), "scroll-event", G_CALLBACK(_scroll_event), self);
-  gtk_widget_add_events(GTK_WIDGET(d->notebook), dt_gui_get_global()->scroll_mask);
+  gtk_widget_add_events(GTK_WIDGET(d->notebook), dt_widget_scroll_mask());
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->notebook), TRUE, TRUE, 0);
   gtk_widget_show_all(self->widget);
@@ -1102,7 +1108,7 @@ void gui_cleanup(dt_lib_module_t *self)
       for(GList *modules = g_list_first(dt_dev_get_global()->iop); modules; modules = g_list_next(modules))
       {
         dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-        if(module->expander) _modulegroups_move_widget(module->expander, GTK_WIDGET(root));
+        if(module->gui && module->gui->expander) _modulegroups_move_widget(module->gui->expander, GTK_WIDGET(root));
       }
     }
     for(int i = 0; i < MOD_TAB_ALL; i++)
@@ -1163,7 +1169,7 @@ static gboolean _update_iop_visibility(gpointer user_data)
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     if(dt_iop_is_hidden(module)) continue; // Hidden modules don't have a widget
 
-    GtkWidget *w = module->expander;
+    GtkWidget *w = module->gui ? module->gui->expander : NULL;
     if(IS_NULL_PTR(w)) continue; // Module GUI may not be inited yet
 
     const gboolean visible = _is_module_in_tab(module, tab);
@@ -1206,15 +1212,15 @@ static gboolean _update_iop_visibility(gpointer user_data)
 
   // Ensure the module is visible
   dt_iop_module_t *active = dev->gui_module;
-  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->expander))
+  if(!IS_NULL_PTR(active) && !IS_NULL_PTR(active->gui->expander))
   {
-    if(dt_gui_get_global()->scroll_to[1] != active->header)
+    if(dt_gui_get_global()->scroll_to[1] != active->gui->header)
     {
       const gboolean scroll_new_instance_to_header
-        = (dt_gui_get_global()->scroll_to_header_once == active->expander
-           && !IS_NULL_PTR(active->header) && GTK_IS_WIDGET(active->header));
+        = (dt_gui_get_global()->scroll_to_header_once == active->gui->expander
+           && !IS_NULL_PTR(active->gui->header) && GTK_IS_WIDGET(active->gui->header));
 
-      dt_gui_get_global()->scroll_to[1] = scroll_new_instance_to_header ? active->header : active->expander;
+      dt_gui_get_global()->scroll_to[1] = scroll_new_instance_to_header ? active->gui->header : active->gui->expander;
 
       if(scroll_new_instance_to_header) dt_gui_get_global()->scroll_to_header_once = NULL;
     }
@@ -1257,19 +1263,20 @@ static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpo
   if(IS_NULL_PTR(iop_module)) return;
 
   const dt_modulesgroups_tabs_t current_tab = _get_current_tab(self);
+  GtkWidget *expander = iop_module->gui ? iop_module->gui->expander : NULL;
   const gboolean prefer_active_once
-      = !IS_NULL_PTR(iop_module->expander)
-        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+      = !IS_NULL_PTR(expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(expander),
                                              "dt-modulegroups-prefer-active-once"));
   const gboolean allow_switch_from_active
-      = !IS_NULL_PTR(iop_module->expander)
-        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(iop_module->expander),
+      = !IS_NULL_PTR(expander)
+        && GPOINTER_TO_INT(g_object_get_data(G_OBJECT(expander),
                                              "dt-modulegroups-switch-from-active-once"));
   const gboolean module_in_active_tab = _is_module_in_tab(iop_module, MOD_TAB_ACTIVE);
-  if(!IS_NULL_PTR(iop_module->expander))
+  if(!IS_NULL_PTR(expander))
   {
-    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-prefer-active-once", NULL);
-    g_object_set_data(G_OBJECT(iop_module->expander), "dt-modulegroups-switch-from-active-once", NULL);
+    g_object_set_data(G_OBJECT(expander), "dt-modulegroups-prefer-active-once", NULL);
+    g_object_set_data(G_OBJECT(expander), "dt-modulegroups-switch-from-active-once", NULL);
   }
 
   // Direct actions (enable/toggle) should prioritize Pipeline for the focused module.

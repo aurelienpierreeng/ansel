@@ -30,19 +30,20 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/color_picker_proxy.h"
-#include "gui/bauhaus.h"
+#include "develop/iop_profile.h"
+#include "widgets/bauhaus.h"
 #include "common/color_picker.h"
 #include "control/signal.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/dev_pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
-#include "gui/gtk.h"
+#include "caches/pixelpipe_cache.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
 
 #include <inttypes.h>
 #include <math.h>
 #include <string.h>
+#include "widgets/togglebutton.h"
 
 /*
   The color_picker_proxy code is an interface which links the UI
@@ -187,8 +188,9 @@ static void _picker_get_module_bounds_image_norm(const dt_develop_t *dev,
   bounds[3] = 1.0f;
 
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(active_module)) return;
-  const float processed_width = dev->roi.processed_width;
-  const float processed_height = dev->roi.processed_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width <= 0.0f || processed_height <= 0.0f) return;
 
   const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(dev->preview_pipe,
@@ -226,8 +228,9 @@ static void _picker_initialize_geometry_raw(dt_iop_color_picker_t *picker, dt_de
   float bounds[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
   _picker_get_module_bounds_image_norm(dev, picker->module, bounds);
 
-  const float processed_width = dev->roi.processed_width;
-  const float processed_height = dev->roi.processed_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width <= 0.0f || processed_height <= 0.0f) return;
   // Fixed border inset in scale-1 image pixels, then converted to image-norm.
   // Keep this explicit here so the caller directly controls default picker coverage.
@@ -509,12 +512,12 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
    * They reopen the current module input/output cachelines by immutable `global_hash`, then take a temporary
    * ref plus read lock only for the duration of the sampling pass so concurrent cache recycling cannot free
    * the payload mid-read. */
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
   if(have_output)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, output_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, output_entry);
   }
 
   const gboolean sampled_input
@@ -544,11 +547,11 @@ static dt_color_picker_resample_status_t _sample_picker_from_cache(dt_develop_t 
 
   if(have_output)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, output_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, output_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, output_entry);
   }
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
 
   if(!sampled_input)
   {
@@ -760,8 +763,8 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     if(prior_picker->module) prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
   }
 
-  if(module && module->off)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), TRUE);
+  GtkWidget *off = dt_iop_gui_get_off(module);
+  if(off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(off), TRUE);
 
   const GdkModifierType state = !IS_NULL_PTR(e) ? e->state : dt_key_modifier_state();
   const gboolean ctrl_key_pressed = dt_modifier_is(state, GDK_CONTROL_MASK) || (!IS_NULL_PTR(e) && e->button == 3);
@@ -889,16 +892,6 @@ void dt_iop_color_picker_request_update(void)
              dev->color_picker.module ? dev->color_picker.module->op : "-",
              (void *)dev->color_picker.picker, (void *)dev->color_picker.widget);
   _queue_refresh_active_picker(dev);
-}
-
-gboolean dt_iop_color_picker_force_cache(const dt_dev_pixelpipe_t *pipe,
-                                         const dt_iop_module_t *module)
-{
-  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece((dt_dev_pixelpipe_t *)pipe,
-                                                                                 pipe->dev->color_picker.module);
-  const dt_dev_pixelpipe_iop_t *const previous_piece = dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
-
-  return module == pipe->dev->color_picker.module || (previous_piece && previous_piece->module == module);
 }
 
 static void _track_active_picker_hashes(dt_develop_t *dev)

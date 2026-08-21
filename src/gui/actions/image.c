@@ -17,15 +17,15 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "common/selection.h"
 #include "common/act_on.h"
 #include "control/jobs/control_jobs.h"
-#include "common/database.h"
 #include "common/image.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/grouping.h"
-#include "common/colorlabels.h"
-#include "common/ratings.h"
-#include "control/control.h"
+#include "metadata/colorlabels.h"
+#include "metadata/ratings.h"
+#include "control/redraw.h"
 #include "common/collection.h"
 
 static gboolean rotate_counterclockwise_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
@@ -51,22 +51,29 @@ static gboolean reset_rotation_callback(GtkAccelGroup *group, GObject *accelerat
 static gboolean group_images_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   GList *imgs = NULL;
-  sqlite3_stmt *stmt;
   int32_t new_group_id = UNKNOWN_IMAGE;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1, &stmt,
-                              NULL);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+
+  GList *selected = dt_selection_get_list(dt_selection_get_global());
+
+  // The new group leader was "the first image in the selection", which meant the first row of
+  // "SELECT imgid FROM main.selected_images" -- and since imgid IS that table's INTEGER PRIMARY
+  // KEY, an unordered scan hands them back ascending, so the leader was the LOWEST id. The
+  // in-memory selection is not kept sorted (ids are appended as they are picked), so take the
+  // minimum explicitly rather than the first element.
+  for(GList *l = selected; l; l = g_list_next(l))
   {
-    int id = sqlite3_column_int(stmt, 0);
+    const int32_t id = GPOINTER_TO_INT(l->data);
+    if(new_group_id == UNKNOWN_IMAGE || id < new_group_id) new_group_id = id;
+  }
 
-    // The new group leader will be the first image in the selection
-    if(new_group_id == UNKNOWN_IMAGE) new_group_id = id;
-
+  for(GList *l = selected; l; l = g_list_next(l))
+  {
+    const int32_t id = GPOINTER_TO_INT(l->data);
     dt_grouping_add_to_group(new_group_id, id);
-
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
   }
-  sqlite3_finalize(stmt);
+  g_list_free(selected);   // shallow copy of the selection's own list
+
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING, imgs);
   return TRUE;
 }
@@ -75,12 +82,11 @@ static gboolean group_images_callback(GtkAccelGroup *group, GObject *acceleratab
 static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   GList *imgs = NULL;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT imgid FROM main.selected_images", -1,
-                              &stmt, NULL);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+
+  GList *selected = dt_selection_get_list(dt_selection_get_global());
+  for(GList *l = selected; l; l = g_list_next(l))
   {
-    const int id = sqlite3_column_int(stmt, 0);
+    const int id = GPOINTER_TO_INT(l->data);
     const int new_group_id = dt_grouping_remove_from_group(id);
     if(new_group_id != -1)
     {
@@ -88,7 +94,8 @@ static gboolean ungroup_images_callback(GtkAccelGroup *group, GObject *accelerat
       imgs = g_list_prepend(imgs, GINT_TO_POINTER(id));
     }
   }
-  sqlite3_finalize(stmt);
+  g_list_free(selected);   // shallow copy of the selection's own list
+
   if(!IS_NULL_PTR(imgs))
   {
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_GROUPING,

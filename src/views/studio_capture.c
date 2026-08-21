@@ -22,22 +22,25 @@
     surface fetcher (fit-to-window or 100% with panning); the darkroom editing
     panels are intentionally absent: this is a viewer, not an editor. */
 
+#include "develop/masks_gui.h"
 #include "system/atomic.h"
+#include "widgets/widget_settings.h"
 #include "common/collection.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
+#include "control/input.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/pixelpipe_hb.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/gdkkeys.h"
-#include "gui/gtk.h"
+#include "widgets/gdkkeys.h"
+#include "gui/application.h"
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
@@ -48,6 +51,7 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <math.h>
+#include "control/signal.h"
 
 DT_MODULE(1)
 
@@ -221,8 +225,7 @@ int try_enter(dt_view_t *self)
  */
 static void _studio_configure_dev_roi(dt_studio_capture_t *d, int width, int height)
 {
-  d->dev->roi.orig_width = width;
-  d->dev->roi.orig_height = height;
+  dt_dev_viewport_set_widget_size(d->dev, width, height);
   dt_dev_toolbox_apply_iso_12646_size(d->dev);
 }
 
@@ -295,7 +298,6 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   dev->exit = 1;
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-  if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
   dev->pipelines_started = FALSE;
 
   // Stop module background threads before freeing the nodes/history they read.
@@ -308,32 +310,20 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   // Taking each busy lock waits for the running pipe to release it.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
   dt_dev_set_backbuf(&dev->pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(),
-                                    dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
   dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 
-  if(dev->virtual_pipe)
-  {
-    dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
-    dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
-    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(),
-                                      dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
-    dt_dev_set_backbuf(&dev->virtual_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
-                       DT_PIXELPIPE_CACHE_HASH_INVALID);
-    dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
-  }
-
-  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->pipe->last_devid);
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->pipe->last_devid);
   if(dev->preview_pipe->last_devid != dev->pipe->last_devid)
-    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->preview_pipe->last_devid);
+    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->preview_pipe->last_devid);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
@@ -379,11 +369,11 @@ static void _studio_dev_teardown(dt_studio_capture_t *d)
   dev->image_storage.id = -1;
 
   // Release the histogram backbuf cache references.
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->raw_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->raw_histogram));
   dt_dev_backbuf_set_hash(&dev->raw_histogram, -1);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->output_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->output_histogram));
   dt_dev_backbuf_set_hash(&dev->output_histogram, -1);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->display_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->display_histogram));
   dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 }
 
@@ -895,7 +885,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     // must not leak past this call.
     cairo_save(cr);
     drew_live = dt_dev_render_locked_surface(cr, d->dev, &d->main_locked, width, height,
-                                             d->dev->roi.border_size, bg_color);
+                                             dt_dev_viewport_border_size(d->dev), bg_color);
     cairo_restore(cr);
   }
 
@@ -904,9 +894,9 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     cairo_save(cr);
     cairo_translate(cr, tr_x, tr_y);
     if(d->zoom == DT_THUMBTABLE_ZOOM_FIT && d->dev->iso_12646.enabled)
-      dt_dev_draw_iso12646_border(cr, logical_width, logical_height, d->dev->roi.border_size);
+      dt_dev_draw_iso12646_border(cr, logical_width, logical_height, dt_dev_viewport_border_size(d->dev));
     cairo_set_source_surface(cr, d->surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_widget_image_filter());
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);
@@ -919,8 +909,8 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
   // live backbuf above: d->dev->roi always describes "fit", never this view's own 100%/pan.
   if(d->zoom == DT_THUMBTABLE_ZOOM_FIT)
   {
-    const float wd = d->dev->roi.preview_width;
-    const float ht = d->dev->roi.preview_height;
+    const float wd = dt_dev_roi_request_preview_width(d->dev);
+    const float ht = dt_dev_roi_request_preview_height(d->dev);
     const float scaling = dt_dev_get_overlay_scale(d->dev);
 
     cairo_save(cr);
@@ -978,8 +968,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 {
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
-  if(dt_iop_color_picker_is_visible(d->dev) && dt_control_get_global()->button_down
-     && dt_control_get_global()->button_down_which == 1)
+  if(dt_iop_color_picker_is_visible(d->dev) && dt_control_button_down(1))
   {
     if(d->picker_dragging_box)
     {

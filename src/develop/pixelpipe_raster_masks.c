@@ -12,6 +12,11 @@
  * modules until they reach the requested stage.
  */
 
+// This file is textually #included into pixelpipe_hb.c (see the doc block above), so
+// these guarded includes fold into that TU; they are named here because THIS file uses them.
+#include "common/glib_utils.h"        // dt_string_replace
+#include "develop/pipeline_notify.h"  // dt_pipeline_message
+
 /**
  * @brief Check that the raster-mask provider/consumer relation is still valid in the current pipe.
  *
@@ -29,7 +34,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
 {
   gboolean success = TRUE;
   gchar *clean_target_name = !IS_NULL_PTR(target_module)
-      ? delete_underscore(target_module->name())
+      ? dt_string_replace(target_module->name(), "_")
       : g_strdup(_("export"));
   gchar *target_name = !IS_NULL_PTR(target_module)
       ? g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name)
@@ -51,14 +56,14 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
     }
     else if(IS_NULL_PTR(current_piece))
     {
-      gchar *clean_source_name = delete_underscore(source_piece->module->name());
+      gchar *clean_source_name = dt_string_replace(source_piece->module->name(), "_");
       hint = g_strdup_printf(_("- Check if the module %s (%s) providing the masks has not been moved above %s.\n"),
                              clean_source_name,
                              source_piece->module->multi_name, clean_target_name);
       dt_free(clean_source_name);
     }
 
-    dt_control_log(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
+    dt_pipeline_message(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
                      "\n%s"),
                    target_name, hint ? hint : "");
     dt_free(hint);
@@ -69,9 +74,9 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
 
   if(success && !source_piece->enabled)
   {
-    gchar *clean_source_name = delete_underscore(source_piece->module->name());
+    gchar *clean_source_name = dt_string_replace(source_piece->module->name(), "_");
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
-    dt_control_log(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
+    dt_pipeline_message(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
                      "Disabled modules cannot provide their masks to other modules.\n"
                      "\n- Please enable `%s` or change the raster mask in `%s`."),
                    target_name, source_name, source_name, target_name);
@@ -96,7 +101,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
   if(!IS_NULL_PTR(error)) *error = 0;
 
   gchar *clean_target_name = !IS_NULL_PTR(target_module)
-      ? delete_underscore(target_module->name())
+      ? dt_string_replace(target_module->name(), "_")
       : g_strdup(_("export"));
   gchar *target_name = !IS_NULL_PTR(target_module)
       ? g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name)
@@ -136,12 +141,12 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     const uint64_t raster_hash
         = dt_dev_pixelpipe_raster_mask_hash(source_piece, raster_mask_id);
 
-    gchar *clean_source_name = delete_underscore(source_piece->module->name());
+    gchar *clean_source_name = dt_string_replace(source_piece->module->name(), "_");
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
     dt_pixel_cache_entry_t *raster_entry = NULL;
     void *cache_data = NULL;
     const gboolean found = dt_dev_pixelpipe_cache_ref_entry_by_hash(
-        dt_pixelpipe_cache_get_global(), raster_hash, &cache_data, &raster_entry);
+        raster_hash, &cache_data, &raster_entry);
 
     gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
     if(found && !IS_NULL_PTR(cache_data) && !IS_NULL_PTR(raster_entry))
@@ -153,7 +158,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       if(IS_NULL_PTR(raster_mask))
       {
         dt_dev_pixelpipe_cache_ref_count_entry(
-            dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+            FALSE, raster_entry);
         if(!IS_NULL_PTR(error)) *error = 1;
         dt_free(clean_source_name);
         dt_free(source_name);
@@ -165,12 +170,12 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       // The cache owns the canonical mask. Copy it under a read lock so the
       // caller can freely distort and release its private working buffer.
       dt_dev_pixelpipe_cache_rdlock_entry(
-          dt_pixelpipe_cache_get_global(), TRUE, raster_entry);
+          TRUE, raster_entry);
       memcpy(raster_mask, cache_data, mask_size);
       dt_dev_pixelpipe_cache_rdlock_entry(
-          dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+          FALSE, raster_entry);
       dt_dev_pixelpipe_cache_ref_count_entry(
-          dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+          FALSE, raster_entry);
 
       dt_print(DT_DEBUG_MASKS,
                "[raster masks] found cached mask id %i from %s for module %s"
@@ -182,7 +187,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     {
       if(!IS_NULL_PTR(raster_entry))
         dt_dev_pixelpipe_cache_ref_count_entry(
-            dt_pixelpipe_cache_get_global(), FALSE, raster_entry);
+            FALSE, raster_entry);
 
       dt_print(DT_DEBUG_DEV,
                "[raster masks] missing source=%s instance=%d target=%s instance=%d"
@@ -262,7 +267,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
       if(module->module == target_module)
       {
-        gchar *clean_module_name = delete_underscore(module->module->name());
+        gchar *clean_module_name = dt_string_replace(module->module->name(), "_");
         dt_print(DT_DEBUG_MASKS, "[raster masks] found mask id %i from %s for module %s (%s) in pipe %s\n",
                  raster_mask_id, source_name, clean_module_name,
                  module->module->multi_name, dt_pixelpipe_get_pipe_name(pipe->type));

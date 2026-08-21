@@ -358,7 +358,6 @@ if(WIN32)
   message("-- Win32 build detected, setting default features")
   set(CMAKE_FIND_LIBRARY_SUFFIXES .dll ${CMAKE_FIND_LIBRARY_SUFFIXES})
   set(USE_COLORD OFF)
-  set(USE_KWALLET OFF)
   set(BUILD_CMSTEST OFF)
   set(BUILD_PRINT OFF)
   set(TESTBUILD_OPENCL_PROGRAMS OFF)
@@ -688,8 +687,44 @@ if(NOT SOURCE_PACKAGE AND NOT (CMAKE_VERSION VERSION_LESS 3.3) AND DEFINED ENV{_
   endif()
 endif()
 
+# Debug builds carry the unit tests by default; any configuration can opt in or out
+# explicitly with -DBUILD_TESTING=ON/OFF. An EMPTY value counts as undecided -- existing
+# build trees carry an empty BUILD_TESTING:BOOL in their cache, which is defined but
+# answers no question. Not cached on purpose: flipping the build type flips the default.
+#
+# The DEFAULT is tolerant: a Debug machine without cmocka builds without tests and says so,
+# because several CI Debug runners are not provisioned for it. An EXPLICIT
+# -DBUILD_TESTING=ON stays a hard requirement.
+#
+# Linux only. Windows links every executable with -municode, so each test binary needs the
+# wWinMain wrapper wired up first; Apple's ld64 has no --wrap, so the cmocka mock tests can
+# never link there. Both platforms opt in explicitly once someone does that work.
+set(_build_testing_defaulted FALSE)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND "${BUILD_TESTING}" STREQUAL "" AND NOT WIN32 AND NOT APPLE)
+  set(BUILD_TESTING ON)
+  set(_build_testing_defaulted TRUE)
+endif()
+
 if(BUILD_TESTING)
-  find_package(cmocka 1.1.0 CONFIG REQUIRED)
+  if(_build_testing_defaulted)
+    find_package(cmocka 1.1.0 CONFIG QUIET)
+    if(NOT cmocka_FOUND)
+      message(STATUS "Debug build without unit tests: cmocka not found (install it, or pass -DBUILD_TESTING=ON to make this an error)")
+      set(BUILD_TESTING OFF)
+    endif()
+  else()
+    find_package(cmocka 1.1.0 CONFIG REQUIRED)
+  endif()
+endif()
+
+if(BUILD_TESTING)
+  # cmocka >= 2 exports cmocka::cmocka and its plain `cmocka` name no longer carries the
+  # include directory (homebrew, notably); older packages export only `cmocka`.
+  if(TARGET cmocka::cmocka)
+    set(CMOCKA_LINK_TARGET cmocka::cmocka)
+  else()
+    set(CMOCKA_LINK_TARGET cmocka)
+  endif()
   include(AddCMockaTest)
   include(AddCMockaMockTest)
   include_directories(${CMOCKA_INCLUDE_DIR} include)

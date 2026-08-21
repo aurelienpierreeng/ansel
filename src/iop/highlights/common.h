@@ -190,6 +190,33 @@ typedef struct
 
 // Max unknowns in the dense-Cholesky biharmonic dome before it downsamples (O(N^3)). Larger = finer
 // dome grid (ds->1 = exact full-res) at more cost -- raise it to test if the coarse solve matters.
+// Below this many clipped input pixels there is nothing worth reconstructing: process()/process_cl()
+// copy the input through instead of running a mode. Same idea as filmicrgb's mask_clipped_pixels()
+// bail-out, one order of magnitude more generous because the reconstruction modes here cost far more
+// per frame (region segmentation, sparse solves) than filmic's wavelet pass.
+// Width, in full-resolution pixels, of the collar around the clip contour where the
+// chromaticity-gradient stage's value-continuation pass (a3) is allowed to act. That pass erases the
+// seam the saturation floor prints at the contour, and is only sound close to it -- see the comment
+// at its hole test. Scaled by the pipe scale so a preview matches the full-resolution render.
+// Range scale of the coefficient-field's edge-aware fit windows, as a fraction of the blown zone's
+// plateau luminance: a guide step of this size halves the transport across it. Small enough to stop
+// a silhouette, large enough that a smooth sky gradient is still one window.
+#define CF_EDGE_RANGE 0.15f
+
+// Pre-smoothing of that guide, in pixels: enough to take sensor noise out of the warp rate, far
+// below the scale of any silhouette it has to stop.
+#define CF_EDGE_GUIDE_SIGMA 3.f
+
+// A 1-clip channel whose model predicted below its own saturation level comes out pinned AT the
+// floor, carrying the floor's chroma instead of the material's. This is the lift, relative to
+// clip0, by which such a pixel is considered to have been reconstructed on its own merits: at 1.0
+// the fit said nothing, by this value it has spoken and is left alone. Ramped, never a threshold.
+#define CF_AUTHORED_RAMP 1.12f
+
+#define DT_HL_A3_COLLAR_PX 24.f
+
+#define DT_HL_MIN_CLIPPED_PIXELS 25
+
 #define DT_HL_DOME_NMAX 2000
 
 // With the sparse direct solver the dome grid can be MUCH finer at less cost than the dense
@@ -378,6 +405,7 @@ typedef struct _hl_region_ctx_t
   int region_w, region_h;
   size_t region_pixels;
   int extent;
+  float scale; // dt_dev_get_module_scale(): full-resolution pixels per buffer pixel
   float epsilon;
   int max_cg_iter;
   float solid_color;
@@ -428,7 +456,7 @@ typedef enum dt_atrous_wavelets_scales_t
 typedef struct dt_iop_highlights_params_t
 {
   // params of v1
-  dt_iop_highlights_mode_t mode; // $DEFAULT: DT_IOP_HIGHLIGHTS_CLIP $DESCRIPTION: "method"
+  dt_iop_highlights_mode_t mode; // $DEFAULT: DT_IOP_HIGHLIGHTS_HARMONIC $DESCRIPTION: "method"
   float blendL;                  // unused $DEFAULT: 1.0
   float blendC;                  // unused $DEFAULT: 0.0
   float blendh;                  // unused $DEFAULT: 0.0
@@ -442,7 +470,7 @@ typedef struct dt_iop_highlights_params_t
   float combine;                      // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 2.0 $DESCRIPTION: "combine segments"
   int debugmode;
   // params of v4
-  float solid_color; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "inpaint a flat color"
+  float solid_color; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "inpaint a flat color"
 } dt_iop_highlights_params_t;
 
 typedef dt_iop_highlights_params_t dt_iop_highlights_data_t;
@@ -450,6 +478,10 @@ typedef dt_iop_highlights_params_t dt_iop_highlights_data_t;
 typedef struct dt_iop_highlights_global_data_t
 {
   int kernel_highlights_1f_clip;
+  int kernel_highlights_count_clipped;
+  int kernel_hl_dt_warp;
+  int kernel_hl_dt_rows;
+  int kernel_hl_dt_cols;
   int kernel_highlights_1f_lch_bayer;
   int kernel_highlights_1f_lch_xtrans;
   int kernel_highlights_4f_clip;

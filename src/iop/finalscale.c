@@ -33,7 +33,8 @@
 #include "common/logging.h"
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "develop/imageop_gui.h"
+#include "widgets/bauhaus.h"
 #include "pixel/interpolation.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
@@ -157,13 +158,31 @@ error:
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  // Depending on ROI zoom level, we may need to enable finalscale so the pipeline runs
-  // at most at 100%, for pixel-level accuracy, and we upscale at the end. 
+  // Export always upscales at the end; thumbnails never do. Both are decided by the pipe
+  // type alone, so settle them before reading anything off dev: this callback runs on the
+  // pipeline thread, and for those two pipe types `dev` is a headless, throwaway one whose
+  // viewport fields still hold their calloc zero -- the old predicate read them and got the
+  // right answer only because its remaining clauses happened to decide first.
+  if(pipe->type == DT_DEV_PIXELPIPE_EXPORT)
+  {
+    piece->enabled = TRUE;
+    return;
+  }
+  if(pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL)
+  {
+    piece->enabled = FALSE;
+    return;
+  }
+
+  // Darkroom pipes only. Depending on ROI zoom level, we may need to enable finalscale so
+  // the pipeline runs at most at 100%, for pixel-level accuracy, and we upscale at the end.
   // This is important for consistency with exports.
-  const float darkroom_zoom = pipe->dev->roi.scaling * pipe->dev->roi.natural_scale;
-  piece->enabled = (darkroom_zoom > 1.f && pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL) 
-    || (pipe->type == DT_DEV_PIXELPIPE_EXPORT)
-    || (dt_conf_get_int("darkroom/render_size") != 1 && darkroom_zoom != 1.f && pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL);
+  // The pipe's latched snapshot, not a live read off dev: this runs on the pipeline thread, and
+  // piece->enabled must agree with the ROI the same iteration planned.
+  const dt_dev_roi_request_t request = dt_dev_roi_request_of_pipe(pipe);
+  const float darkroom_zoom = request.scaling * request.natural_scale;
+  piece->enabled = (darkroom_zoom > 1.f)
+    || (dt_conf_get_int("darkroom/render_size") != 1 && darkroom_zoom != 1.f);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -186,7 +205,6 @@ void init(dt_iop_module_t *self)
   self->default_enabled = 1;
   self->hide_enable_button = 1;
   self->params_size = sizeof(dt_iop_finalscale_params_t);
-  self->gui_data = NULL;
 }
 
 void cleanup(dt_iop_module_t *self)
@@ -198,18 +216,17 @@ void cleanup(dt_iop_module_t *self)
 typedef struct dt_iop_finalscale_gui_data_t
 { } dt_iop_finalscale_gui_data_t;
 
-dt_iop_finalscale_gui_data_t dummy;
 
 void gui_init(dt_iop_module_t *self)
 {
   IOP_GUI_ALLOC(finalscale);
-  self->widget = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(self->widget),_("This module is used to downscale images at export time. "
+  self->gui->widget = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(self->gui->widget),_("This module is used to downscale images at export time. "
                                                  "Moving it along the pipeline will have diffent effects on exported images. "
                                                  "<a href='https://ansel.photos/en/doc/modules/processing-modules/finalscale/'>Learn more</a>"));
-  gtk_widget_set_halign(self->widget, GTK_ALIGN_START);
-  gtk_label_set_xalign (GTK_LABEL(self->widget), 0.0f);
-  gtk_label_set_line_wrap(GTK_LABEL(self->widget), TRUE);
+  gtk_widget_set_halign(self->gui->widget, GTK_ALIGN_START);
+  gtk_label_set_xalign (GTK_LABEL(self->gui->widget), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(self->gui->widget), TRUE);
 }
 
 // clang-format off

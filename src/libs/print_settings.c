@@ -37,36 +37,40 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "widgets/draw.h"
+#include "control/control.h"
 #include "common/conf.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include <glib.h>
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/cups_print.h"
 #include "common/file_location.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/logging.h"
-#include "common/macros.h"
-#include "common/metadata.h"
+#include "system/macros.h"
+#include "metadata/metadata.h"
 #include "common/module_versioning.h"
-#include "common/paths.h"
 #include "common/pdf.h"
-#include "common/printprof.h"
+#include "colorprofiles/printprof.h"
 #include "common/printing.h"
 #include "common/styles.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/usermanual_url.h"
 #include "common/utility.h"
-#include "common/variables.h"
 #include "control/jobs.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
 
 #include <glib/gstdio.h>
+#include "widgets/label.h"
+#include "imageio/imageio_profile.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 DT_MODULE(4)
 
@@ -383,7 +387,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
   {
     const dt_colorspaces_color_profile_t *pprof =
       dt_colorspaces_get_profile(params->p_icc_type, params->p_icc_profile,
-                                 DT_PROFILE_DIRECTION_OUT);
+                                 DT_PROFILE_ROLE_OUTPUT);
     if(IS_NULL_PTR(pprof))
     {
       dt_control_log(_("cannot open printer profile `%s'"), params->p_icc_profile);
@@ -589,7 +593,7 @@ static int _print_job_run(dt_job_t *job)
         DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
 
     /* register print timestamp in cache */
-    dt_image_cache_set_print_timestamp(dt_image_cache_get_global(), params->imgs.box[k].imgid);
+    dt_image_cache_set_print_timestamp(params->imgs.box[k].imgid);
   }
 
   return 0;
@@ -723,7 +727,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   }
   else
   {
-    const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     if(IS_NULL_PTR(img))
     {
       // in this case no need to release from cache what we couldn't get
@@ -732,7 +736,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
       return;
     }
     params->job_title = g_strdup(img->filename);
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
   }
   // FIXME: ellipsize title/printer as the export completed message is ellipsized
   gchar *message = g_strdup_printf(_("processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
@@ -1261,7 +1265,7 @@ _intent_callback(GtkWidget *widget, dt_lib_module_t *self)
 static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf,
+  dt_mipmap_cache_get(&buf,
                       imgid, DT_MIPMAP_0, DT_MIPMAP_BLOCKING, 'r');
 
   // If there's a mipmap available, figure out orientation based upon
@@ -1274,7 +1278,7 @@ static void _set_orientation(dt_lib_print_settings_t *ps, int32_t imgid)
     dt_bauhaus_combobox_set(ps->orientation, ps->prt.page.landscape == TRUE ? 1 : 0);
   }
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
   dt_control_queue_redraw_center();
 }
 
@@ -1319,21 +1323,28 @@ static GList* _get_profiles()
   prof->ppos = -2;
   list = g_list_prepend(list, prof);
 
-  // add the profiles from datadir/color/out/*.icc
-  for(GList *iter = dt_colorspaces_get_global()->profiles; iter; iter = g_list_next(iter))
+  /* Every on-disk profile, from color/in/ as well as color/out/ -- this list applies no
+   * direction predicate, only a type filter, which IN|OUT reproduces exactly: a
+   * DT_COLORSPACE_FILE entry gets the INPUT role from the in/ batch or OUTPUT from the out/
+   * batch, never neither, and no built-in has type DT_COLORSPACE_FILE. Enumeration order
+   * is list order, so the resulting menu is unchanged. */
+  dt_colorprofile_desc_t *file_profiles = NULL;
+  const size_t n_file_profiles = dt_colorspaces_enumerate_profiles(
+      DT_PROFILE_ROLE_INPUT | DT_PROFILE_ROLE_OUTPUT, &file_profiles);
+
+  for(size_t k = 0; k < n_file_profiles; k++)
   {
-    dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
-    if(p->type == DT_COLORSPACE_FILE)
-    {
-      prof = (dt_lib_export_profile_t *)g_malloc0(sizeof(dt_lib_export_profile_t));
-      g_strlcpy(prof->name, p->name, sizeof(prof->name));
-      g_strlcpy(prof->filename, p->filename, sizeof(prof->filename));
-      prof->type = DT_COLORSPACE_FILE;
-      prof->pos = -2;
-      prof->ppos = -2;
-      list = g_list_prepend(list, prof);
-    }
+    if(file_profiles[k].type != DT_COLORSPACE_FILE) continue;
+
+    prof = (dt_lib_export_profile_t *)g_malloc0(sizeof(dt_lib_export_profile_t));
+    g_strlcpy(prof->name, file_profiles[k].name, sizeof(prof->name));
+    g_strlcpy(prof->filename, file_profiles[k].filename, sizeof(prof->filename));
+    prof->type = DT_COLORSPACE_FILE;
+    prof->pos = -2;
+    prof->ppos = -2;
+    list = g_list_prepend(list, prof);
   }
+  dt_free_align(file_profiles);
 
   return g_list_reverse(list);  // list was built in reverse order, so un-reverse it
 }

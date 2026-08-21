@@ -47,20 +47,19 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/debug.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
+#include "database/image_repository.h"
 #include "common/variables.h"
-#include "common/colorlabels.h"
+#include "metadata/colorlabels.h"
 #include "common/file_location.h"
 #include "common/image.h"
-#include "common/image_cache.h"
-#include "common/metadata.h"
+#include "caches/image_cache.h"
+#include "metadata/metadata.h"
 #include "common/opencl.h"
 #include "common/utility.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/datetime.h"
 #include "common/conf.h"
-#include "common/exif.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -208,7 +207,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   }
   else if(params->imgid > UNKNOWN_IMAGE)
   {
-    img = dt_image_cache_get(dt_image_cache_get_global(), params->imgid, 'r');
+    img = dt_image_cache_get(params->imgid, 'r');
     release = IMGID;
   }
 
@@ -260,7 +259,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
     }
     case IMGID:
     {
-      dt_image_cache_read_release(dt_image_cache_get_global(), img);
+      dt_image_cache_read_release(img);
       break;
     }
   }
@@ -474,9 +473,9 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   {
     gchar buffer[1024];
     const dt_image_t *img = params->img ? (dt_image_t *)params->img
-                                        : dt_image_cache_get(dt_image_cache_get_global(), params->imgid, 'r');
+                                        : dt_image_cache_get(params->imgid, 'r');
     dt_image_print_exif(img, buffer, sizeof(buffer));
-    if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(img);
     result = g_strdup(buffer);
   }
   else if(_has_prefix(variable, "VERSION.NAME") || _has_prefix(variable, "VERSION_NAME"))
@@ -491,29 +490,15 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   }
   else if(_has_prefix(variable, "VERSION.IF_MULTI") || _has_prefix(variable, "VERSION_IF_MULTI"))
   {
-    sqlite3_stmt *stmt;
+    // Same row set the duplicate list returns -- every image sharing this one's film roll and
+    // filename, itself included -- so this asks it rather than counting the rows twice over.
+    GList *versions = dt_image_repository_get_duplicate_ids(params->imgid);
+    const guint count = g_list_length(versions);
+    g_list_free(versions);
 
-    // count duplicates
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                "SELECT COUNT(1)"
-                                " FROM images AS i1"
-                                " WHERE EXISTS (SELECT 'y' FROM images AS i2"
-                                "               WHERE  i2.id = ?1"
-                                "               AND    i1.film_id = i2.film_id"
-                                "               AND    i1.filename = i2.filename)",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, params->imgid);
-
-    if(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      const int count = sqlite3_column_int(stmt, 0);
-      //only return data if more than one matching image
-      if(count > 1)
-        result = g_strdup_printf("%d", params->data->version);
-    }
-    sqlite3_finalize (stmt);
+    //only return data if more than one matching image
+    if(count > 1)
+      result = g_strdup_printf("%d", params->data->version);
   }
   else if(_has_prefix(variable, "VERSION"))
     result = g_strdup_printf("%d", params->data->version);

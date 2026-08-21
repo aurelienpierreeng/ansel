@@ -34,30 +34,28 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "colorprofiles/profile_types.h"
 #include "develop/lightroom.h"
-#include "common/colorlabels.h"
-#include "common/colorspaces.h"
+#include "metadata/colorlabels.h"
 #include "common/curve_tools.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/paths.h"
 #include "control/signal.h"
 #include "common/utility.h"
-#include "common/history.h"
-#include "common/iop_order.h"
-#include "common/ratings.h"
-#include "common/tags.h"
-#include "common/metadata.h"
-#include "control/control.h"
+#include "history/history.h"
+#include "database/history_repository.h"
+#include "metadata/ratings.h"
+#include "metadata/tags.h"
+#include "metadata/metadata.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 
-#include <ctype.h>
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 // copy here the iop params struct with the actual version. This is so to
 // be as independent as possible of any iop evolutions. Indeed, we create
@@ -354,10 +352,10 @@ static void dt_add_hist(int32_t imgid, char *operation, dt_iop_params_t *params,
 {
   dt_develop_blend_params_t blend_params = { 0 };
 
-  const int32_t num = dt_history_db_get_next_history_num(imgid);
-  dt_history_db_write_history_item(imgid, num, operation, params, params_size, version, 1,
+  const int32_t num = dt_history_repository_get_next_num(imgid);
+  dt_history_repository_write_item(imgid, num, operation, params, params_size, version, 1,
                                    &blend_params, sizeof(dt_develop_blend_params_t), LRDT_BLEND_VERSION, 0, " ");
-  dt_history_set_end(imgid, num + 1);
+  dt_history_repository_set_end(imgid, num + 1);
 
   if(imported[0]) g_strlcat(imported, ", ", imported_len);
   g_strlcat(imported, dt_iop_get_localized_name(operation), imported_len);

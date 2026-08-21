@@ -45,7 +45,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/logging.h"
@@ -54,13 +54,13 @@
 #include "system/target_clones.h"
 #include "config.h"
 #endif
+#include "develop/imageop_gui.h"
 #include <stdlib.h>
 
 #include <cairo.h>
 
 #include "common/opencl.h"
-#include "common/imagebuf.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
@@ -411,7 +411,6 @@ void init(dt_iop_module_t *module)
   module->hide_enable_button = 1;
   module->default_enabled = 1;
   module->params_size = sizeof(dt_iop_overexposed_t);
-  module->gui_data = NULL;
 
   // This module permanently bypasses the cache because it takes input from GUI
   // and doesn't leave internal parameters to compute an integrity hash on.

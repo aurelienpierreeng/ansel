@@ -31,7 +31,7 @@
 /** this is the view for the print module.  */
 #include "common/cups_print.h"
 #include "common/printing.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
 #include "control/control.h"
@@ -39,7 +39,7 @@
 #include "gui/dtgtk/thumbtable.h"
 
 #include "gui/drag_and_drop.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 #include "views/view_api.h"
 
@@ -47,6 +47,8 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/widget_settings.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 
@@ -332,7 +334,7 @@ void expose(dt_view_t *self, cairo_t *cri, int32_t width_i, int32_t height_i, in
   dt_print_t *prt = (dt_print_t *)self->data;
 
   // clear the current surface
-  dt_gui_gtk_set_source_rgb(cri, DT_GUI_COLOR_PRINT_BG);
+  dt_widget_set_source_rgb(cri, DT_GUI_COLOR_PRINT_BG);
   cairo_paint(cri);
 
   // Draw the page first so the image fetcher paints into the same clipped print
@@ -449,7 +451,7 @@ int try_enter(dt_view_t *self)
   }
 
   // this loads the image from db if needed:
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   // get image and check if it has been deleted from disk first!
 
   char imgfilename[PATH_MAX] = { 0 };
@@ -458,11 +460,11 @@ int try_enter(dt_view_t *self)
   if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))
   {
     dt_control_log(_("image `%s' is currently unavailable"), img->filename);
-    dt_image_cache_read_release(dt_image_cache_get_global(), img);
+    dt_image_cache_read_release(img);
     return 1;
   }
   // and drop the lock again.
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   // we need to setup the selected image
   prt->pending_imgid = imgid;

@@ -33,12 +33,13 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "colorprofiles/colorspaces.h"
 #include "imageio_tiff.h"
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/exif.h"
+#include "caches/pixelpipe_cache_alloc.h"
+#include "metadata/exif.h"
 #include "develop/develop.h"
 
 #include <inttypes.h>
@@ -225,8 +226,8 @@ static inline int _read_chunky_f(tiff_t *t)
 
 static inline int _read_chunky_8_Lab(tiff_t *t, uint16_t photometric)
 {
-  const cmsHPROFILE Lab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_DIRECTION_ANY)->profile;
-  const cmsHPROFILE output_profile = dt_colorspaces_get_profile(LAB_CONVERSION_PROFILE, "", DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY)->profile;
+  const cmsHPROFILE Lab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_ROLE_ANY)->profile;
+  const cmsHPROFILE output_profile = dt_colorspaces_get_profile(LAB_CONVERSION_PROFILE, "", DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR)->profile;
   const cmsHTRANSFORM xform = cmsCreateTransform(Lab, TYPE_LabA_FLT, output_profile, TYPE_RGBA_FLT, INTENT_PERCEPTUAL, 0);
 
   for(uint32_t row = 0; row < t->height; row++)
@@ -278,8 +279,8 @@ failed:
 
 static inline int _read_chunky_16_Lab(tiff_t *t, uint16_t photometric)
 {
-  const cmsHPROFILE Lab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_DIRECTION_ANY)->profile;
-  const cmsHPROFILE output_profile = dt_colorspaces_get_profile(LAB_CONVERSION_PROFILE, "", DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY)->profile;
+  const cmsHPROFILE Lab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_ROLE_ANY)->profile;
+  const cmsHPROFILE output_profile = dt_colorspaces_get_profile(LAB_CONVERSION_PROFILE, "", DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR)->profile;
   const cmsHTRANSFORM xform = cmsCreateTransform(Lab, TYPE_LabA_FLT, output_profile, TYPE_RGBA_FLT, INTENT_PERCEPTUAL, 0);
   const float range = (photometric == PHOTOMETRIC_CIELAB) ? 65535.0f : 65280.0f;
 
@@ -536,7 +537,7 @@ int dt_imageio_tiff_read_profile(const char *filename, uint8_t **out)
 
   if(photometric == PHOTOMETRIC_CIELAB || photometric == PHOTOMETRIC_ICCLAB)
   {
-    profile = dt_colorspaces_get_profile(LAB_CONVERSION_PROFILE, "", DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY)->profile;
+    profile = dt_colorspaces_get_profile(LAB_CONVERSION_PROFILE, "", DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR)->profile;
 
     cmsSaveProfileToMem(profile, 0, &profile_len);
     if(profile_len > 0)
@@ -559,6 +560,180 @@ int dt_imageio_tiff_read_profile(const char *filename, uint8_t **out)
   TIFFClose(tiff);
 
   return profile_len;
+}
+
+/* ---- Embedded-preview decoding, from a memory blob ------------------------
+ *
+ * A raw file that embeds a JPEG preview is handled by libjpeg in
+ * dt_imageio_large_thumbnail(); one that embeds a TIFF preview lands here.
+ * These previews are small, self-contained images, so the whole blob is
+ * already in memory and libtiff reads it through TIFFClientOpen with the five
+ * callbacks below -- no temporary file, and no second image library.
+ *
+ * Sample format and bit depth are libtiff's problem, not ours: the RGBA
+ * interface converts whatever the preview holds into 8-bit RGBA, and the cases
+ * it cannot convert are refused up front by TIFFRGBAImageOK(). See the depth
+ * note in dt_imageio_tiff_decode_blob(). */
+
+typedef struct _tiff_blob_t
+{
+  const uint8_t *data;
+  tmsize_t size;
+  // Held as toff_t, libtiff's file-offset type, rather than tmsize_t: a seek past the end is
+  // legal (see _blob_seek) and must record the position asked for, which a corrupt offset in
+  // the file's own tags can put far beyond the blob. _blob_read() is what bounds it.
+  toff_t pos;
+} _tiff_blob_t;
+
+static tmsize_t _blob_read(thandle_t handle, void *buffer, tmsize_t size)
+{
+  _tiff_blob_t *blob = (_tiff_blob_t *)handle;
+  // At or past the end reads as empty rather than as an error -- this is the single place the
+  // extent of the data is enforced, so _blob_seek() does not have to refuse anything.
+  if(size <= 0 || blob->pos >= (toff_t)blob->size) return 0;
+  const tmsize_t available = (tmsize_t)((toff_t)blob->size - blob->pos);
+  const tmsize_t n = (size < available) ? size : available;
+  memcpy(buffer, blob->data + (size_t)blob->pos, (size_t)n);
+  blob->pos += (toff_t)n;
+  return n;
+}
+
+// Read-only: libtiff still requires a write callback, and refusing every write
+// is what makes the handle read-only rather than silently corrupting anything.
+static tmsize_t _blob_write(thandle_t handle, void *buffer, tmsize_t size)
+{
+  return 0;
+}
+
+static toff_t _blob_seek(thandle_t handle, toff_t offset, int whence)
+{
+  _tiff_blob_t *blob = (_tiff_blob_t *)handle;
+  toff_t base = 0;
+  switch(whence)
+  {
+    case SEEK_SET: base = 0; break;
+    case SEEK_CUR: base = blob->pos; break;
+    case SEEK_END: base = (toff_t)blob->size; break;
+    default: return (toff_t)-1;
+  }
+  const toff_t target = base + offset;
+  if(target < base) return (toff_t)-1; // wrapped: the caller asked for something absurd
+
+  // Seeking beyond the end is legal and must succeed, exactly as lseek(2) does: libtiff probes
+  // an offset before deciding whether to read it, and expects the new position back rather than
+  // an error. Refusing here would turn a routine probe into a fatal read failure. The end of the
+  // data is enforced by _blob_read(), which returns 0 bytes from any position at or past it.
+  blob->pos = target;
+  return target;
+}
+
+static int _blob_close(thandle_t handle)
+{
+  return 0;
+}
+
+static toff_t _blob_size(thandle_t handle)
+{
+  return (toff_t)((_tiff_blob_t *)handle)->size;
+}
+
+// No memory-mapped path: the blob is already a plain host buffer, and claiming
+// otherwise would hand libtiff a mapping it would try to unmap.
+static int _blob_map(thandle_t handle, void **base, toff_t *size)
+{
+  return 0;
+}
+
+static void _blob_unmap(thandle_t handle, void *base, toff_t size)
+{
+}
+
+gboolean dt_imageio_tiff_decode_blob(const uint8_t *const blob, const size_t bufsize, uint8_t **out,
+                                     int32_t *width, int32_t *height)
+{
+  if(IS_NULL_PTR(blob) || bufsize == 0 || IS_NULL_PTR(out) || IS_NULL_PTR(width) || IS_NULL_PTR(height))
+    return FALSE;
+
+  // Same handlers the file path installs, so a malformed preview is reported
+  // through our log instead of libtiff's default stderr chatter.
+  TIFFSetWarningHandler(_warning_handler);
+  TIFFSetErrorHandler(_error_handler);
+
+  _tiff_blob_t handle = { .data = blob, .size = (tmsize_t)bufsize, .pos = 0 };
+  TIFF *tiff = TIFFClientOpen("embedded-preview", "rm", (thandle_t)&handle, _blob_read, _blob_write,
+                              _blob_seek, _blob_close, _blob_size, _blob_map, _blob_unmap);
+  if(IS_NULL_PTR(tiff)) return FALSE;
+
+  gboolean ok = FALSE;
+  uint32_t w = 0, h = 0;
+  if(!TIFFGetField(tiff, TIFFTAG_IMAGEWIDTH, &w) || !TIFFGetField(tiff, TIFFTAG_IMAGELENGTH, &h)
+     || w == 0 || h == 0)
+    goto done;
+
+  /* Bit depth is NOT assumed. TIFFReadRGBAImage() normalises 1-, 2-, 4-, 8- and 16-bit samples
+   * down to 8 bits per channel itself, along with the photometric interpretation (palette,
+   * greyscale, YCbCr, CMYK, ...) -- which is the whole reason for using the RGBA interface here
+   * rather than reading strips by hand. What it does NOT handle is 32-bit integer or float
+   * samples, and a few exotic compression/photometric combinations.
+   *
+   * TIFFRGBAImageOK() is libtiff's own predicate for exactly that question and fills in the
+   * reason, so an unsupported preview is refused with a diagnosis instead of failing anonymously
+   * inside the read below. Losing precision to 8 bits is correct here regardless: the caller's
+   * contract is an 8-bit RGBx buffer for a thumbnail. */
+  char why[1024] = { 0 };
+  if(!TIFFRGBAImageOK(tiff, why))
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[tiff_decode_blob] embedded preview cannot be read as RGBA: %s\n", why);
+    goto done;
+  }
+
+  uint16_t bps = 0;
+  if(TIFFGetField(tiff, TIFFTAG_BITSPERSAMPLE, &bps) && bps != 8)
+    dt_print(DT_DEBUG_IMAGEIO, "[tiff_decode_blob] %u-bit embedded preview, converted to 8-bit\n",
+             (unsigned)bps);
+
+  // TIFFReadRGBAImage indexes its raster with a 32-bit pixel count, so refuse
+  // anything that would overflow it rather than trusting the tags in a file we
+  // did not write.
+  if((uint64_t)w * (uint64_t)h > (uint64_t)0xFFFFFFFFu / 4u) goto done;
+
+  const size_t npixels = (size_t)w * (size_t)h;
+  uint8_t *pixels = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(sizeof(uint8_t) * 4 * npixels, 0);
+  if(IS_NULL_PTR(pixels)) goto done;
+
+  // ORIENTATION_TOPLEFT so the result is top-down like every other decoder here;
+  // libtiff would otherwise hand back a bottom-up raster. stopOnError = 0: a
+  // partially decodable preview is still worth showing.
+  if(!TIFFReadRGBAImageOriented(tiff, w, h, (uint32_t *)pixels, ORIENTATION_TOPLEFT, 0))
+  {
+    dt_pixelpipe_cache_free_align(pixels);
+    goto done;
+  }
+
+  // libtiff packs each pixel as one host-order uint32 (ABGR); unpack in place to the R, G, B,
+  // unused byte layout the callers expect. Copied out through memcpy rather than read through a
+  // uint32_t* view of a uint8_t buffer: the compiler turns it into the same single load, and it
+  // keeps the loop from resting on an effective-type argument (the allocation has no declared
+  // type, so libtiff's write is what makes it uint32) that a reader would have to reconstruct.
+  for(size_t i = 0; i < npixels; i++)
+  {
+    uint8_t *const dest = pixels + 4 * i;
+    uint32_t px;
+    memcpy(&px, dest, sizeof(px));
+    dest[0] = (uint8_t)TIFFGetR(px);
+    dest[1] = (uint8_t)TIFFGetG(px);
+    dest[2] = (uint8_t)TIFFGetB(px);
+    dest[3] = 0;
+  }
+
+  *out = pixels;
+  *width = (int32_t)w;
+  *height = (int32_t)h;
+  ok = TRUE;
+
+done:
+  TIFFClose(tiff);
+  return ok;
 }
 
 // clang-format off

@@ -30,7 +30,8 @@
 #ifndef DT_GUI_DTGTK_FOCUS_H
 #define DT_GUI_DTGTK_FOCUS_H
 
-#include "common/image_cache.h"
+#include "gui/application.h"
+#include "caches/image_cache.h"
 #include "develop/develop.h"
 
 typedef struct dt_focus_cluster_t
@@ -232,9 +233,9 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
   cairo_save(cr);
   cairo_translate(cr, width / 2.0, height / 2.0f);
 
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   dt_image_t image = *img;
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   // FIXME: get those from rawprepare IOP somehow !!!
   int wd = buffer_width + image.crop_x;
@@ -284,7 +285,12 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
     dt_dev_cleanup(&dev);
   }
 
-  const int32_t tb = dt_dev_get_global()->roi.border_size;
+  // Reads the DARKROOM's border size from a lighttable thumbnail render job, on a control-job
+  // thread, through the global dev. Wrong on two axes -- a view that is not darkroom, a thread
+  // that is not the GUI's -- and flagged as such in doc/develop-split.md; kept behaviour-
+  // identical here because changing which border a thumbnail overlay uses is a visual change,
+  // not a relocation.
+  const int32_t tb = dt_dev_viewport_border_size(dt_dev_get_global());
   const float scale = fminf((width - 2 * tb) / (float)wd, (height - 2 * tb) / (float)ht) * full_zoom;
   cairo_scale(cr, scale, scale);
   float fx = 0.0f;

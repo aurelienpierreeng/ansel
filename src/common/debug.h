@@ -11,125 +11,42 @@
     Copyright (C) 2022, 2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023, 2025 Alynx Zhou.
-    
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/** @file common/debug.h
+ *
+ * @brief Call tracing for functions you do not want to edit every caller of.
+ *
+ * @note This header used to also carry the `DT_DEBUG_SQLITE3_*` family, so a file wanting
+ * ::DT_DEBUG_TRACE_WRAPPER -- which has nothing to do with SQL -- got `database.h` and
+ * `<sqlite3.h>` with it. Those macros live in `database/sql_debug.h` now, next to the
+ * connection they call into.
+ */
+
 #ifndef DT_COMMON_DEBUG_H
 #define DT_COMMON_DEBUG_H
 
-/* Self-containment: the DT_DEBUG_SQLITE3_* macros below expand to
- * dt_database_get_sqlite3_global() (common/database.h), dt_print()/DT_DEBUG_SQL
- * (common/logging.h) and fprintf() (<stdio.h>). Include them here rather than
- * making every consumer of the macros do it: this header used to compile only
- * because darktable.h happened to be included first. */
+/* Self-containment: DT_DEBUG_TRACE_WRAPPER expands to dt_vprint() and the
+ * dt_debug_thread_t enumeration, both from common/logging.h. */
 
-#include "common/database.h"
 #include "common/logging.h"
-
-#include <sqlite3.h>
-#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// define this to see all sql queries passed to prepare and exec at compile time, or a variable name
-// warning:
-// there are some direct calls to sqlite3_exec and sqlite3_prepare_v2 which are missing here. grep manually.
-// #define DEBUG_SQL_QUERIES
-
-#ifdef DEBUG_SQL_QUERIES
-  #define __STRINGIFY(TEXT) #TEXT
-  #define MESSAGE(VALUE) __STRINGIFY(message __STRINGIFY(SQLDEBUG: VALUE))
-  #define __DT_DEBUG_SQL_QUERY__(value) _Pragma(MESSAGE(value))
-#else
-  #define __DT_DEBUG_SQL_QUERY__(value)
-#endif
-
-
-#ifdef _DEBUG
-#include <assert.h>
-#define __DT_DEBUG_ASSERT__(xin)                                                                                  \
-  {                                                                                                               \
-    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wshadow\"") const int x = xin;              \
-    if(x != SQLITE_OK)                                                                                            \
-    {                                                                                                             \
-      fprintf(stderr, "sqlite3 error: %s:%d, function %s(): %s\n", __FILE__, __LINE__, __FUNCTION__,              \
-              sqlite3_errmsg(dt_database_get_sqlite3_global()));                                                     \
-    }                                                                                                             \
-    assert(x == SQLITE_OK);                                                                                       \
-    _Pragma("GCC diagnostic pop")                                                                                 \
-  }
-#define __DT_DEBUG_ASSERT_WITH_QUERY__(xin, query)                                                                \
-  {                                                                                                               \
-    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wshadow\"") const int x = xin;              \
-    if(x != SQLITE_OK)                                                                                            \
-    {                                                                                                             \
-      fprintf(stderr, "sqlite3 error: %s:%d, function %s(), query \"%s\": %s\n", __FILE__, __LINE__, __FUNCTION__,\
-              (query), sqlite3_errmsg(dt_database_get_sqlite3_global()));                                            \
-    }                                                                                                             \
-    assert(x == SQLITE_OK);                                                                                       \
-    _Pragma("GCC diagnostic pop")                                                                                 \
-  }
-#else
-#define __DT_DEBUG_ASSERT__(xin)                                                                                  \
-  {                                                                                                               \
-    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wshadow\"") const int x = xin;              \
-    if(x != SQLITE_OK)                                                                                            \
-    {                                                                                                             \
-      fprintf(stderr, "sqlite3 error: %s:%d, function %s(): %s\n", __FILE__, __LINE__, __FUNCTION__,              \
-              sqlite3_errmsg(dt_database_get_sqlite3_global()));                                                     \
-    }                                                                                                             \
-    _Pragma("GCC diagnostic pop")                                                                                 \
-  }
-#define __DT_DEBUG_ASSERT_WITH_QUERY__(xin, query)                                                                \
-  {                                                                                                               \
-    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wshadow\"") const int x = xin;              \
-    if(x != SQLITE_OK)                                                                                            \
-    {                                                                                                             \
-      fprintf(stderr, "sqlite3 error: %s:%d, function %s(), query \"%s\": %s\n", __FILE__, __LINE__, __FUNCTION__,\
-              (query), sqlite3_errmsg(dt_database_get_sqlite3_global()));                                            \
-    }                                                                                                             \
-    _Pragma("GCC diagnostic pop")                                                                                 \
-  }
-
-#endif
-
-#define DT_DEBUG_SQLITE3_EXEC(a, b, c, d, e)                                                                      \
-  do                                                                                                              \
-  {                                                                                                               \
-    dt_print(DT_DEBUG_SQL, "[sql] %s:%d, function %s(): exec \"%s\"\n", __FILE__, __LINE__, __FUNCTION__, (b));   \
-    __DT_DEBUG_ASSERT_WITH_QUERY__(sqlite3_exec(a, b, c, d, e), (b));                                             \
-    __DT_DEBUG_SQL_QUERY__(b)                                                                                     \
-  } while(0)
-
-#define DT_DEBUG_SQLITE3_PREPARE_V2(a, b, c, d, e)                                                                \
-  do                                                                                                              \
-  {                                                                                                               \
-    dt_print(DT_DEBUG_SQL, "[sql] %s:%d, function %s(): prepare \"%s\"\n", __FILE__, __LINE__, __FUNCTION__, (b));\
-    __DT_DEBUG_ASSERT_WITH_QUERY__(sqlite3_prepare_v2(a, b, c, d, e), (b));                                       \
-    __DT_DEBUG_SQL_QUERY__(b)                                                                                     \
-  } while(0)
-
-#define DT_DEBUG_SQLITE3_BIND_INT(a, b, c) __DT_DEBUG_ASSERT__(sqlite3_bind_int(a, b, c))
-#define DT_DEBUG_SQLITE3_BIND_INT64(a, b, c) __DT_DEBUG_ASSERT__(sqlite3_bind_int64(a, b, c))
-#define DT_DEBUG_SQLITE3_BIND_DOUBLE(a, b, c) __DT_DEBUG_ASSERT__(sqlite3_bind_double(a, b, c))
-#define DT_DEBUG_SQLITE3_BIND_TEXT(a, b, c, d, e) __DT_DEBUG_ASSERT__(sqlite3_bind_text(a, b, c, d, e))
-#define DT_DEBUG_SQLITE3_BIND_BLOB(a, b, c, d, e) __DT_DEBUG_ASSERT__(sqlite3_bind_blob(a, b, c, d, e))
-#define DT_DEBUG_SQLITE3_CLEAR_BINDINGS(a) __DT_DEBUG_ASSERT__(sqlite3_clear_bindings(a))
-#define DT_DEBUG_SQLITE3_RESET(a) __DT_DEBUG_ASSERT__(sqlite3_reset(a))
 
 // Use this to re-define a function to trace it, so you don't need to modify all
 // callers. `thread` should be `dt_debug_thread_t`. This requires verbose mode.
@@ -142,6 +59,16 @@ extern "C" {
     dt_vprint((thread), "[debug_trace] %s is called from %s at %s:%d\n", \
               #function, __FUNCTION__, __FILE__, __LINE__);              \
     function(__VA_ARGS__);                                               \
+  } while (0)
+
+// Same, for a function taking no arguments. ISO C wants at least one argument for a
+// variadic macro's `...`, so DT_DEBUG_TRACE_WRAPPER cannot be handed an empty list
+// without relying on a GNU extension.
+#define DT_DEBUG_TRACE_WRAPPER_VOID(thread, function)                    \
+  do {                                                                   \
+    dt_vprint((thread), "[debug_trace] %s is called from %s at %s:%d\n", \
+              #function, __FUNCTION__, __FILE__, __LINE__);              \
+    function();                                                          \
   } while (0)
 
 #ifdef __cplusplus

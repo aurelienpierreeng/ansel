@@ -44,12 +44,12 @@
 #include "config.h"
 #endif
 // our includes go first:
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/bilateral.h"
 #include "pixel/bilateralcl.h"
 #include "pixel/locallaplacian.h"
 #include "pixel/locallaplaciancl.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
@@ -362,7 +362,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_bilat_gui_data_t *g = (dt_iop_bilat_gui_data_t *)self->gui_data;
+  dt_iop_bilat_gui_data_t *g = (dt_iop_bilat_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_bilat_params_t *p = (dt_iop_bilat_params_t *)self->params;
   if(w == g->highlights || w == g->shadows || w == g->midtone)
   {
@@ -398,7 +398,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_bilat_gui_data_t *g = (dt_iop_bilat_gui_data_t *)self->gui_data;
+  dt_iop_bilat_gui_data_t *g = (dt_iop_bilat_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_bilat_params_t *p = (dt_iop_bilat_params_t *)self->params;
 
   if(p->mode == s_mode_local_laplacian)

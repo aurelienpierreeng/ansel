@@ -1,0 +1,72 @@
+/*
+    This file is part of Ansel,
+    Copyright (C) 2026 Aurélien PIERRE.
+
+    Ansel is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Ansel is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef DT_GUI_COMMON_HISTORY_MERGE_H
+#define DT_GUI_COMMON_HISTORY_MERGE_H
+
+#include "develop/history_merge.h"
+
+#include <glib.h>
+
+struct dt_develop_t;
+
+
+
+dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, const char *faulty_id,
+                                                         const char *src_prev, const char *src_next,
+                                                         const char *dst_prev, const char *dst_next);
+
+gboolean _hm_warn_missing_raster_producers(const GList *mod_list);
+
+void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht);
+
+
+GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHashTable *mod_list_ids,
+                                               GPtrArray **out_styles);
+
+/**
+ * @brief Show a modal dialog to pick merge mode and pipeline order before a paste or style apply.
+ *
+ * Reads the current saved settings from @p mode_key and @p iop_order_key, lets the user
+ * adjust them, and writes back on OK.  Returns TRUE when the user confirmed (proceed),
+ * FALSE when they cancelled (abort the operation).
+ *
+ * @param title               Window title string (already translated).
+ * @param mode_key            Conf key for the dt_history_merge_strategy_t value (int).
+ * @param iop_order_key       Conf key for the "use incoming pipeline order" boolean.
+ * @param ask_key             Conf key for the "show this dialog next time" boolean.
+ * @param iop_order_available Whether the source has a stored pipeline order to offer.
+ *                            When FALSE the pipeline-order checkbox is disabled.
+ */
+gboolean dt_gui_merge_options_dialog(const char *title,
+                                     const char *mode_key,
+                                     const char *iop_order_key,
+                                     const char *ask_key,
+                                     gboolean iop_order_available);
+
+gboolean _hm_show_merge_report_popup(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
+                                     const gboolean merge_iop_order, const gboolean used_source_order,
+                                     const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
+                                     GHashTable *dst_last_before_by_id, const GHashTable *orig_ids,
+                                     const GHashTable *mod_list_ids, const char *source_label,
+                                     dt_hm_batch_state_t *batch);
+/** Register the four handlers develop/history_merge.c asks through. Called from
+ *  dt_gui_gtk_init(); without it merging simply takes its no-handler defaults. */
+void dt_history_merge_gui_register_handlers(void);
+
+#endif // DT_GUI_COMMON_HISTORY_MERGE_H

@@ -38,19 +38,18 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
-#include "common/pixelpipe_cache_alloc.h"
-#include "common/exif.h"
+#include "caches/pixelpipe_cache_alloc.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
 #include "imageio/format/imageio_format_api.h"
-#include "gui/gtk.h"
 
 #include <inttypes.h>
 #include <setjmp.h>
@@ -60,6 +59,7 @@
 #undef HAVE_STDLIB_H
 #undef HAVE_STDDEF_H
 #include <jpeglib.h>
+#include "imageio/imageio_profile.h"
 #undef HAVE_STDLIB_H
 #undef HAVE_STDDEF_H
 

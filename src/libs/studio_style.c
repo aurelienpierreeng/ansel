@@ -22,20 +22,22 @@
     on pool rows, add on style leaves), matching the click-by-column pattern
     already used for mask group rows in develop/blend_gui.c. */
 
-#include "common/macros.h"
+#include "widgets/widget_settings.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "common/folder_survey.h"
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
 #include "common/image.h"
 #include "common/styles.h"
 #include "common/conf.h"
-#include "control/control.h"
-#include "gui/gtk.h"
+#include "control/user_message.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
+#include "gui/window_manager.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

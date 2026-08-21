@@ -33,23 +33,23 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
 #include "imageio/format/imageio_format_api.h"
-#include "gui/gtk.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <webp/encode.h>
 #include <webp/mux.h>
+#include "imageio/imageio_profile.h"
 
 DT_MODULE(2)
 

@@ -50,8 +50,9 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 #ifdef HAVE_CONFIG_H
+#include "common/imagebuf.h" // dt_iop_image_copy_by_size(): the early-bypass passthrough
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "system/openmp.h"
@@ -59,11 +60,9 @@
 #include "system/target_clones.h"
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/imagebuf.h"
+#include "widgets/bauhaus.h"
 #include "common/opencl.h"
-#include "math/choleski.h" // dense Cholesky solve (SPD) for the direct biharmonic dome (needs control.h)
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
@@ -74,7 +73,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 // Highlights internals: harmonic mode is a set of compiled per-stage TUs; include only the
 // shared types (params + per-module OpenCL global data) and the high-level harmonic driver.
@@ -87,6 +85,7 @@
 
 #include <gtk/gtk.h>
 #include <inttypes.h>
+#include "widgets/label.h"
 
 // Downsampling factor for guided-laplacian
 
@@ -224,6 +223,84 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
+// ===== early bypass: nothing worth reconstructing ============================================
+// The clipping threshold the ACTIVE MODE actually tests against, so the bypass counts exactly what
+// that mode would call clipped instead of a conservative envelope of all of them: colour inpainting
+// takes 0.987 of each channel's white point, the two reconstruction modes 0.995, and plain clip /
+// LCh the scalar clip (the smallest channel's white point, which is what they clamp to). Keep these
+// factors in step with the clips[] each case of the mode switch builds below.
+static inline void _hl_count_thresholds(const int mode, const float user_clip,
+                                        const dt_aligned_pixel_t pmax, const float clip,
+                                        dt_aligned_pixel_t thresholds)
+{
+  float factor = 0.f;
+  switch(mode)
+  {
+    case DT_IOP_HIGHLIGHTS_INPAINT:
+      factor = 0.987f;
+      break;
+    case DT_IOP_HIGHLIGHTS_LAPLACIAN:
+    case DT_IOP_HIGHLIGHTS_HARMONIC:
+      factor = 0.995f;
+      break;
+    case DT_IOP_HIGHLIGHTS_LCH:
+    case DT_IOP_HIGHLIGHTS_CLIP:
+    default:
+      factor = 0.f; // no per-channel white point: these test the scalar clip
+      break;
+  }
+  for(int c = 0; c < 3; c++) thresholds[c] = (factor > 0.f) ? factor * user_clip * pmax[c] : clip;
+  thresholds[3] = clip;
+}
+
+// Count the input pixels the active mode would treat as clipped, against those thresholds. A
+// demosaiced pixel counts if any of R/G/B is over its own threshold; a mosaic pixel is one
+// photosite, whose colour would need a CFA lookup (FC / FCxtrans) to pick the matching threshold.
+// This module runs AFTER white balance, so processed_maximum carries the WB coefficients and the
+// three thresholds genuinely differ on raw (measured {2.28, 1.00, 1.60} on a Fuji X-Trans file).
+// The smallest is used instead of the per-photosite one: that OVER-counts -- an R photosite between
+// 0.995 and its own 2.28 threshold is counted as clipped -- so the bypass fires less often than it
+// strictly could, never more. Deliberate: this is a "nothing to do" guard, and a frame quiet enough
+// to bypass has every channel under every threshold anyway. Exactness here would cost a CFA lookup
+// per pixel on both the CPU and the device.
+static size_t _hl_count_clipped(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                                const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t thresholds)
+{
+  const float *const restrict in = (const float *const restrict)ivoid;
+  const size_t n_pixels = (size_t)roi_out->width * roi_out->height;
+  size_t clipped = 0;
+
+  if(piece->dsc_in.filters)
+  {
+    const float raw_threshold = fminf(fminf(thresholds[0], thresholds[1]), thresholds[2]);
+    __OMP_PARALLEL_FOR_SIMD__(reduction(+ : clipped))
+    for(size_t k = 0; k < n_pixels; k++) clipped += (in[k] > raw_threshold);
+  }
+  else
+  {
+    const size_t ch = piece->dsc_in.channels;
+    const size_t n_colours = MIN(ch, (size_t)3);
+    __OMP_PARALLEL_FOR__(reduction(+ : clipped))
+    for(size_t k = 0; k < n_pixels; k++)
+    {
+      int over = 0;
+      for(size_t c = 0; c < n_colours; c++) over |= (in[k * ch + c] > thresholds[c]);
+      clipped += (over != 0);
+    }
+  }
+  return clipped;
+}
+
+// Pure copy input -> output, the bypass result. roi_in == roi_out here (this module declares no
+// modify_roi_*), so the buffers have identical geometry and channel count.
+static void _hl_copy_input(const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+                           const dt_iop_roi_t *const roi_out)
+{
+  const size_t ch = piece->dsc_in.filters ? 1 : (size_t)piece->dsc_in.channels;
+  dt_iop_image_copy_by_size((float *const)ovoid, (const float *const)ivoid, roi_out->width, roi_out->height,
+                            ch);
+}
+
 #ifdef HAVE_OPENCL
 
 // The per-mode OpenCL helpers below carry the kernel-argument boilerplate so process_cl() reads as a
@@ -248,6 +325,49 @@ static cl_int _hl_cl_visualize(dt_iop_highlights_global_data_t *gd, const int de
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_false_color, 7, sizeof(cl_mem), (void *)&dev_clips);
   const cl_int err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_false_color, sizes);
   dt_opencl_release_mem_object(dev_clips);
+  return err;
+}
+
+// Device twin of _hl_count_clipped: one workgroup-local reduction per group, summed here.
+static cl_int _hl_cl_count_clipped(dt_iop_highlights_global_data_t *gd, const int devid, cl_mem dev_in,
+                                   const int width, const int height,
+                                   const dt_aligned_pixel_t thresholds, const int is_raw,
+                                   size_t *const clipped)
+{
+  const int local_size = 64, n_groups = 256;
+  *clipped = 0;
+  cl_mem partial = dt_opencl_alloc_device_buffer(devid, sizeof(uint32_t) * n_groups);
+  cl_mem dev_thresholds = dt_opencl_copy_host_to_device_constant(devid, 4 * sizeof(float),
+                                                                 (float *)thresholds);
+  if(IS_NULL_PTR(partial) || IS_NULL_PTR(dev_thresholds))
+  {
+    dt_opencl_release_mem_object(partial);
+    dt_opencl_release_mem_object(dev_thresholds);
+    return DT_OPENCL_DEFAULT_ERROR;
+  }
+
+  const int kernel = gd->kernel_highlights_count_clipped;
+  size_t sizes[3] = { (size_t)n_groups * local_size, 1, 1 };
+  size_t local[3] = { local_size, 1, 1 };
+  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&partial);
+  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), (void *)&dev_thresholds);
+  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(int), (void *)&is_raw);
+  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(uint32_t) * local_size, NULL);
+  cl_int err = dt_opencl_enqueue_kernel_2d_with_local(devid, kernel, sizes, local);
+
+  if(err == CL_SUCCESS)
+  {
+    uint32_t partial_host[256];
+    err = dt_opencl_read_buffer_from_device(devid, partial_host, partial, 0, sizeof(uint32_t) * n_groups,
+                                            CL_TRUE);
+    if(err == CL_SUCCESS)
+      for(int group = 0; group < n_groups; group++) *clipped += (size_t)partial_host[group];
+  }
+  dt_opencl_release_mem_object(partial);
+  dt_opencl_release_mem_object(dev_thresholds);
   return err;
 }
 
@@ -347,7 +467,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_highlights_data_t *d = (dt_iop_highlights_data_t *)piece->data;
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_highlights_global_data_t *gd = (dt_iop_highlights_global_data_t *)self->global_data;
 
   const uint32_t filters = piece->dsc_in.filters;
@@ -389,6 +509,25 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const float clip = d->clip * fminf(pmax[0], fminf(pmax[1], pmax[2]));
   const dt_aligned_pixel_t clips
       = { 0.995f * d->clip * pmax[0], 0.995f * d->clip * pmax[1], 0.995f * d->clip * pmax[2], clip };
+
+  // Early bypass: with a negligible clipped area every mode below would pay a full-frame pass (the
+  // reconstruction modes several, plus region segmentation and sparse solves) to move a couple of
+  // dozen pixels. Count first and copy the input through instead. Mirrors process().
+  {
+    dt_aligned_pixel_t count_thresholds;
+    _hl_count_thresholds(d->mode, d->clip, pmax, clip, count_thresholds);
+    size_t n_clipped = 0;
+    err = _hl_cl_count_clipped(gd, devid, dev_in, width, height, count_thresholds, filters != 0, &n_clipped);
+    if(err != CL_SUCCESS) goto error;
+    if(n_clipped < DT_HL_MIN_CLIPPED_PIXELS)
+    {
+      size_t origin[] = { 0, 0, 0 };
+      size_t region[] = { width, height, 1 };
+      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
+      if(err != CL_SUCCESS) goto error;
+      return TRUE;
+    }
+  }
 
   // Mode switch, symmetric to process(). The reconstruction modes run on the GPU for raw and non-raw
   // alike -- the non-raw passthrough drivers use their own device gather/remosaic kernels, no CPU
@@ -550,7 +689,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // filters==9u / !filters checks are shift-invariant.
   const uint32_t filters = dt_dev_get_roi_filters(piece, roi_in);
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
 
   /* This transient preview belongs to the central darkroom view. Do not infer
    * its owner from ROI geometry: at zoom-to-fit the main and navigation pipes
@@ -584,6 +723,15 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   // Non-raw input is no longer nuked to a plain clip here: the mode switch below dispatches it too
   // (LAPLACIAN/HARMONIC reconstruct already-demosaiced RGB via their passthrough gather, CLIP thresholds
   // per channel, LCh/INPAINT have no non-raw path and fall back to _highlights_copy_input).
+
+  // Early bypass, twin of process_cl()'s: nothing worth reconstructing -> copy the input through.
+  dt_aligned_pixel_t count_thresholds;
+  _hl_count_thresholds(data->mode, data->clip, pmax, clip, count_thresholds);
+  if(_hl_count_clipped(piece, ivoid, roi_out, count_thresholds) < DT_HL_MIN_CLIPPED_PIXELS)
+  {
+    _hl_copy_input(piece, ivoid, ovoid, roi_out);
+    return 0;
+  }
 
   switch(data->mode)
   {
@@ -754,6 +902,7 @@ void init_global(dt_iop_module_so_t *module)
       = (dt_iop_highlights_global_data_t *)malloc(sizeof(dt_iop_highlights_global_data_t));
   module->data = gd;
   gd->kernel_highlights_1f_clip = dt_opencl_create_kernel(program, "highlights_1f_clip");
+  gd->kernel_highlights_count_clipped = dt_opencl_create_kernel(program, "highlights_count_clipped");
   const int harmonic_program = 38; // highlights_harmonic.cl (harmonic transposition, fp32)
   const int sparse_program = 37;   // highlights_sparse.cl (fp64 sparse solvers)
   gd->kernel_sparse_chol_update_level = dt_opencl_create_kernel(sparse_program, "sparse_chol_update_level");
@@ -855,6 +1004,9 @@ void init_global(dt_iop_module_so_t *module)
   gd->kernel_hl_pyr_putc = dt_opencl_create_kernel(harmonic_program, "hl_pyr_putc");
   gd->kernel_hl_aniso_iter = dt_opencl_create_kernel(harmonic_program, "hl_aniso_iter");
   gd->kernel_hl_aniso_iter_block = dt_opencl_create_kernel(harmonic_program, "hl_aniso_iter_block");
+  gd->kernel_hl_dt_warp = dt_opencl_create_kernel(harmonic_program, "hl_dt_warp");
+  gd->kernel_hl_dt_rows = dt_opencl_create_kernel(harmonic_program, "hl_dt_rows");
+  gd->kernel_hl_dt_cols = dt_opencl_create_kernel(harmonic_program, "hl_dt_cols");
   gd->kernel_hl_aniso_splat = dt_opencl_create_kernel(harmonic_program, "hl_aniso_splat");
   gd->kernel_highlights_1f_lch_bayer = dt_opencl_create_kernel(program, "highlights_1f_lch_bayer");
   gd->kernel_highlights_1f_lch_xtrans = dt_opencl_create_kernel(program, "highlights_1f_lch_xtrans");
@@ -997,6 +1149,10 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_highlights_1f_lch_bayer);
   dt_opencl_free_kernel(gd->kernel_highlights_1f_lch_xtrans);
   dt_opencl_free_kernel(gd->kernel_highlights_1f_clip);
+  dt_opencl_free_kernel(gd->kernel_highlights_count_clipped);
+  dt_opencl_free_kernel(gd->kernel_hl_dt_warp);
+  dt_opencl_free_kernel(gd->kernel_hl_dt_rows);
+  dt_opencl_free_kernel(gd->kernel_hl_dt_cols);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_xtrans);
   dt_opencl_free_kernel(gd->kernel_highlights_bilinear_and_mask_passthrough);
@@ -1036,7 +1192,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_highlights_params_t *p = (dt_iop_highlights_params_t *)self->params;
 
   const gboolean raw = (self->dev->image_storage.dsc.filters != 0);
@@ -1057,7 +1213,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   const dt_image_t *const image = &self->dev->image_storage;
   const gboolean supported = _highlights_image_supported(image);
   // Auto-enable only on raw colorimetry (raw / sRAW, not monochrome); on rendered RGB it is opt-in.
@@ -1067,7 +1223,7 @@ void gui_update(struct dt_iop_module_t *self)
   // the module self-disables (mono-raw / greyscale), and even then keep it if already enabled (history
   // copy & paste from a RAW image) so the user can turn it back off.
   self->hide_enable_button = !supported && !self->enabled;
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), supported ? "default" : "monochrome");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), supported ? "default" : "monochrome");
 
   // capability entries, added once (moved here from reload_defaults so it never touches widgets off
   // the GUI thread / on a widget-less export dev)
@@ -1104,7 +1260,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
 
   // if blend module is displaying mask do not display it here
   if(self->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
@@ -1120,7 +1276,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)self->gui_data;
+  dt_iop_highlights_gui_data_t *g = (dt_iop_highlights_gui_data_t *)dt_iop_gui_data(self);
   if(!in)
   {
     const gboolean was_visualize = g->show_visualize;
@@ -1133,7 +1289,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_highlights_gui_data_t *g = IOP_GUI_ALLOC(highlights);
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
   gtk_widget_set_tooltip_text(g->mode, _("highlight reconstruction method"));
@@ -1171,10 +1327,10 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(monochromes, _("no highlights reconstruction for monochrome images"));
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
-  gtk_stack_add_named(GTK_STACK(self->widget), monochromes, "monochrome");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "default");
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), monochromes, "monochrome");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "default");
 }
 
 // clang-format off

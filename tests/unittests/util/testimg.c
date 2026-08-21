@@ -18,7 +18,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/darktable.h"
+#include "system/mem_alloc.h" // dt_free
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

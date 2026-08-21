@@ -25,8 +25,7 @@
 #               $ export CODECERT="developer@apple.id"
 #               The mail address is the email/id of your developer certificate.
 
-#   
- Exit in case of error
+# Exit in case of error
 set -e -o pipefail
 trap 'echo "${BASH_SOURCE[0]}{${FUNCNAME[0]}}:${LINENO}: Error: command \`${BASH_COMMAND}\` failed with exit code $?"' ERR
 
@@ -245,7 +244,7 @@ for dtExecutable in $dtExecutables; do
 done
 
 # Add homebrew shared objects
-dtSharedObjDirs="gtk-3.0 gdk-pixbuf-2.0 gio GraphicsMagick"
+dtSharedObjDirs="gtk-3.0 gdk-pixbuf-2.0 gio"
 for dtSharedObj in $dtSharedObjDirs; do
     cp -LR "$homebrewHome"/lib/"$dtSharedObj" "$dtResourcesDir"/lib/
 done
@@ -335,23 +334,29 @@ cp fonts/*  "$dtResourcesDir"/fonts/
 sed -i -e '/ansel-macos-strip/d' "$dtResourcesDir"/share/ansel/themes/ansel.css
 
 # Create Icon file
+#
+# The icon is rendered larger than the target and then cropped to the centre, which trims the
+# padding the SVG carries: every offset below is exactly (rendered - target)/2. That used to be
+# `gm mogrify -crop WxH+X+Y`, from GraphicsMagick, which is no longer a dependency of Ansel and so
+# is no longer installed on the build host. `sips` ships with macOS and its -c crops centred, so
+# it is an exact replacement rather than an approximation -- and it adds no dependency back.
 if [ -d "$buildDir"/Icons.iconset ]; then
     rm -R "$buildDir/Icons.iconset"
 fi
 mkdir "$buildDir"/Icons.iconset
 rsvg-convert -h 644 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_512x512.png"
-gm mogrify -crop 512x512+66+66 "$buildDir/Icons.iconset/icon_512x512.png"
+sips -c 512 512 "$buildDir/Icons.iconset/icon_512x512.png"
 cp  "$buildDir/Icons.iconset/icon_512x512.png" "$buildDir/Icons.iconset/icon_256x256@2.png"
 rsvg-convert -h 322 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_256x256.png"
-gm mogrify -crop 256x256+33+33 "$buildDir/Icons.iconset/icon_256x256.png"
+sips -c 256 256 "$buildDir/Icons.iconset/icon_256x256.png"
 cp  "$buildDir/Icons.iconset/icon_256x256.png" "$buildDir/Icons.iconset/icon_128x128@2.png"
 rsvg-convert -h 162 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_128x128.png"
-gm mogrify -crop 128x128+17+17 "$buildDir/Icons.iconset/icon_128x128.png"
+sips -c 128 128 "$buildDir/Icons.iconset/icon_128x128.png"
 rsvg-convert -h 40 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_32x32.png"
-gm mogrify -crop 32x32+4+4 "$buildDir/Icons.iconset/icon_32x32.png"
+sips -c 32 32 "$buildDir/Icons.iconset/icon_32x32.png"
 cp  "$buildDir/Icons.iconset/icon_32x32.png" "$buildDir/Icons.iconset/icon_16x168@2.png"
 rsvg-convert -h 20 ../../data/pixmaps/scalable/ansel.svg > "$buildDir/Icons.iconset/icon_16x16.png"
-gm mogrify -crop 16x16+2+2 "$buildDir/Icons.iconset/icon_16x16.png"
+sips -c 16 16 "$buildDir/Icons.iconset/icon_16x16.png"
 if [ -f "$buildDir/Icons.icns" ]; then
     rm "$buildDir/Icons.icns"
 fi

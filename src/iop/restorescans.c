@@ -18,15 +18,12 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
 // our includes go first:
-#include "gui/bauhaus.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
-#include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>

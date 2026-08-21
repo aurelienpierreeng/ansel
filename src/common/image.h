@@ -62,6 +62,9 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+
+// Opaque here: only a pointer is stored. colorprofiles owns the definition.
+struct dt_colorspaces_color_profile_t;
 #endif
 
 #include "common/paths.h"
@@ -331,15 +334,13 @@ typedef enum dt_image_loader_t
   LOADER_EXR      =  5,
   LOADER_RGBE     =  6,
   LOADER_PFM      =  7,
-  LOADER_GM       =  8,
-  LOADER_RAWSPEED =  9,
-  LOADER_PNM      = 10,
-  LOADER_AVIF     = 11,
-  LOADER_IM       = 12,
-  LOADER_HEIF     = 13,
-  LOADER_LIBRAW   = 14,
-  LOADER_WEBP     = 15,
-  LOADER_COUNT    = 16, // keep last
+  LOADER_RAWSPEED =  8,
+  LOADER_PNM      =  9,
+  LOADER_AVIF     = 10,
+  LOADER_HEIF     = 11,
+  LOADER_LIBRAW   = 12,
+  LOADER_WEBP     = 13,
+  LOADER_COUNT    = 14, // keep last
 } dt_image_loader_t;
 
 typedef enum dt_image_path_source_t
@@ -364,11 +365,9 @@ static const struct
   { N_("exr"),             'e'},
   { N_("rgbe"),            'R'},
   { N_("pfm"),             'P'},
-  { N_("GraphicsMagick"),  'g'},
   { N_("rawspeed"),        'r'},
   { N_("netpnm"),          'n'},
   { N_("avif"),            'a'},
-  { N_("ImageMagick"),     'i'},
   { N_("heif"),            'h'},
   { N_("libraw"),          'l'},
   { N_("webp"),            'w'}
@@ -380,6 +379,31 @@ typedef struct dt_image_geoloc_t
 } dt_image_geoloc_t;
 
 struct dt_cache_entry_t;
+
+/**
+ * @brief What a thumbnail shows over an image: its rating, or one of the badge states.
+ *
+ * @details Stored in dt_image_t::rating -- 0..5 stars, or DT_VIEW_REJECT for rejected -- which
+ * is why it lives here rather than in views/view.h where it was defined. It was read 8 times
+ * from common/, 3 from caches/ and 5 from gui/, against a single use in views/ itself: an
+ * enum declared at the top layer and consumed from the bottom, which is what made
+ * common/ratings.c and caches/image_cache.c include the view layer for one constant.
+ */
+typedef enum dt_view_image_over_t
+{
+  DT_VIEW_ERR     = -1,
+  DT_VIEW_DESERT  =  0,
+  DT_VIEW_STAR_1  =  1,
+  DT_VIEW_STAR_2  =  2,
+  DT_VIEW_STAR_3  =  3,
+  DT_VIEW_STAR_4  =  4,
+  DT_VIEW_STAR_5  =  5,
+  DT_VIEW_REJECT  =  6,
+  DT_VIEW_GROUP   =  7,
+  DT_VIEW_AUDIO   =  8,
+  DT_VIEW_ALTERED =  9,
+  DT_VIEW_END     = 10, // placeholder for the end of the list
+} dt_view_image_over_t;
 
 typedef struct dt_image_t
 {
@@ -443,6 +467,11 @@ typedef struct dt_image_t
   float d65_color_matrix[9]; // the 3x3 matrix embedded in some DNGs
   uint8_t *profile;          // embedded profile, for example from JPEGs
   uint32_t profile_size;
+  /* The parsed form of the bytes above, built on demand by the export path and owned by THIS
+   * image -- not by the application-wide profile list, which is built at init and read-only
+   * thereafter. NULL until something asks for it; freed with the image. Guarded by the image
+   * cache entry's own lock, like every other member here. */
+  struct dt_colorspaces_color_profile_t *embedded_profile;
   dt_image_colorspace_t colorspace; // the colorspace that is specified in exif. mostly used for jpeg files
 
   dt_image_raw_parameters_t legacy_flip; // unfortunately needed to convert old bits to new flip module.
@@ -601,6 +630,11 @@ int32_t dt_image_get_id_full_path(const gchar *filename);
 /** get image id by film_id and filename */
 int32_t dt_image_get_id(int32_t film_id, const gchar *filename);
 /** imports a new image from raw/etc file and adds it to the data base and image cache. Use from threads other than lua.*/
+/** Guess DT_IMAGE_RAW / _HDR / _LDR from a filename extension, with or without its
+ *  leading dot. Returns 0 when the extension is ambiguous (a .dng may be either) or
+ *  unknown -- the answer then only comes from decoding the file. */
+dt_image_flags_t dt_image_flags_from_extension(const char *extension);
+
 int32_t dt_image_import(int32_t film_id, const char *filename, gboolean raise_signals);
 /** imports a new image from raw/etc file and adds it to the data base and image cache. Use from lua thread.*/
 int32_t dt_image_import_lua(int32_t film_id, const char *filename);
@@ -644,8 +678,6 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc,
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc);
 /** returns the number of history entries in library for this image */
 uint32_t dt_image_altered(const int32_t imgid);
-/** cleanup cached statements */
-void dt_image_cleanup(void);
 
 /** Orientation every module after `flip` sees, for an image we already hold.
  *
@@ -751,12 +783,27 @@ gboolean dt_image_safe_remove(const int32_t imgid);
 /* try to sync .xmp for all local copies */
 void dt_image_local_copy_synch();
 // xmp functions:
-int dt_image_write_sidecar_file(const int32_t imgid);
+/** why dt_image_write_sidecar_file() did not write a sidecar. Distinct causes get distinct
+ * values so callers can report something more useful than a generic "storage unavailable" --
+ * DISABLED and CACHE_BUSY in particular are not I/O problems at all. */
+typedef enum dt_image_write_sidecar_result_t
+{
+  DT_IMAGE_WRITE_SIDECAR_OK = 0,
+  DT_IMAGE_WRITE_SIDECAR_DISABLED,       // xmp writing is off (or an invalid imgid was passed)
+  DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY,     // could not acquire the image cache entry
+  DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH, // the original file / local copy could not be located
+  DT_IMAGE_WRITE_SIDECAR_IO_ERROR,       // the write to storage itself failed
+} dt_image_write_sidecar_result_t;
+dt_image_write_sidecar_result_t dt_image_write_sidecar_file(const int32_t imgid);
 void dt_image_synch_xmp(const int selected);
 void dt_image_synch_xmps(const GList *img);
 void dt_image_synch_all_xmp(const gchar *pathname);
-/** get the mode xmp sidecars are written */
+/** get the mode xmp sidecars are written. Lock-free: reads a cached value, refreshed only at
+ * startup and on DT_SIGNAL_PREFERENCES_CHANGE. */
 gboolean dt_image_get_xmp_mode();
+/** re-read the "write_sidecar_files" preference from conf and update the cache dt_image_get_xmp_mode()
+ * reads. Call once at startup, and wire to DT_SIGNAL_PREFERENCES_CHANGE -- never call from a hot path. */
+void dt_image_xmp_mode_refresh_from_conf(void);
 
 // set datetime to exif_datetime_taken field
 void dt_image_set_datetime(const GList *imgs, const char *datetime, const gboolean undo_on);

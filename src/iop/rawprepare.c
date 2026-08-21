@@ -37,24 +37,23 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "imageio/imageio_rawspeed.h" // for dt_rawspeed_crop_dcraw_filters
 #include "common/opencl.h"
 #include "common/imagebuf.h"
 #include "common/image.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "develop/tiling.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 #include "common/dng_opcode.h"
@@ -62,6 +61,8 @@
 #include <gtk/gtk.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include "widgets/label.h"
+#include "control/signal.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_rawprepare_params_t)
 
@@ -185,7 +186,7 @@ const char **description(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   dt_gui_presets_add_generic(_("passthrough"), self->op, self->version(),
                              &(dt_iop_rawprepare_params_t){.x = 0,
@@ -199,7 +200,7 @@ void init_presets(dt_iop_module_so_t *self)
                                                            .raw_white_point = UINT16_MAX },
                              sizeof(dt_iop_rawprepare_params_t), 1, DEVELOP_BLEND_CS_NONE);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 static inline __attribute__((always_inline)) int compute_proper_crop(const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)
@@ -268,6 +269,40 @@ static void _update_output_cfa_descriptor(const dt_dev_pixelpipe_t *pipe,
   }
 }
 
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * rawprepare's geometry is the fixed sensor border trim: a translation by the top/left margin,
+ * and an output shrunk by the total margin. Expressed once here for the pipeline callbacks and
+ * for geometry_record() (develop/geometry/geometry.h) alike.
+ */
+
+typedef struct dt_iop_rawprepare_geometry_t
+{
+  int32_t x, y, width, height;   /**< the four crop fields, verbatim from params */
+} dt_iop_rawprepare_geometry_t;
+
+/** @brief The translation the trim applies, at @p scale. */
+static void _rawprepare_offset(const int32_t crop_x, const int32_t crop_y, const double scale, double *dx,
+                               double *dy)
+{
+  *dx = (double)crop_x * scale;
+  *dy = (double)crop_y * scale;
+}
+
+/** @brief Input rect -> output rect, shrunk by the total margin at the input's own scale. */
+static void _rawprepare_map_size(const dt_iop_rawprepare_geometry_t *const g,
+                                 const dt_iop_roi_t *const roi_in, dt_iop_roi_t *roi_out)
+{
+  *roi_out = *roi_in;
+  roi_out->x = roi_out->y = 0;
+
+  const double x = g->x + g->width;
+  const double y = g->y + g->height;
+  const double scale = roi_in->scale;
+  roi_out->width = (int)round((double)roi_out->width - x * scale);
+  roi_out->height = (int)round((double)roi_out->height - y * scale);
+}
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const restrict points, size_t points_count)
 {
@@ -278,9 +313,8 @@ int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   // nothing to be done if parameters are set to neutral values (no top/left crop)
   if (d->x == 0 && d->y == 0) return 1;
 
-  const double scale = piece->buf_in.scale;
-  const double x = (double)d->x * scale;
-  const double y = (double)d->y * scale;
+  double x = 0.0, y = 0.0;
+  _rawprepare_offset(d->x, d->y, piece->buf_in.scale, &x, &y);
   __OMP_PARALLEL_FOR_SIMD__(aligned(points:64) if(points_count > 100))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
@@ -302,9 +336,8 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   // nothing to be done if parameters are set to neutral values (no top/left crop)
   if (d->x == 0 && d->y == 0) return 1;
 
-  const double scale = piece->buf_in.scale;
-  const double x = (double)d->x * scale;
-  const double y = (double)d->y * scale;
+  double x = 0.0, y = 0.0;
+  _rawprepare_offset(d->x, d->y, piece->buf_in.scale, &x, &y);
   __OMP_PARALLEL_FOR_SIMD__(aligned(points:64) if(points_count > 100))
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
@@ -332,16 +365,10 @@ void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_de
                     dt_iop_roi_t *roi_out,
                     const dt_iop_roi_t *const roi_in)
 {
-  *roi_out = *roi_in;
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
 
-  roi_out->x = roi_out->y = 0;
-
-  const double x = d->x + d->width;
-  const double y = d->y + d->height;
-  const double scale = roi_in->scale;
-  roi_out->width = (int)round((double)roi_out->width - x * scale);
-  roi_out->height = (int)round((double)roi_out->height - y * scale);
+  const dt_iop_rawprepare_geometry_t geo = { d->x, d->y, d->width, d->height };
+  _rawprepare_map_size(&geo, roi_in, roi_out);
 
   /* Rawprepare changes the CFA phase according to the effective crop on the current ROI scale.
    * That contract cannot be authored at history resync time because `piece->roi_in` is not known yet.
@@ -745,19 +772,19 @@ static gboolean image_set_rawcrops(const int32_t imgid, int dx, int dy)
   if(imgid <= 0) return FALSE;
 
   dt_image_t *img = NULL;
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
   const gboolean test = (img->p_width == img->width - dx)
                      && (img->p_height == img->height - dy);
 
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
   if(test) return FALSE;
 
-  img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img)) return FALSE;
   img->p_width = img->width - dx;
   img->p_height = img->height - dy;
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
   return TRUE;
 }
 
@@ -926,6 +953,71 @@ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe
   piece->data_size = sizeof(dt_iop_rawprepare_data_t);
 }
 
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+static void _rawprepare_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _rawprepare_map_size((const dt_iop_rawprepare_geometry_t *)data, in, out);
+}
+
+static int _rawprepare_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                          dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_iop_rawprepare_geometry_t *const g = (const dt_iop_rawprepare_geometry_t *)data;
+  if(g->x == 0 && g->y == 0) return 1;
+
+  double x = 0.0, y = 0.0;
+  _rawprepare_offset(g->x, g->y, record->in.scale, &x, &y);
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] -= x;
+    points[i + 1] -= y;
+  }
+  return 1;
+}
+
+static int _rawprepare_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                              dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  const dt_iop_rawprepare_geometry_t *const g = (const dt_iop_rawprepare_geometry_t *)data;
+  if(g->x == 0 && g->y == 0) return 1;
+
+  double x = 0.0, y = 0.0;
+  _rawprepare_offset(g->x, g->y, record->in.scale, &x, &y);
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] += x;
+    points[i + 1] += y;
+  }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _rawprepare_geometry_vtable = {
+  .map_size = _rawprepare_geometry_map_size,
+  .transform = _rawprepare_geometry_transform,
+  .backtransform = _rawprepare_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  const dt_iop_rawprepare_params_t *const p = (const dt_iop_rawprepare_params_t *)params;
+
+  dt_iop_rawprepare_geometry_t *data
+      = (dt_iop_rawprepare_geometry_t *)g_malloc0(sizeof(dt_iop_rawprepare_geometry_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+
+  /* commit_params() copies these four verbatim; nothing else about them is derived. */
+  data->x = p->x;
+  data->y = p->y;
+  data->width = p->width;
+  data->height = p->height;
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_rawprepare_geometry_vtable;
+  return TRUE;
+}
+
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
@@ -1006,7 +1098,7 @@ void cleanup_global(dt_iop_module_so_t *self)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)self->gui_data;
+  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rawprepare_params_t *p = (dt_iop_rawprepare_params_t *)self->params;
 
   const gboolean is_monochrome = (self->dev->image_storage.flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER)) != 0;
@@ -1029,12 +1121,12 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->flat_field, p->flat_field);
 
   // raw vs non_raw page, from the per-image default computed by reload_defaults()
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->default_enabled ? "raw" : "non_raw");
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)self->gui_data;
+  dt_iop_rawprepare_gui_data_t *g = (dt_iop_rawprepare_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rawprepare_params_t *p = (dt_iop_rawprepare_params_t *)self->params;
 
   const gboolean is_monochrome = (self->dev->image_storage.flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER)) != 0;
@@ -1059,7 +1151,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_rawprepare_gui_data_t *g = IOP_GUI_ALLOC(rawprepare);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   for(int i = 0; i < 4; i++)
   {
@@ -1080,7 +1172,7 @@ void gui_init(dt_iop_module_t *self)
   g->flat_field = dt_bauhaus_combobox_from_params(self, "flat_field");
   gtk_widget_set_tooltip_text(g->flat_field, _("flat field correction to compensate for lens shading"));
 
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(self->gui->widget),
                       dt_ui_section_label_new(_("In-camera crop")), FALSE, FALSE, 0);
 
   g->x = dt_bauhaus_slider_from_params(self, "x");
@@ -1100,13 +1192,13 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_max(g->height, 256);
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
   GtkWidget *label_non_raw = dt_ui_label_new(_("raw black/white point correction\nonly works for the sensors that need it."));
 
-  gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 // clang-format off

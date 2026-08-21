@@ -123,22 +123,6 @@ int dt_iop_color_picker_get_ready_data(const dt_iop_module_t *module, GtkWidget 
                                        struct dt_dev_pixelpipe_t **pipe,
                                        const struct dt_dev_pixelpipe_iop_t **piece);
 
-/**
- * @brief Tell whether the active picker requires host-cache retention on one module output.
- *
- * @details
- * Picker sampling reopens the active module cacheline directly from the preview cache on the GUI thread.
- * To make that possible when OpenCL is active, the producing module must keep a host-visible cacheline.
- * The pixelpipe asks that question during `_set_opencl_cache()`, while the picker code asks it again
- * when deciding whether a cache miss should trigger a preview recompute.
- *
- * @param module Candidate module in the preview pipe.
- *
- * @return TRUE if the active picker captures @p module and therefore needs its output cached on host.
- */
-gboolean dt_iop_color_picker_force_cache(const struct dt_dev_pixelpipe_t *pipe,
-                                         const dt_iop_module_t *module);
-
 /* global init: link signal */
 void dt_iop_color_picker_init();
 

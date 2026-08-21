@@ -19,16 +19,16 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "develop/imageop_gui.h"
 
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/mipmap_cache.h"
-#include "common/imagebuf.h"
+#include "caches/mipmap_cache.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
-#include "develop/dev_pixelpipe.h"
 #include "iop/iop_api.h"
 
 #include <string.h>
@@ -75,6 +75,31 @@ void modify_roi_out(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, dt_de
   *roi_out = (dt_iop_roi_t){ 0, 0, pipe->iwidth, pipe->iheight, 1.f };
 }
 
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) ---------
+ *
+ * basebuffer is the first module in the pipe and asserts the full sensor frame at scale 1,
+ * ignoring whatever roi_in it is handed. The geometry chain seeds its fold with exactly that
+ * -- the raw dimensions at scale 1 -- so re-asserting the input rect here reproduces the
+ * callback above for every position this module can occupy. It moves no points.
+ */
+
+static void _basebuffer_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  *out = (dt_iop_roi_t){ 0, 0, in->width, in->height, 1.f };
+}
+
+static const dt_geometry_vtable_t _basebuffer_geometry_vtable = {
+  .map_size = _basebuffer_geometry_map_size,
+  .transform = NULL,
+  .backtransform = NULL,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  record->vtable = &_basebuffer_geometry_vtable;
+  return TRUE;
+}
+
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                    dt_iop_buffer_dsc_t *dsc)
@@ -97,7 +122,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_mipmap_buffer_t buf;
 
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
 
   // Catch out-of-bounds here because roi_in -> roi_out conversions
   // use float scaling that may not always respect initial size.
@@ -128,7 +153,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   for(size_t j = 0; j < in_height; j++)
     memcpy(ovoid + j * out_stride, input + x_offset + y_offset + j * in_stride, MIN(row_bytes, out_stride));
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   return 0;
 }
@@ -139,7 +164,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_mipmap_buffer_t buf;
 
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
 
   // Catch out-of-bounds here because roi_in -> roi_out conversions
   // use float scaling that may not always respect initial size.
@@ -171,7 +196,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                                                region, in_stride, CL_TRUE);
 
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   return err == CL_SUCCESS;
 }
@@ -197,7 +222,6 @@ void init(dt_iop_module_t *self)
   self->default_enabled = 1;
   self->hide_enable_button = 1;
   self->params_size = sizeof(dt_iop_basebuffer_params_t);
-  self->gui_data = NULL;
 }
 
 void cleanup(dt_iop_module_t *self)

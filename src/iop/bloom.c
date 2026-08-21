@@ -44,17 +44,15 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/module_versioning.h"
 #include "system/target_clones.h"
 #include "pixel/box_filters.h"
 #include "common/imagebuf.h"
-#include "math/math.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
 

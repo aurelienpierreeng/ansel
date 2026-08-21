@@ -18,7 +18,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
 
 #include "common/imagebuf.h"
@@ -26,7 +26,7 @@
 #include "common/opencl.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"
@@ -119,7 +119,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_iop_image_copy_by_size(ovoid, ivoid, width, height, 4);
   dt_dev_clear_rawdetail_mask(mutable_pipe);
 
-  created = dt_dev_pixelpipe_cache_get(dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * (size_t)width * height,
+  created = dt_dev_pixelpipe_cache_get(mask_hash, sizeof(float) * (size_t)width * height,
                                        "detailmask rawdetail", pipe->type, TRUE, &cache_data, &entry);
   mask = (float *)cache_data;
   if(IS_NULL_PTR(mask) || IS_NULL_PTR(entry)) goto error;
@@ -143,7 +143,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
    * input uses an explicit 4-float stride while the Scharr operator runs on the
    * 1-float-per-pixel temporary buffer. No CFA layout survives past demosaic. */
   dt_masks_calc_rawdetail_mask((float *const)ovoid, mask, tmp, width, height, wb);
-  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   dt_pixelpipe_cache_free_align(tmp);
   dt_print(DT_DEBUG_MASKS, "[detailmask process] (%ix%i)\n", width, height);
 
@@ -152,11 +152,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 error:
   fprintf(stderr, "[detailmask process] couldn't write detail mask\n");
   if(created && !IS_NULL_PTR(entry))
-    dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   dt_dev_clear_rawdetail_mask(mutable_pipe);
   if(!IS_NULL_PTR(entry))
   {
-    if(created) dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, entry);
+    if(created) dt_dev_pixelpipe_cache_remove(TRUE, entry);
   }
   dt_pixelpipe_cache_free_align(tmp);
   return 1;
@@ -186,7 +186,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     return FALSE;
 
   dt_dev_clear_rawdetail_mask(mutable_pipe);
-  created = dt_dev_pixelpipe_cache_get(dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * (size_t)width * height,
+  created = dt_dev_pixelpipe_cache_get(mask_hash, sizeof(float) * (size_t)width * height,
                                        "detailmask rawdetail", pipe->type, TRUE, &cache_data, &entry);
   mask = (float *)cache_data;
   if(IS_NULL_PTR(mask) || IS_NULL_PTR(entry)) goto error;
@@ -201,7 +201,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(IS_NULL_PTR(mask_dev)) goto error;
 
   {
-    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_Y0_mask;
+    const int kernel = dt_develop_blend_get_cl_global()->kernel_calc_Y0_mask;
     dt_aligned_pixel_t wb = { 1.0f, 1.0f, 1.0f };
     if(piece->dsc_in.temperature.enabled)
     {
@@ -223,7 +223,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   }
 
   {
-    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_scharr_mask;
+    const int kernel = dt_develop_blend_get_cl_global()->kernel_calc_scharr_mask;
     size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &detail);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &mask_dev);
@@ -236,7 +236,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   err = dt_opencl_read_buffer_from_device(devid, mask, mask_dev, 0, sizeof(float) * (size_t)width * height, CL_TRUE);
   if(err != CL_SUCCESS) goto error;
 
-  dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   dt_opencl_release_mem_object(detail);
   dt_opencl_release_mem_object(mask_dev);
   dt_print(DT_DEBUG_MASKS, "[detailmask process_cl] (%ix%i)\n", width, height);
@@ -246,11 +246,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 error:
   fprintf(stderr, "[detailmask process_cl] couldn't write detail mask: %i\n", err);
   if(created && !IS_NULL_PTR(entry))
-    dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   dt_dev_clear_rawdetail_mask(mutable_pipe);
   if(!IS_NULL_PTR(entry))
   {
-    if(created) dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, entry);
+    if(created) dt_dev_pixelpipe_cache_remove(TRUE, entry);
   }
   dt_opencl_release_mem_object(detail);
   dt_opencl_release_mem_object(mask_dev);

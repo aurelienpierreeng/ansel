@@ -23,9 +23,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "gui/gtk.h"
+// dt_gui_main_window() is used only under _WIN32 below; a Linux clang-tidy run analyses
+// the other branch and cannot see it. Removing this include breaks the Windows build.
+// The suppression is on the line itself: NOLINTNEXTLINE applies to the immediately
+// following line, so a multi-line reason above it suppresses a comment and nothing else.
+#include "gui/application.h"  // NOLINT(misc-include-cleaner)
 #include "common/dbus.h"
 #include "control/progress.h"
 #include "control/control.h"

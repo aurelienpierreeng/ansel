@@ -53,20 +53,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "math/math.h"
 #include "develop/develop.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "gui/dtgtk/gradientslider.h"
+#include "widgets/gradientslider.h"
 #include "gui/color_picker_proxy.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
@@ -81,7 +80,7 @@ typedef struct dt_iop_relight_params_t
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   dt_gui_presets_add_generic(_("fill-light 0.25EV with 4 zones"), self->op, self->version(),
                              &(dt_iop_relight_params_t){ 0.25, 0.25, 4.0 }, sizeof(dt_iop_relight_params_t),
@@ -91,7 +90,7 @@ void init_presets(dt_iop_module_so_t *self)
                              &(dt_iop_relight_params_t){ -0.25, 0.25, 4.0 }, sizeof(dt_iop_relight_params_t),
                              1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 typedef struct dt_iop_relight_gui_data_t
@@ -208,14 +207,14 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)self->gui_data;
+  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_relight_params_t *p = (dt_iop_relight_params_t *)self->params;
   dtgtk_gradient_slider_set_value(g->center, p->center);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)self->gui_data;
+  dt_iop_relight_gui_data_t *g = (dt_iop_relight_gui_data_t *)dt_iop_gui_data(self);
   float mean, min, max;
 
   if(self->picked_color_max[0] >= 0.0f)
@@ -252,7 +251,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(sliderbox, GTK_WIDGET(g->center), TRUE, TRUE, 0);
   g->colorpicker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, GTK_WIDGET(sliderbox));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->colorpicker), _("toggle tool for picking median lightness in image"));
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(sliderbox), TRUE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(sliderbox), TRUE, FALSE, 0);
 
   g->width = dt_bauhaus_slider_from_params(self, N_("width"));
   gtk_widget_set_tooltip_text(g->width, _("width of fill-light area defined in zones"));

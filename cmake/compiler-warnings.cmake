@@ -44,14 +44,18 @@ CHECK_COMPILER_FLAG_AND_ENABLE_IT(-Wno-error=address-of-packed-member)
 
 # minimal main thread's stack/frame stack size.
 # 2 MiB seems to work.
-# 1 MiB does NOT work with gmic support enabled.
+# The 2 MiB floor was originally set because 1 MiB did not work with G'MIC linked in. That
+# dependency is gone, so the number is no longer justified by anything measured -- it is kept
+# because lowering a stack limit blind is how you get overflows in the deepest recursion the
+# pipeline happens to run, not because 2 MiB is known to be needed. Revisit with a measurement,
+# not with a guess.
 # MUST be a multiple of the system page size !!!
 # see  $ getconf PAGESIZE
 math(EXPR WANTED_STACK_SIZE 512*4*1024)
 
 # minimal pthread stack/frame stack size.
-# 2 MiB seems to work and is default on Linux.
-# 1 MiB does NOT work with gmic support enabled.
+# 2 MiB seems to work and is the default on Linux, so this asks for no more than the platform
+# would have given anyway. (It used to be a hard requirement of G'MIC, which is no longer linked.)
 # MUST be a multiple of the system page size !!!
 # see  $ getconf PAGESIZE
 math(EXPR WANTED_THREADS_STACK_SIZE 512*4*1024)

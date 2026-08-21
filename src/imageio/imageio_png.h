@@ -27,7 +27,7 @@
 #define DT_IMAGEIO_IMAGEIO_PNG_H
 
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 #include <png.h>
 

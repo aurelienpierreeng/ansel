@@ -25,13 +25,13 @@
  */
 
 #include <json-glib/json-glib.h>
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/paths.h"
 #include "common/noiseprofiles.h"
 #include "common/file_location.h"
-#include "control/control.h"
+#include "control/user_message.h"
 
 // bump this when the noiseprofiles are getting a different layout or meaning (raw-raw data, ...)
 #define DT_NOISE_PROFILE_VERSION 0
@@ -349,7 +349,8 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
             json_reader_end_element(reader);
 
             // everything worked out, add tmp_profile to result
-            dt_noiseprofile_t *new_profile = (dt_noiseprofile_t *)malloc(sizeof(dt_noiseprofile_t));
+            // dt_alloc_align: dt_noiseprofile_t is 64-aligned; dt_noiseprofile_free() pairs with it.
+  dt_noiseprofile_t *new_profile = (dt_noiseprofile_t *)dt_alloc_align(sizeof(dt_noiseprofile_t));
             *new_profile = tmp_profile;
             result = g_list_prepend(result, new_profile);
 
@@ -383,7 +384,7 @@ void dt_noiseprofile_free(gpointer data)
   dt_free(profile->name);
   dt_free(profile->maker);
   dt_free(profile->model);
-  dt_free(profile);
+  dt_free_align(profile);
 }
 
 void dt_noiseprofile_interpolate(

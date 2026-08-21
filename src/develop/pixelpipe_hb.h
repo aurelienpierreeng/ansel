@@ -34,14 +34,15 @@
 
 #include "system/atomic.h"
 #include "imageio/imageio_core.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 /* develop/imageop.h is deliberately NOT included: it includes this header back.
  * dt_iop_module_t is only ever used through a pointer here (tag-declared below);
  * the concrete types needed by value (dt_iop_roi_t, dt_iop_buffer_dsc_t) live in
  * develop/format.h. */
 #include "pixel/format.h"
+#include "develop/dev_roi_request.h"
 #include "develop/pixelpipe.h"
-#include "develop/pixelpipe_cache.h"
+#include "caches/pixelpipe_cache.h"
 
 
 /**
@@ -189,6 +190,31 @@ typedef enum dt_dev_pixelpipe_cache_request_t
  * for previews and full blits to cairo and for
  * the export function.
  */
+/**
+ * @brief What the pipeline last published: which cacheline, and what shape its pixels are in.
+ *
+ * @details These five fields are ONE fact and must be read as one. `hash' names a cacheline and
+ * `width'/`height' say what shape the pixels in it are -- a cacheline records how many BYTES it
+ * holds and nothing about their layout, so a consumer that pairs a hash from one publication with
+ * dimensions from the next has no way to notice. It computes a cairo stride from the wrong width
+ * and paints the diagonal striping of a stride error, or writes a mis-shaped thumbnail into the
+ * mipmap cache. The published entry is routinely LARGER than width x height x bpp (aligned
+ * allocation, pool reuse), so a size check does not catch it either.
+ *
+ * That was reachable: `hash' was atomic and the dimensions were plain fields, so a GUI thread
+ * could read the hash, resolve its entry, and then read dimensions the worker had republished in
+ * between. It needs a publication whose SHAPE changes to become visible, which is why entering a
+ * clipping module's edit mode -- where the crop is neutralised and the frame jumps to the full
+ * transformed image -- is where it was reported.
+ *
+ * So the record carries a seqlock, exactly as dt_dev_geometry_store_t does (develop/dev_geometry.h),
+ * and ::dt_dev_backbuf_snapshot is how a consumer reads it. Do not read the fields directly to
+ * pair them with pixels; a bare read is fine only for something that pairs with nothing.
+ *
+ * WRITERS ARE SERIALISED BY CONVENTION, not by a lock: each backbuffer belongs to one pipe and is
+ * published by the thread that runs it, with the view's leave() joining that thread before it
+ * touches anything. A second concurrent publisher needs a real lock, not a second odd counter.
+ */
 typedef struct dt_backbuf_t
 {
   size_t bpp;            // bits per pixel
@@ -196,7 +222,60 @@ typedef struct dt_backbuf_t
   size_t height;         // pixel size of image
   dt_atomic_uint64 hash;         // data checksum/integrity hash, for example to connect to a cacheline
   dt_atomic_uint64 history_hash; // arbitrary state hash
+
+  /** Odd while a publication is in flight, even once it has settled. See ::dt_dev_backbuf_snapshot. */
+  dt_atomic_uint64 generation;
 } dt_backbuf_t;
+
+/** @brief One coherent publication, by value. */
+typedef struct dt_backbuf_state_t
+{
+  size_t bpp;
+  size_t width;
+  size_t height;
+  uint64_t hash;
+  uint64_t history_hash;
+} dt_backbuf_state_t;
+
+static inline void dt_dev_backbuf_publish_begin(dt_backbuf_t *backbuf)
+{
+  dt_atomic_set_uint64(&backbuf->generation, dt_atomic_get_uint64(&backbuf->generation) + 1);
+}
+
+static inline void dt_dev_backbuf_publish_end(dt_backbuf_t *backbuf)
+{
+  dt_atomic_set_uint64(&backbuf->generation, dt_atomic_get_uint64(&backbuf->generation) + 1);
+}
+
+/**
+ * @brief Read the whole record as one publication.
+ *
+ * @details Retries until a settled generation is read twice with no write in between. A
+ * publication is five stores between two counter bumps, so this converges immediately unless a
+ * writer is running right now; there is no waiting and no lock to order against anything.
+ */
+static inline dt_backbuf_state_t dt_dev_backbuf_snapshot(const dt_backbuf_t *backbuf)
+{
+  dt_backbuf_state_t state = { 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID };
+  if(IS_NULL_PTR(backbuf)) return state;
+
+  for(;;)
+  {
+    const uint64_t before = dt_atomic_get_uint64(&backbuf->generation);
+    if(before & 1) continue;   // publication in flight
+
+    state.bpp = backbuf->bpp;
+    state.width = backbuf->width;
+    state.height = backbuf->height;
+    state.hash = dt_atomic_get_uint64(&backbuf->hash);
+    state.history_hash = dt_atomic_get_uint64(&backbuf->history_hash);
+
+    const uint64_t after = dt_atomic_get_uint64(&backbuf->generation);
+    if(before == after) break;
+  }
+
+  return state;
+}
 
 static inline uint64_t dt_dev_backbuf_get_hash(const dt_backbuf_t *backbuf)
 {
@@ -205,7 +284,9 @@ static inline uint64_t dt_dev_backbuf_get_hash(const dt_backbuf_t *backbuf)
 
 static inline void dt_dev_backbuf_set_hash(dt_backbuf_t *backbuf, const uint64_t hash)
 {
+  dt_dev_backbuf_publish_begin(backbuf);
   dt_atomic_set_uint64(&backbuf->hash, hash);
+  dt_dev_backbuf_publish_end(backbuf);
 }
 
 static inline uint64_t dt_dev_backbuf_get_history_hash(const dt_backbuf_t *backbuf)
@@ -215,7 +296,9 @@ static inline uint64_t dt_dev_backbuf_get_history_hash(const dt_backbuf_t *backb
 
 static inline void dt_dev_backbuf_set_history_hash(dt_backbuf_t *backbuf, const uint64_t history_hash)
 {
+  dt_dev_backbuf_publish_begin(backbuf);
   dt_atomic_set_uint64(&backbuf->history_hash, history_hash);
+  dt_dev_backbuf_publish_end(backbuf);
 }
 
 typedef struct dt_dev_pixelpipe_t
@@ -242,6 +325,18 @@ typedef struct dt_dev_pixelpipe_t
   struct dt_iop_order_iccprofile_info_t *work_profile_info;
   /** input profile info **/
   struct dt_iop_order_iccprofile_info_t *input_profile_info;
+  /* Storage for an input profile DERIVED FROM THIS IMAGE, which cannot be shared.
+   *
+   * The types DT_COLORSPACE_EMBEDDED_ICC..DT_COLORSPACE_ALTERNATE_MATRIX are not
+   * registered in the profile list, so nothing can resolve them by identity: their
+   * matrices come from the image's own camera data, via colorin. They were being kept in
+   * the (type, filename) memo, where filename is "" -- so every image sharing a
+   * camera-matrix type shared one entry and overwrote its matrix in place. That was
+   * survivable only because the memo is per-dev and a dev is one image.
+   *
+   * This is per-pipe and owned by the pipe. `input_profile_info` above points either here
+   * or at a genuinely shared memo entry, and is never freed through that pointer. */
+  struct dt_iop_order_iccprofile_info_t *owned_input_profile_info;
   /** output profile info **/
   struct dt_iop_order_iccprofile_info_t *output_profile_info;
 
@@ -281,6 +376,20 @@ typedef struct dt_dev_pixelpipe_t
   GArray *raster_mask_hashes;
 
   int output_imgid;
+  /**
+   * @brief The viewport snapshot this run was planned from.
+   *
+   * @details Latched once per darkroom worker iteration, before any resync, and read by
+   * everything that runs on the pipeline thread for the rest of that run -- so a module
+   * callback and the ROI planner cannot disagree about the zoom, however many times the GUI
+   * thread republishes while the frame is being computed.
+   *
+   * A pipe nobody latches (export, thumbnail, snapshot) keeps the neutral seed
+   * dt_dev_pixelpipe_init_cached() gives it: scaling 1, natural_scale -1, which is what those
+   * pipes have always read off a headless dev. See develop/dev_roi_request.h.
+   */
+  dt_dev_roi_request_store_t roi_request;
+
   // processing is true when actual pixel computations are ongoing
   int processing;
   // running is true when the pipe thread is running, computing or idle.
@@ -318,6 +427,31 @@ typedef struct dt_dev_pixelpipe_t
   // sampling. The processing core reacts to this property instead of branching
   // on pipeline type.
   gboolean gui_observable_source;
+
+  /**
+   * @brief Rasterisation step for drawn masks, in image pixels. Always >= 1.
+   *
+   * @details Brush and polygon subdivide their outline until consecutive samples land within
+   * this many pixels, then paint one radial spoke per sample. At 1 the outline is followed to
+   * pixel accuracy. Above 1 the samples spread out and the spokes leave gaps between them --
+   * invisible when the result is shown well below 1:1, a diagonal hatch across the stroke when
+   * it is not (#1116).
+   *
+   * IT IS SET UPSTREAM AND ONLY READ HERE. Every mask type used to re-derive its own answer
+   * from `dt_dev_pixelpipe_has_preview_output(...) || type == THUMBNAIL' -- six copies across
+   * brush.c and polygon.c, some passing the module's roi and some NULL, so one pipe could be
+   * classified two ways inside a single frame, and an export could be classified as a preview.
+   * How finely a pipe must rasterise is a property OF THE PIPE, decided by whoever configures
+   * it: pipe init, or the darkroom GUI from the zoom level.
+   *
+   * The default is 1 and every init sets it, so a pipe nobody configures -- every headless
+   * export, thumbnail and snapshot -- is pixel-accurate by construction rather than by a
+   * predicate that has to get the answer right.
+   *
+   * It feeds the module hash (dt_pixelpipe_get_global_hash), because two runs at different
+   * steps produce different pixels and must not share a cache line.
+   */
+  int mask_rasterization_step;
   // the final output pixel format this pixelpipe will be converted to
   dt_imageio_levels_t levels;
   // opencl device that has been locked for this pipe.
@@ -464,6 +598,11 @@ char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type);
 
 // inits the pixelpipe with plain passthrough input/output and empty input and default caching settings.
 int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+
+/** @brief Set the drawn-mask rasterisation step for the next frame, in image pixels (clamped
+ *  to >= 1). @see dt_dev_pixelpipe_t::mask_rasterization_step. */
+void dt_dev_pixelpipe_set_mask_rasterization_step(struct dt_dev_pixelpipe_t *pipe, const int step);
+
 // inits the preview pixelpipe with plain passthrough input/output and empty input and default caching
 // settings.
 int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);

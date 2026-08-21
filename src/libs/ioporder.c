@@ -24,23 +24,22 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/database.h"
-#include "common/debug.h"
-#include "common/history.h"
-#include "common/iop_order.h"
-#include "common/macros.h"
+#include "develop/imageop_gui.h"
+#include "widgets/widget_settings.h"
+#include "colorprofiles/colorspaces.h"
+#include "database/preset_repository.h"
+#include "develop/iop_order.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "pixel/format.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
-#include "gui/dtgtk/button.h"
-#include "gui/dtgtk/paint.h"
-#include "gui/dtgtk/togglebutton.h"
-#include "gui/gtk.h"
+#include "widgets/button.h"
+#include "widgets/paint.h"
+#include "widgets/togglebutton.h"
+#include "gui/application.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
 
@@ -50,6 +49,9 @@
 #include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
+#include "widgets/popup.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE(1)
 
@@ -509,23 +511,18 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
   gchar *iop_order_list = dt_ioppr_serialize_text_iop_order_list(dt_dev_get_global()->iop_order_list);
   gchar *name = NULL;
   int index = 0;
-  sqlite3_stmt *stmt;
 
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT op_params, name"
-                              " FROM data.presets"
-                              " WHERE operation='ioporder'"
-                              " ORDER BY writeprotect DESC, LOWER(name), rowid",
-                              -1, &stmt, NULL);
-  // clang-format on
+  // Shipped presets first, so two presets with identical content resolve to the shipped one --
+  // the loop below stops at the first match.
+  GList *presets = dt_preset_repository_list_all_versions("ioporder");
 
   /* Compare the current order text against every saved preset serialization. */
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = presets; l; l = g_list_next(l))
   {
-    const char *params = (const char *)sqlite3_column_blob(stmt, 0);
-    const int32_t params_len = sqlite3_column_bytes(stmt, 0);
-    const char *preset_name = (const char *)sqlite3_column_text(stmt, 1);
+    const dt_module_preset_t *pr = (const dt_module_preset_t *)l->data;
+    const char *params = (const char *)pr->op_params;
+    const int32_t params_len = pr->op_params_size;
+    const char *preset_name = pr->name;
     GList *preset_list = dt_ioppr_deserialize_iop_order_list(params, params_len);
     gchar *preset_text = dt_ioppr_serialize_text_iop_order_list(preset_list);
     g_list_free_full(preset_list, dt_free_gpointer);
@@ -542,8 +539,7 @@ static gchar *_ioporder_get_current_order_name(dt_lib_module_t *self)
 
     dt_free(preset_text);
   }
-
-  sqlite3_finalize(stmt);
+  g_list_free_full(presets, dt_module_preset_free);
   dt_free(iop_order_list);
 
   if(name) return name;
@@ -575,21 +571,14 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
   gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->preset_combo), "__custom__", _("custom order"));
 
   gchar *active_id = g_strdup("__custom__");
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT name"
-                              " FROM data.presets"
-                              " WHERE operation='ioporder' AND op_version=?1"
-                              " ORDER BY writeprotect DESC, LOWER(name), rowid",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, self->version());
+
+  GList *presets = dt_preset_repository_list_for_version("ioporder", self->version());
 
   /* Rebuild the preset list in DB order and keep the current one selected. */
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(GList *l = presets; l; l = g_list_next(l))
   {
-    const char *preset_name = (const char *)sqlite3_column_text(stmt, 0);
+    const dt_module_preset_t *pr = (const dt_module_preset_t *)l->data;
+    const char *preset_name = pr->name;
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->preset_combo), preset_name, preset_name);
     if(!g_strcmp0(current_name, preset_name))
     {
@@ -597,7 +586,7 @@ static void _ioporder_refresh_toolbar(dt_lib_module_t *self)
       active_id = g_strdup(preset_name);
     }
   }
-  sqlite3_finalize(stmt);
+  g_list_free_full(presets, dt_module_preset_free);
 
   gtk_combo_box_set_active_id(GTK_COMBO_BOX(d->preset_combo), active_id);
   d->refreshing_toolbar = FALSE;
@@ -710,11 +699,11 @@ static void _ioporder_set_enable_button_icon(GtkWidget *widget, dt_iop_module_t 
 static void _ioporder_node_toggle_enable(GtkToggleButton *togglebutton, gpointer user_data)
 {
   const dt_ioporder_graph_node_t *node = (const dt_ioporder_graph_node_t *)user_data;
-  if(!node || !GTK_IS_TOGGLE_BUTTON(node->module->off)) return;
+  if(!node || !node->module->gui || !GTK_IS_TOGGLE_BUTTON(node->module->gui->off)) return;
 
   const gboolean active = gtk_toggle_button_get_active(togglebutton);
-  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->off)) != active)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->off), active);
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->gui->off)) != active)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->gui->off), active);
 }
 
 /**
@@ -726,11 +715,11 @@ static void _ioporder_node_toggle_enable(GtkToggleButton *togglebutton, gpointer
 static void _ioporder_node_toggle_mask(GtkToggleButton *togglebutton, gpointer user_data)
 {
   const dt_ioporder_graph_node_t *node = (const dt_ioporder_graph_node_t *)user_data;
-  if(!node || !GTK_IS_TOGGLE_BUTTON(node->module->mask_indicator)) return;
+  if(!node || !node->module->gui || !GTK_IS_TOGGLE_BUTTON(node->module->gui->mask_indicator)) return;
 
   const gboolean active = gtk_toggle_button_get_active(togglebutton);
-  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->mask_indicator)) != active)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->mask_indicator), active);
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->module->gui->mask_indicator)) != active)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(node->module->gui->mask_indicator), active);
 }
 
 /**

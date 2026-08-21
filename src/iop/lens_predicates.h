@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DT_IOP_LENS_PREDICATES_H
+#define DT_IOP_LENS_PREDICATES_H
 
 #include <glib.h>
 #include <lensfun.h>
@@ -142,3 +143,5 @@ static inline const char *corrections_status_string(
              dist_label, vig_label, tca_label);
   return buf;
 }
+
+#endif // DT_IOP_LENS_PREDICATES_H

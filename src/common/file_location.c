@@ -42,7 +42,6 @@
 #include "config.h"
 
 #include <pwd.h>
-#include <sys/types.h>
 #define HAVE_GETPWNAM_R 1
 #endif
 
@@ -58,7 +57,7 @@
 #include "darktable.h"
 #include "file_location.h"
 #include "whereami.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/utility.h"

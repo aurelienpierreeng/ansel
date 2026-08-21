@@ -48,7 +48,6 @@ PKGS = ['gtk+-3.0', 'lcms2', 'sqlite3', 'libpng', 'libtiff-4', 'libjpeg', 'exiv2
 # /usr/x86_64-w64-mingw32/sys-root/mingw/include; re-check after installing packages.
 UNAVAILABLE = re.compile(
     r'(json-glib[/.]|lensfun[/.]|curl/curl\.h|libraw|osmgpsmap|osm-gps-map|openjpeg|'
-    r'gmic|libsecret|libavif|libheif|graphicsmagick|magick|sentry\.h|CL/cl|lua\.h|'
     r'cmark|colord|gphoto2|portmidi|pugixml|rawspeed|libdeflate|jasper|portaudio)',
     re.I)
 
@@ -74,10 +73,10 @@ EXPLICIT_ERROR = re.compile(r'error: #error\s+"?([^"\n]+)')
 # because the guarded include fails outright. Dropping them checks everything EXCEPT
 # those branches, which were unverifiable regardless. HAVE_MAP alone accounted for 110
 # skipped files.
-UNBUILDABLE_FEATURES = ('HAVE_MAP', 'HAVE_GMIC', 'HAVE_LIBAVIF', 'HAVE_LIBHEIF',
-                        'HAVE_GRAPHICSMAGICK', 'HAVE_IMAGEMAGICK', 'HAVE_HTTP_SERVER',
+UNBUILDABLE_FEATURES = ('HAVE_MAP', 'HAVE_LIBAVIF', 'HAVE_LIBHEIF',
+                        'HAVE_HTTP_SERVER',
                         'HAVE_SENTRY', 'HAVE_LIBRAW', 'HAVE_OPENJPEG', 'HAVE_WEBP',
-                        'HAVE_OPENEXR', 'HAVE_ISO_CODES', 'HAVE_CMARK', 'HAVE_LIBSECRET',
+                        'HAVE_OPENEXR', 'HAVE_ISO_CODES', 'HAVE_CMARK',
                         'HAVE_OSMGPSMAP_110_OR_NEWER', 'HAVE_OSMGPSMAP_NEWER_THAN_110')
 
 

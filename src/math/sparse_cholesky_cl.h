@@ -26,7 +26,7 @@
 // them and passes their handles through _sp_chol_cl_kernels_t.
 
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "math/sparse_cholesky.h" // _sp_etree / _sp_ereach (host symbolic)
 #include "common/times.h"
 

@@ -30,20 +30,22 @@
 
 #include "common/pdf.h"
 #include "common/conf.h"
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
-#include "common/variables.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "imageio/format/imageio_format_api.h"
 
 #include <strings.h>
+#include "widgets/accelerators.h"
+#include "widgets/label.h"
+#include "imageio/imageio_profile.h"
 
 DT_MODULE(1)
 

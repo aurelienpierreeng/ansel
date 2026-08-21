@@ -59,7 +59,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/logging.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
@@ -68,12 +68,9 @@
 #include "common/gui_module_api.h"
 #include "common/opencl.h"
 
-#include "control/settings.h"
+#include "history/history.h"   // dt_dev_operation_t, both structs' `op` member
 #include "pixel/format.h"
 #include "develop/pixelpipe_hb.h"
-#include "gui/dtgtk/togglebutton.h"
-#include "gui/gtk.h"
-#include "gui/gui_throttle.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,6 +82,12 @@ struct dt_dev_pixelpipe_iop_t;
 struct dt_develop_blend_params_t;
 struct dt_develop_tiling_t;
 struct dt_iop_color_picker_t;
+/* develop/geometry/geometry.h -- named by the geometry_record() vtable entry. Declared HERE,
+ * not only in iop_api.h: that header's forward declarations live inside its FULL_API_H block,
+ * which the struct-body expansion of the X-macro does not compile, so the first mention would
+ * otherwise be inside a function prototype -- C scopes that to the prototype and the resulting
+ * type is distinct from every other declaration of the same name. */
+struct dt_geometry_record_t;
 
 typedef enum dt_iop_module_header_icons_t
 {
@@ -213,25 +216,13 @@ typedef enum dt_dev_request_colorpick_flags_t
   DT_REQUEST_COLORPICK_MODULE = 1 // requested by module (should take precedence)
 } dt_dev_request_colorpick_flags_t;
 
-/** colorspace enums, must be in synch with dt_iop_colorspace_type_t in color_conversion.cl */
-typedef enum dt_iop_colorspace_type_t
-{
-  IOP_CS_NONE = -1,
-  IOP_CS_RAW = 0,
-  IOP_CS_LAB = 1,
-  IOP_CS_RGB = 2,
-  IOP_CS_LCH = 3,
-  IOP_CS_HSL = 4,
-  IOP_CS_JZCZHZ = 5,
-  IOP_CS_RGB_DISPLAY = 6,
-} dt_iop_colorspace_type_t;
+/* dt_iop_colorspace_type_t moved to pixel/format.h: it tags a pixel buffer's colour
+ * space, which is a layer-2 concept, and colorprofiles/iop_profile.h needs it. */
 
-static inline gboolean dt_iop_colorspace_is_rgb(const dt_iop_colorspace_type_t cst)
-{
-  return cst == IOP_CS_RGB || cst == IOP_CS_RGB_DISPLAY;
-}
 
-/** part of the module which only contains the cached dlopen stuff. */
+/** The per-operation half of a module: everything that exists once, whatever the image.
+ *  Modules are linked into lib_ansel and bound at startup by dt_iop_load_modules_so();
+ *  there is no dlopen handle to cache any more. See doc/static-iop.md. */
 typedef struct dt_iop_module_so_t
 {
   // Needs to stay on top for casting
@@ -240,8 +231,6 @@ typedef struct dt_iop_module_so_t
 #define INCLUDE_API_FROM_MODULE_H
 #include "iop/iop_api.h"
 
-  /** opened module. */
-  GModule *module;
   /** string identifying this operation. */
   dt_dev_operation_t op;
   /** other stuff that may be needed by the module, not only in gui mode. inited only once, has to be
@@ -266,8 +255,6 @@ typedef struct dt_iop_module_t
 #define INCLUDE_API_FROM_MODULE_H
 #include "iop/iop_api.h"
 
-  /** opened module. */
-  GModule *module;
   /** string identifying this operation. */
   dt_dev_operation_t op;
   /** used to identify this module in the history stack. */
@@ -330,15 +317,20 @@ typedef struct dt_iop_module_t
   dt_iop_params_t *params, *default_params;
   /** size of individual params struct. */
   int32_t params_size;
-  /** parameters needed if a gui is attached. will be NULL if in export/batch mode. */
-  dt_iop_gui_data_t *gui_data;
-  dt_pthread_mutex_t gui_lock;
   /** other stuff that may be needed by the module, not only in gui mode. */
   dt_iop_global_data_t *global_data;
+
+  /**
+   * The module's interactive half: every widget pointer, the per-module GUI data blob and
+   * its lock, the blending panel state. Allocated by dt_iop_gui_init(), freed by
+   * dt_iop_gui_cleanup_module(), and NULL for every headless module -- "does this module
+   * have a GUI" is this pointer, asked once, instead of fifteen widget NULL-checks.
+   * Defined in develop/imageop_gui.h; this header carries only the name.
+   */
+  struct dt_iop_module_gui_t *gui;
+
   /** blending params */
   struct dt_develop_blend_params_t *blend_params, *default_blendop_params;
-  /** holder for blending ui control */
-  gpointer blend_data;
   struct {
     struct {
       /** if this module generates a mask, is it used later on? needed to decide if the mask should be stored.
@@ -356,27 +348,7 @@ typedef struct dt_iop_module_t
       int id;
     } sink;
   } raster_mask;
-  /** child widget which is added to the GtkExpander. copied from module_so_t. */
-  GtkWidget *widget;
-  /** off button, somewhere in header, common to all plug-ins. */
-  GtkDarktableToggleButton *off;
-  /** this is the module header, contains label and buttons */
-  GtkWidget *header;
-  /** this is the module mask indicator, inside header */
-  GtkWidget *mask_indicator;
-  /** expander containing the widget and flag to store expanded state */
-  GtkWidget *expander;
-  gboolean expanded;
-  /** reset parameters button */
-  GtkWidget *reset_button;
-  /** show preset menu button */
-  GtkWidget *presets_button;
-  /** fusion slider */
-  GtkWidget *fusion_slider;
 
-  /** show/hide guide button and combobox */
-  GtkWidget *guides_toggle;
-  GtkWidget *guides_combo;
 
   /** the corresponding SO object */
   dt_iop_module_so_t *so;
@@ -384,14 +356,7 @@ typedef struct dt_iop_module_t
   /** multi-instances things */
   int multi_priority; // user may change this
   char multi_name[128]; // user may change this name
-  gboolean multi_show_close;
-  gboolean multi_show_up;
-  gboolean multi_show_down;
-  gboolean multi_show_new;
-  GtkWidget *multimenu_button;
 
-  /** delayed-event handling */
-  guint timeout_handle;
 
   int (*process_plain)(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                        const struct dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o);
@@ -411,9 +376,27 @@ typedef struct dt_iop_module_t
 
 } dt_iop_module_t;
 
-/** loads and inits the modules in the plugins/ directory. */
+/**
+ * @brief One IOP module built into this binary, and the generated function that binds it.
+ *
+ * @details IOP modules are linked in, not dlopen'd. The table below is generated from
+ * src/iop/CMakeLists.txt by tools/generate_iop_static.py -- the same list develop/iop_order.c
+ * and develop/geometry/geometry.c are written against, so the three cannot drift the way a
+ * directory scan could. @p fill_so lives in the module's own translation unit, which is the
+ * only place its entry points are reachable by their plain names.
+ */
+typedef struct dt_iop_module_static_entry_t
+{
+  const char *op;                                 /**< operation name, e.g. "exposure" */
+  void (*fill_so)(dt_iop_module_so_t *module);    /**< generated; binds this module's API */
+} dt_iop_module_static_entry_t;
+
+extern const dt_iop_module_static_entry_t dt_iop_static_modules[];
+extern const int dt_iop_static_modules_count;
+
+/** loads and inits every module in dt_iop_static_modules. */
 void dt_iop_load_modules_so(void);
-/** cleans up the dlopen refs. */
+/** tears down the module descriptors built by dt_iop_load_modules_so(). */
 void dt_iop_unload_modules_so(void);
 /** load a module for a given .so */
 int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, struct dt_develop_t *dev);
@@ -432,18 +415,18 @@ gboolean dt_iop_is_hidden(dt_iop_module_t *module);
 /** Check if the module is currently visible in GUI */
 gboolean dt_iop_is_visible(dt_iop_module_t *module);
 
-/** enter a GUI critical section by acquiring gui_data->lock **/
-static inline void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module)
-  ACQUIRE(&module->gui_lock)
-{
-  dt_pthread_mutex_lock(&module->gui_lock);
-}
-/** leave a GUI critical section by releasing gui_data->lock **/
-static inline void dt_iop_gui_leave_critical_section(dt_iop_module_t *const module)
-  RELEASE(&module->gui_lock)
-{
-  dt_pthread_mutex_unlock(&module->gui_lock);
-}
+/** enter/leave a GUI critical section by acquiring gui->gui_lock. Implemented in
+ * imageop_gui.c; tolerate headless callers (no GUI, no GUI data to protect), so
+ * common/iop-autoset.c and friends can call them without seeing the gui struct. */
+void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module);
+void dt_iop_gui_leave_critical_section(dt_iop_module_t *const module);
+
+/** widget-identity helpers for gui/ callers that must not see the gui struct through this
+ * header's forward declaration (the struct lives in imageop_gui.h, layer-wise above them
+ * until the T6 re-stratification). Implemented in imageop_gui.c; all NULL-safe. */
+GtkWidget *dt_iop_gui_get_off(dt_iop_module_t *module);
+gboolean dt_iop_gui_owns_widget(const dt_iop_module_t *module, const GtkWidget *target);
+
 /** cleans up gui of module and of blendops */
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module);
 /** updates the enable button state. (take into account module->enabled and module->hide_enable_button  */
@@ -603,9 +586,6 @@ gboolean dt_iop_gui_move_module_after(dt_iop_module_t *module, dt_iop_module_t *
 // initializes memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table();
 
-/** shared callback for throttled module history updates */
-void dt_iop_throttled_history_update(gpointer data);
-
 /** add/remove mask indicator to iop module header */
 void dt_iop_add_remove_mask_indicator(dt_iop_module_t *module);
 
@@ -614,23 +594,8 @@ const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_te
                                     const char *purpose, const char *input,
                                     const char *process, const char *output);
 
-static inline dt_iop_gui_data_t *_iop_gui_alloc(dt_iop_module_t *module, size_t size)
-{
-  // Align so that DT_ALIGNED_ARRAY may be used within gui_data struct
-  module->gui_data = (dt_iop_gui_data_t*)dt_calloc_align(size);
-  dt_pthread_mutex_init(&module->gui_lock,NULL);
-  return module->gui_data;
-}
-#define IOP_GUI_ALLOC(module) \
-  (dt_iop_##module##_gui_data_t *)_iop_gui_alloc(self,sizeof(dt_iop_##module##_gui_data_t))
-
-#define IOP_GUI_FREE \
-  dt_pthread_mutex_destroy(&self->gui_lock);       \
-  if(self->gui_data){                              \
-    dt_free_align(self->gui_data);                 \
-    self->gui_data = NULL;                         \
-  }                                                \
-  self->gui_data = NULL;
+/* _iop_gui_alloc and IOP_GUI_ALLOC/IOP_GUI_FREE live in imageop_gui.h, with the
+ * dt_iop_module_gui_t they operate on. */
 
 /* bring up module rename dialog */
 void dt_iop_gui_rename_module(dt_iop_module_t *module);
@@ -711,9 +676,23 @@ void dt_iop_set_cache_bypass_variant(dt_iop_module_t *module, int variant);
 GList *dt_iop_get_modules_so(void);
 
 
+/* Defaults an IOP's input_format()/output_format()/blend_colorspace() callbacks can delegate
+ * to. Defined in develop/format.c. They were declared in pixel/format.h, which is layer 2 and
+ * had to forward-declare dt_iop_module_t and dt_dev_pixelpipe_t just to say this -- so they
+ * moved here, to the module API every caller already includes. */
+void default_input_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                          struct dt_dev_pixelpipe_iop_t *piece, struct dt_iop_buffer_dsc_t *dsc);
+
+void default_output_format(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                           struct dt_dev_pixelpipe_iop_t *piece, struct dt_iop_buffer_dsc_t *dsc);
+
+int default_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_t *pipe,
+                             const struct dt_dev_pixelpipe_iop_t *piece);
+
 #ifdef __cplusplus
 }
 #endif
+
 
 #endif // DT_DEVELOP_IMAGEOP_H
 

@@ -27,7 +27,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "darktable.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include <stdlib.h>
 
 #ifdef __APPLE__

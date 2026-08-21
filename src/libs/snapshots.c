@@ -39,26 +39,26 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
-#include "common/history.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/dev_history.h"
 #include "develop/dev_snapshot.h"
-#include "gui/dtgtk/paint.h"
+#include "widgets/paint.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/gtk.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
 
 #include <math.h>
+#include "gui/window_manager.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 

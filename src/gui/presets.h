@@ -35,15 +35,12 @@
 
 #include "develop/blend.h"
 
-// format flags stored into the presets database; the FOR_NOT_ variants are negated to keep existing presets
-typedef enum dt_gui_presets_format_flag_t
-{
-  FOR_LDR = 1 << 0,
-  FOR_RAW = 1 << 1,
-  FOR_HDR = 1 << 2,
-  FOR_NOT_MONO = 1 << 3,
-  FOR_NOT_COLOR = 1 << 4
-} dt_gui_presets_format_flag_t;
+// The preset format flags (FOR_RAW, FOR_LDR, ...) used to be defined here. They are
+// persisted database vocabulary — database/preset_repository.h documents its `format` and
+// `excluded` fields in terms of them — so they live in history/presets.h now, with the
+// preset code that owns the concept. This include keeps every existing consumer working.
+#include "history/history.h"   // dt_dev_operation_t, named throughout
+#include "history/presets.h"
 
 typedef struct dt_gui_presets_edit_dialog_t
 {

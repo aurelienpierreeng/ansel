@@ -17,19 +17,21 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "colorprofiles/colorspaces.h"
 #include "common/conf.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/collection.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "gui/actions/menu.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 
 #include "gui/window_manager.h"
 
 #include <gtk/gtk.h>
+#include "control/signal.h"
 
 
 /** FULL SCREEN MODE **/
@@ -275,44 +277,29 @@ static gboolean filmstrip_checked_callback(GtkWidget *widget)
 
 static gboolean profile_checked_callback(GtkWidget *widget)
 {
-  dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)get_custom_data(widget);
-  return (prof->type == dt_colorspaces_get_global()->display_type
-          && (prof->type != DT_COLORSPACE_FILE
-              || !strcmp(prof->filename, dt_colorspaces_get_global()->display_filename)));
+  const dt_colorprofile_desc_t *prof = (const dt_colorprofile_desc_t *)get_custom_data(widget);
+  if(IS_NULL_PTR(prof)) return FALSE;
+
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+
+  return (prof->type == settings.display_type
+          && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, settings.display_filename)));
 }
 
 static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)get_custom_data(GTK_WIDGET(user_data));
+  const dt_colorprofile_desc_t *pp = (const dt_colorprofile_desc_t *)get_custom_data(GTK_WIDGET(user_data));
+  if(IS_NULL_PTR(pp)) return TRUE;
 
-  gboolean profile_changed = FALSE;
-  if(dt_colorspaces_get_global()->display_type != pp->type
-      || (dt_colorspaces_get_global()->display_type == DT_COLORSPACE_FILE
-           && strcmp(dt_colorspaces_get_global()->display_filename, pp->filename)))
-  {
-    dt_colorspaces_get_global()->display_type = pp->type;
-    g_strlcpy(dt_colorspaces_get_global()->display_filename, pp->filename,
-              sizeof(dt_colorspaces_get_global()->display_filename));
-    profile_changed = TRUE;
-  }
-
-  if(!profile_changed)
-  {
-    // profile not found, fall back to system display profile. shouldn't happen
-    fprintf(stderr, "can't find display profile `%s', using system display profile instead\n", pp->filename);
-    profile_changed = dt_colorspaces_get_global()->display_type != DT_COLORSPACE_DISPLAY;
-    dt_colorspaces_get_global()->display_type = DT_COLORSPACE_DISPLAY;
-    dt_colorspaces_get_global()->display_filename[0] = '\0';
-  }
+  /* The setter owns the lock, the changed decision and the transform rebuild. pp comes
+   * straight from the menu item, which was built from the profile list, so "not found" is
+   * not reachable here -- re-picking the active entry is simply a no-op. */
+  const gboolean profile_changed = dt_colorprofiles_set_display_profile_choice(pp->type, pp->filename);
 
   if(profile_changed)
-  {
-    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
-    dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
-  }
+
   return TRUE;
 }
 
@@ -339,23 +326,20 @@ dt_iop_color_intent_t string_to_color_intent(const char *string)
 
 static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_iop_color_intent_t old_intent = dt_colorspaces_get_global()->display_intent;
-  dt_iop_color_intent_t new_intent = string_to_color_intent(get_custom_data(GTK_WIDGET(user_data)));
-  if(new_intent != old_intent)
-  {
-    dt_colorspaces_get_global()->display_intent = new_intent;
-    dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
-    dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
+  const dt_iop_color_intent_t new_intent = string_to_color_intent(get_custom_data(GTK_WIDGET(user_data)));
+  const gboolean intent_changed = dt_colorprofiles_set_display_intent(new_intent);
+
+  if(intent_changed)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
-  }
+
   return TRUE;
 }
 
 static gboolean intent_checked_callback(GtkWidget *widget)
 {
-  return dt_colorspaces_get_global()->display_intent == string_to_color_intent(get_custom_data(widget));
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+  return settings.display_intent == string_to_color_intent(get_custom_data(widget));
 }
 
 static gboolean always_hide_overlays_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
@@ -438,7 +422,7 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
     for(GList *img = g_list_first(imgs); img; img = g_list_next(img))
     {
       const int32_t imgid = GPOINTER_TO_INT(img->data);
-      dt_mipmap_cache_remove(dt_mipmap_cache_get_global(), imgid, TRUE);
+      dt_mipmap_cache_remove(imgid, TRUE);
     }
     g_list_free(imgs);
     imgs = NULL;
@@ -458,16 +442,22 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_top_submenu_entry(menus, lists, _("Monitor color profile"), index);
   GtkWidget *parent = get_last_widget(lists);
 
-  // Add available color profiles to the sub-menu
-  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->display_pos > -1)
-    {
-      add_sub_sub_menu_entry(menus, parent, lists, prof->name, index, prof, profile_callback, profile_checked_callback, NULL, NULL, 0, 0);
-      //gtk_check_menu_item_set_draw_as_radio(GTK_CHECK_MENU_ITEM(get_last_widget(lists)), TRUE);
-    }
-  }
+  /* Add available color profiles to the sub-menu.
+   *
+   * The menu items keep a pointer to their profile identity, read back by
+   * profile_callback() and profile_checked_callback(). That used to be a raw pointer into
+   * the module's own list; it is an owned copy now, so the menu holds no reference into
+   * module state. The array has the same lifetime as the menu -- built once at startup,
+   * alive for the process -- so it is deliberately not freed. */
+  static dt_colorprofile_desc_t *display_profiles = NULL;
+  static size_t n_display_profiles = 0;
+
+  if(IS_NULL_PTR(display_profiles))
+    n_display_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_MONITOR, &display_profiles);
+
+  for(size_t k = 0; k < n_display_profiles; k++)
+    add_sub_sub_menu_entry(menus, parent, lists, display_profiles[k].name, index, &display_profiles[k],
+                           profile_callback, profile_checked_callback, NULL, NULL, 0, 0);
 
   // Parent sub-menu profile intent
   add_top_submenu_entry(menus, lists, _("Monitor color intent"), index);

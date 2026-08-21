@@ -26,7 +26,6 @@
 
 #include "system/mem_alloc.h"
 #include "common/paths.h"
-#include "dtwin.h"
 
 GList* win_image_find_duplicates(const char* filename)
 {

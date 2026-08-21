@@ -29,7 +29,7 @@
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/dtgtk/thumbtable_internal.h"
 #include "gui/dtgtk/thumbnail.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 
 

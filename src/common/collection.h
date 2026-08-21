@@ -49,9 +49,21 @@
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <inttypes.h>
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 
 #define NUM_LAST_COLLECTIONS 10
+
+/* Recording the N most recently used collections is a GUI feature: the list exists to fill a
+ * menu, and nothing in the collection backend reads it back. It lived here only because this
+ * is where a collection change is noticed.
+ *
+ * It must run BEFORE DT_SIGNAL_COLLECTION_CHANGED is raised -- some listeners read the recents
+ * list -- so it cannot simply become another listener. The backend therefore calls the handler
+ * at exactly the point the old code did. */
+typedef void (*dt_collection_recents_handler_t)(void);
+
+/** Install the handler that records the current collection as recently used. NULL removes it. */
+void dt_collection_set_recents_handler(dt_collection_recents_handler_t handler);
 
 typedef enum dt_collection_query_flags_t
 {
@@ -146,11 +158,33 @@ typedef enum dt_collection_properties_t
 
 typedef enum dt_collection_change_t
 {
-  DT_COLLECTION_CHANGE_NONE      = 0,
-  DT_COLLECTION_CHANGE_NEW_QUERY = 1, // a completly different query
-  DT_COLLECTION_CHANGE_FILTER    = 2, // base query has been finetuned (filter, ...)
-  DT_COLLECTION_CHANGE_RELOAD    = 3  // we have just reload the collection after images changes (query is identical)
+  DT_COLLECTION_CHANGE_NONE            = 0,
+  DT_COLLECTION_CHANGE_NEW_QUERY       = 1, // a completly different query
+  DT_COLLECTION_CHANGE_FILTER          = 2, // base query has been finetuned (filter, ...)
+  DT_COLLECTION_CHANGE_RELOAD          = 3, // we have just reload the collection after images changes (query is identical)
+  // Something changed elsewhere (e.g. an import landing outside the browsed folder) that
+  // listeners with their own independent state may care about, but that is NOT a navigational
+  // event: nothing about what the user is currently looking at changed. Listeners driven by user
+  // navigation (scroll/focus/zoom resets) should treat this the same as NONE and do nothing;
+  // listeners that keep their own counts (e.g. the Collect module's tag/camera/lens lists) should
+  // still refresh. Deliberately its own value rather than reusing NONE: NONE already means "no
+  // value" in non-signal contexts (see gui/actions/file.c's one-time init call), and overloading
+  // it with this second, signal-specific meaning would make every future listener re-derive which
+  // sense of NONE it is looking at.
+  DT_COLLECTION_CHANGE_BACKGROUND_SYNC = 4
 } dt_collection_change_t;
+
+/** One rule of a collection: "images whose <property> <mode> matches <text>".
+ *
+ *  This is what crosses into the database module. The module turns rules into SQL; reading them
+ *  out of the user's configuration is common/collection.c's. */
+typedef struct dt_collection_rule_t
+{
+  dt_collection_properties_t property;
+  int mode;              /**< 0 = AND, 1 = OR, 2 = AND NOT */
+  const char *text;      /**< empty or NULL means "match everything" */
+  gboolean recursive;    /**< for the path-like properties: match below the value too */
+} dt_collection_rule_t;
 
 typedef struct dt_collection_params_t
 {
@@ -171,8 +205,8 @@ typedef struct dt_collection_params_t
 
 typedef struct dt_collection_t
 {
-  gchar *query;
-  gchar **where_ext;
+  dt_collection_rule_t *rules;   /**< the user's rules; SQL is composed from these downstream */
+  int n_rules;
   unsigned int count;
   unsigned int tagid;
   dt_collection_params_t params;
@@ -195,16 +229,15 @@ const dt_collection_params_t *dt_collection_params(const dt_collection_t *collec
 void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList **exif);
 /** get the sanitized makermodel for exif maker/model **/
 gchar *dt_collection_get_makermodel(const char *exif_maker, const char *exif_model);
-/** get the generated query for collection */
-const gchar *dt_collection_get_query(const dt_collection_t *collection);
 /** updates sql query for a collection. @return 1 if query changed. */
 int dt_collection_update(const dt_collection_t *collection);
 /** reset collection to default dummy selection */
 void dt_collection_reset(const dt_collection_t *collection);
 /** gets an extended where part */
-gchar *dt_collection_get_extended_where(const dt_collection_t *collection, int exclude);
 /** sets an extended where part */
-void dt_collection_set_extended_where(const dt_collection_t *collection, gchar **extended_where);
+/** Replace the collection's rules and rebuild its query. */
+void dt_collection_set_rules(const dt_collection_t *collection, const dt_collection_rule_t *rules,
+                             const int n_rules);
 
 /** get filter flags for collection */
 dt_collection_filter_flag_t dt_collection_get_filter_flags(const dt_collection_t *collection);
@@ -224,8 +257,50 @@ void dt_collection_set_text_filter(const dt_collection_t *collection, char *text
 /** set the tagid of collection */
 void dt_collection_set_tag_id(dt_collection_t *collection, const uint32_t tagid);
 
-/** load a filmroll-based collection from an imgid */
-void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image);
+/** load a filmroll-based collection from an imgid. set_mouse_over controls whether
+ * dt_control_set_mouse_over_id(imgid) is (re-)applied here: pass FALSE when the caller already
+ * pointed mouse_over_id at imgid earlier and does not want it forced back onto imgid here,
+ * clobbering whatever the user may be hovering by the time this runs. */
+void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image,
+                                 gboolean set_mouse_over);
+
+/** If lighttable/Studio Capture is currently browsing a single folder or film-roll (Collect
+ * module on the "Folders" tab), copy its path into folder (up to len bytes), set *recursive to
+ * whether sub-folders are included (always FALSE for a film-roll: only the Tree/FOLDERS view
+ * supports recursion), and return TRUE. Otherwise leave both outputs untouched and return
+ * FALSE. */
+gboolean dt_collection_get_browsed_folder(gchar *folder, size_t len, gboolean *recursive);
+
+/** Shared notifier for import jobs that process images one at a time, throttled to at most once
+ * every 250ms via *last_refresh_us (caller-owned state, zero-initialized before the import loop
+ * starts). Re-reads dt_collection_get_browsed_folder() itself on every throttle-admitted call
+ * (so at most 4/s, not once per whole import job) rather than trusting a snapshot the caller took
+ * before the loop started: the user can change which folder is browsed while a long import is
+ * still running, and a stale snapshot would keep comparing against wherever they were looking
+ * when the job began.
+ *
+ * known_image_folder is an optional optimization: pass imgid's folder if the caller already has
+ * it at hand (e.g. film_jobs.c's import loop, which never copies files, already knows it from
+ * the film-roll it just inserted into) to skip re-deriving it here. Pass NULL to have it resolved
+ * fresh via dt_get_dirname_from_imgid() -- necessary whenever the caller can't otherwise know the
+ * final path, e.g. import_jobs.c's copy mode, which writes to a pattern-generated destination.
+ *
+ * If imgid's folder matches the browsed folder exactly, or falls under it and sub-folders are
+ * included, this does a real dt_collection_update_query(), so the grid gains the new image -- or
+ * no folder is being browsed at all, meaning relevance can't be determined, which takes the same
+ * real-update path. Otherwise it raises DT_SIGNAL_COLLECTION_CHANGED directly, without
+ * re-querying/rebuilding memory.collected_images: listeners that keep their own counts
+ * independently of it (e.g. the Collect module's tag/camera/lens lists) still refresh, while the
+ * center view -- keyed off the query generation and memory.collected_images's row count, both
+ * left untouched on this path -- does not needlessly reload thumbnails.
+ *
+ * Either way the signal is labeled DT_COLLECTION_CHANGE_BACKGROUND_SYNC: a background import
+ * heartbeat should never steal scroll/focus or reset grid/zoom preferences, whether or not it
+ * touches what's on screen. Listeners that guard exactly that off query_change (thumbtable.c's
+ * own collection-changed callback, libs/tools/lighttable.c's) recognize it as "not a real
+ * [navigational] change" and skip just that side effect, not the parts driven by their own
+ * hash/state. */
+void dt_collection_notify_imported(const int32_t imgid, const gchar *known_image_folder, gint64 *last_refresh_us);
 
 /** set the sort fields and flags used to show the collection **/
 void dt_collection_set_sort(const dt_collection_t *collection, dt_collection_sort_t sort, gint reverse);

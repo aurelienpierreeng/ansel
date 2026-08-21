@@ -34,21 +34,25 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/geo.h"
+#include "metadata/geo.h"
 #include "control/settings.h"
 #include "common/curl_tools.h"
 #include "common/glib_utils.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/utility.h"
 #include "common/conf.h"
 #include "control/jobs.h"
-#include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
 #include <curl/curl.h>
 #include <gdk/gdkkeysyms.h>
+#include "gui/window_manager.h"
+#include "widgets/accelerators.h"
+#include "widgets/container.h"
+#include "widgets/widget_settings.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 

@@ -1,0 +1,46 @@
+name: Translations
+
+# ci.yml carries `paths-ignore: po/**`, so a translation-only commit builds nothing --
+# which is how a po/it.po that msgfmt refuses reached master and then failed every
+# subsequent pull request instead of its own. This runs on exactly the paths ci.yml
+# skips, and does the one check that matters for a catalogue: does it compile.
+#
+# `msgfmt -c` is what the build itself runs (see po/CMakeLists.txt), so a green run here
+# is the same verdict, ~2 seconds instead of a full build.
+
+on:
+  push:
+    paths:
+      - "po/**"
+      - ".github/workflows/po-check.yml"
+  pull_request:
+    paths:
+      - "po/**"
+      - ".github/workflows/po-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  msgfmt:
+    name: msgfmt -c
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Install gettext
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gettext
+      - name: Compile every catalogue
+        run: |
+          status=0
+          for po in po/*.po; do
+            if ! msgfmt -c "$po" -o /dev/null; then
+              echo "::error file=$po::$po does not compile; the build stops here"
+              status=1
+            fi
+          done
+          exit $status

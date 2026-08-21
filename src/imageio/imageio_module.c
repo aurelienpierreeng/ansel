@@ -36,15 +36,16 @@
 
 #include "common/module_versioning.h"
 #include "imageio/imageio_module.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/paths.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "common/file_location.h"
 #include "imageio/imageio_core.h"
 #include "common/conf.h"
 #include "control/signal.h"
 #include <stdlib.h>
+#include "widgets/widget_settings.h"
 static gint dt_imageio_sort_modules_storage(gconstpointer a, gconstpointer b)
 {
   const dt_imageio_module_storage_t *am = (const dt_imageio_module_storage_t *)a;

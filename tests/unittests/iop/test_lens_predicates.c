@@ -43,7 +43,7 @@
  *
  * The test deliberately includes only glib.h and cmocka.h; it does
  * NOT pull in any GTK header (FR-18, NFR-09). The shim is the single
- * linkage surface; no pixelpipe, no GUI, no lensfun DB at runtime.
+ * linkage surface; no pixelpipe, no GUI, no Lensfun at runtime.
  */
 #include <setjmp.h>
 #include <stdarg.h>
@@ -83,6 +83,7 @@
 #define TCA_OFF            0
 #define TCA_MANUAL         1
 #define TCA_LENSFUN_DB     2
+#define TCA_EMBEDDED       3
 
 /* ---------------------------------------------------------------------------
  * Shim forward declarations.
@@ -115,11 +116,11 @@ static void test_correction_source_selector_entries_false_returns_2(void **state
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
   int values[3] = { -1, -1, -1 };
-  TR_STEP("correction_source, has_embedded=FALSE -> 2 entries: [off, lensfun DB]");
+  TR_STEP("correction_source, has_embedded=FALSE -> 2 entries: [off, Lensfun]");
   int n = test_correction_source_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 2);
   assert_string_equal(labels[0], "off");
-  assert_string_equal(labels[1], "lensfun DB");
+  assert_string_equal(labels[1], "Lensfun");
   assert_int_equal(values[0], SOURCE_OFF);
   assert_int_equal(values[1], SOURCE_LENSFUN_DB);
 }
@@ -129,12 +130,12 @@ static void test_correction_source_selector_entries_true_returns_3_with_embedded
   (void)state;
   const char *labels[3] = { NULL, NULL, NULL };
   int values[3] = { -1, -1, -1 };
-  TR_STEP("correction_source, has_embedded=TRUE -> 3 entries: [off, embedded, lensfun DB]");
+  TR_STEP("correction_source, has_embedded=TRUE -> 3 entries: [off, embedded, Lensfun]");
   int n = test_correction_source_selector_entries(TRUE, labels, values);
   assert_int_equal(n, 3);
   assert_string_equal(labels[0], "off");
   assert_string_equal(labels[1], "embedded");
-  assert_string_equal(labels[2], "lensfun DB");
+  assert_string_equal(labels[2], "Lensfun");
   assert_int_equal(values[0], SOURCE_OFF);
   assert_int_equal(values[1], SOURCE_EMBEDDED);
   assert_int_equal(values[2], SOURCE_LENSFUN_DB);
@@ -158,33 +159,35 @@ static void test_correction_source_selector_entries_null_safe(void **state)
 static void test_tca_selector_entries_false_returns_3_with_manual(void **state)
 {
   (void)state;
-  const char *labels[3] = { NULL, NULL, NULL };
-  int values[3] = { -1, -1, -1 };
-  TR_STEP("tca, has_embedded=FALSE -> 3 entries: [off, manual, lensfun DB]");
+  const char *labels[4] = { NULL, NULL, NULL, NULL };
+  int values[4] = { -1, -1, -1, -1 };
+  TR_STEP("tca, has_embedded=FALSE -> 3 entries: [off, Lensfun, manual]");
   int n = test_tca_selector_entries(FALSE, labels, values);
   assert_int_equal(n, 3);
   assert_string_equal(labels[0], "off");
-  assert_string_equal(labels[1], "manual");
-  assert_string_equal(labels[2], "lensfun DB");
+  assert_string_equal(labels[1], "Lensfun");
+  assert_string_equal(labels[2], "manual");
   assert_int_equal(values[0], TCA_OFF);
-  assert_int_equal(values[1], TCA_MANUAL);
-  assert_int_equal(values[2], TCA_LENSFUN_DB);
+  assert_int_equal(values[1], TCA_LENSFUN_DB);
+  assert_int_equal(values[2], TCA_MANUAL);
 }
 
 static void test_tca_selector_entries_true_returns_3_with_manual(void **state)
 {
   (void)state;
-  const char *labels[3] = { NULL, NULL, NULL };
-  int values[3] = { -1, -1, -1 };
-  TR_STEP("tca, has_embedded=TRUE -> 3 entries (FR-15: has_embedded ignored, MANUAL always present)");
+  const char *labels[4] = { NULL, NULL, NULL, NULL };
+  int values[4] = { -1, -1, -1, -1 };
+  TR_STEP("tca, has_embedded=TRUE -> 4 entries: [off, embedded, Lensfun, manual] (FR-15: MANUAL always present)");
   int n = test_tca_selector_entries(TRUE, labels, values);
-  assert_int_equal(n, 3);
+  assert_int_equal(n, 4);
   assert_string_equal(labels[0], "off");
-  assert_string_equal(labels[1], "manual");
-  assert_string_equal(labels[2], "lensfun DB");
+  assert_string_equal(labels[1], "embedded");
+  assert_string_equal(labels[2], "Lensfun");
+  assert_string_equal(labels[3], "manual");
   assert_int_equal(values[0], TCA_OFF);
-  assert_int_equal(values[1], TCA_MANUAL);
+  assert_int_equal(values[1], TCA_EMBEDDED);
   assert_int_equal(values[2], TCA_LENSFUN_DB);
+  assert_int_equal(values[3], TCA_MANUAL);
 }
 
 static void test_tca_selector_entries_null_safe(void **state)
@@ -227,7 +230,7 @@ static void test_tca_show_manual_sliders_lensfun_DB_false(void **state)
  *
  * The function returns the bitwise OR of LF_MODIFY_DISTORTION /
  * LF_MODIFY_VIGNETTING / LF_MODIFY_TCA for axes that select the
- * lensfun DB source, masked with LENSFUN_MODFLAG_MASK. The TCA bit
+ * Lensfun source, masked with LENSFUN_MODFLAG_MASK. The TCA bit
  * is cleared when monochrome is TRUE.
  * --------------------------------------------------------------------------- */
 
@@ -407,7 +410,7 @@ static void test_per_axis_modify_flags_masked_to_LENSFUN_MODFLAG_MASK(void **sta
  * corrections_status_string (FR-08, FR-26, OQ-08)
  *
  * Format (per OQ-08): "distortion: <s>, vignetting: <s>, TCA: <s>" where
- * <s> is one of {off, embedded, lensfun DB, manual}. Monochrome forces
+ * <s> is one of {off, embedded, Lensfun, manual}. Monochrome forces
  * TCA's <s> to "off" regardless of the user's selection (FR-24).
  *
  * The function returns a pointer to a static buffer; each test reads
@@ -418,26 +421,26 @@ static void test_corrections_status_string_all_lensfun_DB_color(void **state)
 {
   (void)state;
   TR_STEP("corrections_status_string(LF, LF, LF, color) == "
-          "\"distortion: lensfun DB, vignetting: lensfun DB, TCA: lensfun DB\"");
+          "\"distortion: Lensfun, vignetting: Lensfun, TCA: Lensfun\"");
   const char *s = test_corrections_status_string(SOURCE_LENSFUN_DB,
                                                   SOURCE_LENSFUN_DB,
                                                   TCA_LENSFUN_DB,
                                                   FALSE);
   assert_non_null(s);
-  assert_string_equal(s, "distortion: lensfun DB, vignetting: lensfun DB, TCA: lensfun DB");
+  assert_string_equal(s, "distortion: Lensfun, vignetting: Lensfun, TCA: Lensfun");
 }
 
 static void test_corrections_status_string_mixed(void **state)
 {
   (void)state;
   TR_STEP("corrections_status_string(LF, EMB, MANUAL, color) == "
-          "\"distortion: lensfun DB, vignetting: embedded, TCA: manual\"");
+          "\"distortion: Lensfun, vignetting: embedded, TCA: manual\"");
   const char *s = test_corrections_status_string(SOURCE_LENSFUN_DB,
                                                   SOURCE_EMBEDDED,
                                                   TCA_MANUAL,
                                                   FALSE);
   assert_non_null(s);
-  assert_string_equal(s, "distortion: lensfun DB, vignetting: embedded, TCA: manual");
+  assert_string_equal(s, "distortion: Lensfun, vignetting: embedded, TCA: manual");
 }
 
 static void test_corrections_status_string_all_off(void **state)
@@ -460,7 +463,7 @@ static void test_corrections_status_string_monochrome_tca_forced_off(void **stat
                                                   TCA_LENSFUN_DB,
                                                   TRUE);
   assert_non_null(s);
-  assert_string_equal(s, "distortion: lensfun DB, vignetting: lensfun DB, TCA: off");
+  assert_string_equal(s, "distortion: Lensfun, vignetting: Lensfun, TCA: off");
 }
 
 static void test_corrections_status_string_all_embedded(void **state)

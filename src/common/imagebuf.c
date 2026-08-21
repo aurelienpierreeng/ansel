@@ -20,10 +20,10 @@
 */
 
 #include <stdarg.h>
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 
 #ifdef _OPENMP

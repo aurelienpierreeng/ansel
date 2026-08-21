@@ -29,12 +29,12 @@
 #include <stdlib.h>
 
 #include "pixel/box_filters.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "math/math.h"
 
 #if defined(__x86_64__) || defined(__i386__)

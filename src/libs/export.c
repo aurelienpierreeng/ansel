@@ -57,37 +57,34 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
+#include "database/preset_repository.h"
 #include "common/act_on.h"
 #include "control/jobs/control_jobs.h"
 #include "common/collection.h"
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "colorprofiles/colorspaces.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/paths.h"
-#include "common/database.h"
-#include "common/debug.h"
 #include "common/file_location.h"
 #include "imageio/imageio_module.h"
 #include "common/styles.h"
 #include "common/conf.h"
 #include "control/control.h"
-#include "control/jobs.h"
 #include "control/signal.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
 #include <gdk/gdkkeysyms.h>
+#include "widgets/container.h"
+#include "widgets/label.h"
 
-static sqlite3_stmt *_export_presets_stmt = NULL;
 #include <gtk/gtk.h>
 #include <stdlib.h>
-#include <ctype.h>
 
 #include <glib.h>
 
@@ -569,17 +566,9 @@ void gui_reset(dt_lib_module_t *self)
   dt_bauhaus_combobox_set(d->profile, 0);
   if(icctype != DT_COLORSPACE_NONE)
   {
-    for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
-    {
-      const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-      if(pp->out_pos > -1
-         && icctype == pp->type
-         && (icctype != DT_COLORSPACE_FILE || !strcmp(iccfilename, pp->filename)))
-      {
-        dt_bauhaus_combobox_set(d->profile, pp->out_pos + 1);
-        break;
-      }
-    }
+    // +1: the combo carries "same as original" ahead of the profiles.
+    const int pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, icctype, iccfilename);
+    if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 
   dt_free(iccfilename);
@@ -798,19 +787,14 @@ static void _profile_changed(GtkWidget *widget, dt_lib_export_t *d)
   int pos = dt_bauhaus_combobox_get(widget);
   if(pos > 0)
   {
-    pos--;
-    for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
+    pos--;   // the combo carries "same as original" at 0
+    dt_colorprofile_desc_t desc;
+    if(dt_colorspaces_profile_at(DT_PROFILE_ROLE_OUTPUT, pos, &desc))
     {
-      const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-      if(pp->out_pos == pos)
-      {
-        dt_conf_set_int(CONFIG_PREFIX "icctype", pp->type);
-        if(pp->type == DT_COLORSPACE_FILE)
-          dt_conf_set_string(CONFIG_PREFIX "iccprofile", pp->filename);
-        else
-          dt_conf_set_string(CONFIG_PREFIX "iccprofile", "");
-        return;
-      }
+      dt_conf_set_int(CONFIG_PREFIX "icctype", desc.type);
+      dt_conf_set_string(CONFIG_PREFIX "iccprofile",
+                         (desc.type == DT_COLORSPACE_FILE) ? desc.filename : "");
+      return;
     }
   }
   dt_conf_set_int(CONFIG_PREFIX "icctype", DT_COLORSPACE_NONE);
@@ -1245,12 +1229,11 @@ void gui_init(dt_lib_module_t *self)
   dt_bauhaus_widget_set_label(d->profile, N_("Color space"));
   gtk_box_pack_start(GTK_BOX(self->widget), d->profile, FALSE, TRUE, 0);
   dt_bauhaus_combobox_add(d->profile, _("same as original"));
-  for(GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
-  {
-    const dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->out_pos > -1)
-      dt_bauhaus_combobox_add(d->profile, prof->name);
-  }
+  dt_colorprofile_desc_t *out_profiles = NULL;
+  const size_t n_out_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_OUTPUT, &out_profiles);
+  for(size_t k = 0; k < n_out_profiles; k++)
+    dt_bauhaus_combobox_add(d->profile, out_profiles[k].name);
+  dt_free_align(out_profiles);
 
   dt_bauhaus_combobox_set(d->profile, 1);
 
@@ -1380,17 +1363,9 @@ void gui_init(dt_lib_module_t *self)
 
   if(icctype != DT_COLORSPACE_NONE)
   {
-    for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
-    {
-      const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-      if(pp->out_pos > -1
-         && icctype == pp->type
-         && (icctype != DT_COLORSPACE_FILE || !strcmp(iccfilename, pp->filename)))
-      {
-        dt_bauhaus_combobox_set(d->profile, pp->out_pos + 1);
-        break;
-      }
-    }
+    // +1: the combo carries "same as original" ahead of the profiles.
+    const int pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, icctype, iccfilename);
+    if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 
   dt_free(iccfilename);
@@ -1441,11 +1416,6 @@ void gui_cleanup(dt_lib_module_t *self)
     if(module->widget && GTK_IS_CONTAINER(d->format_extra_container)) gtk_container_remove(GTK_CONTAINER(d->format_extra_container), module->widget);
   }
 
-  if(_export_presets_stmt)
-  {
-    sqlite3_finalize(_export_presets_stmt);
-    _export_presets_stmt = NULL;
-  }
 
   dt_free(d->metadata_export);
 
@@ -1469,23 +1439,17 @@ void init_presets(dt_lib_module_t *self)
 
   const int version = self->version();
 
-  if(!_export_presets_stmt)
+  // The whole result set is materialised before the first write. This loop DELETEs and UPDATEs
+  // data.presets, and it used to do so while its own cursor was still scanning that table.
+  GList *presets = dt_preset_repository_list_all_versions("export");
+  for(GList *l = presets; l; l = g_list_next(l))
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-        dt_database_get_sqlite3_global(),
-        "SELECT rowid, op_version, op_params, name FROM data.presets WHERE operation='export'", -1,
-        &_export_presets_stmt, NULL);
-  }
-  sqlite3_stmt *stmt = _export_presets_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int rowid = sqlite3_column_int(stmt, 0);
-    const int op_version = sqlite3_column_int(stmt, 1);
-    const void *op_params = (void *)sqlite3_column_blob(stmt, 2);
-    const size_t op_params_size = sqlite3_column_bytes(stmt, 2);
-    const char *name = (char *)sqlite3_column_text(stmt, 3);
+    const dt_module_preset_t *p = (const dt_module_preset_t *)l->data;
+    const int rowid = p->rowid;
+    const int op_version = p->op_version;
+    const void *op_params = p->op_params;
+    const size_t op_params_size = p->op_params_size;
+    const char *name = p->name;
 
     if(op_version != version)
     {
@@ -1493,13 +1457,7 @@ void init_presets(dt_lib_module_t *self)
       fprintf(stderr, "[export_init_presets] found export preset '%s' with version %d, version %d was "
                       "expected. dropping preset.\n",
               name, op_version, version);
-      sqlite3_stmt *innerstmt;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "DELETE FROM data.presets WHERE rowid=?1", -1,
-                                  &innerstmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(innerstmt, 1, rowid);
-      sqlite3_step(innerstmt);
-      sqlite3_finalize(innerstmt);
+      dt_preset_repository_delete_by_rowid(rowid);
     }
     else
     {
@@ -1590,14 +1548,9 @@ void init_presets(dt_lib_module_t *self)
         fprintf(stderr,
                 "[export_init_presets] updating export preset '%s' from versions %d/%d to versions %d/%d\n",
                 name, fversion, sversion, new_fversion, new_sversion);
-        sqlite3_stmt *innerstmt;
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                    "UPDATE data.presets SET op_params=?1 WHERE rowid=?2",
-                                    -1, &innerstmt, NULL);
-        DT_DEBUG_SQLITE3_BIND_BLOB(innerstmt, 1, new_params, new_params_size, SQLITE_TRANSIENT);
-        DT_DEBUG_SQLITE3_BIND_INT(innerstmt, 2, rowid);
-        sqlite3_step(innerstmt);
-        sqlite3_finalize(innerstmt);
+        // op_version is written back as the row's own value, so this stays the op_params-only
+        // update the original was, whatever branch reaches it.
+        dt_preset_repository_update_params_by_rowid(rowid, op_version, new_params, new_params_size);
 
         dt_free(new_fdata);
         dt_free(new_sdata);
@@ -1612,17 +1565,10 @@ void init_presets(dt_lib_module_t *self)
       fprintf(stderr, "[export_init_presets] export preset '%s' can't be updated from versions %d/%d to "
                       "versions %d/%d. dropping preset\n",
               name, fversion, sversion, new_fversion, new_sversion);
-      sqlite3_stmt *innerstmt;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                                  "DELETE FROM data.presets WHERE rowid=?1", -1,
-                                  &innerstmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(innerstmt, 1, rowid);
-      sqlite3_step(innerstmt);
-      sqlite3_finalize(innerstmt);
+      dt_preset_repository_delete_by_rowid(rowid);
     }
   }
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
+  g_list_free_full(presets, dt_module_preset_free);
 }
 
 void *legacy_params(dt_lib_module_t *self, const void *const old_params, const size_t old_params_size,
@@ -1972,17 +1918,9 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   dt_bauhaus_combobox_set(d->profile, 0);
   if(icctype != DT_COLORSPACE_NONE)
   {
-    for(GList *iter = dt_colorspaces_get_global()->profiles; iter; iter = g_list_next(iter))
-    {
-      const dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)iter->data;
-      if(pp->out_pos > -1
-         && icctype == pp->type
-         && (icctype != DT_COLORSPACE_FILE || !strcmp(iccfilename, pp->filename)))
-      {
-        dt_bauhaus_combobox_set(d->profile, pp->out_pos + 1);
-        break;
-      }
-    }
+    // +1: the combo carries "same as original" ahead of the profiles.
+    const int pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, icctype, iccfilename);
+    if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 
   // parse both names to '\0'

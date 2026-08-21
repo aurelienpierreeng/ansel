@@ -43,23 +43,23 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
+#include "widgets/widget_settings.h"
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "gui/dtgtk/drawingarea.h"
+#include "widgets/drawingarea.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
@@ -67,6 +67,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "gui/screen_metrics.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_colorcorrection_params_t)
 
@@ -263,10 +264,10 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
+  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorcorrection_params_t *p = (dt_iop_colorcorrection_params_t *)self->params;
   dt_bauhaus_slider_set(g->slider, p->saturation);
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 static gboolean dt_iop_colorcorrection_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data);
@@ -285,16 +286,16 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->selected = 0;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("drag the line for split-toning. "
                                                      "bright means highlights, dark means shadows. "
                                                      "use mouse wheel to change saturation."));
 
-  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | dt_widget_scroll_mask()
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
@@ -311,14 +312,14 @@ void gui_init(struct dt_iop_module_t *self)
   g->slider = dt_bauhaus_slider_from_params(self, N_("saturation"));
   gtk_widget_set_tooltip_text(g->slider, _("set the global saturation"));
 
-  cmsHPROFILE hsRGB = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_IN)->profile;
-  cmsHPROFILE hLab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_DIRECTION_ANY)->profile;
+  cmsHPROFILE hsRGB = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_INPUT)->profile;
+  cmsHPROFILE hLab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_ROLE_ANY)->profile;
   g->xform = cmsCreateTransform(hLab, TYPE_Lab_DBL, hsRGB, TYPE_RGB_DBL, INTENT_PERCEPTUAL, 0);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
+  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)dt_iop_gui_data(self);
   cmsDeleteTransform(g->xform);
 
   IOP_GUI_FREE;
@@ -327,7 +328,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 static gboolean dt_iop_colorcorrection_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
+  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorcorrection_params_t *p = (dt_iop_colorcorrection_params_t *)self->params;
 
   const int inset = DT_COLORCORRECTION_INSET;
@@ -404,7 +405,7 @@ static gboolean dt_iop_colorcorrection_motion_notify(GtkWidget *widget, GdkEvent
                                                      gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
+  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorcorrection_params_t *p = (dt_iop_colorcorrection_params_t *)self->params;
   const int inset = DT_COLORCORRECTION_INSET;
   GtkAllocation allocation;
@@ -441,7 +442,7 @@ static gboolean dt_iop_colorcorrection_motion_notify(GtkWidget *widget, GdkEvent
       g->selected = 2;
   }
   if(g->selected > 0) gtk_widget_grab_focus(widget);
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   return TRUE;
 }
 
@@ -452,7 +453,7 @@ static gboolean dt_iop_colorcorrection_button_press(GtkWidget *widget, GdkEventB
   {
     // double click resets:
     dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-    dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
+    dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)dt_iop_gui_data(self);
     dt_iop_colorcorrection_params_t *p = (dt_iop_colorcorrection_params_t *)self->params;
     switch(g->selected)
     {
@@ -480,14 +481,14 @@ static gboolean dt_iop_colorcorrection_leave_notify(GtkWidget *widget, GdkEventC
                                                     gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   return TRUE;
 }
 
 static gboolean dt_iop_colorcorrection_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
+  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorcorrection_params_t *p = (dt_iop_colorcorrection_params_t *)self->params;
 
   int delta_y;
@@ -506,7 +507,7 @@ static gboolean dt_iop_colorcorrection_scrolled(GtkWidget *widget, GdkEventScrol
 static gboolean dt_iop_colorcorrection_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)self->gui_data;
+  dt_iop_colorcorrection_gui_data_t *g = (dt_iop_colorcorrection_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_colorcorrection_params_t *p = (dt_iop_colorcorrection_params_t *)self->params;
   if(g->selected < 1) return FALSE;
   guint key = dt_keys_mainpad_alternatives(event->keyval);

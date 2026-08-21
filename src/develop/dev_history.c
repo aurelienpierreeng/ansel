@@ -58,26 +58,32 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "widgets/widget_settings.h"
+#include "control/control.h"
 #include "common/conf.h"
-#include "common/history.h"
+#include "history/history.h"
+#include "history/notify.h"
+#include "history/presets.h"   // FOR_RAW/FOR_LDR/... matched against the image at auto-apply
+#include "database/history_repository.h"
 
 #include "common/undo.h"
-#include "common/image_cache.h"
-#include "common/history_merge.h"
-#include "common/iop_order.h"
+#include "caches/image_cache.h"
+#include "develop/history_merge.h"
+#include "develop/iop_order.h"
 #include "develop/dev_history.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/supervisor.h"
+#include "develop/gui_throttle.h"
 
-#include "gui/presets.h"
 
 #include <inttypes.h>
 
 #include <glib.h>
 #include "common/hash.h"
+#include "gui/application.h"
 
 static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
                                       const int modversion, const char *operation, const void *module_params,
@@ -382,11 +388,11 @@ int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, c
      * after a history deletion: the first-run defaults, auto-presets, image
      * flags and resulting module order must exist before paste/style merging.
      */
-    dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), dest_imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(dest_imgid, 'w');
     if(!IS_NULL_PTR(image))
     {
       *image = dev_dest.image_storage;
-      dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
+      dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
     }
 
     dt_dev_write_history_ext(&dev_dest, dest_imgid);
@@ -557,6 +563,21 @@ GList *dt_history_duplicate(GList *hist)
   return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 
+/* Installed by dt_dev_history_gui_init(); absent under ansel-cli and in tests. */
+static dt_dev_history_commit_gui_handler_t _commit_gui_handler = NULL;
+
+void dt_dev_history_set_commit_gui_handler(dt_dev_history_commit_gui_handler_t handler)
+{
+  _commit_gui_handler = handler;
+}
+
+static dt_dev_history_undo_restore_gui_handler_t _undo_restore_gui_handler = NULL;
+
+void dt_dev_history_set_undo_restore_gui_handler(dt_dev_history_undo_restore_gui_handler_t handler)
+{
+  _undo_restore_gui_handler = handler;
+}
+
 typedef struct dt_undo_history_t
 {
   GList *before_snapshot, *after_snapshot;
@@ -655,21 +676,37 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   // TODO: check if we need to rebuild the full pipeline and do it only if needed
   dt_dev_history_pixelpipe_update(dev, TRUE);
 
+  /* Republish the darkroom geometry, like every other path that replays history in bulk:
+   * dt_dev_pop_history_items() does it, so does the history-row click in libs/history.c, and
+   * so do image load and compress/truncate. This one did not, and undo is the path where it
+   * matters most -- undoing a crop changes the processed size, and without this the geometry
+   * record (hence natural_scale, the preview dimensions, and everything the pipes plan from)
+   * kept describing the pre-undo image until some unrelated later caller happened to refresh
+   * it. dt_dev_history_pixelpipe_update() above rebuilds the virtual pipe, so this only folds
+   * and publishes.
+   *
+   * After the history lock is released, never inside it: dt_dev_get_thumbnail_size() resyncs
+   * the virtual pipe, which takes history_mutex as reader, and the same-thread reentrancy that
+   * makes this survivable is a safety net, not a licence -- the sibling call sites all note the
+   * same ordering constraint. */
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+
   if(dev->gui_module)
   {
     dt_masks_set_edit_mode(dev->gui_module, hist->mask_edit_mode);
     dev->gui_module->request_mask_display = hist->request_mask_display;
-    dt_iop_gui_update_blendif(dev->gui_module);
-    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)(dev->gui_module->blend_data);
-    if(bd)
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask),
-                                   hist->request_mask_display == DT_DEV_PIXELPIPE_DISPLAY_MASK);
+    // the blending panel's widgets are the GUI half's to poke (dev_history_gui.c)
+    if(_undo_restore_gui_handler)
+      _undo_restore_gui_handler(dev, hist->mask_edit_mode, hist->request_mask_display);
   }
 
   // Ensure all UI pieces (history treeview, iop order, etc.) resync after undo/redo.
   // Undo callbacks bypass dt_dev_undo_end_record(), so we need to raise the change signal here.
-  if(dt_gui_get_global() && dev->gui_attached && dev == dt_dev_get_global())
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  // The interactive session's panels resync through the changed-handler; the
+  // dev == dt_dev_get_global() test is engine knowledge (only the interactive dev has
+  // panels), so it stays here rather than in the handler.
+  if(dev->gui_attached && dev == dt_dev_get_global())
+    dt_history_changed(DT_HISTORY_CHANGE_DEVELOP);
 }
 
 void dt_dev_history_undo_start_record(dt_develop_t *dev)
@@ -975,11 +1012,11 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
 }
 
 
-// The next 2 functions are always called from GUI controls setting parameters
-// This is why they directly start a pipeline recompute.
-// Otherwise, please keep GUI and pipeline fully separated.
+/* The pending-commit throttle queue lives in dev_history_gui.c: it exists to coalesce
+ * slider-drag input on the GTK main loop, and its headless timeout is zero -- the
+ * engine entry it drains into is dt_dev_history_commit_item_now() below. */
 
-void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean redraw)
+void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
 {
   gboolean add_new_pipe_node = FALSE;
 
@@ -1024,11 +1061,11 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
   if(dev->image_storage.id > 0)
   {
-    dt_image_t *cache_img = dt_image_cache_get(dt_image_cache_get_global(), dev->image_storage.id, 'w');
+    dt_image_t *cache_img = dt_image_cache_get(dev->image_storage.id, 'w');
     if(cache_img)
     {
       cache_img->history_hash = dt_dev_get_history_hash(dev);
-      dt_image_cache_write_release(dt_image_cache_get_global(), cache_img, DT_IMAGE_CACHE_RELAXED);
+      dt_image_cache_write_release(cache_img, DT_IMAGE_CACHE_RELAXED);
     }
   }
 
@@ -1059,20 +1096,11 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   dt_dev_masks_list_update(dev);
 
-  if(!IS_NULL_PTR(dt_gui_get_global()) && dev->gui_attached && !IS_NULL_PTR(module))
-  {
-    // If module params change the geometry of the ROI,
-    // update immediately so we avoid drawing glitches.
-    if(module->modify_roi_in || module->modify_roi_out)
-      dt_dev_get_thumbnail_size(dev);
-    
-
-    // Changing a parameter of a disabled module enables it,
-    // so update the GUI toggle state to reflect it.
-    dt_gui_freeze_begin(); // don't run GUI callbacks when setting GUI state
-    dt_iop_gui_set_enable_button(module);
-    dt_gui_freeze_end();
-  }
+  // The post-commit presentation work -- refreshing the viewport size when the module
+  // changes ROI geometry, and syncing the enable toggle a param edit may have flipped --
+  // is the GUI half's (dev_history_gui.c), reached through the handler.
+  if(dev->gui_attached && !IS_NULL_PTR(module) && _commit_gui_handler)
+    _commit_gui_handler(dev, module);
   
   // Save history straight away. Regular GUI edits are the only place where
   // we accept an asynchronous write because `dev` is the long-lived darkroom
@@ -1172,7 +1200,7 @@ dt_dev_history_item_t *dt_dev_history_cow_touch(dt_develop_t *dev, dt_dev_histor
   // dt_dev_pixelpipe_synch_top to bound the resync range). dt_dev_pixelpipe_change() holds
   // history_mutex for its whole resync, same as this splice, so a plain compare-and-assign is
   // enough -- no concurrent access is possible.
-  dt_dev_pixelpipe_t *const pipes[] = { dev->pipe, dev->preview_pipe, dev->virtual_pipe };
+  dt_dev_pixelpipe_t *const pipes[] = { dev->pipe, dev->preview_pipe };
   for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
     if(pipes[i] && pipes[i]->last_history_item == hist)
       pipes[i]->last_history_item = clone;
@@ -1371,42 +1399,8 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
 }
 
-void dt_dev_history_gui_update(dt_develop_t *dev)
-{
-  if(!dev->gui_attached) return;
-
-  // Match the live module instances to the reloaded history before touching GTK.
-  // This loop may remove obsolete instances or expose instances newly created
-  // while reading a style/history from the database.
-  dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_history_refresh_nodes_ext(dev, &dev->iop, dev->history);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
-
-  dt_gui_freeze_begin();
-
-  for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)(module->data);
-
-    // History reload is backend-only and creates new multi-instances without
-    // GTK state. Attach every missing GUI here, after releasing history_mutex,
-    // so styles and global history actions expose their complete module set.
-    if(!dt_iop_is_hidden(mod) && IS_NULL_PTR(mod->expander))
-    {
-      if(IS_NULL_PTR(mod->widget)) dt_iop_gui_init(mod);
-      dt_iop_gui_set_expander(mod);
-    }
-
-    // Parameters, enabled state, headers and blending controls may all have
-    // changed, therefore refresh every module rather than only history entries.
-    dt_iop_gui_update(mod);
-  }
-
-  dt_dev_masks_list_change(dev);
-  dt_gui_freeze_end();
-
-  dt_dev_signal_modules_moved(dev);
-}
+/* dt_dev_history_gui_update() lives in dev_history_gui.c: it attaches missing GTK
+ * expanders and refreshes every module widget after a backend history reload. */
 
 void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
 {
@@ -1431,12 +1425,12 @@ void dt_apply_dev_history_update(dt_develop_t *dev)
   dt_dev_reload_history_items(dev, dev->image_storage.id);
   dt_dev_history_gui_update(dev);
   // Re-derive dev->roi.processed_{width,height} (and the natural scale) from the new
-  // history through the virtual pipe. Without this, a history change that alters the
+  // history, through the geometry service's size fold. Without this, a history change that alters the
   // final image geometry (e.g. removing a crop/ashift step) still renders at the old,
   // stale ROI -- same fix as _history_apply_history_end() in libs/history.c.
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
   dt_dev_history_pixelpipe_update(dev, TRUE);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  dt_history_changed(DT_HISTORY_CHANGE_DEVELOP);
 }
 
 /**
@@ -1446,7 +1440,7 @@ void dt_apply_dev_history_update(dt_develop_t *dev)
  */
 static void _cleanup_history(const int32_t imgid)
 {
-  dt_history_db_delete_dev_history(imgid);
+  dt_history_repository_delete_dev_history(imgid);
 }
 
 guint dt_dev_mask_history_overload(GList *dev_history, guint threshold)
@@ -1467,11 +1461,11 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 {
   if(IS_NULL_PTR(dev) || imgid <= 0) return;
 
-  if(dt_gui_get_global() && dev->gui_attached)
+  if(dev->gui_attached)
   {
     const guint states = dt_dev_mask_history_overload(dev->history, 250);
     if(states > 250)
-      dt_toast_log(_("Image #%i history is storing %d mask states. n"
+      dt_history_toast(_("Image #%i history is storing %d mask states. n"
                      "Consider compressing history and removing unused masks to keep reads/writes manageable."),
                      imgid, states);
   }
@@ -1500,7 +1494,7 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
   const int blendop_version
       = h->blend_params ? (h->blendop_version > 0 ? h->blendop_version : dt_develop_blend_version()) : 0;
 
-  dt_history_db_write_history_item(imgid, num, operation, h->params, params_size, module_version, h->enabled != 0,
+  dt_history_repository_write_item(imgid, num, operation, h->params, params_size, module_version, h->enabled != 0,
                                    h->blend_params, blendop_params_size, blendop_version, h->multi_priority, h->multi_name);
 
   // write masks (if any)
@@ -1519,14 +1513,14 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
 
 void dt_dev_history_cleanup(void)
 {
-  // No-op: SQL statement caching/cleanup for history lives in common/history.c (dt_history_cleanup()).
+  // No-op: SQL statement caching/cleanup for history lives in common/history.c (dt_history_repository_cleanup()).
 }
 
 
 
 void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
-  dt_image_t *cache_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *cache_img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(cache_img)) return;
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
@@ -1544,14 +1538,14 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
     i++;
   }
 
-  dt_history_set_end(imgid, dt_dev_get_history_end_ext(dev));
+  dt_history_repository_set_end(imgid, dt_dev_get_history_end_ext(dev));
 
   // write the current iop-order-list for this image
   dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
 
   cache_img->history_hash = dt_dev_get_history_hash(dev);
 
-  dt_image_cache_write_release(dt_image_cache_get_global(), cache_img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(cache_img, DT_IMAGE_CACHE_SAFE);
 }
 
 // Schedule history write as a background job to avoid blocking the GUI.
@@ -1639,7 +1633,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
 
   int legacy_params = 0;
   dt_dev_history_db_ctx_t ctx = { .dev = dev, .imgid = imgid, .legacy_params = &legacy_params, .presets = TRUE };
-  dt_history_db_foreach_auto_preset_row(imgid, image, workflow_preset, iformat, excluded, _dev_history_db_row_cb, &ctx);
+  dt_history_repository_foreach_auto_preset_row(imgid, image, workflow_preset, iformat, excluded, _dev_history_db_row_cb, &ctx);
 
   // now we want to auto-apply the iop-order list if one corresponds and none are
   // still applied. Note that we can already have an iop-order list set when
@@ -1649,7 +1643,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
   {
     void *params = NULL;
     int32_t params_len = 0;
-    if(dt_history_db_get_autoapply_ioporder_params(imgid, image, iformat, excluded, &params, &params_len))
+    if(dt_history_repository_get_autoapply_ioporder_params(imgid, image, iformat, excluded, &params, &params_len))
     {
       GList *iop_list = dt_ioppr_deserialize_iop_order_list(params, params_len);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
@@ -1709,7 +1703,7 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
   //    "missing" there too, causing every already-edited image to get spurious duplicate default
   //    entries prepended ahead of its real history on every single load.
   if(!IS_NULL_PTR(dt_dev_history_get_first_item_by_module(dev->history, module))
-     || dt_history_check_module_exists(dev->image_storage.id, module->op, FALSE))
+     || dt_history_repository_module_exists(dev->image_storage.id, module->op))
     return;
 
   // Module has no user params: no history: don't prepend either
@@ -1935,8 +1929,8 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
       fprintf(stderr, "[dev_read_history] module `%s' %s version mismatch: history is %d, dt %d.\n", hist->module->op,
               preset, modversion, hist->module->version());
 
-      dt_control_log(_("module `%s' %s version mismatch: %d != %d"), hist->module->op,
-                      preset, hist->module->version(), modversion);
+      dt_history_message(_("module `%s' %s version mismatch: %d != %d"), hist->module->op,
+                         preset, hist->module->version(), modversion);
 
       dt_free(preset);
       return 1;
@@ -2172,10 +2166,10 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
   // Find the new history end from DB now, if defined.
   // Note: dt_dev_set_history_end_ext sanitizes the value with the actual history size.
   // It needs to run after dev->history is fully populated.
-  int32_t history_end = dt_history_get_end(imgid);
+  int32_t history_end = dt_history_repository_get_end(imgid);
 
   // Find out if we already have an history, and how many items  
-  const int32_t db_items = dt_history_db_get_next_history_num(imgid);
+  const int32_t db_items = dt_history_repository_get_next_num(imgid);
 
   // Load all the modules that may be required by the image format,
   // plus auto-presets if it's a new edit
@@ -2183,12 +2177,12 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   // Protect history DB reads with a cache read lock.
   // Release it before applying history to modules to avoid deadlocks.
-  dt_image_t *read_lock_img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  dt_image_t *read_lock_img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(read_lock_img)) return FALSE;
 
   // Load DB history into dev->history
   dt_dev_history_db_ctx_t ctx = { .dev = dev, .imgid = imgid, .legacy_params = &legacy_params, .presets = FALSE };
-  dt_history_db_foreach_history_row(imgid, _dev_history_db_row_cb, &ctx);
+  dt_history_repository_foreach_row(imgid, _dev_history_db_row_cb, &ctx);
   const int32_t history_length = g_list_length(dev->history);
 
   if(history_length > db_items)
@@ -2226,7 +2220,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
   // but should live in its own branch. See `dt_dev_pop_history_items_ext()`
   dt_masks_read_masks_history(dev, imgid);
 
-  dt_image_cache_read_release(dt_image_cache_get_global(), read_lock_img);
+  dt_image_cache_read_release(read_lock_img);
   read_lock_img = NULL;
 
   // Now we have fully-populated history items:
@@ -2526,7 +2520,8 @@ void dt_dev_history_compress_or_truncate(dt_develop_t *dev)
  * @param history_list History list.
  * @return 0 on success, non-zero on error.
  */
-static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList *history_list)
+static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList *history_list,
+                                    GList **removed_gui_modules)
 {
   GList *iop_list = *_iop_list;
   int deleted_module_found = 0;
@@ -2600,21 +2595,6 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
     {
       deleted_module_found = 1;
 
-      if(dev->gui_module == mod) dt_iop_request_focus(NULL);
-
-      dt_gui_freeze_begin();
-
-      // we remove the plugin effectively
-      if(!dt_iop_is_hidden(mod))
-      {
-        // we just hide the module to avoid lots of gtk critical warnings
-        gtk_widget_hide(mod->expander);
-
-        // this is copied from dt_iop_gui_delete_callback(), not sure why the above sentence...
-        dt_iop_gui_cleanup_module(mod);
-        gtk_widget_destroy(mod->widget);
-      }
-
       iop_list = g_list_delete_link(iop_list, modules);
 
       // remove the module reference from all snapshots
@@ -2623,7 +2603,13 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
       // don't delete the module, a pipe may still need it
       dev->alliop = g_list_append(dev->alliop, mod);
 
-      dt_gui_freeze_end();
+      // Its widgets used to be destroyed RIGHT HERE, under history_mutex as writer --
+      // GTK teardown inside the engine lock. The caller collects the removed instances
+      // and destroys their widgets after the lock is released; the module is already
+      // unlinked from the iop list and parked in alliop, so nothing re-touches it in
+      // the meantime.
+      if(removed_gui_modules)
+        *removed_gui_modules = g_list_append(*removed_gui_modules, mod);
 
       // and reset the list
       modules = iop_list;
@@ -2773,7 +2759,8 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
 
 // returns 1 if the topology of the pipe has changed, aka it needs a full rebuild
 // 0 means only internal parameters of pipe nodes have change, so it's a mere resync
-int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *history)
+int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *history,
+                                     GList **removed_gui_modules)
 {
   GList *iop_list = *iop;
 
@@ -2793,7 +2780,7 @@ int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList **iop, GList *hist
     pipe_remove = 1;
 
   // check if this is a redo of a delete module or an undo of an add module
-  if(_check_deleted_instances(dev, &iop_list, history))
+  if(_check_deleted_instances(dev, &iop_list, history, removed_gui_modules))
     pipe_remove = 1;
 
   *iop = iop_list;

@@ -32,20 +32,21 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/database.h"
+#include "database/database.h"
+#include "database/collection_query.h"
+#include "widgets/widget_settings.h"
 #include "common/image.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/collection.h"
 #include "common/selection.h"
-#include "common/debug.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "gui/dtgtk/thumbtable.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "views/view.h"
 #include "views/view_api.h"
 
@@ -157,16 +158,7 @@ static int32_t _slideshow_get_imgid_from_rank(const dt_slideshow_t *d, const int
     return link ? GPOINTER_TO_INT(link->data) : UNKNOWN_IMAGE;
   }
 
-  const gchar *query = dt_collection_get_query(dt_collection_get_global());
-  if(IS_NULL_PTR(query)) return UNKNOWN_IMAGE;
-
-  int32_t id = 0;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, rank);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, 1);
-  if(sqlite3_step(stmt) == SQLITE_ROW) id = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
+  const int32_t id = dt_collection_query_get_nth(rank);
   return id;
 }
 
@@ -490,7 +482,7 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     cairo_save(cr);
     cairo_translate(cr, tr_width, tr_height);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), dt_gui_get_global()->filter_image);
+    cairo_pattern_set_filter(cairo_get_source(cr), dt_widget_image_filter());
     cairo_rectangle(cr, 0, 0, logical_width, logical_height);
     cairo_fill(cr);
     cairo_restore(cr);

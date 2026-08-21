@@ -59,7 +59,7 @@
 */
 
 #include "common/imagebuf.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 
 typedef enum dt_distance_transform_t
 {

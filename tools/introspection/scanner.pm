@@ -262,7 +262,17 @@ sub handle_include
 
   my $filename = join('', @buf);
 
-  if($filename =~ /^iop|^common/)
+  # Follow any FIRST-PARTY header, identified by the file actually existing under the source
+  # root, rather than by a hard-coded list of directory prefixes.
+  #
+  # This used to test /^iop|^common/. That silently stopped working the moment a type used in
+  # a params struct moved out of common/: dt_illuminant_t went to pixel/illuminants.h, the
+  # scanner skipped the include, never saw the enum, and emitted DT_INTROSPECTION_TYPE_OPAQUE
+  # instead of _ENUM. The visible symptom was a combobox labelled "'illuminant' is not an
+  # enum/int/bool/combobox parameter" in channelmixerrgb -- nowhere near the cause.
+  #
+  # Third-party headers stay out: they are large, irrelevant here, and slow to scan.
+  if($filename !~ m{^external/} && -e $folder.$filename)
   {
     # add the current filename and lineno to the code stream so we
     # can reset these when the included file is scanned

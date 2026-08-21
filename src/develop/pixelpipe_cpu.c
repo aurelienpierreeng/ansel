@@ -2,11 +2,12 @@
     Private CPU pixelpipe backend.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
+#include "develop/iop_profile.h"
 #include "system/openmp.h"
 #include "common/logging.h"
-#include "common/pixelpipe_cache_alloc.h"
-#include "common/iop_order.h"
+#include "caches/pixelpipe_cache_alloc.h"
+#include "develop/iop_order.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe_cpu.h"
 
@@ -41,7 +42,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     return 1;
   }
   if(IS_NULL_PTR(output))
-    output = dt_pixel_cache_alloc(dt_pixelpipe_cache_get_global(), output_entry);
+    output = dt_pixel_cache_alloc(output_entry);
 
   if(IS_NULL_PTR(output))
   {
@@ -63,12 +64,12 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     if(IS_NULL_PTR(process_input_temp))
       return 1;
 
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
     input_locked = TRUE;
-    dt_ioppr_transform_image_colorspace(module, input, process_input_temp, piece->roi_in.width,
+    dt_colorspaces_apply_profile(module->op, module->multi_name, input, process_input_temp, piece->roi_in.width,
                                         piece->roi_in.height, process_input_dsc.cst, piece->dsc_in.cst,
                                         &process_input_dsc.cst, work_profile);
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
     input_locked = FALSE;
     process_input = process_input_temp;
   }
@@ -77,7 +78,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     process_input_dsc.cst = piece->dsc_in.cst;
     if(input_entry)
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
       input_locked = TRUE;
     }
   }
@@ -85,7 +86,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   {
     if(input_entry)
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
       input_locked = TRUE;
     }
   }
@@ -128,7 +129,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   {
     fprintf(stdout, "[pixelpipe] %s process on CPU returned with an error\n", module->name());
     if(input_locked)
-      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
     dt_pixelpipe_cache_free_align(process_input_temp);
     return err;
   }
@@ -157,18 +158,18 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         if(IS_NULL_PTR(blend_input_temp))
         {
           if(input_locked)
-            dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+            dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
           dt_pixelpipe_cache_free_align(process_input_temp);
           return 1;
         }
 
-        dt_ioppr_transform_image_colorspace(module, process_input, blend_input_temp, piece->roi_in.width,
+        dt_colorspaces_apply_profile(module->op, module->multi_name, process_input, blend_input_temp, piece->roi_in.width,
                                             piece->roi_in.height, blend_input_dsc.cst, blend_cst,
                                             &blend_input_dsc.cst, work_profile);
         blend_input = blend_input_temp;
         if(input_locked)
         {
-          dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+          dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
           input_locked = FALSE;
         }
       }
@@ -187,13 +188,13 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
         if(IS_NULL_PTR(blend_output_temp))
         {
           if(input_locked)
-            dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+            dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
           dt_pixelpipe_cache_free_align(blend_input_temp);
           dt_pixelpipe_cache_free_align(process_input_temp);
           return 1;
         }
 
-        dt_ioppr_transform_image_colorspace(module, output, blend_output_temp, piece->roi_out.width,
+        dt_colorspaces_apply_profile(module->op, module->multi_name, output, blend_output_temp, piece->roi_out.width,
                                             piece->roi_out.height, blend_output_dsc.cst, blend_cst,
                                             &blend_output_dsc.cst, work_profile);
         blend_output = blend_output_temp;
@@ -219,7 +220,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       }
       else
       {
-        dt_ioppr_transform_image_colorspace(module, blend_output, output, piece->roi_out.width,
+        dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
                                             piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
                                             &blend_output_dsc.cst, work_profile);
       }
@@ -227,7 +228,7 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   }
 
   if(input_locked)
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
   dt_pixelpipe_cache_free_align(blend_output_temp);
   dt_pixelpipe_cache_free_align(blend_input_temp);
   dt_pixelpipe_cache_free_align(process_input_temp);

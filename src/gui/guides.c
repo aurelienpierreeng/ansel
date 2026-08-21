@@ -31,12 +31,14 @@
 
 #include <glib.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/conf.h"
 #include "common/utility.h"
 #include "gui/guides.h"
-#include "gui/draw.h"
-#include "control/control.h"
+#include "widgets/draw.h"
+#include "control/redraw.h"
+#include "develop/develop.h"
+#include "widgets/widget_style.h"
 
 #define DEFAULT_GUIDE_NAME "rules of thirds"
 
@@ -666,23 +668,24 @@ static void _settings_flip_changed(GtkWidget *w, _guides_settings_t *gw)
 void dt_guides_set_overlay_colors()
 {
   const int overlay_color = dt_conf_get_int("darkroom/ui/overlay_color");
+  const double contrast = dt_conf_get_float("darkroom/ui/overlay_contrast");
 
-  dt_gui_get_global()->overlay_contrast = dt_conf_get_float("darkroom/ui/overlay_contrast");
-
-  dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_green = dt_gui_get_global()->overlay_blue = 0.0f;
+  double red = 0.0, green = 0.0, blue = 0.0;
 
   if(overlay_color == DT_DEV_OVERLAY_GRAY)
-    dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_green = dt_gui_get_global()->overlay_blue = 1.0f;
+    red = green = blue = 1.0;
   else if(overlay_color == DT_DEV_OVERLAY_RED)
-    dt_gui_get_global()->overlay_red = 1.0f;
+    red = 1.0;
   else if(overlay_color == DT_DEV_OVERLAY_GREEN)
-    dt_gui_get_global()->overlay_green = 1.0f;
+    green = 1.0;
   else if(overlay_color == DT_DEV_OVERLAY_YELLOW)
-    dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_green = 1.0f;
+    red = green = 1.0;
   else if(overlay_color == DT_DEV_OVERLAY_CYAN)
-    dt_gui_get_global()->overlay_green = dt_gui_get_global()->overlay_blue = 1.0f;
+    green = blue = 1.0;
   else if(overlay_color == DT_DEV_OVERLAY_MAGENTA)
-    dt_gui_get_global()->overlay_red = dt_gui_get_global()->overlay_blue = 1.0f;
+    red = blue = 1.0;
+
+  dt_widget_set_overlay_color(red, green, blue, contrast);
 }
 
 static void _settings_colors_changed(GtkWidget *combo, _guides_settings_t *gw)

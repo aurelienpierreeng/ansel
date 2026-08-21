@@ -31,9 +31,9 @@
 #ifndef DT_PIXEL_GUIDED_FILTER_H
 #define DT_PIXEL_GUIDED_FILTER_H
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/opencl.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 
 #include <string.h>
 
@@ -105,9 +105,9 @@ typedef struct dt_guided_filter_cl_global_t
 } dt_guided_filter_cl_global_t;
 
 
-dt_guided_filter_cl_global_t *dt_guided_filter_init_cl_global();
+void dt_guided_filter_init_cl_global(void);
 
-void dt_guided_filter_free_cl_global(dt_guided_filter_cl_global_t *g);
+void dt_guided_filter_free_cl_global(void);
 
 int guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, int width, int height, int ch, int w,
                      float sqrt_eps, float guide_weight, float min, float max);

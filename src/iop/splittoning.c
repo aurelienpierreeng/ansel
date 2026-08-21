@@ -61,8 +61,8 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
 #include "math/math.h"
 #include "develop/develop.h"
 #include "system/openmp.h"
@@ -70,11 +70,10 @@
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
@@ -83,6 +82,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_splittoning_params_t)
 
@@ -146,7 +146,7 @@ const char **description(struct dt_iop_module_t *self)
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   // shadows: #ED7212
   // highlights: #ECA413
@@ -184,7 +184,7 @@ void init_presets(dt_iop_module_so_t *self)
       &(dt_iop_splittoning_params_t){ 28.0 / 360.0, 39.0 / 100.0, 28.0 / 360.0, 8.0 / 100.0, 0.60, 0.0 },
       sizeof(dt_iop_splittoning_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 __DT_CLONE_TARGETS__
@@ -275,7 +275,7 @@ static inline void update_balance_slider_colors(
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_splittoning_params_t *p = (dt_iop_splittoning_params_t *)self->params;
-  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)dt_iop_gui_data(self);
 
   if(w == g->shadow_sat_gslider || w == g->shadow_hue_gslider)
   {
@@ -307,7 +307,7 @@ static void colorpick_callback(GtkColorButton *widget, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)dt_iop_gui_data(self);
 
   dt_aligned_pixel_t color;
   float h, s, l;
@@ -339,7 +339,7 @@ static void colorpick_callback(GtkColorButton *widget, dt_iop_module_t *self)
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_params_t *p = (dt_iop_splittoning_params_t *)self->params;
 
   float *p_hue, *p_saturation;
@@ -417,7 +417,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)self->gui_data;
+  dt_iop_splittoning_gui_data_t *g = (dt_iop_splittoning_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_splittoning_params_t *p = (dt_iop_splittoning_params_t *)self->params;
 
   dt_bauhaus_slider_set(g->shadow_hue_gslider, p->shadow_hue);
@@ -440,7 +440,7 @@ static inline void gui_init_section(struct dt_iop_module_t *self, char *section,
 {
   GtkWidget *label = dt_ui_section_label_new(_(section));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
   dt_bauhaus_widget_set_label(hue, N_("hue"));
   dt_bauhaus_slider_set_feedback(hue, 0);
@@ -467,34 +467,34 @@ static inline void gui_init_section(struct dt_iop_module_t *self, char *section,
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(hbox), slider_box, TRUE, TRUE, 0);
   gtk_box_pack_end(GTK_BOX(hbox), *picker, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), hbox, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, FALSE, FALSE, 0);
 }
 
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_splittoning_gui_data_t *g = IOP_GUI_ALLOC(splittoning);
 
-  GtkWidget *shadows_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *shadows_box = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->shadow_hue_gslider = dt_bauhaus_slider_from_params(self, "shadow_hue");
   dt_bauhaus_slider_set_factor(g->shadow_hue_gslider, 360.0f);
   dt_bauhaus_slider_set_format(g->shadow_hue_gslider, "\302\260");
   g->shadow_sat_gslider = dt_bauhaus_slider_from_params(self, "shadow_saturation");
 
-  GtkWidget *highlights_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *highlights_box = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   g->highlight_hue_gslider = dt_bauhaus_slider_from_params(self, "highlight_hue");
   dt_bauhaus_slider_set_factor(g->highlight_hue_gslider, 360.0f);
   dt_bauhaus_slider_set_format(g->highlight_hue_gslider, "\302\260");
   g->highlight_sat_gslider = dt_bauhaus_slider_from_params(self, "highlight_saturation");
 
   // start building top level widget
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   gui_init_section(self, N_("shadows"), shadows_box, g->shadow_hue_gslider, g->shadow_sat_gslider, &g->shadow_colorpick, TRUE);
 
   gui_init_section(self, N_("highlights"), highlights_box, g->highlight_hue_gslider, g->highlight_sat_gslider, &g->highlight_colorpick, FALSE);
 
   // Additional parameters
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_section_label_new(_("properties")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("properties")), FALSE, FALSE, 0);
 
   g->balance_scale = dt_bauhaus_slider_from_params(self, N_("balance"));
   dt_bauhaus_slider_set_feedback(g->balance_scale, 0);

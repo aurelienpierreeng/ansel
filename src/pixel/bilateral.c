@@ -29,13 +29,13 @@
 */
 
 #include "pixel/bilateral.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"
-#include "common/pixelpipe_cache_alloc.h" // dt_pixelpipe_cache_alloc_align_float_cache
+#include "caches/pixelpipe_cache_alloc.h" // dt_pixelpipe_cache_alloc_align_float_cache
 #include "math/math.h"      // for CLAMPS, roundf
 #include <glib.h>             // for MIN, MAX
 #include <stdlib.h>           // for size_t, free, malloc, NULL

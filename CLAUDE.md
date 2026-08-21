@@ -47,10 +47,51 @@ ad-hoc greps were wrong.
 `common/module_api.h`, `views/view_api.h`, `libs/lib_api.h`,
 `imageio/format/imageio_format_api.h`, `imageio/storage/imageio_storage_api.h`. They are
 X-macro headers, re-included several times in the *same* translation unit with different macros
-defined, and expanded *inside struct bodies* to generate members. For the same reason they must
-carry **no `#include` of their own** — an include at the top of one lands inside those structs.
-Symbols they use (`dt_version()`, `dt_print()`, `IS_NULL_PTR`) are the consuming `.c` file's
+defined, and expanded *inside struct bodies* to generate members. For the same reason a
+**top-level `#include` in one lands inside those structs**. The precise rule, as the imageio
+pair actually implement it: real includes must sit inside the `#ifdef FULL_API_H` block —
+that macro is defined only in full-API mode, while the struct-body expansion defines
+`INCLUDE_API_FROM_MODULE_H` instead and skips the block — and only *other* X-macro headers
+(`common/module_api.h`, which has no includes itself) may be included unguarded. Symbols used
+outside that block (`dt_version()`, `dt_print()`, `IS_NULL_PTR`) are the consuming `.c` file's
 responsibility.
+
+### A header includes only what its own declarations need
+
+Everything else belongs in the `.c`. A header that includes more becomes a supply line its
+consumers never asked for and cannot see: they compile because something upstream happened to
+pull in what they use, and the day anyone tidies that include away the breakage surfaces
+somewhere else entirely, in a file that was never touched.
+
+This is not theoretical. Removing `gui/gtk.h` broke a dozen IOPs because it had been the only
+thing pulling `sqlite3.h` in ahead of `common/points.h` (whose vendored SFMT `#define N` then
+collided with `sqlite3_compileoption_get(int N)`). And within the same series, deleting an
+unused `widgets/label.h` from `widgets/dialog.c` removed `dt_free` — arriving through
+`label.h` -> `system/mem_alloc.h` — from a file that had never named either header.
+
+Concretely: if a header declares `void f(GtkWidget *w)`, it includes `<gtk/gtk.h>` and nothing
+more. Implementations do not belong there either — `widgets/label.h` carried five `static
+inline` helpers, and those five forced four extra includes on all ~30 of its consumers.
+Moving them to `label.c` left the header needing only `<gtk/gtk.h>`.
+
+The one legitimate exception is a header whose published interface *is* inline code
+(`widgets/draw.h`), which necessarily includes what that code calls. Keep those rare, and keep
+them honest: they are a deliberate performance trade, not a convenience.
+
+`tools/check_unused_includes.sh` gates the include lines a change adds.
+`tools/header_consumers.py` reports what each includer of a header actually takes from it,
+separating a header's own symbols from what it merely forwards.
+
+**`header_consumers.py`'s "files using nothing from it" bucket does NOT mean the file can
+drop the include.** It means *this include is redundant — the file reaches those symbols
+through one of its other includes*. Those are exactly the files that are relying on the
+supply line described above, so under this tree's rule they need the include **added
+explicitly**, not removed. Deleting all seven such includes when `colorprofiles/colorspaces.h`
+was split still compiled in Release *and* Debug, and broke `build-nofeatures`, where
+`control/jobs/control_jobs.h` lost the two types `dt_control_export()` is declared with — the
+other supplier only existed in the feature-full configurations. Confirm against the symbols
+the file actually names (`grep` for the header's types and functions) before removing
+anything, and never trust one build configuration to prove an include is unnecessary.
 
 ### No SQL in GUI modules
 
@@ -398,6 +439,39 @@ Diagnostics that settle this class of bug in one pass: dump the module's raw out
 bucket per-CFA-channel means by "own channel clipped" vs the per-channel `clips[]` — if the output
 means sit at the clip levels, the floors are authoring the color, not the solver.
 
+### Highlights (harmonic): a 1-clip pixel is only "measured" if the fit actually lifted it
+
+Third failure family, on a blown sky meeting a dark ridge (DSC_1267.NEF): a magenta rim hugging the
+mountain's edge. The cgrad stage's survivor-anchored reprojection deliberately skipped 1-clip pixels
+as "measured-correct where the fit spoke" — but *the fit does not always speak*. Where the sky dims
+toward an occluder it drags the guides, the colour-line prediction lands **below** the pixel's own
+saturation level, and `fmaxf(pred, clip0)` pins the channel AT the floor — the minimum compatible
+value, carrying the floor's chroma (i.e. the WB coefficients: magenta) instead of the material's.
+Measured: **96.5%** of the 1-clip-G pixels 4–6 px from the rock, and 90.4% at 8–12 px, exit the whole
+chain still at their floor (median lift 1.000), against 27.9% far from it.
+
+Such a pixel holds exactly what a *partial multi-clip* pixel holds — two measured channels plus a
+surround chromaticity — so it takes the same survivor-anchored reprojection. Ring profile (R+B)/2G by
+distance from the ridge: 1.032 / **1.046** / 1.030 → 1.004 / **1.005** / 1.007.
+
+**Two traps, both paid for in a full bench round each:**
+
+*Never a hard threshold.* The first version admitted pixels via `est <= 1.03 * clip0`. Every metric
+went flat and the render grew a NEW hard-edged pink region — the test printing its own contour along
+the boundary between mostly-floored and mostly-lifted pixels. It is now an inverted smoothstep on the
+lift (`CF_AUTHORED_RAMP`). The numbers alone would have shipped the bad version; only the picture
+caught it.
+
+*Anything that imports surround chroma MUST be gated on `_hl_floor_gate(clips)`.* Ungated, this
+regressed the whole unit-WB bench — pk1synth +140% RMSE, balls +26%, occluded +18% — because at
+unit WB every channel saturates at the same level, so a floored channel's chroma is NEUTRAL ≈ truth
+and reprojecting it replaces a correct value with a guess. This is the SECOND time this exact
+omission cost a bench round (the joint floor's first attempt, documented above, died the same way).
+Gated, the six unit-WB cases return **bit-identical** to baseline (A = 1.145 vs a ramp starting at
+1.25 → gate exactly 0) while real raws (A ≈ 2–2.6) keep the full fix. Note the same function already
+consulted `floor_gate` to decide which pixels may *vote* — consulting it for the voters and not for
+the pixels being *acted on* is the shape of the mistake.
+
 ### Highlights (harmonic): value-continuing estimators inherit the fence-band chromaticity — blotches
 
 Second failure family, found on a blown sunrise laced with branches (Brandon Woods RW2): blotchy
@@ -597,7 +671,262 @@ similar snap anywhere in this path would silently mask a regression here rather 
 
 ---
 
+## Colour management (`src/colorprofiles`)
+
+The module owns its state: a single `dt_colorspaces_t` is file-static in
+`colorprofiles/colorspaces.c`, built by `dt_colorprofiles_init()` and torn down by
+`dt_colorprofiles_cleanup()`. Nothing outside `src/colorprofiles/` names the profile list, its
+`xprofile_lock` or its cached LCMS transforms, and `darktable_t` does not know profiles exist.
+`tools/check_module_boundaries.sh` holds that: external `dt_colorspaces_get_global()` and
+external `xprofile_lock` acquisitions are both ratcheted at baseline **0**, and a count that
+*falls* must lower the baseline in the same commit. `src/colorprofiles/README.md` is the full map.
+
+**The standing regression check is `tools/check_export_pixels.sh <ref-a> <ref-b>`**, which decodes
+both exports and compares the pixel arrays. Do NOT sha256 the exported PNG: it carries the build's
+version string in its metadata, so two builds differ by a few bytes of compressed text with every
+pixel identical. For colour management "it still runs" is a very low bar — the actual failure mode
+is a one-LSB hue shift.
+
+`colorprofiles/colorspaces.h` drags `<lcms2.h>` and `<pthread.h>` in behind it. A translation unit
+that only needs the vocabulary — a profile type to store in its params, an intent to pass along —
+includes `colorprofiles/profile_types.h` instead, which is the reason that header exists.
+
+### The `role` argument is load-bearing, never a formality
+
+`DT_COLORSPACE_SRGB` is registered **twice** — a v4 parametric-curve entry valid only as INPUT,
+and a v2 point-TRC entry carrying output/monitor/working — and the two are distinguished by
+nothing but which `*_pos` field is `-1`. A multi-bit role mask resolves to the **first** match in
+registration order, which for sRGB is the v4 input entry. Resolving the *working* profile with
+`DT_PROFILE_ROLE_ANY` therefore hands back the input-only variant; pass
+`DT_PROFILE_ROLE_WORKING`. The index-valued calls (`dt_colorspaces_profile_index()`,
+`dt_colorspaces_profile_at()`) require a single bit outright — an index means nothing outside the
+enumeration that produced it, and an index taken from `INPUT|OUTPUT` equals neither `in_pos` nor
+`out_pos`.
+
+**They are roles, not directions**, and the enum was renamed to say so
+(`dt_colorspaces_profile_role_t`). A profile is RGB→PCS or PCS→RGB and nothing else; what these
+bits select is which *menu* an entry appears in. The menus genuinely differ:
+`DT_PROFILE_ROLE_MONITOR` is the curated eligibility list for the monitor-profile menu and
+diverges from `DT_PROFILE_ROLE_OUTPUT` on 5 of the 21 built-in registrations (`DISPLAY`,
+`REC709`, `ITUR_BT1886`, `XYZ`, `LAB`), so substituting one for the other is a behaviour change,
+not a rename. Two further bits, `CATEGORY` and `DISPLAY2`, were declared and never tested by any
+lookup — the first had a `category_pos` no predicate consulted, the second had no backing field
+at all — so `ANY` claimed six meanings and had four. They are gone; nothing changed at runtime.
+
+**Three registered entries have `profile == NULL`.** `DT_COLORSPACE_WORK`, `_EXPORT` and
+`_SOFTPROOF` name a user *setting* rather than a colour space and exist only to occupy a combo
+row. Dozens of call sites write `dt_colorspaces_get_profile(...)->profile` with no NULL check;
+what keeps them safe is precisely that the lookup never tests `category_pos`, so a category entry
+can never be returned. Do not "fix" the predicate to consult it, and do not give categories a
+role of their own, without auditing those sites first.
+
+### Lifetime is answered by a lock, not by a copy
+
+There is no `cmsDupProfile` in lcms2. The only true deep copy is serialise-and-reopen — ~0.005 ms
+for a built-in but 1.02 ms for a real colord display profile — and copying a prepared
+`cmsHTRANSFORM` means rebuilding it, 2.2–38 ms, with nothing to amortise it against. So the
+module's four prepared display transforms never leave it (`dt_colorprofiles_xyz_to_display()`,
+`dt_colorprofiles_rgba8_to_display_bgra8()`, `dt_colorprofiles_srgb_to_display_strided()` run the
+pixel loop inside), and a caller deriving from a profile handle holds
+`dt_colorspaces_lock_profiles()` / `dt_colorspaces_unlock_profiles()` across the derivation. An
+LCMS transform does not retain the profiles it was built from, so the span ends at the
+`cmsCreateTransform()` call, not at the transform's lifetime.
+
+That lock is not ceremony. The `DT_COLORSPACE_DISPLAY` entry's `cmsHPROFILE` and the four
+transforms derived from it are the only things in the list that mutate after init, and they are
+replaced on every window move or resize that lands on a different monitor — i.e. on exactly the
+events that repaint. **The display setters take `xprofile_lock` for WRITING**: never call
+`dt_colorprofiles_set_display_profile_choice()` / `dt_colorprofiles_set_display_intent()` while
+holding `dt_colorspaces_lock_profiles()`, which is a *read* lock — rebuilding the transforms
+`cmsDeleteTransform()`s four handles a legitimate reader may still be using.
+
+**Lock order where both are involved: `xprofile_lock` OUTER, the settings lock (private to
+`colorspaces.c`) INNER.** Nothing takes them the other way round.
+
+### Read the display / soft-proof settings as one snapshot, and render from the one you hashed
+
+The seven fields (colour mode, display triple, soft-proof pair) cross the module boundary only
+together, as `dt_colorprofiles_settings_t` via `dt_colorprofiles_get_settings()`, and are written
+only through the setters. Reading them one at a time lets a reader pair a new profile type with
+the previous filename, and a 512-byte filename read while `g_strlcpy()` is writing it is a **torn**
+string, not merely a stale one.
+
+A pipeline module that folds this state into its cache key must then **render from the same
+snapshot**. Snapshotting it in `commit_params()` for the hash and re-reading the live state from
+`process()`/`process_cl()` — once per tile — renders from state the cache key does not describe.
+`dt_colorprofiles_settings_t.generation` advances on every accepted change and is the cheap thing
+to hash: one number that cannot go stale field by field.
+
+Every setter returns "did it actually change", and that return value is the point. A caller that
+decides for itself, against a value it read separately, is how re-selecting the **already active**
+display profile came to reset the user to the system profile — an inherited "profile not found"
+fallback firing on the one case where nothing should happen.
+
+### The derived-profile memo is module-owned; image-derived profiles are not in it
+
+`dt_iop_order_iccprofile_info_t` (two 3×3 matrices plus six eagerly allocated 65536-float LUTs,
+~1.5 MB) is a pure function of `(type, filename)`, so `dt_colorspaces_add_profile()` memoises it
+process-wide under its own mutex — find-or-create as one critical section, because it is reached
+per tile from `process()`/`process_cl()` (`iop/lut3d.c`, `iop/tonecurve.c`) and from the GUI
+thread (`iop/colorin.c`). It returns a pointer the **module** owns, valid until
+`dt_colorspaces_flush_profile_memo()` (or, for `DT_COLORSPACE_DISPLAY`,
+`dt_colorspaces_invalidate_display_profile_memo()`).
+
+It must stay sole-owned: `develop/blend.c` shallow-`memcpy`s the struct, aliasing all six LUT
+pointers. Tear one down only through `dt_ioppr_cleanup_profile_info()`, which frees the LUTs as
+well as the struct — freeing the struct alone leaks 1.5 MB per failure.
+
+`intent` is **not** part of the memo key, so the first caller to ask for a given
+`(type, filename)` fixes the intent every later caller gets.
+
+Profiles derived from ONE IMAGE — `DT_COLORSPACE_EMBEDDED_ICC` through
+`DT_COLORSPACE_ALTERNATE_MATRIX`, enum 9..14 — are **not** registered in the profile list and
+cannot be resolved by identity: their matrices come from that image's own camera data via
+`iop/colorin.c`. They must not be memoised either, since a `(type, "")` key would be shared by
+every image of the same camera-matrix kind. The pipe that builds one owns it
+(`dt_dev_pixelpipe_t.owned_input_profile_info`, freed with the pipe).
+
+### `dev->roi.raw_width`/`raw_height` must be set for every `dev`, not just `gui_attached` ones — every drawn shape's absolute position depends on it
+
+`dev->roi.raw_width`/`raw_height` (`develop.h`, doc-commented "Dimensions of the full-resolution
+RAW image being worked on") are read by `dt_dev_coordinates_raw_norm_to_raw_abs()`
+(`develop/develop.c`) to convert a shape's normalized (0..1) center/points into absolute pixel
+coordinates — the first step of every drawn-mask shape's own area/mask function
+(`masks/circle.c`, `ellipse.c`, `brush.c`, `gradient.c`, `polygon.c`: all read
+`dev->roi.raw_width`/`raw_height` directly, several also route through the same coordinates
+helper). `_dt_dev_mipmap_prefetch_full()` (`develop/develop.c`), called from every
+`dt_dev_load_image()` through `dt_dev_ensure_image_storage()` → `_dt_dev_load_raw()`, is the only
+place that sets them — but it used to do so **only `if(dev->gui_attached)`**, left over from a
+commit that gated the surrounding GUI-viewport fields (`orig_width`, `preview_width`, ...) the
+same way without noticing `raw_width`/`raw_height` aren't GUI state — they're an objective fact
+about the loaded raw buffer, needed by any `dev`, headless or not.
+
+For a `gui_attached` dev (the live darkroom) this was invisible: `raw_width`/`raw_height` get set,
+shapes resolve correctly. For a throwaway, non-interactive `dev` — `imageio_core.c`'s export
+`dev`, `dev_snapshot.c`'s `frozen`, thumbnail generation — `dev->roi.raw_width` stays `0` (its
+calloc default), and `dt_dev_coordinates_raw_norm_to_raw_abs()` early-returns on `raw_width==0`
+**without transforming the points at all**. A shape's normalized center (e.g. `(0.85, 0.35)`) then
+masquerades as if it were already in absolute pixel coordinates, added to a radius term that
+*is* correctly scaled to pixels (`radius * MIN(pipe->iwidth, pipe->iheight)`, passed as a
+parameter, not read from `dev->roi`) — so the resulting bounding box lands within a few hundred
+pixels of the image origin, its position dominated by the (correct, large) radius term and the
+shape's own (tiny, ~0..1) normalized center contributing almost nothing. Two shapes at wildly
+different real positions on the image collapse to nearly the **same** wrong bounding box, since
+their normalized centers differ by less than 1.0 while the radius term is hundreds of pixels —
+this is the tell that distinguishes this bug from an ordinary ROI/ROI-offset mismatch. Depending
+on whether that degenerate bounding box happens to overlap the module's own `roi_in` for the
+current render, a shape's effect either gets rejected outright (empty ROI intersection, e.g.
+`iop/retouch.c`'s `rt_build_scaled_mask()`) or gets "applied" against mask values sampled from
+the wrong, mostly out-of-bounds region of the source mask buffer (silently zero-filled by
+`rt_build_scaled_mask()`'s own `dt_iop_image_fill(mask_tmp, 0.0f, ...)`), producing a real kernel
+call that visibly changes nothing. Both outcomes were observed on the same image, same run: one
+circle rejected, the other "applied" with zero measured pixel difference in the export.
+
+Fixed by setting `raw_width`/`raw_height`/`raw_inited` unconditionally in
+`_dt_dev_mipmap_prefetch_full()`. The two `dev->roi.raw_inited` checks that also gate on
+`dev->roi.gui_inited` (`dev_pixelpipe.c`'s virtual-pipe resync, `develop.c`'s own zoom-scale
+getters) stay correctly GUI-only through that second, genuinely-GUI flag — this fix doesn't
+change their behavior. This was found chasing a report that `iop/retouch.c`'s clone/heal/blur/fill
+had no visible effect at export and in the darkroom "before/after" snapshot compare: two
+narrower, real fixes were needed first (`rt_process_forms()`/`_cl()` must resolve shapes through
+`pipe->forms`, and `dev_snapshot.c`'s `history_override` path must resync `frozen->forms` — both
+documented below) before this coordinate bug became the sole remaining, and actually dominant,
+cause — restoring it alone (verified by CLI export pixel-diff against a debug build) turned two
+previously invisible edits, including one healing over a blown bokeh highlight, fully visible.
+
+### An embedded ICC profile belongs to its image, not to the application
+
+`dt_colorspaces_t.profiles` (`colorprofiles/colorspaces.h`) is the application-wide profile list.
+It is built once by `dt_colorprofiles_init()` and **never appended to at runtime** — registration
+order is what enumeration reproduces and what every stored combo index in every preset and conf
+key refers to, and the whole CRUDE (metadata) half of the API reads the list lock-free on that
+basis. **It must stay that way.**
+
+It did not used to be. `_build_embedded_profile()` (`imageio/imageio_profile.c`), reached from
+`dt_colorspaces_get_output_profile()`, appended a container for an image's embedded ICC to that
+list at runtime — from export jobs, which run in parallel. Three defects in one function:
+
+- an unsynchronised `g_list_append` against a list every reader walks without a lock
+  (`xprofile_lock` does not cover this; it guards the *display* profile, and the readers of
+  `profiles` never take it);
+- unbounded growth — one entry per exported image, held until shutdown;
+- an outright leak whenever the profile was not newly created, because only the `new_profile`
+  branch ever registered the container it had already allocated.
+
+An embedded profile is a property of one image, so the image owns it:
+`dt_image_t.embedded_profile`, written under the image cache entry's own lock, freed by
+`dt_image_cache_deallocate()`, and reused on the next export of the same image rather than
+rebuilt. Its container is built with `dt_colorspaces_new_image_profile()` and released with
+`dt_colorspaces_free_image_profile()` — that pair exists so an image-owned container never touches
+the list. The list is init-only — verified by checking that every `profiles = g_list_append` sits
+inside `_colorspaces_build()`.
+
+**Two traps, both paid for once already:**
+
+*Do not "fix" such a race by locking the append alone.* With that many unlocked readers it
+relocates the unsynchronised write rather than removing it. Either lock every reader, or — better,
+and what was done here — stop mutating the shared structure at runtime and give the data to
+whatever actually owns it.
+
+*A `cmsHPROFILE` in a container is not necessarily the container's to close.* Several branches
+of `dt_image_find_best_color_profile()` (`imageio/imageio_profile.c`) return a profile **borrowed**
+from the application-wide list (`dt_colorspaces_get_profile(...)->profile`) and leave its
+`new_profile` out-parameter FALSE; only the branches that build one set it TRUE. Giving the
+container to the image and closing its profile on eviction therefore double-freed every borrowed
+profile — the list closes it again at shutdown. `dt_colorspaces_color_profile_t.owns_profile`
+records which case a container is in, and only owning containers close.
+
+That second one aborted all eight CI runners with `corrupted size vs prev_size in fastbins`
+after passing four build configurations and every static gate. Nothing static can see it:
+`tools/check_it_runs.sh` runs the binary once, which does.
+
+The same "profile-creating function used as a predicate" shape is what leaked three profiles per
+resolve in `imageio/imageio_profile.c`: calling a function that *builds* a profile to ask whether
+one exists, then calling it again for the value, discards the first. And a `goto finish` that
+skips every write to an out-parameter — including the sRGB fallback — returns an **uninitialised**
+`cmsHPROFILE` straight into `cmsCreateTransform()`. Both live in the profile-for-an-image cascade;
+check the early-out paths there before adding another branch to it.
+
+---
+
 ## Masks / forms history
+
+### Brush masks rasterize as radial spokes — wedge holes across the stroke (OPEN)
+
+Reported 2026-08-08 on `_DSC9410.NEF` (sidecar alongside it): a 57-node brush leaves four
+wedge-shaped holes in its mask, the largest 1336x966 px. **Not caused by the gtk.h/widgets
+refactor** — exports from that branch and from master are bit-identical, image and mask
+channel alike (0 differing pixels of 24,160,256).
+
+Two things make the diagnosis quick, and both were got wrong on the first pass:
+
+- **They are not the interiors of self-crossing loops.** A brush paints a stroke of finite
+  width, so a loop's interior legitimately stays unpainted, and the largest hole looks exactly
+  like that at a glance. Look at the small ones at full resolution instead: each has a
+  *perfectly straight* edge cutting across the stroke, which no smooth outline produces.
+- **They are not the sparse-sampling path.** `use_sparse` in `_brush_get_mask_roi()`
+  (`develop/masks/brush.c`) is gated on `dt_dev_pixelpipe_has_preview_output() || pipe->type ==
+  DT_DEV_PIXELPIPE_THUMBNAIL`, and that predicate returns FALSE immediately on
+  `!dev->gui_attached`. An `ansel-cli` export therefore runs the full-sampling branch
+  (`sparse_step = 1`), and the holes are present there.
+
+The mechanism the shape points at: the mask is not a filled polygon but the **union of radial
+spokes** — for each border sample `i`, `_brush_falloff_roi()` stamps a segment from centreline
+point `points[i]` out to `border[i]`. Where consecutive spokes fan out faster than the border
+sampling density, the wedge between them is never stamped, and both its straight edges are
+spokes. That is precisely "holes orthogonal to the path".
+
+Where to look: `_brush_get_pts_border()`, and the two arc-filling helpers
+`_brush_points_recurs_border_gaps()` / `_brush_points_recurs_border_small_gaps()`. Both bail
+out with `if(l < 2) return;` where `l = |delta_angle| * max(r1, r2)` — a pixel-count test on
+arc length, which is the shape of a threshold that is right at the resolution it was tuned for
+and too coarse elsewhere. **Measure before theorising**: dump `points`/`border` for this brush
+and check actual spoke spacing at the four hole coordinates. This file's history (see the
+highlights sections above) is full of plausible-but-wrong theories that survived source
+reading and died on the first measurement.
+
+Reproduce: export with `--export_masks 1`; page 1 of the TIFF is the mask. Flood-fill from the
+border and anything left unset is a hole.
 
 ### Forms are refcounted, not deep-copied
 
@@ -729,6 +1058,57 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 (full, all pipes); drawlayer heartbeat raises `TOP_CHANGED` + redraw (fast, non-geometry). The
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
+
+### retouch: the pixel-processing callback must resolve shapes through `pipe->forms`, not `self->dev->forms`
+
+`rt_process_forms()`/`rt_process_forms_cl()` (`iop/retouch.c`) are the `dwt_decompose()`/
+`dwt_decompose_cl()` callbacks that actually apply each shape's clone/heal/blur/fill at every
+wavelet scale — they run on the pipeline/worker/CL thread, not the GUI thread. They resolve the
+module's mask group and each shape by id through `dt_masks_get_from_id_ext(pipe->forms, id)` —
+the refcounted, frozen snapshot `dt_dev_pixelpipe_process()` takes once per run (see "Forms are
+refcounted, not deep-copied" above) — never through `dt_masks_get_from_id(self->dev, id)`. The
+latter reads the live, GUI-owned `dev->forms` with no lock and no reference held, which is safe
+enough while `self->dev` is the long-lived darkroom `dev` continuously driven by the same GUI
+thread, but not for a `dev` that is created, populated, and torn down around one pipeline run —
+`imageio_core.c`'s export `dev` and `dev_snapshot.c`'s `frozen` both fit that shape. `commit_params()`
+and `rt_resynch_params()` already followed the `pipe->forms`-first pattern (falling back to a
+lock-guarded `self->dev->forms` only when `pipe->forms` is not yet populated); the two processing
+callbacks are the only per-pixel consumers and must use the same source. `rt_masks_form_is_in_roi()`,
+`rt_masks_get_delta_to_destination()`, `dt_masks_get_area()` and `dt_masks_get_mask()` all take an
+already-resolved `dt_masks_form_t*` and don't re-lookup by id, so they need no equivalent change.
+
+### dev_snapshot.c: the `history_override` path must resync `frozen->forms` too, not just `frozen->history`
+
+The darkroom "Snapshot" feature (`libs/snapshots.c`'s `_lib_snapshot_capture_state()`) captures the
+**live, possibly-uncommitted** `dev->history` — a duplicate taken under `history_mutex` — and hands
+it to `dt_dev_snapshot_capture()` as `history_override`, precisely so a shape drawn a second ago,
+before any history commit, still shows up in the frozen comparison. `dt_dev_snapshot_capture()`
+splices that duplicate straight into a fresh `frozen` dev's `frozen->history`/`iop_order_list`, and
+resolves each `hist->module` — but never touches `frozen->forms`. It stays at whatever
+`dt_dev_load_image(frozen, imgid)` read a few lines earlier from the image's *saved*
+`main.masks_history` — the on-disk state as of the last commit, not the override's live one.
+
+Module params/blend_params don't have this problem: `dt_dev_pixelpipe_synch_all()` →
+`_sync_pipe_nodes_from_history()` (`dev_pixelpipe.c`) walks `pipe->dev->history` itself and commits
+`hist->params`/`hist->blend_params` per node independently of `dt_dev_load_image()`'s earlier read,
+so a module's own param blob — retouch's `rt_forms[]` array included, with the freshly-drawn shape's
+`formid`/`scale`/`algorithm` — is correctly the override's. But that blob only names the shape by
+id; the geometry lives in `dev->forms`/`pipe->forms` (see the entry above), and a module needing mask
+history resolves `blend_params->mask_id` against a group that `pipe->forms` (snapshotted from
+`frozen->forms` at `dt_dev_pixelpipe_process()` start) doesn't contain. The shape's params exist,
+its parent group doesn't — `dt_masks_get_from_id_ext(pipe->forms, mask_id)` returns `NULL`, and
+`rt_process_forms()`/`_cl()` return early with no shapes applied, no error printed either (a
+`grp == NULL` group lookup is a silent no-op by design, not a logged failure).
+
+Fixed by re-deriving `frozen->forms` inside the `history_override` block with the same accumulation
+rule `dt_dev_pop_history_items_ext()` uses elsewhere: walk the (just-spliced) `frozen->history` up to
+`history_end_override`, keep the last non-`NULL` `hist->forms`, and call
+`dt_masks_replace_current_forms(frozen, forms)` before `dt_dev_set_history_end_ext()`. `hist->forms`
+is already a per-commit snapshot (refcounted, shared by reference — see "Forms are refcounted, not
+deep-copied"), so this is a cheap re-point, not a copy. `duplicate.c`'s call site
+(`dt_dev_snapshot_capture(&d->preview, dev, imgid, NULL, NULL, -1)`) passes no override and never
+enters this block — it already gets correct forms from `dt_dev_load_image()`'s normal DB read, since
+it is snapshotting an already-saved image, not a live in-progress edit.
 
 ### retouch: combining the mask/wavelet-scale/suppress preview toggles
 

@@ -42,24 +42,23 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "gui/bauhaus.h"
+#include "widgets/widget_settings.h"
 #include "common/act_on.h"
 #include "common/history_actions.h"
 #include "common/collection.h"
-#include "common/history.h"
 #include "common/styles.h"
-#include "common/macros.h"
+#include "gui/common/styles_gui.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/glib_utils.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "common/conf.h"
-#include "control/control.h"
-#include "control/jobs.h"
+#include "control/user_message.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "gui/styles.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -70,6 +69,7 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <libxml/parser.h>
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 
@@ -379,7 +379,7 @@ static void delete_clicked(GtkWidget *w, gpointer user_data)
 
   if(can_delete)
   {
-    dt_database_start_transaction(dt_database_get_global());
+    dt_database_start_transaction();
 
     for (const GList *style = style_names; style; style = g_list_next(style))
     {
@@ -391,7 +391,7 @@ static void delete_clicked(GtkWidget *w, gpointer user_data)
       // this also calls _gui_styles_update_view
       DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
     }
-    dt_database_release_transaction(dt_database_get_global());
+    dt_database_release_transaction();
   }
   g_list_free_full(style_names, dt_free_gpointer);
   style_names = NULL;
@@ -932,13 +932,13 @@ void gui_cleanup(dt_lib_module_t *self)
 
 void gui_reset(dt_lib_module_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   GList *all_styles = dt_styles_get_list("");
 
   if(IS_NULL_PTR(all_styles))
   {
-    dt_database_release_transaction(dt_database_get_global());
+    dt_database_release_transaction();
     return;
   }
 
@@ -956,7 +956,7 @@ void gui_reset(dt_lib_module_t *self)
   }
   g_list_free_full(all_styles, dt_style_free);
   all_styles = NULL;
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
   _update(self);
 }
 

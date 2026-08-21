@@ -25,12 +25,11 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/conf.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
@@ -38,6 +37,8 @@
 #include <gdk/gdkkeysyms.h>
 
 #include <osm-gps-map-source.h>
+#include "widgets/label.h"
+#include "widgets/widget_settings.h"
 
 DT_MODULE(1)
 

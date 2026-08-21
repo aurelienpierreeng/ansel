@@ -26,8 +26,7 @@
 #include <glib/gi18n.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <libsoup/soup.h>
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/http_server.h"

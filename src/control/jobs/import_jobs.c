@@ -15,22 +15,21 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "system/mem_alloc.h"
 #include "common/conf.h"
 #include "import_jobs.h"
 #include "common/collection.h"
 #include "common/datetime.h"
-#include "common/exif.h"
-#include "common/history_merge.h"
-#include "common/metadata.h"
+#include "metadata/exif.h"
+#include "develop/history_merge.h"
+#include "metadata/metadata.h"
 #include "common/styles.h"
 #include "control/control.h"
 #include "common/film.h"
 #include "common/image.h"
 #include "control/jobs/control_jobs.h"
-#include "gui/gtk.h"
 
 #ifndef _WIN32
-#include <glob.h>
 #endif
 #include <string.h>
 #include <glib/gstdio.h>
@@ -258,7 +257,7 @@ int _import_copy_txt(const char *const filename, const char *dest_file_path)
  */
 int _import_copy_file(const char *const filename, const int index, dt_control_import_t *data, gchar *img_path_to_db, size_t pathname_len, GList **discarded)
 {
-  dt_image_t *img = malloc(sizeof(dt_image_t));
+  dt_image_t *img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
   dt_image_init(img);
 
   // Generate file I/O only if the pattern is using EXIF variables.
@@ -273,7 +272,7 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
 
   gchar *dest_file_path = dt_build_filename_from_pattern(filename, index, img, data);
   dt_print(DT_DEBUG_IMPORT, "[Import] Image %s will be copied into %s\n", filename, dest_file_path);
-  dt_free(img);
+  dt_free_align(img);
 
   int process = TRUE;
   int copied = 0;
@@ -552,21 +551,12 @@ static int32_t _control_import_job_run(dt_job_t *job)
       // collection by hand (issue #860). So always run a collection update afterwards: it
       // re-runs the current query and makes newly-imported matching images appear.
       if(index == 0)
-        dt_collection_load_filmroll(dt_collection_get_global(), imgid, FALSE);
+        dt_collection_load_filmroll(dt_collection_get_global(), imgid, FALSE, TRUE);
 
-      // Throttled: dt_collection_update_query() fully rebuilds memory.collected_images and its
-      // DT_SIGNAL_COLLECTION_CHANGED triggers a full lighttable/thumbtable re-layout on the GUI
-      // thread. Firing it after every single image queued one such redraw per image -- for a
-      // large library each redraw is expensive enough that a multi-hundred-image import kept the
-      // GUI thread permanently busy processing the backlog, appearing fully frozen (no input
-      // handled, and even the background-job progress bar -- created and shown correctly -- never
-      // got an actual repaint) for the whole import.
-      const gint64 now = g_get_monotonic_time();
-      if(now - last_collection_refresh > 250000) // 250ms
-      {
-        dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
-        last_collection_refresh = now;
-      }
+      // known_image_folder is NULL: in copy mode the image's final DB location can be a
+      // completely different, pattern-generated folder from its original source path, which is
+      // all this loop has at hand -- dt_collection_notify_imported() must resolve it fresh.
+      dt_collection_notify_imported(imgid, NULL, &last_collection_refresh);
 
       index++;
     }
@@ -589,7 +579,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   {
     if(data->folder_survey)
       dt_control_log(_("Capture: imported 1 image."));
-    dt_collection_load_filmroll(dt_collection_get_global(), imgid, TRUE);
+    dt_collection_load_filmroll(dt_collection_get_global(), imgid, TRUE, TRUE);
   }
   else
   {
@@ -636,80 +626,18 @@ void dt_control_import_data_free(dt_control_import_t *data)
   }
 }
 
-static int _discarded_files_popup(dt_control_image_enumerator_t *params)
+/* Installed by the GUI at startup; absent under ansel-cli, where the discarded list is
+ * simply freed with the rest -- a headless import has nobody to show a dialog to. */
+static dt_control_import_discarded_handler_t _discarded_files_handler = NULL;
+
+void dt_control_import_set_discarded_files_handler(dt_control_import_discarded_handler_t handler)
 {
-  dt_control_import_t *data = params->data;
-
-  // Create the window
-  GtkWidget *dialog = gtk_dialog_new_with_buttons("Message",
-    GTK_WINDOW(dt_gui_main_window()),
-    GTK_DIALOG_DESTROY_WITH_PARENT,
-    _("_OK"),
-    GTK_RESPONSE_NONE,
-    NULL);
-  gtk_window_set_title(GTK_WINDOW(dialog), _("Some files have not been copied"));
-  gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PIXEL_APPLY_DPI(800), DT_PIXEL_APPLY_DPI(800));
-
-  // Create the label
-  GtkWidget *label = gtk_label_new(_("The following source files have not been copied "
-    "because similarly-named files already exist on the destination. "
-    "This may be because the files have already been imported "
-    "or the naming pattern leads to non-unique file names."));
-  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
-
-  // Create the scrolled window internal container
-  GtkWidget *scrolled_window = gtk_scrolled_window_new (NULL, NULL);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC,
-  GTK_POLICY_AUTOMATIC);
-  gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled_window), TRUE);
-
-  // Create the treeview model from the list of discarded file pathes
-  GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
-  GtkTreeIter iter;
-  for(GList *file = g_list_first(data->discarded); file; file = g_list_next(file))
-  {
-    if(file->data)
-    {
-      gtk_list_store_append(store, &iter);
-      gtk_list_store_set(store, &iter, 0, (char *)file->data, -1);
-    }
-  }
-
-  // Create the treeview view. Sooooo verbose... it's only a flat list.
-  GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
-  GtkTreeViewColumn *col = gtk_tree_view_column_new();
-  gtk_tree_view_column_set_title(col, _("Origin path"));
-  GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-  gtk_tree_view_column_pack_start(col, renderer, TRUE);
-  gtk_tree_view_column_set_attributes(col, renderer, "text", 0, NULL);
-  gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
-  g_object_unref(store);
-
-  // Pack widgets to an unified box
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
-  dt_gui_add_class(scrolled_window, "dt_recessed_scroll");
-  gtk_container_add(GTK_CONTAINER(scrolled_window), view);
-
-  // Pack the box to the dialog internal container
-  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  gtk_container_add(GTK_CONTAINER(content_area), box);
-  gtk_widget_show_all(dialog);
-
-#ifdef GDK_WINDOWING_QUARTZ
-  dt_osx_disallow_fullscreen(dialog);
-#endif
-
-  gtk_dialog_run(GTK_DIALOG(dialog));
-  gtk_widget_destroy(dialog);
-
-  dt_control_import_data_free(data);
-  dt_free(data);
-  dt_control_image_enumerator_cleanup(params);
-
-  return 0;
+  _discarded_files_handler = handler;
 }
+
+/* The discarded-files recap dialog lives in gui/import.c now: it was the only GUI
+ * code in this job file, and the only reason a control-layer TU included
+ * widgets/ and gui/ headers. The job reaches it through the handler below. */
 
 static void _control_import_job_cleanup(void *p)
 {
@@ -717,10 +645,12 @@ static void _control_import_job_cleanup(void *p)
   dt_control_import_t *data = params->data;
 
   // Display a recap of files that weren't copied
-  if(g_list_length(data->discarded) > 0)
+  if(g_list_length(data->discarded) > 0 && _discarded_files_handler)
   {
-    g_main_context_invoke(NULL, (GSourceFunc)_discarded_files_popup, (gpointer)params);
-    // we will free data and params from the function since it's run asynchronously
+    // Called on THIS worker thread: getting onto the GUI main loop is the handler's
+    // business (g_main_context_invoke is GTK machinery, not a job's). The handler owns
+    // freeing data and params, whenever it is done with them.
+    _discarded_files_handler((struct dt_control_image_enumerator_t *)params);
   }
   else
   {

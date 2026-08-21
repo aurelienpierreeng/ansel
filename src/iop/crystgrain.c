@@ -17,15 +17,15 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "math/math.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -1441,7 +1441,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_crystgrain_gui_data_t *g = (dt_iop_crystgrain_gui_data_t *)self->gui_data;
+  dt_iop_crystgrain_gui_data_t *g = (dt_iop_crystgrain_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_crystgrain_params_t *p = (dt_iop_crystgrain_params_t *)self->params;
   const gboolean is_color = (p->mode == DT_CRYSTGRAIN_COLOR);
 

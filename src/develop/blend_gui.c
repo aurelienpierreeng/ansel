@@ -46,122 +46,49 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "control/signal.h"
 #include "common/usermanual_url.h"
 #include "develop/blend.h"
-#include "gui/bauhaus.h"
-#include "common/dtpthread.h"
+#include "develop/blend_gui.h"
+#include "widgets/bauhaus.h"
+#include "gui/bauhaus_conf.h"
+#include "system/dtpthread.h"
 #include "math/math.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
-#include "develop/tiling.h"
-#include "gui/dtgtk/button.h"
-#include "gui/dtgtk/gradientslider.h"
+#include "develop/masks_gui.h"
+#include "widgets/button.h"
+#include "widgets/gradientslider.h"
 
 #include "gui/actions/menu.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/colorpicker.h"
 
 #include <assert.h>
-#include <gmodule.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
+#include "widgets/collapsible_section.h"
+#include "widgets/container.h"
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/popup.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
+#include "widgets/togglebutton.h"
 
 #define NEUTRAL_GRAY 0.5
 #define BLEND_MASKMODE_CONF_KEY "plugins/darkroom/blending/mask_mode_tab"
 
-const dt_develop_name_value_t dt_develop_blend_mode_names[]
-    = { { NC_("blendmode", "normal"), DEVELOP_BLEND_NORMAL2 },
-        { NC_("blendmode", "normal bounded"), DEVELOP_BLEND_BOUNDED },
-        { NC_("blendmode", "lighten"), DEVELOP_BLEND_LIGHTEN },
-        { NC_("blendmode", "darken"), DEVELOP_BLEND_DARKEN },
-        { NC_("blendmode", "multiply"), DEVELOP_BLEND_MULTIPLY },
-        { NC_("blendmode", "average"), DEVELOP_BLEND_AVERAGE },
-        { NC_("blendmode", "addition"), DEVELOP_BLEND_ADD },
-        { NC_("blendmode", "subtract"), DEVELOP_BLEND_SUBTRACT },
-        { NC_("blendmode", "difference"), DEVELOP_BLEND_DIFFERENCE2 },
-        { NC_("blendmode", "screen"), DEVELOP_BLEND_SCREEN },
-        { NC_("blendmode", "overlay"), DEVELOP_BLEND_OVERLAY },
-        { NC_("blendmode", "softlight"), DEVELOP_BLEND_SOFTLIGHT },
-        { NC_("blendmode", "hardlight"), DEVELOP_BLEND_HARDLIGHT },
-        { NC_("blendmode", "vividlight"), DEVELOP_BLEND_VIVIDLIGHT },
-        { NC_("blendmode", "linearlight"), DEVELOP_BLEND_LINEARLIGHT },
-        { NC_("blendmode", "pinlight"), DEVELOP_BLEND_PINLIGHT },
-        { NC_("blendmode", "lightness"), DEVELOP_BLEND_LIGHTNESS },
-        { NC_("blendmode", "chromaticity"), DEVELOP_BLEND_CHROMATICITY },
-        { NC_("blendmode", "hue"), DEVELOP_BLEND_HUE },
-        { NC_("blendmode", "color"), DEVELOP_BLEND_COLOR },
-        { NC_("blendmode", "coloradjustment"), DEVELOP_BLEND_COLORADJUST },
-        { NC_("blendmode", "Lab lightness"), DEVELOP_BLEND_LAB_LIGHTNESS },
-        { NC_("blendmode", "Lab color"), DEVELOP_BLEND_LAB_COLOR },
-        { NC_("blendmode", "Lab L-channel"), DEVELOP_BLEND_LAB_L },
-        { NC_("blendmode", "Lab a-channel"), DEVELOP_BLEND_LAB_A },
-        { NC_("blendmode", "Lab b-channel"), DEVELOP_BLEND_LAB_B },
-        { NC_("blendmode", "HSV value"), DEVELOP_BLEND_HSV_VALUE },
-        { NC_("blendmode", "HSV color"), DEVELOP_BLEND_HSV_COLOR },
-        { NC_("blendmode", "RGB red channel"), DEVELOP_BLEND_RGB_R },
-        { NC_("blendmode", "RGB green channel"), DEVELOP_BLEND_RGB_G },
-        { NC_("blendmode", "RGB blue channel"), DEVELOP_BLEND_RGB_B },
-        { NC_("blendmode", "divide"), DEVELOP_BLEND_DIVIDE },
-        { NC_("blendmode", "geometric mean"), DEVELOP_BLEND_GEOMETRIC_MEAN },
-        { NC_("blendmode", "harmonic mean"), DEVELOP_BLEND_HARMONIC_MEAN },
-
-        /** deprecated blend modes: make them available as legacy history stacks might want them */
-        { NC_("blendmode", "difference (deprecated)"), DEVELOP_BLEND_DIFFERENCE },
-        { NC_("blendmode", "subtract inverse (deprecated)"), DEVELOP_BLEND_SUBTRACT_INVERSE },
-        { NC_("blendmode", "divide inverse (deprecated)"), DEVELOP_BLEND_DIVIDE_INVERSE },
-        { "", 0 } };
-
-const dt_develop_name_value_t dt_develop_blend_mode_flag_names[]
-    = { { NC_("blendoperation", "normal"), 0 },
-        { NC_("blendoperation", "reverse"), DEVELOP_BLEND_REVERSE },
-        { "", 0 } };
-
-const dt_develop_name_value_t dt_develop_blend_colorspace_names[]
-    = { { N_("default"), DEVELOP_BLEND_CS_NONE },
-        { N_("RAW"), DEVELOP_BLEND_CS_RAW },
-        { N_("Lab"), DEVELOP_BLEND_CS_LAB },
-        { N_("RGB (display)"), DEVELOP_BLEND_CS_RGB_DISPLAY },
-        { N_("RGB (scene)"), DEVELOP_BLEND_CS_RGB_SCENE },
-        { "", 0 } };
-
-const dt_develop_name_value_t dt_develop_mask_mode_names[]
-    = { { N_("None"), 0 },
-        { N_("Uniform"), 1 },
-        { N_("Parametric mask"), 2 },
-        { N_("Drawn mask"), 3 },
-        { N_("Drawn & parametric mask"), 4 },
-        { N_("Reuse an existing mask"), 5 },
-        { "", 0 } };
-
-const dt_develop_name_value_t dt_develop_combine_masks_names[]
-    = { { N_("exclusive"), DEVELOP_COMBINE_NORM_EXCL },
-        { N_("inclusive"), DEVELOP_COMBINE_NORM_INCL },
-        { N_("exclusive & inverted"), DEVELOP_COMBINE_INV_EXCL },
-        { N_("inclusive & inverted"), DEVELOP_COMBINE_INV_INCL },
-        { "", 0 } };
-
-const dt_develop_name_value_t dt_develop_feathering_guide_names[]
-    = { { N_("output before blur"), DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR },
-        { N_("input before blur"), DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR },
-        { N_("output after blur"), DEVELOP_MASK_GUIDE_OUT_AFTER_BLUR },
-        { N_("input after blur"), DEVELOP_MASK_GUIDE_IN_AFTER_BLUR },
-        { "", 0 } };
-
-const dt_develop_name_value_t dt_develop_invert_mask_names[]
-    = { { N_("off"), DEVELOP_COMBINE_NORM },
-        { N_("on"), DEVELOP_COMBINE_INV },
-        { "", 0 } };
-
+/* The seven blend name tables are DEFINED in blend.c now: backend consumers
+ * (develop/supervisor.c) read them, so they cannot live in a GUI-only file. */
 const dt_iop_gui_blendif_colorstop_t _gradient_L[]
     = { { 0.0f,   { 0, 0, 0, 1.0 } },
         { 0.125f, { NEUTRAL_GRAY / 8, NEUTRAL_GRAY / 8, NEUTRAL_GRAY / 8, 1.0 } },
@@ -494,7 +421,7 @@ static gboolean _blendif_are_output_channels_used(const dt_develop_blend_params_
 
 static gboolean _blendif_clean_output_channels(dt_iop_module_t *module)
 {
-  const dt_iop_gui_blend_data_t *const bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  const dt_iop_gui_blend_data_t *const bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return FALSE;
 
   gboolean changed = FALSE;
@@ -771,7 +698,7 @@ static float magnifier_scale_callback(GtkWidget *self, float inval, int dir)
 static int _blendop_blendif_disp_alternative_worker(GtkWidget *widget, dt_iop_module_t *module, int mode,
                                                     float (*scale_callback)(GtkWidget*, float, int), const char *label)
 {
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
   GtkDarktableGradientSlider *slider = (GtkDarktableGradientSlider *)widget;
 
   int in_out = (slider == data->filter[1].slider) ? 1 : 0;
@@ -813,7 +740,7 @@ static void _blendop_blendif_log_scale_toggled(GtkToggleButton *button, dt_iop_m
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->blend_data : NULL;
+  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->gui->blend_data : NULL;
   if(IS_NULL_PTR(data) || IS_NULL_PTR(data->channel)) return;
 
   const int in_out = GTK_WIDGET(button) == data->filter[1].log_scale ? 1 : 0;
@@ -869,7 +796,7 @@ static inline int _blendif_print_digits_picker(float value)
 
 static void _update_gradient_slider_pickers(GtkWidget *callback_dummy, dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
   if(callback_dummy == data->colorpicker_set_values
      && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->colorpicker_set_values)))
   {
@@ -940,7 +867,7 @@ static void _update_gradient_slider_pickers(GtkWidget *callback_dummy, dt_iop_mo
 
 static void _blendop_blendif_update_tab(dt_iop_module_t *module, const int tab)
 {
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
   dt_develop_blend_params_t *bp = module->blend_params;
   dt_develop_blend_params_t *dp = module->default_blendop_params;
   const float epsilon = 1e-6f;
@@ -1218,12 +1145,12 @@ static gboolean _blendop_blendif_showmask_clicked(GtkToggleButton *button, GdkEv
                                  module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
 
     module->enabled = TRUE;
-    if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), TRUE);
+    if(module->gui->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->gui->off), TRUE);
 
     dt_gui_freeze_begin();
     // (re)set the header mask indicator too
-    if(module->mask_indicator)
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->mask_indicator),
+    if(module->gui->mask_indicator)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->gui->mask_indicator),
                                    module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
     dt_gui_freeze_end();
 
@@ -1245,7 +1172,7 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
   const unsigned int bit = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(togglebutton), "mask-bit"));
   if(!bit) return;
   if(IS_NULL_PTR(module)) return;
-  if(IS_NULL_PTR(module->blend_data)) return;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
 
   uint32_t mask_mode = module->blend_params->mask_mode;
   const gboolean active = gtk_toggle_button_get_active(togglebutton);
@@ -1288,7 +1215,7 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
       break;
   }
 
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
   _blendop_masks_mode_callback(mask_mode, data);
   dt_iop_add_remove_mask_indicator(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
@@ -1315,7 +1242,7 @@ static gboolean _blendop_blendif_invert(GtkButton *button, GdkEventButton *event
 {
   if(dt_gui_widgets_suppressed()) return TRUE;
 
-  const dt_iop_gui_blend_data_t *data = module->blend_data;
+  const dt_iop_gui_blend_data_t *data = module->gui->blend_data;
 
   unsigned int toggle_mask = 0;
 
@@ -1362,7 +1289,7 @@ static gboolean _blendop_masks_shape_can_start(GtkWidget *button, dt_iop_module_
 static gboolean _blendop_masks_show_and_edit(GtkWidget *widget, GdkEventButton *event, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return FALSE;
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
 
   if(event->button == 1)
   {
@@ -1505,27 +1432,6 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
   module->blend_params->mask_id = group_form->formid;
 
   return group_form;
-}
-
-static dt_masks_form_group_t *_blendop_masks_find_group_entry(dt_masks_form_t *group_form, const int formid, int *index)
-{
-  if(!IS_NULL_PTR(index)) *index = -1;
-  if(IS_NULL_PTR(group_form)) return NULL;
-  if(!(group_form->type & DT_MASKS_GROUP)) return NULL;
-
-  int group_index = 0;
-  for(GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
-  {
-    dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
-    if(group_entry->formid == formid)
-    {
-      if(index) *index = group_index;
-      return group_entry;
-    }
-    group_index++;
-  }
-
-  return NULL;
 }
 
 static void _blendop_masks_init_icons(dt_iop_gui_blend_data_t *bd)
@@ -1720,8 +1626,8 @@ static gboolean _blendop_masks_group_name_focus_out(GtkWidget *widget, GdkEventF
 static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
-  if(IS_NULL_PTR(module->blend_data)) return;
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd)) return;
   if(!GTK_IS_TREE_VIEW(bd->masks_treeview)) return;
   if(!GTK_IS_TREE_VIEW(bd->masks_group_treeview)) return;
@@ -1755,7 +1661,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     // Skip groups containing only a single group
     if(_blendop_masks_is_single_group_wrapper(module->dev, mask_form)) continue;
 
-    const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
+    const gboolean active = dt_masks_form_group_find_entry(group_form, mask_form->formid, NULL) != NULL;
     GtkTreeIter iter;
     gtk_list_store_append(GTK_LIST_STORE(all_model), &iter);
     gchar *display_markup = g_markup_printf_escaped("%s", mask_form->name);
@@ -1777,7 +1683,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     if(!IS_NULL_PTR(group_form) && mask_form->formid == group_form->formid) continue;
     if(_blendop_masks_is_group_with_shapes(module->dev, mask_form)) continue;
 
-    const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
+    const gboolean active = dt_masks_form_group_find_entry(group_form, mask_form->formid, NULL) != NULL;
     gboolean sensitive = TRUE;
     const gchar *locked_group_name = NULL;
     
@@ -1787,8 +1693,8 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
       dt_masks_form_t *parent_form = (dt_masks_form_t *)parent_node->data;
       if(IS_NULL_PTR(parent_form) || !_blendop_masks_is_group_with_shapes(module->dev, parent_form)) continue;
       
-      const gboolean parent_active = _blendop_masks_find_group_entry(group_form, parent_form->formid, NULL) != NULL;
-      if(parent_active && _blendop_masks_find_group_entry(parent_form, mask_form->formid, NULL))
+      const gboolean parent_active = dt_masks_form_group_find_entry(group_form, parent_form->formid, NULL) != NULL;
+      if(parent_active && dt_masks_form_group_find_entry(parent_form, mask_form->formid, NULL))
       {
         sensitive = FALSE;
         locked_group_name = parent_form->name;
@@ -1885,9 +1791,9 @@ static void _blendop_masks_all_name_edited(GtkCellRendererText *cell, gchar *pat
 {
   (void)cell;
   if(IS_NULL_PTR(module)) return;
-  if(IS_NULL_PTR(module->blend_data)) return;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_treeview));
   if(!GTK_IS_TREE_MODEL(model)) return;
 
@@ -1943,9 +1849,9 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
   (void)cell;
   if(dt_gui_widgets_suppressed()) return;
   if(IS_NULL_PTR(module)) return;
-  if(IS_NULL_PTR(module->blend_data)) return;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_treeview));
   if(!GTK_IS_TREE_MODEL(model)) return;
 
@@ -1978,7 +1884,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
       group_form = _blendop_masks_group_create(module);
     if(IS_NULL_PTR(group_form)) return;
 
-    if(!_blendop_masks_find_group_entry(group_form, mask_form->formid, NULL))
+    if(!dt_masks_form_group_find_entry(group_form, mask_form->formid, NULL))
     {
       group_form = dt_masks_cow_touch(module->dev, group_form);
       dt_masks_group_add_form(module->dev, group_form, mask_form);
@@ -1999,7 +1905,7 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
       gtk_tree_model_get(model, &search_iter, BLENDOP_MASKS_ALL_COL_FORMID, &child_formid, -1);
       
       // Check if this child belongs to the toggled group
-      if(_blendop_masks_find_group_entry(mask_form, child_formid, NULL))
+      if(dt_masks_form_group_find_entry(mask_form, child_formid, NULL))
       {
         // Lock (gray out) if group is being activated, unlock if deactivated
         gtk_list_store_set(GTK_LIST_STORE(model), &search_iter, 
@@ -2018,8 +1924,8 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
                                 active ? DT_MASKS_EVENT_REMOVE : DT_MASKS_EVENT_ADD);
 }
 
-// Permanently delete a shape from the "all shapes" list: shared by the row's trash icon and
-// the right-click "Delete" context menu entry, both gated by dt_masks_gui_confirm_permanent_delete().
+// Permanently delete a shape from the "all shapes" list: the row's trash icon is the only
+// entry point, gated by dt_masks_gui_confirm_permanent_delete().
 static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
 {
   if(IS_NULL_PTR(module)) return;
@@ -2033,14 +1939,6 @@ static void _blendop_masks_all_delete(dt_iop_module_t *module, const int formid)
   dt_masks_form_delete(module->dev, module, NULL, mask_form);
   _blendop_masks_apply_and_commit(module);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
-}
-
-static void _blendop_masks_all_delete_callback(GtkWidget *menu_item, dt_iop_module_t *module)
-{
-  if(IS_NULL_PTR(module)) return;
-
-  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
-  _blendop_masks_all_delete(module, formid);
 }
 
 static void _blendop_masks_all_duplicate_callback(GtkWidget *menu_item, dt_iop_module_t *module)
@@ -2057,10 +1955,10 @@ static void _blendop_masks_all_duplicate_callback(GtkWidget *menu_item, dt_iop_m
 static void _blendop_masks_all_rename_callback(GtkWidget *menu_item, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module)) return;
-  if(IS_NULL_PTR(module->blend_data)) return;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
 
   const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   GtkTreeView *view = GTK_TREE_VIEW(bd->masks_treeview);
   GtkTreeModel *model = gtk_tree_view_get_model(view);
   if(!GTK_IS_TREE_MODEL(model)) return;
@@ -2082,7 +1980,7 @@ static gboolean _blendop_masks_all_handle_left_click(GtkWidget *treeview, GtkTre
   if(IS_NULL_PTR(module)) return FALSE;
   if(IS_NULL_PTR(path) || IS_NULL_PTR(column)) return FALSE;
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd) || column != bd->all_shapes_col) return FALSE;
 
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
@@ -2124,7 +2022,7 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
   // Handle left click on the per-row delete icon column.
   if(event->button == GDK_BUTTON_PRIMARY && !IS_NULL_PTR(column))
   {
-    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
     if(!IS_NULL_PTR(bd) && column == bd->all_shapes_delete_col)
     {
       GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
@@ -2165,12 +2063,7 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
   if(formid <= 0) return TRUE;
 
   GtkWidget *menu = gtk_menu_new();
-  GtkWidget *item = gtk_menu_item_new_with_label(_("Delete"));
-  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
-  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_delete_callback), module);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-
-  item = gtk_menu_item_new_with_label(_("Duplicate"));
+  GtkWidget *item = gtk_menu_item_new_with_label(_("Duplicate"));
   g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_duplicate_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
@@ -2324,9 +2217,27 @@ static void _blendop_masks_group_move_callback(GtkWidget *menu_item, dt_iop_modu
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, 0, parentid, DT_MASKS_EVENT_UPDATE);
 }
 
+static void _blendop_masks_group_duplicate_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(IS_NULL_PTR(module)) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
+
+  // dt_masks_form_duplicate_in_group also attaches the duplicate to the group right away,
+  // inheriting the source entry's state/opacity -- same helper used by the mask manager's
+  // own "Duplicate shape" action (libs/masks.c).
+  const int nid = dt_masks_form_duplicate_in_group(module->dev, parentid, formid);
+  if(nid <= 0) return;
+
+  _blendop_masks_apply_and_commit(module);
+  _blendop_masks_refresh_lists(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_MASK_CHANGED, nid, parentid, DT_MASKS_EVENT_ADD);
+}
+
 static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   if(!GTK_IS_TOGGLE_BUTTON(togglebutton)) return;
 
@@ -2383,6 +2294,24 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
 
   GtkWidget *menu = gtk_menu_new();
   gtk_style_context_add_class(gtk_widget_get_style_context(menu), "dt-masks-context-menu");
+
+  // Same shape-parameter sliders (size/fading/rotation/opacity) as the darkroom canvas's
+  // own shape context menu (dt_masks_create_menu). Touch the parent group before resolving
+  // the entry pointer, same rule as _blendop_masks_group_operation_callback: the sliders
+  // mutate this entry in place across the whole drag/scroll interaction.
+  dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
+  if(!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
+    parent_group = dt_masks_cow_touch(module->dev, parent_group);
+  dt_masks_form_group_t *op_form = (!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
+                                       ? dt_masks_form_group_find_entry(parent_group, formid, NULL)
+                                       : NULL;
+  dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
+
+  if(!IS_NULL_PTR(op_form) && !IS_NULL_PTR(form))
+  {
+    dt_masks_gui_populate_interaction_sliders(menu, module->dev, form, op_form, module->dev->form_gui, module);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+  }
 
   GtkWidget *op_item = gtk_menu_item_new_with_label(_("Operation"));
   GtkWidget *op_submenu = gtk_menu_new();
@@ -2450,6 +2379,14 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_move_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+  item = gtk_menu_item_new_with_label(_("Duplicate shape"));
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_duplicate_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
   return menu;
 }
 
@@ -2500,7 +2437,7 @@ static gboolean _blendop_masks_group_handle_action_click(GtkWidget *treeview, Gt
                                                          GtkTreeViewColumn *column, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module) || IS_NULL_PTR(path) || IS_NULL_PTR(column)) return FALSE;
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd)) return FALSE;
   if(column != bd->group_unlink_col && column != bd->group_delete_col) return FALSE;
 
@@ -2566,7 +2503,7 @@ static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEven
 
   if(formid <= 0 || parentid <= 0) return TRUE;
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
   const int list_length = (parent_group && (parent_group->type & DT_MASKS_GROUP))
                               ? g_list_length(parent_group->points)
@@ -2584,7 +2521,7 @@ static gboolean _blendop_masks_group_query_tooltip(GtkWidget *treeview, gint x, 
                                                    GtkTooltip *tooltip, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(module) || keyboard_tip) return FALSE;
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd)) return FALSE;
 
   gint bx = 0, by = 0;
@@ -2637,8 +2574,8 @@ static gboolean _blendop_masks_group_find_row(GtkTreeModel *model, GtkTreeIter *
 // the masks library treeview does, so live opacity changes don't rebuild and collapse the tree.
 static void _blendop_masks_group_update_row(dt_iop_module_t *module, const int formid, const int parentid)
 {
-  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->blend_data)) return;
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(!GTK_IS_TREE_VIEW(bd->masks_group_treeview)) return;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_group_treeview));
   if(!GTK_IS_TREE_STORE(model)) return;
@@ -2649,7 +2586,7 @@ static void _blendop_masks_group_update_row(dt_iop_module_t *module, const int f
   dt_masks_form_t *form = dt_masks_get_from_id(module->dev, formid);
   dt_masks_form_t *parent_group = dt_masks_get_from_id(module->dev, parentid);
   int index = -1;
-  dt_masks_form_group_t *entry = _blendop_masks_find_group_entry(parent_group, formid, &index);
+  dt_masks_form_group_t *entry = dt_masks_form_group_find_entry(parent_group, formid, &index);
   if(IS_NULL_PTR(form) || IS_NULL_PTR(entry)) return;
 
   char display_name[256] = "";
@@ -2679,7 +2616,7 @@ static void _blendop_masks_handler_callback(gpointer instance, const int formid,
 gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_t *pipe,
                                   dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
 
   if(picker == data->colorpicker_set_values)
   {
@@ -2948,7 +2885,7 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
       }
     }
 
-    dt_iop_gui_blend_data_t *bd = module->blend_data;
+    dt_iop_gui_blend_data_t *bd = module->gui->blend_data;
     const int cst_old = _blendop_blendif_get_picker_colorspace(bd);
     dt_dev_add_history_item(module->dev, module, FALSE, TRUE);
     dt_iop_gui_update(module);
@@ -2971,13 +2908,13 @@ static void _blendif_select_colorspace(GtkMenuItem *menuitem, dt_iop_module_t *m
   dt_develop_blend_colorspace_t cst = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menuitem), "dt-blend-cst"));
   if(_blendif_change_blend_colorspace(module, cst))
   {
-    gtk_widget_queue_draw(module->widget);
+    gtk_widget_queue_draw(module->gui->widget);
   }
 }
 
 static void _blendif_show_output_channels(GtkMenuItem *menuitem, dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
   if(!bd->output_channels_shown)
   {
@@ -2988,7 +2925,7 @@ static void _blendif_show_output_channels(GtkMenuItem *menuitem, dt_iop_module_t
 
 static void _blendif_hide_output_channels(GtkMenuItem *menuitem, dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
   if(bd->output_channels_shown)
   {
@@ -3004,7 +2941,7 @@ static void _blendif_hide_output_channels(GtkMenuItem *menuitem, dt_iop_module_t
 static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
 {
   if(event->button != 1 && event->button != 2) return;
-  const dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  const dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
 
   GtkWidget *mi;
@@ -3106,7 +3043,7 @@ static void _blendop_blendif_channel_mask_view(GtkWidget *widget, dt_iop_module_
   // So the not-so-clever workaround inherited from darktable was to flush all cache lines when requesting mask preview,
   // which flushed lines that could be reused later and were only temporarily not needed.
 
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
 
   dt_dev_pixelpipe_display_mask_t new_request_mask_display = module->request_mask_display | mode;
 
@@ -3154,7 +3091,7 @@ static void _blendop_blendif_channel_mask_view_toggle(GtkWidget *widget, dt_iop_
   // So the not-so-clever workaround inherited from darktable was to flush all cache lines when requesting mask preview,
   // which flushed lines that could be reused later and were only temporarily not needed.
 
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
 
   dt_dev_pixelpipe_display_mask_t new_request_mask_display = module->request_mask_display & ~DT_DEV_PIXELPIPE_DISPLAY_STICKY;
 
@@ -3204,7 +3141,7 @@ static void _blendop_blendif_channel_mask_view_toggle(GtkWidget *widget, dt_iop_
  */
 static void _blendop_blendif_sync_channel_display_buttons(dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->blend_data : NULL;
+  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->gui->blend_data : NULL;
   if(IS_NULL_PTR(data)) return;
 
   const gboolean channel_active
@@ -3234,7 +3171,7 @@ static void _blendop_blendif_channel_display_toggled(GtkToggleButton *button, dt
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->blend_data : NULL;
+  dt_iop_gui_blend_data_t *data = !IS_NULL_PTR(module) ? module->gui->blend_data : NULL;
   if(IS_NULL_PTR(data) || IS_NULL_PTR(data->channel)) return;
 
   const int in_out = GTK_WIDGET(button) == data->filter[1].channel_display ? 1 : 0;
@@ -3300,7 +3237,7 @@ static gboolean _blendop_blendif_enter(GtkWidget *widget, GdkEventCrossing *even
   // which flushed lines that could be reused later and were only temporarily not needed.
 
   if(dt_gui_widgets_suppressed()) return FALSE;
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
 
   dt_dev_pixelpipe_display_mask_t mode = 0;
 
@@ -3367,7 +3304,7 @@ static gboolean _blendop_blendif_leave_delayed(gpointer data)
   // which flushed lines that could be reused later and were only temporarily not needed.
 
   dt_iop_module_t *module = (dt_iop_module_t *)data;
-  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  dt_iop_gui_blend_data_t *bd = module->gui->blend_data;
   int reprocess = 0;
 
   dt_pthread_mutex_lock(&bd->lock);
@@ -3394,7 +3331,7 @@ static gboolean _blendop_blendif_leave_delayed(gpointer data)
 static gboolean _blendop_blendif_leave(GtkWidget *widget, GdkEventCrossing *event, dt_iop_module_t *module)
 {
   if(dt_gui_widgets_suppressed()) return FALSE;
-  dt_iop_gui_blend_data_t *data = module->blend_data;
+  dt_iop_gui_blend_data_t *data = module->gui->blend_data;
 
   // do not immediately switch-off mask/channel display in case user leaves gradient only briefly.
   // instead we activate a handler function that gets triggered after some timeout
@@ -3532,7 +3469,7 @@ void dt_iop_gui_update_blendif(dt_iop_module_t *module)
   // the preview at the far end of the pipe.
   // So the not-so-clever workaround inherited from darktable was to flush all cache lines when requesting mask preview,
   // which flushed lines that could be reused later and were only temporarily not needed.
-  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  dt_iop_gui_blend_data_t *bd = module->gui->blend_data;
 
   if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
 
@@ -3603,7 +3540,7 @@ void dt_iop_gui_update_blendif(dt_iop_module_t *module)
 
 void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget *blendif_header)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   bd->blendif_box = blendw;
 
@@ -3764,7 +3701,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
 
 void dt_iop_gui_init_contours(GtkBox *blendw, dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   gtk_box_pack_start(blendw, bd->details_slider, FALSE, FALSE, 0);
   gtk_box_pack_start(blendw, bd->blur_radius_slider, FALSE, FALSE, 0);
@@ -3776,7 +3713,7 @@ void dt_iop_gui_init_contours(GtkBox *blendw, dt_iop_module_t *module)
 
 void dt_masks_iop_update(dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = module->gui ? (dt_iop_gui_blend_data_t *)module->gui->blend_data : NULL;
   dt_develop_blend_params_t *bp = module->blend_params;
 
   if(IS_NULL_PTR(bd) || !bd->masks_support || !bd->masks_inited) return;
@@ -3852,7 +3789,7 @@ void dt_masks_iop_update(dt_iop_module_t *module)
 
 void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   bd->masks_box = blendw;
 
@@ -4173,7 +4110,7 @@ static void _raster_value_changed_callback(GtkWidget *widget, struct dt_iop_modu
 
 void dt_iop_gui_update_raster(dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   dt_develop_blend_params_t *bp = module->blend_params;
 
   if(IS_NULL_PTR(bd) || !bd->masks_support || !bd->raster_inited) return;
@@ -4198,7 +4135,7 @@ static void _raster_polarity_callback(GtkToggleButton *togglebutton, dt_iop_modu
 
 void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   bd->raster_box = blendw;
 
@@ -4232,8 +4169,8 @@ void dt_iop_gui_init_raster(GtkBox *blendw, dt_iop_module_t *module)
 
 void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(module->blend_data)) return;
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   dt_iop_gui_cleanup_blending_body(module);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_blendop_masks_handler_callback), module);
@@ -4246,8 +4183,8 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   dt_pthread_mutex_unlock(&bd->lock);
   dt_pthread_mutex_destroy(&bd->lock);
 
-  dt_free(module->blend_data);
-  module->blend_data = NULL;
+  dt_free(module->gui->blend_data);
+  module->gui->blend_data = NULL;
 }
 
 
@@ -4305,9 +4242,9 @@ static GtkWidget *_blendop_create_enable_toggle(dt_iop_module_t *module, const u
 
 static void _blendop_update_top_enable_label(dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(module) || !module->blend_data) return;
+  if(IS_NULL_PTR(module) || !module->gui->blend_data) return;
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(!GTK_IS_BUTTON(bd->top_enable)) return;
 
   gchar *clean_name = delete_underscore(module->name());
@@ -4383,7 +4320,7 @@ static void _blendop_sync_toggle_state(GtkWidget *toggle, const gboolean availab
 
 void dt_iop_gui_update_blending(dt_iop_module_t *module)
 {
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   if(!(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || IS_NULL_PTR(bd)) return;
 
@@ -4695,9 +4632,9 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
 
   const int has_mask_display = module->request_mask_display & (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL);
 
-  if((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && module->blend_data)
+  if((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && module->gui->blend_data)
   {
-    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
     if(bd->showmask)
       _blendop_toggle_button_set_active(bd->showmask, FALSE);
     module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
@@ -4732,17 +4669,19 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
 
 void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(module)) return;
-  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  // reached from dt_iop_load_default_params() -- the module-defaults path, which runs
+  // headless too; every other entry in this file exists only under a live GUI
+  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->gui)) return;
+  dt_iop_gui_blend_data_t *bd = module->gui->blend_data;
   if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
   bd->output_channels_shown = FALSE;
 }
 
 void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
 {
-  if(IS_NULL_PTR(module) || !module->blend_data) return;
+  if(IS_NULL_PTR(module) || !module->gui->blend_data) return;
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(IS_NULL_PTR(bd->blending_box)) return;
   dt_pthread_mutex_lock(&bd->lock);
   if(bd->timeout_handle)
@@ -4830,16 +4769,16 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->raster_inited = 0;
   bd->blend_modes_csp = DEVELOP_BLEND_CS_NONE;
   bd->channel_tabs_csp = DEVELOP_BLEND_CS_NONE;
-  module->fusion_slider = NULL;
+  module->gui->fusion_slider = NULL;
 }
 
 void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module)
 {
   if(IS_NULL_PTR(container) || !GTK_IS_WIDGET(container)) return;
   if(!(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return;
-  if(IS_NULL_PTR(module->blend_data)) return;
+  if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->blend_data)) return;
 
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
   if(bd->blending_box) return;
 
   dt_gui_freeze_begin();
@@ -4938,7 +4877,7 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
   dt_bauhaus_widget_set_field(bd->opacity_slider, &module->blend_params->opacity, DT_INTROSPECTION_TYPE_FLOAT);
   dt_bauhaus_widget_set_label(bd->opacity_slider, N_("opacity"));
   dt_bauhaus_slider_set_format(bd->opacity_slider, "%");
-  module->fusion_slider = bd->opacity_slider;
+  module->gui->fusion_slider = bd->opacity_slider;
   gtk_widget_set_tooltip_text(bd->opacity_slider, _("set the opacity of the blending"));
   g_object_set_data(G_OBJECT(bd->opacity_slider), "dt-blendop-header-update", GINT_TO_POINTER(TRUE));
   gtk_box_pack_start(GTK_BOX(bd->blending_box), bd->opacity_slider, TRUE, TRUE, 0);
@@ -5071,10 +5010,10 @@ void dt_iop_gui_init_blending_body(GtkWidget *container, dt_iop_module_t *module
 
 void dt_iop_gui_init_blending(dt_iop_module_t *module)
 {
-  if(!(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || module->blend_data) return;
+  if(!(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || module->gui->blend_data) return;
 
-  module->blend_data = g_malloc0(sizeof(dt_iop_gui_blend_data_t));
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  module->gui->blend_data = g_malloc0(sizeof(dt_iop_gui_blend_data_t));
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
 
   bd->module = module;
   bd->csp = DEVELOP_BLEND_CS_NONE;

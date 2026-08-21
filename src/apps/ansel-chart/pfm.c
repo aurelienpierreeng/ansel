@@ -23,9 +23,9 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <inttypes.h>

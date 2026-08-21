@@ -39,8 +39,8 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "system/openmp.h"
@@ -460,7 +460,7 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_update(dt_iop_module_t *module)
 {
-  dt_iop_defringe_gui_data_t *g = (dt_iop_defringe_gui_data_t *)module->gui_data;
+  dt_iop_defringe_gui_data_t *g = (dt_iop_defringe_gui_data_t *)dt_iop_gui_data(module);
   dt_iop_defringe_params_t *p = (dt_iop_defringe_params_t *)module->params;
   dt_bauhaus_combobox_set(g->mode_select, p->op_mode);
   dt_bauhaus_slider_set(g->radius_scale, p->radius);

@@ -47,9 +47,7 @@ DNF_PACKAGES=(
   gdb
   gettext
   git
-  gmic
   graphviz
-  GraphicsMagick-devel
   libgomp
   libgomp-devel
   gstreamer1-plugins-base-tools
@@ -74,7 +72,6 @@ DNF_PACKAGES=(
   libomp-devel
   libpng-devel
   libraw-devel
-  libsecret-devel
   libtiff-devel
   libwebp-devel
   libxkbcommon-devel

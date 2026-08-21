@@ -57,20 +57,21 @@
 #include "config.h"
 #include "system/simd.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "develop/imageop_gui.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
+#include "colorprofiles/conversion.h"
 #include "math/matrices.h"
 #include "common/imagebuf.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
@@ -82,11 +83,11 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "imageio/imageio_profile.h"
 
 // max iccprofile file name length
 // must be in synch with dt_colorspaces_color_profile_t
 #define DT_IOP_COLOR_ICC_LEN 512
-#define LUT_SAMPLES 0x10000
 
 DT_MODULE_INTROSPECTION(5, dt_iop_colorout_params_t)
 
@@ -94,10 +95,21 @@ typedef struct dt_iop_colorout_data_t
 {
   dt_colorspaces_color_profile_type_t type;
   dt_colorspaces_color_mode_t mode;
-  float lut[3][LUT_SAMPLES];
-  dt_colormatrix_t cmatrix;
-  cmsHTRANSFORM xform;
-  float unbounded_coeffs[3][3]; // for extrapolation of shaper curves
+  /* Identity of the conversion below, and the only thing in this struct that describes it.
+   * runtime_data_hash() folds this prefix into the pipeline cache key, and the conversion is
+   * opaque heap state whose address says nothing about the pixels it produces -- so the
+   * address is deliberately kept OUT of the hashed prefix and its identity carried here
+   * instead. See dt_colorspaces_conversion_identity(). */
+  uint64_t conversion_id;
+
+  /* --- runtime pointers, deliberately after the hashed prefix (see init_pipe) --- */
+
+  /* The whole of "how do we get from the pipeline's working space to the output space" --
+   * matrices, tone curves, extrapolation fits, or an lcms2 proofing transform. Built by
+   * colorprofiles/conversion.c, which is where the lifetime and locking rules for the
+   * profiles behind it are written down and enforced. NULL when the module is a nop
+   * (a Lab output). */
+  dt_colorspaces_conversion_t *conversion;
 } dt_iop_colorout_data_t;
 
 typedef struct dt_iop_colorout_global_data_t
@@ -276,46 +288,6 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_free(module->data);
 }
 
-__DT_CLONE_TARGETS__
-static void process_fastpath_apply_tonecurves(const dt_iop_colorout_data_t *const d,
-                                              float *const restrict out, const size_t npixels)
-{
-  const int run_lut0 = d->lut[0][0] >= 0.0f;
-  const int run_lut1 = d->lut[1][0] >= 0.0f;
-  const int run_lut2 = d->lut[2][0] >= 0.0f;
-  if(!(run_lut0 || run_lut1 || run_lut2)) return;
-
-  const float *const lut0 = d->lut[0];
-  const float *const lut1 = d->lut[1];
-  const float *const lut2 = d->lut[2];
-  const float *const coeff0 = d->unbounded_coeffs[0];
-  const float *const coeff1 = d->unbounded_coeffs[1];
-  const float *const coeff2 = d->unbounded_coeffs[2];
-
-  if(run_lut0 && run_lut1 && run_lut2)
-  {
-    __OMP_PARALLEL_FOR__()
-    for(size_t k = 0; k < npixels; k++)
-    {
-      const size_t idx = 4 * k;
-      out[idx + 0] = dt_ioppr_eval_trc(out[idx + 0], lut0, coeff0, LUT_SAMPLES);
-      out[idx + 1] = dt_ioppr_eval_trc(out[idx + 1], lut1, coeff1, LUT_SAMPLES);
-      out[idx + 2] = dt_ioppr_eval_trc(out[idx + 2], lut2, coeff2, LUT_SAMPLES);
-    }
-  }
-  else
-  {
-    __OMP_PARALLEL_FOR__()
-    for(size_t k = 0; k < npixels; k++)
-    {
-      const size_t idx = 4 * k;
-      if(run_lut0) out[idx + 0] = dt_ioppr_eval_trc(out[idx + 0], lut0, coeff0, LUT_SAMPLES);
-      if(run_lut1) out[idx + 1] = dt_ioppr_eval_trc(out[idx + 1], lut1, coeff1, LUT_SAMPLES);
-      if(run_lut2) out[idx + 2] = dt_ioppr_eval_trc(out[idx + 2], lut2, coeff2, LUT_SAMPLES);
-    }
-  }
-}
-
 #ifdef HAVE_OPENCL
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
@@ -340,18 +312,32 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
+  /* The kernel needs the numbers the conversion reduced to. It cannot call back into
+   * colorprofiles, so this is the one place the module reads them -- to upload them, never
+   * to run the conversion itself; that is dt_colorspaces_apply_conversion()'s job on the
+   * host side. `linear_ramp` stands in for a channel with no tone curve: the kernel reads
+   * the first sample as the "is this channel linear" marker, exactly as the CPU path does. */
+  dt_colormatrix_t conversion_matrix;
+  if(!dt_colorspaces_conversion_matrix(d->conversion, conversion_matrix)) goto error;
+
   float cmatrix[12];
-  pack_3xSSE_to_3x4(d->cmatrix, cmatrix);
+  pack_3xSSE_to_3x4(conversion_matrix, cmatrix);
   dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, cmatrix);
   if(IS_NULL_PTR(dev_m)) goto error;
-  dev_r = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
+
+  const float *const curve_r = dt_colorspaces_conversion_target_curve(d->conversion, 0);
+  const float *const curve_g = dt_colorspaces_conversion_target_curve(d->conversion, 1);
+  const float *const curve_b = dt_colorspaces_conversion_target_curve(d->conversion, 2);
+  const float *const coeffs = dt_colorspaces_conversion_target_coeffs(d->conversion);
+  if(IS_NULL_PTR(curve_r) || IS_NULL_PTR(curve_g) || IS_NULL_PTR(curve_b) || IS_NULL_PTR(coeffs)) goto error;
+
+  dev_r = dt_opencl_copy_host_to_device(devid, (void *)curve_r, 256, 256, sizeof(float));
   if(IS_NULL_PTR(dev_r)) goto error;
-  dev_g = dt_opencl_copy_host_to_device(devid, d->lut[1], 256, 256, sizeof(float));
+  dev_g = dt_opencl_copy_host_to_device(devid, (void *)curve_g, 256, 256, sizeof(float));
   if(IS_NULL_PTR(dev_g)) goto error;
-  dev_b = dt_opencl_copy_host_to_device(devid, d->lut[2], 256, 256, sizeof(float));
+  dev_b = dt_opencl_copy_host_to_device(devid, (void *)curve_b, 256, 256, sizeof(float));
   if(IS_NULL_PTR(dev_b)) goto error;
-  dev_coeffs
-      = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * 3, (float *)d->unbounded_coeffs);
+  dev_coeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * 3, (void *)coeffs);
   if(IS_NULL_PTR(dev_coeffs)) goto error;
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorout, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_colorout, 1, sizeof(cl_mem), (void *)&dev_out);
@@ -384,109 +370,22 @@ error:
 #endif
 
 __DT_CLONE_TARGETS__
-static inline void process_fastpath_matrix(const float *const restrict in, float *const restrict out,
-                                           const size_t npixels,
-                                           const dt_aligned_pixel_simd_t cm0,
-                                           const dt_aligned_pixel_simd_t cm1,
-                                           const dt_aligned_pixel_simd_t cm2,
-                                           const int use_nontemporal)
-{
-  __OMP_PARALLEL_FOR_SIMD__(aligned(in, out:64))
-  for(size_t k = 0; k < npixels; k++)
-  {
-    const size_t idx = 4 * k;
-    const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in + idx);
-    const dt_aligned_pixel_simd_t vout = dt_mat3x4_mul_vec4(vin, cm0, cm1, cm2);
-    if(use_nontemporal)
-      dt_store_simd_nontemporal(out + idx, vout);
-    else
-      dt_store_simd_aligned(out + idx, vout);
-  }
-
-  if(use_nontemporal)
-    dt_omploop_sfence();  // ensure that nontemporal writes complete before we attempt to read output
-}
-
-__DT_CLONE_TARGETS__
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
             void *const ovoid)
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_colorout_data_t *const d = (dt_iop_colorout_data_t *)piece->data;
-  const int gamutcheck = (d->mode == DT_PROFILE_GAMUTCHECK);
-  const size_t npixels = (size_t)roi_out->width * roi_out->height;
-  float *const restrict out = (float *)ovoid;
 
-  if(d->type == DT_COLORSPACE_LAB)
-  {
+  /* Lab output is a nop -- the pipe already carries Lab -- and leaves `conversion` NULL. */
+  if(d->type == DT_COLORSPACE_LAB || IS_NULL_PTR(d->conversion))
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, 4);
-  }
-  else if(!isnan(d->cmatrix[0][0]))
-  {
-    const float *const restrict in = DT_IS_ALIGNED(ivoid);
-    float *const restrict out_aligned = DT_IS_ALIGNED(out);
-    const int use_nontemporal
-        = (d->lut[0][0] < 0.0f) && (d->lut[1][0] < 0.0f) && (d->lut[2][0] < 0.0f);
-    dt_colormatrix_t cmatrix;
-    transpose_3xSSE(d->cmatrix, cmatrix);
-    const dt_aligned_pixel_simd_t cm0 = dt_colormatrix_row_to_simd(cmatrix, 0);
-    const dt_aligned_pixel_simd_t cm1 = dt_colormatrix_row_to_simd(cmatrix, 1);
-    const dt_aligned_pixel_simd_t cm2 = dt_colormatrix_row_to_simd(cmatrix, 2);
-
-    process_fastpath_matrix(in, out_aligned, npixels, cm0, cm1, cm2, use_nontemporal);
-    process_fastpath_apply_tonecurves(d, out_aligned, npixels);
-  }
   else
-  {
-// fprintf(stderr,"Using xform codepath\n");
-    /* Alias the LCMS transform before the OpenMP region and share that alias
-     * explicitly instead of reaching through `d->xform` inside the loop. */
-    const cmsHTRANSFORM xform = d->xform;
-    __OMP_PARALLEL_FOR__()
-    for(int k = 0; k < roi_out->height; k++)
-    {
-      const float *in = ((float *)ivoid) + (size_t)4 * k * roi_out->width;
-      float *const restrict outp = out + (size_t)4 * k * roi_out->width;
-
-      dt_colorspaces_transform_rgba_float_row(xform, in, outp, roi_out->width);
-
-      if(gamutcheck)
-      {
-        for(int j = 0; j < roi_out->width; j++)
-        {
-          if(outp[4*j+0] < 0.0f || outp[4*j+1] < 0.0f || outp[4*j+2] < 0.0f)
-          {
-            outp[4*j+0] = 0.0f;
-            outp[4*j+1] = 1.0f;
-            outp[4*j+2] = 1.0f;
-          }
-        }
-      }
-    }
-  }
+    dt_colorspaces_apply_conversion(d->conversion, DT_IS_ALIGNED((const float *)ivoid),
+                                    DT_IS_ALIGNED((float *)ovoid), roi_out->width, roi_out->height);
 
   if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
-}
-
-static cmsHPROFILE _make_clipping_profile(cmsHPROFILE profile)
-{
-  cmsUInt32Number size;
-  cmsHPROFILE old_profile = profile;
-  profile = NULL;
-
-  if(old_profile && cmsSaveProfileToMem(old_profile, NULL, &size))
-  {
-    char *data = malloc(size);
-
-    if(cmsSaveProfileToMem(old_profile, data, &size))
-      profile = cmsOpenProfileFromMem(data, size);
-
-    dt_free(data);
-  }
-
-  return profile;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
@@ -506,27 +405,30 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   dt_colorspaces_color_profile_type_t work_type = DT_COLORSPACE_NONE;
   const char *work_filename = "";
 
-  cmsHPROFILE input = NULL;
-  cmsHPROFILE output = NULL;
-  cmsHPROFILE softproof = NULL;
-  cmsUInt32Number output_format = TYPE_RGBA_FLT;
+  /* One snapshot for the whole of commit_params. The display triple and the soft-proof
+   * pair were read as six separate loads spread over ~170 lines, on a pipeline thread,
+   * while the GUI thread wrote them unlocked: a resolve could see a new type with the
+   * previous filename, or build a proofing transform against a profile that had already
+   * been replaced since `mode` was read. It also makes out_filename below a copy rather
+   * than a pointer into the module's mutable state. */
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
 
-  d->mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? dt_colorspaces_get_global()->mode : DT_PROFILE_NORMAL;
+  d->mode = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? settings.mode : DT_PROFILE_NORMAL;
 
   // Softproof and gamut check take input from GUI and don't write it in internal parameters.
   // The cacheline integrity hash will not be meaningful in this scenario,
   // we need to bypass the cache entirely in these modes.
   dt_iop_set_cache_bypass(self, (d->mode != DT_PROFILE_NORMAL));
 
-  if(!IS_NULL_PTR(d->xform))
-  {
-    cmsDeleteTransform(d->xform);
-    d->xform = NULL;
-  }
-  d->cmatrix[0][0] = NAN;
-  d->lut[0][0] = -1.0f;
-  d->lut[1][0] = -1.0f;
-  d->lut[2][0] = -1.0f;
+  /* Detach-then-free, and build through a local below: same discipline as colorin, for the
+   * same reason (issues #1212/#1216 -- a mid-commit clobber of the published field). */
+  dt_colorspaces_conversion_t *stale_conversion = d->conversion;
+  d->conversion = NULL;
+  dt_colorspaces_free_conversion(&stale_conversion);
+  /* Cleared here rather than beside each prepare below, so that every path which returns
+   * without building a conversion -- a Lab output -- leaves a hashed prefix that says so. */
+  d->conversion_id = 0;
   piece->process_cl_ready = 1;
 
   /* if we are exporting then check and set usage of override profile */
@@ -570,30 +472,19 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
     out_type = DT_COLORSPACE_ADOBERGB;
     out_filename = "";
-    out_intent = dt_colorspaces_get_global()->display_intent;
+    out_intent = settings.display_intent;
   }
   else
   {
     /* we are not exporting, using display profile as output */
-    out_type = dt_colorspaces_get_global()->display_type;
-    out_filename = dt_colorspaces_get_global()->display_filename;
-    out_intent = dt_colorspaces_get_global()->display_intent;
+    out_type = settings.display_type;
+    out_filename = settings.display_filename;
+    out_intent = settings.display_intent;
   }
 
   // when the output type is Lab then process is a nop, so we can avoid creating a transform
   // and the subsequent error messages
   d->type = out_type;
-  /* The virtual pipe mirrors history only for GUI geometry queries. It must
-   * still commit module contracts so ROI transforms see the same enabled
-   * modules, but creating an LCMS output transform for a pipe that will never
-   * process pixels only adds lifetime coupling to display/softproof profiles. */
-  if(!IS_NULL_PTR(pipe->dev) && pipe->dev->virtual_pipe == pipe)
-  {
-    d->type = DT_COLORSPACE_LAB;
-    piece->process_cl_ready = 0;
-    return;
-  }
-
   if(out_type == DT_COLORSPACE_LAB)
     return;
 
@@ -608,185 +499,101 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     dt_ioppr_get_work_profile_type(self->dev, &work_type, &work_filename);
   }
 
-  /*
-   * Setup transform flags
-   */
-  uint32_t transformFlags = 0;
+  /* The output profile may not be in the profile list at all: an export that names no colour
+   * space uses the ICC embedded in the source file, which belongs to that one image. Resolve
+   * that case into a container the conversion can take as an endpoint, and release it after
+   * the conversion is built -- an lcms2 transform does not retain the profiles it was made
+   * from, so the container only has to outlive the preparation. */
+  const dt_colorspaces_profile_role_t output_role
+      = DT_PROFILE_ROLE_OUTPUT | DT_PROFILE_ROLE_MONITOR;
 
-  /* creating output profile */
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-  if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_rdlock(&profiles->xprofile_lock);
+  struct dt_colorspaces_color_profile_t *image_output = NULL;
+  if(!dt_colorspaces_profile_exists(output_role, out_type, out_filename))
+  {
+    if(pipe->type == DT_DEV_PIXELPIPE_EXPORT)
+      image_output = dt_image_get_embedded_output_profile(pipe->dev->image_storage.id, &out_type);
 
-  const dt_colorspaces_color_profile_t *out_profile
-      = dt_colorspaces_get_profile(out_type, out_filename,
-                                   DT_PROFILE_DIRECTION_OUT
-                                   | DT_PROFILE_DIRECTION_DISPLAY);
-  if(!IS_NULL_PTR(out_profile))
-  {
-    // Path for internal profile or external ICC file
-    output = out_profile->profile;
-    if(out_type == DT_COLORSPACE_XYZ) output_format = TYPE_XYZA_FLT;
-  }
-  else if(pipe->type == DT_DEV_PIXELPIPE_EXPORT)
-  {
-    // Export with no explicit profile specified : use input file embedded profile
-    gboolean new_profile;
-    output = dt_colorspaces_get_embedded_profile(pipe->dev->image_storage.id, &out_type, &new_profile);
+    if(IS_NULL_PTR(image_output))
+    {
+      dt_control_log(_("missing output profile has been replaced by sRGB!"));
+      fprintf(stderr, "missing output profile `%s' has been replaced by sRGB!\n",
+              dt_colorspaces_get_name(out_type, out_filename));
+      out_type = DT_COLORSPACE_SRGB;
+      out_filename = "";
+    }
   }
 
-  // We don't have an internal, embedded or external file profile,
-  // just fall back to sRGB
-  if(IS_NULL_PTR(output))
-  {
-    output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
-                                        DT_PROFILE_DIRECTION_OUT
-                                        | DT_PROFILE_DIRECTION_DISPLAY)
-                 ->profile;
-    dt_control_log(_("missing output profile has been replaced by sRGB!"));
-    fprintf(stderr, "missing output profile `%s' has been replaced by sRGB!\n",
-            dt_colorspaces_get_name(out_type, out_filename));
-  }
+  dt_colorspaces_endpoint_t source = { .type = work_type,
+                                       .filename = work_filename ? work_filename : "",
+                                       .role = DT_PROFILE_ROLE_ANY };
+  dt_colorspaces_endpoint_t target = { .type = out_type,
+                                       .filename = out_filename,
+                                       .role = output_role,
+                                       .resolved = image_output };
+  dt_colorspaces_endpoint_t proof = { .type = settings.softproof_type,
+                                      .filename = settings.softproof_filename,
+                                      .role = output_role };
 
-  if(work_type != DT_COLORSPACE_NONE)
+  /* No working profile on this pipe at all: convert nothing, the buffer is taken to be in
+   * the output space already. That is what "input = output" meant before. */
+  if(work_type == DT_COLORSPACE_NONE)
   {
-    const dt_colorspaces_color_profile_t *in_profile
-        = dt_colorspaces_get_profile(work_type, work_filename ? work_filename : "", DT_PROFILE_DIRECTION_ANY);
-    if(in_profile) input = in_profile->profile;
-  }
-  if(IS_NULL_PTR(input))
-  {
-    input = output;
     dt_print(DT_DEBUG_DEV,
              "[colorout] could not resolve pipeline work profile, assuming input is already in output profile\n");
+    source = target;
   }
 
-  /* creating softproof profile if softproof is enabled */
-  if(d->mode != DT_PROFILE_NORMAL && pipe->type == DT_DEV_PIXELPIPE_FULL)
+  const gboolean softproofing = (d->mode != DT_PROFILE_NORMAL && pipe->type == DT_DEV_PIXELPIPE_FULL);
+  if(softproofing
+     && !dt_colorspaces_profile_exists(output_role, settings.softproof_type, settings.softproof_filename))
   {
-    const dt_colorspaces_color_profile_t *prof = dt_colorspaces_get_profile
-      (dt_colorspaces_get_global()->softproof_type,
-       dt_colorspaces_get_global()->softproof_filename,
-       DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
-
-    if(!IS_NULL_PTR(prof))
-      softproof = prof->profile;
-    else
-    {
-      softproof = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
-                                             DT_PROFILE_DIRECTION_OUT
-                                             | DT_PROFILE_DIRECTION_DISPLAY)
-                      ->profile;
-      dt_control_log(_("missing softproof profile has been replaced by sRGB!"));
-      fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",
-              dt_colorspaces_get_name(dt_colorspaces_get_global()->softproof_type,
-                                      dt_colorspaces_get_global()->softproof_filename));
-    }
-
-    // some of our internal profiles are what lcms considers ideal profiles as they have a parametric TRC so
-    // taking a roundtrip through those profiles during softproofing has no effect. as a workaround we have to
-    // make lcms quantisize those gamma tables to get the desired effect.
-    // in case that fails we don't enable softproofing.
-    softproof = _make_clipping_profile(softproof);
-    if(softproof)
-    {
-      /* TODO: the use of bpc should be userconfigurable either from module or preference pane */
-      /* softproof flag and black point compensation */
-      transformFlags |= cmsFLAGS_SOFTPROOFING | cmsFLAGS_NOCACHE | cmsFLAGS_BLACKPOINTCOMPENSATION;
-
-      if(d->mode == DT_PROFILE_GAMUTCHECK) transformFlags |= cmsFLAGS_GAMUTCHECK;
-    }
+    dt_control_log(_("missing softproof profile has been replaced by sRGB!"));
+    fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",
+            dt_colorspaces_get_name(settings.softproof_type, settings.softproof_filename));
+    proof.type = DT_COLORSPACE_SRGB;
+    proof.filename = "";
   }
 
-  /*
-   * NOTE: theoretically, we should be passing
-   * UsedDirection = LCMS_USED_AS_PROOF  into
-   * dt_colorspaces_get_matrix_from_output_profile() so that
-   * dt_colorspaces_get_matrix_from_profile() knows it, but since we do not try
-   * to use our matrix codepath when softproof is enabled, this seemed redundant.
-   */
+  /* The kernel this module owns applies the OUTPUT profile's encoding curves after the
+   * matrix and has no stage for the input side, so a non-linear working profile has to go
+   * through lcms2 -- which is what the old `!work_profile->nonlinearlut` gate said, in the
+   * form of a condition the module had to remember to write. */
+  dt_colorspaces_conversion_flags_t flags = DT_CONVERSION_TARGET_CURVES;
+  if(force_lcms2) flags |= DT_CONVERSION_FORCE_LCMS2;
+  if(d->mode == DT_PROFILE_GAMUTCHECK) flags |= DT_CONVERSION_GAMUTCHECK;
 
-  const gboolean can_use_fast_matrix = (d->mode == DT_PROFILE_NORMAL
-                                        && !force_lcms2
-                                        && work_profile
-                                        && !work_profile->nonlinearlut
-                                        && !isnan(work_profile->matrix_in[0][0]));
+  dt_colorspaces_conversion_t *conversion
+      = dt_colorspaces_prepare_conversion(&source, &target, NULL,
+                                          softproofing ? &proof : NULL, out_intent, flags);
 
-  // matrix fast path: work RGB -> XYZ from work profile, then XYZ -> output RGB from output profile
-  if(can_use_fast_matrix)
+  if(IS_NULL_PTR(conversion))
   {
-    dt_colormatrix_t output_matrix;
-    if(!dt_colorspaces_get_matrix_from_output_profile(output, output_matrix, d->lut[0], d->lut[1], d->lut[2],
-                                                      LUT_SAMPLES))
-      dt_colormatrix_mul(d->cmatrix, output_matrix, work_profile->matrix_in);
-    else
-      d->cmatrix[0][0] = NAN;
-  }
-
-  if(isnan(d->cmatrix[0][0]))
-  {
-      d->cmatrix[0][0] = NAN;
-      piece->process_cl_ready = 0;
-      d->xform = cmsCreateProofingTransform(input, TYPE_RGBA_FLT, output, output_format, softproof,
-                                          out_intent, INTENT_RELATIVE_COLORIMETRIC, transformFlags);
-  }
-
-  // user selected a non-supported output profile, check that:
-  if(IS_NULL_PTR(d->xform) && isnan(d->cmatrix[0][0]))
-  {
-    const char *const unsupported_name
-        = out_profile ? out_profile->name : dt_colorspaces_get_name(out_type, out_filename);
+    /* Whatever the user asked for, we cannot render it. sRGB is the fallback that has always
+     * been here; saying so out loud is the point, since the exported file will not be in the
+     * profile its name claims. */
     dt_control_log(_("unsupported output profile has been replaced by sRGB!"));
-    fprintf(stderr, "unsupported output profile `%s' has been replaced by sRGB!\n", unsupported_name);
-    output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT)->profile;
-
-    if(can_use_fast_matrix)
-    {
-      dt_colormatrix_t output_matrix;
-      if(!dt_colorspaces_get_matrix_from_output_profile(output, output_matrix, d->lut[0], d->lut[1], d->lut[2],
-                                                        LUT_SAMPLES))
-        dt_colormatrix_mul(d->cmatrix, output_matrix, work_profile->matrix_in);
-      else
-        d->cmatrix[0][0] = NAN;
-    }
-
-    if(isnan(d->cmatrix[0][0]))
-    {
-      d->cmatrix[0][0] = NAN;
-      piece->process_cl_ready = 0;
-
-      d->xform = cmsCreateProofingTransform(input, TYPE_RGBA_FLT, output, output_format, softproof,
-                                            out_intent, INTENT_RELATIVE_COLORIMETRIC, transformFlags);
-    }
+    fprintf(stderr, "unsupported output profile `%s' has been replaced by sRGB!\n",
+            dt_colorspaces_get_name(out_type, out_filename));
+    target.type = DT_COLORSPACE_SRGB;
+    target.filename = "";
+    target.resolved = NULL;
+    if(work_type == DT_COLORSPACE_NONE) source = target;
+    conversion = dt_colorspaces_prepare_conversion(&source, &target, NULL,
+                                                   softproofing ? &proof : NULL, out_intent, flags);
   }
 
-  if(out_type == DT_COLORSPACE_DISPLAY)
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
+  /* After BOTH prepare attempts: what the sRGB fallback built is what will render. */
+  d->conversion_id = dt_colorspaces_conversion_identity(conversion);
 
-  // now try to initialize unbounded mode:
-  // we do extrapolation for input values above 1.0f.
-  // unfortunately we can only do this if we got the computation
-  // in our hands, i.e. for the fast builtin-dt-matrix-profile path.
-  for(int k = 0; k < 3; k++)
-  {
-    // omit luts marked as linear (negative as marker)
-    if(d->lut[k][0] >= 0.0f)
-    {
-      const float x[4] = { 0.7f, 0.8f, 0.9f, 1.0f };
-      const float y[4] = { extrapolate_lut(d->lut[k], x[0], LUT_SAMPLES),
-                           extrapolate_lut(d->lut[k], x[1], LUT_SAMPLES),
-                           extrapolate_lut(d->lut[k], x[2], LUT_SAMPLES),
-                           extrapolate_lut(d->lut[k], x[3], LUT_SAMPLES) };
-      dt_iop_estimate_exp(x, y, 4, d->unbounded_coeffs[k]);
-    }
-    else
-      d->unbounded_coeffs[k][0] = -1.0f;
-  }
+  dt_colorspaces_free_image_profile(image_output);
 
-  // softproof is never the original but always a copy that went through _make_clipping_profile()
-  dt_colorspaces_cleanup_profile(softproof);
+  /* Only the vectorised branch has a kernel. The lcms2 one is host-only, and saying so here
+   * is the whole of what `process_cl_ready` needs to know. */
+  if(!dt_colorspaces_conversion_is_matrix(conversion)) piece->process_cl_ready = 0;
 
   dt_ioppr_set_pipe_output_profile_info(self->dev, pipe, d->type, out_filename, p->intent);
+
+  d->conversion = conversion; // single publication, after the conversion is complete
 }
 
 gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
@@ -801,17 +608,16 @@ gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pip
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = dt_calloc_align(sizeof(dt_iop_colorout_data_t));
-  piece->data_size = sizeof(dt_iop_colorout_data_t);
+  // Hash the rendering contract, stopping before the runtime pointer.
+  piece->data_size = G_STRUCT_OFFSET(dt_iop_colorout_data_t, conversion);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  /* init_pipe() may have failed to allocate, and cleanup runs regardless. */
+  if(IS_NULL_PTR(piece->data)) return;
   dt_iop_colorout_data_t *d = (dt_iop_colorout_data_t *)piece->data;
-  if(!IS_NULL_PTR(d->xform))
-  {
-    cmsDeleteTransform(d->xform);
-    d->xform = NULL;
-  }
+  dt_colorspaces_free_conversion(&d->conversion);
 
   dt_free_align(piece->data);
   piece->data = NULL;
@@ -834,12 +640,12 @@ dt_iop_colorout_gui_data_t dummy;
 void gui_init(dt_iop_module_t *self)
 {
   IOP_GUI_ALLOC(colorout);
-  self->widget = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(self->widget),_("Convert images to the display or export RGB color space. "
+  self->gui->widget = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(self->gui->widget),_("Convert images to the display or export RGB color space. "
                                                  "The color profile is set in the export module or in the display preferences. "));
-  gtk_widget_set_halign(self->widget, GTK_ALIGN_START);
-  gtk_label_set_xalign (GTK_LABEL(self->widget), 0.0f);
-  gtk_label_set_line_wrap(GTK_LABEL(self->widget), TRUE);
+  gtk_widget_set_halign(self->gui->widget, GTK_ALIGN_START);
+  gtk_label_set_xalign (GTK_LABEL(self->gui->widget), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(self->gui->widget), TRUE);
 }
 
 

@@ -55,10 +55,13 @@
 #include "system/atomic.h"
 #include "common/debug.h"
 #include "common/logging.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe_hb.h"
+#include "develop/dev_geometry.h"
+#include "develop/dev_viewport.h"
+#include "develop/dev_roi_request.h"
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 
@@ -177,80 +180,41 @@ typedef struct dt_develop_t
    */
   dt_atomic_int mask_preview_settings_revision;
 
-  // The roi structure is used in darkroom GUI only.
-  // It defines the output size of the image backbuffer fitting
-  // into the darkroom center widget. This is critically used for all
-  // GUI <-> RAW pixel coordinates conversions. It should be recomputed
-  // ASAP when widget size changes.
-  struct {
-    // width = orig_width - 2 * border_size,
-    // height = orig_height - 2 * border_size,
-    // converted to raster pixels through the GUI ppd factor.
-    // This is the surface actually covered by an image backbuffer (ROI)
-    // and it is set by `dt_dev_configure()`.
-    int32_t width, height;
+  /**
+   * @brief Objective geometry of the image being worked on: the raw dimensions and the
+   * full-resolution processed dimensions.
+   *
+   * @details Not GUI state -- every dev has it, headless ones included, and reading it
+   * through dt_dev_geometry_get*() is what makes the pair coherent for the pipeline
+   * threads that consume it. See develop/dev_geometry.h.
+   */
+  dt_dev_geometry_store_t geometry;
 
-    // User-defined scaling factor, related to GUI zoom.
-    // Applies on top of natural scale
-    float scaling;
+  /**
+   * @brief The darkroom view's window onto the image: widget allocation, borders, zoom, pan.
+   *
+   * @details Allocated only for a gui_attached dev and NULL otherwise -- its absence IS
+   * "this dev has no viewport", replacing roi.gui_inited. Read it through
+   * dt_dev_viewport_get(), which yields the neutral state for a dev that has none, so a
+   * headless caller needs no special case. See develop/dev_viewport.h.
+   */
+  dt_dev_viewport_t *viewport;
 
-    // Relative coordinates of the center of the ROI, expressed with
-    // regard to the complete image.
-    float x, y;
+  /**
+   * @brief What the darkroom pipes plan their ROI from: the viewport and the geometry,
+   * combined and derived once, published as one coherent record.
+   *
+   * @details Every dev has one; a dev with no viewport simply publishes the neutral inputs.
+   * See develop/dev_roi_request.h.
+   */
+  dt_dev_roi_request_store_t roi_request;
 
-    // darkroom border size: ISO 12646 borders or user-defined borders
-    int32_t border_size;
-
-    // Those are the darkroom main widget size in GUI coordinates, aka max
-    // paintable area. This size is allocated by Gtk from the window size
-    // minus all panels. It is NOT the size of the backbuffer/ROI.
-    int32_t orig_width, orig_height;
-
-    // Dimensions of the preview backbuffer, depending on the
-    // darkroom main widget size and DPI factor.
-    // These are computed early, before we have the actual buffer.
-    // Use them everywhere in GUI.
-    // They respect the final image aspect ratio and fit within
-    // the width x height bounding box.
-    int32_t preview_width, preview_height;
-
-    // Dimension of the main image backbuffer
-    // They are at lower than or equal to (width, height),
-    // the bounding box defined by the widget where main image fits.
-    // Since the ROI may clip the zoomed-in image, they don't respect
-    // the final image aspect ratio
-    int32_t main_width, main_height;
-
-    // natural scaling = MIN(dev->width / dev->roi.processed_width, dev->height / dev->roi.processed_height)
-    // aka ensure that image fits into widget minus margins/borders.
-    float natural_scale;
-
-    // Dimensions of the full-resolution RAW image
-    // being worked on.
-    int32_t raw_width, raw_height;
-
-    // Dimensions of the final processed image if we processed it full-resolution.
-    // This is used to get the final aspect ratio of an image,
-    // taking all cropping and distortions into account.
-    int32_t processed_width, processed_height;
-
-    // Conveniency state to check if all widget sizes are inited
-    gboolean gui_inited;
-
-    // Conveniency state to check if input (raw image) sizes are inited
-    gboolean raw_inited;
-
-    // Conveniency state to check if all output (backbuffer) sizes are inited
-    gboolean output_inited;
-
-  } roi;
 
   // image processing pipeline with caching
   struct dt_dev_pixelpipe_t *pipe, *preview_pipe;
   // Virtual preview-like pipeline used for geometry/ROI computations on the GUI thread.
   // It mirrors preview_pipe history/nodes but never processes pixels.
   // It is meant for fast access from the GUI mainthread without waiting for threads to return.
-  struct dt_dev_pixelpipe_t *virtual_pipe;
 
   // image under consideration, which
   // is copied each time an image is changed. this means we have some information
@@ -317,13 +281,6 @@ typedef struct dt_develop_t
     uint64_t serial;                // bumped on every publish, for change detection
   } transient_params;
   dt_pthread_mutex_t transient_params_mutex;
-
-  // profiles info
-  GList *allprofile_info;
-
-  // histogram for display.
-  uint32_t *histogram_pre_tonecurve, *histogram_pre_levels;
-  uint32_t histogram_pre_tonecurve_max, histogram_pre_levels_max;
 
   // list of forms iop can use for masks or whatever
   GList *forms;
@@ -506,7 +463,11 @@ typedef struct dt_develop_t
 
   cairo_surface_t *image_surface;
 
-  gboolean loading_cache;
+  /* Composed geometry, GUI thread only: where the GUI gets sizes and coordinates from.
+   * Appended at the end of this struct deliberately -- IOP plugins are compiled against this
+   * layout, so a field inserted anywhere else silently shifts what they read. See
+   * develop/geometry/geometry.h and doc/geometry-service.md. NULL on non-gui devs. */
+  struct dt_geometry_chain_t *geometry_chain;
 } dt_develop_t;
 
 static inline uint64_t dt_dev_get_history_hash(const dt_develop_t *dev)
@@ -619,6 +580,10 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
  */
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h);
 
+/** Clamp the viewport centre against the box visible at the current zoom. Returns TRUE when
+ *  the centre moved. */
+gboolean dt_dev_clamp_viewport_center(dt_develop_t *dev);
+
 /*
  * modulegroups helpers
  */
@@ -678,6 +643,34 @@ int dt_dev_distort_transform_locked(const struct dt_dev_pixelpipe_t *pipe, const
 /** same fct as `dt_dev_coordinates_image_abs_to_raw_abs`, but we can specify iop with priority between pmin and pmax.*/
 int dt_dev_distort_backtransform_plus(const struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                       float *points, size_t points_count);
+
+/**
+ * @brief GUI-side bounded transform folds. Ask the geometry service, fall back to the pixel-less
+ * pipe. Same iop_order bound and direction modes as dt_dev_distort_transform_plus().
+ *
+ * The only way a GUI asks for a composed transform.
+ */
+int dt_dev_distort_transform_gui(struct dt_develop_t *dev, const double iop_order,
+                                 const int transf_direction, float *points, size_t points_count);
+int dt_dev_distort_backtransform_gui(struct dt_develop_t *dev, const double iop_order,
+                                     const int transf_direction, float *points, size_t points_count);
+
+/**
+ * @brief One module's own input and output rectangles at full resolution, from the geometry
+ * service.
+ *
+ * Replaces resolving a piece and reading piece->buf_in / piece->buf_out. Returns FALSE when the
+ * service has none, leaving the out-params untouched -- a disabled or absent module has no
+ * rectangles, and a caller that draws anyway draws somewhere arbitrary.
+ */
+gboolean dt_dev_module_geometry_gui(struct dt_develop_t *dev, struct dt_iop_module_t *module,
+                                    dt_iop_roi_t *in, dt_iop_roi_t *out);
+
+/**
+ * @brief The developed image's full-resolution size for a GUI caller: the geometry service,
+ * then the published record, in that order of freshness. FALSE when neither has one.
+ */
+gboolean dt_dev_processed_size_gui(struct dt_develop_t *dev, int *width, int *height);
 
 /** get the iop_pixelpipe instance corresponding to the iop in the given pipe */
 struct dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(struct dt_dev_pixelpipe_t *pipe,

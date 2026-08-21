@@ -45,12 +45,15 @@
 
 
 #include <gtk/gtk.h>
+#include "system/dtpthread.h"
 #include <inttypes.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
 #include "control/jobs.h"
+#include "control/user_message.h"   // the message API moved out; still supplied here
+#include "control/redraw.h"         // the redraw raisers moved out; still supplied here
 #include "control/progress.h"
 #include "libs/lib.h"
 #include <gtk/gtk.h>
@@ -91,10 +94,13 @@ void *dt_control_expose(void *voidptr);
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state);
 
 /** Message painted over the main preview while the pipeline is working. Written by the
- * pipeline (develop/pixelpipe_hb.c), rendered by control/control.c; the storage belongs
- * to the orchestrator. dt_set_main_message() TAKES OWNERSHIP of `message` and frees the
- * previous one; pass NULL to clear. */
-const char *dt_get_main_message(void);
+ * pipeline (develop/pixelpipe_hb.c) from WORKER threads, rendered by control/control.c on the
+ * GUI thread; the storage belongs to the orchestrator and carries its own lock.
+ *
+ * dt_set_main_message() TAKES OWNERSHIP of `message` and frees the previous one; pass NULL to
+ * clear. The reader gets a COPY it must free -- there is no safe way to lend the pointer, since
+ * the next write frees it and the writer is on another thread. */
+char *dt_get_main_message_copy(void);
 void dt_set_main_message(char *message);
 void dt_control_button_released(double x, double y, int which, uint32_t state);
 void dt_control_mouse_moved(double x, double y, double pressure, int which);
@@ -104,13 +110,6 @@ void dt_control_key_pressed(GdkEventKey *event);
 void dt_control_mouse_leave();
 void dt_control_mouse_enter();
 gboolean dt_control_configure(GtkWidget *da, GdkEventConfigure *event, gpointer user_data);
-void dt_control_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
-void dt_toast_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
-void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
-void dt_control_log_busy_enter();
-void dt_control_toast_busy_enter();
-void dt_control_log_busy_leave();
-void dt_control_toast_busy_leave();
 void dt_control_draw_busy_msg(cairo_t *cr, int width, int height);
 // disable the possibility to change the cursor shape with dt_control_change_cursor
 void dt_control_forbid_change_cursor();
@@ -162,39 +161,11 @@ void dt_control_save_xmp(const int32_t imgid);
 void dt_control_save_xmps(const GList *imgids, const gboolean check_history);
 void dt_control_delete_images();
 
-/** \brief request redraw of the workspace.
-    This redraws the whole workspace within a gdk critical
-    section to prevent several threads to carry out a redraw
-    which will end up in crashes.
- */
-void dt_control_queue_redraw();
-
-/** \brief request redraw of center window.
-    This redraws the center view within a gdk critical section
-    to prevent several threads to carry out the redraw.
-*/
-void dt_control_queue_redraw_center();
-
 /** \brief threadsafe request of redraw of specific widget.
     Use this function if you need to redraw a specific widget
     if your current thread context is not gtk main thread.
 */
 void dt_control_queue_redraw_widget(GtkWidget *widget);
-
-/** \brief request redraw of the navigation widget.
-    This redraws the wiget of the navigation module.
- */
-void dt_control_navigation_redraw();
-
-/** \brief request redraw of the log widget.
-    This redraws the message label.
- */
-void dt_control_log_redraw();
-
-/** \brief request redraw of the toast widget.
-    This redraws the message label.
- */
-void dt_control_toast_redraw();
 
 void dt_ctl_switch_mode_to(const char *mode);
 void dt_ctl_switch_mode_to_by_view(const dt_view_t *view);
@@ -219,10 +190,8 @@ void dt_control_hinter_message(const struct dt_control_t *s, const char *message
 typedef struct dt_control_t
 {
   // gui related stuff
-  double tabborder;
   int32_t width, height;
   pthread_t gui_thread;
-  int button_down, button_down_which, button_type;
   double button_x, button_y;
   int history_start;
   int32_t mouse_over_id;

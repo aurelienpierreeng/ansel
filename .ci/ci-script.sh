@@ -103,7 +103,6 @@ case "$TARGET" in
       -DUSE_OPENMP=OFF \
       -DUSE_OPENCL=OFF \
       -DUSE_NLS=OFF \
-      -DUSE_GRAPHICSMAGICK=OFF \
       -DUSE_OPENJPEG=OFF \
       -DUSE_WEBP=OFF \
       -DUSE_AVIF=OFF \
@@ -111,8 +110,6 @@ case "$TARGET" in
       -DUSE_OPENEXR=OFF \
       -DBUILD_PRINT=OFF \
       -DBUILD_RS_IDENTIFY=OFF \
-      -DUSE_GMIC=OFF \
-      -DUSE_LIBSECRET=OFF \
       -DUSE_SENTRY=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
@@ -124,7 +121,6 @@ case "$TARGET" in
       -DUSE_OPENMP=OFF \
       -DUSE_OPENCL=OFF \
       -DUSE_NLS=OFF \
-      -DUSE_GRAPHICSMAGICK=OFF \
       -DUSE_OPENJPEG=OFF \
       -DUSE_WEBP=OFF \
       -DUSE_AVIF=OFF \
@@ -132,8 +128,6 @@ case "$TARGET" in
       -DUSE_OPENEXR=OFF \
       -DBUILD_PRINT=OFF \
       -DBUILD_RS_IDENTIFY=OFF \
-      -DUSE_GMIC=OFF \
-      -DUSE_LIBSECRET=OFF \
       -DUSE_SENTRY=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest

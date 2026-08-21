@@ -47,21 +47,23 @@
 #ifndef DT_VIEWS_VIEW_H
 #define DT_VIEWS_VIEW_H
 
-#include "system/atomic.h"
+#include "common/image.h"   // dt_view_image_over_t
 
-#include "common/history.h"
+#include "system/atomic.h"
+#include "system/dtpthread.h"
+
+#include "history/history.h"
 #ifdef HAVE_PRINT
 #include "common/cups_print.h"
 #include "common/printing.h"
 #endif
 #ifdef HAVE_MAP
-#include "common/geo.h"
-#include "common/map_locations.h"
+#include "metadata/geo.h"
+#include "metadata/map_locations.h"
 #include <osm-gps-map.h>
 #endif
 #include <cairo.h>
 #include <gmodule.h>
-#include <gui/gtk.h>
 #include <inttypes.h>
 #include <sqlite3.h>
 
@@ -161,21 +163,11 @@ typedef struct dt_view_t
   float hscroll_size, hscroll_lower, hscroll_viewport_size, hscroll_pos;
 } dt_view_t;
 
-typedef enum dt_view_image_over_t
-{
-  DT_VIEW_ERR     = -1,
-  DT_VIEW_DESERT  =  0,
-  DT_VIEW_STAR_1  =  1,
-  DT_VIEW_STAR_2  =  2,
-  DT_VIEW_STAR_3  =  3,
-  DT_VIEW_STAR_4  =  4,
-  DT_VIEW_STAR_5  =  5,
-  DT_VIEW_REJECT  =  6,
-  DT_VIEW_GROUP   =  7,
-  DT_VIEW_AUDIO   =  8,
-  DT_VIEW_ALTERED =  9,
-  DT_VIEW_END     = 10, // placeholder for the end of the list
-} dt_view_image_over_t;
+/* dt_view_image_over_t now lives in common/image.h: it is the value stored in
+ * dt_image_t.rating (0-5 stars, 6 = rejected) plus the other per-thumbnail overlay
+ * states, and it was consumed 8x from common/, 3x from caches/ and 5x from gui/ against
+ * exactly ONE use in views/ -- an enum defined at the top layer and read from the
+ * bottom. */
 
 /** returns an uppercase string of file extension **plus** some flag information **/
 char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const gboolean is_bw, const gboolean is_bw_flow);
@@ -202,8 +194,9 @@ typedef struct dt_view_manager_t
   // images currently active in the main view (there can be more than 1 in culling)
   GList *active_images;
 
-  // copy/paste history structure
-  dt_history_copy_item_t copy_paste;
+  // the copy/paste history clipboard used to live here; the view manager never touched
+  // it, so it is now file-static in common/history_actions.c behind
+  // dt_history_copy_paste_get(), and that file no longer includes views/view.h
 
   // The imgid of the image for which we currently show the image info
   int32_t image_info_id;

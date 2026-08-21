@@ -55,17 +55,15 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include <json-glib/json-glib.h>
-#include "common/paths.h"
-#include "gui/gtk.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/imagebuf.h"
 #include "common/nn_model.h"
@@ -79,6 +77,8 @@
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/collapsible_section.h"
+#include "widgets/label.h"
 
 #define DT_RAWDENOISEAI_MODEL_LEN 128
 
@@ -752,18 +752,34 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
      * padding headroom. */
     extra_cl = planes + dt_nn_unet_scratch_per_px_cl(d->model) + 3.2f;
 
-    // The theoretical receptive field of the depth-4 U-Net is ~110 px, but the
-    // measured impulse response of the trained model decays to 1.4e-6 of peak
-    // at radius 32 (3 orders below 8-bit visibility) and to exactly zero at
-    // 96. 48 px of overlap is generous against seams while wasting far less
-    // redundant tile area than the theoretical bound would.
-    // the coarse guide widens the receptive field: 96 px covers 2x the fine
-    // net's measured impulse support plus the coarse levels carrying nearly
-    // all of its measured energy (see doc/rawdenoiseai.md); leaks beyond it
-    // are sub-visibility smooth offsets since the guide is conditioning, not
-    // additive output. 96 is a multiple of both CFA alignments. Fast mode
-    // (chroma pass off) keeps the historical 48.
-    overlap = (bin > 1) ? 96 : 48;
+    /* Overlap is set from the MEASURED seam profile, not from the impulse
+     * response. An earlier revision sized it at 48 px because the trained
+     * model's response to a delta decays to 1.4e-6 of peak by radius 32; that
+     * reasoning is wrong for this purpose. A tile boundary does not remove one
+     * tap, it removes an entire half-plane of context, and the summed
+     * contribution of that half-plane is orders of magnitude above any single
+     * tap. Measured on DSCF9668.RAF (X-Trans, 3 tiles across), CPU untiled vs
+     * GPU tiled, as a fraction of full scale:
+     *
+     *   overlap  48 -> seam peaks at 0.17-0.23 %, i.e. 238-317x the interior
+     *                  difference, and does not return to it until ~50 px in
+     *   overlap 192 -> seam peaks at 0.006-0.016 %, 5.5-14.5x interior
+     *
+     * The 48 px case is visible; it is the tile grid users report. The decay
+     * measured with 48 px of overlap reaches the interior baseline exactly
+     * 48 px inside the owned region, so a boundary pixel needs 48 + 48 = 96 px
+     * of context: that is the fine net's effective receptive field, and the
+     * floor for the single-scale model.
+     *
+     * The multiscale model adds the coarse stage, whose receptive field is its
+     * own (in binned pixels) times `bin`, so it needs substantially more. 192
+     * is the value actually validated above. Note X-Trans multiscale reached it
+     * only by accident: the engine rounds the requested overlap UP to a
+     * multiple of lcm(xalign, yalign), which is 192 there, so a request of 96
+     * silently became 192. Bayer multiscale aligns to 64 and would have stayed
+     * at 128. Ask for what the measurement supports instead of relying on an
+     * alignment that varies with the sensor. */
+    overlap = (bin > 1) ? 192 : 96;
   }
   tiling->factor = 2.0f + extra;
   /* The GPU budget must be more conservative than the CPU one, for two
@@ -1708,7 +1724,7 @@ static void _custom_model_callback(GtkWidget *w, dt_iop_module_t *self)
 
 static void _custom_model_populate(dt_iop_module_t *self)
 {
-  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_rawdenoiseai_params_t *const p = (dt_iop_rawdenoiseai_params_t *)self->params;
   dt_bauhaus_combobox_clear(g->custom_model);
   dt_bauhaus_combobox_add(g->custom_model, _("(shipped model)"));
@@ -1737,10 +1753,10 @@ static void _custom_model_populate(dt_iop_module_t *self)
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoiseai_gui_data_t *g = (dt_iop_rawdenoiseai_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_rawdenoiseai_params_t *p = (dt_iop_rawdenoiseai_params_t *)self->params;
   dt_iop_rawdenoiseai_global_data_t *gd = (dt_iop_rawdenoiseai_global_data_t *)self->global_data;
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "unsupported" : "raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->hide_enable_button ? "unsupported" : "raw");
 
   // rescan on every panel update: the user may have dropped a file in since
   _custom_model_populate(self);
@@ -1771,7 +1787,7 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_rawdenoiseai_gui_data_t *g = IOP_GUI_ALLOC(rawdenoiseai);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->strength = dt_bauhaus_slider_from_params(self, "strength");
   dt_bauhaus_slider_set_digits(g->strength, 3);
@@ -1822,7 +1838,7 @@ void gui_init(dt_iop_module_t *self)
 
   dt_gui_new_collapsible_section(&g->cs, "plugins/darkroom/rawdenoiseai/expand_channel",
                                  _("per-channel corrections"), GTK_BOX(box_raw), GTK_PACK_START);
-  self->widget = GTK_WIDGET(g->cs.container); // sliders below pack into the section
+  self->gui->widget = GTK_WIDGET(g->cs.container); // sliders below pack into the section
 
   const char *sigma_tooltip = _("per-channel correction of the camera noise profile, applied on top\n"
                                 "of the global correction. Profiles are measured after demosaicing,\n"
@@ -1845,15 +1861,15 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->sigma_blue, "%");
   gtk_widget_set_tooltip_text(g->sigma_blue, sigma_tooltip);
 
-  self->widget = box_raw; // done packing into the collapsible section
+  self->gui->widget = box_raw; // done packing into the collapsible section
 
   GtkWidget *label_unsupported = dt_ui_label_new(_("AI raw denoising needs a mosaiced raw image\n"
                                                    "and an installed rawdenoiseai model file."));
 
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
-  gtk_stack_add_named(GTK_STACK(self->widget), label_unsupported, "unsupported");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_unsupported, "unsupported");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 void gui_cleanup(dt_iop_module_t *self)

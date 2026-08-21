@@ -387,6 +387,46 @@ highlights_4f_clip (read_only image2d_t in, write_only image2d_t out, const int 
   write_imagef (out, (int2)(x, y), pixel);
 }
 
+/* Count the input pixels that any highlights mode would treat as clipped, so process_cl() can copy
+ * the input through when there is nothing worth reconstructing (see DT_HL_MIN_CLIPPED_PIXELS).
+ * One workgroup-local reduction per group into `partial`, summed on the host -- the same shape as
+ * this module's other reductions (hl_cmean_reduce, hl_grad_reduce), and deterministic, unlike an
+ * atomic over every clipped pixel. `is_raw` selects the mosaic (single channel) reading, and
+ * `thresholds` carries the ACTIVE MODE's per-channel clipping levels (see _hl_count_thresholds). */
+kernel void
+highlights_count_clipped(read_only image2d_t in, global uint *partial, const int width, const int height,
+                         global const float *thresholds, const int is_raw, local uint *scratch)
+{
+  const int global_id = get_global_id(0);
+  const int global_size = get_global_size(0);
+  const int local_id = get_local_id(0);
+  const int local_size = get_local_size(0);
+  const int n_pixels = width * height;
+
+  // A mosaic photosite's colour needs a CFA lookup to pick its threshold; the smallest of the three
+  // is used instead, which over-counts (fires the bypass less often, never more). See the CPU twin.
+  const float raw_threshold = fmin(fmin(thresholds[0], thresholds[1]), thresholds[2]);
+
+  uint count = 0;
+  for(int i = global_id; i < n_pixels; i += global_size)
+  {
+    const float4 pixel = read_imagef(in, sampleri, (int2)(i % width, i / width));
+    // alpha is never a clipping signal, so the 4-channel test stays on RGB
+    count += is_raw ? (pixel.x > raw_threshold)
+                    : (pixel.x > thresholds[0] || pixel.y > thresholds[1] || pixel.z > thresholds[2]);
+  }
+
+  scratch[local_id] = count;
+  barrier(CLK_LOCAL_MEM_FENCE);
+  for(int offset = local_size / 2; offset > 0; offset /= 2)
+  {
+    if(local_id < offset) scratch[local_id] += scratch[local_id + offset];
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+  if(local_id == 0) partial[get_group_id(0)] = scratch[0];
+}
+
+
 kernel void
 highlights_1f_clip (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                     const float clip, const int rx, const int ry, const int filters)

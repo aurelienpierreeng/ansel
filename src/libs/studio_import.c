@@ -23,19 +23,21 @@
     source folder and the scan frequency are locked during a session to
     protect the engine's baseline. */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "control/signal.h"
-#include "gui/bauhaus.h"
-#include "common/datetime.h"
+#include "widgets/bauhaus.h"
 #include "common/folder_survey.h"
 #include "common/conf.h"
 #include "control/jobs/import_jobs.h"
-#include "gui/gtk.h"
-#include "gui/gtkentry.h"
+#include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "gui/window_manager.h"
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/popup.h"
 
 DT_MODULE(1)
 
@@ -127,7 +129,7 @@ static void _studio_import_update_state(dt_lib_studio_import_t *d)
   }
   else
   {
-    const GdkRGBA *warning = &dt_gui_get_global()->colors[DT_GUI_COLOR_WARNING];
+    const GdkRGBA *warning = &dt_widget_colors()[DT_GUI_COLOR_WARNING];
     dt_gui_set_symbolic_icon(d->status_icon, "emblem-important-symbolic", GTK_ICON_SIZE_BUTTON, warning);
     gchar *color = g_strdup_printf("#%02x%02x%02x", (int)(warning->red * 255), (int)(warning->green * 255),
                                    (int)(warning->blue * 255));

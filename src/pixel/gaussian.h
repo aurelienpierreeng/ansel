@@ -87,9 +87,9 @@ typedef struct dt_gaussian_cl_t
   cl_mem dev_temp2;
 } dt_gaussian_cl_t;
 
-dt_gaussian_cl_global_t *dt_gaussian_init_cl_global(void);
+void dt_gaussian_init_cl_global(void);
 
-void dt_gaussian_free_cl_global(dt_gaussian_cl_global_t *g);
+void dt_gaussian_free_cl_global(void);
 
 dt_gaussian_cl_t *dt_gaussian_init_cl(const int devid, const int width, const int height, const int channels,
                                       const float *max, const float *min, const float sigma, const int order);

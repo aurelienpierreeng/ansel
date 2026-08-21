@@ -78,38 +78,39 @@
 */
 
 #include "control/jobs/control_jobs.h"
+#include "control/signal.h"
+#include "database/film_repository.h"
+#include "database/image_repository.h"
 #include "common/act_on.h"
 #include "common/history_actions.h"
 #include "control/control.h"
 #include "common/collection.h"
-#include "common/debug.h"
-#include "common/exif.h"
+#include "common/xmp_sidecar.h"
+#include "metadata/exif.h"
 #include "common/film.h"
-#include "common/gpx.h"
-#include "common/history.h"
-#include "common/history_merge.h"
+#include "metadata/gpx.h"
+#include "history/history.h"
+#include "develop/history_merge.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_dng.h"
 #include "imageio/imageio_module.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/undo.h"
 #include "common/grouping.h"
 #include "common/utility.h"
 #include "common/datetime.h"
 #include "common/conf.h"
 #include "develop/imageop_math.h"
-#include "develop/develop.h"
 
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 
 #include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 #ifndef _WIN32
-#include <glob.h>
 #endif
 #ifdef __APPLE__
 #include "osx/osx.h"
@@ -156,18 +157,11 @@ typedef struct dt_control_export_t
 /* enumerator of images from filmroll */
 static void dt_control_image_enumerator_job_film_init(dt_control_image_enumerator_t *t, int32_t filmid)
 {
-  sqlite3_stmt *stmt;
   /* get a list of images in filmroll */
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), "SELECT id FROM main.images WHERE film_id = ?1", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, filmid);
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
-    t->index = g_list_append(t->index, GINT_TO_POINTER(imgid));
-  }
-  sqlite3_finalize(stmt);
+  GList *ids = dt_film_repository_get_image_ids(filmid);
+  for(GList *l = ids; l; l = g_list_next(l))
+    t->index = g_list_append(t->index, l->data);
+  g_list_free(ids);
 }
 
 static int32_t _generic_dt_control_fileop_images_job_run(dt_job_t *job,
@@ -299,10 +293,25 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
   for(GList *t = params->index; t; t = g_list_next(t))
   {
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    if(dt_image_write_sidecar_file(imgid))
-      fprintf(stdout,
-              "cannot write XMP file for image %i. The target storage may be unavailable or read-only.\n",
-              imgid);
+    switch(dt_image_write_sidecar_file(imgid))
+    {
+      case DT_IMAGE_WRITE_SIDECAR_OK:
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_DISABLED:
+        // xmp writing is off, or the setting changed mid-batch: nothing was attempted, nothing to report
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY:
+        fprintf(stdout, "cannot write XMP file for image %i: the image cache entry is busy, try again.\n", imgid);
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH:
+        fprintf(stdout, "cannot write XMP file for image %i: the original file could not be found.\n", imgid);
+        break;
+      case DT_IMAGE_WRITE_SIDECAR_IO_ERROR:
+        fprintf(stdout,
+                "cannot write XMP file for image %i: the target storage may be unavailable or read-only.\n",
+                imgid);
+        break;
+    }
   }
   return 0;
 }
@@ -389,9 +398,9 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
   dt_control_merge_hdr_t *d = data->d;
 
   // just take a copy. also do it after blocking read, so filters will make sense.
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   const dt_image_t image = *img;
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   if(IS_NULL_PTR(d->pixels))
   {
@@ -718,57 +727,6 @@ static int32_t dt_control_monochrome_images_job_run(dt_job_t *job)
   return 0;
 }
 
-static char *_get_image_list(GList *l)
-{
-  const guint size = g_list_length(l);
-  char num[8];
-  char *buffer = calloc(size, sizeof(num));
-  gboolean first = TRUE;
-
-  buffer[0] = '\0';
-
-  while(l)
-  {
-    const int32_t imgid = GPOINTER_TO_INT(l->data);
-    snprintf(num, sizeof(num), "%s%6d", first ? "" : ",", imgid);
-    g_strlcat(buffer, num, size * sizeof(num));
-    l = g_list_next(l);
-    first = FALSE;
-  }
-  return buffer;
-}
-
-static void _set_remove_flag(char *imgs)
-{
-  sqlite3_stmt *stmt = NULL;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "UPDATE main.images SET flags = (flags|?1) WHERE id IN (?2)", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, DT_IMAGE_REMOVE);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, imgs, -1, SQLITE_STATIC);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-}
-
-static GList *_get_full_pathname(char *imgs)
-{
-  sqlite3_stmt *stmt = NULL;
-  GList *list = NULL;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT DISTINCT folder || '" G_DIR_SEPARATOR_S "' || filename FROM "
-                              "main.images i, main.film_rolls f "
-                              "ON i.film_id = f.id WHERE i.id IN (?1)",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, imgs, -1, SQLITE_STATIC);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    list = g_list_prepend(list, g_strdup((const gchar *)sqlite3_column_text(stmt, 0)));
-  }
-  sqlite3_finalize(stmt);
-  return g_list_reverse(list);  // list was built in reverse order, so un-reverse it
-}
-
 // Regenerate .xmp files for any surviving duplicate at each of `pathnames` (owned, g_strdup'd
 // full paths from _get_full_pathname(); this call takes ownership and frees them), batched into
 // a single dt_control_save_xmps() job. dt_image_synch_all_xmp() spawns one DT_JOB_QUEUE_USER_FG
@@ -796,47 +754,37 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
   GList *t = params->index;
-  char *imgs = _get_image_list(t);
   const guint total = g_list_length(t);
   char message[512] = { 0 };
   snprintf(message, sizeof(message), ngettext("removing %d image", "removing %d images", total), total);
   dt_control_job_set_progress_message(job, message);
-  sqlite3_stmt *stmt = NULL;
 
   // check that we can safely remove the image
   gboolean remove_ok = TRUE;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT id FROM main.images WHERE id IN (?2) AND flags&?1=?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, DT_IMAGE_LOCAL_COPY);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, imgs, -1, SQLITE_STATIC);
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  GList *local_copies = dt_image_repository_get_ids_with_flag_among(t, DT_IMAGE_LOCAL_COPY);
+  for(GList *l = local_copies; l; l = g_list_next(l))
   {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
-    if(!dt_image_safe_remove(imgid))
+    if(!dt_image_safe_remove(GPOINTER_TO_INT(l->data)))
     {
       remove_ok = FALSE;
       break;
     }
   }
-  sqlite3_finalize(stmt);
+  g_list_free(local_copies);
 
   if(!remove_ok)
   {
     dt_control_log(_("cannot remove local copy when the original file is not accessible."));
-    dt_free(imgs);
     return 0;
   }
 
   // update remove status
-  _set_remove_flag(imgs);
+  dt_image_repository_set_flag_among(t, DT_IMAGE_REMOVE);
 
   dt_collection_update(dt_collection_get_global());
 
   // We need a list of files to regenerate .xmp files if there are duplicates
-  GList *list = _get_full_pathname(imgs);
-
-  dt_free(imgs);
+  GList *list = dt_image_repository_get_full_paths(t);
 
   double fraction = 0.0f;
   while(t)
@@ -1055,8 +1003,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
   GList *t = params->index;
-  char *imgs = _get_image_list(t);
-  char imgidstr[25] = { 0 };
+
   const guint total = g_list_length(t);
   double fraction = 0.0f;
   char message[512] = { 0 };
@@ -1067,19 +1014,11 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
     snprintf(message, sizeof(message), ngettext("deleting %d image", "deleting %d images", total), total);
   dt_control_job_set_progress_message(job, message);
 
-  sqlite3_stmt *stmt;
 
   dt_collection_update(dt_collection_get_global());
 
   // We need a list of files to regenerate .xmp files if there are duplicates
-  GList *list = _get_full_pathname(imgs);
-
-  dt_free(imgs);
-
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT COUNT(*) FROM main.images WHERE filename IN (SELECT filename FROM "
-                              "main.images WHERE id = ?1) AND film_id IN (SELECT film_id FROM main.images WHERE "
-                              "id = ?1)", -1, &stmt, NULL);
+  GList *list = dt_image_repository_get_full_paths(t);
   while(t)
   {
     enum _dt_delete_status delete_status = _DT_DELETE_STATUS_UNKNOWN;
@@ -1092,11 +1031,10 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
     char *dirname = g_path_get_dirname(filename);
 #endif
 
-    int duplicates = 0;
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    if(sqlite3_step(stmt) == SQLITE_ROW) duplicates = sqlite3_column_int(stmt, 0);
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
+    // same row set the duplicate list returns: every image sharing this one's roll and filename
+    GList *dups = dt_image_repository_get_duplicate_ids(imgid);
+    const int duplicates = g_list_length(dups);
+    g_list_free(dups);
 
     // remove from disk:
     if(duplicates == 1)
@@ -1105,8 +1043,9 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
       if(dt_image_local_copy_reset(imgid))
         goto delete_next_file;
 
-      snprintf(imgidstr, sizeof(imgidstr), "%d", imgid);
-      _set_remove_flag(imgidstr);
+      GList *one = g_list_prepend(NULL, GINT_TO_POINTER(imgid));
+      dt_image_repository_set_flag_among(one, DT_IMAGE_REMOVE);
+      g_list_free(one);
       dt_image_remove(imgid);
 
       // there are no further duplicates so we can remove the source data file
@@ -1139,8 +1078,9 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
       g_strlcat(filename, ".xmp", sizeof(filename));
 
       // remove image from db first ...
-      snprintf(imgidstr, sizeof(imgidstr), "%d", imgid);
-      _set_remove_flag(imgidstr);
+      GList *one = g_list_prepend(NULL, GINT_TO_POINTER(imgid));
+      dt_image_repository_set_flag_among(one, DT_IMAGE_REMOVE);
+      g_list_free(one);
       dt_image_remove(imgid);
 
       // ... and delete afterwards because removing will re-write the XMP
@@ -1158,7 +1098,6 @@ delete_next_file:
       break;
   }
 
-  sqlite3_finalize(stmt);
 
   _resync_xmp_duplicates(list);
   list = NULL;
@@ -1202,13 +1141,13 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
     int32_t imgid = GPOINTER_TO_INT(t->data);
 
     /* get image */
-    const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const dt_image_t *cimg = dt_image_cache_get(imgid, 'r');
     if(IS_NULL_PTR(cimg)) continue;
 
     GDateTime *exif_time = dt_datetime_img_to_gdatetime(cimg, tz_camera);
 
     /* release the lock */
-    dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
+    dt_image_cache_read_release(cimg);
     if(IS_NULL_PTR(exif_time)) continue;
     GDateTime *utc_time = g_date_time_to_timezone(exif_time, dt_datetime_utc_tz());
     g_date_time_unref(exif_time);
@@ -1333,7 +1272,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
       char sourcefile[PATH_MAX];
       dt_image_full_path(imgid,  sourcefile,  sizeof(sourcefile),  &from_cache, __FUNCTION__);
 
-      dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+      dt_image_t *img = dt_image_cache_get(imgid, 'w');
       if(!IS_NULL_PTR(img))
       {
         // Re-sync the file-derived classification flags (LDR/HDR/RAW/sRAW, mosaic, monochrome,
@@ -1350,7 +1289,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
             | DT_IMAGE_BUFFER_RESOLVED | DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
         img->flags &= ~file_class_flags;
         dt_exif_read(img, sourcefile);
-        dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_SAFE);
+        dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
       }
       else
         fprintf(stderr,"[dt_control_refresh_exif_run] couldn't dt_image_cache_get for imgid %i\n", imgid);
@@ -1459,10 +1398,10 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
     if(dt_tag_attach(etagid, imgid, FALSE, FALSE)) tag_change = TRUE;
 
     /* register export timestamp in cache */
-    dt_image_cache_set_export_timestamp(dt_image_cache_get_global(), imgid);
+    dt_image_cache_set_export_timestamp(imgid);
 
     // check if image still exists:
-    const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), (int32_t)imgid, 'r');
+    const dt_image_t *image = dt_image_cache_get((int32_t)imgid, 'r');
     if(image)
     {
       char imgfilename[PATH_MAX] = { 0 };
@@ -1473,11 +1412,11 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
         dt_control_log(_("image `%s' is currently unavailable"), image->filename);
         fprintf(stderr, "image `%s' is currently unavailable\n", imgfilename);
         // dt_image_remove(imgid);
-        dt_image_cache_read_release(dt_image_cache_get_global(), image);
+        dt_image_cache_read_release(image);
       }
       else
       {
-        dt_image_cache_read_release(dt_image_cache_get_global(), image);
+        dt_image_cache_read_release(image);
         if(mstorage->store(mstorage, sdata, imgid, mformat, fdata, num, total, TRUE,
                            settings->export_masks, settings->icc_type, settings->icc_filename, settings->icc_intent,
                            &metadata) != 0)

@@ -50,17 +50,24 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "develop/imageop_gui.h"
+#include "widgets/widget_settings.h"
 #include "common/history_actions.h"
-#include "common/macros.h"
+#include "gui/common/history_actions_gui.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/styles.h"
 #include "develop/develop.h"
 #include "develop/masks.h"
+#include "develop/blend_gui.h"
 
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include <complex.h>
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
+#include "control/signal.h"
 
 DT_MODULE(1)
 
@@ -486,7 +493,7 @@ static gchar *_create_tooltip_text(const dt_dev_history_item_t *hitem)
                                 ? g_strdup_printf(_("the drawn mask was removed"))
                                 : g_strdup_printf(_("the drawn mask was changed"));
 
-    dt_iop_gui_blend_data_t *bd = hitem->module->blend_data;
+    dt_iop_gui_blend_data_t *bd = hitem->module->gui ? hitem->module->gui->blend_data : NULL;
 
     for(int in_out = 1; in_out >= 0; in_out--)
     {

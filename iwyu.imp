@@ -92,6 +92,5 @@
  { include: ["@<magick/.*>", "private", "<magick/api.h>", "public"] },
  { include: ["@\"rawspeed/RawSpeed/.*\"", "private", "\"rawspeed/RawSpeed/RawSpeed-API.h\"", "public"] },
  { include: ["@<json-glib/.*>", "private", "<json-glib/json-glib.h>", "public"] },
- { include: ["@<libsecret/.*>", "private", "<libsecret/secret.h>", "public"] },
  { include: ["@<SDL/.*>", "private", "<SDL/SDL.h>", "public"] }
 ]

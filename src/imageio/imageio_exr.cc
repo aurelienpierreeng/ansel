@@ -50,9 +50,9 @@
 
 #include "glib.h"
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_exr.h"
 #include "develop/develop.h"
 

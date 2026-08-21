@@ -32,7 +32,7 @@
 #ifndef DT_COMMON_POINTS_H
 #define DT_COMMON_POINTS_H
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "system/openmp.h"   // dt_get_thread_num()
@@ -1061,6 +1061,38 @@ static inline float dt_points_get()
 {
   return dt_points_get_for(dt_points_get_global(), dt_get_thread_num());
 }
+
+/* The vendored SFMT generator above defines its parameters as bare macros -- `N`, `POS1`,
+ * `MSK1`, `inline` -- at file scope, and leaks every one of them into whatever is included
+ * after this header. `N` is the dangerous one: sqlite3.h declares
+ * `sqlite3_compileoption_get(int N)`, so any translation unit that reaches sqlite3.h *after*
+ * points.h fails to compile, with an error pointing at sqlite3.h and no hint as to why.
+ *
+ * That was latent for as long as something else happened to include sqlite3.h earlier in
+ * every affected unit -- which the old gui/gtk.h did, by dragging in history/history.h. Take
+ * one god-header out of the include graph and a dozen IOPs stop compiling for reasons that
+ * have nothing to do with the change. Undefine them here so the leak cannot come back.
+ */
+#undef N
+#undef N32
+#undef N64
+#undef MEXP
+#undef POS1
+#undef SL1
+#undef SL2
+#undef SR1
+#undef SR2
+#undef MSK1
+#undef MSK2
+#undef MSK3
+#undef MSK4
+#undef PARITY1
+#undef PARITY2
+#undef PARITY3
+#undef PARITY4
+#undef IDSTR
+#undef ALWAYSINLINE
+#undef PRE_ALWAYS
 
 #endif
 

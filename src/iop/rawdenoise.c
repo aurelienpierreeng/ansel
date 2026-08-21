@@ -46,29 +46,34 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "widgets/widget_settings.h"
 #include "common/conf.h"
 #endif
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
 #include "pixel/dwt.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/dev_history.h"  // dt_dev_add_history_item, previously reached through gui/draw.h
+#include "develop/develop.h"
 #include "math/openmp_maths.h"
 
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "widgets/draw.h"
 #include "iop/iop_api.h"
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
-#include <strings.h>
+#include "widgets/label.h"
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_rawdenoise_params_t)
 
@@ -626,10 +631,9 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_gui_throttle_cancel(self);
   // raw vs non_raw page, from the per-image support flag computed by reload_defaults()
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->hide_enable_button ? "non_raw" : "raw");
-  gtk_widget_queue_draw(self->widget);
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->hide_enable_button ? "non_raw" : "raw");
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 static void dt_iop_rawdenoise_get_params(dt_iop_rawdenoise_params_t *p, const int ch, const double mouse_x,
@@ -645,7 +649,7 @@ static void dt_iop_rawdenoise_get_params(dt_iop_rawdenoise_params_t *p, const in
 static gboolean rawdenoise_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rawdenoise_params_t p = *(dt_iop_rawdenoise_params_t *)self->params;
 
   int ch = (int)c->channel;
@@ -835,7 +839,7 @@ static gboolean rawdenoise_draw(GtkWidget *widget, cairo_t *crf, gpointer user_d
 static gboolean rawdenoise_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_rawdenoise_params_t *p = (dt_iop_rawdenoise_params_t *)self->params;
   const int inset = DT_IOP_RAWDENOISE_INSET;
   GtkAllocation allocation;
@@ -851,7 +855,7 @@ static gboolean rawdenoise_motion_notify(GtkWidget *widget, GdkEventMotion *even
       dt_iop_rawdenoise_get_params(p, c->channel, c->mouse_x, c->mouse_y + c->mouse_pick, c->mouse_radius);
     }
     gtk_widget_queue_draw(widget);
-    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else
   {
@@ -864,7 +868,7 @@ static gboolean rawdenoise_motion_notify(GtkWidget *widget, GdkEventMotion *even
 static gboolean rawdenoise_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
   const int ch = c->channel;
   if(event->button == 1 && event->type == GDK_2BUTTON_PRESS)
   {
@@ -877,7 +881,7 @@ static gboolean rawdenoise_button_press(GtkWidget *widget, GdkEventButton *event
       p->y[ch][k] = d->y[ch][k];
     }
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-    gtk_widget_queue_draw(self->widget);
+    gtk_widget_queue_draw(self->gui->widget);
   }
   else if(event->button == 1)
   {
@@ -900,7 +904,7 @@ static gboolean rawdenoise_button_release(GtkWidget *widget, GdkEventButton *eve
   if(event->button == 1)
   {
     dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-    dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+    dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
     c->dragging = 0;
     return TRUE;
   }
@@ -910,7 +914,7 @@ static gboolean rawdenoise_button_release(GtkWidget *widget, GdkEventButton *eve
 static gboolean rawdenoise_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
   if(!c->dragging) c->mouse_y = -1.0;
   gtk_widget_queue_draw(widget);
   return TRUE;
@@ -919,7 +923,7 @@ static gboolean rawdenoise_leave_notify(GtkWidget *widget, GdkEventCrossing *eve
 static gboolean rawdenoise_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
 
   int delta_y;
   if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
@@ -935,9 +939,9 @@ static void rawdenoise_tab_switch(GtkNotebook *notebook, GtkWidget *page, guint 
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(dt_gui_widgets_suppressed()) return;
-  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
   c->channel = (dt_iop_rawdenoise_channel_t)page_num;
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 void gui_init(dt_iop_module_t *self)
@@ -968,10 +972,10 @@ void gui_init(dt_iop_module_t *self)
   c->mouse_x = c->mouse_y = c->mouse_pick = -1.0;
   c->dragging = 0;
   c->x_move = -1;
-  self->timeout_handle = 0;
+  self->gui->timeout_handle = 0;
   c->mouse_radius = 1.0 / (DT_IOP_RAWDENOISE_BANDS * 2);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
   gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
@@ -983,7 +987,7 @@ void gui_init(dt_iop_module_t *self)
                                                   "plugins/darkroom/rawdenoise/graphheight", 280, 100),
                      FALSE, FALSE, 0);
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_widget_scroll_mask()
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(rawdenoise_draw), self);
@@ -998,21 +1002,20 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(c->threshold, 3);
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
   GtkWidget *label_non_raw = dt_ui_label_new(_("raw denoising\nonly works for raw images."));
 
-  gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)self->gui_data;
+  dt_iop_rawdenoise_gui_data_t *c = (dt_iop_rawdenoise_gui_data_t *)dt_iop_gui_data(self);
   dt_conf_set_int("plugins/darkroom/rawdenoise/gui_channel", c->channel);
   dt_draw_curve_destroy(c->transition_curve);
-  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

@@ -31,17 +31,18 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/macros.h"
+#include "common/hash.h"   // dt_hash()
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/times.h"
-#include "common/pixelpipe_cache_alloc.h"
-#include "gui/gdkkeys.h"
-#include"control/control.h"
-#include "develop/blend.h"
+#include "caches/pixelpipe_cache_alloc.h"
+#include "widgets/gdkkeys.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
+#include "develop/masks/masks_functions.h"
 
 /* Shape handlers receive widget-space coordinates, while normalized output-image
  * coordinates come from `gui->rel_pos` and absolute output-image
@@ -133,8 +134,29 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
   dt_masks_form_t *selected_form = _group_get_child_at(gui->dev, form, pos, NULL);
   if(selected_form && selected_form->functions && selected_form->functions->post_expose)
   {
+    /* Timed per shape, with the size of what is being stroked.
+     *
+     * The overlay redraw is the expensive half of a mask-heavy darkroom and nothing measured it:
+     * on the #1158 logs the darkroom expose runs 270-390 ms with only ~15 ms of it accounted for
+     * by the outline rebuilds around it, and the unaccounted time falls BETWEEN consecutive
+     * shapes -- which is this call. Whether that is the cairo stroking, and whether it scales
+     * with the point count or with the node count (dt_masks_draw_path_seg_by_seg() strokes once
+     * per node), is exactly what these two numbers separate. */
+    const dt_times_t start = { 0 };
+    dt_get_times((dt_times_t *)&start);
+
     gui->type = selected_form->type;
     selected_form->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(selected_form->points));
+
+    if(dt_get_debug_flags() & DT_DEBUG_MASKS)
+    {
+      const dt_masks_form_gui_points_t *const gui_points
+          = (const dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, pos);
+      dt_show_times_f(&start, "[masks]", "shape %d (%s) drawn: %d outline points, %d border points, %d nodes",
+                      pos, selected_form->name, IS_NULL_PTR(gui_points) ? -1 : gui_points->points_count,
+                      IS_NULL_PTR(gui_points) ? -1 : gui_points->border_count,
+                      g_list_length(selected_form->points));
+    }
   }
 }
 
@@ -576,6 +598,52 @@ __OMP_FOR_SIMD__(aligned(dest, newmask : 64)  if(npixels > 10000)
   }
 }
 
+/**
+ * @brief Identity of the group mask after folding the first @p count shapes, at this ROI.
+ *
+ * @details The fold below is a left fold: the result after k shapes is a pure function of the
+ * result after k-1 and of shape k. So every PREFIX of it is a cacheable value, and the one that
+ * matters is the longest one: drawing a new stroke appends a shape and leaves every earlier
+ * prefix untouched.
+ *
+ * What has to be in the key is everything the fold reads:
+ *
+ *   - each shape's own content, via dt_masks_form_get_own_hash() -- for a brush that is every
+ *     node's position, border, hardness and density, which is exactly what its rasterisation is
+ *     a function of;
+ *   - each membership's state and opacity, which decide the combine operator and its weight;
+ *   - the ROI, which decides the pixels;
+ *   - the module's own input and output rects, which is how a geometry change upstream (a crop
+ *     moved, a keystone) reaches the rasterisation without changing any form. Deliberately NOT
+ *     the pipe's history hash: that changes on every commit, including the stroke being drawn,
+ *     which would make the cache miss exactly when it is worth having.
+ */
+static uint64_t _group_prefix_hash(const dt_masks_form_t *const form, GList *masks,
+                                   const dt_dev_pixelpipe_iop_t *const piece, const dt_iop_roi_t *const roi,
+                                   const int count)
+{
+  uint64_t hash = 5381;
+  hash = dt_hash(hash, (const char *)roi, sizeof(dt_iop_roi_t));
+  if(!IS_NULL_PTR(piece))
+  {
+    hash = dt_hash(hash, (const char *)&piece->buf_in, sizeof(dt_iop_roi_t));
+    hash = dt_hash(hash, (const char *)&piece->buf_out, sizeof(dt_iop_roi_t));
+  }
+
+  int i = 0;
+  for(const GList *fpts = form->points; fpts && i < count; fpts = g_list_next(fpts), i++)
+  {
+    const dt_masks_form_group_t *const fpt = (const dt_masks_form_group_t *)fpts->data;
+    const dt_masks_form_t *const sel = dt_masks_get_from_id_ext(masks, fpt->formid);
+    if(IS_NULL_PTR(sel)) return 0;   // cannot describe this prefix; refuse to key on it
+
+    hash = dt_hash(hash, (const char *)&fpt->state, sizeof(int));
+    hash = dt_hash(hash, (const char *)&fpt->opacity, sizeof(float));
+    hash = dt_masks_form_get_own_hash(hash, masks, sel);
+  }
+  return hash ? hash : 1;
+}
+
 static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const restrict piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
@@ -589,10 +657,54 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
   const int height = roi->height;
   const size_t npixels = (size_t)width * height;
 
+  /* Resume from the longest cached prefix.
+   *
+   * Without this every shape is rasterised and combined from scratch on every render, so drawing
+   * the tenth stroke costs ten shapes and drawing the first costs one -- measured on #1158 at
+   * ~9 ms to rasterise and ~21 ms to combine per shape, on the preview pipe and the full pipe
+   * both, growing `render all masks' from 205 ms to 260 ms across one session. Appending a stroke
+   * leaves every earlier prefix identical, so the work that actually has to be redone is one
+   * shape's.
+   *
+   * Shapes are walked newest-first: the append case hits on the first probe. The forms come from
+   * pipe->forms, the refcounted snapshot this run owns -- never dev->forms, which the GUI thread
+   * is mutating while this runs on a worker. */
+  GList *const masks = !IS_NULL_PTR(pipe) && !IS_NULL_PTR(pipe->forms) ? pipe->forms : module->dev->forms;
+  const int shape_count = g_list_length(form->points);
+  int resume_from = 0;
+
+  for(int count = shape_count - 1; count > 0; count--)
+  {
+    const uint64_t prefix = _group_prefix_hash(form, masks, piece, roi, count);
+    if(prefix == 0) break;
+
+    void *cached = NULL;
+    dt_pixel_cache_entry_t *entry = NULL;
+    if(dt_dev_pixelpipe_cache_peek(prefix, &cached, &entry, -1, NULL) && !IS_NULL_PTR(cached))
+    {
+      dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
+      memcpy(buffer, cached, npixels * sizeof(float));
+      dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+      resume_from = count;
+      nb_ok = count;
+      if(dt_get_debug_flags() & DT_DEBUG_PERF)
+        dt_print(DT_DEBUG_MASKS, "[masks] group fold resumed from cached prefix of %d/%d shapes\n", count,
+                 shape_count);
+      break;
+    }
+  }
+
   // we need to allocate a zeroed temporary buffer for intermediate creation of individual shapes
   float *const restrict bufs = dt_pixelpipe_cache_alloc_align_float_cache(npixels, 0);
   if(IS_NULL_PTR(bufs)) return 1;
   int err = 0;
+
+  /* Somewhere to hold the fold minus its last shape. Only needed when there is something new to
+   * publish; a failure to allocate simply means this render publishes nothing. */
+  float *publishable = NULL;
+  if(shape_count > 1 && resume_from < shape_count - 1)
+    publishable = dt_pixelpipe_cache_alloc_align_float_cache(npixels, 0);
 
   int i = 0;
   // and we get all masks
@@ -601,8 +713,20 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
 
+    if(sel && i < resume_from)
+    {
+      // already folded into `buffer' by the cached prefix above
+      i++;
+      continue;
+    }
+
     if(sel)
     {
+      /* Snapshot the fold before the LAST shape goes in: that is what gets published, and it is
+       * the only state a later render can start from without redoing the shape being edited. */
+      if(i == shape_count - 1 && !IS_NULL_PTR(publishable))
+        memcpy(publishable, buffer, npixels * sizeof(float));
+
       // ensure that we start with a zeroed buffer regardless of what was previously written into 'bufs'
       memset(bufs, 0, npixels*sizeof(float));
       const int err_child = dt_masks_get_mask_roi(module, pipe, piece, sel, roi, bufs);
@@ -657,8 +781,49 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_
   // and we free the intermediate buffer
   dt_pixelpipe_cache_free_align(bufs);
 
+
   if(nb_ok == 0)
     memset(buffer, 0, npixels * sizeof(float));
+
+  /* Publish the fold WITHOUT the last shape, never the complete one.
+   *
+   * The last shape is the one being edited: while a stroke is dragged its content changes on every
+   * frame, so the complete fold's key changes on every frame too. Publishing that would leave one
+   * full-ROI cacheline per rendered frame behind, each dead the moment it is written -- memory
+   * pressure that evicts the pipeline's own outputs and costs more than the fold ever saved.
+   * Measured: publishing the complete fold flattened `render all masks' as intended (205-260 ms
+   * down to 32-100 ms) while the darkroom redraw grew from 5 ms to 416 ms over one session.
+   *
+   * The fold minus its last shape is stable across every frame of a stroke, so it is published
+   * once and hit on every later frame -- and when the next shape is appended the resume covers all
+   * but two. Nothing is published when the resume already came from that prefix: it is what we
+   * would be writing back.
+   *
+   * Only on a complete, error-free fold: a prefix that describes fewer shapes than its key claims
+   * is not a wrong-looking mask, it is a mask. */
+  if(!err && shape_count > 1 && nb_ok == shape_count && resume_from < shape_count - 1
+     && !IS_NULL_PTR(publishable))
+  {
+    const uint64_t prefix = _group_prefix_hash(form, masks, piece, roi, shape_count - 1);
+    if(prefix != 0)
+    {
+      void *slot = NULL;
+      dt_pixel_cache_entry_t *entry = NULL;
+      const int created = dt_dev_pixelpipe_cache_get(prefix, npixels * sizeof(float), "masks group prefix",
+                                                    IS_NULL_PTR(pipe) ? -1 : pipe->type, TRUE, &slot, &entry);
+      if(!IS_NULL_PTR(slot))
+      {
+        if(created)
+        {
+          memcpy(slot, publishable, npixels * sizeof(float));
+          dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+        }
+        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+      }
+    }
+  }
+
+  dt_pixelpipe_cache_free_align(publishable);
 
   return err;
 }

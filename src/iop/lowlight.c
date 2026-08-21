@@ -46,26 +46,28 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "widgets/widget_settings.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
 
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "widgets/draw.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_lowlight_params_t)
 
@@ -249,11 +251,10 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_lowlight_gui_data_t *g = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+  dt_iop_lowlight_gui_data_t *g = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_lowlight_params_t *p = (dt_iop_lowlight_params_t *)self->params;
   dt_bauhaus_slider_set(g->scale_blueness, p->blueness);
-  dt_gui_throttle_cancel(self);
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 void init(dt_iop_module_t *module)
@@ -269,7 +270,7 @@ void init_presets(dt_iop_module_so_t *self)
 {
   dt_iop_lowlight_params_t p;
 
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
 
   p.transition_x[0] = 0.000000;
   p.transition_x[1] = 0.200000;
@@ -434,7 +435,7 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("night"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 // fills in new parameters based on mouse position (in 0,1)
@@ -451,7 +452,7 @@ static void dt_iop_lowlight_get_params(dt_iop_lowlight_params_t *p, const double
 static gboolean lowlight_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_lowlight_params_t p = *(dt_iop_lowlight_params_t *)self->params;
 
   dt_draw_curve_set_point(c->transition_curve, 0, p.transition_x[DT_IOP_LOWLIGHT_BANDS - 2] - 1.0,
@@ -643,7 +644,7 @@ static gboolean lowlight_draw(GtkWidget *widget, cairo_t *crf, gpointer user_dat
 static gboolean lowlight_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_lowlight_params_t *p = (dt_iop_lowlight_params_t *)self->params;
   const int inset = DT_IOP_LOWLIGHT_INSET;
   GtkAllocation allocation;
@@ -669,7 +670,7 @@ static gboolean lowlight_motion_notify(GtkWidget *widget, GdkEventMotion *event,
       dt_iop_lowlight_get_params(p, c->mouse_x, c->mouse_y + c->mouse_pick, c->mouse_radius);
     }
     gtk_widget_queue_draw(widget);
-    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else if(event->y > height)
   {
@@ -708,11 +709,11 @@ static gboolean lowlight_button_press(GtkWidget *widget, GdkEventButton *event, 
       p->transition_y[k] = d->transition_y[k];
     }
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-    gtk_widget_queue_draw(self->widget);
+    gtk_widget_queue_draw(self->gui->widget);
   }
   else if(event->button == 1)
   {
-    dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+    dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
     c->drag_params = *(dt_iop_lowlight_params_t *)self->params;
     const int inset = DT_IOP_LOWLIGHT_INSET;
     GtkAllocation allocation;
@@ -732,7 +733,7 @@ static gboolean lowlight_button_release(GtkWidget *widget, GdkEventButton *event
   if(event->button == 1)
   {
     dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-    dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+    dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
     c->dragging = 0;
     return TRUE;
   }
@@ -742,7 +743,7 @@ static gboolean lowlight_button_release(GtkWidget *widget, GdkEventButton *event
 static gboolean lowlight_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
   if(!c->dragging) c->mouse_y = -1.0;
   gtk_widget_queue_draw(widget);
   return TRUE;
@@ -751,7 +752,7 @@ static gboolean lowlight_leave_notify(GtkWidget *widget, GdkEventCrossing *event
 static gboolean lowlight_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
 
   int delta_y;
   if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
@@ -778,20 +779,20 @@ void gui_init(struct dt_iop_module_t *self)
   c->mouse_x = c->mouse_y = c->mouse_pick = -1.0;
   c->dragging = 0;
   c->x_move = -1;
-  self->timeout_handle = 0;
+  self->gui->timeout_handle = 0;
   c->mouse_radius = 1.0 / DT_IOP_LOWLIGHT_BANDS;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
   gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(self->gui->widget),
                      dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
                                                   "plugins/darkroom/lowlight/graphheight", 280, 100),
                      FALSE, FALSE, 0);
 
-  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_gui_get_global()->scroll_mask
+  gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | dt_widget_scroll_mask()
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(lowlight_draw), self);
@@ -808,9 +809,8 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)self->gui_data;
+  dt_iop_lowlight_gui_data_t *c = (dt_iop_lowlight_gui_data_t *)dt_iop_gui_data(self);
   dt_draw_curve_destroy(c->transition_curve);
-  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

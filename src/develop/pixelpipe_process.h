@@ -5,7 +5,7 @@
 #ifndef DT_DEVELOP_PIXELPIPE_PROCESS_H
 #define DT_DEVELOP_PIXELPIPE_PROCESS_H
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/tiling.h"
 

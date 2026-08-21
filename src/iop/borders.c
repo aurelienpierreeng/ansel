@@ -50,7 +50,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -60,13 +60,12 @@
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "develop/develop.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-#include "gui/dtgtk/resetlabel.h"
+#include "develop/imageop_gui.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
@@ -241,15 +240,29 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
   return IOP_CS_RGB;
 }
 
+/* --- the shared geometry core ----------------------------------------------------------
+ *
+ * The border's offset is DERIVED, not a parameter: it is the difference between the output and
+ * input sizes, apportioned by pos_h/pos_v. Both the pixel pipe's distort callbacks and the
+ * geometry service's record (develop/geometry/geometry.h) go through the two helpers below, so
+ * the size map and the offset can never drift apart.
+ */
+
+/** @brief The translation the border applies, from the two rects it sits between. */
+static void _borders_offset(const dt_iop_borders_data_t *const d, const dt_iop_roi_t *const in,
+                            const dt_iop_roi_t *const out, int *left, int *top)
+{
+  *left = (out->width - in->width) * d->pos_h;
+  *top = (out->height - in->height) * d->pos_v;
+}
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const restrict points, size_t points_count)
 {
   dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
 
-  const int border_tot_width = (piece->buf_out.width - piece->buf_in.width);
-  const int border_tot_height = (piece->buf_out.height - piece->buf_in.height);
-  const int border_size_t = border_tot_height * d->pos_v;
-  const int border_size_l = border_tot_width * d->pos_h;
+  int border_size_l = 0, border_size_t = 0;
+  _borders_offset(d, &piece->buf_in, &piece->buf_out, &border_size_l, &border_size_t);
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if (border_size_l == 0 && border_size_t == 0) return 1;
@@ -267,10 +280,8 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
 {
   dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
 
-  const int border_tot_width = (piece->buf_out.width - piece->buf_in.width);
-  const int border_tot_height = (piece->buf_out.height - piece->buf_in.height);
-  const int border_size_t = border_tot_height * d->pos_v;
-  const int border_size_l = border_tot_width * d->pos_h;
+  int border_size_l = 0, border_size_t = 0;
+  _borders_offset(d, &piece->buf_in, &piece->buf_out, &border_size_l, &border_size_t);
 
   // nothing to be done if parameters are set to neutral values (no top/left border)
   if (border_size_l == 0 && border_size_t == 0) return 1;
@@ -313,12 +324,13 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
 
 // 1st pass: how large would the output be, given this input roi?
 // this is always called with the full buffer before processing.
-void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
-                    const dt_iop_roi_t *roi_in)
+/** @brief Input rect -> output rect. THE size evaluator: modify_roi_out() below and the
+ *  geometry record both call it, so the frame the pipe renders and the frame the GUI
+ *  measures are the same frame. */
+static void _borders_map_size(const dt_iop_borders_data_t *const d, const dt_iop_roi_t *const roi_in,
+                              dt_iop_roi_t *roi_out)
 {
   *roi_out = *roi_in;
-  const dt_iop_borders_data_t *d = (dt_iop_borders_data_t *)piece->data;
   const float size = fabsf(d->size);
   if(size == 0.0f || size >= 1.0f) return;
 
@@ -363,6 +375,13 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
       roi_out->width  = roi_out->height * aspect;
     }
   }
+}
+
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+                    const dt_iop_roi_t *roi_in)
+{
+  _borders_map_size((const dt_iop_borders_data_t *)piece->data, roi_in, roi_out);
 }
 
 // 2nd pass: which roi would this operation need as input to fill the given output region?
@@ -699,6 +718,61 @@ void cleanup_global(dt_iop_module_so_t *module)
 }
 
 
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) --------- */
+
+static void _borders_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _borders_map_size((const dt_iop_borders_data_t *)data, in, out);
+}
+
+static int _borders_geometry_transform(const void *data, const dt_geometry_record_t *const record,
+                                       dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  int left = 0, top = 0;
+  _borders_offset((const dt_iop_borders_data_t *)data, &record->in, &record->out, &left, &top);
+  if(left == 0 && top == 0) return 1;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] += left;
+    points[i + 1] += top;
+  }
+  return 1;
+}
+
+static int _borders_geometry_backtransform(const void *data, const dt_geometry_record_t *const record,
+                                           dt_geometry_chain_t *chain, float *points, size_t points_count)
+{
+  int left = 0, top = 0;
+  _borders_offset((const dt_iop_borders_data_t *)data, &record->in, &record->out, &left, &top);
+  if(left == 0 && top == 0) return 1;
+  for(size_t i = 0; i < points_count * 2; i += 2)
+  {
+    points[i] -= left;
+    points[i + 1] -= top;
+  }
+  return 1;
+}
+
+static const dt_geometry_vtable_t _borders_geometry_vtable = {
+  .map_size = _borders_geometry_map_size,
+  .transform = _borders_geometry_transform,
+  .backtransform = _borders_geometry_backtransform,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  /* commit_params() is a straight copy of the parameters into the data struct -- the two are the
+   * same type -- so the record carries that copy and nothing is derived twice. */
+  dt_iop_borders_data_t *data = (dt_iop_borders_data_t *)g_malloc0(sizeof(dt_iop_borders_data_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+  memcpy(data, params, sizeof(dt_iop_borders_params_t));
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_borders_geometry_vtable;
+  return TRUE;
+}
+
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -745,7 +819,7 @@ void init_presets(dt_iop_module_so_t *self)
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
 
   if(fabsf(p->color[0] - self->picked_color[0]) < 0.0001f
@@ -789,7 +863,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
 static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   const char *text = dt_bauhaus_combobox_get_text(combo);
@@ -811,7 +885,7 @@ static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   const char *text = dt_bauhaus_combobox_get_text(combo);
@@ -833,7 +907,7 @@ static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
   const int which = dt_bauhaus_combobox_get(combo);
   const char *text = dt_bauhaus_combobox_get_text(combo);
@@ -855,7 +929,7 @@ static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
 
   if (w == g->aspect_slider)
   {
@@ -908,7 +982,7 @@ static void frame_colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *s
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_borders_params_t *p = (dt_iop_borders_params_t *)self->params;
 
 // FIXME by hand
@@ -968,7 +1042,7 @@ void gui_update(struct dt_iop_module_t *self)
 
 static void gui_init_aspect(struct dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
 
   dt_bauhaus_combobox_add(g->aspect, _("image"));
   dt_bauhaus_combobox_add(g->aspect, _("3:1"));
@@ -1001,7 +1075,7 @@ static void gui_init_aspect(struct dt_iop_module_t *self)
 
 static void gui_init_positions(struct dt_iop_module_t *self)
 {
-  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)self->gui_data;
+  dt_iop_borders_gui_data_t *g = (dt_iop_borders_gui_data_t *)dt_iop_gui_data(self);
 
   dt_bauhaus_combobox_add(g->pos_h, _("center"));
   dt_bauhaus_combobox_add(g->pos_h, _("1/3"));
@@ -1043,7 +1117,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->aspect = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->aspect, 1);
   dt_bauhaus_widget_set_label(g->aspect, N_("aspect"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->aspect, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->aspect, TRUE, TRUE, 0);
   gui_init_aspect(self);
   g_signal_connect(G_OBJECT(g->aspect), "value-changed", G_CALLBACK(aspect_changed), self);
   gtk_widget_set_tooltip_text(g->aspect, _("select the aspect ratio or right click and type your own (w:h)"));
@@ -1059,7 +1133,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->pos_h = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_h, 1);
   dt_bauhaus_widget_set_label(g->pos_h, N_("horizontal position"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->pos_h, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->pos_h, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->pos_h), "value-changed", G_CALLBACK(position_h_changed), self);
   gtk_widget_set_tooltip_text(g->pos_h, _("select the horizontal position ratio relative to top "
                                           "or right click and type your own (y:h)"));
@@ -1069,7 +1143,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->pos_v = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_v, 1);
   dt_bauhaus_widget_set_label(g->pos_v, N_("vertical position"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->pos_v, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->pos_v, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->pos_v), "value-changed", G_CALLBACK(position_v_changed), self);
   gtk_widget_set_tooltip_text(g->pos_v, _("select the vertical position ratio relative to left "
                                           "or right click and type your own (x:w)"));
@@ -1093,7 +1167,7 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *label, *box;
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  label = dtgtk_reset_label_new(_("border color"), self, &p->color, 3 * sizeof(float));
+  label = dt_iop_gui_reset_label_new(_("border color"), self, &p->color, 3 * sizeof(float));
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   g->colorpick = gtk_color_button_new_with_rgba(&color);
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->colorpick), FALSE);
@@ -1102,10 +1176,10 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(g->colorpick), FALSE, TRUE, 0);
   g->border_picker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, box);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->border_picker), _("pick border color from image"));
-  gtk_box_pack_start(GTK_BOX(self->widget), box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), box, TRUE, TRUE, 0);
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  label = dtgtk_reset_label_new(_("frame line color"), self, &p->color, 3 * sizeof(float));
+  label = dt_iop_gui_reset_label_new(_("frame line color"), self, &p->color, 3 * sizeof(float));
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
   g->frame_colorpick = gtk_color_button_new_with_rgba(&color);
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->frame_colorpick), FALSE);
@@ -1114,7 +1188,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(g->frame_colorpick), FALSE, TRUE, 0);
   g->frame_picker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, box);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->frame_picker), _("pick frame line color from image"));
-  gtk_box_pack_start(GTK_BOX(self->widget), box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), box, TRUE, TRUE, 0);
 }
 
 

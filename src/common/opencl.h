@@ -65,7 +65,6 @@
 #ifdef HAVE_OPENCL
 
 #include "common/dlopencl.h"
-#include "common/iop_profile.h"
 #include "common/conf.h"
 
 // #pragma GCC diagnostic push
@@ -88,10 +87,52 @@ extern "C" {
 #define DT_OPENCL_BPP_IS_RGBA8(bpp) ((((unsigned int)(bpp)) & DT_OPENCL_BPP_TAG_RGBA8) != 0u)
 #define DT_OPENCL_BPP_DECODE(bpp) ((int)(((unsigned int)(bpp)) & ~DT_OPENCL_BPP_TAG_RGBA8))
 
-#define DT_OPENCL_DEFAULT_COMPILE_INTEL ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
-#define DT_OPENCL_DEFAULT_COMPILE_AMD ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
-#define DT_OPENCL_DEFAULT_COMPILE_NVIDIA ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
-#define DT_OPENCL_DEFAULT_COMPILE ("-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations")
+/* Per-vendor kernel build options. The per-device conf key
+ * `cldevice_v4/<n>/<cname>/building` overrides these and is what a user edits in anselrc; these
+ * are only the value written there on first sight of a device.
+ *
+ * `-cl-unsafe-math-optimizations` (and `-cl-fast-relaxed-math`, which implies it) lets the
+ * driver substitute a low-precision implementation for any libm function. That is a per-vendor
+ * gamble, not a uniform speedup, and Intel loses it badly: measured on an HD Graphics P630
+ * (NEO 24.35, max relative error of erf() against a double-precision host reference over
+ * x in [-8, 8])
+ *
+ *     safe flags   1.39e-07      correct to float precision
+ *     unsafe       1.00e+00      erf() returns exactly 0.0 for |x| < ~1e-3, and is 22 % low
+ *                                at 1e-2
+ *
+ * `iop/rawdenoiseai.c`'s GELU is 0.5*x*(1+erf(x/sqrt(2))) and a convolutional net spends most
+ * of its activations in exactly that small-|x| band, so the whole denoiser drifts: the same
+ * export differs from the CPU path by 0.78 % mean / 3.1 % p99 with the flag, and by 0.0023 %
+ * without it -- the latter being bit-for-bit what NVIDIA produces. It is visible, and it is
+ * what users report as a grid or mesh on X-Trans (discussion #1104).
+ *
+ * And it buys nothing to pay for that. Measured wall-clock, same image, kernels already cached:
+ *
+ *     P630, denoiser export          96.8 s unsafe   93.9 s safe
+ *     Quadro M2200, denoiser export   8.10 s unsafe   8.14 s safe
+ *     Quadro M2200, whole pipeline
+ *       with the denoiser OFF, so
+ *       every other module dominates  5.38/4.81/4.84 unsafe   5.27/4.92/4.89 safe
+ *
+ * i.e. a 0.4 % spread, inside run-to-run noise, on hardware old enough to show a real
+ * difference if there were one. Dropping the flag also barely moves the existing NVIDIA render
+ * (0.00024 % mean over the whole pipeline), so this is not a visual change for users who were
+ * already getting correct output.
+ *
+ * So every vendor gets the same conservative set. `-cl-mad-enable` keeps the fused multiply-add
+ * that actually matters for convolution throughput, `-cl-no-signed-zeros` is free, and neither
+ * licenses a substitute libm. NVIDIA happens to keep erf() exact under the unsafe flag
+ * (7.97e-08) but still degrades log(), and AMD has never been measured here at all -- there is
+ * no reason to keep taking a per-driver gamble for a speedup that does not show up.
+ *
+ * The per-vendor macros are kept separate rather than collapsed: they are the natural place to
+ * record a future measurement that justifies diverging again. Run tools/opencl-math-accuracy.c
+ * to regenerate every number above on any machine; see doc/opencl-math-accuracy.md. */
+#define DT_OPENCL_DEFAULT_COMPILE_INTEL ("-cl-mad-enable -cl-no-signed-zeros")
+#define DT_OPENCL_DEFAULT_COMPILE_AMD ("-cl-mad-enable -cl-no-signed-zeros")
+#define DT_OPENCL_DEFAULT_COMPILE_NVIDIA ("-cl-mad-enable -cl-no-signed-zeros")
+#define DT_OPENCL_DEFAULT_COMPILE ("-cl-mad-enable -cl-no-signed-zeros")
 #define DT_CLDEVICE_HEAD ("cldevice_v4")
 
 typedef enum dt_opencl_memory_t
@@ -252,63 +293,18 @@ struct dt_colorspaces_cl_global_t; // colorspaces transform
 struct dt_guided_filter_cl_global_t;
 
 /**
- * main struct, stored in dt_opencl_get_global().
+ * main struct, private to common/opencl.c.
  * holds pointers to all
  */
-typedef struct dt_opencl_t
-{
-  dt_pthread_mutex_t lock;
-  int inited;
-  int print_statistics;
-  int enabled;
-  int stopped;
-  int num_devs;
-  int num_detected_devs;
-  int error_count;
-  int opencl_synchronization_timeout;
-  uint32_t crc;
-  int mandatory[5];
-  int *dev_priority_image;
-  int *dev_priority_preview;
-  int *dev_priority_export;
-  int *dev_priority_thumbnail;
-  dt_opencl_device_t *dev;
-  dt_opencl_detected_device_t *detected_devs;
-  dt_dlopencl_t *dlocl;
-
-  // global kernels for blending operations.
-  struct dt_blendop_cl_global_t *blendop;
-
-  // global kernels for bilateral filtering, to be reused by a few plugins.
-  struct dt_bilateral_cl_global_t *bilateral;
-
-  // global kernels for gaussian filtering, to be reused by a few plugins.
-  struct dt_gaussian_cl_global_t *gaussian;
-
-  // global kernels for interpolation resampling.
-  struct dt_interpolation_cl_global_t *interpolation;
-
-  // global kernels for local laplacian filter.
-  struct dt_local_laplacian_cl_global_t *local_laplacian;
-
-  // global kernels for dwt filter.
-  struct dt_dwt_cl_global_t *dwt;
-
-  // global kernels for heal filter.
-  struct dt_heal_cl_global_t *heal;
-
-  // global kernels for colorspaces filter.
-  struct dt_colorspaces_cl_global_t *colorspaces;
-
-  // global kernels for guided filter.
-  struct dt_guided_filter_cl_global_t *guided_filter;
-
-  // Maps every live cl_mem we allocated to the (devid, byte size) we requested,
-  // so memory accounting never has to query the driver (clGetMemObjectInfo) about
-  // a freshly-created object -- some drivers fault on that under vRAM pressure.
-  GHashTable *mem_sizes;
-  dt_pthread_mutex_t mem_sizes_lock;
-} dt_opencl_t;
+/* dt_opencl_t is PRIVATE to common/opencl.c.
+ *
+ * It used to be defined here and instantiated on the application god-struct, so its device
+ * array, its lock and nine other subsystems' kernel bundles were reachable from any file that
+ * included darktable.h. Callers ask questions now -- dt_opencl_get_num_devices(),
+ * dt_opencl_get_device_name(), dt_opencl_get_device_max_image_size() -- and reserve devices
+ * through dt_opencl_reserve_device_for_pipe() / _by_id(). Nothing outside the module needs
+ * the layout, so nothing outside the module has it. */
+typedef struct dt_opencl_t dt_opencl_t;
 
 /** description of memory requirements of local buffer
   * local buffer size will be calculated as:
@@ -328,17 +324,16 @@ typedef struct dt_opencl_local_buffer_t
 /** internally calls dt_clGetDeviceInfo, and takes care of memory allocation
  * afterwards, *param_value will point to memory block of size at least *param_value
  * which needs to be g_free()'d manually */
-int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_info param_name, void **param_value,
-                              size_t *param_value_size);
+
 
 /** inits the opencl subsystem. */
-void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics);
+void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statistics);
 
 /** cleans up the opencl subsystem. */
-void dt_opencl_cleanup(dt_opencl_t *cl);
+void dt_opencl_cleanup(void);
 
 /** cleans up the i-th device in the cl->dev list */
-void dt_opencl_cleanup_device(dt_opencl_t *cl, int i);
+
 
 /** both finish functions return TRUE in case of success */
 /** cleans up command queue. */
@@ -348,10 +343,77 @@ int dt_opencl_finish(const int devid);
 int dt_opencl_enqueue_barrier(const int devid);
 
 /** locks a device for your thread's exclusive use */
-int dt_opencl_lock_device(const int pipetype);
+/**
+ * @brief Reserve a device for a pipe run: choose a free one by the pipe's priority list and
+ * take its lock. Blocks or gives up per the `opencl_mandatory_timeout` conf key.
+ *
+ * @param pipetype a ::dt_dev_pixelpipe_type_t; selects which priority list applies.
+ * @return the reserved device id, or -1 if none could be had. Release with
+ *         dt_opencl_release_device().
+ *
+ * @note There is ONE lock per device and this is it -- reserving a device and locking it are
+ * the same act. dt_opencl_reserve_device_by_id() takes the same lock when the caller already
+ * knows which device it needs. This used to be called `dt_opencl_lock_device()`, which took a
+ * PIPE TYPE while its `dt_opencl_unlock_device()` counterpart took a DEVICE ID -- two
+ * different ints, one of them silently wrong if the pair were ever read as symmetric. The old
+ * names are gone rather than redefined, so a stale caller fails to compile.
+ */
+int dt_opencl_reserve_device_for_pipe(const int pipetype);
+
+/**
+ * @brief Reserve a device the caller has already identified, blocking until it is free.
+ * @param devid device id; out-of-range ids are ignored.
+ */
+void dt_opencl_reserve_device_by_id(const int devid);
+
+/**
+ * @brief Reserve a device only if it is free right now.
+ * @param devid device id.
+ * @return 0 when the device was reserved (pthread convention), non-zero when it was busy or
+ *         the id was out of range. Never waits -- callers use this on paths that must not
+ *         block behind a pipe that is mid-run.
+ */
+int dt_opencl_try_reserve_device_by_id(const int devid);
+
+/** @brief Number of usable OpenCL devices; 0 when OpenCL is unavailable. */
+int dt_opencl_get_num_devices(void);
+
+/**
+ * @brief Human-readable device name, owned by the OpenCL module.
+ * @param devid device id.
+ * @return the name, or NULL for an out-of-range id or a device with no name. Valid until
+ *         cleanup; do not free.
+ */
+const char *dt_opencl_get_device_name(const int devid);
+
+/**
+ * @brief Largest 2D image the device will accept, which is what bounds tile size.
+ * @param devid device id.
+ * @param width receives the maximum width. Not written for an out-of-range id.
+ * @param height receives the maximum height. Same.
+ * @return TRUE when both were written.
+ */
+gboolean dt_opencl_get_device_max_image_size(const int devid, int *width, int *height);
+
+/** @brief Total device memory in bytes, or 0 for an out-of-range id. */
+size_t dt_opencl_get_device_max_global_mem(const int devid);
+
+/**
+ * @brief Record that a pipe run failed on OpenCL, and decide whether to give up on it.
+ *
+ * @details The count and the give-up threshold belong to the OpenCL module, not to the
+ * pipeline: the pipeline's job is to report the failure and be told what to do next. Crossing
+ * the threshold also drops the "opencl" capability, so this is the one place that decides
+ * OpenCL is finished for the session.
+ *
+ * @return 1 for "this run failed, retry on CPU", 2 for "too many failures, OpenCL is off for
+ *         the rest of the session".
+ */
+int dt_opencl_report_pipe_error(void);
 
 /** done with your command queue. */
-void dt_opencl_unlock_device(const int dev);
+/** @brief Release a device reserved by either reserve function. */
+void dt_opencl_release_device(const int devid);
 
 /** calculates md5sums for a list of CL include files. */
 void dt_opencl_md5sum(const char **files, char **md5sums);
@@ -598,13 +660,10 @@ gboolean dt_opencl_is_pinned_memory(cl_mem mem);
 extern "C" {
 #endif
 
-typedef struct dt_opencl_t
-{
-  int inited;
-  int enabled;
-  int stopped;
-  int error_count;
-} dt_opencl_t;
+/* Opaque here too, so the type name means the same thing in both configurations: private to
+ * common/opencl.c, and impossible to instantiate anywhere else. In this build there is no
+ * state at all -- every query below is a constant. */
+typedef struct dt_opencl_t dt_opencl_t;
 typedef struct dt_opencl_detected_device_t
 {
   int config_id;
@@ -618,16 +677,13 @@ typedef struct dt_opencl_detected_device_t
   // headroom setting accurately for integrated GPUs without reaching into the live device array.
   gboolean host_unified_memory;
 } dt_opencl_detected_device_t;
-static inline void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics)
+static inline void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statistics)
 {
-  cl->inited = 0;
-  cl->enabled = 0;
-  cl->stopped = 0;
-  cl->error_count = 0;
+  /* There is no state to initialise in this build: the queries below are constants. */
   dt_conf_set_bool("opencl", FALSE);
   dt_print(DT_DEBUG_OPENCL, "[opencl_init] this version of darktable was built without opencl support\n");
 }
-static inline void dt_opencl_cleanup(dt_opencl_t *cl)
+static inline void dt_opencl_cleanup(void)
 {
 }
 static inline gboolean dt_opencl_finish(const int devid)
@@ -638,12 +694,39 @@ static inline int dt_opencl_enqueue_barrier(const int devid)
 {
   return -1;
 }
-static inline int dt_opencl_lock_device(const int dev)
+static inline int dt_opencl_reserve_device_for_pipe(const int pipetype)
 {
   return -1;
 }
-static inline void dt_opencl_unlock_device(const int dev)
+static inline void dt_opencl_reserve_device_by_id(const int devid)
 {
+}
+static inline int dt_opencl_try_reserve_device_by_id(const int devid)
+{
+  return 1; // never free: there are no devices
+}
+static inline void dt_opencl_release_device(const int devid)
+{
+}
+static inline int dt_opencl_get_num_devices(void)
+{
+  return 0;
+}
+static inline const char *dt_opencl_get_device_name(const int devid)
+{
+  return NULL;
+}
+static inline gboolean dt_opencl_get_device_max_image_size(const int devid, int *width, int *height)
+{
+  return FALSE;
+}
+static inline size_t dt_opencl_get_device_max_global_mem(const int devid)
+{
+  return 0;
+}
+static inline int dt_opencl_report_pipe_error(void)
+{
+  return 2;
 }
 static inline int dt_opencl_load_program(const int dev, const char *filename)
 {
@@ -785,15 +868,6 @@ static inline void dt_opencl_events_profiling(const int devid, const int aggrega
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Process-wide singleton with no per-call context to ride on: this accessor is the intended
- * end state (same category as dt_conf_*), implemented by the orchestrator. Declared OUTSIDE the
- * HAVE_OPENCL split on purpose: dt_opencl_t exists in both configurations and darktable.c
- * defines the accessor unconditionally, so callers that merely pass the handle around keep
- * compiling in no-OpenCL builds exactly as they did when they read the global directly.
- * NOTE: common/opencl.c keeps direct access for now; relocating ownership into the subsystem
- * itself (a file-static set at init) is the follow-up, not an accessor. */
-struct dt_opencl_t *dt_opencl_get_global(void);
 
 #ifdef __cplusplus
 }

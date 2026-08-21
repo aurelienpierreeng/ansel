@@ -46,50 +46,73 @@ add_dependencies(generate_authors_h generate_authors_file)
 #
 # Add files for libansel
 #
+add_subdirectory(widgets)
+
 FILE(GLOB SOURCE_FILES
-  "gui/bauhaus.c"
+  "gui/bauhaus_conf.c"
   "common/act_on.c"
   "system/atomic.c"
+  "system/display_profile.c"
+  "gui/screen_metrics.c"
   "pixel/bilateral.c"
   "pixel/bilateralcl.c"
   "pixel/box_filters.c"
-  "common/cache.c"
-  "common/calculator.c"
+  "caches/cache.c"
+  "math/calculator.c"
   "common/collection.c"
   "common/color_picker.c"
   "common/color_vocabulary.c"
-  "common/colorlabels.c"
   "pixel/colorequal_shared.c"
-  "common/colorspaces.c"
+  "colorprofiles/colorspaces.c"
+  "colorprofiles/conversion.c"
+  "imageio/imageio_profile.c"
   "common/curve_tools.c"
-  "common/splines.cpp"
+  "math/splines.cpp"
   "common/curl_tools.c"
   "darktable.c"
-  "common/database.c"
+  "database/database.c"
   "common/datetime.c"
   "common/dbus.c"
   "common/dtpthread.c"
   "pixel/eaw.c"
   "system/memory_arena.c"
-  "common/exif.cc"
+  "common/xmp_sidecar.cc"
   "common/film.c"
   "common/file_location.c"
   "common/folder_survey.c"
-  "gui/dtgtk/focus_peaking.c"
   "common/fp_mode.c"
   "pixel/gaussian.c"
   "common/grouping.c"
   "pixel/guided_filter.c"
-  "common/history.c"
+  "history/history.c"
+  "history/notify.c"
   "common/history_actions.c"
-  "common/history_merge.c"
-  "gui/history_merge_gui.c"
-  "common/history_snapshot.c"
-  "common/topological_sort.c"
-  "common/gpx.c"
+  "develop/history_merge.c"
+  "gui/common/collection_gui.c"
+  "gui/common/database_gui.c"
+  "gui/common/film_gui.c"
+  "gui/common/folder_survey_gui.c"
+  "gui/common/history_actions_gui.c"
+  "gui/develop/history_merge_gui.c"
+  "gui/common/styles_gui.c"
+  "history/history_snapshot.c"
+  "math/topological_sort.c"
   "common/image.c"
-  "common/image_cache.c"
+  "caches/image_cache.c"
+  "database/collection_query.c"
+  "database/colorlabel_repository.c"
+  "database/selection_repository.c"
+  "database/history_snapshot_repository.c"
+  "database/metadata_repository.c"
+  "database/film_repository.c"
+  "database/history_repository.c"
+  "database/style_repository.c"
+  "database/tag_repository.c"
+  "database/location_repository.c"
+  "database/preset_repository.c"
+  "database/image_repository.c"
   "common/image_extensions.c"
+  "common/image_notify.c"
   "common/imagebuf.c"
   "imageio/imageio_core.c"
   "imageio/imageio_jpeg.c"
@@ -99,46 +122,50 @@ FILE(GLOB SOURCE_FILES
   "imageio/imageio_pnm.c"
   "imageio/imageio_rgbe.c"
   "imageio/imageio_tiff.c"
-  "imageio/imageio_im.c"
-  "imageio/imageio_gm.c"
   "gui/import.c"
   "pixel/interpolation.c"
   "pixel/locallaplacian.c"
   "pixel/locallaplaciancl.c"
   "common/l10n.c"
-  "common/lut3d.c"
+  "database/legacy_presets.c"
+  "pixel/lut3d.c"
   "gui/lut_viewer.c"
-  "common/metadata.c"
   "common/metadata_export.c"
-  "common/mipmap_cache.c"
+  "caches/mipmap_cache.c"
   "common/module.c"
   "common/noiseprofiles.c"
   "common/nn_model.c"
   "pixel/nlmeans_core.c"
   "common/pdf.c"
-  "common/presets.c"
+  "history/presets.c"
   "common/styles.c"
   "common/selection.c"
-  "common/privacy_consent.c"
+  "gui/privacy_consent.c"
   "common/sentry.c"
   "common/telemetry.c"
   "common/system_signal_handling.c"
-  "common/tags.c"
-  "common/map_locations.c"
+  "common/startup_progress.c"
+  "common/thumbnail_notify.c"
   "common/utility.c"
   "common/variables.c"
-  "common/pwstorage/backend_kwallet.c"
-  "common/pwstorage/pwstorage.c"
+  "metadata/colorlabels.c"
+  "metadata/exif.cc"
+  "metadata/gpx.c"
+  "metadata/map_locations.c"
+  "metadata/metadata.c"
+  "metadata/notify.c"
+  "metadata/ratings.c"
+  "metadata/tags.c"
   "common/opencl.c"
-  "common/dynload.c"
+  "system/dynload.c"
   "common/dlopencl.c"
-  "common/ratings.c"
-  "common/resource_limits.c"
+  "system/resource_limits.c"
   "common/histogram.c"
   "common/undo.c"
   "common/usermanual_url.c"
-  "common/iop_order.c"
-  "common/iop_profile.c"
+  "develop/iop_order.c"
+  "develop/iop_profile.c"
+  "colorprofiles/iop_profile.c"
   "common/dng_opcode.c"
   "common/conf.c"
   "control/control.c"
@@ -151,7 +178,13 @@ FILE(GLOB SOURCE_FILES
   "control/progress.c"
   "control/signal.c"
   "develop/develop.c"
+  "develop/dev_geometry.c"
+  "develop/geometry/geometry.c"
+  "develop/dev_viewport.c"
+  "develop/dev_roi_request.c"
+  "develop/gui_throttle.c"
   "develop/dev_history.c"
+  "develop/dev_history_gui.c"
   "develop/dev_pixelpipe.c"
   "develop/dev_snapshot.c"
   "develop/imageop.c"
@@ -159,8 +192,10 @@ FILE(GLOB SOURCE_FILES
   "develop/imageop_gui.c"
   "develop/lightroom.c"
   "develop/pixelpipe.c"
-  "develop/pixelpipe_cache.c"
+  "caches/pixelpipe_cache.c"
+  "caches/pixelpipe_cache_wait.c"
   "develop/pixelpipe_cpu.c"
+  "develop/pipeline_notify.c"
   "develop/pixelpipe_gpu.c"
   "develop/supervisor.c"
   "develop/blend.c"
@@ -184,28 +219,15 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/masks_history.c"
   "develop/masks/polygon.c"
   "develop/format.c"
-  "gui/dtgtk/button.c"
-  "gui/dtgtk/drawingarea.c"
-  "gui/dtgtk/expander.c"
-  "gui/dtgtk/gradientslider.c"
-  "gui/dtgtk/icon.c"
-  "gui/dtgtk/icon_cell_renderer.c"
-  "gui/dtgtk/paint.c"
+  "pixel/format.c"
   "gui/dtgtk/preview_window.c"
-  "gui/dtgtk/resetlabel.c"
-  "gui/dtgtk/sidepanel.c"
   "gui/dtgtk/thumbnail.c"
   "gui/dtgtk/thumbtable_info.c"
-  "gui/dtgtk/thumbnail_btn.c"
   "gui/dtgtk/thumbtable.c"
   "gui/dtgtk/filemanager.c"
   "gui/dtgtk/filmstrip.c"
-  "gui/dtgtk/togglebutton.c"
-  "gui/accelerators.c"
-  "gui/gtkentry.c"
   "gui/guides.c"
-  "gui/gtk.c"
-  "gui/gui_throttle.c"
+  "gui/application.c"
   "gui/splash.c"
   "gui/hist_dialog.c"
   "gui/preferences.c"
@@ -491,27 +513,6 @@ else(IsoCodes_FOUND)
   message(STATUS "no suitable iso-codes, there will be no language names in the preferences")
 endif(IsoCodes_FOUND)
 
-#
-# Detect compile of optional pwstorage backends
-#
-if(USE_LIBSECRET)
-  find_package(Libsecret)
-  if(Libsecret_FOUND)
-    if(Libsecret_VERSION VERSION_LESS "0.18")
-      message(STATUS "Found libsecret unsupported version ${Libsecret_VERSION}. Please upgrade to version 0.18 or newer.")
-      set(Libsecret_FOUND FALSE)
-    else()
-      target_link_libraries(ansel_deps INTERFACE Libsecret::Libsecret)
-      set(SOURCES ${SOURCES} "common/pwstorage/backend_libsecret.c")
-      add_definitions(-DHAVE_LIBSECRET=1)
-    endif()
-  endif(Libsecret_FOUND)
-endif()
-
-if(USE_KWALLET)
-  add_definitions(-DHAVE_KWALLET=1)
-endif(USE_KWALLET)
-
 if(USE_MAC_INTEGRATION)
   find_package(MacIntegration)
   if(TARGET MacIntegration::MacIntegration)
@@ -525,59 +526,6 @@ if(USE_MAC_INTEGRATION)
   endif()
 endif()
 
-if(USE_GRAPHICSMAGICK)
-  find_package(GraphicsMagick)
-
-  if(TARGET GraphicsMagick::GraphicsMagick)
-    target_link_libraries(ansel_deps INTERFACE GraphicsMagick::GraphicsMagick)
-  else()
-    # pkg-config fallback
-    pkg_check_modules(GRAPHICSMAGICK QUIET IMPORTED_TARGET GraphicsMagick)
-
-    if(TARGET PkgConfig::GRAPHICSMAGICK)
-      target_link_libraries(ansel_deps INTERFACE PkgConfig::GRAPHICSMAGICK)
-    elseif(GraphicsMagick_FOUND)
-      # legacy fallback
-      target_include_directories(ansel_deps INTERFACE ${GraphicsMagick_INCLUDE_DIRS})
-      target_link_libraries(ansel_deps INTERFACE ${GraphicsMagick_LIBRARIES})
-    endif()
-  endif()
-
-  if(TARGET GraphicsMagick::GraphicsMagick OR TARGET PkgConfig::GRAPHICSMAGICK OR GraphicsMagick_FOUND)
-    set(DT_SUPPORTED_EXTENSIONS
-        ${DT_SUPPORTED_EXTENSIONS}
-        gif jpc jp2 bmp dcm jng miff mng pbm pnm ppm pgm webp
-        CACHE INTERNAL "")
-    add_definitions(-DHAVE_GRAPHICSMAGICK=1)
-  endif()
-endif()
-
-if(USE_IMAGEMAGICK AND NOT TARGET GraphicsMagick::GraphicsMagick AND NOT TARGET PkgConfig::GRAPHICSMAGICK)
-  pkg_check_modules(IMAGEMAGICK IMPORTED_TARGET MagickWand>=7)
-
-  if(TARGET PkgConfig::IMAGEMAGICK)
-    target_link_libraries(ansel_deps INTERFACE PkgConfig::IMAGEMAGICK)
-    add_definitions(-DHAVE_IMAGEMAGICK=1)
-
-    # pkg-config CFLAGS_OTHER (rare but needed for ImageMagick)
-    if(IMAGEMAGICK_CFLAGS_OTHER)
-      target_compile_options(ansel_deps INTERFACE ${IMAGEMAGICK_CFLAGS_OTHER})
-    endif()
-
-    set(DT_SUPPORTED_EXTENSIONS
-        ${DT_SUPPORTED_EXTENSIONS}
-        gif jpc jp2 bmp dcm jng miff mng pam webp
-        CACHE INTERNAL "")
-  endif()
-endif()
-
-if(USE_GMIC)
-  find_package(GMIC)
-  if(GMIC_FOUND)
-    add_definitions(-DHAVE_GMIC=1)
-    target_link_libraries(ansel_deps INTERFACE ${GMIC_LIBRARIES})
-  endif(GMIC_FOUND)
-endif(USE_GMIC)
 
 if(USE_ICU)
   find_package(ICU REQUIRED COMPONENTS uc i18n data)
@@ -585,7 +533,7 @@ if(USE_ICU)
   if(TARGET ICU::uc)
     target_link_libraries(ansel_deps INTERFACE ICU::uc ICU::i18n ICU::data)
     add_definitions(-DHAVE_ICU=1 -DSQLITE_CORE -DSQLITE_ENABLE_ICU)
-    list(APPEND SOURCES common/sqliteicu.c)
+    list(APPEND SOURCES database/sqliteicu.c)
   endif()
 endif()
 
@@ -747,7 +695,7 @@ if(BUILD_PRINT)
     FILE(GLOB SOURCE_FILES_PRINT
       "common/cups_print.h"
       "common/cups_print.c"
-      "common/printprof.c"
+      "colorprofiles/printprof.c"
       "common/printing.h"
       "common/printing.c"
       )
@@ -851,6 +799,18 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 # Link external libs
 #
 target_link_libraries(lib_ansel PUBLIC ansel_deps)
+# The widget toolkit is its own target (src/widgets/CMakeLists.txt). Linked whole, because GTK
+# widget types register themselves through GObject and the linker would otherwise drop objects
+# nothing references by name.
+#
+# The spelling is NOT portable: --whole-archive is GNU ld, and Apple's ld64 rejects it
+# outright ("clang: error: linker command failed"), which is why this broke macOS alone while
+# Linux and Windows linked fine. ld64 spells it -force_load and takes the archive path.
+if(APPLE)
+  target_link_libraries(lib_ansel PRIVATE -Wl,-force_load,$<TARGET_FILE:ansel_widgets> ansel_widgets)
+else()
+  target_link_libraries(lib_ansel PRIVATE -Wl,--whole-archive ansel_widgets -Wl,--no-whole-archive)
+endif()
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_libraw)
 target_link_libraries(lib_ansel PRIVATE whereami)
@@ -929,6 +889,10 @@ add_subdirectory(imageio)
 if(HAVE_OPENCL)
   # have a small test program, to be run as root on some systems to enable the driver to run cl stuff
   add_subdirectory(apps/ansel-cltest)
+  # three-way parity of the .anselnn executor: torch fixture vs CPU vs OpenCL. The GPU half
+  # needs a compiled program number, so unlike src/tests/nn_model_test.c it cannot be built
+  # standalone and has to link lib_ansel.
+  add_subdirectory(apps/ansel-nn-parity)
 endif(HAVE_OPENCL)
 
 # have a command line interface

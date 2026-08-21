@@ -38,7 +38,7 @@
 #ifndef DT_IMAGEIO_IMAGEIO_MODULE_H
 #define DT_IMAGEIO_IMAGEIO_MODULE_H
 
-#include "common/colorspaces.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/metadata_export.h"
 #include <gmodule.h>
 #include <gtk/gtk.h>

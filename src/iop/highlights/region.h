@@ -29,7 +29,7 @@
 void _region_guided_filter(float *const restrict interp, const float *const restrict mask,
                            const float *const restrict depth, const int width, const _hl_region_t *const region,
                            const dt_dev_pixelpipe_t *pipe, const float solid_color, const int max_iter,
-                           const float noise_level, const float floor_gate);
+                           const float noise_level, const float floor_gate, const float module_scale);
 
 #if defined(HAVE_OPENCL) && DT_HL_COEFF_FIELD && DT_HL_SPARSE_SOLVE && (DT_HL_ANISO_SOLVER == 2)
 // CPU offload of one region inside the GPU middle: gather the padded window to host, run the
@@ -44,7 +44,7 @@ void _region_guided_filter(float *const restrict interp, const float *const rest
 cl_int _region_cpu_offload_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                               const int width, const _hl_region_t *const region, const dt_dev_pixelpipe_t *pipe,
                               const float solid_color, const int max_iter, const float noise_level,
-                              const float floor_gate);
+                              const float floor_gate, const float module_scale);
 
 // MATHS/PIPELINE BRIDGE -- device-resident per-region reconstruction, the GPU twin of the CPU
 // _region_guided_filter (article §"The algorithm", steps 3-8, and §"The OpenCL pipe": a big region
@@ -60,6 +60,6 @@ cl_int _region_cpu_offload_cl(const int devid, void *gd_void, cl_mem interp, cl_
 // reduction partials cross the bus. The reconstructed clipped channels are scattered back on device.
 cl_int _region_guided_filter_cl(const int devid, void *gd_void, cl_mem interp, cl_mem mask, cl_mem depth,
                                 const int width, const _hl_region_t *const region, const dt_dev_pixelpipe_t *pipe,
-                                const float solid_color, const float floor_gate);
+                                const float solid_color, const float floor_gate, const float module_scale);
 #endif
 #endif // DT_IOP_HIGHLIGHTS_REGION_H

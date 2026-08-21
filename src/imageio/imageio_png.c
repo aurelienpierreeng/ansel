@@ -34,11 +34,11 @@
 #include <stdio.h>
 #include <strings.h>
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "imageio_png.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "develop/develop.h"
 
 int read_header(const char *filename, dt_imageio_png_t *png)

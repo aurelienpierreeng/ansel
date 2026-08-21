@@ -34,6 +34,7 @@ on:
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -60,18 +61,84 @@ jobs:
           sudo apt-get -y install \
             intltool \
             doxygen \
-            graphviz;
+            graphviz \
+            cloc \
+            cppcheck;
+          pipx install lizard
+      # fetch-depth: 0 - the health panel's evolution metrics (hotspots, change
+      # coupling, ownership) read git log. A shallow clone has no history, so they
+      # would silently report nothing.
       - name: Checkout
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v2
-      - name: Build docs
+      # Pass 1 builds only Doxygen's SQLite symbol table: no HTML, no graphs, so it
+      # costs seconds. The health panel is generated from it, and pass 2 then picks
+      # that panel up as an ordinary page. Two passes are needed because the panel
+      # reports on Doxygen's own output.
+      - name: Doxygen pass 1 - symbol database
+        run: |
+          ( cat doc/Doxyfile
+            echo 'GENERATE_HTML          = NO'
+            echo 'GENERATE_AUTOGEN_DEF   = NO'
+            echo 'HAVE_DOT               = NO'
+            echo 'GENERATE_SQLITE3       = YES'
+            echo 'QUIET                  = YES'
+            echo 'WARNINGS               = NO'
+            echo 'WARN_IF_UNDOCUMENTED   = NO'
+            echo 'WARN_IF_DOC_ERROR      = NO'
+            echo 'WARN_IF_INCOMPLETE_DOC = NO' ) | doxygen -
+
+      # Optional: the most recent clang-tidy log from the code-health workflow, which
+      # can configure a build tree. Absent is fine - the panel then says so.
+      - name: Fetch latest clang-tidy report
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow code-health.yml --status success \
+                     --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --name clang-tidy-report --dir clang-tidy-report \
+              && echo "fetched clang-tidy report from run $run_id"
+          else
+            echo "no successful code-health run yet"
+          fi
+
+      - name: Code health panel
+        run: |
+          extra=""
+          [ -f clang-tidy-report/clang-tidy.log ] && extra="$extra --clang-tidy-log clang-tidy-report/clang-tidy.log"
+          [ -f clang-tidy-report/selfcontained.json ] && extra="$extra --selfcontained-report clang-tidy-report/selfcontained.json"
+          python3 tools/code_health.py \
+            --project ansel \
+            --source-dir src \
+            --db doc/api/sqlite3/doxygen_sqlite3.db \
+            $extra
+
+      - name: Doxygen pass 2 - full site
         run: |
           doxygen doc/Doxyfile
+
+      - name: Report generated size
+        run: |
+          {
+            echo "### Doxygen output"
+            echo '```'
+            du -sh doc/api/html
+            echo "html files : $(find doc/api/html -name '*.html' | wc -l)"
+            echo "svg graphs : $(find doc/api/html -name '*.svg' | wc -l)"
+            echo '```'
+            echo "### Code health"
+            echo '```'
+            python3 -c "import json;d=json.load(open('doc/code-health.json'));c=d.get('ccn') or {};print('functions      ', c.get('functions'));print('mean CCN       ', c.get('ccn_mean'));print('CCN > 15       ', c.get('over_15'));print('CCN > 50       ', c.get('over_50'));print('max header fan-in', (d.get('includers') or [{}])[0].get('included_by'))"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          du -sh doc/api/html
       - name: Upload page artifact
         uses: actions/upload-pages-artifact@v3
         with:

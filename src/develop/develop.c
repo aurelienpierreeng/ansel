@@ -68,11 +68,13 @@
 #include <strings.h>
 #include <unistd.h>
 
+#include "develop/imageop_gui.h"
+#include "widgets/widget_settings.h"
 #include "system/atomic.h"
-#include "common/history.h"
-#include "common/image_cache.h"
-#include "common/mipmap_cache.h"
-#include "common/tags.h"
+#include "history/history.h"
+#include "caches/image_cache.h"
+#include "caches/mipmap_cache.h"
+#include "metadata/tags.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/signal.h"
@@ -82,10 +84,14 @@
 #include "develop/imageop.h"
 #include "develop/lightroom.h"
 #include "develop/masks.h"
-#include "develop/pixelpipe_cache.h"
-#include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "caches/pixelpipe_cache.h"
+#include "gui/application.h"
+#include "develop/geometry/geometry.h"
+#include "develop/gui_throttle.h"
 #include "libs/colorpicker.h"
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
+#include "gui/screen_metrics.h"
 
 #define DT_IOP_ORDER_INFO (dt_get_debug_flags() & DT_DEBUG_IOPORDER)
 
@@ -122,6 +128,8 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 {
   memset(dev, 0, sizeof(dt_develop_t));
+  dt_dev_geometry_init(dev);
+  dt_dev_roi_request_init(dev);
   dt_dev_set_history_hash(dev, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dt_pthread_rwlock_set_name(&dev->history_mutex, "history_mutex"); // find_history_mutex_blocker, temporary
@@ -129,8 +137,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_pthread_mutex_init(&dev->transient_params_mutex, NULL);
 
   dev->gui_attached = gui_attached;
-  dev->roi.width = -1;
-  dev->roi.height = -1;
+  if(gui_attached) dev->viewport = dt_dev_viewport_new();
 
   dt_image_init(&dev->image_storage);
 
@@ -138,17 +145,13 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   {
     dev->pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
     dev->preview_pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
-    // Virtual pipe mirrors preview_pipe for geometry, but is never processed.
-    dev->virtual_pipe = (dt_dev_pixelpipe_t *)malloc(sizeof(dt_dev_pixelpipe_t));
     dt_dev_pixelpipe_init(dev->pipe, dev);
     dt_dev_pixelpipe_init_preview(dev->preview_pipe, dev);
-    dt_dev_pixelpipe_init_preview(dev->virtual_pipe, dev);
-    dev->histogram_pre_tonecurve = (uint32_t *)calloc(4 * 256, sizeof(uint32_t));
-    dev->histogram_pre_levels = (uint32_t *)calloc(4 * 256, sizeof(uint32_t));
 
-    // FIXME: these are uint32_t, setting to -1 is confusing
-    dev->histogram_pre_tonecurve_max = -1;
-    dev->histogram_pre_levels_max = -1;
+    /* Where the GUI gets sizes and coordinates from (doc/geometry-service.md). GUI devs only:
+     * it answers GUI questions and is GUI-thread state, so a headless dev has nothing to do with
+     * one -- which is also what makes the NULL chain the guard on every entry point. */
+    dev->geometry_chain = dt_geometry_chain_new();
   }
 
   dt_dev_set_backbuf(&dev->raw_histogram, 0, 0, 0, -1, -1);
@@ -222,6 +225,10 @@ void dt_dev_cleanup(dt_develop_t *dev)
   // image_cache does not have to be unref'd, this is done outside develop module.
 
   dt_gui_throttle_cancel(dev);
+  dt_dev_history_drop_pending_commits(dev);
+
+  dt_dev_viewport_free(dev->viewport);
+  dev->viewport = NULL;
 
   dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_coeffs[0] = 0.f;
@@ -235,12 +242,8 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dt_dev_pixelpipe_cleanup(dev->preview_pipe);
     dt_free(dev->preview_pipe);
   }
-  if(dev->virtual_pipe)
-  {
-    // Virtual pipe has nodes and committed params but no pixel buffers.
-    dt_dev_pixelpipe_cleanup(dev->virtual_pipe);
-    dt_free(dev->virtual_pipe);
-  }
+  dt_geometry_chain_free(dev->geometry_chain);
+  dev->geometry_chain = NULL;
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   while(dev->history)
@@ -283,16 +286,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
   }
   g_list_free_full(dev->iop_order_list, dt_free_gpointer);
   dev->iop_order_list = NULL;
-  while(dev->allprofile_info)
-  {
-    dt_ioppr_cleanup_profile_info((dt_iop_order_iccprofile_info_t *)dev->allprofile_info->data);
-    dt_free_align(dev->allprofile_info->data);
-    dev->allprofile_info->data = NULL;
-    dev->allprofile_info = g_list_delete_link(dev->allprofile_info, dev->allprofile_info);
-  }
-
-  dt_free(dev->histogram_pre_tonecurve);
-  dt_free(dev->histogram_pre_levels);
 
   if(dev->color_picker.primary_sample)
   {
@@ -336,71 +329,65 @@ static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return FALSE;
 
+  dt_dev_image_geometry_t geometry;
+  dt_dev_geometry_get(dev, &geometry);
+
   return dev->image_storage.id > 0
-         && dev->roi.width >= 32
-         && dev->roi.height >= 32
-         && dev->roi.raw_width >= 32
-         && dev->roi.raw_height >= 32
-         && dev->roi.processed_width >= 32
-         && dev->roi.processed_height >= 32
-         && dev->roi.preview_width >= 32
-         && dev->roi.preview_height >= 32;
+         && dt_dev_viewport_box_width(dev) >= 32
+         && dt_dev_viewport_box_height(dev) >= 32
+         && geometry.raw_width >= 32
+         && geometry.raw_height >= 32
+         && geometry.processed_width >= 32
+         && geometry.processed_height >= 32
+         && dt_dev_roi_request_preview_width(dev) >= 32
+         && dt_dev_roi_request_preview_height(dev) >= 32;
 }
 
 int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 {
-  if(!dev->roi.raw_inited || !dev->roi.gui_inited) return 1;
+  if(!dt_dev_geometry_raw_inited(dev) || !dt_dev_viewport_configured(dev)) return 1;
 
-  // Keep the virtual pipe synced so ROI computations on the GUI thread
-  // always use up-to-date history and input sizes.
-  if(dev->virtual_pipe->imgid != dev->image_storage.id
-      || dev->virtual_pipe->iwidth != dev->roi.raw_width
-      || dev->virtual_pipe->iheight != dev->roi.raw_height
-      || dev->virtual_pipe->dev->image_storage.id != dev->image_storage.id)
-    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev->image_storage.id,
-                                dev->roi.raw_width, dev->roi.raw_height, 1.0f, DT_MIPMAP_FULL);
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const int32_t raw_width = geometry.raw_width;
+  const int32_t raw_height = geometry.raw_height;
 
-  if(!dev->virtual_pipe->nodes)
-    dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_REMOVE);
-  else if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
-  {
-    if(dt_dev_pixelpipe_get_realtime(dev->pipe))
-      dt_dev_pixelpipe_set_history_hash(dev->virtual_pipe, dt_dev_get_history_hash(dev));
-    else
-      dt_dev_pixelpipe_or_changed(dev->virtual_pipe, DT_DEV_PIPE_SYNCH);
-  }
+  /* The chain is rebuilt BEFORE the size is decided now, because it is what decides it. It is
+   * cheap -- small derivations of already-committed parameters, no LUT, no colour transform, no
+   * disk -- which is the whole point of the exercise: the resync below is not. */
+  const double chain_start = dt_get_wtime();
+  dt_geometry_chain_rebuild(dev);
+  const double chain_ms = (dt_get_wtime() - chain_start) * 1000.0;
 
-  if(dt_dev_pixelpipe_get_changed(dev->virtual_pipe) != DT_DEV_PIPE_UNCHANGED)
-    dt_dev_pixelpipe_change(dev->virtual_pipe);
+  /* The developed size, folded from the geometry records. Nothing is rebuilt to obtain it: that
+   * is what this service replaced, and what it cost is recorded in doc/geometry-service.md. */
+  int processed_width = 0;
+  int processed_height = 0;
+  if(!dt_geometry_chain_processed_size(dev->geometry_chain, &processed_width, &processed_height))
+    return 1;
 
-  // Compute the virtual full-res output. This needs an inited history
-  dt_dev_pixelpipe_get_roi_out(dev->virtual_pipe, dev->roi.raw_width, dev->roi.raw_height, 
-                               &dev->roi.processed_width, &dev->roi.processed_height);
+  dt_dev_geometry_set_processed_size(dev, processed_width, processed_height);
 
-  // Compute the scaling factor that makes full-res output fit within widget
-  dev->roi.natural_scale = dt_dev_get_natural_scale(dev);
+  // Derive and publish everything the pipes plan from, as one record.
+  dt_dev_roi_request_publish(dev);
 
-  // The preview backbuffer and the pipeline ROI both live in raster pixels.
-  // `natural_scale` therefore directly maps the processed image size to the
-  // raster backbuffer size, without any GUI-density factor mixed in.
-  // Use roundf() — NOT a plain (int) truncation — so these match the ROI the
-  // worker actually requests in `_update_darkroom_roi()` (which rounds too) and
-  // therefore the size of the backbuffer the pipe produces. A truncation here
-  // disagreed with that rounding by 1px whenever the fractional part was >= 0.5,
-  // which is image-dependent: it silently broke `dt_dev_pixelpipe_has_preview_output()`
-  // (hence ashift structure detection / drawing) on some images but not others,
-  // and resetting the module to neutral did not help because the mismatch does
-  // not depend on the module parameters at all.
-  dev->roi.preview_width = roundf(dev->roi.natural_scale * dev->roi.processed_width);
-  dev->roi.preview_height = roundf(dev->roi.natural_scale * dev->roi.processed_height);
-  dev->roi.output_inited = TRUE;
+  /* Shadow mode compares against the pipe's own fold, which only exists when the pipe was
+   * resynced above -- so it is asked for, and paid for, under `-d dev' and nowhere else. It runs
+   * STRICTLY AFTER both publications and never between them: those two are one atomic-looking
+   * update, the first moving the geometry record to the new size and the second moving the ROI
+   * request to match AND flagging the pipes to replan. Anything inserted between them widens the
+   * window in which the darkroom worker latches the OLD request against ALREADY NEW history,
+   * which is the mixed frame of #1157. An observer must not sit inside the update it observes. */
+  dt_geometry_self_check(dev, chain_ms);
 
-  dt_dev_update_mouse_effect_radius(dev); 
+
+  dt_dev_update_mouse_effect_radius(dev);
+
+  const dt_dev_roi_request_t request = dt_dev_roi_request_get(dev);
 
   dt_print(DT_DEBUG_DEV,
             "[pixelpipe] thumbnail sizes raw %dx%d -> processed %dx%d -> preview %dx%d (scale %.5f)\n",
-            dev->roi.raw_width, dev->roi.raw_height, dev->roi.processed_width, dev->roi.processed_height,
-            dev->roi.preview_width, dev->roi.preview_height, dev->roi.natural_scale);
+            raw_width, raw_height, request.processed_width, request.processed_height,
+            request.preview_width, request.preview_height, request.natural_scale);
   
   return 0;
 }
@@ -408,13 +395,20 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_dev_pixelpipe_t *pipe,
                                              const dt_iop_roi_t *roi)
 {
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !dev->gui_attached || !dev->roi.output_inited) return FALSE;
+  // The NULL checks come FIRST: this is called with dev->preview_pipe, which is allocated only
+  // for a gui_attached dev (dt_dev_init) and is therefore NULL on every export and thumbnail
+  // dev -- iop/denoiseprofile.c passes exactly that.
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(pipe) || !dev->gui_attached) return FALSE;
+
+  // Compare against what this pipe was planned from, not what the GUI has published since.
+  const dt_dev_roi_request_t request = dt_dev_roi_request_of_pipe(pipe);
+  if(!request.valid) return FALSE;
 
   int x = 0;
   int y = 0;
   int width = 0;
   int height = 0;
-  float scale = dev->roi.natural_scale;
+  float scale = request.natural_scale;
 
   if(!IS_NULL_PTR(roi))
   {
@@ -439,17 +433,17 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_d
   // GUI buffer on portrait images, breaking structure detection and manual drawing (#710).
   //
   // Tolerate a couple of pixels of slack on the dimensions. `dev->roi.preview_*` is derived from the
-  // virtual pipe at scale 1.0, whereas `roi` is produced at `natural_scale`; geometric modules
+  // composed geometry at scale 1.0, whereas `roi` is produced at `natural_scale`; geometric modules
   // (ashift, lens) round their transformed bounding box with floorf() independently at each scale,
   // so the two legitimately disagree by ~1px for the very same full image. The real discriminators
   // are the origin and scale tests below: a zoomed or panned ROI has a non-zero x/y and a scale
   // strictly greater than natural_scale, so loosening the size match cannot misclassify those.
   const int tol = 2;
   const gboolean dims_match
-      = (abs(width - dev->roi.preview_width) <= tol && abs(height - dev->roi.preview_height) <= tol)
-        || (abs(width - dev->roi.preview_height) <= tol && abs(height - dev->roi.preview_width) <= tol);
+      = (abs(width - request.preview_width) <= tol && abs(height - request.preview_height) <= tol)
+        || (abs(width - request.preview_height) <= tol && abs(height - request.preview_width) <= tol);
   if(!dims_match) return FALSE;
-  return x == 0 && y == 0 && fabsf(scale - dev->roi.natural_scale) < 1e-4f;
+  return x == 0 && y == 0 && fabsf(scale - request.natural_scale) < 1e-4f;
 }
 
 
@@ -457,7 +451,10 @@ gboolean dt_dev_pixelpipe_has_preview_output(const dt_develop_t *dev, const dt_d
 static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *x, int *y, int *wd, int *ht,
                                      float *scale)
 {  
-  if(!dev->roi.output_inited) return 1;
+  // The latched snapshot, not the live record: this runs on the worker, and the frame must be
+  // planned from the same numbers the rest of this iteration uses.
+  const dt_dev_roi_request_t request = dt_dev_roi_request_of_pipe(pipe);
+  if(!request.valid) return 1;
 
   // Store previous values
   int x_old = *x;
@@ -468,36 +465,38 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
   // roi->scale is the pipeline sampling ratio against the processed image and
   // therefore excludes the GUI backing-store density.
-  *scale = dev->roi.natural_scale;
+  *scale = request.natural_scale;
   const gboolean preview_pipe = (pipe == dev->preview_pipe);
-  if(!preview_pipe) *scale *= dev->roi.scaling;
+  if(!preview_pipe) *scale *= request.scaling;
 
   // Width, height, x and y are already expressed in raster pixels, so they
-  // must follow the same raster-space sampling ratio as roi->scale.
-  int roi_width = roundf(*scale * dev->roi.processed_width);
-  int roi_height = roundf(*scale * dev->roi.processed_height);
-  int widget_wd = dev->roi.width;
-  int widget_ht = dev->roi.height;
+  // must follow the same raster-space sampling ratio as roi->scale. All of it comes from the
+  // latched record: mixing one live read into this arithmetic is exactly how a frame ends up
+  // describing a viewport that never existed.
+  int roi_width = roundf(*scale * request.processed_width);
+  int roi_height = roundf(*scale * request.processed_height);
+  int widget_wd = request.box_width;
+  int widget_ht = request.box_height;
 
   *wd = roundf(fminf(roi_width, widget_wd));
   *ht = roundf(fminf(roi_height, widget_ht));
 
-  // dev->roi.x,y are the relative coordinates of the ROI center.
+  // dt_dev_viewport_center_x(dev),y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
   // otherwise, x,y here are the top-left corner. Translate:
-  *x = preview_pipe ? 0 : roundf(dev->roi.x * roi_width - *wd * .5f);
-  *y = preview_pipe ? 0 : roundf(dev->roi.y * roi_height - *ht * .5f);
+  *x = preview_pipe ? 0 : roundf(request.center_x * roi_width - *wd * .5f);
+  *y = preview_pipe ? 0 : roundf(request.center_y * roi_height - *ht * .5f);
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
-            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, dt_gui_get_global()->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
+            dt_dev_viewport_center_x(dev), dt_dev_viewport_center_y(dev), dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, dt_gui_get_global()->ppd, *scale, dt_dev_roi_request_natural_scale(dev), dt_dev_viewport_scaling(dev));
 */
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
 
 gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev)
 {
-  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->pipe) || IS_NULL_PTR(dev->preview_pipe) || !dev->roi.output_inited) return FALSE;
+  if(IS_NULL_PTR(dev) || !dev->gui_attached || IS_NULL_PTR(dev->pipe) || IS_NULL_PTR(dev->preview_pipe) || !dt_dev_roi_request_valid(dev)) return FALSE;
 
   float preview_scale = 1.0f;
   float main_scale = 1.0f;
@@ -514,11 +513,12 @@ gboolean dt_dev_pipelines_share_preview_output(dt_develop_t *dev)
 
 static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 {
-  dt_mipmap_cache_t *cache = dt_mipmap_cache_get_global();
   const int32_t imgid = pipe->dev->image_storage.id;
 
-  // Get the mip size that is at most as big as our pipeline backbuf
-  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(cache, pipe->backbuf.width, pipe->backbuf.height, imgid);
+  // Get the mip size that is at most as big as our pipeline backbuf. One read: these dimensions
+  // are handed to the mipmap cache alongside the payload below, so they must describe it.
+  const dt_backbuf_state_t published = dt_dev_backbuf_snapshot(&pipe->backbuf);
+  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(published.width, published.height, imgid);
   
   // Flush backup to mipmap_cache. This runs after dt_dev_pixelpipe_process() released the OpenCL device
   // lock, so we must NOT pass pipe->devid (now stale/unlocked): a device-only payload would otherwise be
@@ -526,17 +526,20 @@ static void dt_dev_resync_mipmap_cache(dt_develop_t *dev, dt_dev_pixelpipe_t *pi
   // so preferred_devid = -1 returns it directly; anything else is simply skipped.
   uint8_t *data = NULL;
   dt_pixel_cache_entry_t *entry = NULL;
-  if(dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_pixelpipe_cache_get_global(), dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry)
+  if(dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_get_hash(pipe), (void **)&data, &entry)
      && data)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
-    dt_mipmap_cache_swap_at_size(cache, imgid, mip, data, pipe->backbuf.width, pipe->backbuf.height, dt_colorspaces_get_global()->display_type);
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
+    dt_colorprofiles_settings_t settings;
+    dt_colorprofiles_get_settings(&settings);
+    dt_mipmap_cache_swap_at_size(imgid, mip, data, published.width, published.height,
+                                 settings.display_type);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
   }
   else if(entry)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
   }
 }
 
@@ -617,9 +620,21 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       continue;
     }
 
-    // This is cheap to run, keep it in sync always.
+    // Latch the viewport request ONCE for this iteration, before anything reads it. Everything
+    // downstream -- the ROI planner, the resync, every module callback -- then works from one
+    // snapshot for the whole frame, however many times the GUI thread republishes meanwhile.
+    // Reading it live at each consumer is what let a single frame be planned from two different
+    // viewport states.
+    const dt_dev_roi_request_t latched = dt_dev_roi_request_get(dev);
     for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
-      dt_dev_pixelpipe_set_input(pipes[i], dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+      dt_dev_roi_request_latch(pipes[i], &latched);
+
+    // This is cheap to run, keep it in sync always.
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+    const int32_t input_width = geometry.raw_width;
+    const int32_t input_height = geometry.raw_height;
+    for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
+      dt_dev_pixelpipe_set_input(pipes[i], dev->image_storage.id, input_width, input_height,
                                  1.0f, DT_MIPMAP_FULL);
 
     gboolean pipe_needs_update[G_N_ELEMENTS(pipes)] = { FALSE };
@@ -660,19 +675,41 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
       // The resync stage above synchronized history, planned the ROI and advertised the matching
       // final global hash. We process the exact state it committed, using pipe_roi[i]: that is what
       // dt_dev_pixelpipe_process() recomputes its hash from, so the cacheline it publishes always
-      // carries the hash already announced to GUI consumers. A change that landed after the resync
-      // (zoom/pan, a fresh history commit) does NOT invalidate this run — it always also raised the
-      // killswitch (`_change_pipe()` sets shutdown together with the changed flag), so the run below
-      // aborts cleanly and the next loop iteration resyncs, re-advertises and reprocesses the new
-      // state. We must NOT skip on a set changed flag here: every darkroom configure-event flags the
-      // preview pipe ZOOMED, so on an image switch (which re-lays-out the view) skipping would starve
-      // the preview and leave navigation/scopes blank.
+      // carries the hash already announced to GUI consumers. A change that lands after this point
+      // raises the killswitch together with its changed flag (`_change_pipe()`, and
+      // dt_dev_roi_request_publish() does the same on a payload change), so the run below aborts
+      // and the next loop iteration resyncs, re-advertises and reprocesses the new state. We must
+      // NOT skip on a set changed flag here: every darkroom configure-event flags the preview pipe
+      // ZOOMED, so on an image switch (which re-lays-out the view) skipping would starve the
+      // preview and leave navigation/scopes blank.
+      //
+      // A change that landed BETWEEN this iteration's latch and this point is another matter, and
+      // the check below is the second half of the #1157 fix. The resync's while(changed) loop
+      // spans 100-400 ms and consumes whatever flags land inside it, syncing their history -- but
+      // the ROI was then planned from THIS ITERATION'S latch, taken before any of it. Their
+      // killswitch does not save the run either, since the reset a few lines down would swallow
+      // it. Rendering the consumed history into the stale latched geometry is how a crop Apply
+      // produced a border-clamped smear that nothing ever corrected. So: if the published record
+      // has moved past the latch, this plan is dead. Re-flag (the flag may have been consumed) and
+      // skip the run; the next iteration re-latches and replans from the current record. This
+      // cannot starve: the generation only advances when a GUI publish actually changed the
+      // payload, so a quiet viewport lets the very next iteration through.
+      const dt_dev_roi_request_t current_request = dt_dev_roi_request_get(dev);
+      if(current_request.generation != latched.generation)
+      {
+        dt_dev_pixelpipe_or_changed(pipe, DT_DEV_PIPE_ZOOMED);
+        continue;
+      }
+
       dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
 
-      // We are starting fresh, reset the killswitch signal.
+      // We are starting fresh, reset the killswitch signal. Safe only because the staleness
+      // check above ran after the resync: any killswitch this discards belonged to a change
+      // whose flag either survives (raised after the resync loop exited) or whose publish
+      // moved the generation (caught above). Do not move this reset earlier.
       dt_atomic_set_int(&pipe->shutdown, FALSE);
 
       /**
@@ -793,7 +830,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
 
       // Update the running average of process time for GUI controls thresholding
       if(processed)
-        dt_gui_throttle_record_runtime(pipe, process_runtime_us);
+      {
+        // Map the pipe onto the throttle's own two slots; it does not know pipeline types.
+        const dt_throttle_slot_t slot = (pipe->type == DT_DEV_PIXELPIPE_FULL) ? DT_THROTTLE_SLOT_MAIN
+                                        : (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? DT_THROTTLE_SLOT_PREVIEW
+                                        : DT_THROTTLE_SLOT_OTHER;
+        dt_gui_throttle_record_runtime(slot, process_runtime_us);
+      }
 
       // If everything went well, yell to GUI listeners that they can use the output buffer.
       if(published_backbuffer)
@@ -865,35 +908,47 @@ void dt_dev_start_all_pipelines(dt_develop_t *dev)
 static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(&buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   const gboolean ok = (!IS_NULL_PTR(buf.buf)) && buf.width != 0 && buf.height != 0;
 
-  if(dev->gui_attached)
-  {
-    dev->roi.raw_height = buf.height;
-    dev->roi.raw_width = buf.width;
-    dev->roi.raw_inited = TRUE;
-  }
+  // dt_dev_geometry_raw_width(dev)/height are the raw image's own pixel dimensions -- an objective fact
+  // about the loaded buffer, not GUI viewport state -- and must be set for every dev, not just
+  // gui_attached ones. dt_dev_coordinates_raw_norm_to_raw_abs() (develop.c) and every drawn-mask
+  // shape's own geometry function (masks/circle.c, ellipse.c, brush.c, gradient.c, polygon.c) read
+  // dt_dev_geometry_raw_width(dev)/height to convert a form's normalized center/points into absolute pixel
+  // coordinates; with raw_width/height left at 0 (their calloc default), that conversion silently
+  // no-ops (dt_dev_coordinates_raw_norm_to_raw_abs() early-returns on raw_width==0), leaving the
+  // shape's normalized (0..1) coordinates masquerading as pixel coordinates -- collapsing every
+  // shape's computed position to somewhere near the image origin regardless of where it was
+  // actually drawn. That made every drawn mask on any non-GUI dev (export, thumbnail generation,
+  // dev_snapshot.c's frozen dev) resolve to the wrong location, so a module needing mask history
+  // (retouch's clone/heal/blur/fill, or any masked blend) either processes empty geometry or
+  // silently produces zero visible effect outside the live darkroom.
+  // Publish what the read actually produced. `ok' is FALSE when the mipmap cache handed back
+  // no buffer or a 0-sized one; claiming raw_inited in that case told every later reader that
+  // 0x0 was a measured fact about the image, and dt_dev_geometry_refresh()'s own guard
+  // (dt_dev_geometry_raw_inited) then let the size fold run on it.
+  dt_dev_geometry_set_raw_size(dev, ok ? buf.width : 0, ok ? buf.height : 0, ok);
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 
   return ok;
 }
 
 static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  const dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *image = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(image)) return FALSE;
   dev->image_storage = *image;
-  dt_image_cache_read_release(dt_image_cache_get_global(), image);
+  dt_image_cache_read_release(image);
   dt_iop_buffer_dsc_update_bpp(&dev->image_storage.dsc);
   return TRUE;
 }
 
 dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid)
 {
-  if(IS_NULL_PTR(dev) || imgid <= 0 || IS_NULL_PTR(dt_image_cache_get_global()))
+  if(IS_NULL_PTR(dev) || imgid <= 0 || !dt_image_cache_is_ready())
     return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
 
   if(!_dt_dev_mipmap_prefetch_full(dev, imgid))
@@ -926,9 +981,13 @@ static inline dt_dev_image_storage_t _dt_dev_load_raw(dt_develop_t *dev, const i
 // return the zoom scale to fit into the viewport
 float dt_dev_get_zoom_scale(const dt_develop_t *dev, const gboolean preview)
 {
-  const float w = preview ? dev->roi.processed_width : dev->pipe->processed_width;
-  const float h = preview ? dev->roi.processed_height : dev->pipe->processed_height;
-  return fminf(dev->roi.width / w, dev->roi.height / h);
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const int32_t processed_width = geometry.processed_width;
+  const int32_t processed_height = geometry.processed_height;
+
+  const float w = preview ? processed_width : dev->pipe->processed_width;
+  const float h = preview ? processed_height : dev->pipe->processed_height;
+  return fminf(dt_dev_viewport_box_width(dev) / w, dt_dev_viewport_box_height(dev) / h);
 }
 
 dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
@@ -945,11 +1004,11 @@ dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   {
     // Resync our private copy of image image with DB,
     // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag.
-    dt_image_t *image = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(imgid, 'w');
     if(!IS_NULL_PTR(image))
     {
       *image = dev->image_storage;
-      dt_image_cache_write_release(dt_image_cache_get_global(), image, DT_IMAGE_CACHE_SAFE);
+      dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
     }
 
     dt_dev_write_history_ext(dev, imgid);
@@ -974,18 +1033,35 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
   const dt_iop_roi_t gui_roi = { .x = 0, .y = 0, .width = wd, .height = ht, .scale = 1.0f };
   dt_iop_roi_t pipe_roi = { 0 };
   dt_dev_convert_roi(dev, &gui_roi, &pipe_roi, DT_DEV_ROI_GUI_LOGICAL, DT_DEV_ROI_PIPELINE);
-  dev->roi.width = pipe_roi.width;
-  dev->roi.height = pipe_roi.height;
-  dev->roi.gui_inited = TRUE;
+  dt_dev_viewport_set_box(dev, pipe_roi.width, pipe_roi.height);
 
   dt_print(DT_DEBUG_DEV,
            "[pixelpipe] Darkroom requested a %i×%i px widget -> %i×%i px raster preview\n",
-           wd, ht, dev->roi.width, dev->roi.height);
+           wd, ht, dt_dev_viewport_box_width(dev), dt_dev_viewport_box_height(dev));
 
   dt_dev_get_thumbnail_size(dev);
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_pixelpipe_update_zoom_preview(dev);
   dt_control_queue_redraw();
+}
+
+/**
+ * @brief Clamp the viewport centre against the box currently visible at this zoom.
+ *
+ * @details Four call sites used to hand dt_dev_check_zoom_pos_bounds() the addresses of the
+ * centre fields and let it write through them. Nothing may hold a pointer into the viewport
+ * now -- it publishes whole states -- so the read/clamp/publish round trip lives here once
+ * instead of being spelled out at each site.
+ *
+ * @return TRUE when the clamp actually moved the centre.
+ */
+gboolean dt_dev_clamp_viewport_center(dt_develop_t *dev)
+{
+  const dt_dev_viewport_state_t viewport = dt_dev_viewport_get(dev);
+  float center_x = viewport.center_x;
+  float center_y = viewport.center_y;
+  dt_dev_check_zoom_pos_bounds(dev, &center_x, &center_y, NULL, NULL);
+  return dt_dev_viewport_set_center(dev, center_x, center_y);
 }
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
@@ -999,16 +1075,16 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   const float scale = dt_dev_get_zoom_level(dev);
 
   // find the box size
-  const float bw = dev->roi.width / (proc_w * scale);
-  const float bh = dev->roi.height / (proc_h * scale);
+  const float bw = dt_dev_viewport_box_width(dev) / (proc_w * scale);
+  const float bh = dt_dev_viewport_box_height(dev) / (proc_h * scale);
 
   // calculate half-dimensions once
   const float half_bw = bw * 0.5f;
   const float half_bh = bh * 0.5f;
 
   // clamp position using pre-calculated values
-  *dev_x = (bw > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
-  *dev_y = (bh > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
+  *dev_x = (bw > 1.0f || dt_dev_viewport_scaling(dev) <= 1.0f) ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
+  *dev_y = (bh > 1.0f || dt_dev_viewport_scaling(dev) <= 1.0f) ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
   // return box size
   if(!IS_NULL_PTR(box_w)) *box_w = bw;
   if(!IS_NULL_PTR(box_h)) *box_h = bh;
@@ -1026,8 +1102,11 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
 {
   if(IS_NULL_PTR(dev)) return;
-  *procw = dev->roi.processed_width;
-  *proch = dev->roi.processed_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const int32_t processed_width = geometry.processed_width;
+  const int32_t processed_height = geometry.processed_height;
+  *procw = processed_width;
+  *proch = processed_height;
  }
 
 void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *points, size_t num_points)
@@ -1050,18 +1129,19 @@ void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, float *po
 void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dev->roi.processed_width;
-  const float processed_height = dev->roi.processed_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   // Widget events are expressed in GUI logical coordinates, while the pipeline
   // zoom lives in raster pixels. Convert back to the same GUI-space zoom used
   // by dt_dev_rescale_roi() so event hit-testing and overlay drawing stay aligned.
   const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
-  const float roi_x = (float)dev->roi.x;
-  const float roi_y = (float)dev->roi.y;
-  const float center_x = 0.5f * (float)dev->roi.orig_width;
-  const float center_y = 0.5f * (float)dev->roi.orig_height;
+  const float roi_x = (float)dt_dev_viewport_center_x(dev);
+  const float roi_y = (float)dt_dev_viewport_center_y(dev);
+  const float center_x = 0.5f * (float)dt_dev_viewport_widget_width(dev);
+  const float center_y = 0.5f * (float)dt_dev_viewport_widget_height(dev);
   const float inv_scaled_width = 1.0f / (processed_width * scale);
   const float inv_scaled_height = 1.0f / (processed_height * scale);
 
@@ -1078,19 +1158,20 @@ void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, s
 void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dev->roi.processed_width;
-  const float processed_height = dev->roi.processed_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   // GUI overlays are drawn in logical widget coordinates, so use the same
   // GUI-space zoom that the Cairo darkroom transform applies.
   const float scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
-  const float roi_x = (float)dev->roi.x;
-  const float roi_y = (float)dev->roi.y;
+  const float roi_x = (float)dt_dev_viewport_center_x(dev);
+  const float roi_y = (float)dt_dev_viewport_center_y(dev);
   const float scaled_width = processed_width * scale;
   const float scaled_height = processed_height * scale;
-  const float center_x = 0.5f * (float)dev->roi.orig_width;
-  const float center_y = 0.5f * (float)dev->roi.orig_height;
+  const float center_x = 0.5f * (float)dt_dev_viewport_widget_width(dev);
+  const float center_y = 0.5f * (float)dt_dev_viewport_widget_height(dev);
 
   for(size_t i = 0; i < num_points; ++i)
   {
@@ -1107,8 +1188,9 @@ void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, s
 void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dev->roi.processed_width;
-  const float processed_height = dev->roi.processed_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   for(size_t i = 0; i < num_points; ++i)
@@ -1122,8 +1204,9 @@ void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points
 void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float processed_width = dev->roi.processed_width;
-  const float processed_height = dev->roi.processed_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float processed_width = geometry.processed_width;
+  const float processed_height = geometry.processed_height;
   if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   const float inv_width = 1.0f / processed_width;
@@ -1139,8 +1222,9 @@ void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points
 void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float raw_width = dev->roi.raw_width;
-  const float raw_height = dev->roi.raw_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float raw_width = geometry.raw_width;
+  const float raw_height = geometry.raw_height;
   if(raw_width == 0.0f || raw_height == 0.0f) return;
   
   const float inv_width = 1.f / raw_width;
@@ -1156,8 +1240,9 @@ void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, si
 void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float raw_width = dev->roi.raw_width;
-  const float raw_height = dev->roi.raw_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float raw_width = geometry.raw_width;
+  const float raw_height = geometry.raw_height;
   if(raw_width == 0.0f || raw_height == 0.0f) return;
   
   for(size_t i = 0; i < num_points; i++)
@@ -1191,8 +1276,8 @@ void dt_dev_coordinates_image_abs_to_raw_norm(dt_develop_t *dev, float *points, 
 void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float preview_width = dev->roi.preview_width;
-  const float preview_height = dev->roi.preview_height;
+  const float preview_width = dt_dev_roi_request_preview_width(dev);
+  const float preview_height = dt_dev_roi_request_preview_height(dev);
   if(preview_width == 0.0f || preview_height == 0.0f) return;
   
   for(size_t i = 0; i < num_points; i++)
@@ -1206,8 +1291,8 @@ void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *poin
 void dt_dev_coordinates_preview_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(points) || num_points == 0) return;
-  const float preview_width = dev->roi.preview_width;
-  const float preview_height = dev->roi.preview_height;
+  const float preview_width = dt_dev_roi_request_preview_width(dev);
+  const float preview_height = dt_dev_roi_request_preview_height(dev);
   if(preview_width == 0.0f || preview_height == 0.0f) return;
 
   const float inv_width = 1.f / preview_width;
@@ -1409,18 +1494,20 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
                                  ? dt_ioppr_check_can_move_before_iop(dev->iop, module, mod_prev)
                                  : -1.0;
 
-  module->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
+  if(IS_NULL_PTR(module->gui)) return;   // headless module: no buttons to update
+
+  module->gui->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
   // Never allow deleting the base instance (multi_priority == 0) nor modules limited to one instance.
-  module->multi_show_close =
+  module->gui->multi_show_close =
       (nb_instances > 1 && module->multi_priority > 0 && !(module->flags() & IOP_FLAGS_ONE_INSTANCE));
   if(!IS_NULL_PTR(mod_next))
-    module->multi_show_up = move_next;
+    module->gui->multi_show_up = move_next;
   else
-    module->multi_show_up = 0;
+    module->gui->multi_show_up = 0;
   if(!IS_NULL_PTR(mod_prev))
-    module->multi_show_down = move_prev;
+    module->gui->multi_show_down = move_prev;
   else
-    module->multi_show_down = 0;
+    module->gui->multi_show_down = 0;
 
   // If it's an additional instance supposed to be added by an history item after
   // the current history_end cursor, conceptually it doesn't exist yet,
@@ -1428,7 +1515,7 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   if(nb_instances > 1
      && module->multi_priority > 0
      && !g_hash_table_contains(state->modules_in_history, module))
-    gtk_widget_hide(module->expander);
+    gtk_widget_hide(module->gui->expander);
 }
 
 // FIXME: this function should just disappear, as it mixes concepts from multi-instances from before
@@ -1580,14 +1667,102 @@ gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module)
 static int dt_dev_distort_backtransform_locked(const dt_dev_pixelpipe_t *pipe, const double iop_order,
                                                const int transf_direction, float *points, size_t points_count);
 
+/* These two are the whole of the mask GUI's coordinate handling -- every shape's centre, every
+ * handle, every source position routes through one of them -- and they ask the geometry service
+ * the simplest question there is: everything, in order, no bound.
+ */
+
+/**
+ * @brief The GUI's bounded transform folds, composed by the geometry service.
+ *
+ * @details Same contract as dt_dev_distort_transform_plus() -- the iop_order bound and the five
+ * direction modes mean exactly what they mean there -- but stated in terms of the dev rather than
+ * a pipe, because a GUI has no pipe of its own to name. It used to fall back to a pixel-less
+ * clone of the pipeline when the chain could not answer; that clone is deleted, so a chain that
+ * cannot answer returns 0 and leaves @p points untouched.
+ */
+int dt_dev_distort_transform_gui(dt_develop_t *dev, const double iop_order, const int transf_direction,
+                                 float *points, size_t points_count)
+{
+  if(IS_NULL_PTR(dev)) return 0;
+  return dt_geometry_transform(dev, iop_order, transf_direction, points, points_count);
+}
+
+/** @brief The inverse of dt_dev_distort_transform_gui(), same rules. */
+int dt_dev_distort_backtransform_gui(dt_develop_t *dev, const double iop_order, const int transf_direction,
+                                     float *points, size_t points_count)
+{
+  if(IS_NULL_PTR(dev)) return 0;
+  return dt_geometry_backtransform(dev, iop_order, transf_direction, points, points_count);
+}
+
+/**
+ * @brief One module's own input and output rectangles, at full resolution.
+ *
+ * @details What a module GUI used to get by resolving its piece on a pixel-less clone of the
+ * pipeline and reading piece->buf_in / piece->buf_out. Those rectangles are a product of the
+ * size fold, and
+ * the geometry service performs that fold over records for EVERY module -- not only the ones
+ * that change geometry, because not only those read the result: iop/graduatednd.c has no
+ * geometry callbacks at all and normalises its overlay against its own output rectangle.
+ *
+ * @return FALSE when the service cannot answer, in which case @p in and @p out are untouched
+ * and the caller must not draw. A module that is disabled or absent has no rectangles.
+ */
+/**
+ * @brief The developed image's full-resolution size, for a GUI caller.
+ *
+ * @details Two sources, in order of freshness, which is why this exists rather than a plain
+ * read of the geometry record: the chain is recomputed the moment the module stack changes,
+ * while the record is only republished when the size path runs. Code that needed the newest
+ * answer used to reach into a pipe's processed_width field to get it, and had to keep its own
+ * fallback for the case where that pipe had none.
+ *
+ * @return FALSE when no source has a usable size, leaving the out-params untouched.
+ */
+gboolean dt_dev_processed_size_gui(dt_develop_t *dev, int *width, int *height)
+{
+  if(IS_NULL_PTR(dev)) return FALSE;
+
+  int w = 0;
+  int h = 0;
+  if(dt_geometry_chain_processed_size(dev->geometry_chain, &w, &h)
+     && dt_geometry_chain_authoritative(dev->geometry_chain) && w > 0 && h > 0)
+  {
+    if(!IS_NULL_PTR(width)) *width = w;
+    if(!IS_NULL_PTR(height)) *height = h;
+    return TRUE;
+  }
+
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  if(geometry.processed_width <= 0 || geometry.processed_height <= 0) return FALSE;
+  if(!IS_NULL_PTR(width)) *width = geometry.processed_width;
+  if(!IS_NULL_PTR(height)) *height = geometry.processed_height;
+  return TRUE;
+}
+
+gboolean dt_dev_module_geometry_gui(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_roi_t *in,
+                                    dt_iop_roi_t *out)
+{
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module)) return FALSE;
+
+  const dt_geometry_record_t *const record
+      = dt_geometry_chain_find(dev->geometry_chain, module->op, module->multi_priority);
+  if(IS_NULL_PTR(record) || !dt_geometry_chain_authoritative(dev->geometry_chain)) return FALSE;
+
+  if(!IS_NULL_PTR(in)) *in = record->in;
+  if(!IS_NULL_PTR(out)) *out = record->out;
+  return TRUE;
+}
+
 int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
-  return dt_dev_distort_transform_plus(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
+  return dt_geometry_transform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
-  return dt_dev_distort_backtransform_locked(dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
+  return dt_geometry_backtransform(dev, 0.0, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 // only call directly or indirectly from dt_dev_distort_transform_plus, so that it runs with the history locked
@@ -1761,17 +1936,17 @@ void dt_dev_masks_update_hash(dt_develop_t *dev)
 
 float dt_dev_get_natural_scale(dt_develop_t *dev)
 {
-  if(!dev->roi.gui_inited || !dev->roi.raw_inited) return -1.f;
+  if(!dt_dev_viewport_configured(dev) || !dt_dev_geometry_raw_inited(dev)) return -1.f;
 
-  return fminf(fminf((float)dev->roi.width / (float)dev->roi.processed_width,
-                      (float)dev->roi.height / (float)dev->roi.processed_height),
+  return fminf(fminf((float)dt_dev_viewport_box_width(dev) / (float)dt_dev_geometry_processed_width(dev),
+                      (float)dt_dev_viewport_box_height(dev) / (float)dt_dev_geometry_processed_height(dev)),
                 1.f);
 }
 
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return 1.0f;
-  return dev->roi.scaling / dt_gui_get_global()->ppd;
+  return dt_dev_viewport_scaling(dev) / dt_gui_get_global()->ppd;
 }
 
 float dt_dev_get_overlay_scale(dt_develop_t *dev)
@@ -1782,24 +1957,24 @@ float dt_dev_get_overlay_scale(dt_develop_t *dev)
 float dt_dev_get_widget_zoom_scale(const dt_develop_t *dev, const float scaling)
 {
   if(IS_NULL_PTR(dev)) return 1.0f;
-  return scaling * dev->roi.natural_scale / dt_gui_get_global()->ppd;
+  return scaling * dt_dev_roi_request_natural_scale(dev) / dt_gui_get_global()->ppd;
 }
 
 void dt_dev_get_widget_center(const dt_develop_t *dev, float *point)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(point)) return;
-  point[0] = 0.5f * dev->roi.orig_width;
-  point[1] = 0.5f * dev->roi.orig_height;
+  point[0] = 0.5f * dt_dev_viewport_widget_width(dev);
+  point[1] = 0.5f * dt_dev_viewport_widget_height(dev);
 }
 
 void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width, const int32_t height, float *box)
 {
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(box)) return;
 
-  const float scale = dev->roi.scaling / dt_gui_get_global()->ppd;
-  const float roi_width = fminf(width, dev->roi.preview_width * scale);
-  const float roi_height = fminf(height, dev->roi.preview_height * scale);
-  const float border = dev->roi.border_size;
+  const float scale = dt_dev_viewport_scaling(dev) / dt_gui_get_global()->ppd;
+  const float roi_width = fminf(width, dt_dev_roi_request_preview_width(dev) * scale);
+  const float roi_height = fminf(height, dt_dev_roi_request_preview_height(dev) * scale);
+  const float border = dt_dev_viewport_border_size(dev);
 
   box[0] = fmaxf(border, 0.5f * (width - roi_width));
   box[1] = fmaxf(border, 0.5f * (height - roi_height));
@@ -1810,15 +1985,15 @@ void dt_dev_get_image_box_in_widget(const dt_develop_t *dev, const int32_t width
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return 1.f;
-  return dev->roi.scaling * dev->roi.natural_scale;
+  return dt_dev_viewport_scaling(dev) * dt_dev_roi_request_natural_scale(dev);
 }
 
 void dt_dev_reset_roi(dt_develop_t *dev)
 {
-  dev->roi.natural_scale = -1.f;
-  dev->roi.scaling = 1.f;
-  dev->roi.x = 0.5f;
-  dev->roi.y = 0.5f;
+  // Zoom and pan back to "fit". The ROI request is derived from the viewport, so the reset
+  // republishes it; there is nothing to invalidate by hand, and an invalidation here could not
+  // have survived that republication anyway.
+  dt_dev_viewport_reset(dev);
 }
 
 void dt_dev_convert_roi(const dt_develop_t *dev, const dt_iop_roi_t *roi_in, dt_iop_roi_t *roi_out,
@@ -1847,12 +2022,12 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
 {
   // DO NOT MODIFIY !! //
 
-  const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(dev);
+  const float ht = dt_dev_roi_request_preview_height(dev);
   if(wd == 0.f || ht == 0.f) return TRUE;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
-  const int32_t border = dev->roi.border_size;
+  const int32_t border = dt_dev_viewport_border_size(dev);
   const float roi_width = fminf(width, wd * zoom_scale);
   const float roi_height = fminf(height, ht * zoom_scale);
 
@@ -1878,8 +2053,8 @@ static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width
 
   // Get image's origin position and scale
   const float zoom_scale = dt_dev_get_zoom_level(dev) / dt_gui_get_global()->ppd;
-  const float tx = 0.5f * width - dev->roi.x * proc_wd * zoom_scale;
-  const float ty = 0.5f * height - dev->roi.y * proc_ht * zoom_scale;
+  const float tx = 0.5f * width - dt_dev_viewport_center_x(dev) * proc_wd * zoom_scale;
+  const float ty = 0.5f * height - dt_dev_viewport_center_y(dev) * proc_ht * zoom_scale;
 
   cairo_translate(cr, tx, ty);
   
@@ -1908,24 +2083,25 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 
 gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev)
 {
-  const float natural_scale = dev->roi.natural_scale;
+  const float natural_scale = dt_dev_roi_request_natural_scale(dev);
+  const float scaling = dt_dev_viewport_scaling(dev);
 
   // Limit zoom in to 16x the size of an apparent pixel on screen
-  const float pixel_actual_size = natural_scale * dev->roi.scaling;
+  const float pixel_actual_size = natural_scale * scaling;
   const float pixel_max_size = 16.f;
-  
+
   if(pixel_actual_size >= pixel_max_size)
   {
     // Restore old scaling (caller should handle this)
-    dev->roi.scaling = pixel_max_size / natural_scale;
+    dt_dev_viewport_set_scaling(dev, pixel_max_size / natural_scale);
     return TRUE;
   }
-  
+
   // Limit zoom out to 1/3rd of the fit-to-window size
   const float min_scaling = 0.33f;
-  if(dev->roi.scaling < min_scaling)
+  if(scaling < min_scaling)
   {
-    dev->roi.scaling = min_scaling;
+    dt_dev_viewport_set_scaling(dev, min_scaling);
     return TRUE;
   }
   return FALSE;
@@ -1938,24 +2114,29 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
 
   // Keep mouse hit-tests usable across zoom levels by bounding the selection
   // radius once it is expressed in image-space pixels.
-  dt_gui_get_global()->mouse.effect_radius_clamped = CLAMP(dt_gui_get_global()->mouse.effect_radius, 
-                                                    DT_PIXEL_APPLY_DPI(4.0f) / zoom_level,
-                                                    DT_PIXEL_APPLY_DPI(15.0f) / zoom_level);
+  const float radius = dt_widget_mouse_radius();
+  const float clamped = CLAMP(radius, DT_PIXEL_APPLY_DPI(4.0f) / zoom_level,
+                              DT_PIXEL_APPLY_DPI(15.0f) / zoom_level);
+  dt_widget_set_mouse_radius(radius, clamped);
 
   dt_print(DT_DEBUG_MASKS,
            "[mouse] effect_radius=%0.3f effect_radius_clamped=%0.3f zoom_level=%0.4f ppd=%0.4f\n",
-           dt_gui_get_global()->mouse.effect_radius, dt_gui_get_global()->mouse.effect_radius_clamped,
-           zoom_level, dt_gui_get_global()->ppd);
+           radius, clamped, zoom_level, dt_screen_ppd());
 }
 
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 
                         const int64_t hash, const int64_t history_hash)
 {
+  /* One publication: the shape and the cacheline it describes settle together, so no consumer
+   * can pair a hash with dimensions from a different frame. The atomics are written directly
+   * rather than through the single-field setters, which bracket the counter themselves. */
+  dt_dev_backbuf_publish_begin(backbuf);
   backbuf->height = height;
   backbuf->width = width;
-  dt_dev_backbuf_set_hash(backbuf, hash);
   backbuf->bpp = bpp;
-  dt_dev_backbuf_set_history_hash(backbuf, history_hash);
+  dt_atomic_set_uint64(&backbuf->hash, (uint64_t)hash);
+  dt_atomic_set_uint64(&backbuf->history_hash, (uint64_t)history_hash);
+  dt_dev_backbuf_publish_end(backbuf);
 }
 
 // clang-format off

@@ -21,7 +21,7 @@
 /* Small GLib convenience helpers (GList traversal, string splicing). Application-free
  * on purpose: include this instead of darktable.h. */
 
-#include "common/macros.h"
+#include "system/macros.h"
 
 #include <glib.h>
 

@@ -2,7 +2,7 @@
 #define DT_IOP_CHANNELMIXERRGB_SHARED_H
 
 #include "pixel/chromatic_adaptation.h"
-#include "common/iop_profile.h"
+#include "develop/iop_profile.h"
 
 #include <glib.h>
 
@@ -15,6 +15,9 @@ typedef struct _GtkWidget GtkWidget;
 #define DT_IOP_CHANNELMIXER_SHARED_SIMPLE_TAN_SCALE 1.55f
 #define DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS 5e-5f
 #define DT_IOP_CHANNELMIXER_SHARED_SIMPLE_CHROMA_PROBE 0.5f
+// Smallest chromaticity triangle, as a fraction of the untouched basis triangle, that the
+// white-preserving model accepts before calling the primaries degenerate.
+#define DT_IOP_CHANNELMIXER_SHARED_MIN_FOOTPRINT 0.02f
 
 typedef enum dt_iop_channelmixer_shared_primaries_basis_t
 {
@@ -54,6 +57,28 @@ typedef struct dt_iop_channelmixer_shared_primaries_params_t
   float gain;
 } dt_iop_channelmixer_shared_primaries_params_t;
 
+/**
+ * @brief White-preserving primaries model : per-primary rotation and saturation, no white freedom.
+ *
+ * Each primary is the chromaticity of one column of the mixer matrix, expressed in the affine
+ * plane of the current mixer basis. `rotation` turns it around the basis white, and `saturation`
+ * scales its distance to that white by `1 + saturation` : -1 collapses the primary onto the white,
+ * 0 leaves it untouched, +1 doubles its distance. The three column magnitudes are then SOLVED, not
+ * chosen, so that the basis white maps to itself : that constraint is what removes the three
+ * remaining degrees of freedom of a 3x3 matrix, and is why six parameters describe the whole
+ * white-preserving submanifold exactly. All-zero parameters are the identity matrix, and a uniform
+ * saturation is the classic saturation matrix around the basis white.
+ */
+typedef struct dt_iop_channelmixer_shared_white_preserving_params_t
+{
+  float red_rotation;
+  float red_saturation;
+  float green_rotation;
+  float green_saturation;
+  float blue_rotation;
+  float blue_saturation;
+} dt_iop_channelmixer_shared_white_preserving_params_t;
+
 float dt_iop_channelmixer_shared_wrap_pi(float angle);
 float dt_iop_channelmixer_shared_wrap_half_pi(float angle);
 float dt_iop_channelmixer_shared_encode_simple_stretch(float stretch);
@@ -68,6 +93,10 @@ void dt_iop_channelmixer_shared_primaries_from_sliders(GtkWidget *const widgets[
                                                        dt_iop_channelmixer_shared_primaries_params_t *primaries);
 void dt_iop_channelmixer_shared_primaries_to_sliders(const dt_iop_channelmixer_shared_primaries_params_t *primaries,
                                                      GtkWidget *const widgets[9]);
+void dt_iop_channelmixer_shared_white_preserving_from_sliders(
+    GtkWidget *const widgets[6], dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving);
+void dt_iop_channelmixer_shared_white_preserving_to_sliders(
+    const dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving, GtkWidget *const widgets[6]);
 
 gboolean dt_iop_channelmixer_shared_rows_are_normalized(const gboolean normalize[3]);
 gboolean dt_iop_channelmixer_shared_get_matrix(const float rows[3][3], const gboolean normalize[3],
@@ -80,6 +109,7 @@ void dt_iop_channelmixer_shared_simple_from_matrix(const float M[3][3],
 void dt_iop_channelmixer_shared_simple_to_matrix(const dt_iop_channelmixer_shared_simple_params_t *simple,
                                                  float M[3][3]);
 float dt_iop_channelmixer_shared_roundtrip_error(const float M[3][3], const float roundtrip[3][3]);
+float dt_iop_channelmixer_shared_roundtrip_error_relative(const float M[3][3], const float roundtrip[3][3]);
 
 dt_iop_channelmixer_shared_primaries_basis_t
 dt_iop_channelmixer_shared_primaries_basis_from_adaptation(dt_adaptation_t adaptation);
@@ -89,6 +119,12 @@ gboolean dt_iop_channelmixer_shared_primaries_to_matrix(dt_iop_channelmixer_shar
 gboolean dt_iop_channelmixer_shared_primaries_from_matrix(dt_iop_channelmixer_shared_primaries_basis_t basis,
                                                           const float M[3][3],
                                                           dt_iop_channelmixer_shared_primaries_params_t *primaries);
+gboolean dt_iop_channelmixer_shared_white_preserving_to_matrix(
+    dt_iop_channelmixer_shared_primaries_basis_t basis,
+    const dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving, float M[3][3]);
+gboolean dt_iop_channelmixer_shared_white_preserving_from_matrix(
+    dt_iop_channelmixer_shared_primaries_basis_t basis, const float M[3][3],
+    dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving);
 
 void dt_iop_channelmixer_shared_simple_probe_source(dt_iop_channelmixer_shared_simple_probe_t probe, float source[3]);
 void dt_iop_channelmixer_shared_work_rgb_to_display(const dt_aligned_pixel_t work_rgb,
@@ -116,6 +152,11 @@ void dt_iop_channelmixer_shared_paint_primaries_sliders(
     const dt_iop_order_iccprofile_info_t *display_profile,
     dt_iop_channelmixer_shared_primaries_basis_t basis,
     const dt_iop_channelmixer_shared_primaries_params_t *primaries, GtkWidget *const widgets[9]);
+void dt_iop_channelmixer_shared_paint_white_preserving_sliders(
+    dt_adaptation_t adaptation, const dt_iop_order_iccprofile_info_t *work_profile,
+    const dt_iop_order_iccprofile_info_t *display_profile,
+    dt_iop_channelmixer_shared_primaries_basis_t basis,
+    const dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving, GtkWidget *const widgets[6]);
 
 #ifdef __cplusplus
 }

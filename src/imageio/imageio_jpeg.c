@@ -35,14 +35,15 @@
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_jpeg.h"
 #include "develop/imageop.h"         // for IOP_CS_RGB
 #include <glib/gstdio.h>
 #include <setjmp.h>
+#include "imageio/imageio_profile.h"
 
 // error functions
 

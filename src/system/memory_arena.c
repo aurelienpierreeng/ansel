@@ -20,11 +20,29 @@
 
 #include "system/memory_arena.h"
 
+/* Diagnostics without the application's logging globals. dt_print() reads a global flags word
+ * and writes to a global stream, and src/system reaching either would cost this directory the
+ * one property its name promises. A debug build prints straight to stdout; a release build
+ * compiles the call away. Same arrangement as widgets/, and for the same reason. */
+#ifdef _DEBUG
+#include <stdarg.h>   // conditional-ok: only _arena_log below uses these, and it
+#include <stdio.h>    // conditional-ok: is itself compiled away outside _DEBUG
+static inline void _arena_log(const char *format, ...)
+{
+  va_list ap;
+  va_start(ap, format);
+  vfprintf(stdout, format, ap);
+  va_end(ap);
+  fflush(stdout);
+}
+#else
+#define _arena_log(...) do { } while(0)
+#endif
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include "common/macros.h"
-#include "common/logging.h"
+#include "system/macros.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -187,7 +205,7 @@ void dt_cache_arena_free(dt_cache_arena_t *a,
    * when pressure actually calls for it. */
   const size_t release_size = (size_t)pages * a->page_size;
   if(madvise(ptr, release_size, MADV_FREE))
-    dt_print(DT_DEBUG_MEMORY, "[arena] MADV_FREE of %" G_GSIZE_FORMAT " bytes failed: %s\n",
+    _arena_log("[arena] MADV_FREE of %" G_GSIZE_FORMAT " bytes failed: %s\n",
              release_size, strerror(errno));
 #endif
 
@@ -303,7 +321,7 @@ size_t dt_cache_arena_trim(dt_cache_arena_t *a)
   }
   dt_pthread_mutex_unlock(&a->lock);
 
-  dt_print(DT_DEBUG_MEMORY, "[arena] trimmed %" G_GSIZE_FORMAT " MiB of free pages back to the OS\n",
+  _arena_log("[arena] trimmed %" G_GSIZE_FORMAT " MiB of free pages back to the OS\n",
            released / (1024 * 1024));
   return released;
 }

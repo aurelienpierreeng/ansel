@@ -24,7 +24,11 @@
  * Standalone build (no ansel build system needed):
  *   gcc -O2 -fopenmp -Isrc src/common/nn_model.c src/tests/nn_model_test.c \
  *       $(pkg-config --cflags --libs json-glib-1.0) -lm -o nn_model_test
- * Usage: nn_model_test <model.anselnn> <fixture-dir> [N]   (N defaults to 96)
+ * Usage: nn_model_test <model.anselnn> <fixture-dir> [N] [--xtrans]
+ *   N defaults to 96. --xtrans selects the 6-px superpixel bin for a fixture
+ *   generated with `make_fixture.py --cfa xtrans`; without it the 4-px Bayer
+ *   bin is assumed, and a mismatch shows up immediately as a binning-contract
+ *   failure rather than as a silently wrong comparison.
  */
 
 #include "common/nn_model.h"
@@ -33,6 +37,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <json-glib/json-glib.h>
 #include <time.h>
 
 static double max_abs_diff(const float *a, const float *b, size_t count)
@@ -68,14 +73,74 @@ static float *read_f32(const char *dir, const char *name, size_t count)
   return buf;
 }
 
+/* Read what the fixture says about itself: which CFA it was generated for (so the superpixel
+ * bin factor is not a flag the caller has to remember) and which model it was generated FROM.
+ *
+ * The hash check is the important half. A fixture pins model_sha256, but nothing used to
+ * enforce it, so running against a model the fixture was not built from produced a large error
+ * that reads exactly like a broken executor -- which is how six perfectly good models once
+ * looked like six failures. Refuse to run instead. */
+static int read_meta(const char *dir, const char *model_path, int *is_xtrans)
+{
+  char path[4096];
+  snprintf(path, sizeof(path), "%s/fixture-meta.json", dir);
+
+  JsonParser *parser = json_parser_new();
+  GError *error = NULL;
+  if(!json_parser_load_from_file(parser, path, &error))
+  {
+    fprintf(stderr, "cannot read %s: %s\n", path, error ? error->message : "?");
+    if(error) g_error_free(error);
+    g_object_unref(parser);
+    return 1;
+  }
+  JsonObject *root = json_node_get_object(json_parser_get_root(parser));
+
+  if(json_object_has_member(root, "cfa"))
+    *is_xtrans = !g_strcmp0(json_object_get_string_member(root, "cfa"), "xtrans");
+
+  int rc = 0;
+  if(json_object_has_member(root, "model_sha256"))
+  {
+    const char *want = json_object_get_string_member(root, "model_sha256");
+    gchar *blob = NULL;
+    gsize len = 0;
+    if(g_file_get_contents(model_path, &blob, &len, NULL))
+    {
+      gchar *got = g_compute_checksum_for_data(G_CHECKSUM_SHA256, (const guchar *)blob, len);
+      if(g_strcmp0(got, want))
+      {
+        fprintf(stderr,
+                "FAIL: this fixture was generated from a different model.\n"
+                "  fixture pins %s\n  model is    %s\n"
+                "  Regenerate with scripts/make_fixture.py in the ansel-denoise repo.\n",
+                want, got);
+        rc = 1;
+      }
+      g_free(got);
+      g_free(blob);
+    }
+  }
+  g_object_unref(parser);
+  return rc;
+}
+
 int main(int argc, char *argv[])
 {
   if(argc < 3)
   {
-    fprintf(stderr, "usage: %s <model.anselnn> <fixture-dir> [N]\n", argv[0]);
+    fprintf(stderr, "usage: %s <model.anselnn> <fixture-dir> [N] [--xtrans]\n", argv[0]);
     return 2;
   }
-  const int n = argc > 3 ? atoi(argv[3]) : 96;
+  const int n = (argc > 3 && argv[3][0] != '-') ? atoi(argv[3]) : 96;
+  /* the fixture declares its own CFA; the flags stay as an override */
+  int is_xtrans = 0;
+  if(read_meta(argv[2], argv[1], &is_xtrans)) return 1;
+  for(int i = 3; i < argc; i++)
+  {
+    if(!strcmp(argv[i], "--xtrans")) is_xtrans = 1;
+    if(!strcmp(argv[i], "--bayer")) is_xtrans = 0;
+  }
 
   char err[256] = "";
   dt_nn_model_t *model = dt_nn_model_load(argv[1], err, sizeof(err));
@@ -96,7 +161,8 @@ int main(int argc, char *argv[])
 
   /* multi-scale model: gate the binning contract and the coarse stage before
    * the fine parity below (which runs on the fixture's torch-built guide). */
-  const int bin = dt_nn_model_bin(model, 0);
+  const int bin = dt_nn_model_bin(model, is_xtrans);
+  printf("fixture CFA: %s, superpixel bin %d\n", is_xtrans ? "xtrans" : "bayer", bin);
   if(bin > 1)
   {
     const int cn = n / bin;

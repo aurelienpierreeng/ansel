@@ -103,7 +103,7 @@
  * application into every translation unit. A file needing dt_print(), dt_alloc_align()
  * or DT_MODULE() must include common/logging.h, common/mem_alloc.h or
  * common/module_versioning.h itself. */
-#include "common/dtpthread.h"   // dt_pthread_mutex_t / rwlock members of darktable_t
+#include "system/dtpthread.h"   // dt_pthread_mutex_t / rwlock members of darktable_t
 #include "system/sys_resources.h" // dt_sys_resources_t member of darktable_t
 #include "control/signal.h"     // DT_SIGNAL_COUNT sizes the unmuted_signal_dbg array
 
@@ -112,7 +112,7 @@
 #include <stdint.h>
 
 /* win/win.h (windows.h/psapi + the #undef of the legacy `near`/`grp2`/`interface`
- * macros) now comes in through common/macros.h, which every TU includes. It used to
+ * macros) now comes in through system/macros.h, which every TU includes. It used to
  * live here, which meant dropping this header silently dropped the shim too --
  * a MinGW-only breakage, far from its cause. Nothing to do here any more. */
 
@@ -155,15 +155,12 @@ extern "C" {
 struct dt_gui_gtk_t;
 struct dt_control_t;
 struct dt_develop_t;
-struct dt_mipmap_cache_t;
-struct dt_image_cache_t;
 struct dt_lib_t;
 struct dt_conf_t;
 struct dt_points_t;
 struct dt_imageio_t;
 struct dt_bauhaus_t;
 struct dt_undo_t;
-struct dt_colorspaces_t;
 struct dt_l10n_t;
 
 
@@ -177,7 +174,7 @@ typedef struct darktable_t
   GList *iop_order_rules;
 
   // Keep track of optional features that may depend on environnement
-  // ond compiling options : OpenCL, libsecret, kwallet
+  // and compiling options : OpenCL
   GList *capabilities;
   JsonParser *noiseprofile_parser;
   struct dt_conf_t *conf;
@@ -187,21 +184,15 @@ typedef struct darktable_t
   struct dt_control_t *control;
   struct dt_control_signal_t *signals;
   struct dt_gui_gtk_t *gui;
-  struct dt_mipmap_cache_t *mipmap_cache;
-  struct dt_image_cache_t *image_cache;
   struct dt_bauhaus_t *bauhaus;
   const struct dt_database_t *db;
-  const struct dt_pwstorage_t *pwstorage;
   struct dt_collection_t *collection;
   struct dt_selection_t *selection;
   struct dt_points_t *points;
   struct dt_imageio_t *imageio;
-  struct dt_opencl_t *opencl;
   struct dt_dbus_t *dbus;
   struct dt_undo_t *undo;
-  struct dt_colorspaces_t *color_profiles;
   struct dt_l10n_t *l10n;
-  struct dt_dev_pixelpipe_cache_t *pixelpipe_cache;
 
   // Protects from concurrent writing at export time
   dt_pthread_mutex_t plugin_threadsafe;
@@ -227,7 +218,6 @@ typedef struct darktable_t
   // `BEGIN": cannot start a transaction within a transaction`
   // Also, we need to ensure that image metadata/history reads & writes
   // happen each in their all time, from all pipeline jobs/threads.
-  dt_pthread_rwlock_t database_threadsafe;
 
   char *progname;
   char *datadir;

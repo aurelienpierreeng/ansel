@@ -33,18 +33,20 @@
 */
 
 #include "system/atomic.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 #include "control/control.h"
 #include "control/progress.h"
 #include "develop/develop.h"
-#include "gui/dtgtk/button.h"
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "widgets/button.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "gui/window_manager.h"
+#include "widgets/container.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 DT_MODULE(1)
 

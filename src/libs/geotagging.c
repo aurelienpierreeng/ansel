@@ -39,24 +39,23 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "control/control.h"
+#include "widgets/widget_settings.h"
 #include "common/act_on.h"
 #include "control/settings.h"
 #include "control/jobs/control_jobs.h"
-#include "gui/dtgtk/togglebutton.h"
+#include "widgets/togglebutton.h"
 #include "libs/lib.h"
-#include "gui/gdkkeys.h"
-#include "common/database.h"
-#include "common/debug.h"
-#include "common/macros.h"
+#include "widgets/gdkkeys.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
 #include "common/file_location.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/selection.h"
-#include "common/gpx.h"
-#include "common/geo.h"
+#include "metadata/gpx.h"
+#include "metadata/geo.h"
 #include "common/datetime.h"
 #include "common/conf.h"
-#include "gui/dtgtk/button.h"
+#include "widgets/button.h"
 #include "control/jobs.h"
 
 #include "libs/lib_api.h"
@@ -70,6 +69,11 @@
 #include <gdk/gdkkeysyms.h>
 #include <glib/gstdio.h>
 #include <sqlite3.h>
+#include "gui/application.h"
+#include "gui/window_manager.h"
+#include "widgets/accelerators.h"
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
 
@@ -802,10 +806,10 @@ static void _refresh_selected_images_datetime(dt_lib_module_t *self)
   for(GList *i = d->imgs; i; i = g_list_next(i))
   {
     dt_sel_img_t *img = i->data;
-    const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), img->imgid, 'r');
+    const dt_image_t *cimg = dt_image_cache_get(img->imgid, 'r');
     if(IS_NULL_PTR(cimg)) continue;
     dt_datetime_img_to_exif(img->dt, sizeof(img->dt), cimg);
-    dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
+    dt_image_cache_read_release(cimg);
   }
 }
 
@@ -918,6 +922,11 @@ static void _preview_gpx_file(GtkWidget *widget, dt_lib_module_t *self)
   gtk_widget_destroy(dialog);
 }
 
+static gint _cmp_imgid_asc(gconstpointer a, gconstpointer b)
+{
+  return GPOINTER_TO_INT(a) - GPOINTER_TO_INT(b);
+}
+
 static void _setup_selected_images_list(dt_lib_module_t *self)
 {
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
@@ -933,18 +942,24 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
   d->imgs = NULL;
   d->nb_imgs = 0;
 
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "SELECT imgid FROM main.selected_images",
-                              -1, &stmt, NULL);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  // selection.h reserves the raw "SELECT imgid FROM main.selected_images" for JOINs that fetch
+  // metadata in the same query; this loop reads its metadata from the image cache, so it is the
+  // other case and must iterate the selection.
+  //
+  // Sorted ascending, and that is load-bearing: the in-memory selection comes back in
+  // pick order, but the SQL scan this replaced yielded ascending imgid (the table's
+  // INTEGER PRIMARY KEY), and _refresh_images_displayed_on_track() collapses same-location
+  // images into one map marker by comparing each entry with its list NEIGHBOUR -- adjacency
+  // the deterministic order provided and click order does not.
+  GList *selected = g_list_sort(dt_selection_get_list(dt_selection_get_global()), _cmp_imgid_asc);
+  for(GList *l = selected; l; l = g_list_next(l))
   {
-    const int32_t imgid = sqlite3_column_int(stmt, 0);
-    const dt_image_t *cimg = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+    const int32_t imgid = GPOINTER_TO_INT(l->data);
+    const dt_image_t *cimg = dt_image_cache_get(imgid, 'r');
     char dt[DT_DATETIME_LENGTH];
     if(IS_NULL_PTR(cimg)) continue;
     dt_datetime_img_to_exif(dt, sizeof(dt), cimg);
-    dt_image_cache_read_release(dt_image_cache_get_global(), cimg);
+    dt_image_cache_read_release(cimg);
 
     dt_sel_img_t *img = g_malloc0(sizeof(dt_sel_img_t));
     if(IS_NULL_PTR(img)) continue;
@@ -953,7 +968,7 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
     d->imgs = g_list_prepend(d->imgs, img);
     d->nb_imgs++;
   }
-  sqlite3_finalize(stmt);
+  g_list_free(selected);   // shallow: the elements are the selection's own ints
 }
 
 static void _choose_gpx_callback(GtkWidget *widget, dt_lib_module_t *self)
@@ -1542,7 +1557,7 @@ static GtkWidget *_gui_init_datetime(dt_lib_datetime_t *dt, const int type, dt_l
       gtk_box_pack_start(box, dt->widget[i], FALSE, FALSE, 0);
       if(type == 0)
       {
-        gtk_widget_add_events(dt->widget[i], dt_gui_get_global()->scroll_mask);
+        gtk_widget_add_events(dt->widget[i], dt_widget_scroll_mask());
       }
       else
       {

@@ -36,12 +36,12 @@
 #include <stdio.h>
 #include <strings.h>
 
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "colorprofiles/colorspaces.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "system/openmp.h"
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "develop/develop.h"
 #include "imageio_heif.h"
 

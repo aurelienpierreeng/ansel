@@ -51,10 +51,15 @@
 // Change that when baseline CLang is upgraded.
 #define __OMP_PARALLEL_FOR_CPP__(...) OMP_PRAGMA(omp parallel for default(none) schedule(static) __VA_ARGS__)
 
+// TRUE while the caller runs inside a parallel region. Diagnostics belong outside one: a message
+// printed per thread floods the log and interleaves mid-line with the other threads' output.
+#define dt_omp_in_parallel() (omp_in_parallel() != 0)
+
 #else /* _OPENMP */
 
 # define omp_get_max_threads() 1
 # define omp_get_thread_num() 0
+# define dt_omp_in_parallel() 0
 
 #define __OMP_PARALLEL__(...)
 #define __OMP_PARALLEL_FOR__(...)

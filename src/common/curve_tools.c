@@ -30,7 +30,7 @@
    Copyright 2004-2008 by Shawn Freeman, Udi Fuchs
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "curve_tools.h"
 

@@ -49,7 +49,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
@@ -57,20 +57,22 @@
 #include "common/image.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
-#include "common/metadata.h"
+#include "metadata/metadata.h"
 #include "common/utility.h"
 #include "common/variables.h"
 #include "common/conf.h"
-#include "control/control.h"
-#include "gui/dtgtk/button.h"
-#include "gui/dtgtk/paint.h"
-#include "gui/gtk.h"
-#include "gui/gtkentry.h"
+#include "control/user_message.h"
+#include "widgets/button.h"
+#include "widgets/paint.h"
+#include "gui/application.h"
+#include "widgets/gtkentry.h"
 #include "imageio/storage/imageio_storage_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #endif
 #include <stdio.h>
 #include <stdlib.h>
+#include "widgets/label.h"
+#include "widgets/widget_settings.h"
 
 DT_MODULE(2)
 

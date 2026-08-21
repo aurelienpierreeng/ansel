@@ -61,6 +61,14 @@ struct dt_gui_module_t
   */
   int (*focus)(dt_gui_module_t *module, gboolean toggle);
 
+  /** make the module's own container visible so a widget inside it can take focus.
+   *
+   * Expanding a collapsed IOP, and dropping stale focus first, is module-type-specific --
+   * gui/bauhaus.c used to reach into develop/ for dt_iop_gui_set_expanded() and
+   * dt_iop_request_focus() to do it. Optional: NULL means nothing needs doing.
+  */
+  void (*ensure_visible)(dt_gui_module_t *module);
+
   char *accel_path;
 };
 

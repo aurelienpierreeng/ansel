@@ -24,16 +24,15 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #endif
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/simd.h"
 #include "math/math.h"
 #include "common/opencl.h"
 #include "develop/imageop.h"
-#include "develop/imageop_math.h"
 #include "iop/iop_api.h"
 #include "pixel/nlmeans_core.h"
 #include <stdbool.h>

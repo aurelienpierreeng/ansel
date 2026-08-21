@@ -81,36 +81,40 @@
 */
 /** this is the view for the darkroom module.  */
 
-#include "gui/bauhaus.h"
+#include "develop/imageop_gui.h"
+#include "widgets/bauhaus.h"
+#include "widgets/widget_settings.h"
 #include <glib/gstdio.h>
 #include "common/paths.h"
 #include "common/collection.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "common/hash.h"
-#include "common/history.h"
 #include "common/iop-autoset.h"
 #include "imageio/imageio_module.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
-#include "common/tags.h"
 #include "common/undo.h"
 #include "common/conf.h"
+#include "control/input.h"
 #include "control/control.h"
 #include "control/jobs.h"
-#include "develop/blend.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/supervisor.h"
 #include "develop/masks.h"
-#include "gui/dtgtk/button.h"
+#include "develop/masks_gui.h"
+#include "widgets/button.h"
 #include "gui/dtgtk/thumbtable.h"
 
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
-#include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "gui/application.h"
+#include "develop/gui_throttle.h"
+// include-cleaner reports this unused while dt_iop_gui_blend_data_t is dereferenced
+// six times in _toggle_mask_visibility_callback() -- the cast from the void*
+// mod->blend_data seems to defeat its attribution. The definition is required.
+#include "develop/blend_gui.h"  // NOLINT(misc-include-cleaner)
 #include "gui/guides.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
@@ -128,8 +132,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include "widgets/label.h"
+#include "widgets/widget_style.h"
+#include "gui/screen_metrics.h"
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 
 #ifndef G_SOURCE_FUNC // Defined for glib >= 2.58
 #define G_SOURCE_FUNC(f) ((GSourceFunc) (void (*)(void)) (f))
@@ -246,6 +254,7 @@ void cleanup(dt_view_t *self)
 
   _release_expose_source_caches();
   dt_gui_throttle_cancel(dev);
+  dt_dev_history_drop_pending_commits(dev);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_darkroom_autoset_popover_refresh), dev);
   if(_autoset_manager)
   {
@@ -334,8 +343,8 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
   cairo_save(cri);
   // The colorpicker samples bounding rectangle should only be displayed inside the visible image
 
-  const double wd = dev->roi.preview_width;
-  const double ht = dev->roi.preview_height;
+  const double wd = dt_dev_roi_request_preview_width(dev);
+  const double ht = dt_dev_roi_request_preview_height(dev);
   const double scale = dt_dev_get_fit_scale(dev);
   const double lw = 1.0 / scale;
   const double dashes[1] = { lw * 4.0 };
@@ -496,7 +505,9 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   cairo_paint(cr);
 
   if(!dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev)) return FALSE;
-  const uint64_t hash = dt_dev_backbuf_get_hash(&dev->pipe->backbuf);
+  // One read of the publication: the hash and the shape must come from the same frame (dt_backbuf_t).
+  const dt_backbuf_state_t published = dt_dev_backbuf_snapshot(&dev->pipe->backbuf);
+  const uint64_t hash = published.hash;
   if(hash == (uint64_t)-1) return FALSE;
 
   dt_pixel_cache_entry_t *entry = NULL;
@@ -507,13 +518,13 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
                                       _darkroom_debug_restart_cache_wait, dev))
     return FALSE;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
 
-  const int bw = (int)dev->pipe->backbuf.width;
-  const int bh = (int)dev->pipe->backbuf.height;
+  const int bw = (int)published.width;
+  const int bh = (int)published.height;
   if(bw <= 0 || bh <= 0)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return FALSE;
   }
 
@@ -522,7 +533,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
   if(entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return FALSE;
   }
 
@@ -531,7 +542,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   if(IS_NULL_PTR(surface) || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     if(surface) cairo_surface_destroy(surface);
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return FALSE;
   }
 
@@ -547,7 +558,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   cairo_fill(cr);
 
   cairo_surface_destroy(surface);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
   return TRUE;
 }
 #endif
@@ -619,7 +630,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   const float ppd = dt_gui_get_global()->ppd;
   const float preview_wd = wd / ppd;
   const float preview_ht = ht / ppd;
-  const float preview_scale = dev->roi.scaling;
+  const float preview_scale = dt_dev_viewport_scaling(dev);
   float image_box[4] = { 0.0f };
   dt_dev_get_image_box_in_widget(dev, width, height, image_box);
 
@@ -636,7 +647,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
     }
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, _darkroom_preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, _darkroom_preview_locked.entry);
   cairo_surface_set_device_scale(_darkroom_preview_locked.surface, ppd, ppd);
 
   // The preview surface already embeds the fit-to-window scale. To emulate the
@@ -651,14 +662,14 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   cairo_rectangle(cr, rec_x, rec_y, rec_w, rec_h);
   cairo_clip(cr);
 
-  const float tx = 0.5f * width - dev->roi.x * preview_wd * preview_scale;
-  const float ty = 0.5f * height - dev->roi.y * preview_ht * preview_scale;
+  const float tx = 0.5f * width - dt_dev_viewport_center_x(dev) * preview_wd * preview_scale;
+  const float ty = 0.5f * height - dt_dev_viewport_center_y(dev) * preview_ht * preview_scale;
   cairo_translate(cr, tx, ty);
   cairo_scale(cr, preview_scale, preview_scale);
   cairo_rectangle(cr, 0, 0, preview_wd, preview_ht);
   cairo_set_source_surface(cr, _darkroom_preview_locked.surface, 0, 0);
   cairo_fill(cr);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, _darkroom_preview_locked.entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, _darkroom_preview_locked.entry);
   cairo_destroy(cr);
 
   _darkroom_preview_fallback_imgid = dev->image_storage.id;
@@ -708,6 +719,44 @@ static inline gboolean _darkroom_preview_fallback_valid(const dt_develop_t *dev,
          && _darkroom_preview_fallback_zoom_hash == zoom_hash
          && _darkroom_preview_fallback_width == width
          && _darkroom_preview_fallback_height == height;
+}
+
+/**
+ * @brief The frame-validity key for the locked main surface.
+ *
+ * @details Every viewport quantity that changes what the composed image should look like,
+ * named one by one. This used to be `dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi))` --
+ * a raw hash of the whole struct, which silently absorbed whatever was added to it and would
+ * just as silently have absorbed the members leaving it as `dev->roi` is divided into its
+ * three real objects. Naming them makes the dependency reviewable and makes the compiler,
+ * rather than a stale cached frame, report the next member that moves.
+ *
+ * The value never leaves the process and is only ever compared against another value computed
+ * here, so it does not have to reproduce the old byte layout -- only to change exactly when
+ * the old one changed.
+ */
+static uint64_t _darkroom_zoom_hash(const dt_develop_t *dev)
+{
+  uint64_t hash = 5381;
+
+  // Three coherent reads, hashed as the three records they are. Hashing field by field through
+  // accessors would let a publication land between two of them and key the cached surface to a
+  // viewport that never existed -- which is the same tearing the objects were built to remove.
+  const dt_dev_viewport_state_t viewport = dt_dev_viewport_get(dev);
+  hash = dt_hash(hash, (const char *)&viewport, sizeof(viewport));
+
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  hash = dt_hash(hash, (const char *)&geometry, sizeof(geometry));
+
+  // The request's generation, not its bytes: the record carries four bytes of tail padding
+  // (its uint64_t forces 8-byte alignment) whose contents C does not define across a copy, so
+  // hashing it raw could key the cached surface differently for identical content. The
+  // generation exists precisely to answer "did this change", and advances only when it did.
+  // dt_dev_viewport_state_t and dt_dev_image_geometry_t above are padding-free, so their bytes
+  // are safe to hash directly -- checked, not assumed.
+  const dt_dev_roi_request_t request = dt_dev_roi_request_get(dev);
+  hash = dt_hash(hash, (const char *)&request.generation, sizeof(request.generation));
+  return hash;
 }
 
 static inline gboolean _darkroom_locked_main_valid_for_zoom(const darkroom_expose_state_t *state,
@@ -771,7 +820,7 @@ void expose(
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  const int32_t border = dev->roi.border_size;
+  const int32_t border = dt_dev_viewport_border_size(dev);
 
 #if DARKROOM_EXPOSE_DUMB_DEBUG
   dt_aligned_pixel_t bg_color_dbg;
@@ -790,16 +839,26 @@ void expose(
     .main_zoom_hash = 0,
     .pending_main_hash = DT_PIXELPIPE_CACHE_HASH_INVALID,
   };
-  const uint64_t zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi));
+  const uint64_t zoom_hash = _darkroom_zoom_hash(dev);
   const gboolean roi_changed = !_darkroom_locked_main_valid_for_zoom(&expose_state, zoom_hash);
+
+  /* The expose is timed as a whole and nothing inside it is, which is why a redraw that grows
+   * from 11 ms to 400 ms across a drawing session cannot be attributed: the mask overlay reports
+   * 1.5 ms of it and the rest is dark. Three stages, so the next log says which. */
+  dt_times_t stage = { 0 };
+  dt_get_times(&stage);
 
   _darkroom_prepare_image_surface(dev, width, height, &expose_state);
 
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] surface prepared");
+  dt_get_times(&stage);
+
   cairo_t *cr = cairo_create(dev->image_surface);
-  const int full_width = dev->roi.preview_width;
-  const int full_height = dev->roi.preview_height;
+  const int full_width = dt_dev_roi_request_preview_width(dev);
+  const int full_height = dt_dev_roi_request_preview_height(dev);
+  const dt_backbuf_state_t preview_published = dt_dev_backbuf_snapshot(&dev->preview_pipe->backbuf);
   const uint64_t main_backbuf_hash = dt_dev_backbuf_get_hash(&dev->pipe->backbuf);
-  const uint64_t preview_backbuf_hash = dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf);
+  const uint64_t preview_backbuf_hash = preview_published.hash;
   const gboolean main_has_backbuf = main_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID;
   const gboolean preview_has_backbuf = preview_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID;
   // Compare main against the last main surface, not against the last source painted into
@@ -812,8 +871,8 @@ void expose(
   const gboolean preview_matches_full_image
       = preview_has_backbuf && dt_dev_pipelines_share_preview_output(dev)
         && full_width > 0 && full_height > 0
-        && dev->preview_pipe->backbuf.width == full_width
-        && dev->preview_pipe->backbuf.height == full_height;
+        && preview_published.width == (size_t)full_width
+        && preview_published.height == (size_t)full_height;
   const gboolean full_image_backbuf_ready = main_ready_for_current_view || preview_matches_full_image;
 
   dt_aligned_pixel_t bg_color = { 0.0f };
@@ -1011,8 +1070,8 @@ void expose(
   // draw guide lines if needed
   if(!dev->gui_module || !(dev->gui_module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW))
   {
-    const float wd = dev->roi.preview_width;
-    const float ht = dev->roi.preview_height;
+    const float wd = dt_dev_roi_request_preview_width(dev);
+    const float ht = dt_dev_roi_request_preview_height(dev);
     const float scaling = dt_dev_get_overlay_scale(dev);
 
     cairo_save(cri);
@@ -1025,6 +1084,9 @@ void expose(
     dt_guides_draw(cri, 0, 0, wd, ht, scaling);
     cairo_restore(cri);
   }
+
+  if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] image painted");
+  dt_get_times(&stage);
 
   const gboolean picker_active = dt_iop_color_picker_is_visible(dev);
 
@@ -1041,12 +1103,22 @@ void expose(
     const gboolean display_masks = (dev->gui_module && dev->gui_module->enabled)
                                  || dt_lib_gui_get_expanded(dt_lib_get_module("masks"));
 
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] overlay predicates");
+
     if(dt_masks_get_visible_form(dev) && display_masks)
       dt_masks_events_post_expose(dev, dev->gui_module, cri, width, height, pointerx, pointery);
       
+    if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_show_times(&stage, "[darkroom] overlays drawn");
+    dt_get_times(&stage);
+
     // module
     if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->gui_post_expose)
+    {
       dev->gui_module->gui_post_expose(dev->gui_module, cri, width, height, pointerx, pointery);
+
+      if(dt_get_debug_flags() & DT_DEBUG_PERF)
+        dt_show_times_f(&stage, "[darkroom]", "module %s gui_post_expose", dev->gui_module->op);
+    }
   }
 
   // indicate if we are in gamut check or softproof mode
@@ -1282,6 +1354,18 @@ static void _darkroom_change_rendering_size(GtkWidget *combobox, gpointer user_d
   dt_dev_pixelpipe_resync_history_main(d);
 }
 
+static void _darkroom_change_mask_rasterization(GtkWidget *combobox, gpointer user_data)
+{
+  dt_develop_t *d = (dt_develop_t *)user_data;
+  dt_conf_set_string("plugins/darkroom/masks/rasterization",
+                     (dt_bauhaus_combobox_get(combobox) == 0) ? "auto" : "never");
+  /* The step itself is recomputed by dt_dev_roi_request_publish(), on this thread. Only the
+   * MAIN pipe is affected: the preview's step is always automatic, set from its own ROI, so
+   * this preference cannot change it and resyncing it would be wasted work. */
+  dt_dev_roi_request_publish(d);
+  dt_dev_pixelpipe_resync_history_main(d);
+}
+
 /** end of toolbox */
 
 #if 0
@@ -1399,13 +1483,14 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
   const gboolean autoset_running_before
       = !IS_NULL_PTR(_autoset_manager) && _autoset_manager->progress_cursor_active;
   const int32_t imgid = dt_dev_get_global()->image_storage.id;
-  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(dt_mipmap_cache_get_global(), pipe->backbuf.width, pipe->backbuf.height, imgid);
+  const dt_backbuf_state_t published = dt_dev_backbuf_snapshot(&pipe->backbuf);
+  dt_mipmap_size_t mip = dt_mipmap_cache_get_fitting_size(published.width, published.height, imgid);
 
   // Check if the cache is ready for that mipmap size.
   dt_mipmap_buffer_t tmp;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &tmp, imgid, mip, DT_MIPMAP_TESTLOCK, 'r');
+  dt_mipmap_cache_get(&tmp, imgid, mip, DT_MIPMAP_TESTLOCK, 'r');
   gboolean cache_ready = !IS_NULL_PTR(tmp.buf);
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &tmp);
+  dt_mipmap_cache_release(&tmp);
 
   if(pipe->autoset)
   {
@@ -1618,6 +1703,25 @@ void gui_init(dt_view_t *self)
                               );
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(rendering), TRUE, TRUE, 0);
 
+    gchar *rasterization = dt_conf_get_string("plugins/darkroom/masks/rasterization");
+    const int rasterization_index = (!IS_NULL_PTR(rasterization) && !strcmp(rasterization, "never")) ? 1 : 0;
+    g_free(rasterization);
+
+    GtkWidget *mask_rasterization;
+    DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), mask_rasterization, NULL,
+                                N_("Fast drawn mask rasterization"),
+                                _("Choose how finely brush and polygon masks are drawn in the darkroom.\n"
+                                  "Auto samples one point per displayed pixel: zoomed out costs less,\n"
+                                  "and at 100% or closer masks are pixel-accurate.\n"
+                                  "Never keeps pixel accuracy at every zoom level, at some cost when zoomed out.\n"
+                                  "Exports, thumbnails and snapshots are always pixel-accurate either way."),
+                                rasterization_index,
+                                _darkroom_change_mask_rasterization, dev,
+                                N_("auto (default)"),
+                                N_("never")
+                              );
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(mask_rasterization), TRUE, TRUE, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), dt_ui_section_label_new(_("Mask preview settings")), FALSE, FALSE, 0);
 
     GtkWidget *checker_1_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -1750,16 +1854,16 @@ void gui_init(dt_view_t *self)
 
   dt_view_manager_get_global()->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
   dt_view_manager_get_global()->proxy.darkroom.set_default_cursor = _darkroom_set_default_cursor;
-  dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+  dt_dev_viewport_set_border(dev, DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size")));
 }
 
 static gboolean _is_scroll_captured_by_widget()
 {
   dt_accels_t *accels = dt_gui_get_accels();
-  if(!dt_gui_get_global()->has_scroll_focus || accels->active_key.accel_key == 0) return FALSE;
+  if(!dt_widget_scroll_focus() || accels->active_key.accel_key == 0) return FALSE;
 
   // When declaring shortcuts, bauhaus widgets write their accel path into a private data field
-  gchar *accel_path = g_object_get_data(G_OBJECT(dt_gui_get_global()->has_scroll_focus), "accel-path");
+  gchar *accel_path = g_object_get_data(G_OBJECT(dt_widget_scroll_focus()), "accel-path");
 
   // Find if the registered accel keys matches currently pressed keys
   GtkAccelKey key = { 0 };
@@ -1779,7 +1883,7 @@ gboolean _scroll_on_focus(GdkEventScroll event, void *data)
   {
     // Pass-through the scrolling event to the scrolling handler of the widget
     gboolean ret;
-    g_signal_emit_by_name(G_OBJECT(dt_gui_get_global()->has_scroll_focus), "scroll-event", &event, &ret);
+    g_signal_emit_by_name(G_OBJECT(dt_widget_scroll_focus()), "scroll-event", &event, &ret);
     return ret;
   }
 
@@ -1820,7 +1924,7 @@ void enter(dt_view_t *self)
       if(module->multi_priority == 0)
       {
         snprintf(option, sizeof(option), "plugins/darkroom/%s/expanded", module->op);
-        module->expanded = dt_conf_get_bool(option);
+        module->gui->expanded = dt_conf_get_bool(option);
         dt_iop_gui_update_expanded(module);
 
         if(active_plugin && !strcmp(module->op, active_plugin))
@@ -1878,6 +1982,9 @@ void leave(dt_view_t *self)
   _darkroom_center_pan_drag = FALSE;
   _reset_edge_pan();
   dt_gui_throttle_cancel(dev);
+  // Last moment at which committing is still safe -- everything below tears down
+  // dev->pipe / dev->iop / dev->history. Run the pending edit rather than lose it.
+  dt_dev_history_flush_pending_commits(dev);
 
   _release_expose_source_caches();
   if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
@@ -1887,7 +1994,6 @@ void leave(dt_view_t *self)
   dev->exit = 1;
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-  if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
   dev->pipelines_started = FALSE;
 
   /* dev->exit / the shutdown atomics above are only checked by the darkroom worker thread
@@ -1959,32 +2065,25 @@ void leave(dt_view_t *self)
   // before destroying the actual modules being referenced.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
   dt_dev_set_backbuf(&dev->pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
   dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
-
-  dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
-  dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
-  dt_dev_set_backbuf(&dev->virtual_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
-                     DT_PIXELPIPE_CACHE_HASH_INVALID);
-  dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
 
   /* Device-side cache payloads are only an acceleration layer. Once darkroom
    * leaves, drop the cl_mem objects these pipes produced -- but only on the
    * device(s) they themselves last ran on, so we never touch cache entries
    * another, still-running pipe (e.g. a background thumbnail export) holds on
    * its own OpenCL device. */
-  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->pipe->last_devid);
+  dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->pipe->last_devid);
   if(dev->preview_pipe->last_devid != dev->pipe->last_devid)
-    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dt_pixelpipe_cache_get_global(), dev->preview_pipe->last_devid);
+    dt_dev_pixelpipe_cache_flush_clmem_for_pipe(dev->preview_pipe->last_devid);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
@@ -2030,13 +2129,13 @@ void leave(dt_view_t *self)
   dt_dev_get_global()->image_storage.id = -1;
 
   // Release the cache entries for histogram buffers
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->raw_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->raw_histogram));
   dt_dev_backbuf_set_hash(&dev->raw_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->output_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->output_histogram));
   dt_dev_backbuf_set_hash(&dev->output_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(&dev->display_histogram));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->display_histogram));
   dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 
   /* GUI backbuffers were already released when each pipeline was quiesced above. Keep the view-side teardown
@@ -2051,7 +2150,6 @@ void mouse_leave(dt_view_t *self)
 {
   // if we are not hovering over a thumbnail in the filmstrip -> show metadata of opened image.
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  dt_control_t *ctl = dt_control_get_global();
   dt_gui_gtk_t *gui = dt_gui_get_global();
   dt_control_mouse_is_dragging(FALSE);
   dt_control_mouse_is_painting(FALSE);
@@ -2060,7 +2158,7 @@ void mouse_leave(dt_view_t *self)
 
   if(gui->pan_edge.timeout_source
      && gui->pan_edge.block_normal_pan
-     && !IS_NULL_PTR(ctl) && ctl->button_down && ctl->button_down_which == 1)
+     && dt_control_button_down(1))
   {
     gui->pan_edge.velocity[0] = 0.0f;
     gui->pan_edge.velocity[1] = 0.0f;
@@ -2235,7 +2333,7 @@ static void _darkroom_edge_pan_update_state(dt_view_t *self,
 
   if(!gui->pan_edge.enabled
      || dt_view_manager_get_current_view(dt_view_manager_get_global()) != self
-     || dev->roi.scaling <= 1.0f)
+     || dt_dev_viewport_scaling(dev) <= 1.0f)
     return;
 
   float image_box[4] = { 0.0f };
@@ -2329,18 +2427,17 @@ static gboolean _darkroom_edge_pan_apply(dt_view_t *self,
   dt_develop_t *dev = edge.dev;
   dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-  float roi[2] = { dev->roi.x + delta[0] / (float)dev->roi.processed_width,
-                   dev->roi.y + delta[1] / (float)dev->roi.processed_height
+  float roi[2] = { dt_dev_viewport_center_x(dev) + delta[0] / (float)dt_dev_geometry_processed_width(dev),
+                   dt_dev_viewport_center_y(dev) + delta[1] / (float)dt_dev_geometry_processed_height(dev)
                  };
   dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
   ctl->button_x = pointer_x;
   ctl->button_y = pointer_y;
 
-  if(dev->roi.x != roi[0] || dev->roi.y != roi[1])
+  if(dt_dev_viewport_center_x(dev) != roi[0] || dt_dev_viewport_center_y(dev) != roi[1])
   {
-    dev->roi.x = roi[0];
-    dev->roi.y = roi[1];
+    dt_dev_viewport_set_center(dev, roi[0], roi[1]);
     // Updating ctl->button_x/y changes the cursor position, which is the same as a mouse move event.
     mouse_moved(self, pointer_x, pointer_y, 1.0, 0);
     //dt_control_queue_redraw_center();
@@ -2400,7 +2497,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   _darkroom_set_default_cursor(self, x, y);
   gboolean handled = FALSE;
 
-  if(picker_active && ctl->button_down && ctl->button_down_which == 1)
+  if(picker_active && dt_control_button_down(1))
   {
     // module requested a color box
     if(mouse_in_imagearea(self, x, y))
@@ -2410,8 +2507,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       float mouse_point[2] = { (float)x, (float)y };
       dt_dev_coordinates_widget_to_image_norm(dev, mouse_point, 1);
       const float delta[2] = {
-        1.0f / dev->roi.processed_width,
-        1.0f / dev->roi.processed_height
+        1.0f / dt_dev_geometry_processed_width(dev),
+        1.0f / dt_dev_geometry_processed_height(dev)
       };
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
@@ -2512,18 +2609,16 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   dt_control_commit_cursor();
 
-  if(_darkroom_center_pan_drag && dt_control_get_global()->button_down
-     && dt_control_get_global()->button_down_which == 1 && dev->roi.scaling > 1)
+  if(_darkroom_center_pan_drag && dt_control_button_down(1) && dt_dev_viewport_scaling(dev) > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
-    float roi[2] = { dev->roi.x - (delta[0] / dev->roi.processed_width),
-                     dev->roi.y - (delta[1] / dev->roi.processed_height) };
+    float roi[2] = { dt_dev_viewport_center_x(dev) - (delta[0] / dt_dev_geometry_processed_width(dev)),
+                     dt_dev_viewport_center_y(dev) - (delta[1] / dt_dev_geometry_processed_height(dev)) };
     dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
-    dev->roi.x = roi[0];
-    dev->roi.y = roi[1];
+    dt_dev_viewport_set_center(dev, roi[0], roi[1]);
     ctl->button_x = x;
     ctl->button_y = y;
 
@@ -2545,19 +2640,22 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     return;
   }
 
-  // panning with left mouse button
-  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1 && dev->roi.scaling > 1)
+  // panning with left mouse button.
+  // _darkroom_center_pan_drag is what makes this OUR drag: dt_control_button_down() reports the
+  // device's state, so without it a button pressed elsewhere and still held on entry would pan
+  // the image from a stale ctl->button_x/y anchor. The sibling path at :2563 always had this
+  // guard; here it was implicit, back when button_down was set only by our own press handler.
+  if(_darkroom_center_pan_drag && dt_control_button_down(1) && dt_dev_viewport_scaling(dev) > 1)
   {
     float delta[2] = { x - ctl->button_x, y - ctl->button_y };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, delta, 1);
 
     // new roi position in full image scale
-    float roi[2] = { dev->roi.x - (delta[0] / dev->roi.processed_width),
-                     dev->roi.y - (delta[1] / dev->roi.processed_height) };
+    float roi[2] = { dt_dev_viewport_center_x(dev) - (delta[0] / dt_dev_geometry_processed_width(dev)),
+                     dt_dev_viewport_center_y(dev) - (delta[1] / dt_dev_geometry_processed_height(dev)) };
     dt_dev_check_zoom_pos_bounds(dev, &roi[0], &roi[1], NULL, NULL);
 
-    dev->roi.x = roi[0];
-    dev->roi.y = roi[1];
+    dt_dev_viewport_set_center(dev, roi[0], roi[1]);
 
     // update clicked position
     ctl->button_x = x;
@@ -2642,8 +2740,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     const float zoom_scale = dt_dev_get_fit_scale(dev);
     float handle[2] = { 6.0f, 6.0f };
     dt_dev_coordinates_widget_delta_to_image_delta(dev, handle, 1);
-    handle[0] /= dev->roi.processed_width;
-    handle[1] /= dev->roi.processed_height;
+    handle[0] /= dt_dev_geometry_processed_width(dev);
+    handle[1] /= dt_dev_geometry_processed_height(dev);
 
     if(which == 1)
     {
@@ -2651,7 +2749,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
       {
         // The default box will be a square with 1% of the image width
         const float delta_x = 0.01f;
-        const float delta_y = delta_x * (float)dev->roi.processed_width / (float)dev->roi.processed_height;
+        const float delta_y = delta_x * (float)dt_dev_geometry_processed_width(dev) / (float)dt_dev_geometry_processed_height(dev);
 
         if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
         {
@@ -2738,8 +2836,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
               MAX(26.0f, roundf(3.0f * zoom_scale))
             };
             dt_dev_coordinates_widget_delta_to_image_delta(dev, slop, 1);
-            slop[0] /= dev->roi.processed_width;
-            slop[1] /= dev->roi.processed_height;
+            slop[0] /= dt_dev_geometry_processed_width(dev);
+            slop[1] /= dt_dev_geometry_processed_height(dev);
             float live_point[2] = { live_sample->point[0], live_sample->point[1] };
             dt_dev_coordinates_raw_norm_to_image_norm(dev, live_point, 1);
             if(fabsf(point[0] - live_point[0]) > slop[0]
@@ -2778,7 +2876,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     return 1;
   }
 
-  if(which == 1 && dev->roi.scaling > 1.0f && mouse_in_imagearea(self, x, y))
+  if(which == 1 && dt_dev_viewport_scaling(dev) > 1.0f && mouse_in_imagearea(self, x, y))
     _darkroom_center_pan_drag = TRUE;
 
   if(which == 2)
@@ -2786,12 +2884,12 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     // Incremental zoom-in on middle button click, from fit to 800% 
     // by power of 2 increments (100%, 200%, 400%, 800%).
     float new_scale = 1.f;
-    if(dev->roi.scaling < 1.f || dev->roi.scaling > 7.f / dev->roi.natural_scale)
+    if(dt_dev_viewport_scaling(dev) < 1.f || dt_dev_viewport_scaling(dev) > 7.f / dt_dev_roi_request_natural_scale(dev))
       new_scale = 1.f; // zoom to fit
-    else if(dev->roi.scaling * dev->roi.natural_scale < 1.f)
-      new_scale = 1.f / dev->roi.natural_scale; // 100 %
+    else if(dt_dev_viewport_scaling(dev) * dt_dev_roi_request_natural_scale(dev) < 1.f)
+      new_scale = 1.f / dt_dev_roi_request_natural_scale(dev); // 100 %
     else
-      new_scale = floorf(dev->roi.scaling * dev->roi.natural_scale) * 2.f / dev->roi.natural_scale;
+      new_scale = floorf(dt_dev_viewport_scaling(dev) * dt_dev_roi_request_natural_scale(dev)) * 2.f / dt_dev_roi_request_natural_scale(dev);
 
     const float point[2] = { x, y };
     return _change_scaling(dev, point, new_scale);
@@ -2802,14 +2900,14 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
 static int _change_scaling(dt_develop_t *dev, const float point[2], const float new_scaling)
 {
-  const float old_scaling = dev->roi.scaling;
+  const float old_scaling = dt_dev_viewport_scaling(dev);
 
   // Round scaling to 1.0 (fit) if close enough
   const float epsilon = fabsf(old_scaling - new_scaling);
   if(fabsf(new_scaling - 1.0f) < epsilon)
-    dev->roi.scaling = 1.0f;
+    dt_dev_viewport_set_scaling(dev, 1.0f);
   else
-    dev->roi.scaling = new_scaling;
+    dt_dev_viewport_set_scaling(dev, new_scaling);
 
   if(!dt_dev_check_zoom_scale_bounds(dev))
   { 
@@ -2824,27 +2922,29 @@ static int _change_scaling(dt_develop_t *dev, const float point[2], const float 
     // Keep the image point under the mouse fixed in widget coordinates while
     // the pipeline zoom stays DPI-invariant.
     const float old_zoom = dt_dev_get_widget_zoom_scale(dev, old_scaling);
-    const float new_zoom = dt_dev_get_widget_zoom_scale(dev, dev->roi.scaling);
+    const float new_zoom = dt_dev_get_widget_zoom_scale(dev, dt_dev_viewport_scaling(dev));
     if(old_zoom <= 1e-6f || new_zoom <= 1e-6f)
     {
-      dev->roi.scaling = old_scaling;
+      dt_dev_viewport_set_scaling(dev, old_scaling);
       return 0;
     }
 
     // Adjust the center to compensate for the scale change
     int proc_w = 0.f, proc_h = 0.f;
     dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-    dev->roi.x += mouse_offset[0] * (1.f / old_zoom - 1.f / new_zoom) / proc_w;
-    dev->roi.y += mouse_offset[1] * (1.f / old_zoom - 1.f / new_zoom) / proc_h;
+    const dt_dev_viewport_state_t anchored = dt_dev_viewport_get(dev);
+    dt_dev_viewport_set_center(dev,
+                               anchored.center_x + mouse_offset[0] * (1.f / old_zoom - 1.f / new_zoom) / proc_w,
+                               anchored.center_y + mouse_offset[1] * (1.f / old_zoom - 1.f / new_zoom) / proc_h);
     
-    dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+    dt_dev_clamp_viewport_center(dev);
     dt_dev_pixelpipe_change_zoom_main(dev);
     return 1;
   }
   else
   {
     // Invalid zoom level, keep previous value
-    dev->roi.scaling = old_scaling;
+    dt_dev_viewport_set_scaling(dev, old_scaling);
     return 0;
   }
 }
@@ -2855,7 +2955,7 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 
   // Commit the new scaling
   const float step = 1.02f;
-  const float new_scaling = dev->roi.scaling * powf(step, (float)-flow);
+  const float new_scaling = dt_dev_viewport_scaling(dev) * powf(step, (float)-flow);
   const float point[2] = { x, y };
   return _change_scaling(dev, point, new_scaling);
 }
@@ -2881,8 +2981,12 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
     return TRUE;
   }
 
-  // module
-  if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->scrolled && dev->gui_module->scrolled(dev->gui_module, x, y, up, state))
+  // module -- skip while the color picker overlay is active, consistent with button_pressed/
+  // button_released/mouse_moved above, which all give the picker priority over the module.
+  // Unlike those three, a module's own scrolled() has no reliable way to know the picker is
+  // showing unless it checks dt_iop_color_picker_is_visible() itself, and not every module does.
+  if(!dt_iop_color_picker_is_visible(dev)
+     && dev->gui_module && dev->gui_module->enabled && dev->gui_module->scrolled && dev->gui_module->scrolled(dev->gui_module, x, y, up, state))
   {
     // Scroll in modules should handle history changes internally.
     return TRUE;
@@ -2894,7 +2998,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
 
 static void _key_scroll(dt_develop_t *dev)
 {
-  dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+  dt_dev_clamp_viewport_center(dev);
   dt_control_queue_redraw_center();
   dt_dev_pixelpipe_change_zoom_main(dev);
 }
@@ -2935,9 +3039,9 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     switch(key)
     {
       case GDK_KEY_plus:
-        return _change_scaling(dev, center, dev->roi.scaling * zoom_step);
+        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) * zoom_step);
       case GDK_KEY_minus:
-        return _change_scaling(dev, center, dev->roi.scaling / zoom_step);
+        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) / zoom_step);
     }
   }
 
@@ -2952,25 +3056,33 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   {
     case GDK_KEY_Up:
     {
-      dev->roi.y -= delta[1] / (float)dev->roi.processed_height;
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev),
+                                 dt_dev_viewport_center_y(dev)
+                                     - delta[1] / (float)dt_dev_geometry_processed_height(dev));
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Down:
     {
-      dev->roi.y += delta[1] / (float)dev->roi.processed_height;
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev),
+                                 dt_dev_viewport_center_y(dev)
+                                     + delta[1] / (float)dt_dev_geometry_processed_height(dev));
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Left:
     {
-      dev->roi.x -= delta[0] / (float)dev->roi.processed_width;
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev)
+                                     - delta[0] / (float)dt_dev_geometry_processed_width(dev),
+                                 dt_dev_viewport_center_y(dev));
       _key_scroll(dev);
       return 1;
     }
     case GDK_KEY_Right:
     {
-      dev->roi.x += delta[0] / (float)dev->roi.processed_width;
+      dt_dev_viewport_set_center(dev, dt_dev_viewport_center_x(dev)
+                                     + delta[0] / (float)dt_dev_geometry_processed_width(dev),
+                                 dt_dev_viewport_center_y(dev));
       _key_scroll(dev);
       return 1;
     }
@@ -3002,8 +3114,7 @@ void configure(dt_view_t *self, int wd, int ht)
   if(dt_view_manager_get_current_view(dt_view_manager_get_global()) == self)
   {
     // Reference dimensions before ISO 12646 mode
-    dev->roi.orig_height = ht;
-    dev->roi.orig_width = wd;
+    dt_dev_viewport_set_widget_size(dev, wd, ht);
     dt_dev_toolbox_apply_iso_12646_size(dev);
   }
 }

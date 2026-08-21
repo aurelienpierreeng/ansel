@@ -43,8 +43,6 @@ MINGW_PACKAGES=(
   gcc-libs
   gettext
   gdb
-  gmic
-  graphicsmagick
   gtk3
   icu
   imath
@@ -61,7 +59,6 @@ MINGW_PACKAGES=(
   libjpeg-turbo
   libjxl
   librsvg
-  libsecret
   libtiff
   libwebp
   libxml2

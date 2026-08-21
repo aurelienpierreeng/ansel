@@ -38,21 +38,26 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "develop/imageop_gui.h"
 #include "develop/masks.h"
-#include "gui/bauhaus.h"
+#include "develop/masks_gui.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "develop/blend.h"
+#include "develop/blend_gui.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "widgets/draw.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
+#include "widgets/scroll_wrap.h"
 
+#include "widgets/togglebutton.h"
+#include "control/signal.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -176,7 +181,7 @@ static void _lib_masks_clear_blending_box(dt_lib_module_t *self)
 static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
 {
   if(!_lib_masks_module_is_current(module) || !module->flags
-     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->blend_data)
+     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->gui || !module->gui->blend_data)
     return FALSE;
 
   return TRUE;
@@ -872,35 +877,14 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
     int id = -1;
     _lib_masks_get_values(model, &iter, &module, &grid, &id);
 
-    const int nid = dt_masks_form_duplicate(dt_dev_get_global(), id);
+    // dt_masks_form_duplicate_in_group also attaches the duplicate to the source shape's
+    // group (grid), inheriting its state/opacity -- without that, the duplicate would be an
+    // orphan: invisible on canvas and useless to the module, since nothing outside a group
+    // ever gets rendered.
+    const int nid = dt_masks_form_duplicate_in_group(dt_dev_get_global(), grid, id);
     if(nid > 0)
     {
-      // If the source shape was a member of a group (grid != 0, i.e. not itself a top-level
-      // group node), dt_masks_form_duplicate only cloned the shape into dev->forms -- it does
-      // NOT add it to that group. Without this, the duplicate is an orphan: invisible on
-      // canvas and useless to the module, since nothing outside a group ever gets rendered.
-      dt_masks_form_t *grp = (grid > 0) ? dt_masks_get_from_id(dt_dev_get_global(), grid) : NULL;
-      if(grp && (grp->type & DT_MASKS_GROUP))
-      {
-        grp = dt_masks_cow_touch(dt_dev_get_global(), grp);
-
-        dt_masks_form_group_t *orig_entry = NULL;
-        for(GList *pts = grp->points; pts; pts = g_list_next(pts))
-        {
-          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-          if(pt->formid == id) { orig_entry = pt; break; }
-        }
-
-        dt_masks_form_t *dup_form = dt_masks_get_from_id(dt_dev_get_global(), nid);
-        dt_masks_form_group_t *new_entry = dup_form ? dt_masks_group_add_form(dt_dev_get_global(), grp, dup_form) : NULL;
-        if(new_entry && orig_entry)
-        {
-          new_entry->state = orig_entry->state;
-          new_entry->opacity = orig_entry->opacity;
-        }
-
-        if(module) dt_masks_iop_update(module);
-      }
+      if(module) dt_masks_iop_update(module);
 
       dt_dev_masks_selection_change(dt_dev_get_global(), NULL, nid, TRUE);
 
@@ -993,11 +977,11 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
           dt_iop_module_t *module = NULL;
           _lib_masks_get_values(model, &iter, &module, NULL, NULL);
 
-          if(module && module->blend_data
+          if(module && module->gui && module->gui->blend_data
              && (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
              && !(module->flags() & IOP_FLAGS_NO_MASKS))
           {
-            dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+            dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
             bd->masks_shown = 1;
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
             gtk_widget_queue_draw(bd->masks_edit);
@@ -1032,6 +1016,7 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
   int from_group = 0;
 
   int grpid = 0;
+  int parentid = 0;
   int depth = 0;
 
   if(nb > 0)
@@ -1044,7 +1029,7 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
       // before freeing the list of selected rows, we check if the form is a group or not
       if(gtk_tree_model_get_iter(model, &iter, it0))
       {
-        _lib_masks_get_values(model, &iter, NULL, NULL, &grpid);
+        _lib_masks_get_values(model, &iter, NULL, &parentid, &grpid);
       }
     }
     g_list_free_full(selected, (GDestroyNotify)gtk_tree_path_free);
@@ -1148,28 +1133,69 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     gtk_menu_shell_append(menu, item);
   }
 
+  dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grpid);
+
+  // Same shape-parameter sliders (size/fading/rotation/opacity) as the darkroom canvas's and
+  // the blend module's own shape context menus. Available for any single selected shape, not
+  // just one nested under a group in the tree: _lib_masks_list_recurs also lists every shape
+  // at top level regardless of group membership (TREE_GROUPID == 0 there), so when the tree
+  // doesn't hand us the parent directly, look up whichever group actually references it.
+  // Touch the parent group before resolving the entry, same rule as elsewhere: the sliders
+  // mutate this entry in place across the whole drag/scroll interaction.
+  if(nb == 1 && !IS_NULL_PTR(grp) && !(grp->type & DT_MASKS_GROUP))
+  {
+    dt_masks_form_group_t *op_form = NULL;
+    if(from_group)
+    {
+      dt_masks_form_t *parent_group = dt_masks_get_from_id(dt_dev_get_global(), parentid);
+      if(!IS_NULL_PTR(parent_group) && (parent_group->type & DT_MASKS_GROUP))
+        parent_group = dt_masks_cow_touch(dt_dev_get_global(), parent_group);
+      op_form = dt_masks_form_group_find_entry(parent_group, grpid, NULL);
+    }
+    else
+    {
+      op_form = dt_masks_form_group_find_any(dt_dev_get_global(), grpid, NULL);
+    }
+
+    if(!IS_NULL_PTR(op_form))
+    {
+      dt_masks_gui_populate_interaction_sliders(GTK_WIDGET(menu), dt_dev_get_global(), grp, op_form,
+                                                dt_dev_get_global()->form_gui, module);
+      gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+    }
+  }
+
   if(from_group && depth < 3)
   {
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+
+    // Same "Operation" submenu grouping (Invert/Union/Intersection/Difference/Exclusion) as
+    // the darkroom canvas's and the blend module's own shape context menus.
+    item = gtk_menu_item_new_with_label(_("Operation"));
+    GtkWidget *op_submenu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), op_submenu);
+    gtk_menu_shell_append(menu, item);
+
     item = gtk_menu_item_new_with_label(_("Invert shape"));
     g_signal_connect(item, "activate", (GCallback)_tree_inverse, self);
-    gtk_menu_shell_append(menu, item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
     if(nb == 1)
     {
-      gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), gtk_separator_menu_item_new());
       item = gtk_menu_item_new_with_label(_("Union"));
       g_signal_connect(item, "activate", (GCallback)_tree_union, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Intersection"));
       g_signal_connect(item, "activate", (GCallback)_tree_intersection, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Difference"));
       g_signal_connect(item, "activate", (GCallback)_tree_difference, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
       item = gtk_menu_item_new_with_label(_("Exclusion"));
       g_signal_connect(item, "activate", (GCallback)_tree_exclusion, self);
-      gtk_menu_shell_append(menu, item);
+      gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), item);
     }
+
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
     item = gtk_menu_item_new_with_label(_("Move up"));
     g_signal_connect(item, "activate", (GCallback)_tree_moveup, self);
@@ -1180,7 +1206,6 @@ static GtkWidget *_tree_context_menu(GtkTreeSelection *selection, GtkTreeModel *
     gtk_menu_shell_append(menu, gtk_separator_menu_item_new());
   }
 
-  dt_masks_form_t *grp = dt_masks_get_from_id(dt_dev_get_global(), grpid);
   if(!from_group && !(grp && (grp->type & DT_MASKS_GROUP)) && nb == 1)
   {
     item = gtk_menu_item_new_with_label(_("Duplicate shape"));

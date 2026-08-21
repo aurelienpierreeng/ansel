@@ -125,31 +125,34 @@
 
 #include "libs/collect.h"
 #include "control/settings.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "common/collection.h"
 #include "common/film.h"
 #include "common/image.h"
-#include "common/macros.h"
-#include "common/metadata.h"
-#include "common/mipmap_cache.h"
+#include "system/macros.h"
+#include "metadata/metadata.h"
+#include "caches/mipmap_cache.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
 #include "common/selection.h"
-#include "common/tags.h"
+#include "metadata/tags.h"
 #include "common/utility.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/jobs/control_jobs.h"
-#include "gui/dtgtk/paint.h"
-#include "gui/dtgtk/togglebutton.h"
+#include "widgets/paint.h"
+#include "widgets/togglebutton.h"
 #include "gui/drag_and_drop.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
 #ifndef _WIN32
 #include <gio/gunixmounts.h>
 #endif
@@ -2024,16 +2027,16 @@ static int32_t _prerender_job(dt_job_t *job)
     for(int k = max; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
     {
       char filename[PATH_MAX] = { 0 };
-      dt_mipmap_get_cache_filename(filename, dt_mipmap_cache_get_global(), k, imgid);
+      dt_mipmap_get_cache_filename(filename, k, imgid);
       if(!dt_util_test_image_file(filename)) // skip thumbnails already on disc
       {
         dt_mipmap_buffer_t buf;
-        dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
-        dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+        dt_mipmap_cache_get(&buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
+        dt_mipmap_cache_release(&buf);
       }
       dt_control_job_set_progress(job, (float)(++done) / total);
     }
-    dt_mimap_cache_evict(dt_mipmap_cache_get_global(), imgid); // flush to disc, free RAM
+    dt_mimap_cache_evict(imgid); // flush to disc, free RAM
   }
   return 0;
 }

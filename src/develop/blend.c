@@ -39,27 +39,38 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/macros.h"
+#include "develop/pipeline_notify.h"
+#include "system/macros.h"
+#include "develop/iop_profile.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "blend.h"
 #include "pixel/gaussian.h"
 #include "pixel/guided_filter.h"
 #include "common/imagebuf.h"
-#include "pixel/interpolation.h"
 #include "common/opencl.h"
-#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
 #include "develop/tiling.h"
-#include "develop/imageop_math.h"
 #include <inttypes.h>
 #include <math.h>
 #include <string.h>
+
+/* The blend kernels, owned HERE. They used to be handed to common/opencl.c, parked on the
+ * application-wide dt_opencl_t, and read back from it by this file and by two IOPs -- a round
+ * trip through a god-struct that added nothing but an ordering. opencl.c still calls init and
+ * free, because the kernels must be built after the devices exist; the pointer itself no
+ * longer leaves the blend subsystem except through dt_develop_blend_get_cl_global(). */
+static dt_blendop_cl_global_t *_blendop_cl_global = NULL;
+
+dt_blendop_cl_global_t *dt_develop_blend_get_cl_global(void)
+{
+  return _blendop_cl_global;
+}
 
 typedef enum _develop_mask_post_processing
 {
@@ -407,7 +418,7 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   return;
 
   error:
-  dt_control_log(_("detail mask blending error"));
+  dt_pipeline_message(_("detail mask blending error"));
   dt_pixelpipe_cache_free_align(warp_mask);
   dt_pixelpipe_cache_free_align(lum);
   dt_pixelpipe_cache_free_align(tmp);
@@ -687,7 +698,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_control_log(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_pipeline_message(_("skipped blending in module '%s': roi's do not match"), self->op);
     return 0;
   }
 
@@ -713,7 +724,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   float *const restrict _mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
   if(IS_NULL_PTR(_mask))
   {
-    dt_control_log(_("could not allocate buffer for blending"));
+    dt_pipeline_message(_("could not allocate buffer for blending"));
     return 1;
   }
   int raster_error = 0;
@@ -752,7 +763,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
         float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
         if(IS_NULL_PTR(drawn_mask))
         {
-          dt_control_log(_("could not allocate buffer for blending"));
+          dt_pipeline_message(_("could not allocate buffer for blending"));
           dt_pixelpipe_cache_free_align(_mask);
           return 1;
         }
@@ -894,18 +905,18 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * buffsize,
+        mask_hash, sizeof(float) * buffsize,
         "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
         if(created)
-          dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
+          dt_dev_pixelpipe_cache_remove(TRUE, mask_entry);
       }
       dt_pixelpipe_cache_free_align(_mask);
       return 1;
@@ -916,7 +927,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
     if(created)
     {
       memcpy(cache_data, _mask, sizeof(float) * buffsize);
-      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
     }
     // Transfer cache_get()'s reference to the pipe. It keeps this side-band
     // output alive until the next graph state is prepared or the pipe closes.
@@ -995,7 +1006,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = dt_opencl_get_global()->blendop->kernel_read_mask;
+    const int kernel = _blendop_cl_global->kernel_read_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &tmp);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1006,7 +1017,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = dt_opencl_get_global()->blendop->kernel_calc_blend;
+    const int kernel = _blendop_cl_global->kernel_calc_blend;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &blur);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1025,7 +1036,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
     if(!IS_NULL_PTR(dev_blurmat))
     {
       size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-      const int clkernel = dt_opencl_get_global()->blendop->kernel_mask_blur;
+      const int clkernel = _blendop_cl_global->kernel_mask_blur;
       dt_opencl_set_kernel_arg(devid, clkernel, 0, sizeof(cl_mem), &blur);
       dt_opencl_set_kernel_arg(devid, clkernel, 1, sizeof(cl_mem), &out);
       dt_opencl_set_kernel_arg(devid, clkernel, 2, sizeof(int), &iwidth);
@@ -1044,7 +1055,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
 
   {
     size_t sizes[3] = { ROUNDUPDWD(iwidth, devid), ROUNDUPDHT(iheight, devid), 1 };
-    const int kernel = dt_opencl_get_global()->blendop->kernel_write_mask;
+    const int kernel = _blendop_cl_global->kernel_write_mask;
     dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), &out);
     dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), &tmp);
     dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), &iwidth);
@@ -1085,7 +1096,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   return;
 
   error:
-  dt_control_log(_("detail mask CL blending problem"));
+  dt_pipeline_message(_("detail mask CL blending problem"));
   dt_pixelpipe_cache_free_align(lum);
   dt_opencl_release_mem_object(tmp);
   dt_opencl_release_mem_object(blur);
@@ -1143,7 +1154,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_control_log(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_pipeline_message(_("skipped blending in module '%s': roi's do not match"), self->op);
     return 0;
   }
 
@@ -1174,7 +1185,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, pipe);
   if(IS_NULL_PTR(_mask))
   {
-    dt_control_log(_("could not allocate buffer for blending"));
+    dt_pipeline_message(_("could not allocate buffer for blending"));
     return 1;
   }
   float *const mask = _mask;
@@ -1185,29 +1196,29 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   switch(blend_csp)
   {
     case DEVELOP_BLEND_CS_RAW:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_RAW;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_RAW;
+      kernel = _blendop_cl_global->kernel_blendop_RAW;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_RAW;
       break;
 
     case DEVELOP_BLEND_CS_RGB_DISPLAY:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_rgb_hsl;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_rgb_hsl;
+      kernel = _blendop_cl_global->kernel_blendop_rgb_hsl;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_rgb_hsl;
       break;
 
     case DEVELOP_BLEND_CS_RGB_SCENE:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_rgb_jzczhz;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_rgb_jzczhz;
+      kernel = _blendop_cl_global->kernel_blendop_rgb_jzczhz;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_rgb_jzczhz;
       break;
 
     case DEVELOP_BLEND_CS_LAB:
     default:
-      kernel = dt_opencl_get_global()->blendop->kernel_blendop_Lab;
-      kernel_mask = dt_opencl_get_global()->blendop->kernel_blendop_mask_Lab;
+      kernel = _blendop_cl_global->kernel_blendop_Lab;
+      kernel_mask = _blendop_cl_global->kernel_blendop_mask_Lab;
       break;
   }
-  int kernel_mask_tone_curve = dt_opencl_get_global()->blendop->kernel_blendop_mask_tone_curve;
-  int kernel_set_mask = dt_opencl_get_global()->blendop->kernel_blendop_set_mask;
-  int kernel_display_channel = dt_opencl_get_global()->blendop->kernel_blendop_display_channel;
+  int kernel_mask_tone_curve = _blendop_cl_global->kernel_blendop_mask_tone_curve;
+  int kernel_set_mask = _blendop_cl_global->kernel_blendop_set_mask;
+  int kernel_display_channel = _blendop_cl_global->kernel_blendop_display_channel;
 
   const int devid = pipe->devid;
   const int offs[2] = { xoffs, yoffs };
@@ -1360,7 +1371,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
         cl_mem guide = dev_in;
         if(!rois_equal)
         {
-          dev_guide = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * 4);
+          dev_guide = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * ch);
           if(IS_NULL_PTR(dev_guide)) goto error;
           guide = dev_guide;
           size_t origin_1[] = { xoffs, yoffs, 0 };
@@ -1426,7 +1437,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   }
 
   // get temporary buffer for output image to overcome readonly/writeonly limitation
-  dev_tmp = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * 4);
+  dev_tmp = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * ch);
   if(IS_NULL_PTR(dev_tmp)) goto error;
 
   err = dt_opencl_enqueue_copy_image(devid, dev_out, dev_tmp, origin, origin, region);
@@ -1511,18 +1522,18 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     dt_pixel_cache_entry_t *mask_entry = NULL;
     void *cache_data = NULL;
     const int created = dt_dev_pixelpipe_cache_get(
-        dt_pixelpipe_cache_get_global(), mask_hash, sizeof(float) * buffsize,
+        mask_hash, sizeof(float) * buffsize,
         "raster mask", pipe->type, TRUE, &cache_data, &mask_entry);
 
     if(IS_NULL_PTR(cache_data) || IS_NULL_PTR(mask_entry))
     {
       if(created && !IS_NULL_PTR(mask_entry))
-        dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
       if(!IS_NULL_PTR(mask_entry))
       {
-        dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, mask_entry);
         if(created)
-          dt_dev_pixelpipe_cache_remove(dt_pixelpipe_cache_get_global(), TRUE, mask_entry);
+          dt_dev_pixelpipe_cache_remove(TRUE, mask_entry);
       }
       goto error;
     }
@@ -1532,7 +1543,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
     if(created)
     {
       memcpy(cache_data, _mask, sizeof(float) * buffsize);
-      dt_dev_pixelpipe_cache_wrlock_entry(dt_pixelpipe_cache_get_global(), FALSE, mask_entry);
+      dt_dev_pixelpipe_cache_wrlock_entry(FALSE, mask_entry);
     }
     // Transfer cache_get()'s reference to the pipe. It keeps this side-band
     // output alive until the next graph state is prepared or the pipe closes.
@@ -1592,7 +1603,7 @@ error:
 #endif
 
 /** global init of blendops */
-dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void)
+void dt_develop_blend_init_cl_global(void)
 {
 #ifdef HAVE_OPENCL
   dt_blendop_cl_global_t *b = (dt_blendop_cl_global_t *)calloc(1, sizeof(dt_blendop_cl_global_t));
@@ -1618,16 +1629,16 @@ dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void)
   b->kernel_calc_blend = dt_opencl_create_kernel(program_rcd, "calc_detail_blend");
   b->kernel_mask_blur  = dt_opencl_create_kernel(program_rcd, "fastblur_mask_9x9");
 
-  return b;
-#else
-  return NULL;
+  _blendop_cl_global = b;
 #endif
 }
 
 /** global cleanup of blendops */
-void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b)
+void dt_develop_blend_free_cl_global(void)
 {
 #ifdef HAVE_OPENCL
+  dt_blendop_cl_global_t *b = _blendop_cl_global;
+  _blendop_cl_global = NULL;
   if(IS_NULL_PTR(b)) return;
 
   dt_opencl_free_kernel(b->kernel_blendop_mask_Lab);
@@ -2232,6 +2243,92 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
 
 // tools/update_modelines.sh
 // remove-trailing-space on;
+/* Name tables for the persisted blend enums. Defined here rather than in blend_gui.c:
+ * they map params values to translatable names, and backend consumers
+ * (develop/supervisor.c) read them with no GUI loaded. */
+const dt_develop_name_value_t dt_develop_blend_mode_names[]
+    = { { NC_("blendmode", "normal"), DEVELOP_BLEND_NORMAL2 },
+        { NC_("blendmode", "normal bounded"), DEVELOP_BLEND_BOUNDED },
+        { NC_("blendmode", "lighten"), DEVELOP_BLEND_LIGHTEN },
+        { NC_("blendmode", "darken"), DEVELOP_BLEND_DARKEN },
+        { NC_("blendmode", "multiply"), DEVELOP_BLEND_MULTIPLY },
+        { NC_("blendmode", "average"), DEVELOP_BLEND_AVERAGE },
+        { NC_("blendmode", "addition"), DEVELOP_BLEND_ADD },
+        { NC_("blendmode", "subtract"), DEVELOP_BLEND_SUBTRACT },
+        { NC_("blendmode", "difference"), DEVELOP_BLEND_DIFFERENCE2 },
+        { NC_("blendmode", "screen"), DEVELOP_BLEND_SCREEN },
+        { NC_("blendmode", "overlay"), DEVELOP_BLEND_OVERLAY },
+        { NC_("blendmode", "softlight"), DEVELOP_BLEND_SOFTLIGHT },
+        { NC_("blendmode", "hardlight"), DEVELOP_BLEND_HARDLIGHT },
+        { NC_("blendmode", "vividlight"), DEVELOP_BLEND_VIVIDLIGHT },
+        { NC_("blendmode", "linearlight"), DEVELOP_BLEND_LINEARLIGHT },
+        { NC_("blendmode", "pinlight"), DEVELOP_BLEND_PINLIGHT },
+        { NC_("blendmode", "lightness"), DEVELOP_BLEND_LIGHTNESS },
+        { NC_("blendmode", "chromaticity"), DEVELOP_BLEND_CHROMATICITY },
+        { NC_("blendmode", "hue"), DEVELOP_BLEND_HUE },
+        { NC_("blendmode", "color"), DEVELOP_BLEND_COLOR },
+        { NC_("blendmode", "coloradjustment"), DEVELOP_BLEND_COLORADJUST },
+        { NC_("blendmode", "Lab lightness"), DEVELOP_BLEND_LAB_LIGHTNESS },
+        { NC_("blendmode", "Lab color"), DEVELOP_BLEND_LAB_COLOR },
+        { NC_("blendmode", "Lab L-channel"), DEVELOP_BLEND_LAB_L },
+        { NC_("blendmode", "Lab a-channel"), DEVELOP_BLEND_LAB_A },
+        { NC_("blendmode", "Lab b-channel"), DEVELOP_BLEND_LAB_B },
+        { NC_("blendmode", "HSV value"), DEVELOP_BLEND_HSV_VALUE },
+        { NC_("blendmode", "HSV color"), DEVELOP_BLEND_HSV_COLOR },
+        { NC_("blendmode", "RGB red channel"), DEVELOP_BLEND_RGB_R },
+        { NC_("blendmode", "RGB green channel"), DEVELOP_BLEND_RGB_G },
+        { NC_("blendmode", "RGB blue channel"), DEVELOP_BLEND_RGB_B },
+        { NC_("blendmode", "divide"), DEVELOP_BLEND_DIVIDE },
+        { NC_("blendmode", "geometric mean"), DEVELOP_BLEND_GEOMETRIC_MEAN },
+        { NC_("blendmode", "harmonic mean"), DEVELOP_BLEND_HARMONIC_MEAN },
+
+        /** deprecated blend modes: make them available as legacy history stacks might want them */
+        { NC_("blendmode", "difference (deprecated)"), DEVELOP_BLEND_DIFFERENCE },
+        { NC_("blendmode", "subtract inverse (deprecated)"), DEVELOP_BLEND_SUBTRACT_INVERSE },
+        { NC_("blendmode", "divide inverse (deprecated)"), DEVELOP_BLEND_DIVIDE_INVERSE },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_blend_mode_flag_names[]
+    = { { NC_("blendoperation", "normal"), 0 },
+        { NC_("blendoperation", "reverse"), DEVELOP_BLEND_REVERSE },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_blend_colorspace_names[]
+    = { { N_("default"), DEVELOP_BLEND_CS_NONE },
+        { N_("RAW"), DEVELOP_BLEND_CS_RAW },
+        { N_("Lab"), DEVELOP_BLEND_CS_LAB },
+        { N_("RGB (display)"), DEVELOP_BLEND_CS_RGB_DISPLAY },
+        { N_("RGB (scene)"), DEVELOP_BLEND_CS_RGB_SCENE },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_mask_mode_names[]
+    = { { N_("None"), 0 },
+        { N_("Uniform"), 1 },
+        { N_("Parametric mask"), 2 },
+        { N_("Drawn mask"), 3 },
+        { N_("Drawn & parametric mask"), 4 },
+        { N_("Reuse an existing mask"), 5 },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_combine_masks_names[]
+    = { { N_("exclusive"), DEVELOP_COMBINE_NORM_EXCL },
+        { N_("inclusive"), DEVELOP_COMBINE_NORM_INCL },
+        { N_("exclusive & inverted"), DEVELOP_COMBINE_INV_EXCL },
+        { N_("inclusive & inverted"), DEVELOP_COMBINE_INV_INCL },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_feathering_guide_names[]
+    = { { N_("output before blur"), DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR },
+        { N_("input before blur"), DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR },
+        { N_("output after blur"), DEVELOP_MASK_GUIDE_OUT_AFTER_BLUR },
+        { N_("input after blur"), DEVELOP_MASK_GUIDE_IN_AFTER_BLUR },
+        { "", 0 } };
+
+const dt_develop_name_value_t dt_develop_invert_mask_names[]
+    = { { N_("off"), DEVELOP_COMBINE_NORM },
+        { N_("on"), DEVELOP_COMBINE_INV },
+        { "", 0 } };
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

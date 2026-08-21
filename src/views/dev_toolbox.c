@@ -15,22 +15,23 @@
 
 #include "views/dev_toolbox.h"
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/file_location.h"
 #include "common/usermanual_url.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/redraw.h"
 #include "control/signal.h"
 #include "develop/develop.h"
 #include "develop/dev_pixelpipe.h"
-#include "gui/dtgtk/button.h"
-#include "gui/dtgtk/paint.h"
-#include "gui/dtgtk/togglebutton.h"
-#include "gui/accelerators.h"
-#include "gui/gtk.h"
+#include "widgets/button.h"
+#include "widgets/paint.h"
+#include "widgets/togglebutton.h"
+#include "widgets/accelerators.h"
+#include "gui/application.h"
 
 #include <limits.h>
+#include "widgets/popup.h"
 
 #define DT_DEV_TOOLBOX_BUTTON_TYPE_KEY "dt-dev-toolbox-button-type"
 
@@ -42,15 +43,15 @@ void dt_dev_toolbox_apply_iso_12646_size(dt_develop_t *dev)
     // no matter the size of the widget. Meaning we force them to fit a square
     // of length matching the smaller widget dimension. The goal is to leave
     // a consistent perceptual impression between pictures, independent from orientation.
-    const int main_dim = MIN(dev->roi.orig_width, dev->roi.orig_height);
-    dev->roi.border_size = 0.125 * main_dim;
+    const int main_dim = MIN(dt_dev_viewport_widget_width(dev), dt_dev_viewport_widget_height(dev));
+    dt_dev_viewport_set_border(dev, 0.125 * main_dim);
   }
   else
   {
-    dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+    dt_dev_viewport_set_border(dev, DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size")));
   }
 
-  dt_dev_configure(dev, dev->roi.orig_width - 2 * dev->roi.border_size, dev->roi.orig_height - 2 * dev->roi.border_size);
+  dt_dev_configure(dev, dt_dev_viewport_widget_width(dev) - 2 * dt_dev_viewport_border_size(dev), dt_dev_viewport_widget_height(dev) - 2 * dt_dev_viewport_border_size(dev));
 }
 
 /*
@@ -230,17 +231,21 @@ void dt_dev_toolbox_add_accels(dt_develop_t *dev, GtkAccelGroup *accel_group, co
 
 static void _button_clicked(GtkWidget *w, gpointer user_data);
 
-/* Keep both buttons' active state in sync with dt_colorspaces_get_global()->mode,
-   since enabling one implicitly disables the other. */
+/* Keep both buttons' active state in sync with the proofing mode, since enabling one
+   implicitly disables the other. One snapshot, so the two buttons cannot be set from
+   two different readings of the mode. */
 static void _update_softproof_gamut_checking(dt_develop_t *dev)
 {
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+
   g_signal_handlers_block_by_func(dev->profile.softproof_button, _button_clicked, dev);
   g_signal_handlers_block_by_func(dev->profile.gamut_button, _button_clicked, dev);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dev->profile.softproof_button),
-                               dt_colorspaces_get_global()->mode == DT_PROFILE_SOFTPROOF);
+                               settings.mode == DT_PROFILE_SOFTPROOF);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dev->profile.gamut_button),
-                               dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK);
+                               settings.mode == DT_PROFILE_GAMUTCHECK);
 
   g_signal_handlers_unblock_by_func(dev->profile.softproof_button, _button_clicked, dev);
   g_signal_handlers_unblock_by_func(dev->profile.gamut_button, _button_clicked, dev);
@@ -273,15 +278,13 @@ static void _button_clicked(GtkWidget *w, gpointer user_data)
       break;
 
     case DT_DEV_TOOLBOX_SOFTPROOF:
-      dt_colorspaces_get_global()->mode
-          = (dt_colorspaces_get_global()->mode == DT_PROFILE_SOFTPROOF) ? DT_PROFILE_NORMAL : DT_PROFILE_SOFTPROOF;
+      dt_colorprofiles_toggle_mode(DT_PROFILE_SOFTPROOF);
       _update_softproof_gamut_checking(dev);
       dt_dev_pixelpipe_resync_history_main(dev);
       break;
 
     case DT_DEV_TOOLBOX_GAMUT:
-      dt_colorspaces_get_global()->mode
-          = (dt_colorspaces_get_global()->mode == DT_PROFILE_GAMUTCHECK) ? DT_PROFILE_NORMAL : DT_PROFILE_GAMUTCHECK;
+      dt_colorprofiles_toggle_mode(DT_PROFILE_GAMUTCHECK);
       _update_softproof_gamut_checking(dev);
       dt_dev_pixelpipe_resync_history_main(dev);
       break;
@@ -453,29 +456,17 @@ static void _softproof_profile_callback(GtkWidget *combo, gpointer user_data)
   dt_develop_t *dev = (dt_develop_t *)user_data;
   gboolean profile_changed = FALSE;
   const int pos = dt_bauhaus_combobox_get(combo);
-  for(GList *profiles = dt_colorspaces_get_global()->profiles; profiles; profiles = g_list_next(profiles))
+
+  dt_colorprofile_desc_t desc;
+  if(dt_colorspaces_profile_at(DT_PROFILE_ROLE_OUTPUT, pos, &desc))
   {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-    if(pp->out_pos == pos)
-    {
-      if(dt_colorspaces_get_global()->softproof_type != pp->type
-        || (dt_colorspaces_get_global()->softproof_type == DT_COLORSPACE_FILE
-            && strcmp(dt_colorspaces_get_global()->softproof_filename, pp->filename)))
-      {
-        dt_colorspaces_get_global()->softproof_type = pp->type;
-        g_strlcpy(dt_colorspaces_get_global()->softproof_filename, pp->filename,
-                 sizeof(dt_colorspaces_get_global()->softproof_filename));
-        profile_changed = TRUE;
-      }
-      goto end;
-    }
+    profile_changed = dt_colorprofiles_set_softproof_profile_choice(desc.type, desc.filename);
+    goto end;
   }
 
   // profile not found, fall back to sRGB. shouldn't happen
   fprintf(stderr, "can't find softproof profile `%s', using sRGB instead\n", dt_bauhaus_combobox_get_text(combo));
-  profile_changed = dt_colorspaces_get_global()->softproof_type != DT_COLORSPACE_SRGB;
-  dt_colorspaces_get_global()->softproof_type = DT_COLORSPACE_SRGB;
-  dt_colorspaces_get_global()->softproof_filename[0] = '\0';
+  profile_changed = dt_colorprofiles_set_softproof_profile_choice(DT_COLORSPACE_SRGB, "");
 
 end:
   if(profile_changed)
@@ -511,18 +502,19 @@ static void _build_softproof_gamut_popover(dt_develop_t *dev)
   dt_bauhaus_combobox_set_entries_ellipsis(softproof_profile, PANGO_ELLIPSIZE_MIDDLE);
   gtk_box_pack_start(GTK_BOX(vbox), softproof_profile, TRUE, TRUE, 0);
 
-  for(const GList *l = dt_colorspaces_get_global()->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    // the system display profile is only suitable for display purposes
-    if(prof->out_pos > -1)
-    {
-      dt_bauhaus_combobox_add(softproof_profile, prof->name);
-      if(prof->type == dt_colorspaces_get_global()->softproof_type
-        && (prof->type != DT_COLORSPACE_FILE || !strcmp(prof->filename, dt_colorspaces_get_global()->softproof_filename)))
-        dt_bauhaus_combobox_set(softproof_profile, prof->out_pos);
-    }
-  }
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+
+  // the system display profile is only suitable for display purposes, hence OUT
+  dt_colorprofile_desc_t *out_profiles = NULL;
+  const size_t n_out_profiles = dt_colorspaces_enumerate_profiles(DT_PROFILE_ROLE_OUTPUT, &out_profiles);
+  for(size_t k = 0; k < n_out_profiles; k++)
+    dt_bauhaus_combobox_add(softproof_profile, out_profiles[k].name);
+  dt_free_align(out_profiles);
+
+  const int softproof_pos = dt_colorspaces_profile_index(DT_PROFILE_ROLE_OUTPUT, settings.softproof_type,
+                                                         settings.softproof_filename);
+  if(softproof_pos > -1) dt_bauhaus_combobox_set(softproof_profile, softproof_pos);
 
   char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);
   char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);

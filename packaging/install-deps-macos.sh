@@ -37,8 +37,6 @@ HB_PACKAGES=(
   gettext
   git
   glib
-  gmic
-  graphicsmagick
   gtk-mac-integration
   gtk+3
   icu4c
@@ -53,7 +51,6 @@ HB_PACKAGES=(
   libomp
   libraw
   librsvg
-  libsecret
   libsoup@2
   little-cms2
   llvm

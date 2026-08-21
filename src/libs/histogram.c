@@ -54,18 +54,19 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#include "gui/bauhaus.h"
+#include "develop/imageop_gui.h"
+#include "widgets/bauhaus.h"
+#include "widgets/resize_handle.h"
+#include "widgets/widget_settings.h"
 #include "common/color_picker.h"
 #include "common/color_vocabulary.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/histogram.h"
 #include "common/image.h"
 #include "imageio/imageio_core.h"
-#include "common/iop_profile.h"
-#include "common/imagebuf.h"
-#include "common/image_cache.h"
+#include "develop/iop_profile.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "math/math.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
@@ -77,14 +78,20 @@
 #include "control/signal.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
-#include "develop/pixelpipe_cache.h"
-#include "gui/dtgtk/button.h"
+#include "caches/pixelpipe_cache.h"
+#include "widgets/button.h"
 #include "gui/color_picker_proxy.h"
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "widgets/draw.h"
+#include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "libs/colorpicker.h"
+#include "widgets/collapsible_section.h"
+#include "widgets/label.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_style.h"
+#include "gui/screen_metrics.h"
+#include "widgets/togglebutton.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #endif
@@ -253,7 +260,7 @@ static void _refresh_module_histogram(const dt_dev_pixelpipe_t *pipe, const dt_d
                           &module->histogram, module->histogram_max);
   dt_iop_gui_leave_critical_section(module);
 
-  if(module->widget) dt_control_queue_redraw_widget(module->widget);
+  if(module->gui && module->gui->widget) dt_control_queue_redraw_widget(module->gui->widget);
 }
 
 static dt_backbuf_t *_get_histogram_backbuf(dt_develop_t *dev, const char *op)
@@ -276,7 +283,7 @@ static void _clear_histogram_backbuf(dt_backbuf_t *backbuf)
 
   /* Global histogram backbuffers keep one structural ref on top of the module-output lifetime.
    * Clearing that published view therefore means releasing the extra GUI-side keepalive ref here. */
-  dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), dt_dev_backbuf_get_hash(backbuf));
+  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(backbuf));
   dt_dev_set_backbuf(backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
 }
 
@@ -330,8 +337,8 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
   {
     /* The module output already owns its producer ref. Tagging it as a global histogram backbuffer
      * reserves one additional consumer ref so GUI readers only need `peek()` and read locks later. */
-    dt_dev_pixelpipe_cache_unref_hash(dt_pixelpipe_cache_get_global(), previous_hash);
-    dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+    dt_dev_pixelpipe_cache_unref_hash(previous_hash);
+    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
   }
 
   dt_dev_set_backbuf(backbuf, roi->width, roi->height, dsc->bpp, hash, DT_PIXELPIPE_CACHE_HASH_INVALID);
@@ -364,8 +371,8 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
                                       _histogram_restart_cache_wait, histogram_module))
     return FALSE;
 
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
 
   const float *histogram_input = input;
   float *transformed_input = NULL;
@@ -380,13 +387,13 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
 
     if(IS_NULL_PTR(transformed_input))
     {
-      dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
-      dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
+      dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
       return FALSE;
     }
 
     memcpy(transformed_input, input, bytes);
-    dt_ioppr_transform_image_colorspace(module, transformed_input, transformed_input,
+    dt_colorspaces_apply_profile(module->op, module->multi_name, transformed_input, transformed_input,
                                         piece->roi_in.width, piece->roi_in.height,
                                         input_dsc.cst, piece->dsc_in.cst, &input_dsc.cst,
                                         dt_ioppr_get_pipe_work_profile_info(dev->preview_pipe));
@@ -399,8 +406,8 @@ static gboolean _refresh_preview_module_histogram_for_hash(dt_develop_t *dev, dt
 
   _refresh_module_histogram(dev->preview_pipe, piece, histogram_input, module);
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(dt_pixelpipe_cache_get_global(), FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
   dt_free_align(transformed_input);
 
   return TRUE;
@@ -978,7 +985,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
 
   dt_histogram_scope_buf_t oriented = _orient_scope_buf(data, backbuf, op);
 
@@ -986,7 +993,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   if(IS_NULL_PTR(bins))
   {
     if(oriented.owned) dt_free_align(oriented.data);
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return;
   }
 
@@ -1013,7 +1020,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, const char *op, cairo_t *c
   }
 
   if(oriented.owned) dt_free_align(oriented.data);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
 
   uint32_t overall_histogram_max = _find_max_histogram(bins, 4 * HISTOGRAM_BINS);
 
@@ -1243,7 +1250,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, const char *op, cairo_t *cr
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
 
   dt_histogram_scope_buf_t oriented = _orient_scope_buf(data, backbuf, op);
 
@@ -1595,7 +1602,7 @@ error:;
   dt_pixelpipe_cache_free_align(bins);
   dt_pixelpipe_cache_free_align(image);
   if(oriented.owned) dt_free_align(oriented.data);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
 }
 
 static float _Luv_to_vectorscope_coord_zoom(const float value, const float zoom)
@@ -1753,7 +1760,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
 
   uint32_t *const restrict vectorscope = dt_pixelpipe_cache_alloc_align_cache(
       HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint32_t),
@@ -1913,7 +1920,7 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, const char *op, cairo_t 
 error:;
   dt_pixelpipe_cache_free_align(image);
   dt_pixelpipe_cache_free_align(vectorscope);
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
 }
 
 gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int height)
@@ -2189,7 +2196,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
     return;
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), TRUE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
 
   const float *const pixel = data;
   dt_iop_buffer_dsc_t dsc = {
@@ -2255,7 +2262,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   }
   else
   {
-    dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
     return;
   }
 
@@ -2284,7 +2291,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
     dt_XYZ_to_Lab(XYZ, sample->lab[k]);
   }
 
-  dt_dev_pixelpipe_cache_rdlock_entry(dt_pixelpipe_cache_get_global(), FALSE, entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
 }
 
 static void _pixelpipe_pick_samples(dt_lib_histogram_t *d)
@@ -3014,7 +3021,7 @@ void gui_init(dt_lib_module_t *self)
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   d->scope_draw = gtk_drawing_area_new();
-  gtk_widget_add_events(GTK_WIDGET(d->scope_draw), dt_gui_get_global()->scroll_mask);
+  gtk_widget_add_events(GTK_WIDGET(d->scope_draw), dt_widget_scroll_mask());
   d->scope_height = dt_conf_key_exists(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
       ? dt_conf_get_int(DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF)
       : DT_PIXEL_APPLY_DPI(DT_LIB_HISTOGRAM_SCOPE_DEFAULT_HEIGHT);
@@ -3044,7 +3051,7 @@ void gui_init(dt_lib_module_t *self)
    * Handle to resize the scope vertically. Drag the handle up or down to adjust the height of the scope display.
    */
 
-  d->scope_resize_handle = dt_bauhaus_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
+  d->scope_resize_handle = dtgtk_resize_handle_new(GTK_ORIENTATION_VERTICAL, FALSE,
                                                         _("Drag to resize the scope vertically"),
                                                         _scope_resize_handle_get_size,
                                                         _scope_resize_handle_resize, d);

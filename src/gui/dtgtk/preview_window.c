@@ -16,19 +16,21 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/logging.h"
-#include "common/iop_profile.h"
+#include "colorprofiles/colorspaces.h"   // dt_colorprofiles_xyz_to_display()
+#include "common/colorspaces_inline_conversions.h"   // dt_Lab_to_XYZ
 #include "common/conf.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/times.h"
 #include "control/signal.h"
-#include "gui/gtk.h"
+#include "gui/application.h"
 #include "control/control.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "views/view.h"
 
 #include <gtk/gtk.h>
+#include "widgets/widget_settings.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -86,7 +88,7 @@ void _colormanage_ui_color(const float L, const float a, const float b, dt_align
   dt_aligned_pixel_t Lab = { L, a, b, 1.f };
   dt_aligned_pixel_t XYZ = { 0.f, 0.f, 0.f, 1.f };
   dt_Lab_to_XYZ(Lab, XYZ);
-  cmsDoTransform(dt_colorspaces_get_global()->transform_xyz_to_display, XYZ, RGB, 1);
+  dt_colorprofiles_xyz_to_display(XYZ, RGB);
 }
 
 static gboolean
@@ -167,9 +169,9 @@ void dt_preview_window_spawn(const int32_t imgid)
 
   GtkWidget *dialog = gtk_dialog_new();
 
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   gchar *name = g_strdup_printf(_("Ansel - Preview : %s"), img->filename);
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
   gtk_window_set_title(GTK_WINDOW(dialog), name);
   dt_free(name);
 

@@ -41,17 +41,17 @@
 
 #include "glib.h"
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/exif.h"
+#include "common/xmp_sidecar.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "imageio/format/imageio_format_api.h"
 
 #include "imageio/imageio_exr.hh"
@@ -61,6 +61,7 @@
 #include <OpenEXR/ImfStandardAttributes.h>
 #include <OpenEXR/ImfThreading.h>
 #include <OpenEXR/ImfOutputFile.h>
+#include "imageio/imageio_profile.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -106,43 +106,53 @@
 #endif
 
 #include "common/collection.h"
-#include "common/colorspaces.h"
-#include "common/colorlabels.h"
+#include "gui/common/database_gui.h"
+#include "colorprofiles/colorspaces.h"
+#include "metadata/colorlabels.h"
 #include "darktable.h"
 #include "common/anonymous_ids.h"
 #include "system/capabilities.h"
 #include "common/global_mutexes.h"
 #include "system/sys_resources.h"
 #include "common/datetime.h"
-#include "common/exif.h"
-#include "common/history.h"
-#include "common/pwstorage/pwstorage.h"
+#include "metadata/exif.h"
+#include "history/history.h"
+#include "database/history_repository.h"
 #include "common/selection.h"
-#include "common/privacy_consent.h"
+#include "gui/privacy_consent.h"
 #include "common/sentry.h"
 #include "common/telemetry.h"
 #include "common/system_signal_handling.h"
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "gui/presets.h"
 #include "gui/splash.h"
 
 #include "common/file_location.h"
 #include "common/film.h"
 #include "common/folder_survey.h"
+#include "gui/common/folder_survey_gui.h"
 #include "common/grealpath.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
+#include "database/database.h"
 #include "common/image_extensions.h"
 #include "imageio/imageio_module.h"
-#include "common/iop_order.h"
+#include "develop/iop_order.h"
 #include "common/l10n.h"
-#include "common/metadata.h"
-#include "common/mipmap_cache.h"
+#include "metadata/metadata.h"
+#include "common/image_notify.h"
+#include "develop/dev_history_gui.h"
+#include "gui/import.h"
+#include "develop/pipeline_notify.h"
+#include "history/notify.h"
+#include "history/presets.h"
+#include "metadata/notify.h"
+#include "caches/mipmap_cache.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
 #include "common/points.h"
-#include "common/resource_limits.h"
-#include "common/tags.h"
+#include "system/resource_limits.h"
+#include "metadata/tags.h"
 #include "common/styles.h"
 #include "common/undo.h"
 #include "system/fp_mode.h"
@@ -155,8 +165,8 @@
 #include "develop/imageop.h"
 #include "develop/supervisor.h"
 
-#include "gui/gtk.h"
-#include "gui/gui_throttle.h"
+#include "gui/application.h"
+#include "develop/gui_throttle.h"
 #include "gui/guides.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
@@ -184,11 +194,6 @@
 #include <xmmintrin.h>
 #endif
 
-#ifdef HAVE_GRAPHICSMAGICK
-#include <magick/api.h>
-#elif defined HAVE_IMAGEMAGICK
-#include <MagickWand/MagickWand.h>
-#endif
 
 #include "common/dbus.h"
 #include "common/utility.h"
@@ -264,7 +269,7 @@ static int usage(const char *argv0)
   printf("  --configdir <user config directory>\n");
   printf("  -d {all,cache,camctl,camsupport,colorprofile,control,demosaic,dev,gtk,history,imageio,import,\n");
   printf("      input,ioporder,lighttable,lua,masks,memory,nan,nocache_reuse,opencl,params,\n");
-  printf("      perf,pipe,pipecache,print,pwstorage,signal,sql,shortcuts,tiling,undo,verbose}\n");
+  printf("      perf,pipe,pipecache,print,signal,sql,shortcuts,tiling,undo,verbose}\n");
   printf("  --d-signal <signal> \n");
   printf("  --d-signal-act <all,raise,connect,disconnect");
   // clang-format on
@@ -417,9 +422,9 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
       dt_film_open(filmid);
       // make sure buffers are loaded (load full for testing)
       dt_mipmap_buffer_t buf;
-      dt_mipmap_cache_get(darktable.mipmap_cache, &buf, id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+      dt_mipmap_cache_get(&buf, id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
       gboolean loaded = (!IS_NULL_PTR(buf.buf));
-      dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+      dt_mipmap_cache_release(&buf);
       if(!loaded)
       {
         id = 0;
@@ -500,13 +505,9 @@ void *dt_alloc_align(size_t size)
 }
 
 /* Singleton accessors: the orchestrator BINDS the application-wide instances to the
- * lower-level libs that declare these symbols (develop/pixelpipe_cache.h and
+ * lower-level libs that declare these symbols (caches/pixelpipe_cache.h and
  * common/openmp.h). This keeps those libs free of darktable.h — they link
  * against two functions instead of importing the whole application struct. */
-struct dt_dev_pixelpipe_cache_t *dt_pixelpipe_cache_get_global(void)
-{
-  return darktable.pixelpipe_cache;
-}
 
 int dt_get_num_openmp_threads(void)
 {
@@ -559,15 +560,41 @@ void dt_gui_set_themes(GList *themes)
   darktable.themes = themes;
 }
 
-const char *dt_get_main_message(void)
+/* The string is written by pipeline worker threads and read by the GUI thread painting the
+ * banner, so it carries its own lock rather than borrowing control->log_mutex: the borrowed
+ * one was taken by the single writer at its CALL SITE, which left the invariant unenforceable
+ * -- and left the reader, dt_control_draw_busy_msg(), holding no lock at all while a worker
+ * dt_free()d the very pointer it had handed to pango. That fired once per module per frame
+ * whenever the darkroom was rendering.
+ *
+ * A private lock also keeps this independent of dt_control_t's lifetime, which is freed at
+ * darktable.c's teardown while this string is not. */
+/* Statically initialised on purpose, and correct in the _DEBUG build too, where
+ * dt_pthread_mutex_t carries ~1.8 kB of instrumentation after the pthread_mutex_t. A
+ * brace-enclosed initialiser with fewer initialisers than members zero-fills the remainder
+ * (C11 6.7.9p21), and this object has static storage duration anyway, so it lives in .bss --
+ * measured: 0 of the 1864 trailing bytes non-zero before first use. That is the same state
+ * dt_pthread_mutex_init() leaves (it memsets), minus only the `name' field, which
+ * dt_pthread_mutex_lock() snprintf()s over before the one place it reads it.
+ *
+ * Static rather than initialised in dt_init() because this string is written from worker
+ * threads: a lock that is valid from program start has no window in which it is not. */
+static dt_pthread_mutex_t _main_message_lock = { PTHREAD_MUTEX_INITIALIZER };
+
+char *dt_get_main_message_copy(void)
 {
-  return darktable.main_message;
+  dt_pthread_mutex_lock(&_main_message_lock);
+  char *const copy = !IS_NULL_PTR(darktable.main_message) ? g_strdup(darktable.main_message) : NULL;
+  dt_pthread_mutex_unlock(&_main_message_lock);
+  return copy;
 }
 
 void dt_set_main_message(char *message)
 {
+  dt_pthread_mutex_lock(&_main_message_lock);
   dt_free(darktable.main_message);
   darktable.main_message = message;
+  dt_pthread_mutex_unlock(&_main_message_lock);
 }
 
 struct dt_view_manager_t *dt_view_manager_get_global(void)
@@ -595,20 +622,7 @@ dt_pthread_mutex_t *dt_readfile_mutex(void)
   return &darktable.readFile_mutex;
 }
 
-dt_pthread_rwlock_t *dt_database_threadsafe_lock(void)
-{
-  return &darktable.database_threadsafe;
-}
 
-struct dt_image_cache_t *dt_image_cache_get_global(void)
-{
-  return darktable.image_cache;
-}
-
-struct dt_mipmap_cache_t *dt_mipmap_cache_get_global(void)
-{
-  return darktable.mipmap_cache;
-}
 
 struct dt_selection_t *dt_selection_get_global(void)
 {
@@ -623,16 +637,6 @@ struct dt_undo_t *dt_undo_get_global(void)
 struct dt_collection_t *dt_collection_get_global(void)
 {
   return darktable.collection;
-}
-
-struct dt_database_t *dt_database_get_global(void)
-{
-  return (struct dt_database_t *)darktable.db;
-}
-
-sqlite3 *dt_database_get_sqlite3_global(void)
-{
-  return dt_database_get(darktable.db);
 }
 
 struct dt_control_signal_t *dt_control_signal_get_global(void)
@@ -660,11 +664,6 @@ struct dt_l10n_t *dt_l10n_get_global(void)
   return darktable.l10n;
 }
 
-const struct dt_pwstorage_t *dt_pwstorage_get_global(void)
-{
-  return darktable.pwstorage;
-}
-
 struct dt_dbus_t *dt_dbus_get_global(void)
 {
   return darktable.dbus;
@@ -675,16 +674,6 @@ JsonParser *dt_noiseprofile_get_parser_global(void)
   return darktable.noiseprofile_parser;
 }
 
-struct dt_opencl_t *dt_opencl_get_global(void)
-{
-  return darktable.opencl;
-}
-
-struct dt_colorspaces_t *dt_colorspaces_get_global(void)
-{
-  return darktable.color_profiles;
-}
-
 struct dt_bauhaus_t *dt_bauhaus_get_global(void)
 {
   return darktable.bauhaus;
@@ -693,6 +682,186 @@ struct dt_bauhaus_t *dt_bauhaus_get_global(void)
 struct dt_control_t *dt_control_get_global(void)
 {
   return darktable.control;
+}
+
+
+/* --- pixelpipe cache handlers ------------------------------------------------
+ * See dt_dev_pixelpipe_cache_set_handlers(). These are the application's answers to the
+ * cache's three announcements; the cache itself names none of these subsystems. */
+static void _pixelpipe_cache_warn(const char *message)
+{
+  dt_control_log("%s", message);
+}
+
+static void _pixelpipe_cache_ready(uint64_t hash, uint64_t producer_node_key)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CACHELINE_READY, hash,
+                                producer_node_key);
+}
+
+static const dt_pixelpipe_cache_observer_t _pixelpipe_cache_observer = {
+  .active = dt_supervisor_active,
+  .cacheline_read = dt_supervisor_cacheline_read,
+  .cacheline_delete = dt_supervisor_cacheline_delete,
+  .rekey = dt_supervisor_rekey,
+};
+
+
+/* The mipmap cache's user-facing settings live in conf; the cache does not read conf. The
+ * application owns that translation, here and in the preference-change handler below, which is
+ * what makes the lifecycle of these four visible: read at startup, re-read when the user
+ * changes one, never anywhere else. */
+static dt_mipmap_cache_settings_t _mipmap_settings_from_conf(void)
+{
+  dt_mipmap_cache_settings_t s = { 0 };
+  s.max_memory = darktable.dtresources.mipmap_memory;
+  s.disk_backend = dt_conf_get_bool("cache_disk_backend");
+  s.embedded_jpg = dt_conf_get_int("lighttable/embedded_jpg");
+  s.cache_quality = dt_conf_get_int("database_cache_quality");
+  return s;
+}
+
+/* Same arrangement for the database's maintenance and snapshot policy. These were read
+ * with dt_conf_* from five places inside database.c, several of them deep in a decision
+ * the user never sees. */
+static void _database_settings_from_conf(void)
+{
+  dt_database_settings_t s = { 0 };
+  s.maintenance_check = dt_conf_get_string("database/maintenance_check");
+  s.maintenance_freepage_ratio = dt_conf_get_int("database/maintenance_freepage_ratio");
+  s.create_snapshot = dt_conf_get_string("database/create_snapshot");
+  s.keep_snapshots = dt_conf_get_int("database/keep_snapshots");
+  dt_database_set_settings(&s);
+  dt_free(s.maintenance_check);
+  dt_free(s.create_snapshot);
+}
+
+/* The database moved the legacy pre-XDG library file and settled on a new name for it.
+ * Persisting that is ours: the module does not write conf. */
+static void _database_renamed(const char *new_library_name)
+{
+  dt_conf_set_string("database", new_library_name);
+}
+
+static void _metadata_tags_changed(void)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+}
+
+/* src/metadata states what it did; where that appears is ours to decide. Installed
+ * unconditionally: dt_control_log()/dt_toast_log() are themselves no-ops without a GUI, so
+ * this keeps the headless behaviour the direct calls had. */
+static void _metadata_notify(const dt_metadata_notice_t kind, const char *message)
+{
+  if(kind == DT_METADATA_NOTICE_TOAST)
+    dt_toast_log("%s", message);
+  else
+    dt_control_log("%s", message);
+}
+
+/* The pipeline worker names what it is chewing on; the banner and its repaint are ours.
+ * Called from worker threads, as the calls it replaces were -- dt_set_main_message()
+ * under log_mutex and the centre redraw are both worker-safe. */
+static void _pipeline_busy(const char *message_or_null)
+{
+  // dt_set_main_message() takes the string's own lock. Do NOT reintroduce an outer
+  // control->log_mutex here: it guards the message LOG, not this, and it bought nothing.
+  dt_set_main_message(message_or_null ? g_strdup(message_or_null) : NULL);
+  dt_control_queue_redraw_center();
+}
+
+static void _pipeline_message(const char *message)
+{
+  dt_control_log("%s", message);
+}
+
+/* The geotag list is copied here, at the raise site, exactly where the old call sites
+ * copied it: the signal takes ownership of what it is given. */
+static void _metadata_geotags_changed(const GList *imgs)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED,
+                                g_list_copy((GList *)imgs), 0);
+}
+
+static void _image_imported(const int32_t imgid)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_IMPORT, imgid);
+}
+
+/* History, styles and presets state what happened; turning that into a signal is ours. */
+static void _history_notify(const char *message)
+{
+  dt_control_log("%s", message);
+}
+
+static void _history_toast(const char *message)
+{
+  dt_toast_log("%s", message);
+}
+
+static void _history_changed(const dt_history_change_t what)
+{
+  switch(what)
+  {
+    case DT_HISTORY_CHANGE_TAGS:
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);
+      break;
+    case DT_HISTORY_CHANGE_STYLES:
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
+      break;
+    case DT_HISTORY_CHANGE_DEVELOP:
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+      break;
+  }
+}
+
+/* The copy is made here, at the raise site, exactly where the call site used to make it:
+ * the signal takes ownership of the list it is given, and the caller keeps its own. */
+static void _history_images_changed(const GList *imgs)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED,
+                                g_list_copy((GList *)imgs));
+}
+
+/* Only the side that loaded the modules knows what an operation is called. */
+static const char *_history_operation_name(const char *operation)
+{
+  return dt_iop_get_localized_name(operation);
+}
+
+/* Only the side of the application that owns the panels can answer this. */
+static gboolean _presets_can_autoapply(const gchar *operation)
+{
+  for(const GList *lib_modules = dt_lib_get_global()->plugins; lib_modules;
+      lib_modules = g_list_next(lib_modules))
+  {
+    dt_lib_module_t *lib_module = (dt_lib_module_t *)lib_modules->data;
+    if(!strcmp(lib_module->plugin_name, operation)) return dt_lib_presets_can_autoapply(lib_module);
+  }
+  return TRUE;
+}
+
+/* The two parameters are the GTK signal signature, not ours; neither carries anything we
+ * need, since the settings are read from conf either way. */
+static void _preferences_changed(gpointer instance, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
+
+  const dt_mipmap_cache_settings_t s = _mipmap_settings_from_conf();
+  dt_mipmap_cache_set_settings(&s);
+  _database_settings_from_conf();
+}
+
+/* Same "read at startup, re-read on change, never anywhere else" lifecycle as the mipmap cache
+ * settings above, for the "write_sidecar_files" preference: dt_image_get_xmp_mode() is on the
+ * per-image hot path and reads a cache instead of conf directly. */
+static void _xmp_mode_preferences_changed(gpointer instance, gpointer user_data)
+{
+  (void)instance;
+  (void)user_data;
+
+  dt_image_xmp_mode_refresh_from_conf();
 }
 
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data)
@@ -738,7 +907,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_pthread_mutex_init(&(darktable.exiv2_threadsafe), &recursive_locking);
   dt_pthread_mutex_init(&(darktable.readFile_mutex), NULL);
   dt_pthread_mutex_init(&(darktable.pipeline_threadsafe), NULL);
-  dt_pthread_rwlock_init(&(darktable.database_threadsafe), NULL);
 
   darktable.control = (dt_control_t *)calloc(1, sizeof(dt_control_t));
 
@@ -806,18 +974,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                "  Colord support enabled\n"
 #else
                "  Colord support disabled\n"
-#endif
-
-#ifdef HAVE_GRAPHICSMAGICK
-               "  GraphicsMagick support enabled\n"
-#else
-               "  GraphicsMagick support disabled\n"
-#endif
-
-#ifdef HAVE_IMAGEMAGICK
-               "  ImageMagick support enabled\n"
-#else
-               "  ImageMagick support disabled\n"
 #endif
 
 #ifdef HAVE_OPENEXR
@@ -898,8 +1054,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           darktable.unmuted |= DT_DEBUG_PIPECACHE; // pipeline cache
         else if(!strcmp(argv[k + 1], "perf"))
           darktable.unmuted |= DT_DEBUG_PERF; // performance measurements
-        else if(!strcmp(argv[k + 1], "pwstorage"))
-          darktable.unmuted |= DT_DEBUG_PWSTORAGE; // pwstorage module
         else if(!strcmp(argv[k + 1], "opencl"))
           darktable.unmuted |= DT_DEBUG_OPENCL; // gpu accel via opencl
         else if(!strcmp(argv[k + 1], "sql"))
@@ -1218,7 +1372,10 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   darktable.l10n = dt_l10n_init(init_gui);
 
   dt_confgen_init();
-  dt_gui_throttle_init();
+  // The throttle's persisted state and timeout preference are configuration, so they are
+  // supplied here rather than read inside it.
+  dt_gui_throttle_init(dt_conf_get_int("processing/gui_throttle_runtime_us"));
+  dt_gui_throttle_set_timeout_ms((guint)MAX(dt_conf_get_int("processing/timeout"), 0));
 
   // Needs to run after dt_confgen_init()
   // Don't override cli argument if any
@@ -1241,24 +1398,49 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     darktable.themes = NULL;
   }
 
-  // get the list of color profiles
-  darktable.color_profiles = dt_colorspaces_init();
+  // build the colour-profile module's own list; it owns it, we do not hold it
+  dt_colorprofiles_init();
 
   // initialize datetime data
   dt_datetime_init();
 
   // initialize the database
+  //
+  // Every user preference the database acts on is read here and handed over, so that the
+  // SQL layer never reads conf itself and "when does this take effect" has one answer.
+  _database_settings_from_conf();
+  dt_database_set_renamed_handler(_database_renamed);
+  dt_metadata_set_notify_handler(_metadata_notify);
+  dt_history_set_message_handler(_history_notify);
+  dt_history_set_toast_handler(_history_toast);
+  dt_presets_set_autoapply_resolver(_presets_can_autoapply);
+  dt_history_set_operation_name_resolver(_history_operation_name);
+
+  gchar *configured_library = dt_conf_get_string("database");
+  const dt_database_params_t db_params = { .alternative = dbfilename_from_command,
+                                           .library = configured_library,
+                                           .load_data = load_data,
+                                           .has_gui = init_gui,
+                                           .verbose = (dt_get_debug_flags() & DT_DEBUG_SQL) != 0 };
+
   gboolean recheck_needed = TRUE;
   while (recheck_needed)
   {
-    darktable.db = dt_database_init(dbfilename_from_command, load_data, init_gui);
-    if(IS_NULL_PTR(darktable.db))
+    // Before, not after: dt_database_open() can hit a read-only or corrupt database and needs
+    // to ask the user what to do about it, and dt_gui_gtk_init() -- where every other backend
+    // handler is registered -- only runs much further down. This is the only place that knows
+    // this early whether there will be anybody to ask.
+    if(init_gui) dt_database_gui_register_handlers();
+
+    const dt_database_open_result_t opened = dt_database_open(&db_params);
+    if(opened == DT_DATABASE_OPEN_FAILED)
     {
       printf("ERROR : cannot open database\n");
+      dt_free(configured_library);
       dt_gui_splash_close();
       return 1;
     }
-    else if(!dt_database_get_lock_acquired(darktable.db))
+    else if(opened == DT_DATABASE_OPEN_LOCKED)
     {
       gboolean error = FALSE;
 
@@ -1289,27 +1471,37 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           if(connection) g_object_unref(connection);
         }
 #endif
-        if(!image_loaded_elsewhere) error = dt_database_show_error(darktable.db);
+        if(!image_loaded_elsewhere)
+          // Reporting CONSUMES the pending error.
+          error = dt_database_show_error();
       }
       if(error)
       {
         fprintf(stderr, "ERROR: can't acquire database lock, aborting.\n");
+        dt_free(configured_library);
         dt_gui_splash_close();
         return error;
       }
       else
       {
-        // try again
+        // Close before retrying. The loop used to jump straight back to
+        // dt_database_init(), abandoning the half-open database it had just been handed
+        // -- its two filename strings and, when only one of the two lock files had been
+        // taken, that lock file too. dt_database_open() refuses to open over an open
+        // connection, so the leak is now a compile-time-visible step instead.
+        dt_database_close();
         continue;
       }
     }
     recheck_needed = FALSE;
   }
 
+  dt_free(configured_library);
+
   //db maintenance on startup (if configured to do so)
-  if(dt_database_maybe_maintenance(darktable.db, init_gui, FALSE))
+  if(dt_database_maybe_maintenance(FALSE))
   {
-    dt_database_perform_maintenance(darktable.db);
+    dt_database_perform_maintenance();
   }
 
   // init darktable tags table
@@ -1317,6 +1509,21 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // Initialize the signal system
   darktable.signals = dt_control_signal_init();
+
+  /* src/metadata reports that the tag vocabulary changed; turning that into the GTK signal
+   * its consumers already listen for is ours. Installed HERE, not with the other handlers
+   * further up: the signal system does not exist until the line above, and nothing can
+   * edit a tag before it does. */
+  dt_metadata_set_tags_changed_handler(_metadata_tags_changed);
+  dt_dev_history_gui_init();
+  dt_gui_import_init_handlers();
+  dt_metadata_set_geotags_changed_handler(_metadata_geotags_changed);
+  dt_image_notify_set_imported_handler(_image_imported);
+  dt_pipeline_set_message_handler(_pipeline_message);
+  dt_pipeline_set_busy_handler(_pipeline_busy);
+  // Same reason for these two: they raise signals, so they wait for the signal system.
+  dt_history_set_changed_handler(_history_changed);
+  dt_history_set_images_changed_handler(_history_images_changed);
   // Critical: ensure image cache gets refreshed BEFORE any other IMAGE_INFO_CHANGED handlers.
   // This handler reloads dt_image_t from DB so all downstream callbacks see fresh metadata.
   dt_image_cache_connect_info_changed_first(darktable.signals);
@@ -1361,23 +1568,31 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   /* capabilities set to NULL */
   darktable.capabilities = NULL;
 
-  // Initialize the password storage engine
-  darktable.pwstorage = dt_pwstorage_new();
-
   darktable.guides = dt_guides_init();
 
-#ifdef HAVE_GRAPHICSMAGICK
-  /* GraphicsMagick init */
-  InitializeMagick(darktable.progname);
-
-  // *SIGH*
+  // Re-assert our handlers once the third-party libraries above are up. This used to compensate
+  // for GraphicsMagick's InitializeMagick(), which stole all of them; that library is gone, but
+  // the call is cheap and idempotent (system_signal_handling.c counts its invocations), and it
+  // keeps the guarantee that whatever init ran before this point cannot leave us without a
+  // SIGSEGV handler. Crash reporting is initialized after it, deliberately.
   dt_set_signal_handlers();
 
-#elif defined HAVE_IMAGEMAGICK
-
-  /* ImageMagick init */
-  MagickWandGenesis();
-
+#ifdef _OPENMP
+  // Re-assert our thread count last, after every library above has initialised.
+  //
+  // omp_set_num_threads() writes only the CALLING thread's ICV, and a library that sizes its own
+  // pool from omp_get_num_procs() publishes that by calling it -- a process-wide side effect on a
+  // library-local decision. GraphicsMagick's InitializeMagick() did exactly that from here, which
+  // silently overrode `-t N` and the "CPU cores" preference for every parallel region entered from
+  // this thread afterwards: invisible in the GUI, where pixel work runs on control worker threads
+  // that set their own count in dt_control_work(), and total in ansel-cli, where the export
+  // pipeline runs on this very thread.
+  //
+  // Both of the libraries known to have done it -- GraphicsMagick and G'MIC -- have since been
+  // removed, so nothing in the current dependency set is known to clobber the count. This stays
+  // anyway, and deliberately unconditional: it costs one call at startup, the failure mode is
+  // silent, and it took an LD_PRELOAD shim to find the last one. Keep it after every library init.
+  omp_set_num_threads(darktable.num_openmp_threads);
 #endif
 
   darktable.noiseprofile_parser = dt_noiseprofile_init(noiseprofiles_from_command);
@@ -1423,18 +1638,30 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // size. Rather than aborting outright, retry smaller: a shrunken cache degrades
   // performance, an abort loses the session.
   size_t pipecache_size = darktable.dtresources.pixelpipe_memory;
-  darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(pipecache_size);
-  while(IS_NULL_PTR(darktable.pixelpipe_cache) && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
+  dt_dev_pixelpipe_cache_init(pipecache_size,
+                              (dt_get_debug_flags() & DT_DEBUG_PIPECACHE) != 0,
+                              (dt_get_debug_flags() & DT_DEBUG_VERBOSE) != 0);
+  while(!dt_dev_pixelpipe_cache_is_ready() && pipecache_size / 2 >= (size_t)512 * 1024 * 1024)
   {
     pipecache_size /= 2;
     fprintf(stderr,
             "WARNING: can't reserve %" G_GSIZE_FORMAT " MiB of virtual memory for the pixelpipe cache, "
             "retrying with %" G_GSIZE_FORMAT " MiB. Check your memory settings.\n",
             2 * pipecache_size / (1024 * 1024), pipecache_size / (1024 * 1024));
-    darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(pipecache_size);
+    dt_dev_pixelpipe_cache_init(pipecache_size,
+                              (dt_get_debug_flags() & DT_DEBUG_PIPECACHE) != 0,
+                              (dt_get_debug_flags() & DT_DEBUG_VERBOSE) != 0);
   }
   darktable.dtresources.pixelpipe_memory = pipecache_size;
-  if(IS_NULL_PTR(darktable.pixelpipe_cache))
+
+  /* The cache announces three things -- it is full, a cacheline became readable, and the
+   * supervisor's bookkeeping -- and used to do it by calling dt_control_log(), raising
+   * DT_SIGNAL_CACHELINE_READY and calling dt_supervisor_*() itself. That put control/ and
+   * develop/ inside a module that is otherwise pure storage. The orchestrator wires them
+   * here instead: the cache says what happened, the application decides who hears it. */
+  dt_dev_pixelpipe_cache_set_handlers(_pixelpipe_cache_warn, _pixelpipe_cache_ready,
+                                      &_pixelpipe_cache_observer);
+  if(!dt_dev_pixelpipe_cache_is_ready())
   {
     fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");
     dt_gui_splash_close();
@@ -1449,15 +1676,21 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // must come before mipmap_cache, because that one will need to access
   // image dimensions stored in here:
-  darktable.image_cache = (dt_image_cache_t *)calloc(1, sizeof(dt_image_cache_t));
-  dt_image_cache_init(darktable.image_cache);
+  dt_image_cache_init((dt_get_debug_flags() & DT_DEBUG_CACHE) != 0);
 
-  darktable.mipmap_cache = (dt_mipmap_cache_t *)calloc(1, sizeof(dt_mipmap_cache_t));
-  dt_mipmap_cache_init(darktable.mipmap_cache);
+  const dt_mipmap_cache_settings_t mipmap_settings = _mipmap_settings_from_conf();
+  dt_mipmap_cache_init(&mipmap_settings, (dt_get_debug_flags() & DT_DEBUG_CACHE) != 0);
 
-  darktable.opencl = (dt_opencl_t *)calloc(1, sizeof(dt_opencl_t));
+  /* Re-tell the cache whenever the user changes one of its four settings. */
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+                            G_CALLBACK(_preferences_changed), NULL);
+
+  dt_image_xmp_mode_refresh_from_conf();
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+                            G_CALLBACK(_xmp_mode_preferences_changed), NULL);
+
 #ifdef HAVE_OPENCL
-  dt_opencl_init(darktable.opencl, exclude_opencl, print_statistics);
+  dt_opencl_init(exclude_opencl, print_statistics);
   // Show the splash only while compiling OpenCL kernels (triggered from opencl.c),
   // then close it immediately so the rest of the startup stays splash-free.
   dt_gui_splash_close();
@@ -1608,12 +1841,12 @@ void dt_cleanup()
 
   // last chance to ask user for any input...
 
-  const gboolean perform_maintenance = dt_database_maybe_maintenance(darktable.db, init_gui, TRUE);
-  const gboolean perform_snapshot = dt_database_maybe_snapshot(darktable.db);
+  const gboolean perform_maintenance = dt_database_maybe_maintenance(TRUE);
+  const gboolean perform_snapshot = dt_database_maybe_snapshot();
   gchar **snaps_to_remove = NULL;
   if(perform_snapshot)
   {
-    snaps_to_remove = dt_database_snaps_to_remove(darktable.db);
+    snaps_to_remove = dt_database_snaps_to_remove();
   }
 
 #ifdef HAVE_PRINT
@@ -1680,10 +1913,9 @@ void dt_cleanup()
   }
 
   dt_colorlabels_cleanup();
-  dt_history_cleanup();
+  dt_history_repository_cleanup();
   dt_dev_history_cleanup();
   dt_metadata_cleanup();
-  dt_image_cleanup();
   dt_tags_cleanup();
   dt_styles_cleanup();
 
@@ -1691,12 +1923,11 @@ void dt_cleanup()
   dt_selection_free(darktable.selection);
 
   // Mipmap cleanup may still consult the image cache for paths.
-  dt_mipmap_cache_cleanup(darktable.mipmap_cache);
-  dt_free(darktable.mipmap_cache);
-  dt_image_cache_cleanup(darktable.image_cache);
-  dt_free(darktable.image_cache);
+  dt_mipmap_cache_cleanup();
+  dt_image_cache_cleanup();
 
-  dt_colorspaces_cleanup(darktable.color_profiles);
+  dt_colorprofiles_cleanup();
+  dt_conf_set_int("processing/gui_throttle_runtime_us", dt_gui_throttle_get_runtime_us());
   dt_gui_throttle_cleanup();
   dt_conf_cleanup(darktable.conf);
   dt_free(darktable.conf);
@@ -1709,38 +1940,30 @@ void dt_cleanup()
   darktable.iop_order_rules = NULL;
 
 #ifdef HAVE_OPENCL
-  if(darktable.opencl && darktable.opencl->inited && darktable.pixelpipe_cache)
+  if(dt_opencl_is_inited() && dt_dev_pixelpipe_cache_is_ready())
   {
-    for(int i = 0; i < darktable.opencl->num_devs; i++)
+    for(int i = 0; i < dt_opencl_get_num_devices(); i++)
       dt_opencl_finish(i);
   }
 #endif
 
-  dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
+  dt_dev_pixelpipe_cache_cleanup();
   dt_supervisor_cleanup();
 
-  dt_opencl_cleanup(darktable.opencl);
-  dt_free(darktable.opencl);
-  dt_pwstorage_destroy(darktable.pwstorage);
-
-#ifdef HAVE_GRAPHICSMAGICK
-  DestroyMagick();
-#elif defined HAVE_IMAGEMAGICK
-  MagickWandTerminus();
-#endif
+  dt_opencl_cleanup();
 
   dt_guides_cleanup(darktable.guides);
 
   if(perform_maintenance)
   {
-    dt_database_cleanup_busy_statements(darktable.db);
-    dt_database_perform_maintenance(darktable.db);
+    dt_database_cleanup_busy_statements();
+    dt_database_perform_maintenance();
   }
 
-  dt_database_optimize(darktable.db);
+  dt_database_optimize();
   if(perform_snapshot)
   {
-    if(dt_database_snapshot(darktable.db) && snaps_to_remove)
+    if(dt_database_snapshot() && snaps_to_remove)
     {
       int i = 0;
       while(snaps_to_remove[i])
@@ -1758,7 +1981,7 @@ void dt_cleanup()
   {
     g_strfreev(snaps_to_remove);
   }
-  dt_database_destroy(darktable.db);
+  dt_database_close();
 
   if(init_gui)
   {
@@ -1793,7 +2016,6 @@ void dt_cleanup()
   dt_pthread_mutex_destroy(&(darktable.exiv2_threadsafe));
   dt_pthread_mutex_destroy(&(darktable.readFile_mutex));
   dt_pthread_mutex_destroy(&(darktable.pipeline_threadsafe));
-  dt_pthread_rwlock_destroy(&(darktable.database_threadsafe));
 
   dt_exif_cleanup();
 
@@ -2129,7 +2351,10 @@ int dt_worker_threads()
 
 size_t dt_get_available_mem()
 {
-  const size_t budget_left = darktable.pixelpipe_cache->max_memory - darktable.pixelpipe_cache->current_memory;
+  size_t cache_used = 0;
+  size_t cache_max = 0;
+  dt_dev_pixelpipe_cache_get_usage(&cache_used, &cache_max);
+  const size_t budget_left = cache_max - cache_used;
 
   // The budget is only a startup-time plan: cap it by what the system can actually
   // back right now without dropping under the pressure floor (issue #1083), so
@@ -2142,7 +2367,7 @@ size_t dt_get_available_mem()
 
   const size_t pressure_floor = dt_get_memory_pressure_floor();
   const size_t sys_room = ((sys_available > pressure_floor) ? sys_available - pressure_floor : 0)
-                          + darktable.pixelpipe_cache->current_memory / 2;
+                          + cache_used / 2;
   return MIN(budget_left, sys_room);
 }
 

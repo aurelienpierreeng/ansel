@@ -50,7 +50,7 @@ typedef struct dt_bilateral_cl_t
   cl_mem dev_grid_tmp;
 } dt_bilateral_cl_t;
 
-dt_bilateral_cl_global_t *dt_bilateral_init_cl_global();
+void dt_bilateral_init_cl_global(void);
 
 void dt_bilateral_free_cl(dt_bilateral_cl_t *b);
 
@@ -68,7 +68,7 @@ cl_int dt_bilateral_slice_to_output_cl(dt_bilateral_cl_t *b, cl_mem in, cl_mem o
 
 cl_int dt_bilateral_slice_cl(dt_bilateral_cl_t *b, cl_mem in, cl_mem out, const float detail);
 
-void dt_bilateral_free_cl_global(dt_bilateral_cl_global_t *b);
+void dt_bilateral_free_cl_global(void);
 
 #endif // HAVE_OPENCL
 

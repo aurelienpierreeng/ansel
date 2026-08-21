@@ -24,12 +24,13 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/module_versioning.h"
-#include "gui/gtk.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "views/view.h"
+#include "gui/window_manager.h"
+#include "widgets/widget_settings.h"
 
 DT_MODULE(1)
 

@@ -36,22 +36,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include <glib/gstdio.h>
-#include "common/exif.h"
+#include "common/xmp_sidecar.h"
 #include "imageio/imageio_core.h"
 #include "imageio/imageio_module.h"
 #include "common/conf.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "imageio/format/imageio_format_api.h"
 
 #include <avif/avif.h>
+#include "imageio/imageio_profile.h"
 
 #define AVIF_MIN_TILE_SIZE 512
 #define AVIF_MAX_TILE_SIZE 3072

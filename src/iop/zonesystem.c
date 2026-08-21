@@ -51,12 +51,14 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "widgets/widget_settings.h"
 #endif
+#include "develop/imageop_gui.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -66,14 +68,16 @@
 #include "pixel/gaussian.h"
 #include "math/math.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include "develop/develop.h"
+#include "common/logging.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
-#include "gui/dtgtk/drawingarea.h"
-#include "gui/gtk.h"
+#include "widgets/drawingarea.h"
 #include "iop/iop_api.h"
 
 #include <librsvg/rsvg.h>
+#include "gui/screen_metrics.h"
 // ugh, ugly hack. why do people break stuff all the time?
 #ifndef RSVG_CAIRO_H
 #include <librsvg/rsvg-cairo.h>
@@ -103,14 +107,10 @@ typedef struct dt_iop_zonesystem_data_t
 /*
 void init_presets (dt_iop_module_so_t *self)
 {
-//   DT_DEBUG_SQLITE3_EXEC(dt_database_get_global(), "begin", NULL, NULL, NULL);
-
   dt_gui_presets_add_generic(_("Fill-light 0.25EV with 4 zones"), self->op, self->version(),
 &(dt_iop_zonesystem_params_t){0.25,0.25,4.0} , sizeof(dt_iop_zonesystem_params_t), 1);
   dt_gui_presets_add_generic(_("Fill-shadow -0.25EV with 4 zones"), self->op, self->version(),
 &(dt_iop_zonesystem_params_t){-0.25,0.25,4.0} , sizeof(dt_iop_zonesystem_params_t), 1);
-
-//   DT_DEBUG_SQLITE3_EXEC(dt_database_get_global(), "commit", NULL, NULL, NULL);
 }
 */
 
@@ -207,7 +207,7 @@ static inline __attribute__((always_inline)) void process_common_setup(struct dt
 
   if(self->dev->gui_attached && dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
-    dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+    dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
     if(IS_NULL_PTR(g)) return;
 
     dt_iop_gui_enter_critical_section(self);
@@ -232,7 +232,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, const dt_dev_pi
                                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_zonesystem_data_t *d = (dt_iop_zonesystem_data_t *)piece->data;
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
 
   const int width = roi_out->width;
   const int height = roi_out->height;
@@ -362,7 +362,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 void gui_update(struct dt_iop_module_t *self)
 {
   //  dt_iop_module_t *module = (dt_iop_module_t *)self;
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   // dt_iop_zonesystem_params_t *p = (dt_iop_zonesystem_params_t *)module->params;
   gtk_widget_queue_draw(GTK_WIDGET(g->zones));
 }
@@ -387,7 +387,7 @@ static gboolean dt_iop_zonesystem_bar_scrolled(GtkWidget *widget, GdkEventScroll
 static void size_allocate_callback(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
 
   if(g->image) cairo_surface_destroy(g->image);
   dt_free(g->image_buffer);
@@ -417,7 +417,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->preview_width = g->preview_height = 0;
   g->mouse_over_output_zones = FALSE;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->preview = dtgtk_drawing_area_new_with_aspect_ratio(1.0);
   g_signal_connect(G_OBJECT(g->preview), "size-allocate", G_CALLBACK(size_allocate_callback), self);
@@ -443,11 +443,11 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->zones), "scroll-event", G_CALLBACK(dt_iop_zonesystem_bar_scrolled), self);
   gtk_widget_add_events(GTK_WIDGET(g->zones), GDK_POINTER_MOTION_MASK
                                               | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
-                                              | GDK_LEAVE_NOTIFY_MASK | dt_gui_get_global()->scroll_mask);
+                                              | GDK_LEAVE_NOTIFY_MASK | dt_widget_scroll_mask());
   gtk_widget_set_size_request(g->zones, -1, DT_PIXEL_APPLY_DPI(40));
 
-  gtk_box_pack_start(GTK_BOX(self->widget), g->preview, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->zones, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->preview, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->zones, TRUE, TRUE, 0);
 
   /* add signal handler for preview pipe finish to redraw the preview */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
@@ -464,7 +464,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_iop_zonesystem_redraw_preview_callback), self);
 
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   dt_free(g->in_preview_buffer);
   dt_free(g->out_preview_buffer);
   if(g->image) cairo_surface_destroy(g->image);
@@ -478,7 +478,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 #define DT_ZONESYSTEM_REFERENCE_SPLIT 0.30
 static gboolean dt_iop_zonesystem_bar_draw(GtkWidget *widget, cairo_t *crf, dt_iop_module_t *self)
 {
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_zonesystem_params_t *p = (dt_iop_zonesystem_params_t *)self->params;
 
   const int inset = DT_ZONESYSTEM_INSET;
@@ -572,7 +572,7 @@ static gboolean dt_iop_zonesystem_bar_button_press(GtkWidget *widget, GdkEventBu
                                                    dt_iop_module_t *self)
 {
   dt_iop_zonesystem_params_t *p = (dt_iop_zonesystem_params_t *)self->params;
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   const int inset = DT_ZONESYSTEM_INSET;
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
@@ -611,7 +611,7 @@ static gboolean dt_iop_zonesystem_bar_button_press(GtkWidget *widget, GdkEventBu
 static gboolean dt_iop_zonesystem_bar_button_release(GtkWidget *widget, GdkEventButton *event,
                                                      dt_iop_module_t *self)
 {
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   if(event->button == 1)
   {
     g->is_dragging = FALSE;
@@ -639,7 +639,7 @@ static gboolean dt_iop_zonesystem_bar_scrolled(GtkWidget *widget, GdkEventScroll
 static gboolean dt_iop_zonesystem_bar_leave_notify(GtkWidget *widget, GdkEventCrossing *event,
                                                    dt_iop_module_t *self)
 {
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   g->hilite_zone = FALSE;
   gtk_widget_queue_draw(g->preview);
   return TRUE;
@@ -649,7 +649,7 @@ static gboolean dt_iop_zonesystem_bar_motion_notify(GtkWidget *widget, GdkEventM
                                                     dt_iop_module_t *self)
 {
   dt_iop_zonesystem_params_t *p = (dt_iop_zonesystem_params_t *)self->params;
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   const int inset = DT_ZONESYSTEM_INSET;
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
@@ -696,7 +696,7 @@ static gboolean dt_iop_zonesystem_bar_motion_notify(GtkWidget *widget, GdkEventM
     g->hilite_zone = (g->mouse_y < height) ? TRUE : FALSE;
   }
 
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   gtk_widget_queue_draw(g->preview);
   return TRUE;
 }
@@ -709,14 +709,14 @@ static gboolean dt_iop_zonesystem_preview_draw(GtkWidget *widget, cairo_t *crf, 
   gtk_widget_get_allocation(widget, &allocation);
   int width = allocation.width, height = allocation.height;
 
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_zonesystem_params_t *p = (dt_iop_zonesystem_params_t *)self->params;
 
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
   cairo_t *cr = cairo_create(cst);
 
   /* clear background */
-  GtkStyleContext *context = gtk_widget_get_style_context(self->expander);
+  GtkStyleContext *context = gtk_widget_get_style_context(self->gui->expander);
   gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
 
   width -= 2 * inset;
@@ -770,7 +770,7 @@ static gboolean dt_iop_zonesystem_preview_draw(GtkWidget *widget, cairo_t *crf, 
     if(g->image)
     {
       GdkRGBA *color;
-      gtk_style_context_get(context, gtk_widget_get_state_flags(self->expander), "background-color", &color,
+      gtk_style_context_get(context, gtk_widget_get_state_flags(self->gui->expander), "background-color", &color,
                             NULL);
 
       cairo_set_source_surface(cr, g->image, (width - g->image_width) * 0.5, (height - g->image_height) * 0.5);
@@ -799,7 +799,7 @@ static gboolean dt_iop_zonesystem_preview_draw(GtkWidget *widget, cairo_t *crf, 
 void _iop_zonesystem_redraw_preview_callback(gpointer instance, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
+  dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)dt_iop_gui_data(self);
 
   dt_control_queue_redraw_widget(g->preview);
 }

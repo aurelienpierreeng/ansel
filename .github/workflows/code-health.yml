@@ -1,0 +1,174 @@
+#   clang-tidy pass for the code-health panel.
+#
+#   Kept separate from the docs workflow because clang-tidy needs a configured build
+#   tree (compile_commands.json), and therefore the whole dependency set,
+#   which has no business being installed just to run Doxygen. This job produces the
+#   report; the docs job downloads the most recent successful one and folds it into
+#   the published panel.
+#
+#   The check list is specified INLINE here rather than read from this repository's
+#   own .clang-tidy. That is deliberate: .clang-tidy is a working tool configuration
+#   scoped to unused-include detection, and the frozen darktable 5.0 reference tree
+#   has a different one. The comparison is only meaningful if both codebases are
+#   measured with exactly the same checks, so the ruleset lives in the workflow,
+#   identical on both sides, and the local .clang-tidy is bypassed with --config.
+#
+#   This file is part of the Ansel project.
+#   Copyright (C) 2025 Aurélien PIERRE.
+#
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+
+
+name: Code health
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/code-health.yml'
+      - 'tools/code_health.py'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      LLVM_VERSION: "20"
+      # Identical on both repositories. General maintainability and correctness
+      # signal, restricted to checks that are meaningful for C:
+      #   misc-include-cleaner            unusable on a glib/GTK tree (fires on nearly
+      #                                   every symbol - see Ansel's .clang-tidy notes)
+      #   bugprone-easily-swappable-parameters
+      #                                   fires on essentially every C function taking
+      #                                   two ints; no signal at this scale
+      #   bugprone-narrowing-conversions,
+      #   cert-err33-c                    tens of thousands of hits in pixel code and
+      #                                   around printf; they would drown everything else
+      CLANG_TIDY_CHECKS: >-
+        -*,bugprone-*,performance-*,misc-*,cert-*,
+        readability-non-const-parameter,readability-misleading-indentation,
+        -misc-include-cleaner,-bugprone-easily-swappable-parameters,
+        -bugprone-narrowing-conversions,-cert-err33-c
+    steps:
+      # clang-tidy is pinned to the same major version as Ansel's copy of this
+      # workflow (which follows Ansel's CI). Two clang-tidy releases do not report
+      # the same findings, so an unpinned version silently makes the two panels
+      # incomparable - the one failure mode this whole exercise exists to avoid.
+      - name: Install clang-tidy ${{ env.LLVM_VERSION }}
+        run: |
+          sudo apt-get --yes update
+          sudo apt-get --yes install wget gnupg
+          wget -q https://apt.llvm.org/llvm-snapshot.gpg.key
+          sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg llvm-snapshot.gpg.key
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" \
+            | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get --yes update
+          sudo apt-get --yes install \
+            "clang-${LLVM_VERSION}" "clang-tidy-${LLVM_VERSION}" "libomp-${LLVM_VERSION}-dev"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      # Ansel keeps its build dependencies in one place; do not duplicate the list here.
+      - name: Install dependencies
+        run: |
+          ./packaging/install-deps-ubuntu.sh
+
+      # Configure only - nothing is compiled. All we need is compile_commands.json.
+      - name: Configure build tree
+        run: |
+          # Configured with the runner's default GCC, NOT with clang. Forcing clang
+          # here fails: this project's CMakeLists requires OpenMP >= 4.5, and CMake's
+          # FindOpenMP cannot locate libomp for clang-20 on the runner, while GCC
+          # carries OpenMP itself. Both repositories therefore configure the same
+          # way, which is also what makes their clang-tidy numbers comparable.
+          # clang-tidy then reads a GCC compilation database; the --extra-arg flags
+          # below stop it treating GCC-only warning flags as findings.
+          cmake -B build -S . -G Ninja \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_BUILD_TYPE=Release
+
+      # Some translation units are generated at build time (config headers, the
+      # preferences GUI, ...). Build only those, so clang-tidy does not trip over
+      # missing generated headers.
+      - name: Generate build-time headers
+        continue-on-error: true
+        run: |
+          cmake --build build --target generate_all 2>/dev/null \
+            || ninja -C build -t targets all 2>/dev/null | grep -oE '^[^:]+\.h' | head -50 \
+            | xargs -r -n1 ninja -C build || true
+
+      - name: Run clang-tidy
+        run: |
+          # Third-party translation units are excluded: their findings are not this
+          # repository's to fix, exactly as in .sonarcloud.properties.
+          python3 - <<'PY' > files.txt
+          import json
+          skip = ("/external/", "/tests/integration/")
+          seen = set()
+          for e in json.load(open("build/compile_commands.json")):
+              f = e["file"]
+              if any(s in f for s in skip) or f in seen:
+                  continue
+              seen.add(f)
+              print(f)
+          PY
+          echo "translation units to analyse: $(wc -l < files.txt)"
+          checks=$(echo "$CLANG_TIDY_CHECKS" | tr -d ' \n')
+          xargs -a files.txt -P "$(nproc)" -I{} \
+            "clang-tidy-${LLVM_VERSION}" -p build --quiet \
+              --extra-arg=-Wno-unknown-warning-option \
+              --extra-arg=-Wno-unknown-attributes \
+              --config="{Checks: '$checks'}" {} \
+            > clang-tidy.log 2>/dev/null || true
+          echo "findings: $(grep -cE 'warning:|error:' clang-tidy.log || true)"
+
+      # Needs the same configured build tree, so it rides along with clang-tidy
+      # rather than getting a job of its own.
+      - name: Check header self-containment
+        continue-on-error: true
+        run: |
+          python3 tools/check_header_selfcontained.py \
+            -p build -s src -o selfcontained.json
+
+      - name: Summarise
+        run: |
+          {
+            echo "### clang-tidy"
+            echo '```'
+            echo "translation units : $(wc -l < files.txt)"
+            echo "findings          : $(grep -cE 'warning:|error:' clang-tidy.log || true)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-tidy-report
+          path: |
+            clang-tidy.log
+            selfcontained.json
+          retention-days: 90

@@ -58,8 +58,6 @@ APT_PACKAGES=(
   libfuse2
   libgdk-pixbuf2.0-dev
   libglib2.0-dev
-  libgmic-dev
-  libgraphicsmagick1-dev
   libgomp1
   libgtk-3-dev
   libheif-dev
@@ -84,7 +82,6 @@ APT_PACKAGES=(
   libraw-dev
   librsvg2-dev
   libsaxon-java
-  libsecret-1-dev
   libsdl2-dev
   libsoup2.4-dev
   libsqlite3-dev

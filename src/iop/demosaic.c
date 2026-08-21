@@ -58,7 +58,7 @@
 #include "config.h"
 #endif
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -67,16 +67,17 @@
 #include "common/times.h"
 #include "common/module_versioning.h"
 #include "system/fp_mode.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/imagebuf.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "pixel/interpolation.h"
 #include "math/math.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "pixel/format.h"
+#include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
@@ -84,12 +85,11 @@
 #include "math/openmp_maths.h"
 #include "develop/tiling.h"
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "pixel/bspline.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
 
 #include <memory.h>
@@ -98,6 +98,7 @@
 #include <time.h>
 #include <complex.h>
 #include <glib.h>
+#include "widgets/label.h"
 
 #ifdef __GNUC__
   #define INLINE __inline
@@ -933,14 +934,14 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   dt_interpolation_resample_roi_1c(itor, out, roi_out, in, roi_in);
 }
 
-void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
-                    const dt_iop_roi_t *const roi_in)
+/** @brief Input rect -> output rect. THE size evaluator: modify_roi_out() below and the
+ *  geometry service's record (develop/geometry/geometry.h) are its only two callers. */
+static void _demosaic_map_size(const gboolean downsamples, const dt_iop_roi_t *const roi_in,
+                               dt_iop_roi_t *roi_out)
 {
   *roi_out = *roi_in;
 
-  dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
-  if(_is_downsample_method(data->demosaicing_method))
+  if(downsamples)
   {
     roi_out->width = (roi_in->width + 1) / 2;
     roi_out->height = (roi_in->height + 1) / 2;
@@ -949,6 +950,53 @@ void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_
   // snap to start of mosaic block:
   roi_out->x = 0; // MAX(0, roi_out->x & ~1);
   roi_out->y = 0; // MAX(0, roi_out->y & ~1);
+}
+
+void modify_roi_out(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                    struct dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
+                    const dt_iop_roi_t *const roi_in)
+{
+  dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
+  _demosaic_map_size(_is_downsample_method(data->demosaicing_method), roi_in, roi_out);
+}
+
+/* --- the geometry service's view of this module (develop/geometry/geometry.h) ---------
+ *
+ * Demosaic is on the roster for its SIZE only: the downsampling methods halve the frame, and
+ * nothing downstream would otherwise know. It publishes no point transform because it has none
+ * -- consumers of coordinates work in the post-demosaic frame and normalise against the
+ * per-module dimensions the chain's fold records.
+ */
+
+typedef struct dt_iop_demosaic_geometry_t
+{
+  gboolean downsamples;
+} dt_iop_demosaic_geometry_t;
+
+static void _demosaic_geometry_map_size(const void *data, const dt_iop_roi_t *const in, dt_iop_roi_t *out)
+{
+  _demosaic_map_size(((const dt_iop_demosaic_geometry_t *)data)->downsamples, in, out);
+}
+
+static const dt_geometry_vtable_t _demosaic_geometry_vtable = {
+  .map_size = _demosaic_geometry_map_size,
+  .transform = NULL,
+  .backtransform = NULL,
+};
+
+gboolean geometry_record(dt_iop_module_t *self, const void *params, dt_geometry_record_t *record)
+{
+  const dt_iop_demosaic_params_t *const p = (const dt_iop_demosaic_params_t *)params;
+
+  dt_iop_demosaic_geometry_t *data
+      = (dt_iop_demosaic_geometry_t *)g_malloc0(sizeof(dt_iop_demosaic_geometry_t));
+  if(IS_NULL_PTR(data)) return FALSE;
+  data->downsamples = _is_downsample_method(p->demosaicing_method);
+
+  record->data = data;
+  record->free_data = dt_free_gpointer;
+  record->vtable = &_demosaic_geometry_vtable;
+  return TRUE;
 }
 
 // which roi input is needed to process to this output?
@@ -1030,7 +1078,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   gboolean showmask = FALSE;
   if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
-    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
     if(g) showmask = (g->visual_mask);
     // take care of passthru modes
     if(pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU)
@@ -1663,7 +1711,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   gboolean showmask = FALSE;
   if(self->dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
-    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+    dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
     if(g) showmask = (g->visual_mask);
     // take care of passthru modes
     if(pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU)
@@ -2296,7 +2344,7 @@ void reload_defaults(dt_iop_module_t *module)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_demosaic_params_t *p = (dt_iop_demosaic_params_t *)self->params;
 
   const gboolean bayer = (self->dev->image_storage.dsc.filters != 9u);
@@ -2331,31 +2379,31 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   gtk_widget_set_visible(g->dual_thrs, isdual);
   gtk_widget_set_visible(g->lmmse_refine, islmmse);
 
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'w');
+  dt_image_t *img = dt_image_cache_get(self->dev->image_storage.id, 'w');
   if(!img) return;
   if((p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
      (p->demosaicing_method == DT_IOP_DEMOSAIC_PASSTHR_MONOX))
     img->flags |= DT_IMAGE_MONOCHROME_BAYER;
   else
     img->flags &= ~DT_IMAGE_MONOCHROME_BAYER;
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_RELAXED);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 }
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
   dt_bauhaus_widget_set_quad_active(g->dual_thrs, FALSE);
 
   g->visual_mask = FALSE;
   gui_changed(self, NULL, NULL);
 
-  gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
+  gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->default_enabled ? "raw" : "non_raw");
 }
 
 static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
 
   g->visual_mask = dt_bauhaus_widget_get_quad_active(quad);
   dt_dev_pixelpipe_update_history_main(self->dev);
@@ -2363,7 +2411,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
+  dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)dt_iop_gui_data(self);
   if(!in)
   {
     const gboolean was_dualmask = g->visual_mask;
@@ -2377,7 +2425,7 @@ void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_demosaic_gui_data_t *g = IOP_GUI_ALLOC(demosaic);
 
-  GtkWidget *box_raw = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->demosaic_method_bayer = dt_bauhaus_combobox_from_params(self, "demosaicing_method");
   for(int i=0;i<7;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_bayer, 9);
@@ -2411,14 +2459,14 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->greeneq, _("green channels matching method"));
 
   // start building top level widget
-  self->widget = gtk_stack_new();
-  gtk_stack_set_homogeneous(GTK_STACK(self->widget), FALSE);
+  self->gui->widget = gtk_stack_new();
+  gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
   GtkWidget *label_non_raw = dt_ui_label_new(_("not applicable"));
   gtk_widget_set_tooltip_text(label_non_raw, _("demosaicing is only used for color raw images"));
 
-  gtk_stack_add_named(GTK_STACK(self->widget), label_non_raw, "non_raw");
-  gtk_stack_add_named(GTK_STACK(self->widget), box_raw, "raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
+  gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");
 }
 
 // clang-format off

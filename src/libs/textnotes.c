@@ -16,24 +16,23 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "common/act_on.h"
-#include "common/colorspaces.h"   // dt_colorspaces_get_global(), and lcms2 for cmsHTRANSFORM
-#include "system/openmp.h"
+#include "colorprofiles/colorspaces.h"   // dt_colorprofiles_srgb_to_display_strided()
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "common/paths.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "common/datetime.h"
 #include "common/file_location.h"
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 #include "common/variables.h"
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"
-#include "gui/gtk.h"
-#include "gui/gtkentry.h"
+#include "gui/application.h"
+#include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "views/view.h"
 
@@ -42,10 +41,10 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include "widgets/label.h"
+#include "widgets/popup.h"
+#include "widgets/scroll_wrap.h"
+#include "widgets/widget_settings.h"
 
 #ifdef HAVE_HTTP_SERVER
 #include <libsoup/soup.h>
@@ -542,148 +541,19 @@ static void _setup_completion(dt_lib_module_t *self, GtkWidget *textview)
   d->completion_tree = completion_tree;
 }
 
-static gboolean _alloc_row_buffers(const int width, guchar **row_in, guchar **row_out)
-{
-  *row_in = g_malloc((size_t)width * 4);
-  *row_out = g_malloc((size_t)width * 4);
-  if(!*row_in || !*row_out)
-  {
-    dt_free(*row_in);
-    dt_free(*row_out);
-    *row_in = NULL;
-    *row_out = NULL;
-    return FALSE;
-  }
-  return TRUE;
-}
-
-static void _free_row_buffers(guchar *row_in, guchar *row_out)
-{
-  dt_free(row_in);
-  dt_free(row_out);
-}
-
-static void _colorcorrect_row(cmsHTRANSFORM transform, guchar *src, const int width,
-                              const int n_channels, const gboolean has_alpha,
-                              guchar *row_in, guchar *row_out)
-{
-  for(int x = 0; x < width; x++)
-  {
-    const int s = x * n_channels;
-    const int d = x * 4;
-    row_in[d + 0] = src[s + 0];
-    row_in[d + 1] = src[s + 1];
-    row_in[d + 2] = src[s + 2];
-    row_in[d + 3] = has_alpha ? src[s + 3] : 255;
-  }
-
-  cmsDoTransform(transform, row_in, row_out, width);
-
-  for(int x = 0; x < width; x++)
-  {
-    const int s = x * 4;
-    const int d = x * n_channels;
-    src[d + 0] = row_out[s + 2];
-    src[d + 1] = row_out[s + 1];
-    src[d + 2] = row_out[s + 0];
-    if(has_alpha)
-      src[d + 3] = row_out[s + 3];
-  }
-}
-
 static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
 {
   if(IS_NULL_PTR(pixbuf)) return;
 
-  cmsHTRANSFORM transform = NULL;
-  dt_colorspaces_t *const profiles = dt_colorspaces_get_global();
-  pthread_rwlock_rdlock(&profiles->xprofile_lock);
-  if(dt_colorspaces_get_global()->transform_srgb_to_display)
-    transform = dt_colorspaces_get_global()->transform_srgb_to_display;
-
-  if(IS_NULL_PTR(transform))
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-  const int width = gdk_pixbuf_get_width(pixbuf);
-  const int height = gdk_pixbuf_get_height(pixbuf);
-  const int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-  const int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-  if(width <= 0 || height <= 0 || n_channels < 3)
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-  guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
-  if(IS_NULL_PTR(pixels))
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-  const gboolean has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);
-
-#ifdef _OPENMP
-  const int nthreads = omp_get_max_threads();
-  guchar **rows_in = g_malloc0((size_t)nthreads * sizeof(*rows_in));
-  guchar **rows_out = g_malloc0((size_t)nthreads * sizeof(*rows_out));
-  gboolean ok = TRUE;
-  for(int i = 0; i < nthreads; i++)
-  {
-    if(!_alloc_row_buffers(width, &rows_in[i], &rows_out[i]))
-    {
-      ok = FALSE;
-      break;
-    }
-  }
-  if(!ok)
-  {
-    for(int i = 0; i < nthreads; i++)
-      _free_row_buffers(rows_in[i], rows_out[i]);
-    dt_free(rows_in);
-    dt_free(rows_out);
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-
-#pragma omp parallel default(firstprivate)
-  {
-    const int tid = omp_get_thread_num();
-    guchar *row_in = rows_in[tid];
-    guchar *row_out = rows_out[tid];
-
-#pragma omp for 
-    for(int y = 0; y < height; y++)
-    {
-      guchar *src = pixels + (size_t)y * rowstride;
-      _colorcorrect_row(transform, src, width, n_channels, has_alpha, row_in, row_out);
-    }
-  }
-
-  for(int i = 0; i < nthreads; i++)
-    _free_row_buffers(rows_in[i], rows_out[i]);
-  dt_free(rows_in);
-  dt_free(rows_out);
-#else
-  guchar *row_in = NULL;
-  guchar *row_out = NULL;
-  if(!_alloc_row_buffers(width, &row_in, &row_out))
-  {
-    pthread_rwlock_unlock(&profiles->xprofile_lock);
-    return;
-  }
-  for(int y = 0; y < height; y++)
-  {
-    guchar *src = pixels + (size_t)y * rowstride;
-    _colorcorrect_row(transform, src, width, n_channels, has_alpha, row_in, row_out);
-  }
-  _free_row_buffers(row_in, row_out);
-#endif
-
-  pthread_rwlock_unlock(&profiles->xprofile_lock);
+  /* The pixbuf is sRGB; bring it into display space. The transform, the lock and the
+   * row scratch all live inside colorprofiles -- this side only reads the geometry
+   * GdkPixbuf reports. */
+  dt_colorprofiles_srgb_to_display_strided(gdk_pixbuf_get_pixels(pixbuf),
+                                           gdk_pixbuf_get_width(pixbuf),
+                                           gdk_pixbuf_get_height(pixbuf),
+                                           gdk_pixbuf_get_rowstride(pixbuf),
+                                           gdk_pixbuf_get_n_channels(pixbuf),
+                                           gdk_pixbuf_get_has_alpha(pixbuf));
 }
 
 static void _toggle_mode(GtkToggleButton *button, dt_lib_module_t *self);
@@ -1856,23 +1726,23 @@ static void _ensure_has_txt_flag(const int32_t imgid)
 {
   if(imgid <= 0) return;
 
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img)) return;
 
   if(!(img->flags & DT_IMAGE_HAS_TXT))
     img->flags |= DT_IMAGE_HAS_TXT;
 
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_SAFE);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
 }
 
 static gboolean _image_has_txt_flag(const int32_t imgid)
 {
   if(imgid <= 0) return FALSE;
 
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'r');
+  dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img)) return FALSE;
   const gboolean has_txt = (img->flags & DT_IMAGE_HAS_TXT);
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
   return has_txt;
 }
 

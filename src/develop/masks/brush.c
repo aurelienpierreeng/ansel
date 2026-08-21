@@ -34,20 +34,20 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/macros.h"
+#include "control/control.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/times.h"
 #include "common/glib_utils.h"
-#include "gui/gtk.h"
-#include "common/pixelpipe_cache_alloc.h"
-#include "gui/bauhaus.h"
-#include "common/imagebuf.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "common/conf.h"
-#include "develop/blend.h"
 #include "develop/imageop.h"
+#include "develop/masks/masks_distort.h"
 #include "develop/masks.h"
+#include "develop/masks_gui.h"
+#include "develop/masks/masks_functions.h"
 #include "math/openmp_maths.h"
 #include "gui/actions/menu.h"
 
@@ -718,7 +718,7 @@ static inline int _brush_cyclic_cursor(int n, int nb)
 // This means that it record the main line twice (up and down) while the border only once (around).
 static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                  const double iop_order, const int transform_direction,
-                                 dt_dev_pixelpipe_t *pipe, float **point_buffer, int *point_count,
+                                 const dt_masks_distort_t *const dist, float **point_buffer, int *point_count,
                                  float **border_buffer, int *border_count, float **payload_buffer,
                                  int *payload_count, int use_source)
 {
@@ -733,10 +733,12 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   double start2 = 0.0;
   if(dt_get_debug_flags() & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
-  const float iwd = pipe->iwidth;
-  const float iht = pipe->iheight;
-  const int pixel_threshold = (dt_dev_pixelpipe_has_preview_output(develop, pipe, NULL)
-                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
+  const float iwd = dist->iwidth;
+  const float iht = dist->iheight;
+  // How far apart consecutive samples of the outline may land, in image pixels. Decided by the
+  // pipe, never here; see dt_dev_pixelpipe_t::mask_rasterization_step. Above 1 the samples
+  // spread out and the radial spokes stamped from them leave gaps between each pair (#1116).
+  const int pixel_threshold = dist->rasterization_step;
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
 
@@ -1032,14 +1034,14 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   {
     // we transform with all distortion that happen *before* the module
     // so we have now the TARGET points in module input reference
-    if(dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+    if(dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
                                      *point_buffer, *point_count))
     {
       // now we move all the points by the shift
       // so we have now the SOURCE points in module input reference
       float pts[2] = { mask_form->source[0], mask_form->source[1] };
       dt_dev_coordinates_raw_norm_to_raw_abs(develop, pts, 1);
-      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
+      if(!dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1))
         goto fail;
 
       dx = pts[0] - (*point_buffer)[2];
@@ -1053,7 +1055,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
       // we apply the rest of the distortions (those after the module)
       // so we have now the SOURCE points in final image reference
-      if(!dt_dev_distort_transform_plus(pipe, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+      if(!dt_masks_distort_transform(dist, iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                         *point_buffer, *point_count))
         goto fail;
     }
@@ -1064,11 +1066,11 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
     return 0;
   }
-  else if(dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
+  else if(dt_masks_distort_transform(dist, iop_order, transform_direction,
                                         *point_buffer, *point_count))
   {
     if(!border_buffer
-       || dt_dev_distort_transform_plus(pipe, iop_order, transform_direction,
+       || dt_masks_distort_transform(dist, iop_order, transform_direction,
                                         *border_buffer, *border_count))
     {
       if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1241,8 +1243,9 @@ static int _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask
 {
   if(use_source && IS_NULL_PTR(module)) return 1;
   const double ioporder = (module) ? module->iop_order : 0.0f;
+  const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
   return _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
-                               develop->virtual_pipe, point_buffer, point_count, border_buffer,
+                               &gui_dist, point_buffer, point_count, border_buffer,
                                border_count, NULL, NULL, use_source);
 }
 
@@ -1984,8 +1987,9 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
                                      dt_masks_form_gui_t *mask_gui, int index)
 {
   dt_develop_t *dev = mask_gui->dev;
-  const int iwidth = dev->roi.raw_width;
-  const int iheight = dev->roi.raw_height;
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const int iwidth = geometry.raw_width;
+  const int iheight = geometry.raw_height;
 
   if(mask_gui->creation)
   {
@@ -2156,11 +2160,35 @@ static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float
 
     // We don't want to draw the plain line twice, adapt the end index accordingly
     const int end_idx = border ? points_count : 0.5 * points_count;
-    
+
+    /* One line_to per point sampled at RAW resolution is several per device pixel; emit at the
+     * resolution the context can actually show. See dt_draw_min_emit_step(). */
+    const double min_step = dt_draw_min_emit_step(cr);
+    const double min_step2 = min_step * min_step;
+    double last_x = points[start_idx * 2];
+    double last_y = points[start_idx * 2 + 1];
+
     for(int i = start_idx + 1; i < end_idx; i++)
     {
-      if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
-        cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
+      const double x = points[i * 2];
+      const double y = points[i * 2 + 1];
+      if(isnan(x) || isnan(y)) continue;
+
+      const double step_x = x - last_x;
+      const double step_y = y - last_y;
+      if((step_x * step_x + step_y * step_y) < min_step2) continue;
+
+      cairo_line_to(cr, x, y);
+      last_x = x;
+      last_y = y;
+    }
+
+    // the last point always lands, so the outline closes where the shape does
+    if(end_idx > start_idx + 1)
+    {
+      const double x = points[(end_idx - 1) * 2];
+      const double y = points[(end_idx - 1) * 2 + 1];
+      if(!isnan(x) && !isnan(y) && (x != last_x || y != last_y)) cairo_line_to(cr, x, y);
     }
   }
 }
@@ -2275,8 +2303,9 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // in creation mode
   if(mask_gui->creation)
   {
-    const float iwd = mask_gui->dev->roi.raw_width;
-    const float iht = mask_gui->dev->roi.raw_height;
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(mask_gui->dev);
+    const float iwd = geometry.raw_width;
+    const float iht = geometry.raw_height;
     const float min_iwd_iht = MIN(iwd, iht);
 
     if(mask_gui->guipoints_count == 0)
@@ -2303,7 +2332,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
       // draw brush circle at current mouse position
       cairo_save(cr);
-      dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
+      dt_widget_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
       cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
       cairo_new_path(cr);
       cairo_arc(cr, xpos, ypos, radius1, 0, 2.0 * M_PI);
@@ -2363,7 +2392,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       opacity = oldopacity = masks_density;
 
       cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius));
-      dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
+      dt_widget_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
 
       cairo_move_to(cr, guipoints[0], guipoints[1]);
       for(int i = 1; i < mask_gui->guipoints_count; i++)
@@ -2406,7 +2435,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
           cairo_stroke(cr);
           stroked = 1;
           cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius));
-          dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
+          dt_widget_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
           oldradius = radius;
           oldopacity = opacity;
           cairo_move_to(cr, guipoints[i * 2], guipoints[i * 2 + 1]);
@@ -2415,7 +2444,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       if(!stroked) cairo_stroke(cr);
 
       cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
-      dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
+      dt_widget_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
       cairo_new_path(cr);
       cairo_arc(cr, guipoints[2 * (mask_gui->guipoints_count - 1)],
                 guipoints[2 * (mask_gui->guipoints_count - 1) + 1],
@@ -2459,8 +2488,12 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw path
   if(node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw
   {
+    // Rounded, not flat: a brush stroke is a paintbrush, not a ruled polygon edge, and a butt
+    // cap on the outline shown here (the node-to-node centerline, not the painted falloff)
+    // looked cut off square at its two open ends. Only the two true ends of the whole stroke,
+    // not every node's own joint -- see dt_masks_draw_path_seg_by_seg().
     dt_masks_draw_path_seg_by_seg(cr, mask_gui, index, gui_points->points, 0.5f * gui_points->points_count,
-                                  node_count, zoom_scale);
+                                  node_count, zoom_scale, TRUE);
   }
 
   if(0)
@@ -2655,7 +2688,8 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                            &points, &points_count, &border, &border_count, NULL, NULL, include_source) != 0)
   {
     dt_pixelpipe_cache_free_align(points);
@@ -2742,7 +2776,8 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
   int points_count, border_count, payload_count;
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                            &points, &points_count,
                                &border, &border_count, &payload, &payload_count, 0) != 0)
   {
@@ -2770,9 +2805,8 @@ static int _brush_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe
     *width = *height = *offset_x = *offset_y = 0;
     return 0;
   }
-  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, NULL)
-                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
-  const int sparse_step = use_sparse ? 4 : 1;
+  const gboolean use_sparse = (pipe->mask_rasterization_step > 1);
+  const int sparse_step = pipe->mask_rasterization_step;
   _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -2923,16 +2957,16 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixel
   const int roi_width = roi->width;
   const int roi_height = roi->height;
   const float roi_scale = roi->scale;
-  const gboolean use_sparse = (dt_dev_pixelpipe_has_preview_output(piece->module->dev, pipe, roi)
-                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
-  const int sparse_step = use_sparse ? 4 : 1;
+  const gboolean use_sparse = (pipe->mask_rasterization_step > 1);
+  const int sparse_step = pipe->mask_rasterization_step;
 
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
 
   int points_count, border_count, payload_count;
 
-  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, pipe,
+  const dt_masks_distort_t pipe_dist = dt_masks_distort_for_pipe(pipe, module->dev);
+  if(_brush_get_pts_border(module->dev, mask_form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &pipe_dist,
                            &points, &points_count, &border, &border_count, &payload, &payload_count, 0) != 0)
   {
     dt_pixelpipe_cache_free_align(points);

@@ -26,16 +26,16 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/utility.h"
-#include "gui/gdkkeys.h"
+#include "widgets/gdkkeys.h"
 #include "imageio/imageio_module.h"
-#include "gui/dtgtk/button.h"
+#include "widgets/button.h"
 
-#include "gui/gtk.h"
-#include "gui/gtkentry.h"
+#include "gui/application.h"
+#include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -44,6 +44,7 @@
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "widgets/widget_style.h"
 
 typedef enum dt_lib_tagging_cols_t
 {

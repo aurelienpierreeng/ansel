@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-20 20:46+0200\n"
-"PO-Revision-Date: 2026-05-22 20:20+0200\n"
+"PO-Revision-Date: 2026-08-09 20:08+0200\n"
 "Last-Translator: Maurizio <maurizio@mauriziopaglia.it>\n"
 "Language-Team: Italian <kde-i18n-it@kde.org>\n"
 "Language: it_IT\n"
@@ -15,7 +15,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 26.04.1\n"
+"X-Generator: Lokalize 26.04.3\n"
 
 #: ../build/src/conf_gen.h:187 ../build/src/conf_gen.h:207
 #: ../build/src/conf_gen.h:371 ../build/src/preferences_gen.h:4140
@@ -352,7 +352,7 @@ msgstr "Bi-cubica"
 #: ../build/src/preferences_gen.h:2982 ../build/src/preferences_gen.h:3001
 msgctxt "preferences"
 msgid "mitchell"
-msgstr ""
+msgstr "Mitchell"
 
 #: ../build/src/conf_gen.h:1817 ../build/src/preferences_gen.h:3959
 #: ../build/src/preferences_gen.h:3995
@@ -629,16 +629,18 @@ msgid "pixel interpolator (warp)"
 msgstr "Interpolatore pixel (distorsione)"
 
 #: ../build/src/preferences_gen.h:2939
-#, fuzzy
 msgid ""
 "pixel interpolator used in modules for rotation, lens correction, liquify, "
 "cropping and final scaling. bilinear (soft, no overshoot), bicubic (Catmull-"
 "Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp and "
 "effectively halo-free)."
 msgstr ""
-"L'interpolatore di pixel viene utilizzato nei moduli rotazione, correzione "
-"obiettivo, fluidifica, ritaglio e ridimensionamento finale (bilineare, bi-"
-"cubica, lanczos2)."
+"Interpolatore di pixel utilizzato nei moduli per la rotazione, la correzione d"
+"ell'obiettivo, la liquidificazione,"
+"il ritaglio e il ridimensionamento finale. Bilineare (morbido, senza overshoot"
+"), bicubico (Catmull-"
+"Rom, nitido ma con aloni sui bordi), Mitchell (Mitchell-Netravali, nitido e"
+"praticamente privo di aloni)."
 
 #: ../build/src/preferences_gen.h:2961
 msgid "pixel interpolator (scaling)"
@@ -650,6 +652,11 @@ msgid ""
 "(Catmull-Rom, sharp but rings at edges), mitchell (Mitchell-Netravali, sharp "
 "and effectively halo-free)."
 msgstr ""
+"Interpolatore di pixel utilizzato per il ridimensionamento. Bilineare (morbido"
+", senza overshoot), bicubico"
+"(Catmull-Rom, nitido ma con aloni sui bordi), Mitchell (Mitchell-Netravali, ni"
+"tido"
+"e praticamente privo di aloni)."
 
 #: ../build/src/preferences_gen.h:3026
 msgid "3D lut root folder"
@@ -989,7 +996,7 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
 msgid "storage"
-msgstr "Supporto"
+msgstr "Archiviazione"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
@@ -1129,13 +1136,12 @@ msgstr ""
 "se nel frattempo alcuni sono stati aggiornati"
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
-#, fuzzy
 msgid "privacy"
-msgstr "Privato"
+msgstr "Privacy"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
-msgstr ""
+msgstr "Invia dettagli crash anonimi"
 
 #: ../build/src/preferences_gen.h:4570
 msgid ""
@@ -1145,6 +1151,13 @@ msgid ""
 "fixed. No images, file names or personal data are sent. Default off; you are "
 "asked once on first launch."
 msgstr ""
+"Quando Ansel va in crash, invia automaticamente agli sviluppatori (tramite sen"
+"try.io) il backtrace, le specifiche del tuo"
+"sistema operativo e dell'hardware (CPU, RAM, GPU), la versione di Ansel e le s"
+"tatistiche relative alle sessioni senza crash,"
+"in modo che il bug possa essere risolto. Non vengono inviate immagini, nomi di"
+" file o dati personali. L'impostazione predefinita è “disattivata”; ti verrà"
+"chiesto una volta al primo avvio."
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
 msgid "miscellaneous"
@@ -2868,7 +2881,7 @@ msgstr "RGB norma euclidea"
 
 #: ../build/src/iop/introspection_filmicrgb.c:539
 msgid "RGB euclidean norm (legacy)"
-msgstr "RGB norma euclidea (legacy)"
+msgstr "RGB norma euclidea (vers. prec.)"
 
 #: ../build/src/iop/introspection_filmicrgb.c:543
 msgid "v3 (2019)"
@@ -4001,9 +4014,8 @@ msgid "rating"
 msgstr "Valutazione"
 
 #: ../src/common/collection.c:686
-#, fuzzy
 msgid "custom query"
-msgstr "Ordinam. personalizzato"
+msgstr "Ricerca personalizzata"
 
 #: ../src/common/collection.c:1269 ../src/common/collection.c:1883
 #: ../src/common/colorlabels.c:63 ../src/develop/lightroom.c:816
@@ -4381,9 +4393,8 @@ msgid "Color label set to %s for %i image(s)"
 msgstr "Etichetta colore impostata a %s per %i immagine/i"
 
 #: ../src/common/colorspaces.c:1691
-#, fuzzy
 msgid "(unknown name)"
-msgstr "Maschera sconosciuta"
+msgstr "(nome sconosciuto)"
 
 #. init the category profile with NULL profile, the actual profile must be retrieved dynamically by the caller
 #: ../src/common/colorspaces.c:1734 ../src/common/colorspaces.c:1990
@@ -4513,31 +4524,33 @@ msgstr "ITU-R BT.1886"
 #, c-format
 msgid "dt_get_color_checker: colorchecker type %i is a user reference.\n"
 msgstr ""
+"dt_get_color_checker: il tipo di colorchecker %i è un riferimento utente.\n"
 
 #: ../src/common/colorchecker.h:725
 #, c-format
 msgid "dt_colorchecker_find: found %d builtin colorcheckers\n"
-msgstr ""
+msgstr "dt_colorchecker_find: trovati %d colorchecker integrati\n"
 
 #: ../src/common/colorchecker.h:729
 #, c-format
 msgid "dt_colorchecker_find: found %d CGAT references files\n"
-msgstr ""
+msgstr "dt_colorchecker_find: trovati %d riferimenti CGAT nei file\n"
 
 #: ../src/common/colorchecker.h:748
 #, c-format
 msgid "dt_colorchecker_find_color: found %d .cht files\n"
-msgstr ""
+msgstr "dt_colorchecker_find_color: trovati %d file .cht\n"
 
 #: ../src/common/colorchecker.c:1425
 #, c-format
 msgid "blackest patch: %s, middle grey patch: %s, white patch: %s\n"
 msgstr ""
+"Campione più scuro: %s, campione grigio medio: %s, campione bianco: %s\n"
 
 #: ../src/common/colorchecker.c:1428
-#, fuzzy, c-format
+#, c-format
 msgid "it8 '%s' done\n"
-msgstr "Toni della pelle it8"
+msgstr "it8 ‘%s’ completato\n"
 
 #: ../src/common/cups_print.c:432
 #, c-format
@@ -5110,9 +5123,11 @@ msgid "replace"
 msgstr "Sostituisci"
 
 #: ../src/common/history_merge_gui.c:1285
-#, fuzzy, c-format
+#, c-format
 msgid "Copy, merging pipeline in %s and history in <b>%s</b> mode."
-msgstr "Copia e fondi la cache di sviluppo in %s e la coda in modalità %s"
+msgstr ""
+"Copia, unione della coda di sviluppo in %s e della cronologia in modalità <b>%"
+"s</b>."
 
 #: ../src/common/history_merge_gui.c:1288
 msgid "History merge report"
@@ -5148,9 +5163,9 @@ msgid "Original: %d %s"
 msgstr "Originale: %d %s"
 
 #: ../src/common/history_merge_gui.c:1335
-#, fuzzy, c-format
+#, c-format
 msgid "Source: %s"
-msgstr "Sorgente: %d %s"
+msgstr "Sorgente: %s"
 
 #: ../src/common/history_merge_gui.c:1336
 #, c-format
@@ -5175,54 +5190,51 @@ msgid "Module"
 msgstr "Modulo"
 
 #: ../src/common/history_merge_gui.c:1405
-#, fuzzy
 msgid "[ Module ]"
-msgstr "Modulo"
+msgstr "[ Modulo ]"
 
 #: ../src/common/history_merge_gui.c:1405
-#, fuzzy
 msgid "inserted module"
-msgstr "Moduli deprecati"
+msgstr "Moduli inseriti"
 
 #: ../src/common/history_merge_gui.c:1406
-#, fuzzy
 msgid "module uses masks"
-msgstr "Preimpostaz. modulo"
+msgstr "Il modulo utilizza maschere"
 
 #: ../src/common/history_merge_gui.c:1407
 msgid "<b> Module </b>"
-msgstr ""
+msgstr "<b> Modulo </b>"
 
 #: ../src/common/history_merge_gui.c:1407
-#, fuzzy
 msgid "moved module"
-msgstr "Commuta modulo"
+msgstr "Modulo spostato"
 
 #: ../src/common/history_merge_gui.c:1408
 msgid "disabled module (shown only if copied)"
-msgstr ""
+msgstr "Modulo disabilitato (mostrato solo se copiato)"
 
 #: ../src/common/history_merge_gui.c:1409
 msgid "parameters overridden on the same row"
-msgstr ""
+msgstr "Parametri sovrascritti sulla stessa riga"
 
 #: ../src/common/history_merge_gui.c:1410
 msgid "parameters overridden on an adjacent row"
-msgstr ""
+msgstr "Parametri sovrascritti sulla riga adiacente"
 
 #: ../src/common/history_merge_gui.c:1411
 msgid "parameters overridden on a farther row"
-msgstr ""
+msgstr "Parametri sovrascritti su una riga lontana"
 
 #: ../src/common/history_merge_gui.c:1412
-#, fuzzy
 msgid "masks overridden"
-msgstr "Modalità maschera"
+msgstr "Maschere sovrascritte"
 
 #: ../src/common/history_merge_gui.c:1435
 msgid ""
 "Drag and drop modules in the “Destination” column to reorder the pipeline."
 msgstr ""
+"Trascina e rilascia i moduli nella colonna “Destinazione” per riorganizzare la"
+" coda di sviluppo."
 
 #: ../src/common/history_merge_gui.c:1549
 msgid "Input image"
@@ -5230,63 +5242,80 @@ msgstr "Immagine di input"
 
 #: ../src/common/history_merge_gui.c:1581
 msgid "Don't ask again for this batch"
-msgstr ""
+msgstr "Non chiedere di nuovo per questo lotto"
 
 #: ../src/common/history_merge_gui.c:1583
 msgid ""
 "When checked, the chosen action (Accept or Revert) is applied silently\n"
 "to all remaining images in this batch without showing this report again."
 msgstr ""
+"Se questa opzione è selezionata, l'azione scelta (Accetta o Annulla) viene app"
+"licata in modo silenzioso\n"
+"a tutte le immagini rimanenti in questo lotto senza visualizzare nuovamente qu"
+"esto messaggio."
 
 #: ../src/common/history_merge_gui.c:1640
-#, fuzzy
 msgid "_Apply"
-msgstr "Applica"
+msgstr "_Applica"
 
 #. --- History merge mode ---
 #: ../src/common/history_merge_gui.c:1650
 msgid "Where should source edits be placed relative to destination ones?"
 msgstr ""
+"Dove devono essere posizionate le modifiche alla sorgente rispetto a quelle di"
+" destinazione?"
 
 #: ../src/common/history_merge_gui.c:1656
 msgid ""
 "Below (prepend) — incoming (source) is the base ; on conflicts, the original "
 "wins."
 msgstr ""
+"Di seguito (prependi) — l'entrata (sorgente) è la base; in caso di conflitti, "
+"prevale l'originale"
 
 #: ../src/common/history_merge_gui.c:1658
 msgid ""
 "Incoming edits are applied BEFORE yours in the processing stack.\n"
 "When the same module exists in both, your version wins."
 msgstr ""
+"Le modifiche in arrivo vengono applicate PRIMA delle tue nella coda di elabora"
+"zione.\n"
+"Quando lo stesso modulo è presente in entrambe, prevale la tua versione."
 
 #: ../src/common/history_merge_gui.c:1663
 msgid ""
 "Above (append) — the original is the base ; on conflicts, incoming (source) "
 "wins."
 msgstr ""
+"Sopra (appendi) — l'originale costituisce la base; in caso di conflitti, preva"
+"le il dato in entrata (sorgente)"
 
 #: ../src/common/history_merge_gui.c:1665
 msgid ""
 "Incoming edits are applied AFTER yours in the processing stack.\n"
 "When the same module exists in both, the incoming version wins."
 msgstr ""
+"Le modifiche in arrivo vengono applicate DOPO le tue nella coda di elaborazion"
+"e.\n"
+"Quando lo stesso modulo è presente in entrambe, prevale la versione in arrivo."
 
 #: ../src/common/history_merge_gui.c:1670
 msgid "Replace — discard original edits entirely."
-msgstr ""
+msgstr "Sostituisci — elimina completamente le modifiche originali."
 
 #: ../src/common/history_merge_gui.c:1672
 msgid ""
 "Your current edits are discarded and replaced entirely by the incoming "
 "history."
 msgstr ""
+"Le modifiche attualmente in corso vengono ignorate e sostituite interamente da"
+"lla"
+"cronologia in arrivo."
 
 #. --- Pipeline (node) order ---
 #: ../src/common/history_merge_gui.c:1685
-#, fuzzy
 msgid "Use incoming (source) pipeline order"
-msgstr "È stata utilizzata la coda sorgente"
+msgstr "Utilizza l'ordine della pipeline in entrata (sorgente)"
 
 #: ../src/common/history_merge_gui.c:1689
 msgid ""
@@ -5294,17 +5323,24 @@ msgid ""
 "yours.\n"
 "When unchecked, your current pipeline order is preserved."
 msgstr ""
+"Se questa opzione è selezionata, l'ordine di elaborazione dei moduli dalla sor"
+"gente in entrata sostituisce"
+"il tuo.\n"
+"Se questa opzione non è selezionata, viene mantenuto l'ordine attuale della tu"
+"a coda di sviluppo."
 
 #: ../src/common/history_merge_gui.c:1696
 msgid ""
 "This source has no saved pipeline order — your current pipeline order will "
 "be kept."
 msgstr ""
+"Questa fonte non ha un ordine di sviluppo salvato: verrà"
+"mantenuto l'ordine di sviluppo corrente."
 
 #. --- Remember choice ---
 #: ../src/common/history_merge_gui.c:1705
 msgid "Ask every time"
-msgstr ""
+msgstr "Chiedi sempre"
 
 #: ../src/common/history_merge_gui.c:1707
 msgid ""
@@ -5312,6 +5348,10 @@ msgid ""
 "dialog.\n"
 "You can still change the defaults from the menu."
 msgstr ""
+"Se l'opzione non è selezionata, le impostazioni correnti vengono applicate aut"
+"omaticamente senza visualizzare questa"
+"finestra di dialogo.\n"
+"È comunque possibile modificare le impostazioni predefinite dal menu."
 
 #: ../src/common/http_server.c:111 ../src/common/http_server.c:160
 #, c-format
@@ -5571,12 +5611,12 @@ msgstr "Formato data/ora di importazione non validi"
 
 #: ../src/common/import.c:771 ../src/common/import.c:1278
 msgid "Choose a file to see the result..."
-msgstr ""
+msgstr "Scegli un file per vedere il risultato..."
 
 #: ../src/common/import.c:815
 #, c-format
 msgid "...%s"
-msgstr ""
+msgstr "...%s"
 
 #: ../src/common/import.c:817
 msgid "Can't build a valid path."
@@ -5749,13 +5789,12 @@ msgstr ""
 "completamento)"
 
 #: ../src/common/import.c:1275
-#, fuzzy
 msgid "Pattern result"
-msgstr "Tenta il ripristino"
+msgstr "Risultato del modello"
 
 #: ../src/common/iop_order.c:73 ../src/libs/ioporder.c:1813
 msgid "legacy"
-msgstr "Legacy"
+msgstr "Vers. prec."
 
 #: ../src/common/iop_order.c:74
 msgid "v3.0 RAW"
@@ -5916,7 +5955,7 @@ msgstr "Nessuna immagine selezionata per applicare la valutazione"
 
 #: ../src/common/sentry.c:104
 msgid "Help us make Ansel more stable?"
-msgstr ""
+msgstr "Vuoi aiutarci a rendere Ansel più stabile?"
 
 #: ../src/common/sentry.c:108
 msgid ""
@@ -5936,14 +5975,34 @@ msgid ""
 "This is entirely optional and you can change your choice at any time in\n"
 "<i>Preferences ▸ Storage ▸ Privacy</i>."
 msgstr ""
+"Ansel può segnalare automaticamente i crash agli sviluppatori, in modo che pos"
+"sano essere"
+"risolti.\n"
+"\n"
+"Se acconsenti, invieremo:\n"
+"  • il backtrace del crash (il punto in cui il programma si è bloccato) quando"
+" Ansel va in crash,\n"
+"  • il tuo sistema operativo e le specifiche hardware (CPU, RAM, GPU),\n"
+"  • la versione di Ansel e le statistiche relative alle sessioni senza crash."
+"\n"
+"\n"
+"Non inviamo mai le tue immagini, i nomi dei file o alcun dato personale.\n"
+"\n"
+"I dati vengono raccolti da sentry.io e archiviati in Europa. Puoi consultare l"
+"a loro"
+"informativa all’indirizzo https://sentry.io/privacy/.\n"
+"\n"
+"Si tratta di un’opzione del tutto facoltativa e puoi modificare la tua scelta "
+"in qualsiasi momento in\n"
+"<i>Preferenze ▸ Archiviazione ▸ Privacy</i>."
 
 #: ../src/common/sentry.c:118
 msgid "No, thanks"
-msgstr ""
+msgstr "No, grazie"
 
 #: ../src/common/sentry.c:119
 msgid "Yes, send crash reports"
-msgstr ""
+msgstr "Sì, invia report sui crash"
 
 #: ../src/common/styles.c:251
 #, c-format
@@ -7002,9 +7061,8 @@ msgstr "OK"
 
 #. Wire shapes toggle button
 #: ../src/develop/blend_gui.c:2235 ../src/develop/blend_gui.c:3778
-#, fuzzy
 msgid "Attach shapes"
-msgstr "Forme"
+msgstr "Collega forme"
 
 #: ../src/develop/blend_gui.c:2280 ../src/develop/masks/masks_gui.c:783
 msgid "Operation"
@@ -7043,27 +7101,35 @@ msgid "Move Down"
 msgstr "Sposta giù"
 
 #: ../src/develop/blend_gui.c:2376
-#, fuzzy, c-format
+#, c-format
 msgid "Permanently delete the shape '%s'?"
-msgstr "Eliminare la forma '%s' ?"
+msgstr "Eliminare definitivamente la forma '%s' ?"
 
 #: ../src/develop/blend_gui.c:2379
 msgid ""
 "It will be detached from this mask and removed from the list of available "
 "shapes."
 msgstr ""
+"Verrà separato da questa maschera e rimosso dall'elenco delle"
+"forme disponibili."
 
 #: ../src/develop/blend_gui.c:2514
 msgid ""
 "Detach this shape from the mask. The shape is kept and stays available for "
 "reuse."
 msgstr ""
+"Stacca questa forma dalla maschera. La forma viene conservata e rimane disponi"
+"bile per"
+"essere riutilizzata."
 
 #: ../src/develop/blend_gui.c:2516
 msgid ""
 "Permanently delete this shape. It is detached from the mask and removed from "
 "the list of available shapes."
 msgstr ""
+"Elimina definitivamente questa forma. Verrà staccata dalla maschera e rimossa "
+"dall'"
+"elenco delle forme disponibili."
 
 #: ../src/develop/blend_gui.c:2936
 msgid "reset to default blend colorspace"
@@ -7323,6 +7389,8 @@ msgid ""
 "<i>Parametric masking is disabled because the <b>%s</b> module does not "
 "provide compatible color channels.</i>"
 msgstr ""
+"<i>Le maschere parametriche sono disabilitate perché il modulo <b>%s</b> non"
+"fornisce canali di colore compatibili.</i>"
 
 #: ../src/develop/blend_gui.c:3617
 #, c-format
@@ -7362,9 +7430,8 @@ msgstr ""
 "disconnettere dalla maschera."
 
 #: ../src/develop/blend_gui.c:3859
-#, fuzzy
 msgid "Brush options"
-msgstr "Opzioni"
+msgstr "Opzioni pennello"
 
 #: ../src/develop/blend_gui.c:3875
 #, c-format
@@ -7372,6 +7439,9 @@ msgid ""
 "<i>Drawn masking is disabled because the <b>%s</b> module manages drawn "
 "shapes internally.</i>"
 msgstr ""
+"<i>Le maschere disegnate sono disabilitate perché il modulo <b>%s</b> gestisce"
+" internamente"
+"le forme disegnate.</i>"
 
 #: ../src/develop/blend_gui.c:4013 ../src/develop/imageop.c:2589
 msgid "raster mask"
@@ -7382,9 +7452,8 @@ msgid "toggle polarity of raster mask"
 msgstr "Commuta polarità della maschera raster"
 
 #: ../src/develop/blend_gui.c:4100
-#, fuzzy
 msgid "Disable"
-msgstr "Disabilitato"
+msgstr "Disabilita"
 
 #. NOTE: we should enable the accel only if the module is disable-able, but this property is set at runtime
 #. in reload_defaults(), which depends on the image metadata for each pipeline.
@@ -7396,9 +7465,9 @@ msgid "Enable"
 msgstr "Abilita"
 
 #: ../src/develop/blend_gui.c:4117
-#, fuzzy, c-format
+#, c-format
 msgid "Enable in <b>%s%s</b>"
-msgstr "Abilita la fusione/maschera in <b>%s%s</b>"
+msgstr "Abilita in <b>%s%s</b>"
 
 #: ../src/develop/blend_gui.c:4647
 msgid "display mask and/or color channel"
@@ -7416,26 +7485,25 @@ msgstr ""
 "selezionare il canale da visualizzare"
 
 #: ../src/develop/blend_gui.c:4667
-#, fuzzy
 msgid "Blend mode"
 msgstr "Modalità di fusione"
 
 #: ../src/develop/blend_gui.c:4675
-#, fuzzy
 msgid "Compositing"
-msgstr "Impostazioni mappa"
+msgstr "Composizione"
 
 #: ../src/develop/blend_gui.c:4676
 msgid "Output over input"
-msgstr ""
+msgstr "Uscita rispetto all'ingresso"
 
 #: ../src/develop/blend_gui.c:4678
 msgid "Input over output"
-msgstr ""
+msgstr "Ingresso rispetto all'uscita"
 
 #: ../src/develop/blend_gui.c:4682
 msgid "choose compositing order: which layer is placed on top"
 msgstr ""
+"Scegli l'ordine di composizione: quale livello va posizionato in primo piano"
 
 #: ../src/develop/blend_gui.c:4693 ../src/libs/history.c:476
 msgid "blend fulcrum"
@@ -7447,24 +7515,22 @@ msgstr "Regola il fulcro utilizzato da alcuni operatori di fusione"
 
 #. mask combine control: how to combine drawn/parametric masks
 #: ../src/develop/blend_gui.c:4703
-#, fuzzy
 msgid "Combine drawn & parametric"
-msgstr "Maschera parametrica e disegnata"
+msgstr "Combina disegnate & parametriche"
 
 #: ../src/develop/blend_gui.c:4704
-#, fuzzy
 msgid "how to combine drawn and parametric masks"
-msgstr "Maschera parametrica e disegnata"
+msgstr "Come combinare maschere disegnate e parametriche"
 
 #. mask invert control: single checkbox to invert masks
 #: ../src/develop/blend_gui.c:4711
-#, fuzzy
 msgid "Invert mask"
 msgstr "Inverti la maschera"
 
 #: ../src/develop/blend_gui.c:4712
 msgid "invert the resulting mask (apply mask in inverted mode)"
 msgstr ""
+"Invertire la maschera risultante (applicare la maschera in modalità invertita)"
 
 #. Add opacity/scale sliders to table
 #: ../src/develop/blend_gui.c:4723 ../src/iop/watermark.c:1190
@@ -7519,9 +7585,8 @@ msgid "spatial radius of feathering"
 msgstr "Estensione spaziale della sfumatura"
 
 #: ../src/develop/blend_gui.c:4773
-#, fuzzy
 msgid "Feathering mask opacity"
-msgstr "Opacità maschera"
+msgstr "Sfumare opacità maschera"
 
 #: ../src/develop/blend_gui.c:4775
 msgid ""
@@ -7532,9 +7597,8 @@ msgstr ""
 "luminosità senza interferire con le zone completamente trasparenti od opache"
 
 #: ../src/develop/blend_gui.c:4785
-#, fuzzy
 msgid "Feathering mask contrast"
-msgstr "Contrasto maschera"
+msgstr "Sfumare contrasto maschera"
 
 #: ../src/develop/blend_gui.c:4787
 msgid ""
@@ -7564,9 +7628,8 @@ msgstr "Parametrica"
 
 #. Contours page
 #: ../src/develop/blend_gui.c:4828
-#, fuzzy
 msgid "Contours"
-msgstr "Contributori"
+msgstr "Contorni"
 
 #: ../src/develop/dev_history.c:1236
 #, c-format
@@ -7785,6 +7848,8 @@ msgstr ""
 #: ../src/develop/pixelpipe_gpu.c:662
 msgid "OpenCL failed for module `%s`: image buffer needs %"
 msgstr ""
+"OpenCL ha generato un errore per il modulo `%s`: il buffer dell'immagine richi"
+"ede %"
 
 #: ../src/develop/masks/brush.c:1332
 #, c-format
@@ -8083,9 +8148,8 @@ msgid "Move down"
 msgstr "Sposta giù"
 
 #: ../src/develop/masks/masks_gui.c:816
-#, fuzzy
 msgid "Done shape creation"
-msgstr "Saturazione mezzi-toni"
+msgstr "Creazione della forma completata"
 
 #: ../src/develop/masks/masks_gui.c:824
 msgid "Delete node"
@@ -8596,7 +8660,7 @@ msgstr "Sans %s"
 
 #: ../src/gui/gtk.c:2760 ../src/gui/gtk.c:2853
 msgid "Drag to resize"
-msgstr ""
+msgstr "Trascina per ridimensionare"
 
 #: ../src/gui/gtkentry.c:200
 msgid "$(FOLDER.NAME) - name of the folder containing the input image"
@@ -9171,26 +9235,24 @@ msgstr "Preferenze Ansel"
 
 #: ../src/gui/preferences.c:689
 msgid "Enable or disable OpenCL processing for this GPU"
-msgstr ""
+msgstr "Abilita o disabilita l'elaborazione OpenCL per questa GPU"
 
 #: ../src/gui/preferences.c:694
 msgid "pinned memory"
-msgstr ""
+msgstr "Memoria bloccata"
 
 #: ../src/gui/preferences.c:705
 msgid "Use pinned host memory for OpenCL transfers on this GPU"
 msgstr ""
+"Utilizza la memoria host bloccata per i trasferimenti OpenCL su questa GPU"
 
 #: ../src/gui/preferences.c:710
 msgid "GPU vRAM headroom (MiB)"
 msgstr "Spazio di memoria per la vRAM GPU (MiB)"
 
 #: ../src/gui/preferences.c:722
-#, fuzzy
 msgid "GPU memory reserved for the system and other applications"
-msgstr ""
-"Ammontare della memoria che Ansel riserverà per il sistema operativo e per "
-"le altre applicazioni"
+msgstr "Memoria della GPU riservata al sistema e ad altre applicazioni"
 
 #: ../src/gui/preferences.c:744
 msgid "Ansel needs to be restarted for settings to take effect"
@@ -9653,23 +9715,20 @@ msgstr "Mostra sempre"
 
 #. Submenu embedded JPEG
 #: ../src/gui/actions/display.c:515
-#, fuzzy
 msgid "Thumbnail source"
-msgstr "_Miniature"
+msgstr "Sorgente miniatura"
 
 #: ../src/gui/actions/display.c:517
-#, fuzzy
 msgid "Always process the RAW"
-msgstr "Sempre: non processare mai il raw"
+msgstr "Processa sempre il RAW"
 
 #: ../src/gui/actions/display.c:519
 msgid "Use embedded JPG if unedited"
-msgstr ""
+msgstr "Usa il JPG incorporato per immagini non elaborate"
 
 #: ../src/gui/actions/display.c:521
-#, fuzzy
 msgid "Always use embedded JPG"
-msgstr "Visualizza JPEG incorporato"
+msgstr "Usa sempre il JPG incorporato"
 
 #: ../src/gui/actions/display.c:524
 msgid "Collapse grouped images"
@@ -9713,14 +9772,12 @@ msgid "Paste needs selected images to work"
 msgstr "Puoi incollare solo se hai delle immagini selezionate"
 
 #: ../src/gui/actions/edit.c:236
-#, fuzzy
 msgid "Paste history — merge settings"
-msgstr "Incolla sviluppo (parziale)..."
+msgstr "Incolla cronologia — unisci impostazioni"
 
 #: ../src/gui/actions/edit.c:267
-#, fuzzy
 msgid "Paste history (parts) — merge settings"
-msgstr "Incolla sviluppo (parziale)..."
+msgstr "Incolla cronologia (parziale) — unisci impostazioni"
 
 #: ../src/gui/actions/edit.c:304
 msgid "open sidecar file"
@@ -9781,6 +9838,9 @@ msgid ""
 "Paste copied history BEFORE the current history.\n"
 "CURRENT EDITS are applied afterwards and win conflicts."
 msgstr ""
+"Incolla la cronologia copiata PRIMA della cronologia corrente.\n"
+"Le MODIFICHE CORRENTI vengono applicate successivamente e hanno la precedenza "
+"in caso di conflitti."
 
 #: ../src/gui/actions/edit.c:520 ../src/gui/actions/styles.c:411
 msgid "Append"
@@ -9791,6 +9851,9 @@ msgid ""
 "Paste copied history AFTER the current history.\n"
 "COPIED EDITS are applied afterwards and win conflicts."
 msgstr ""
+"Incolla la cronologia copiata DOPO la cronologia corrente.\n"
+"Le MODIFICHE COPIATE vengono applicate successivamente e hanno la precedenza i"
+"n caso di conflitti."
 
 #: ../src/gui/actions/edit.c:526 ../src/gui/actions/styles.c:417
 msgid "Replace"
@@ -9800,6 +9863,7 @@ msgstr "Sostituisci"
 msgid ""
 "Discard the current history and replace it entirely with the copied history."
 msgstr ""
+"Elimina la cronologia attuale e sostituiscila interamente con quella copiata."
 
 #: ../src/gui/actions/edit.c:531 ../src/gui/actions/styles.c:422
 msgid "Nodes pasting mode"
@@ -9811,7 +9875,7 @@ msgstr "Copia ordinamento moduli"
 
 #: ../src/gui/actions/edit.c:537
 msgid "Ask merge settings before paste"
-msgstr ""
+msgstr "Chiedi conferma unione prima di incollare"
 
 #: ../src/gui/actions/edit.c:542
 msgid "Load history from XMP..."
@@ -10078,49 +10142,40 @@ msgid "Ungroup images"
 msgstr "Scollega immagini raggruppate"
 
 #: ../src/gui/actions/run.c:126
-#, fuzzy
 msgid "Preloading cache (up to 360x225 px) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 360x225 px) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:131
-#, fuzzy
 msgid "Preloading cache (up to 720x450 px) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 720x450 px) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:136
-#, fuzzy
 msgid "Preloading cache (up to 1440x900 px) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 1440x900 px) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:141
-#, fuzzy
 msgid "Preloading cache (up to Full HD 1080p) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a Full HD 1080p) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:146
-#, fuzzy
 msgid "Preloading cache (up to 2560x1440 px) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 2560x1440 px) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:151
-#, fuzzy
 msgid "Preloading cache (up to 4K/UHD) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 4K/UHD) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:156
-#, fuzzy
 msgid "Preloading cache (up to 5K) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 5K) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:161
-#, fuzzy
 msgid "Preloading cache (up to 6K) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 6K) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:166
-#, fuzzy
 msgid "Preloading cache (up to 8K) for current collection"
-msgstr "Pre-carico la cache della collezione attuale"
+msgstr "Pre-carico la cache (fino a 8K) della raccolta attuale"
 
 #: ../src/gui/actions/run.c:177
 msgid "Preloading cache for current collection"
@@ -10138,43 +10193,43 @@ msgstr "Pre-carica miniature selezionate nella cache"
 #. Add mipmap size options to the submenu
 #: ../src/gui/actions/run.c:210
 msgid "up to 360x225 px"
-msgstr ""
+msgstr "fino a 360x225 px"
 
 #: ../src/gui/actions/run.c:211
 msgid "up to 720x450 px"
-msgstr ""
+msgstr "fino a 720x450 px"
 
 #: ../src/gui/actions/run.c:212
 msgid "up to 1440x900 px"
-msgstr ""
+msgstr "fino a 1440x900 px"
 
 #: ../src/gui/actions/run.c:213
 msgid "up to Full HD 1080p"
-msgstr ""
+msgstr "fino a Full HD 1080p"
 
 #: ../src/gui/actions/run.c:214
 msgid "up to 2560x1440 px"
-msgstr ""
+msgstr "fino a 2560x1440 px"
 
 #: ../src/gui/actions/run.c:215
 msgid "up to 4K/UHD"
-msgstr ""
+msgstr "fino a 4K/UHD"
 
 #: ../src/gui/actions/run.c:216
 msgid "up to 5K"
-msgstr ""
+msgstr "fino a 5K"
 
 #: ../src/gui/actions/run.c:217
 msgid "up to 6K"
-msgstr ""
+msgstr "fino a 6K"
 
 #: ../src/gui/actions/run.c:218
 msgid "up to 8K"
-msgstr ""
+msgstr "fino a 8K"
 
 #: ../src/gui/actions/run.c:220
 msgid "for current grid size"
-msgstr ""
+msgstr "per la dimensione attuale della griglia"
 
 #: ../src/gui/actions/run.c:222
 msgid "Purge selected thumbnails from cache"
@@ -10190,16 +10245,15 @@ msgstr "Backup della libreria"
 
 #: ../src/gui/actions/run.c:227
 msgid "Synchronize developments from XMP to database"
-msgstr ""
+msgstr "Sincronizzare gli aggiornamenti da XMP al database"
 
 #: ../src/gui/actions/run.c:228
 msgid "Synchronize developments from database to XMP"
-msgstr ""
+msgstr "Sincronizza le modifiche dal database a XMP"
 
 #: ../src/gui/actions/run.c:230
-#, fuzzy
 msgid "Resynchronize local copies with distant XMP"
-msgstr "Ri-sincronizza il database con gli XMP remoti per le copie locali"
+msgstr "Ri-sincronizza le copie locali con l'XMP remoto"
 
 #: ../src/gui/actions/select.c:73
 msgid "Clear selection"
@@ -10216,7 +10270,7 @@ msgstr "Torna alla selezione"
 #: ../src/gui/actions/styles.c:56
 #, c-format
 msgid "Apply style \"%s\" — merge settings"
-msgstr ""
+msgstr "Applica lo stile “%s” — unisci le impostazioni"
 
 #: ../src/gui/actions/styles.c:138
 msgid "Ansel - Styles"
@@ -10231,20 +10285,27 @@ msgid ""
 "Apply style BEFORE the current history.\n"
 "CURRENT EDITS are applied afterwards and win conflicts."
 msgstr ""
+"Applica lo stile PRIMA della cronologia corrente.\n"
+"Le MODIFICHE CORRENTI vengono applicate in seguito e hanno la precedenza in ca"
+"so di conflitti."
 
 #: ../src/gui/actions/styles.c:414
 msgid ""
 "Apply style AFTER the current history.\n"
 "STYLE EDITS are applied afterwards and win conflicts."
 msgstr ""
+"Applica lo stile DOPO la cronologia corrente.\n"
+"Le MODIFICHE ALLO STILE vengono applicate successivamente e hanno la precedenz"
+"a in caso di conflitti."
 
 #: ../src/gui/actions/styles.c:420
 msgid "Discard the current history and replace it entirely with the style."
 msgstr ""
+"Elimina la cronologia attuale e sostituiscila interamente con lo stile."
 
 #: ../src/gui/actions/styles.c:428
 msgid "Ask merge settings before apply"
-msgstr ""
+msgstr "Chiedi conferma delle impostazioni di unione prima dell'applicazione"
 
 #: ../src/gui/actions/styles.c:432
 msgid "Create new style..."
@@ -10257,7 +10318,7 @@ msgstr "Gestisci stili..."
 #: ../src/gui/window_manager.c:418 ../src/gui/window_manager.c:449
 #: ../src/gui/window_manager.c:509
 msgid "Drag to resize panel"
-msgstr ""
+msgstr "Trascina per ridimensionare il pannello"
 
 #: ../src/gui/window_manager.c:668
 msgid "_File"
@@ -12473,6 +12534,8 @@ msgstr "Ho terminato il calcolo del bilanciamento del bianco"
 #: ../src/iop/channelmixerrgb.c:2493
 msgid "Error: No color data available for the selected chart."
 msgstr ""
+"Errore: non sono disponibili dati relativi ai colori per la tabella selezionat"
+"a."
 
 #: ../src/iop/channelmixerrgb.c:3605
 #, c-format
@@ -12992,24 +13055,24 @@ msgstr "Calibra con un color checker"
 #: ../src/iop/channelmixerrgb.c:5165
 #, c-format
 msgid "'%s'"
-msgstr ""
+msgstr "'%s'"
 
 #: ../src/iop/channelmixerrgb.c:5170
-#, fuzzy
 msgid "Chart"
-msgstr "Diagramma"
+msgstr "Tabella"
 
 #: ../src/iop/channelmixerrgb.c:5173
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "Choose the vendor and the type of your chart.\n"
 ".cht files in %s."
-msgstr "Scegli il venditore ed il tipo del tuo diagramma"
+msgstr ""
+"Scegli il fornitore e il tipo della tua tabella.\n"
+"File .cht in %s."
 
 #: ../src/iop/channelmixerrgb.c:5180
-#, fuzzy
 msgid "Chart color"
-msgstr "Colore finale"
+msgstr "Colore tabella"
 
 #: ../src/iop/channelmixerrgb.c:5184
 #, c-format
@@ -13017,6 +13080,8 @@ msgid ""
 "Choose the definition of your chart.\n"
 "CGATS.17 files in %s."
 msgstr ""
+"Scegli la definizione della tua tabella.\n"
+"File CGATS.17 in %s."
 
 #: ../src/iop/channelmixerrgb.c:5190
 #, c-format
@@ -13024,6 +13089,8 @@ msgid ""
 "<i>No CGATS.17 color file matches the selected chart.\n"
 "Add a compatible CGATS.17 file to <b>%s</b>.</i>"
 msgstr ""
+"<i>Nessun file di colori CGATS.17 corrisponde alla tabella selezionata.\n"
+"Aggiungi un file CGATS.17 compatibile a <b>%s</b>.</i>"
 
 #: ../src/iop/channelmixerrgb.c:5203
 msgid "optimize for"
@@ -13338,9 +13405,8 @@ msgid "color saturation adjustment"
 msgstr "Regolazione saturazione colore"
 
 #: ../src/iop/colorbalance.c:178
-#, fuzzy
 msgid "color balance (legacy)"
-msgstr "Bilanciamento colore RGB"
+msgstr "Bilanciamento colore (vers. prec.)"
 
 #: ../src/iop/colorbalance.c:183
 msgid "lift gamma gain|cdl|color grading|contrast|saturation|hue"
@@ -13519,9 +13585,8 @@ msgid "optimize the RGB curves to remove color casts"
 msgstr "Ottimizza le curve RGB per rimuovere le dominanti di colore"
 
 #: ../src/iop/colorbalancergb.c:194
-#, fuzzy
 msgid "color _balance"
-msgstr "bilanciamento colore"
+msgstr "color _balance"
 
 #: ../src/iop/colorbalancergb.c:199
 msgid ""
@@ -13533,7 +13598,7 @@ msgstr ""
 
 #: ../src/iop/colorbalancergb.c:472
 msgid "add basic colorfulness (legacy)"
-msgstr "Aggiungi colorazione di base (legacy)"
+msgstr "Aggiungi colorazione di base (vers. prec.)"
 
 #: ../src/iop/colorbalancergb.c:481
 msgid "basic colorfulness: natural skin"
@@ -13826,7 +13891,7 @@ msgstr "Campione"
 
 #: ../src/iop/colorchecker.c:1329
 msgid "color checker patch"
-msgstr "Campione per il color checker"
+msgstr "Campione per il colorchecker"
 
 #: ../src/iop/colorchecker.c:1340
 msgid ""
@@ -15210,9 +15275,8 @@ msgid "the desired target exposure after mapping"
 msgstr "L'esposizione desiderata dopo la mappatura"
 
 #: ../src/iop/filmic.c:179
-#, fuzzy
 msgid "filmic (legacy)"
-msgstr "Filmic RGB"
+msgstr "Filmic (vers. prec.)"
 
 #: ../src/iop/filmic.c:194
 msgid "this module is deprecated. better use filmic rgb module instead."
@@ -15473,9 +15537,8 @@ msgstr ""
 "esattamente che cosa stia facendo!"
 
 #: ../src/iop/filmicrgb.c:356
-#, fuzzy
 msgid "fil_mic"
-msgstr "Filmic RGB"
+msgstr "fil_mic"
 
 #: ../src/iop/filmicrgb.c:361
 msgid "tone mapping|curve|view transform|contrast|saturation|highlights"
@@ -16474,7 +16537,7 @@ msgstr "Quali correzioni sono state effettivamente eseguite"
 
 #: ../src/iop/levels.c:139
 msgid "levels (legacy)"
-msgstr ""
+msgstr "Livelli (vers. prec.)"
 
 #: ../src/iop/levels.c:167
 msgid "adjust black, white and mid-gray points"
@@ -16611,13 +16674,13 @@ msgid "draw multiple points"
 msgstr "Disegna punti multipli"
 
 #: ../src/iop/liquify.c:3954
-#, fuzzy
 msgid ""
 "drag: move segment - ctrl+click: add node - right click: remove path\n"
 "ctrl+alt+click: toggle line/curve"
 msgstr ""
-"Ctrl+click: aggiungi nodo - click destro: rimuovi segmento\n"
-"Ctrl+Alt+click: alterna linea/curva"
+"Trascina: sposta il segmento - Ctrl+Click: aggiungi nodo - Click destro: rimuo"
+"vi tracciato\n"
+"Ctrl+Alt+Click: alterna linea/curva"
 
 #: ../src/iop/liquify.c:3956
 msgid ""
@@ -17929,9 +17992,8 @@ msgid "the mix of effect"
 msgstr "Fusione dell'effetto"
 
 #: ../src/iop/splittoning.c:119
-#, fuzzy
 msgid "split-toning (legacy)"
-msgstr "divisione dei toni"
+msgstr "Divisione dei toni (vers. prec.)"
 
 #: ../src/iop/splittoning.c:139
 msgid ""
@@ -18749,66 +18811,55 @@ msgid "uncategorized"
 msgstr "Senza categoria"
 
 #: ../src/libs/collect.c:1840
-#, fuzzy
 msgid "select the new location of this folder"
-msgstr "Seleziona la tonalità del filtro"
+msgstr "Seleziona la nuova posizione di questa cartella"
 
 #: ../src/libs/collect.c:1840
-#, fuzzy
 msgid "select the new parent folder"
-msgstr "Seleziona la tonalità della tinta"
+msgstr "Seleziona la nuova cartella principale"
 
 #: ../src/libs/collect.c:1873
-#, fuzzy
 msgid "problem selecting new path for the folder"
-msgstr "Problema selezionando il nuovo percorso per il rullino in %s"
+msgstr "Problema nella selezione del nuovo percorso per la cartella"
 
 #: ../src/libs/collect.c:1881
-#, fuzzy, c-format
+#, c-format
 msgid "Delete %d tag and detach it from all images?"
 msgid_plural "Delete %d tags and detach them from all images?"
-msgstr[0] "Rimuovi etichetta dalle immagini selezionate"
-msgstr[1] "Rimuovi etichetta dalle immagini selezionate"
+msgstr[0] "Cancellare l'etichetta %d e scollegarla da tutte le immagini?"
+msgstr[1] "Cancellare le etichette %d e scollegarle da tutte le immagini?"
 
 #: ../src/libs/collect.c:1884 ../src/libs/tagging.c:2177
-#, fuzzy
 msgid "delete tags"
-msgstr "Elimina etichetta"
+msgstr "Elimina etichette"
 
 #: ../src/libs/collect.c:1906
-#, fuzzy
 msgid "rename tag"
-msgstr "Crea etichetta"
+msgstr "Rinomina etichetta"
 
 #: ../src/libs/collect.c:1971
-#, fuzzy
 msgid "pre-rendering thumbnails"
-msgstr "Preserva i dettagli"
+msgstr "Pre-renderzzazione delle miniature"
 
 #: ../src/libs/collect.c:2002
-#, fuzzy
 msgid "remove from library..."
-msgstr "Rimuovi dalla libreria"
+msgstr "Rimuovi dalla libreria..."
 
 #: ../src/libs/collect.c:2003
-#, fuzzy
 msgid "relocate..."
-msgstr "Crea..."
+msgstr "Sposta..."
 
 #: ../src/libs/collect.c:2004
-#, fuzzy
 msgid "delete tag(s)..."
-msgstr "Elimina etichetta"
+msgstr "Elimina etichetta/e..."
 
 #: ../src/libs/collect.c:2005
-#, fuzzy
 msgid "rename tag..."
-msgstr "Crea etichetta..."
+msgstr "Rinomina etichetta..."
 
 #: ../src/libs/collect.c:2006
-#, fuzzy
 msgid "pre-render thumbnails"
-msgstr "Preserva i dettagli"
+msgstr "Pre-renderizza le miniature"
 
 #: ../src/libs/collect.c:2056
 #, c-format
@@ -18823,11 +18874,19 @@ msgid_plural ""
 "\n"
 "Files are moved on disk."
 msgstr[0] ""
+"Spostare fisicamente %d immagine in\n"
+"%s ?\n"
+"\n"
+"I file vengono spostati sul disco."
 msgstr[1] ""
+"Spostare fisicamente %d immagini in\n"
+"%s ?\n"
+"\n"
+"I file vengono spostati sul disco."
 
 #: ../src/libs/collect.c:2070
 msgid "could not access the destination folder"
-msgstr ""
+msgstr "Non è stato possibile accedere alla cartella di destinazione"
 
 #: ../src/libs/collect.c:2206
 msgid "use <, <=, >, >=, <>, =, [;] as operators"
@@ -18884,9 +18943,11 @@ msgstr ""
 "Ctrl+click per includere solo le sotto località (suffisso `|%')"
 
 #: ../src/libs/collect.c:2233
-#, fuzzy, c-format
+#, no-c-format
 msgid "use `%' as wildcard and append `*' to match sub-folders"
-msgstr "Usa `%' come jolly e ',' per separare i valori"
+msgstr ""
+"Utilizzare `%' come carattere jolly e aggiungere `*' per includere le sottocar"
+"telle"
 
 #: ../src/libs/collect.c:2236
 #, no-c-format
@@ -18974,34 +19035,30 @@ msgid "Folders"
 msgstr "Cartelle"
 
 #: ../src/libs/collect.c:2936
-#, fuzzy
 msgid "Browse and manage the folders known to Ansel"
-msgstr "Sfoglia il contenuto delle cartelle conosciute da Ansel"
+msgstr "Sfoglia e gestisci le cartelle riconosciute da Ansel"
 
 #: ../src/libs/collect.c:2937
 msgid "Browse and manage tags"
-msgstr ""
+msgstr "Sfoglia e gestisci le etichette"
 
 #: ../src/libs/collect.c:2938
 msgid "Queries"
 msgstr "Interrogazioni"
 
 #: ../src/libs/collect.c:2938
-#, fuzzy
 msgid "Build arbitrary collections"
-msgstr "Ricarica collezione corrente"
+msgstr "Creare raccolte arbitrarie"
 
 #: ../src/libs/collect.c:2971
-#, fuzzy
 msgid "comparison operator"
-msgstr "Tipo di compressione"
+msgstr "Operatore di confronto"
 
 #: ../src/libs/collect.c:2996
 msgid "include sub-folders"
-msgstr ""
+msgstr "Includi sotto-cartelle"
 
 #: ../src/libs/collect.c:3002
-#, fuzzy
 msgid "sort by"
 msgstr "Ordina per"
 
@@ -19010,34 +19067,31 @@ msgid "id"
 msgstr "ID"
 
 #: ../src/libs/collect.c:3013
-#, fuzzy
 msgid "toggle ascending / descending order"
-msgstr "Commuta l'ordine di miscelazione"
+msgstr "Commuta l'ordinamento crescente/decrescente"
 
 #: ../src/libs/collect.c:3019
-#, fuzzy
 msgid "number of folder levels to show in film-roll names, from the right"
 msgstr ""
-"Numero di livelli di cartella da mostrare nel nome del rullino, iniziando da "
-"destra"
+"Numero di livelli di cartelle da visualizzare nei nomi dei rullini, partendo d"
+"a destra"
 
 #: ../src/libs/collect.c:3026
-#, fuzzy
 msgid "no 'uncategorized' group"
-msgstr "Senza categoria"
+msgstr "Nessun gruppo “senza categoria”"
 
 #: ../src/libs/collect.c:3028
-#, fuzzy
 msgid "do not group childless tags under an 'uncategorized' entry"
-msgstr "Non impostare la voce 'senza categoria' per le etichette"
+msgstr ""
+"Non raggruppare i tag senza sotto-categorie nella voce “senza categoria”"
 
 #: ../src/libs/collect.c:3035
 msgid "edit as raw SQL"
-msgstr ""
+msgstr "Modifica come SQL grezzo"
 
 #: ../src/libs/collect.c:3040
 msgid "SQL WHERE expression, e.g. iso > 800 AND lens LIKE '%50mm%'"
-msgstr ""
+msgstr "Espressione WHERE in SQL, ad esempio: iso > 800 AND lens LIKE '%50mm%'"
 
 #: ../src/libs/duplicate.c:79
 msgid "Duplicates"
@@ -19642,7 +19696,7 @@ msgstr "Grafici"
 
 #: ../src/libs/histogram.c:1885
 msgid "Restricted"
-msgstr ""
+msgstr "Ristretto"
 
 #: ../src/libs/histogram.c:2727
 msgid ""
@@ -19702,7 +19756,7 @@ msgstr "Vettorscopio"
 
 #: ../src/libs/histogram.c:2943
 msgid "Drag to resize the scope vertically"
-msgstr ""
+msgstr "Trascina per ridimensionare il grafico verticalmente"
 
 #: ../src/libs/histogram.c:2951
 msgid "Color picker"
@@ -20228,14 +20282,12 @@ msgid "Cleanup unused shapes"
 msgstr "Elimina forme inutilizzate"
 
 #: ../src/libs/masks.c:1945
-#, fuzzy
 msgid "Mask Manager Panel"
-msgstr "Gestore maschere"
+msgstr "Pannello Gestione Maschere"
 
 #: ../src/libs/masks.c:1975
-#, fuzzy
 msgid "Open mask manager..."
-msgstr "Gestore maschere"
+msgstr "Apri il gestore maschere..."
 
 #: ../src/libs/metadata.c:90
 msgid "Metadata"
@@ -20442,7 +20494,7 @@ msgstr "Applicata preimpostazione auto-applicante"
 
 #: ../src/libs/metadata_view.c:381
 msgid "legacy flag. set for all new images"
-msgstr "Etichetta ricorsiva. impostata per tutte le nuove immagini"
+msgstr "Etichetta precedente. Impostata per tutte le nuove immagini"
 
 #: ../src/libs/metadata_view.c:383
 msgid "has .txt"
@@ -21055,18 +21107,16 @@ msgid "attach tag to all"
 msgstr "Allega etichetta a tutte le immagini"
 
 #: ../src/libs/tagging.c:1217
-#, fuzzy
 msgid "detach tags"
-msgstr "Rimuovi etichetta"
+msgstr "Rimuovi etichette"
 
 #: ../src/libs/tagging.c:1217
 msgid "detach tag"
 msgstr "Rimuovi etichetta"
 
 #: ../src/libs/tagging.c:1222
-#, fuzzy
 msgid "detach all tags"
-msgstr "Rimuovi etichetta"
+msgstr "Rimuovi tutte le etichette"
 
 #: ../src/libs/tagging.c:1461
 msgid "delete node?"
@@ -21173,7 +21223,7 @@ msgid "delete tag?"
 msgstr "Eliminare etichetta?"
 
 #: ../src/libs/tagging.c:2092
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "do you really want to delete %d tag?\n"
 "%d image is assigned these tags!"
@@ -21181,11 +21231,11 @@ msgid_plural ""
 "do you really want to delete %d tags?\n"
 "%d images are assigned these tags!"
 msgstr[0] ""
-"Vuoi veramente eliminare l'etichetta '%s'?\n"
+"Vuoi veramente eliminare %d etichetta?\n"
 "A %d immagine è assegnata questa etichetta!"
 msgstr[1] ""
-"Vuoi veramente eliminare l'etichetta '%s'?\n"
-"A %d immagini è assegnata questa etichetta!"
+"Vuoi veramente eliminare %d etichette?\n"
+"A %d immagini sono assegnate queste etichette!"
 
 #: ../src/libs/tagging.c:2117
 #, c-format
@@ -21264,12 +21314,10 @@ msgid "drop to root"
 msgstr "Drop to root"
 
 #: ../src/libs/tagging.c:3103
-#, fuzzy
 msgid "view"
-msgstr "Viste"
+msgstr "Vista"
 
 #: ../src/libs/tagging.c:3104
-#, fuzzy
 msgid "list"
 msgstr "Elenco"
 
@@ -21280,25 +21328,23 @@ msgstr "Albero"
 #: ../src/libs/tagging.c:3109
 msgid "show the attached tags as a flat list or as a hierarchical tree"
 msgstr ""
+"Visualizza le etichette associate come elenco piatto o come albero gerarchico"
 
 #: ../src/libs/tagging.c:3115 ../src/libs/tools/filter.c:698
 msgid "Sort by"
 msgstr "Ordina per"
 
 #: ../src/libs/tagging.c:3117
-#, fuzzy
 msgid "count"
-msgstr "Calcolo"
+msgstr "Conteggio"
 
 #: ../src/libs/tagging.c:3120
-#, fuzzy
 msgid "sort the tags by name or by image count"
-msgstr "Commuta ordinamento per nome o per conteggio"
+msgstr "Ordina le etichette per nome o per numero di immagini"
 
 #. NB: liststore and treestore are not unref'd here — d keeps a ref on each so they
 #. both survive while the view switches between list and tree mode (freed in gui_cleanup)
 #: ../src/libs/tagging.c:3179
-#, fuzzy
 msgid ""
 "attached tags,\n"
 "click the trash icon, press Delete or double-click to detach\n"
@@ -21306,34 +21352,34 @@ msgid ""
 "press Tab to give the focus to entry,\n"
 "ctrl-wheel scroll to resize the window"
 msgstr ""
-"Etichette allegate,\n"
-"premi Canc o fai doppio Click per scollegare\n"
-"Click destro per altre azioni sulle etichette collegate,\n"
-"premi Tab per dare ad un elemento il fuoco,\n"
-"Ctrl+rotella del mouse per ridimensionare la finestra"
+"Etichette associate,\n"
+"fare Click sull'icona del cestino, premere Canc o fare doppio clic per rimuove"
+"rle\n"
+"selezionare più etichette e fare Click-destro per rimuoverle in blocco,\n"
+"premere il tasto Tab per spostare il focus sulla voce,\n"
+"scorrere con la rotellina del mouse tenendo premuto Ctrl per ridimensionare la"
+" finestra"
 
 #. no widget tooltip here: it would pop up over the autocompletion list and hide it
 #: ../src/libs/tagging.c:3208
 msgid "enter or pick a tag, Enter to attach"
-msgstr ""
+msgstr "Inserisci o seleziona un'etichetta, premi Invio per associarla"
 
 #: ../src/libs/tagging.c:3210 ../src/libs/tagging.c:3265
 msgid "clear entry"
 msgstr "Pulisci"
 
 #: ../src/libs/tagging.c:3219
-#, fuzzy
 msgid "attach this tag to the selected images"
-msgstr "Allega etichetta alle immagini selezionate"
+msgstr "Associa questa etichetta alle immagini selezionate"
 
 #: ../src/libs/tagging.c:3248
-#, fuzzy
 msgid "manage tags"
-msgstr "Etichette geografiche"
+msgstr "Gestisci etichette"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
-msgstr ""
+msgstr "Digita per filtrare il dizionario delle etichette qui sotto"
 
 #: ../src/libs/tagging.c:3311
 msgid ""
@@ -21343,6 +21389,11 @@ msgid ""
 "shift+click to fully expand the selected tag,\n"
 "ctrl-scroll to resize the window"
 msgstr ""
+"Dizionario etichette,\n"
+"Click-destro per creare, modificare o eliminare le etichette,\n"
+"seleziona più etichette e Click-destro per eliminarle in blocco,\n"
+"Maiusc+Click per espandere completamente l'etichetta selezionata,\n"
+"Ctrl+scorrimento per ridimensionare la finestra"
 
 #: ../src/libs/tagging.c:3345
 msgid "new"
@@ -21377,36 +21428,37 @@ msgid "suggestion"
 msgstr "Suggerimento"
 
 #: ../src/libs/tagging.c:3373
-#, fuzzy, c-format
+#, no-c-format
 msgid ""
 "level of confidence to include a tag in the suggestions list:\n"
 "0: all associated tags, 99: 99% matching tags,\n"
 "100: only the recently-used tags (faster)"
 msgstr ""
-"Livello di confidenza per includere l'etichetta nella lista dei "
-"suggerimenti, 0: tutte le etichette associate, 99: 99% delle etichette "
-"associate corrispondenti, 100: nessuna etichetta corrispondente, mostra solo "
-"etichette recenti (più veloce)"
+"Livello di affidabilità per l'inclusione di un'etichetta nell'elenco dei sugge"
+"rimenti:\n"
+"0: tutte le etichette associate, 99: etichette con corrispondenza al 99%,\n"
+"100: solo le etichette utilizzate di recente (più veloce)"
 
 #: ../src/libs/tagging.c:3385
-#, fuzzy
 msgid ""
 "number of recently attached tags shown in the suggestions list\n"
 "(-1 disables the recent-tags list)"
 msgstr ""
-"Numero di etichette aggiunte di recente che devono essere incluse nella "
-"lista dei suggerimenti. Il valore '-1' disabilita la lista dei recenti"
+"Numero di etichette aggiunte di recente visualizzate nell'elenco dei suggerime"
+"nti\n"
+"(-1 disattiva l'elenco delle etichette recenti)"
 
 #. "show system tags" checkbox: reveal the tags Ansel manages automatically (Ansel|…)
 #: ../src/libs/tagging.c:3395
-#, fuzzy
 msgid "Show system tags"
-msgstr "Vecchio sistema"
+msgstr "Visualizza etichette di sistema"
 
 #: ../src/libs/tagging.c:3396
 msgid ""
 "show the tags automatically attached by Ansel (names starting with “Ansel|”)"
 msgstr ""
+"Mostra le etichette aggiunte automaticamente da Ansel (nomi che iniziano con “"
+"Ansel|”)"
 
 #: ../src/libs/tagging.c:3424 ../src/libs/tagging.c:3428
 #: ../src/libs/tagging.c:3447 ../src/libs/tagging.c:3450
@@ -21444,9 +21496,8 @@ msgstr ""
 "la visualizzazione lista."
 
 #: ../src/libs/tagging.c:3668
-#, fuzzy
 msgid "manage tags..."
-msgstr "Gestione delle preimpostazioni..."
+msgstr "Gestione etichette..."
 
 #: ../src/libs/tools/filter.c:114
 msgid "captured"
@@ -21660,10 +21711,9 @@ msgstr "Modulo strumenti"
 
 #: ../src/views/darkroom.c:204
 msgid "Autoset is running on selected modules"
-msgstr ""
+msgstr "Autoset è in esecuzione sui moduli selezionati"
 
 #: ../src/views/darkroom.c:205 ../src/views/darkroom.c:2495
-#, fuzzy
 msgid ""
 "Run autoset on selected modules\n"
 "Right click for options"
@@ -21819,9 +21869,8 @@ msgid "Picture margins"
 msgstr "Margini immagine"
 
 #: ../src/views/darkroom.c:2160
-#, fuzzy
 msgid "Rendering size"
-msgstr "Dimensione bordo"
+msgstr "Dimensioni"
 
 #: ../src/views/darkroom.c:2161
 msgid ""
@@ -21832,45 +21881,47 @@ msgid ""
 "Scaled renders at screen resolution and is the best trade-off.\n"
 "Pixel-level accuracy is guaranteed only when zoomed-in at 100%."
 msgstr ""
+"Scegli la dimensione con cui visualizzare l'anteprima principale.\n"
+"L'opzione “Risoluzione completa” visualizza la pipeline alla risoluzione origi"
+"nale non elaborata.\n"
+"Il risultato è perfetto a livello di pixel, soprattutto per quanto riguarda la"
+" riduzione del rumore e della sfocatura, ma è molto"
+"lento.\n"
+"L'opzione “Ridimensionata” visualizza l'immagine alla risoluzione dello scherm"
+"o e rappresenta il miglior compromesso.\n"
+"La precisione a livello di pixel è garantita solo con lo zoom al 100%."
 
 #: ../src/views/darkroom.c:2168
 msgid "full resolution (slow)"
-msgstr ""
+msgstr "risoluzione piena (lento)"
 
 #: ../src/views/darkroom.c:2169
-#, fuzzy
 msgid "scaled (default)"
-msgstr "(Predefinito)"
+msgstr "scalato (predefinito)"
 
 #: ../src/views/darkroom.c:2173
-#, fuzzy
 msgid "Mask preview settings"
 msgstr "Impostazioni maschera di anteprima"
 
 #: ../src/views/darkroom.c:2176
-#, fuzzy
 msgid "Checkerboard color 1"
-msgstr "Scheda di controllo colore 1"
+msgstr "Scheda di calibrazione colore 1"
 
 #: ../src/views/darkroom.c:2187 ../src/views/darkroom.c:2201
-#, fuzzy
 msgid "Select color of the checkerboard from a swatch"
-msgstr "Seleziona il colore della scheda di controllo colore da un campione"
+msgstr "Seleziona il colore della scheda di calibrazione colore da un campione"
 
 #: ../src/views/darkroom.c:2193
-#, fuzzy
 msgid "Checkerboard color 2"
-msgstr "Scheda di controllo colore 2"
+msgstr "Scheda di calibrazione colore 2"
 
 #: ../src/views/darkroom.c:2211
-#, fuzzy
 msgid "Checkerboard size"
-msgstr "Dimensione scheda di controllo colore"
+msgstr "Dimensione scheda di calibrazione colore"
 
 #: ../src/views/darkroom.c:2216
-#, fuzzy
 msgid "Show a greyscaled mask image"
-msgstr "Esportazione come immagine in scala di grigi"
+msgstr "Visualizza un'immagine con maschera in scala di grigi"
 
 #: ../src/views/darkroom.c:2226
 msgid "show the pipeline node graph"
@@ -22447,13 +22498,13 @@ msgstr ""
 "su ciascun livello"
 
 #: ../src/iop/crystgrain.c:1467
-#, fuzzy, c-format
+#, no-c-format
 msgid ""
 "average crystal footprint at 100% zoom, clamped so zooming in does not "
 "enlarge it further"
 msgstr ""
-"Area media del cristallo fissata al 100% di zoom, così che l'ingrandimento "
-"non lo allarghi ulteriormente"
+"Area media del cristallo fissata al 100% di zoom, "
+"così che l'ingrandimento non lo allarghi ulteriormente"
 
 #: ../src/iop/crystgrain.c:1471
 msgid "number of crystal layers stacked through the emulsion"

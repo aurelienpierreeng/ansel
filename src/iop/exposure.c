@@ -55,6 +55,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "develop/iop_profile.h"
 #include "common/conf.h"
 #endif
 
@@ -64,8 +65,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
@@ -73,21 +74,22 @@
 #include "common/logging.h"
 #include "common/module_versioning.h"
 #include "common/histogram.h"
-#include "common/image_cache.h"
-#include "common/mipmap_cache.h"
+#include "caches/image_cache.h"
+#include "caches/mipmap_cache.h"
 #include "common/opencl.h"
-#include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "widgets/collapsible_section.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/pixelpipe.h"
-#include "gui/dtgtk/paint.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
+#include "widgets/label.h"
+#include "gui/screen_metrics.h"
 
 #define exposure2white(x) exp2f(-(x))
 #define white2exposure(x) -dt_log2f(fmaxf(1e-20f, x))
@@ -338,19 +340,19 @@ void init_presets (dt_iop_module_so_t *self)
 static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histogram,
                                          dt_dev_histogram_stats_t *histogram_stats)
 {
-  const dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), self->dev->image_storage.id, 'r');
+  const dt_image_t *img = dt_image_cache_get(self->dev->image_storage.id, 'r');
   dt_image_t image = *img;
-  dt_image_cache_read_release(dt_image_cache_get_global(), img);
+  dt_image_cache_read_release(img);
 
   if(image.dsc.channels != 1 || image.dsc.datatype != TYPE_UINT16) return;
 
   dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(dt_mipmap_cache_get_global(), &buf, self->dev->image_storage.id, DT_MIPMAP_FULL,
+  dt_mipmap_cache_get(&buf, self->dev->image_storage.id, DT_MIPMAP_FULL,
                       DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf))
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image.filename);
-    dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+    dt_mipmap_cache_release(&buf);
     return;
   }
 
@@ -372,7 +374,7 @@ static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histo
                       dt_histogram_helper_cs_RAW_uint16, NULL);
   histogram_stats->ch = 1u;
 
-  dt_mipmap_cache_release(dt_mipmap_cache_get_global(), &buf);
+  dt_mipmap_cache_release(&buf);
 }
 
 /* input: 0 - 65535 (valid range: from black level to white level) */
@@ -431,7 +433,7 @@ static void _compute_correction(dt_iop_module_t *self, dt_iop_params_t *p1,
 static void _process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                   const dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t*)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_exposure_data_t *d = piece->data;
 
   d->black = d->params.black;
@@ -649,7 +651,7 @@ static void _autoexp_disable(dt_iop_module_t *self)
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
 
   if(!dt_image_needs_rawprepare(&self->dev->image_storage)
@@ -734,7 +736,7 @@ static void _exposure_set_white(struct dt_iop_module_t *self, const float white)
   p->exposure = exposure;
   if(p->black >= white) _exposure_set_black(self, white - 0.01);
 
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->exposure, p->exposure);
@@ -754,7 +756,7 @@ static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
     _exposure_set_white(self, p->black + 0.01);
   }
 
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->black, p->black);
   dt_gui_freeze_end();
@@ -763,7 +765,7 @@ static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
 
 static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
 {
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
 
   // capture gui color picked event.
@@ -884,7 +886,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
 
   if(w == g->mode)
@@ -937,7 +939,7 @@ static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return FALSE;
 
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
 
   dt_iop_gui_enter_critical_section(self);
   if(!isnan(g->deflicker_computed_exposure))
@@ -958,7 +960,7 @@ static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
 static gboolean _target_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
 
   // Init
   GtkAllocation allocation;
@@ -1001,7 +1003,7 @@ static gboolean _target_color_draw(GtkWidget *widget, cairo_t *crf, gpointer use
 static gboolean _origin_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
 
   // Init
   GtkAllocation allocation;
@@ -1032,7 +1034,7 @@ static gboolean _origin_color_draw(GtkWidget *widget, cairo_t *crf, gpointer use
 static void _paint_hue(dt_iop_module_t *self)
 {
   // update the fill background color of LCh sliders
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
 
   const float lightness_min = dt_bauhaus_slider_get_hard_min(g->lightness_spot);
   const float lightness_max = dt_bauhaus_slider_get_hard_max(g->lightness_spot);
@@ -1064,7 +1066,7 @@ static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *
 {
   if(dt_gui_widgets_suppressed()) return;
 
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
 
   dt_aligned_pixel_t Lch_target = { 0.f };
 
@@ -1102,15 +1104,15 @@ void gui_init(struct dt_iop_module_t *self)
   // So we need to store the main widget first, stupidly update the ref to self->widget,
   // as we add boxes and restore it last to the main widget.
   // The guy who thought of that should really burn his computer and do everyone a favour.
-  GtkWidget *main_widget = self->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
+  GtkWidget *main_widget = self->gui->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING));
 
   g->mode = dt_bauhaus_combobox_from_params(self, N_("mode"));
 
   g->mode_stack = GTK_STACK(gtk_stack_new());
   gtk_stack_set_homogeneous(GTK_STACK(g->mode_stack),FALSE);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->mode_stack), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->mode_stack), TRUE, TRUE, 0);
 
-  GtkWidget *vbox_manual = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *vbox_manual = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_stack_add_named(GTK_STACK(g->mode_stack), vbox_manual, "manual");
 
   g->compensate_exposure_bias = dt_bauhaus_toggle_from_params(self, "compensate_exposure_bias");
@@ -1132,7 +1134,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->black, 4);
   dt_bauhaus_slider_set_soft_range(g->black, -0.1, 0.1);
 
-  GtkWidget *vbox_deflicker = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *vbox_deflicker = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_stack_add_named(GTK_STACK(g->mode_stack), vbox_deflicker, "deflicker");
 
   g->deflicker_percentile = dt_bauhaus_slider_from_params(self, "deflicker_percentile");
@@ -1156,13 +1158,13 @@ void gui_init(struct dt_iop_module_t *self)
   g->deflicker_computed_exposure = NAN;
   dt_iop_gui_leave_critical_section(self);
 
-  self->widget = main_widget;
+  self->gui->widget = main_widget;
 
   dt_gui_new_collapsible_section
     (&g->cs,
      "plugins/darkroom/exposure/mapping",
      _("spot exposure mapping"),
-     GTK_BOX(self->widget), GTK_PACK_END);
+     GTK_BOX(self->gui->widget), GTK_PACK_END);
 
   DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), g->spot_mode, DT_GUI_MODULE(self), N_("spot mode"),
                                 _("\"correction\" automatically adjust exposure\n"
@@ -1220,12 +1222,12 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(g->cs.container), GTK_WIDGET(hhbox), FALSE, FALSE, 0);
 
-  g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_draw), self);
+  g_signal_connect(G_OBJECT(self->gui->widget), "draw", G_CALLBACK(_draw), self);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
+  dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)dt_iop_gui_data(self);
 
   dt_free(g->deflicker_histogram);
 

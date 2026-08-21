@@ -45,6 +45,7 @@
 #include "system/target_clones.h"
 #include "config.h"
 #endif
+#include "develop/imageop_gui.h"
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
@@ -54,8 +55,8 @@
 #include "common/opencl.h"
 #include "develop/develop.h"
 
-#include "gui/gtk.h"
 #include "iop/iop_api.h"
+#include "widgets/widget_settings.h"
 
 /**
  * @brief This module converts float32 RGBA pixels to uint8 BGRA pixels, for
@@ -553,7 +554,6 @@ void init(dt_iop_module_t *module)
   module->params = calloc(1, sizeof(dt_iop_gamma_params_t));
   module->default_params = calloc(1, sizeof(dt_iop_gamma_params_t));
   module->params_size = sizeof(dt_iop_gamma_params_t);
-  module->gui_data = NULL;
   module->hide_enable_button = 1;
   module->default_enabled = 1;
 }

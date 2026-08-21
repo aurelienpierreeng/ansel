@@ -28,6 +28,7 @@
  * labeled as Dmin or GS0, and Dmax or GS23.
  */
 
+#include "system/mem_alloc.h"
 #include "colorchecker.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "file_location.h"
@@ -86,6 +87,21 @@ typedef struct cht_box_F_t {
 } cht_box_F_t;
 
 #define TWO_SQRT2f 2.8284271247461900976f // sqrt(2) * 2
+
+/* The only consumers of these two tables live in this file. They used to be defined in
+ * common/colorchecker.h, i.e. once per translation unit that included it -- which was
+ * invisible while every IOP was its own shared object, and a duplicate definition once
+ * the modules were linked into lib_ansel. A header declares; it does not define. */
+static const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
+  "IT8.7/1", // transparent 
+  "IT8.7/2", // opaque
+  "CTI3"     // opaque
+};
+
+static const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
+  "Transparent",
+  "Opaque"
+};
 
 static void _dt_colorchecker_copy_patch(dt_color_checker_patch *dest, const dt_color_checker_patch *src)
 {
@@ -221,7 +237,9 @@ static void _dt_colorchecker_chart_spec_cleanup(dt_colorchecker_chart_spec_t *ch
 
 static dt_color_checker_patch *_dt_colorchecker_patch_init()
 {
-  dt_color_checker_patch *patch = (dt_color_checker_patch *)malloc(sizeof(dt_color_checker_patch));
+  // dt_alloc_align: dt_color_checker_patch is 64-aligned (its array sibling above already
+  // allocates aligned); dt_colorchecker_patch_cleanup_list() frees with dt_free_align.
+  dt_color_checker_patch *patch = (dt_color_checker_patch *)dt_alloc_align(sizeof(dt_color_checker_patch));
   if(IS_NULL_PTR(patch)) return NULL;
 
   patch->name = NULL;

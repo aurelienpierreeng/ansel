@@ -28,7 +28,7 @@
 #define DT_IMAGEIO_IMAGEIO_LIBRAW_H
 
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 #ifdef HAVE_LIBRAW
 gboolean dt_libraw_lookup_makermodel(const char *maker, const char *model,

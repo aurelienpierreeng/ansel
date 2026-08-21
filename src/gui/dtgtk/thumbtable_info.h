@@ -20,12 +20,11 @@
 #define DT_GUI_DTGTK_THUMBTABLE_INFO_H
 
 #include "common/image.h"
-#include "common/image_cache.h"
+#include "caches/image_cache.h"
 
 #include <glib.h>
 #include <limits.h>
 #include <stdint.h>
-#include <sqlite3.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,9 +40,6 @@ static inline gboolean dt_thumbtable_info_is_grouped(const dt_image_t info)
   return info.group_members > 1;
 }
 
-
-sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void);
-void dt_thumbtable_info_cleanup(void);
 
 void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *const img);
 void dt_thumbtable_info_seed_image_cache(const dt_image_t *info);

@@ -20,16 +20,14 @@
 #define DT_COMMON_HISTORY_ACTIONS_H
 
 #include <glib.h>
-#include <gtk/gtk.h>
 #include <inttypes.h>
 
-#include "common/history_merge.h"
+#include "develop/history_merge.h"
+#include "history/history.h"   // dt_history_copy_item_t, for the clipboard accessor below
 
 /** copy history from imgid and pasts on selected images, merge or overwrite... */
 gboolean dt_history_copy(int32_t imgid);
-gboolean dt_history_copy_parts(int32_t imgid);
 gboolean dt_history_paste_on_list(const GList *list);
-gboolean dt_history_paste_parts_prepare(void);
 gboolean dt_history_paste_parts_on_list(const GList *list);
 gboolean dt_history_paste_on_image(const int32_t imgid);
 gboolean dt_history_paste_parts_on_image(const int32_t imgid);
@@ -49,16 +47,25 @@ void dt_history_compress_on_image(const int32_t imgid);
 /** delete historystack of selected images */
 gboolean dt_history_delete_on_list(const GList *list, gboolean undo);
 
-/** GUI entry point: confirm (if configured) then delete history of the active images.
-    Shared verbatim between the Edit menu's "Delete history" action and the darkroom
-    history module's reset button -- see common/history_actions.c. */
-gboolean delete_history_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods,
-                                 gpointer user_data);
-
 /** load a dt file and applies to selected images */
 int dt_history_load_and_apply_on_list(gchar *filename, const GList *list);
 
 /** load a dt file and applies to specified image */
 int dt_history_load_and_apply(const int32_t imgid, gchar *filename, int history_only);
 int dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only);
+
+/**
+ * @brief The history clipboard: what "copy history" put there, for "paste" to read.
+ *
+ * @details It used to be a `dt_history_copy_item_t` member of `dt_view_manager_t`, which
+ * made this file -- the one that actually defines copy and paste -- include
+ * `views/view.h`, layer 7, to reach its own state. The view manager never touched it. It
+ * is now file-static here, zero-initialised exactly as it was when the view manager was
+ * calloc'd, and handed out by this accessor.
+ *
+ * Never NULL, and lives for the process. The GUI reaches it to drive the "paste parts"
+ * dialog, which is what `items` and `selops` are for.
+ */
+dt_history_copy_item_t *dt_history_copy_paste_get(void);
+
 #endif // DT_COMMON_HISTORY_ACTIONS_H

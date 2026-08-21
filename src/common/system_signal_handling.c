@@ -61,8 +61,10 @@ typedef void(dt_signal_handler_t)(int);
 static dt_signal_handler_t *_dt_sigsegv_old_handler = NULL;
 #endif
 
-// deer graphicsmagick, please stop messing with the stuff that you should not be touching at all.
-// based on GM's InitializeMagickSignalHandlers() and MagickSignalHandlerMessage()
+// Signals whose original disposition is saved before we install ours, so a library that
+// overwrites them cannot leave the process without a handler. Historically this existed because
+// GraphicsMagick's InitializeMagick() replaced every one of them; that dependency is gone, and
+// the preservation is now generic insurance against any library doing the same.
 #if !defined(_WIN32)
 static const int _signals_to_preserve[] = { SIGHUP,  SIGINT,  SIGQUIT, SIGILL,  SIGABRT, SIGBUS, SIGFPE,
                                             SIGPIPE, SIGALRM, SIGTERM, SIGCHLD, SIGXCPU, SIGXFSZ };
@@ -303,9 +305,8 @@ void dt_set_signal_handlers()
   Set up exception handler for backtrace on Windows
   Works when there is NO SIGSEGV handler installed
 
-  SetUnhandledExceptionFilter handler must be saved on the first invocation
-  as GraphicsMagick is overwriting SetUnhandledExceptionFilter and all other signals in InitializeMagick()
-  Eventually InitializeMagick() should be fixed upstream not to ignore existing exception handlers
+  SetUnhandledExceptionFilter handler must be saved on the first invocation, so that a library
+  which installs its own filter behind our back cannot displace ours permanently.
   */
 
   dt_set_unhandled_exception_handler_win();
@@ -315,7 +316,7 @@ void dt_set_signal_handlers()
     // This should be drmingw's exception handler
     _dt_exceptionfilter_old_handler = SetUnhandledExceptionFilter(dt_toplevel_exception_handler);
   }
-  // Restore our UnhandledExceptionFilter handler no matter what GM is doing
+  // Restore our UnhandledExceptionFilter handler no matter what anything else installed
   SetUnhandledExceptionFilter(dt_toplevel_exception_handler);
 
 #endif //!defined(__APPLE__) && !defined(_WIN32)

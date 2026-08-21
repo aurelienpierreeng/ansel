@@ -24,7 +24,7 @@
 #define DT_IMAGEIO_IMAGEIO_AVIF_H
 
 #include "common/image.h"
-#include "common/mipmap_cache.h"
+#include "caches/mipmap_cache.h"
 
 dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
                                          const char *filename,

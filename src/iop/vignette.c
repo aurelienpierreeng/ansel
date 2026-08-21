@@ -51,32 +51,33 @@
 #include "config.h"
 #endif
 #include <assert.h>
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
+#include "database/database.h"
 #include <stdlib.h>
 #include <string.h>
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "math/math.h"
 #include "common/opencl.h"
 #include "pixel/tea.h"
+#include "control/input.h"
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
-#include "gui/gtk.h"
 #include "gui/presets.h"
-#include "gui/draw.h"
+#include "widgets/draw.h"
 #include "iop/iop_api.h"
 #include <gtk/gtk.h>
 #include <inttypes.h>
+#include "widgets/label.h"
 
 DT_MODULE_INTROSPECTION(4, dt_iop_vignette_params_t)
 
@@ -373,12 +374,12 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                      int32_t pointerx, int32_t pointery)
 {
   dt_develop_t *dev = self->dev;
-  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
+  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
-  const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(dev);
+  const float ht = dt_dev_roi_request_preview_height(dev);
   float bigger_side, smaller_side;
   if(wd >= ht)
   {
@@ -461,11 +462,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   const dt_develop_t *dev = (const dt_develop_t *)self->dev;
-  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
+  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return 0;
-  const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
+  const float wd = dt_dev_roi_request_preview_width(dev);
+  const float ht = dt_dev_roi_request_preview_height(dev);
   float bigger_side, smaller_side;
   if(wd >= ht)
   {
@@ -478,7 +479,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     smaller_side = wd;
   }
 
-  const float zoom_scale = dev->roi.scaling;
+  const float zoom_scale = dt_dev_viewport_scaling(dev);
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
   const float pzx = pzxpy[0];
@@ -533,13 +534,13 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
   }
 
-  if(grab == 0 || !(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1))
+  if(grab == 0 || !(dt_control_button_down(1)))
   {
     grab = get_grab(self, pzx * wd - vignette_x, pzy * ht - vignette_y, vignette_w, -vignette_h, vignette_fx,
                     -vignette_fy, zoom_scale);
   }
 
-  if(dt_control_get_global()->button_down && dt_control_get_global()->button_down_which == 1)
+  if(dt_control_button_down(1))
   {
     if(grab == 0) // pan the image
     {
@@ -945,7 +946,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
+  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
 
@@ -971,7 +972,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
   dt_iop_vignette_params_t p;
   p.scale = 40.0f;
   p.falloff_scale = 100.0f;
@@ -986,7 +987,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.unbound = TRUE;
   dt_gui_presets_add_generic(_("lomo"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -1003,7 +1004,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
+  dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(p)) return;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->autoratio), p->autoratio);
@@ -1019,7 +1020,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->brightness = dt_bauhaus_slider_from_params(self, N_("brightness"));
   g->saturation = dt_bauhaus_slider_from_params(self, N_("saturation"));
 
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(self->gui->widget),
                      dt_ui_section_label_new(_("position / form")), FALSE, FALSE, 0);
 
   g->center_x = dt_bauhaus_slider_from_params(self, "center.x");

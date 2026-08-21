@@ -24,21 +24,17 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "develop/imageop.h" // for IOP_CS_RGB
 
 #include <assert.h>
 #include <glib/gstdio.h>
 #include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 
 // pbm -- portable bit map. values are either 0 or 1, single channel
 static dt_imageio_retval_t _read_pbm(dt_image_t *img, FILE*f, float *buf)

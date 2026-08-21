@@ -25,35 +25,6 @@
 #include "develop/imageop.h"
 #include "develop/develop.h"
 
-void dt_iop_buffer_dsc_update_bpp(dt_iop_buffer_dsc_t *dsc)
-{
-  dsc->bpp = dsc->channels;
-
-  switch(dsc->datatype)
-  {
-    case TYPE_FLOAT:
-      dsc->bpp *= sizeof(float);
-      break;
-    case TYPE_UINT16:
-      dsc->bpp *= sizeof(uint16_t);
-      break;
-    case TYPE_UINT8:
-      dsc->bpp *= sizeof(uint8_t);
-      break;
-    case TYPE_UNKNOWN:
-      dsc->bpp = 0;
-      break;
-    default:
-      dt_unreachable_codepath();
-      break;
-  }
-}
-
-size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc)
-{
-  return dsc->bpp;
-}
-
 void default_input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                           dt_iop_buffer_dsc_t *dsc)
 {

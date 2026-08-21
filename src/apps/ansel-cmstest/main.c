@@ -36,7 +36,7 @@
 #include "config.h"
 #endif
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include <glib-object.h>
 #include <glib.h>

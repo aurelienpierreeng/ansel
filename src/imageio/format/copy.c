@@ -27,16 +27,16 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
-#include "common/paths.h"
-#include "common/exif.h"
-#include "common/image_cache.h"
+#include "common/xmp_sidecar.h"
+#include "caches/image_cache.h"
 #include "imageio/imageio_module.h"
 #include "common/utility.h"
 #include "imageio/format/imageio_format_api.h"
-#include "gui/gtk.h"
+#include "widgets/label.h"
+#include "widgets/widget_settings.h"
 #include <glib/gstdio.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -68,15 +68,15 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
   // we got a copy of the file, now write the xmp data
   xmpfile = g_strconcat(targetfile, ".xmp", NULL);
-  dt_image_t *img = dt_image_cache_get(dt_image_cache_get_global(), imgid, 'w');
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img) || dt_exif_xmp_write_with_imgpath(img, xmpfile, sourcefile) != 0)
   {
-    if(img) dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_MINIMAL);
+    if(img) dt_image_cache_write_release(img, DT_IMAGE_CACHE_MINIMAL);
     // something went wrong, unlink the copied image.
     g_unlink(targetfile);
     goto END;
   }
-  dt_image_cache_write_release(dt_image_cache_get_global(), img, DT_IMAGE_CACHE_MINIMAL);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_MINIMAL);
 
   status = 0;
 END:

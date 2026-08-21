@@ -56,16 +56,17 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/macros.h"
+#include "system/macros.h"
+#include "widgets/widget_settings.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "common/logging.h"
 #include "common/module_versioning.h"
-#include "common/database.h"
-#include "common/pixelpipe_cache_alloc.h"
-#include "gui/bauhaus.h"
+#include "database/database.h"
+#include "caches/pixelpipe_cache_alloc.h"
+#include "widgets/bauhaus.h"
 #include "pixel/eaw.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
@@ -75,14 +76,15 @@
 #include "develop/imageop_math.h"
 #include "develop/tiling.h"
 
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "widgets/draw.h"
 #include "gui/presets.h"
 #include "iop/iop_api.h"
 
 #include <math.h>
-#include <memory.h>
 #include <stdlib.h>
+#include "widgets/notebook.h"
+#include "widgets/scroll_wrap.h"
+#include "gui/screen_metrics.h"
 //#define USE_NEW_CL  //uncomment to use the new, more memory-efficient OpenCL code (not yet finished)
 
 #define INSET DT_PIXEL_APPLY_DPI(5)
@@ -327,7 +329,7 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
 
   if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
-    dt_iop_atrous_gui_data_t *g = (dt_iop_atrous_gui_data_t *)self->gui_data;
+    dt_iop_atrous_gui_data_t *g = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
     if(!IS_NULL_PTR(g)) g->num_samples = get_samples(g->sample, d, roi_in, piece);
     // tries to acquire gdk lock and this prone to deadlock:
     // dt_control_queue_draw(GTK_WIDGET(g->area));
@@ -536,7 +538,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   if(self->dev->gui_attached && !dt_dev_pixelpipe_has_preview_output(self->dev, pipe, roi_out))
   {
-    dt_iop_atrous_gui_data_t *g = (dt_iop_atrous_gui_data_t *)self->gui_data;
+    dt_iop_atrous_gui_data_t *g = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
     if(!IS_NULL_PTR(g)) g->num_samples = get_samples(g->sample, d, roi_in, piece);
     // dt_control_queue_redraw_widget(GTK_WIDGET(g->area));
     // tries to acquire gdk lock and this prone to deadlock:
@@ -801,7 +803,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  dt_database_start_transaction(dt_database_get_global());
+  dt_database_start_transaction();
   dt_iop_atrous_params_t p;
   p.octaves = 7;
   p.mix = 1.0f;
@@ -1068,12 +1070,12 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("deblur: fine blur, strength 1"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_database_release_transaction(dt_database_get_global());
+  dt_database_release_transaction();
 }
 
 static void reset_mix(dt_iop_module_t *self)
 {
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_atrous_params_t *p = (dt_iop_atrous_params_t *)self->params;
   c->drag_params = *p;
   dt_gui_freeze_begin();
@@ -1084,8 +1086,7 @@ static void reset_mix(dt_iop_module_t *self)
 void gui_update(struct dt_iop_module_t *self)
 {
   reset_mix(self);
-  dt_gui_throttle_cancel(self);
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 
@@ -1094,7 +1095,7 @@ void gui_update(struct dt_iop_module_t *self)
 static gboolean area_enter_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
   if(!c->dragging) c->mouse_y = fabs(c->mouse_y);
   c->in_curve = TRUE;
   gtk_widget_queue_draw(widget);
@@ -1104,7 +1105,7 @@ static gboolean area_enter_notify(GtkWidget *widget, GdkEventCrossing *event, gp
 static gboolean area_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
   if(!c->dragging) c->mouse_y = -fabs(c->mouse_y);
   c->in_curve = FALSE;
   gtk_widget_queue_draw(widget);
@@ -1125,7 +1126,7 @@ static void get_params(dt_iop_atrous_params_t *p, const int ch, const double mou
 static gboolean area_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_atrous_params_t p = *(dt_iop_atrous_params_t *)self->params;
 
   const float mix = c->in_curve ? 1.0f : p.mix;
@@ -1146,7 +1147,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
   cairo_t *cr = cairo_create(cst);
   // clear bg, match color of the notebook tabs:
   GdkRGBA bright_bg_color, graph_bg;
-  GtkStyleContext *context = gtk_widget_get_style_context(self->expander);
+  GtkStyleContext *context = gtk_widget_get_style_context(self->gui->expander);
   gboolean color_found = gtk_style_context_lookup_color (context, "graph_overlay", &bright_bg_color);
   if(!color_found)
   {
@@ -1437,7 +1438,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_atrous_params_t *p = (dt_iop_atrous_params_t *)self->params;
   const int inset = INSET;
   GtkAllocation allocation;
@@ -1470,7 +1471,7 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
       get_params(p, c->channel2, c->mouse_x, c->mouse_y + c->mouse_pick, c->mouse_radius);
     }
     gtk_widget_queue_draw(widget);
-    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else if(event->y > height)
   {
@@ -1520,20 +1521,20 @@ static gboolean area_button_press(GtkWidget *widget, GdkEventButton *event, gpoi
     // reset current curve
     dt_iop_atrous_params_t *p = (dt_iop_atrous_params_t *)self->params;
     dt_iop_atrous_params_t *d = (dt_iop_atrous_params_t *)self->default_params;
-    dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+    dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
     reset_mix(self);
     for(int k = 0; k < BANDS; k++)
     {
       p->x[c->channel2][k] = d->x[c->channel2][k];
       p->y[c->channel2][k] = d->y[c->channel2][k];
     }
-    gtk_widget_queue_draw(self->widget);
+    gtk_widget_queue_draw(self->gui->widget);
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else if(event->button == 1)
   {
     // set active point
-    dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+    dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
     reset_mix(self);
     const int inset = INSET;
     GtkAllocation allocation;
@@ -1554,7 +1555,7 @@ static gboolean area_button_release(GtkWidget *widget, GdkEventButton *event, gp
   if(event->button == 1)
   {
     dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-    dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+    dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
     c->dragging = 0;
     reset_mix(self);
     return TRUE;
@@ -1565,7 +1566,7 @@ static gboolean area_button_release(GtkWidget *widget, GdkEventButton *event, gp
 static gboolean area_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
 
   int delta_y;
   if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
@@ -1579,10 +1580,10 @@ static gboolean area_scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer
 static void tab_switch(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
   if(dt_gui_widgets_suppressed()) return;
   c->channel = c->channel2 = (atrous_channel_t)page_num;
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
 }
 
 static void mix_callback(GtkWidget *slider, gpointer user_data)
@@ -1591,7 +1592,7 @@ static void mix_callback(GtkWidget *slider, gpointer user_data)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_atrous_params_t *p = (dt_iop_atrous_params_t *)self->params;
   p->mix = dt_bauhaus_slider_get(slider);
-  gtk_widget_queue_draw(self->widget);
+  gtk_widget_queue_draw(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -1609,12 +1610,12 @@ void gui_init(struct dt_iop_module_t *self)
     (void)dt_draw_curve_add_point(c->minmax_curve, p->x[ch][k], p->y[ch][k]);
   c->mouse_x = c->mouse_y = c->mouse_pick = -1.0;
   c->dragging = 0;
-  self->timeout_handle = 0;
+  self->gui->timeout_handle = 0;
   c->x_move = -1;
   c->mouse_radius = 1.0 / BANDS;
   c->in_curve = FALSE;
 
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   c->channel_tabs = dt_ui_notebook_new();
   dt_ui_notebook_page(c->channel_tabs, N_("luma"), _("change lightness at each feature size"));
@@ -1623,12 +1624,12 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_show(gtk_notebook_get_nth_page(c->channel_tabs, c->channel));
   gtk_notebook_set_current_page(c->channel_tabs, c->channel);
   g_signal_connect(G_OBJECT(c->channel_tabs), "switch_page", G_CALLBACK(tab_switch), self);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(c->channel_tabs), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(c->channel_tabs), FALSE, FALSE, 0);
 
   // graph
   c->area = GTK_DRAWING_AREA(gtk_drawing_area_new());
   gtk_widget_set_hexpand(GTK_WIDGET(c->area), TRUE);
-  gtk_box_pack_start(GTK_BOX(self->widget),
+  gtk_box_pack_start(GTK_BOX(self->gui->widget),
                      dt_ui_resizable_drawing_area(GTK_WIDGET(c->area),
                                                   "plugins/darkroom/atrous/graphheight", 280, 100),
                      FALSE, FALSE, 0);
@@ -1637,7 +1638,7 @@ void gui_init(struct dt_iop_module_t *self)
                         GDK_POINTER_MOTION_MASK
                         | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                         | GDK_LEAVE_NOTIFY_MASK | GDK_ENTER_NOTIFY_MASK
-                        | dt_gui_get_global()->scroll_mask);
+                        | dt_widget_scroll_mask());
   g_object_set_data(G_OBJECT(c->area), "iop-instance", self);
   g_signal_connect(G_OBJECT(c->area), "draw", G_CALLBACK(area_draw), self);
   g_signal_connect(G_OBJECT(c->area), "button-press-event", G_CALLBACK(area_button_press), self);
@@ -1655,10 +1656,9 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
-  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
+  dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)dt_iop_gui_data(self);
   dt_conf_set_int("plugins/darkroom/atrous/gui_channel", c->channel);
   dt_draw_curve_destroy(c->minmax_curve);
-  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

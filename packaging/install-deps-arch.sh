@@ -48,9 +48,7 @@ PACMAN_PACKAGES=(
   gdb
   gettext
   git
-  gmic
   graphviz
-  graphicsmagick
   gdk-pixbuf2
   glib2
   gstreamer
@@ -70,7 +68,6 @@ PACMAN_PACKAGES=(
   libpng
   libraw
   librsvg
-  libsecret
   libsoup
   libtiff
   libwebp

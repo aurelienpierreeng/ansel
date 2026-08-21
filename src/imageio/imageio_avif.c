@@ -37,7 +37,7 @@
 #include <stdio.h>
 #include <strings.h>
 
-#include "common/exif.h"
+#include "metadata/exif.h"
 #include "develop/develop.h"
 #include "imageio_avif.h"
 

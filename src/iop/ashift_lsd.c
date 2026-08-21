@@ -147,13 +147,12 @@
  */
 /*----------------------------------------------------------------------------*/
 
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/mem_alloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <float.h>
-#include "math/math.h"
 
 #ifndef FALSE
 #define FALSE 0

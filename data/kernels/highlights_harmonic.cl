@@ -1884,7 +1884,8 @@ hl_cgrad_gate(global const float *estimate, global const float *valid, global co
 kernel void
 hl_cgrad_reproject(global float *estimate, global const float *valid, global const float *clip0,
              global const float *shares, read_only image2d_t gate_wgt, read_only image2d_t gate_nrm,
-             const int width, const int height, const float epsilon, const float gate_vote)
+             const int width, const int height, const float epsilon, const float gate_vote,
+             const float authored_ramp, const float floor_gate)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
@@ -1893,8 +1894,22 @@ hl_cgrad_reproject(global float *estimate, global const float *valid, global con
   const int clip_g = valid[i * 4 + 1] < 0.5f;
   const int clip_b = valid[i * 4 + 2] < 0.5f;
   const int n_clip = clip_r + clip_g + clip_b;
-  if(n_clip < 2) return; // 1-clip: measured-correct where the fit spoke; floor-authored ones are
-                         // handled by the pass-2 kernels (hl_cgrad_hole1c/hl_cgrad_write1c)
+  // 1-clip pixels are trusted where the fit SPOKE; where it did not, fmax(pred, clip0) pinned the
+  // channel AT its floor and printed the floor's own chroma (see the CPU stage for the measurement).
+  // How much the fit failed to speak, as a RAMP and not a test -- a hard threshold prints its own
+  // contour along the boundary between mostly-floored and mostly-lifted pixels.
+  float authored_w = 1.f;
+  if(n_clip == 1)
+  {
+    // WB'd clips only (see the CPU stage): at unit WB the floor imprint is neutral ~ truth
+    if(floor_gate <= 1e-6f) return;
+    const int cc = clip_r ? 0 : (clip_g ? 1 : 2);
+    const float lift = estimate[i * 4 + cc] / fmax(clip0[i * 4 + cc], 1e-9f);
+    const float over = (lift - 1.f) / (authored_ramp - 1.f);
+    authored_w = 1.f - clamp(over * over * (3.f - 2.f * over), 0.f, 1.f); // smoothstep, inverted
+    authored_w *= floor_gate; // blend in with the same asymmetry ramp as every floor site
+    if(authored_w <= 1e-4f) return; // the fit spoke here: leave the pixel to it
+  }
 
   // diffused agreement weight, shrunk toward the region-level ring vote as local evidence thins
   const float gate_lambda = 0.05f;
@@ -1919,10 +1934,11 @@ hl_cgrad_reproject(global float *estimate, global const float *valid, global con
     // survivor-anchored scale, bounded (mirror of the CPU stability cap)
     const float scale
         = fmin(sv_est / sv_share, 4.f * (estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2]));
+    const float reproject_w = gate_w * authored_w; // 1 for multi-clip; ramped for 1-clip
     for(int c = 0; c < 3; c++)
       if(valid[i * 4 + c] < 0.5f)
-        estimate[i * 4 + c]
-            = gate_w * (scale * (shares[i * 4 + c] / share_sum)) + (1.f - gate_w) * estimate[i * 4 + c];
+        estimate[i * 4 + c] = reproject_w * (scale * (shares[i * 4 + c] / share_sum))
+                              + (1.f - reproject_w) * estimate[i * 4 + c];
   }
   else
   {
@@ -1953,7 +1969,9 @@ hl_cgrad_reproject(global float *estimate, global const float *valid, global con
 // across the hole from BOTH sides (multi-clip reconstruction inside, measured data outside).
 kernel void
 hl_cgrad_hole1c(global const float *estimate, global const float *valid, global const float *clip0,
-                global uchar *hole, global float *field, const int width, const int height, const int c)
+                global const float *clip_depth, global uchar *hole, global uchar *authored,
+                global float *field, const int width, const int height, const int c,
+                const float a3_collar, const float lum_anchor_min)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
@@ -1962,22 +1980,28 @@ hl_cgrad_hole1c(global const float *estimate, global const float *valid, global 
   const int clip_g = valid[i * 4 + 1] < 0.5f;
   const int clip_b = valid[i * 4 + 2] < 0.5f;
   const int cc = clip_r ? 0 : (clip_g ? 1 : 2);
-  const int is_hole = (clip_r + clip_g + clip_b == 1) && (cc == c)
+  // a COLLAR around the measured contour, not a plateau, and DARK valid content may not anchor the
+  // dome -- see the CPU twin in _chromaticity_gradient() for what each condition is worth
+  const int is_hole = (clip_r + clip_g + clip_b == 1) && (cc == c) && (clip_depth[i] <= a3_collar)
                       && (estimate[i * 4 + c] <= 1.03f * fmax(clip0[i * 4 + c], 1e-9f));
-  hole[i] = is_hole;
+  const float lum = estimate[i * 4 + 0] + estimate[i * 4 + 1] + estimate[i * 4 + 2];
+  const int too_dark_to_anchor = !is_hole && (lum < lum_anchor_min);
+  authored[i] = is_hole;                       // written back
+  hole[i] = is_hole || too_dark_to_anchor;     // solved over (dark pixels are interpolated ACROSS)
   field[i] = estimate[i * 4 + c];
 }
 
 // PASS 2 = a3 write-back: the filled value replaces the floor-authored pixel's clipped channel,
 // floored at saturation (the fill approaches clip0 at the outer contour by construction).
 kernel void
-hl_cgrad_write1c(global float *estimate, global const uchar *hole, global const float *field,
+hl_cgrad_write1c(global float *estimate, global const uchar *authored, global const float *field,
                  global const float *clip0, const int width, const int height, const int c)
 {
   const int x = get_global_id(0), y = get_global_id(1);
   if(x >= width || y >= height) return;
   const int i = y * width + x;
-  if(!hole[i]) return;
+  // only the authored pixels: a dark pixel that merely joined the solve keeps its measured value
+  if(!authored[i]) return;
   estimate[i * 4 + c] = fmax(field[i], clip0[i * 4 + c]);
 }
 
@@ -2838,5 +2862,63 @@ hl_aniso_splat(global float *chroma, global const float *valid_anchor, global co
     const float top_row = coarse_ratio[(y_lo * coarse_w + x_lo) * 3 + c] * (1.f - frac_x) + coarse_ratio[(y_lo * coarse_w + x_hi) * 3 + c] * frac_x;
     const float bottom_row = coarse_ratio[(y_hi * coarse_w + x_lo) * 3 + c] * (1.f - frac_x) + coarse_ratio[(y_hi * coarse_w + x_hi) * 3 + c] * frac_x;
     chroma[fine_index * 4 + c] = top_row * (1.f - frac_y) + bottom_row * frac_y;
+  }
+}
+
+/* ===== edge-aware transport of the coefficient-field fit windows (domain transform) ===========
+ * Device twin of _region_edge_blur (see the CPU implementation for why the fit windows must not
+ * carry samples across a silhouette). The recursive filter is sequential along each row and then
+ * each column, so these run one work-item per LINE and read/write buffers -- an OpenCL 1.2 image
+ * cannot be read and written by the same kernel, and a sweep needs exactly that. */
+kernel void
+hl_dt_warp(global const float *guide, global float *step_x, global float *step_y,
+           const int width, const int height, const float range_scale)
+{
+  const int x = get_global_id(0), y = get_global_id(1);
+  if(x >= width || y >= height) return;
+  const int i = y * width + x;
+  const float dx = (x > 0) ? fabs(guide[i] - guide[i - 1]) : 0.f;
+  const float dy = (y > 0) ? fabs(guide[i] - guide[i - width]) : 0.f;
+  step_x[i] = 1.f + range_scale * dx;   // warp rate: 1 where flat, large across an edge
+  step_y[i] = 1.f + range_scale * dy;
+}
+
+kernel void
+hl_dt_rows(global float *data, global const float *step_x, const int width, const int height,
+           const float feedback)
+{
+  const int y = get_global_id(0);
+  if(y >= height) return;
+  global float *row = data + (size_t)y * width * 4;
+  global const float *a_row = step_x + (size_t)y * width;
+  for(int x = 1; x < width; x++)
+  {
+    const float a = pow(feedback, a_row[x]);
+    for(int c = 0; c < 4; c++) row[x * 4 + c] += a * (row[(x - 1) * 4 + c] - row[x * 4 + c]);
+  }
+  for(int x = width - 2; x >= 0; x--)
+  {
+    const float a = pow(feedback, a_row[x + 1]);
+    for(int c = 0; c < 4; c++) row[x * 4 + c] += a * (row[(x + 1) * 4 + c] - row[x * 4 + c]);
+  }
+}
+
+kernel void
+hl_dt_cols(global float *data, global const float *step_y, const int width, const int height,
+           const float feedback)
+{
+  const int x = get_global_id(0);
+  if(x >= width) return;
+  for(int y = 1; y < height; y++)
+  {
+    const size_t i = (size_t)y * width + x;
+    const float a = pow(feedback, step_y[i]);
+    for(int c = 0; c < 4; c++) data[i * 4 + c] += a * (data[(i - width) * 4 + c] - data[i * 4 + c]);
+  }
+  for(int y = height - 2; y >= 0; y--)
+  {
+    const size_t i = (size_t)y * width + x;
+    const float a = pow(feedback, step_y[i + width]);
+    for(int c = 0; c < 4; c++) data[i * 4 + c] += a * (data[(i + width) * 4 + c] - data[i * 4 + c]);
   }
 }

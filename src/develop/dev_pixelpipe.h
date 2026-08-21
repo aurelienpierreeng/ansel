@@ -18,6 +18,7 @@
 #ifndef DT_DEVELOP_DEV_PIXELPIPE_H
 #define DT_DEVELOP_DEV_PIXELPIPE_H
 
+#include "caches/pixelpipe_cache_wait.h"
 #include <inttypes.h>
 #include <stdint.h>
 #include <glib.h>
@@ -84,7 +85,7 @@ void dt_dev_pixelpipe_change_zoom_main(struct dt_develop_t *dev);
 // returns the dimensions of a virtual image of size (width_in, height_in) image after processing
 // all modules of the pipe. This chains calls to module's modify_roi_out() methods in pipeline order.
 // Doesn't actually compute pixels.
-// NOTE: pipe must be a real or virtual pipe with nodes; NULL pipes are not supported anymore.
+// NOTE: pipe must have nodes; NULL pipes are not supported anymore.
 void dt_dev_pixelpipe_get_roi_out(struct dt_dev_pixelpipe_t *pipe, const int width_in,
                                   const int height_in, int *width, int *height);
                                 
@@ -92,7 +93,7 @@ void dt_dev_pixelpipe_get_roi_out(struct dt_dev_pixelpipe_t *pipe, const int wid
 // the desired sizes from roi_out, from end to start. This chains calls to module's modify_roi_in() methods
 // in pipeline reverse order.
 // Doesn't actually compute pixels.
-// NOTE: pipe must be a real or virtual pipe with nodes; NULL pipes are not supported anymore.
+// NOTE: pipe must have nodes; NULL pipes are not supported anymore.
 void dt_dev_pixelpipe_get_roi_in(struct dt_dev_pixelpipe_t *pipe, const struct dt_iop_roi_t roi_out);
 
 // Check if current_module is performing operations that dev->gui_module (active GUI module)
@@ -110,7 +111,8 @@ gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_
 // wrapper for cleanup_nodes, create_nodes, synch_all and synch_top, decides upon changed event which one to
 // take on. also locks dev->history_mutex.
 void dt_dev_pixelpipe_change(struct dt_dev_pixelpipe_t *pipe);
-void dt_dev_pixelpipe_sync_virtual(struct dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
+
+
 
 // Get the global hash of a pipe node (piece), or a fallback if none.
 uint64_t dt_dev_pixelpipe_node_hash(struct dt_dev_pixelpipe_t *pipe, 
@@ -150,23 +152,12 @@ const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_module_piece(const str
 const struct dt_dev_pixelpipe_iop_t *dt_dev_pixelpipe_get_prev_enabled_piece(const struct dt_dev_pixelpipe_t *pipe,
                                                                              const struct dt_dev_pixelpipe_iop_t *piece);
 
-typedef void (*dt_dev_pixelpipe_cache_ready_callback_t)(gpointer user_data);
-
-typedef struct dt_dev_pixelpipe_cache_wait_t
-{
-  struct dt_dev_pixelpipe_t *pipe;
-  const struct dt_iop_module_t *module;
-  uint64_t hash;
-  uint64_t target_node_key; // producer node identity of the awaited output; lets the manager
-                            // serve this waiter when its target module publishes, even if the
-                            // exact awaited hash drifted (INVALID for a backbuf target).
-  dt_dev_pixelpipe_cache_ready_callback_t restart;
-  gpointer user_data;
-  const char *owner_tag;
-  gpointer owner_object;
-  uint64_t request_id;
-  gboolean connected;
-} dt_dev_pixelpipe_cache_wait_t;
+/* The wait queue itself is cache state and lives in caches/pixelpipe_cache_wait.{h,c}. These
+ * two names stay because ~12 files across views/, libs/, iop/ and gui/ use them, and renaming
+ * them would be churn with no reader benefit: what matters is that the queue moved, not what
+ * its record is spelled. */
+typedef dt_pixelpipe_cache_ready_callback_t dt_dev_pixelpipe_cache_ready_callback_t;
+typedef dt_pixelpipe_cache_wait_t dt_dev_pixelpipe_cache_wait_t;
 
 /**
  * @brief Cancel one pending GUI cache wait request and clear its runtime state.

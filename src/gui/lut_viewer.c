@@ -19,9 +19,9 @@
 #include <glib/gstdio.h>
 #include "gui/lut_viewer.h"
 
-#include "gui/bauhaus.h"
-#include "common/colorspaces.h"
-#include "common/macros.h"
+#include "widgets/bauhaus.h"
+#include "colorprofiles/colorspaces.h"
+#include "system/macros.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
 #include "system/simd.h"
@@ -29,14 +29,15 @@
 #include "common/times.h"
 #include "math/matrices.h"
 #include "common/conf.h"
-#include "control/control.h"
-#include "gui/dtgtk/drawingarea.h"
-#include "gui/draw.h"
-#include "gui/gtk.h"
+#include "control/user_message.h"
+#include "widgets/drawingarea.h"
+#include "gui/application.h"
 
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "gui/screen_metrics.h"
+#include "widgets/draw.h"
 
 #define DT_LUT_VIEWER_MARGIN DT_PIXEL_APPLY_DPI(12)
 #define DT_LUT_VIEWER_TARGET_SAMPLES 4096
@@ -390,7 +391,7 @@ static inline gboolean _gamut_matches_lut_profile(const dt_lut_viewer_t *viewer,
 static int _get_xyz_to_rgb_matrix(const dt_lut_viewer_gamut_t gamut, dt_colormatrix_t xyz_to_rgb)
 {
   const dt_colorspaces_color_profile_t *profile
-      = dt_colorspaces_get_profile(_gamut_to_profile_type(gamut), "", DT_PROFILE_DIRECTION_ANY);
+      = dt_colorspaces_get_profile(_gamut_to_profile_type(gamut), "", DT_PROFILE_ROLE_ANY);
   if(IS_NULL_PTR(profile)|| IS_NULL_PTR(profile->profile)) return 1;
 
   const cmsCIEXYZ *red = cmsReadTag(profile->profile, cmsSigRedColorantTag);

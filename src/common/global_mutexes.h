@@ -31,7 +31,7 @@
  * imageio/storage/disk.c, imageio/imageio_rawspeed.cc, ...) do not have to include
  * darktable.h, and therefore the whole application, to take a lock. */
 
-#include "common/dtpthread.h"
+#include "system/dtpthread.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,7 +55,6 @@ dt_pthread_mutex_t *dt_readfile_mutex(void);
 /** Serializes SQL transactions and image metadata/history reads and writes across all
  *  pipeline jobs and threads: sqlite refuses to start a transaction within a
  *  transaction, which is what "too many" concurrent writers produce. */
-dt_pthread_rwlock_t *dt_database_threadsafe_lock(void);
 
 #ifdef __cplusplus
 }

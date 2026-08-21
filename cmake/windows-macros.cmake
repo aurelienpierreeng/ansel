@@ -151,25 +151,7 @@ if (WIN32 AND NOT BUILD_MSYS2_INSTALL)
     list(APPEND CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS ${TMP_SYSTEM_RUNTIME_LIBS})
   endif()
 
-  if(GraphicsMagick_FOUND)
-    file(GLOB TMP_SYSTEM_RUNTIME_LIBS
-      #GRAPHICKSMAGICK
-      ${MINGW_PATH}/libltdl*.dll
-      ${MINGW_PATH}/libGraphicsMagick++*.dll
-      ${MINGW_PATH}/libGraphicsMagickWand*.dll
-    )
-    list(APPEND CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS ${TMP_SYSTEM_RUNTIME_LIBS})
-  endif()
 
-  # workaround for msys2 gmic 2.9.0-3. Should be reviewed when gmic 2.9.3 is available
-  if(GMIC_FOUND)
-    file(GLOB TMP_SYSTEM_RUNTIME_LIBS
-      #GMIC
-      ${MINGW_PATH}/libopencv_core*.dll
-      ${MINGW_PATH}/libopencv_videoio*.dll
-    )
-    list(APPEND CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS ${TMP_SYSTEM_RUNTIME_LIBS})
-  endif()
 
   if(WebP_FOUND)
     file(GLOB TMP_SYSTEM_RUNTIME_LIBS
@@ -226,16 +208,6 @@ if (WIN32 AND NOT BUILD_MSYS2_INSTALL)
       DESTINATION share/libthai/
       COMPONENT DTApplication)
 
-  # Add GraphicsMagick libraries
-  if(GraphicsMagick_FOUND)
-    install(DIRECTORY
-        "${MINGW_PATH}/../lib/GraphicsMagick-${GraphicsMagick_PKGCONF_VERSION}/modules-Q16/coders"
-        DESTINATION lib/GraphicsMagick-${GraphicsMagick_PKGCONF_VERSION}/modules-Q16/
-        COMPONENT DTApplication
-        FILES_MATCHING PATTERN "*"
-        PATTERN "*.a" EXCLUDE
-        PATTERN "*.la" EXCLUDE)
-  endif()
 
   # Add lensfun libraries
   if(LensFun_FOUND)

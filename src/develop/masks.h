@@ -111,13 +111,20 @@ GList dev->forms
 
 #include "system/atomic.h"
 #include "common/logging.h"
-#include "common/macros.h"
+#include "system/macros.h"
 #include "system/simd.h"
 #include "common/times.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
+#include "develop/develop.h"     // dt_develop_t, and dt_iop_module_t through imageop.h
 #include "develop/pixelpipe.h"
-#include "gui/draw.h"
-#include "control/control.h"
+
+/* The per-shape function table is an implementation detail: every one of its members is
+ * dispatched from inside src/develop/masks/ and nowhere else (measured), so its definition
+ * lives in develop/masks/masks_functions.h and only this forward declaration is public.
+ * That is what lets this header drop widgets/draw.h -- the table was the only thing here
+ * naming a drawing type. The interactive-editing state (dt_masks_form_gui_t) and the whole
+ * event/drawing/menu API live in develop/masks_gui.h. */
+typedef struct dt_masks_functions_t dt_masks_functions_t;
 
 #include <assert.h>
 
@@ -289,9 +296,7 @@ typedef struct dt_masks_form_group_t
   float opacity;
 } dt_masks_form_group_t;
 
-struct dt_masks_form_t;
-struct dt_masks_form_gui_t;
-struct dt_develop_t;
+
 
 /*
 * Type of user interaction to map with internal properties of masks.
@@ -310,70 +315,6 @@ typedef enum dt_masks_interaction_t
   DT_MASKS_INTERACTION_ROTATION = 4, // property of the form (shape), explicit
   DT_MASKS_INTERACTION_LAST
 } dt_masks_interaction_t;
-
-/** structure used to store pointers to the functions implementing operations on a mask shape */
-/** plus a few per-class descriptive data items */
-typedef struct dt_masks_functions_t
-{
-  int point_struct_size;   // sizeof(struct dt_masks_point_*_t)
-  void (*sanitize_config)(dt_masks_type_t type_flags);
-  void (*set_form_name)(struct dt_masks_form_t *const form, const size_t nb);
-  void (*set_hint_message)(const struct dt_masks_form_gui_t *const gui, const struct dt_masks_form_t *const form,
-                           const int opacity, char *const __restrict__ msgbuf, const size_t msgbuf_len);
-  void (*duplicate_points)(struct dt_develop_t *const dev, struct dt_masks_form_t *base, struct dt_masks_form_t *dest);
-  void (*initial_source_pos)(struct dt_develop_t *dev, const float iwd, const float iht, float *x, float *y);
-  // input coordinates are in absolute output-image space, dist is squared in the same space
-  void (*get_distance)(float x, float y, float as, struct dt_masks_form_gui_t *gui, int index, int num_points,
-                       int *inside, int *inside_border, int *near_handle, int *inside_source, float *dist);
-  int (*get_points)(struct dt_develop_t *dev, float x, float y, float radius_a, float radius_b, float rotation,
-                    float **points, int *points_count);
-  int (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form, float **points, int *points_count,
-                           float **border, int *border_count, int source, const dt_iop_module_t *const module);
-  int (*get_mask)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
-                  const dt_dev_pixelpipe_iop_t *const piece,
-                  struct dt_masks_form_t *const form,
-                  float **buffer, int *width, int *height, int *posx, int *posy);
-  int (*get_mask_roi)(const dt_iop_module_t *const fmodule, struct dt_dev_pixelpipe_t *pipe,
-                      const dt_dev_pixelpipe_iop_t *const piece,
-                      struct dt_masks_form_t *const form,
-                      const dt_iop_roi_t *roi, float *buffer);
-  int (*get_area)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
-                  const dt_dev_pixelpipe_iop_t *const piece,
-                  struct dt_masks_form_t *const form,
-                  int *width, int *height, int *posx, int *posy);
-  int (*get_source_area)(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
-                         dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
-                         int *width, int *height, int *posx, int *posy);
-  gboolean (*get_gravity_center)(struct dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);
-  float (*get_interaction_value)(const struct dt_masks_form_t *form, dt_masks_interaction_t interaction);
-  float (*set_interaction_value)(struct dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
-                                 dt_masks_increment_t increment, int flow,
-                                 struct dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
-  /* Recompute hovered handles/nodes from the cached cursor state in gui. */
-  int (*update_hover)(struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui, int index);
-  /* Mouse x and y are widget-space coordinates from GTK/Cairo */
-  int (*mouse_moved)(struct dt_iop_module_t *module, double x, double y, double pressure, int which,
-                     struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
-  /* Mouse x and y are widget-space coordinates from GTK/Cairo */
-  int (*mouse_scrolled)(struct dt_iop_module_t *module, double x, double y, int up, const int delta_y, uint32_t state,
-                        struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index,
-                        dt_masks_interaction_t interaction);
-  /* Mouse x and y are widget-space coordinates from GTK/Cairo */
-  int (*button_pressed)(struct dt_iop_module_t *module, double x, double y,
-                        double pressure, int which, int type, uint32_t state,
-                        struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
-  /* Mouse x and y are widget-space coordinates from GTK/Cairo */
-  int (*button_released)(struct dt_iop_module_t *module, double x, double y, int which, uint32_t state,
-                         struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
-  /* Key event */
-  int (*key_pressed)(struct dt_iop_module_t *module, GdkEventKey *event, struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
-  void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
-  // The function to draw the shape in question. Signature must match shape_draw_function_t.
-  shape_draw_function_t draw_shape;
-  /** initialise all control points to eventually match a catmull-rom like spline */
-  void (*init_ctrl_points)(struct dt_masks_form_t *form);
-  int (*populate_context_menu)(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui, const float pzx, const float pzy);
-} dt_masks_functions_t;
 
 /** structure used to define a form */
 typedef struct dt_masks_form_t
@@ -416,17 +357,20 @@ typedef struct dt_masks_form_t
 // dt_masks_form_t must be fully defined above this include.
 #include "develop/masks/masks_history.h"
 
-/** structure used to define all the gui points to draw in viewport*/
-typedef struct dt_masks_form_gui_points_t
-{
-  float *points;   // points in absolute coordinates in output image space
-  int points_count;
-  float *border;   // border points in absolute coordinates in output image space
-  int border_count;
-  float *source;   // source point in absolute coordinates in output image space
-  int source_count;
-  gboolean clockwise;
-} dt_masks_form_gui_points_t;
+/* Rasterisation entry points: dispatch through the private table. */
+/** get points in real space with respect of distortion dx and dy are used to eventually move the center of
+ * the circle */
+int dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form, float **points, int *points_count,
+                               float **border, int *border_count, int source, dt_iop_module_t *module);
+/** get the rectangle which include the form and his border */
+int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                      dt_masks_form_t *form,
+                      int *width, int *height, int *posx, int *posy);
+int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+                             dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
+                             int *width, int *height, int *posx, int *posy);
+
+
 
 /** structure for dynamic buffers */
 typedef struct dt_masks_dynbuf_t
@@ -438,221 +382,6 @@ typedef struct dt_masks_dynbuf_t
 } dt_masks_dynbuf_t;
 
 
-/** structure used to display a form */
-typedef struct dt_masks_form_gui_t
-{
-  // Owning develop instance, set once at init. Mask GUI code must use this (or an explicit
-  // dev/module argument) instead of the darktable.develop global: shape handlers can run with
-  // module == NULL (mask-manager editing), and reaching for the global both couples every
-  // shape file to the whole application and hides which develop instance the code mutates.
-  struct dt_develop_t *dev;
-
-  dt_masks_type_t type;
-  // currently visible form when editing masks (GUI-only; may be a temporary copy)
-  dt_masks_form_t *form_visible;
-  // points used to draw the form
-  GList *points; // list of dt_masks_form_gui_points_t 
-
-  // points used to sample mouse moves
-  dt_masks_dynbuf_t *guipoints, *guipoints_payload;
-  int guipoints_count;
-
-  // values for mouse positions, etc...
-
-  // Mouse position in absolute coordinates in final image space
-  // This is used to map input event handlers to *_post_expose() drawing functions
-  // and to record drag & drop starting coordinates.
-  float pos[2];
-
-  // Mouse position in normalized coordinates in output image space.
-  // This is cached once per top-level event and replaces ad-hoc pzx/pzy recomputation.
-  float rel_pos[2];
-
-  // Mouse position in absolute coordinates in raw input image space.
-  // This is cached once per top-level event so nested handlers can reuse it.
-  float raw_pos[2];
-
-  // delta movement of the mouse in absolute coordinates in final image space
-  // This is used to map input event handlers to *_post_expose() drawing functions
-  float delta[2];
-
-  // scroll offset
-  float scrollx, scrolly;
-
-  // Position of a clone mask's source point (in what coordinates space ?)
-  float pos_source[2];
-
-  dt_masks_edit_mode_t edit_mode;
-
-  int node_hovered;           // this is the index of the node, refreshed on mouse_moved when a a group is selected
-  int handle_hovered;         // this is the index of the node, refreshed on mouse_moved when a a group is selected
-  int seg_hovered;            // this is the index of the segment, refreshed on mouse_moved when a a group is selected
-  int handle_border_hovered;  // this is the index of the node, refreshed on mouse_moved when a a group is selected
-
-  gboolean node_selected;     // this is the state of the node referenced by node_hovered
-  gboolean handle_selected;   // this is the state of the handle referenced by handle_hovered
-  gboolean seg_selected;      // this is the state of the segment referenced by segment_hovered
-  gboolean handle_border_selected; // this is the state of the border handle referenced by handle_border_hovered
-  int node_selected_idx;      // stable selected node index, distinct from current hover
-
-  gboolean form_selected;
-  gboolean border_selected;
-  gboolean source_selected;
-  gboolean pivot_selected;
-
-  int group_selected;
-  
-  int source_pos_type;
-
-  gboolean form_dragging;
-  gboolean source_dragging;
-  gboolean form_rotating;
-  gboolean border_toggling;
-  gboolean gradient_toggling;
-  int node_dragging;
-  int handle_dragging;
-  int seg_dragging;
-  int handle_border_dragging;
-
-  // Throttle GUI rebuilds while dragging to avoid heavy border recomputation.
-  double last_rebuild_ts;
-  float last_rebuild_pos[2];
-  gboolean rebuild_pending;
-
-  // Throttle handle hit-testing when cursor barely moves.
-  float last_hit_test_pos[2];
-
-  gboolean creation;
-  gboolean creation_closing_form;
-  dt_iop_module_t *creation_module;
-  // Shape type reused to create the next temporary form in a continuous creation session.
-  dt_masks_type_t creation_type;
-  // Form ids completed during the active creation session; only these are drawn while creation stays active.
-  GList *creation_formids;
-  // Last completed form id, selected when the creation session is disabled.
-  int creation_last_formid;
-
-  dt_masks_pressure_sensitivity_t pressure_sensitivity;
-
-  // ids
-  int formid;
-  uint64_t pipe_hash;
-} dt_masks_form_gui_t;
-
-dt_masks_form_t *dt_masks_get_visible_form(const struct dt_develop_t *dev);
-void dt_masks_set_visible_form(struct dt_develop_t *dev, dt_masks_form_t *form);
-void dt_masks_gui_init(struct dt_develop_t *dev);
-void dt_masks_gui_cleanup(struct dt_develop_t *dev);
-void dt_masks_gui_set_dragging(dt_masks_form_gui_t *gui);
-void dt_masks_gui_reset_dragging(dt_masks_form_gui_t *gui);
-gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui);
-
-// Test wether the form, the border, the source or the pivot is selected 
-static inline gboolean dt_masks_gui_was_anything_selected(const dt_masks_form_gui_t *gui)
-{
-  return gui && (gui->form_selected || gui->border_selected || gui->source_selected || gui->pivot_selected);
-}
-
-static inline int dt_masks_gui_selected_node_index(const dt_masks_form_gui_t *gui)
-{
-  return (gui && gui->node_selected) ? gui->node_selected_idx : -1;
-}
-
-static inline int dt_masks_gui_selected_handle_index(const dt_masks_form_gui_t *gui)
-{
-  return (gui && gui->handle_selected) ? gui->handle_hovered : -1;
-}
-
-static inline int dt_masks_gui_selected_handle_border_index(const dt_masks_form_gui_t *gui)
-{
-  return (gui && gui->handle_border_selected) ? gui->handle_border_hovered : -1;
-}
-
-static inline int dt_masks_gui_selected_segment_index(const dt_masks_form_gui_t *gui)
-{
-  return (gui) ? gui->seg_hovered : -1;
-}
-
-static inline gboolean dt_masks_gui_change_affects_selected_node_or_all(const dt_masks_form_gui_t *gui,
-                                                                        const int index)
-{
-  if(IS_NULL_PTR(gui)) return TRUE;
-
-  const int selected_node = dt_masks_gui_selected_node_index(gui);
-  return selected_node < 0 || selected_node == index;
-}
-
-static inline float dt_masks_get_form_size_from_nodes(const GList *points)
-{
-  if(IS_NULL_PTR(points) || IS_NULL_PTR(points->data)) return 0.0f;
-
-  // Brush and polygon node payloads both start with `float node[2]`.
-  const float *first = (const float *)points->data;
-  float min_x = first[0];
-  float max_x = first[0];
-  float min_y = first[1];
-  float max_y = first[1];
-
-  for(const GList *point_node = points; point_node; point_node = g_list_next(point_node))
-  {
-    const float *node = (const float *)point_node->data;
-    if(IS_NULL_PTR(node)) continue;
-    min_x = fminf(min_x, node[0]);
-    max_x = fmaxf(max_x, node[0]);
-    min_y = fminf(min_y, node[1]);
-    max_y = fmaxf(max_y, node[1]);
-  }
-
-  return fmaxf(max_x - min_x, max_y - min_y);
-}
-
-static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui)
-{
-  const float hit_thresh = DT_GUI_MOUSE_EFFECT_RADIUS * 0.5f;
-  const float dx = gui->pos[0] - gui->last_hit_test_pos[0];
-  const float dy = gui->pos[1] - gui->last_hit_test_pos[1];
-  if(gui->last_hit_test_pos[0] < 0.0f || (dx * dx + dy * dy) > (hit_thresh * hit_thresh))
-  {
-    gui->last_hit_test_pos[0] = gui->pos[0];
-    gui->last_hit_test_pos[1] = gui->pos[1];
-    return TRUE;
-  }
-  return FALSE;
-}
-
-// High-level mask event dispatchers cache the current cursor in raw absolute coordinates.
-// Reuse that cache for current-cursor conversions instead of backtransforming `gui->pos` again.
-static inline void dt_masks_gui_cursor_to_raw_norm(dt_develop_t *dev, const dt_masks_form_gui_t *gui, float point[2])
-{
-  point[0] = gui->raw_pos[0];
-  point[1] = gui->raw_pos[1];
-  dt_dev_coordinates_raw_abs_to_raw_norm(dev, point, 1);
-}
-
-// Reuse the cached absolute output-image cursor and drag delta to derive a raw-normalized point.
-static inline void dt_masks_gui_delta_to_raw_norm(dt_develop_t *dev, const dt_masks_form_gui_t *gui, float point[2])
-{
-  point[0] = gui->pos[0] + gui->delta[0];
-  point[1] = gui->pos[1] + gui->delta[1];
-  dt_dev_coordinates_image_abs_to_raw_norm(dev, point, 1);
-}
-
-static inline void dt_masks_gui_delta_to_image_abs(const dt_masks_form_gui_t *gui, float point[2])
-{
-  point[0] = gui->pos[0] + gui->delta[0];
-  point[1] = gui->pos[1] + gui->delta[1];
-}
-
-// Drag branches need the same "cursor + drag delta" converted back to raw space.
-// Keep that conversion in one place so all shapes use the same anchor semantics.
-static inline void dt_masks_gui_delta_from_raw_anchor(dt_develop_t *dev, const dt_masks_form_gui_t *gui,
-                                                      const float anchor[2], float *delta_x, float *delta_y)
-{
-  float point[2];
-  dt_masks_gui_delta_to_raw_norm(dev, gui, point);
-  *delta_x = point[0] - anchor[0];
-  *delta_y = point[1] - anchor[1];
-}
 
 // Clone and spot forms share the same default presets, while regular drawn masks use their own.
 static inline gboolean dt_masks_form_uses_spot_defaults(const dt_masks_form_t *form)
@@ -696,198 +425,17 @@ static inline void dt_masks_set_ctrl_points(float ctrl1[2], float ctrl2[2], cons
   ctrl2[1] = control_points[3];
 }
 
-gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index);
-void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index,
-                              struct dt_iop_module_t *module);
 
-// Brush and polygon nodes share the same node/control-point edit semantics.
-static inline gboolean dt_masks_toggle_bezier_node_type(struct dt_iop_module_t *module,
-                                                        struct dt_masks_form_t *mask_form,
-                                                        struct dt_masks_form_gui_t *mask_gui,
-                                                        const int form_index,
-                                                        const struct dt_masks_form_gui_points_t *gui_points,
-                                                        const int node_index,
-                                                        float node[2], float ctrl1[2], float ctrl2[2],
-                                                        dt_masks_points_states_t *state)
-{
-  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_gui) || IS_NULL_PTR(gui_points) || IS_NULL_PTR(state) || node_index < 0) return FALSE;
-
-  if(dt_masks_node_is_cusp(gui_points, node_index))
-  {
-    *state = DT_MASKS_POINT_STATE_NORMAL;
-    if(mask_form->functions && mask_form->functions->init_ctrl_points)
-      mask_form->functions->init_ctrl_points(mask_form);
-  }
-  else
-  {
-    ctrl1[0] = ctrl2[0] = node[0];
-    ctrl1[1] = ctrl2[1] = node[1];
-    *state = DT_MASKS_POINT_STATE_USER;
-  }
-
-  dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
-  return TRUE;
-}
-
-static inline gboolean dt_masks_reset_bezier_ctrl_points(struct dt_iop_module_t *module,
-                                                         struct dt_masks_form_t *mask_form,
-                                                         struct dt_masks_form_gui_t *mask_gui,
-                                                         const int form_index,
-                                                         const struct dt_masks_form_gui_points_t *gui_points,
-                                                         const int node_index,
-                                                         dt_masks_points_states_t *state)
-{
-  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_gui) || IS_NULL_PTR(gui_points) || IS_NULL_PTR(state) || node_index < 0) return FALSE;
-
-  if(*state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gui_points, node_index))
-  {
-    *state = DT_MASKS_POINT_STATE_NORMAL;
-    if(mask_form->functions && mask_form->functions->init_ctrl_points)
-      mask_form->functions->init_ctrl_points(mask_form);
-    dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
-  }
-
-  return TRUE;
-}
-
-// Brush and polygon border handles both constrain the cursor to the node->handle axis.
-static inline void dt_masks_project_on_line(const float cursor[2], const float node[2],
-                                            const float handle[2], float point[2])
-{
-  const float dx_line = handle[0] - node[0];
-  const float dy_line = handle[1] - node[1];
-
-  if(fabsf(dx_line) < 1e-6f)
-  {
-    point[0] = node[0];
-    point[1] = cursor[1];
-  }
-  else
-  {
-    const float a = dy_line / dx_line;
-    const float b = node[1] - a * node[0];
-    const float denom = a * a + 1.0f;
-    const float xproj = (a * cursor[1] + cursor[0] - b * a) / denom;
-
-    point[0] = xproj;
-    point[1] = a * xproj + b;
-  }
-}
-
-// Border handles store normalized raw-space radii, but hit/drag code works in image space.
-// Convert both ends once here so all shapes derive border thickness the same way.
-static inline float dt_masks_border_from_projected_handle(dt_develop_t *dev, const float node[2],
-                                                          const float projected_image_pos[2],
-                                                          const float scale_ref)
-{
-  float projected_raw[2] = { projected_image_pos[0], projected_image_pos[1] };
-  float node_raw[2] = { node[0], node[1] };
-  dt_dev_coordinates_image_abs_to_raw_abs(dev, projected_raw, 1);
-  dt_dev_coordinates_raw_norm_to_raw_abs(dev, node_raw, 1);
-
-  const float delta_x = projected_raw[0] - node_raw[0];
-  const float delta_y = projected_raw[1] - node_raw[1];
-  return sqrtf(delta_x * delta_x + delta_y * delta_y) / scale_ref;
-}
-
-// Circle, ellipse and gradient creation previews all follow the same drawing sequence:
-// optional save/restore, draw the shape, then draw the border preview if present.
-static inline void dt_masks_draw_preview_shape(struct dt_develop_t *dev, cairo_t *cr, const float zoom_scale,
-                                               const int num_points,
-                                               float *points, const int points_count,
-                                               float *border, const int border_count,
-                                               const shape_draw_function_t *draw_shape,
-                                               const cairo_line_cap_t shape_cap,
-                                               const cairo_line_cap_t border_cap,
-                                               const gboolean save_restore,
-                                               const gboolean source)
-{
-  if(save_restore) cairo_save(cr);
-  if(points && points_count > 0)
-    dt_draw_shape_lines(dev, DT_MASKS_NO_DASH, source, cr, num_points, FALSE, zoom_scale, points, points_count,
-                        draw_shape, shape_cap);
-  if(border && border_count > 0)
-    dt_draw_shape_lines(dev, DT_MASKS_DASH_STICK, source, cr, num_points, FALSE, zoom_scale, border, border_count,
-                        draw_shape, border_cap);
-  if(save_restore) cairo_restore(cr);
-}
-
-// Shared scratch buffers for creation previews. Keeping them grouped makes the shape
-// preview helpers return a single value and centralizes cleanup.
-typedef struct dt_masks_preview_buffers_t
-{
-  float *points;
-  int points_count;
-  float *border;
-  int border_count;
-
-  float *source_points;
-} dt_masks_preview_buffers_t;
-
-static inline void dt_masks_preview_buffers_cleanup(dt_masks_preview_buffers_t *buffers)
-{
-  dt_pixelpipe_cache_free_align(buffers->points);
-  dt_pixelpipe_cache_free_align(buffers->border);
-  dt_pixelpipe_cache_free_align(buffers->source_points);
-}
-
-typedef struct dt_masks_gui_center_point_t
-{
-  struct
-  {
-    float x;
-    float y;
-  }main;
-
-  struct 
-  {
-    float x;
-    float y;
-  }source;
-} dt_masks_gui_center_point_t;
-
-/** the shape-specific function tables */
-extern const dt_masks_functions_t dt_masks_functions_circle;
-extern const dt_masks_functions_t dt_masks_functions_ellipse;
-extern const dt_masks_functions_t dt_masks_functions_brush;
-extern const dt_masks_functions_t dt_masks_functions_polygon;
-extern const dt_masks_functions_t dt_masks_functions_gradient;
-extern const dt_masks_functions_t dt_masks_functions_group;
-
-/** init dt_masks_form_gui_t struct with default values */
-/** Reset a form GUI state and bind it to its owning develop instance (gui->dev). */
-void dt_masks_init_form_gui(dt_develop_t *dev, dt_masks_form_gui_t *gui);
-
-/** get points in real space with respect of distortion dx and dy are used to eventually move the center of
- * the circle */
-int dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form, float **points, int *points_count,
-                               float **border, int *border_count, int source, dt_iop_module_t *module);
-
-/** get the rectangle which include the form and his border */
-int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
-                      dt_masks_form_t *form,
-                      int *width, int *height, int *posx, int *posy);
-int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                             dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
-                             int *width, int *height, int *posx, int *posy);
 /** get the transparency mask of the form and his border */
-static inline int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+int dt_masks_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       dt_masks_form_t *const form,
-                      float **buffer, int *width, int *height, int *posx, int *posy)
-{
-  return (form->functions && form->functions->get_mask)
-    ? form->functions->get_mask(module, pipe, piece, form, buffer, width, height, posx, posy)
-    : 1;
-}
-static inline int dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+                      float **buffer, int *width, int *height, int *posx, int *posy);
+
+int dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
                           const dt_dev_pixelpipe_iop_t *const piece,
-                          dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
-{
-  return (form->functions && form->functions->get_mask_roi)
-    ? form->functions->get_mask_roi(module, pipe, piece, form, roi, buffer)
-    : 1;
-}
+                          dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer);
+
 
 int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
                               const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
@@ -896,10 +444,7 @@ int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
 // returns current masks version
 int dt_masks_version(void);
 
-void dt_masks_append_form(dt_develop_t *dev, dt_masks_form_t *form);
-void dt_masks_remove_form(dt_develop_t *dev, dt_masks_form_t *form);
-void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
-                          dt_masks_form_gui_t *gui, int index, int node_index);
+
 
 // update masks from older versions
 int dt_masks_legacy_params(dt_develop_t *dev, void *params, const int old_version, const int new_version);
@@ -934,194 +479,44 @@ void dt_masks_write_masks_history_item(const int32_t imgid, const int num, dt_ma
 void dt_masks_free_form(dt_masks_form_t *form);
 void dt_masks_cleanup_unused(dt_develop_t *dev);
 
-/** function used to manipulate forms for masks */
-void dt_masks_change_form_gui(dt_develop_t *dev, dt_masks_form_t *newform);
-void dt_masks_clear_form_gui(dt_develop_t *dev);
-void dt_masks_reset_form_gui(dt_develop_t *dev);
-void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui);
-void dt_masks_reset_show_masks_icons(dt_develop_t *dev);
+
 
 #define DEVELOP_MASKS_NB_SHAPES 5
 
-typedef enum dt_masks_shape_button_index_t
-{
-  DT_MASKS_SHAPE_INDEX_GRADIENT = 0,
-  DT_MASKS_SHAPE_INDEX_POLYGON = 1,
-  DT_MASKS_SHAPE_INDEX_ELLIPSE = 2,
-  DT_MASKS_SHAPE_INDEX_CIRCLE = 3,
-  DT_MASKS_SHAPE_INDEX_BRUSH = 4,
-} dt_masks_shape_button_index_t;
-
-typedef enum dt_masks_shape_buttons_flags_t
-{
-  /** Do not create any shape button. */
-  DT_MASKS_SHAPE_BUTTONS_NONE = 0,
-  /** Create/register the circle button. */
-  DT_MASKS_SHAPE_BUTTONS_CIRCLE = 1 << 0,
-  /** Create/register the ellipse button. */
-  DT_MASKS_SHAPE_BUTTONS_ELLIPSE = 1 << 1,
-  /** Create/register the polygon button. */
-  DT_MASKS_SHAPE_BUTTONS_POLYGON = 1 << 2,
-  /** Create/register the brush button. */
-  DT_MASKS_SHAPE_BUTTONS_BRUSH = 1 << 3,
-  /** Create/register the gradient button. */
-  DT_MASKS_SHAPE_BUTTONS_GRADIENT = 1 << 4,
-  /** Create/register every shape button. */
-  DT_MASKS_SHAPE_BUTTONS_ALL = DT_MASKS_SHAPE_BUTTONS_CIRCLE
-                               | DT_MASKS_SHAPE_BUTTONS_ELLIPSE
-                               | DT_MASKS_SHAPE_BUTTONS_POLYGON
-                               | DT_MASKS_SHAPE_BUTTONS_BRUSH
-                               | DT_MASKS_SHAPE_BUTTONS_GRADIENT,
-} dt_masks_shape_buttons_flags_t;
-
-typedef gboolean (*dt_masks_shape_buttons_start_f)(GtkWidget *button, dt_iop_module_t *module,
-                                                   dt_masks_type_t type, gpointer user_data);
-typedef dt_masks_type_t (*dt_masks_shape_buttons_type_f)(dt_iop_module_t *module, dt_masks_type_t type,
-                                                         gpointer user_data);
-typedef void (*dt_masks_shape_buttons_notify_f)(GtkWidget *button, dt_iop_module_t *module,
-                                                dt_masks_type_t type, gpointer user_data);
-
-typedef struct dt_masks_shape_buttons_config_t
-{
-  // Owning develop instance. Mandatory: the GTK button callbacks have no other context when
-  // creation_module is NULL (the shape-manager toolbar case).
-  struct dt_develop_t *dev;
-  dt_iop_module_t *owner_module;
-  dt_iop_module_t *creation_module;
-  GtkWidget **buttons;
-  int *types;
-  const char *action_section;
-  dt_masks_shape_buttons_flags_t flags;
-  dt_masks_shape_buttons_flags_t register_flags;
-  gboolean local;
-  gpointer user_data;
-  dt_masks_shape_buttons_start_f can_start;
-  dt_masks_shape_buttons_type_f form_type;
-  dt_masks_shape_buttons_notify_f started;
-  dt_masks_shape_buttons_notify_f exited;
-} dt_masks_shape_buttons_config_t;
-
-GtkWidget *dt_masks_shape_buttons_create(const dt_masks_shape_buttons_config_t *config);
-void dt_masks_shape_buttons_deactivate_all(GtkWidget *active_button);
-
-int dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure,
-                                int which);
-int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, int which,
-                                    uint32_t state);
-int dt_masks_events_button_pressed(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, double pressure,
-                                   int which, int type, uint32_t state);
-int dt_masks_events_mouse_scrolled(dt_develop_t *dev, struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
-
-int dt_masks_events_key_pressed(dt_develop_t *dev, struct dt_iop_module_t *module, GdkEventKey *event);
-/**
- * @brief returns wether a node is a corner or not.
- * A node is a corner if its 2 control handles are at the same position, else it's a curve.
- *
- * @param gpt the GUI points of the mask form
- * @param index the index of the node to test
- * @param nb the number of coord by node
- * @param coord_offset the offset of the coordinates in the points array
- *
- * @return TRUE if the node is a corner, FALSE it's a curve.
- */
-gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index);
-
-/**
- * @brief Draw the source for a correction mask.
- *
- * @param cr the cairo context to draw into
- * @param gui the GUI state of the mask form
- * @param index the index of the mask form
- * @param nb the number of coord for that shape
- * @param zoom_scale the current zoom scale of the image
- * @param shape_function the function to draw the shape
- */
-void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
-  const float zoom_scale, struct dt_masks_gui_center_point_t *center_point, const shape_draw_function_t *draw_shape_func);
-void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const float *points,
-                                   const int points_count, const int node_count, const float zoom_scale);
-
-void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
-                                 int32_t pointerx, int32_t pointery);
-int dt_masks_events_mouse_leave(struct dt_iop_module_t *module);
-int dt_masks_events_mouse_enter(struct dt_iop_module_t *module);
-
-/** functions used to manipulate gui data */
-void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index,
-                              struct dt_iop_module_t *module);
-gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index,
-                                            struct dt_iop_module_t *module, float posx, float posy);
-
-/**
- * @brief remove a mask shape or node form from the GUI.
- * This function is used with a popupmenu "Delete" action.
- * 
- * @param module The module owning the mask
- * @param form The form to remove
- * @param gui The GUI state of the form
- * @param parentid The parent ID of the form
- * @return gboolean TRUE if the form was removed, FALSE otherwise
- */
-gboolean dt_masks_gui_remove(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid);
-
-/**
- * @brief If the form to remove is used once, ask to the user if he wants to delete it from the list or just remove and keep for later reuse.
- * 
- * @param module The module owning the mask
- * @param sel The form to remove
- * @param parent_id The parent ID of the form
- * @param mask_gui The GUI state of the form
- * @param form_id The form ID of the form to remove
- * @return gboolean TRUE if the form was removed, FALSE otherwise
- */
-gboolean dt_masks_remove_or_delete(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
-                                    dt_masks_form_gui_t *mask_gui, int form_id);
-
-/**
- * @brief Remove the form from its current group only, keeping it around unused for potential
- * reuse. Never asks for confirmation, since nothing is destroyed.
- *
- * @return gboolean TRUE if the form was removed, FALSE otherwise
- */
-gboolean dt_masks_remove_shape_from_group(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
-                                          dt_masks_form_gui_t *mask_gui, int form_id);
-
-/**
- * @brief Permanently delete the form from every group and from dev->forms. Gated by
- * dt_masks_gui_confirm_permanent_delete() (itself gated by the "ask_before_delete_mask_shape" pref).
- *
- * @return gboolean TRUE if the form was deleted, FALSE otherwise (dialog cancelled)
- */
-gboolean dt_masks_delete_shape(struct dt_iop_module_t *module, dt_masks_form_t *sel, int parent_id,
-                               dt_masks_form_gui_t *mask_gui, int form_id);
 
 
-// Remove a mask
-gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_t *gui);
 
 
-void dt_masks_gui_form_remove(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index);
-void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
 
-/**
- * @brief Save the form creation right after a shape has been finished drawing.
- * 
- * @param dev the develop structure
- * @param module the module owning the mask
- * @param form the form to save
- * @param gui the GUI state of the form
- */
-void dt_masks_gui_form_save_creation(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *form,
-                                     dt_masks_form_gui_t *gui);
-void dt_masks_group_ungroup(dt_develop_t *dev, dt_masks_form_t *dest_grp, dt_masks_form_t *grp);
-void dt_masks_group_update_name(dt_iop_module_t *module);
-dt_masks_form_group_t *dt_masks_group_add_form(dt_develop_t *dev, dt_masks_form_t *grp, dt_masks_form_t *form);
 
-void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module_t *module);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 dt_masks_edit_mode_t dt_masks_get_edit_mode(struct dt_iop_module_t *module);
 void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t value);
 void dt_masks_iop_update(struct dt_iop_module_t *module);
-void dt_masks_iop_combo_populate(GtkWidget *w, void *module);
 void dt_masks_iop_use_same_as(struct dt_iop_module_t *module, struct dt_iop_module_t *src);
 /** Hash a group's full content (recursing into members). Children are resolved from the given
  * forms list — pass the same list the group came from (live dev->forms or a snapshot), so the
@@ -1136,101 +531,34 @@ void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_
 int dt_masks_form_change_opacity(dt_develop_t *dev, dt_masks_form_t *form, int parentid, int up, const int flow);
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up);
 int dt_masks_form_duplicate(dt_develop_t *dev, int formid);
+/**
+ * @brief Duplicate a shape (dt_masks_form_duplicate) and, if `group_id` names a valid
+ * group, attach the duplicate as a new member of that group right away, inheriting the
+ * source form's group-entry state (operation) and opacity. If `group_id` is not a group
+ * (e.g. <= 0), the duplicate is left unattached in dev->forms, same as
+ * dt_masks_form_duplicate alone. Shared by every "Duplicate shape" UI entry point so the
+ * attach-and-inherit behavior does not get re-implemented per caller.
+ * @return the new form's id, or <= 0 on failure.
+ */
+int dt_masks_form_duplicate_in_group(dt_develop_t *dev, int group_id, int form_id);
 /* returns a duplicate tof form, including the formid */
 dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form);
 
-/** utils functions */
-int dt_masks_point_in_form_exact(const float *pts, int num_pts, const float *points, int points_start, int points_count);
 
-/** allow to select a shape inside an iop */
-void dt_masks_select_form(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *sel);
 
-/** utils for selecting the source of a clone mask while creating it */
-void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint32_t state);
-void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form);
-void dt_masks_calculate_source_pos_origin(dt_masks_form_gui_t *gui, const float initial_xpos,
-                                         const float initial_ypos, const float xpos, const float ypos, float *px,
-                                         float *py, const int adding);
-static inline void dt_masks_draw_source_preview(cairo_t *cr, const float zoom_scale, dt_masks_form_gui_t *gui,
-                                                const float initial_xpos, const float initial_ypos,
-                                                const float xpos, const float ypos, const int adding)
-{
-  float source_pos[2] = { 0.0f, 0.0f };
-  dt_masks_calculate_source_pos_origin(gui, initial_xpos, initial_ypos, xpos, ypos,
-                                      &source_pos[0], &source_pos[1], adding);
-  dt_draw_cross(cr, zoom_scale, source_pos[0], source_pos[1]);
-}
-/**
- * @brief Rotate a mask shape around its center.
- * WARNING: gui->delta will be updated with the new position after rotation.
- * 
- * @param dev the develop structure
- * @param anchor the current cursor position in absolute output-image coordinates.
- * @param center the origin point of rotation in absolute output-image coordinates.
- * @param gui the GUI form structure
- * @return * float : The signed angle to increment.
- */
-float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], const float center[2], dt_masks_form_gui_t *gui);
 
-/** Getters and setters for direct GUI interaction */
-dt_masks_form_group_t *dt_masks_form_group_from_parentid(dt_develop_t *dev, int parentid, int formid);
-int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int formid);
-dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_form_t *form,
-                                                        const struct dt_masks_form_gui_t *gui);
 
-/** Returns TRUE if anything in the mask is selected at all, regardless of what it is. */
-gboolean dt_masks_is_anything_selected(const dt_masks_form_gui_t *mask_gui);
 
-/** Returns TRUE if anything in the mask is hovered at all, regardless of what it is. */
-gboolean dt_masks_is_anything_hovered(const dt_masks_form_gui_t *mask_gui);
 
-/**
- * @brief Return the currently selected group entry, resolving to the live form group when the GUI
- *        is operating on a temporary copy (for example the visible group created for editing).
- *
- * The selection is taken from `gui->group_selected`. If the selected entry belongs to a temporary
- * group (non-zero parentid), the function resolves and returns the corresponding entry from the
- * real group in `dev->forms`.
- */
-dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const struct dt_masks_form_t *form,
-                                                             const struct dt_masks_form_gui_t *gui);
-float dt_masks_form_get_interaction_value(dt_develop_t *dev, dt_masks_form_group_t *form_group,
-                                          dt_masks_interaction_t interaction);
-gboolean dt_masks_form_get_gravity_center(dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);
-void dt_masks_form_update_gravity_center(dt_develop_t *dev, struct dt_masks_form_t *form);
-/** Marks gravity_center/area stale instead of recomputing them right away. Use for bulk
- * paths (loading history, undo/redo) that swap in many forms at once; the one GUI
- * hit-testing read site recomputes lazily on first actual use. */
-void dt_masks_form_invalidate_gravity_center(struct dt_masks_form_t *form);
-int dt_masks_center_view_on_form(struct dt_develop_t *dev, const struct dt_masks_form_t *form);
-float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
-                                          dt_masks_interaction_t interaction,
-                                          float value, dt_masks_increment_t increment, int flow,
-                                          struct dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
 
-/**
- * @brief Change a numerical property of a mask shape, either by in/de-crementing the current value
- * or setting it in an absolute fashion, then save it to configuration.
- *
- * @param form the shape to change. We will read its type internally
- * @param feature the propertie to change: hardness, size, curvature (for gradients)
- * @param new_value if increment is set to absolute, this is directly the updated value. if increment is offset, the updated value is old_value + new_value. if increment is scale, the updated value is old value * new_value.
- * @param v_min minimum acceptable value of the property for sanitization
- * @param v_max maximum acceptable value of the property for sanitization
- * @param increment the increment type: absolute, offset or scale.
- * @param flow the value of the scroll distance that can be postive or negative.
- */
-float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float new_value, float v_min, float v_max,
-                                  dt_masks_increment_t increment, const int flow);
-/**
- * @brief Update a mask configuration value and emit a toast message.
- *
- * This is a convenience wrapper around dt_masks_get_set_conf_value() that keeps UI
- * feedback consistent across mask types.
- */
-float dt_masks_get_set_conf_value_with_toast(dt_masks_form_t *form, const char *feature, float amount,
-                                             float v_min, float v_max, dt_masks_increment_t increment, int flow,
-                                             const char *toast_fmt, float toast_scale);
+
+
+
+
+
+
+
+
 
 /**
  * @brief Duplicate a points list for a mask using a fixed node size.
@@ -1239,16 +567,9 @@ float dt_masks_get_set_conf_value_with_toast(dt_masks_form_t *form, const char *
  */
 void dt_masks_duplicate_points(const dt_masks_form_t *base, dt_masks_form_t *dest, size_t node_size);
 
-/**
- * @brief Apply a scroll increment to a scalar value.
- */
-float dt_masks_apply_increment(float current, float amount, dt_masks_increment_t increment, int flow);
 
-/**
- * @brief Apply a scroll increment using precomputed scale/offset factors.
- */
-float dt_masks_apply_increment_precomputed(float current, float amount, float scale_amount, float offset_amount,
-                                            dt_masks_increment_t increment);
+
+
 
 /** detail mask support */
 void dt_masks_extend_border(float *const mask, const int width, const int height, const int border);
@@ -1258,8 +579,7 @@ void dt_masks_calc_rawdetail_mask(float *const src, float *const out, float *con
                                   const int height, const dt_aligned_pixel_t wb);
 void dt_masks_calc_detail_mask(float *const src, float *const out, float *const tmp, const int width, const int height, const float threshold, const gboolean detail);
 
-void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
-                                 dt_masks_form_gui_t *gui);
+
 
 /** code for dynamic handling of intermediate buffers */
 static inline gboolean _dt_masks_dynbuf_growto(dt_masks_dynbuf_t *a, size_t size)
@@ -1492,106 +812,33 @@ static inline int dt_masks_roundup(int num, int mult)
   return (rem == 0) ? num : num + mult - rem;
 }
 
-/**
- * @brief Check if a point (px,py) is inside a radius from a center point (cx,cy)
- * 
- * @param px x coord of the point to test
- * @param py y coord of the point to test
- * @param cx center x coord
- * @param cy center y coord
- * @param radius the radius from center
- * @return gboolean TRUE if the point is inside the radius from center, FALSE otherwise
- */
-gboolean dt_masks_point_is_within_radius(const float px, const float py,
-                                        const float cx, const float cy,
-                                        const float radius);
 
-/**
- * @brief Shape-specific callback to fetch a node's border handle in GUI space.
- *
- * @return TRUE if the handle is valid and written to (handle_x, handle_y).
- */
-typedef gboolean (*dt_masks_border_handle_fn)(const dt_masks_form_gui_points_t *gui_points, int node_count,
-                                              int node_index, float *handle_x, float *handle_y, void *user_data);
-/**
- * @brief Shape-specific callback to fetch a node's curve handle in GUI space.
- *
- * The handle is only queried for non-cusp nodes; implementations may assume that.
- */
-typedef void (*dt_masks_curve_handle_fn)(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                         float *handle_x, float *handle_y, void *user_data);
-/**
- * @brief Shape-specific callback to fetch a node's position in GUI space.
- *
- * When NULL, the common helper assumes Bezier-like layout at points[k*6+2].
- */
-typedef void (*dt_masks_node_position_fn)(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                          float *node_x, float *node_y, void *user_data);
-/**
- * @brief Shape-specific callback for inside/border/segment hit testing.
- *
- * This mirrors the per-shape *_get_distance() APIs and returns the same outputs.
- * The dist output is a squared distance in absolute output-image coordinates.
- */
-typedef void (*dt_masks_distance_fn)(float pointer_x, float pointer_y, float cursor_radius,
-                                     dt_masks_form_gui_t *mask_gui, int form_index, int node_count,
-                                     int *inside, int *inside_border, int *near_handle, int *inside_source, float *dist,
-                                     void *user_data);
-/**
- * @brief Optional hook to customize selection flags after inside/border/source resolution.
- */
-typedef void (*dt_masks_post_select_fn)(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
-                                        int inside_source, void *user_data);
 
-/**
- * @brief Shared selection logic for node/handle/segment hit testing.
- *
- * The shape-specific callbacks supply handles and distance tests while this function
- * performs common selection bookkeeping on dt_masks_form_gui_t.
- *
- * The cached cursor in `mask_gui->pos` is authoritative for hit testing.
- */
-int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui,
-                                        int form_index, int node_count_override,
-                                        dt_masks_border_handle_fn border_handle_cb,
-                                        dt_masks_curve_handle_fn curve_handle_cb,
-                                        dt_masks_node_position_fn node_position_cb,
-                                        dt_masks_distance_fn distance_cb,
-                                        dt_masks_post_select_fn post_select_cb,
-                                        void *user_data);
 
-void dt_masks_creation_mode_quit(dt_masks_form_gui_t *gui);
-gboolean dt_masks_creation_mode_enter(dt_develop_t *dev, dt_iop_module_t *module, const dt_masks_type_t type);
-void apply_operation(struct dt_masks_form_group_t *pt, const dt_masks_state_t apply_state);
 
-/** Contextual menu */
 
-#define menu_item_set_fake_accel(menu_item, keyval, mods)             \
-                                                                      \
-{                                                                     \
-  GtkWidget *child = gtk_bin_get_child(GTK_BIN(menu_item));           \
-  if(GTK_IS_ACCEL_LABEL(child))                                       \
-    gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), keyval, mods);  \
-}
 
-void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data);
 
-GdkModifierType dt_masks_get_accel_mods(dt_masks_interaction_t interaction);
 
-GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const dt_masks_form_group_t *fpt,
-                                const float pzx, const float pzy);
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /** Dialogs */
 
-int dt_masks_gui_confirm_delete_form_dialog(const char *form_name);
 
-/**
- * @brief Ask the user to confirm a permanent shape deletion, gated by the
- * "ask_before_delete_mask_shape" pref. Shows a "Always ask" checkbox that writes back to the
- * pref regardless of the response. Returns TRUE immediately without showing anything when the
- * pref is off.
- */
-gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name);
+
+
 
 #ifdef __cplusplus
 }

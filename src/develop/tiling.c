@@ -32,12 +32,11 @@
 */
 
 
+#include "develop/pipeline_notify.h"
 #include "system/sys_resources.h"
-#include "common/pixelpipe_cache_alloc.h"
+#include "caches/pixelpipe_cache_alloc.h"
 #include "develop/tiling.h"
 #include "common/opencl.h"
-#include "control/control.h"
-#include "develop/blend.h"
 #include "develop/pixelpipe.h"
 #include "math/nelder_mead_simplex.h"
 
@@ -45,8 +44,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <unistd.h>
 
 #define CLAMPI(a, mn, mx) ((a) < (mn) ? (mn) : ((a) > (mx) ? (mx) : (a)))
 
@@ -294,7 +291,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
    * run, so a plan that exceeds it is guaranteed to fail at runtime no
    * matter how much total memory is nominally free. */
   const float largest_run
-      = (float)dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+      = (float)dt_pixelpipe_cache_get_largest_free_run();
   available = fminf(available, 0.9f * largest_run);
 
   /* Size the tile from the memory left in the host cache.
@@ -472,7 +469,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   return 0;
 
 error:
-  dt_control_log(_("tiling failed for module '%s'. output might be garbled."), self->op);
+  dt_pipeline_message(_("tiling failed for module '%s'. output might be garbled."), self->op);
 // fall through
 
 fallback:
@@ -554,7 +551,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
    * run, so a plan that exceeds it is guaranteed to fail at runtime no
    * matter how much total memory is nominally free. */
   const float largest_run
-      = (float)dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+      = (float)dt_pixelpipe_cache_get_largest_free_run();
   available = fminf(available, 0.9f * largest_run);
 
   /* Size the tile from the memory left in the host cache.
@@ -806,7 +803,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   return 0;
 
 error:
-  dt_control_log(_("tiling failed for module '%s'. output might be garbled."), self->op);
+  dt_pipeline_message(_("tiling failed for module '%s'. output might be garbled."), self->op);
 // fall through
 
 fallback:
@@ -873,8 +870,10 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
   const float singlebuffer = fminf(fmaxf((available - tiling.overhead) / factor, 0.0f),
                                    (float)(dt_opencl_get_device_memalloc(devid)));
   const float maxbuf = fmaxf(tiling.maxbuf_cl, 1.0f);
-  int width = _min(roi_in->width, dt_opencl_get_global()->dev[devid].max_image_width);
-  int height = _min(roi_in->height, dt_opencl_get_global()->dev[devid].max_image_height);
+  int max_width = 0, max_height = 0;
+  dt_opencl_get_device_max_image_size(devid, &max_width, &max_height);
+  int width = _min(roi_in->width, max_width);
+  int height = _min(roi_in->height, max_height);
 
   /* shrink tile size in case it would exceed singlebuffer size */
   if((float)width * height * max_bpp * maxbuf > singlebuffer)
@@ -943,6 +942,17 @@ static int _default_process_tiling_cl_ptp(struct dt_iop_module_t *self, const st
     else
       height -= halign;
   }
+
+  /* The loop above subtracts whole multiples of the alignment, which preserves alignment only
+     if the value it started from was already aligned. That is not guaranteed here: the
+     alignment step further up is deliberately skipped while a dimension still spans the whole
+     image -- correct as long as it stays that way, but this loop is free to shrink such a
+     dimension below the image size, and it then carries the image's own arbitrary size as a
+     permanent phase error. Tile origins step by (dimension - 2 * overlap), so one unaligned
+     dimension puts every tile after the first off-lattice, and with it every lattice a module
+     anchors to its own tile origin -- CFA phase, superpixel binning, pyramid levels. */
+  if(width < roi_in->width) width = _max((int)walign, _align_down(width, walign));
+  if(height < roi_in->height) height = _max((int)halign, _align_down(height, halign));
 
   /* also make sure that overlap follows alignment rules by making it wider when needed */
   const int overlap = tiling.overlap % xyalign != 0 ? (tiling.overlap / xyalign + 1) * xyalign
@@ -1107,8 +1117,10 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
                                    (float)(dt_opencl_get_device_memalloc(devid)));
   const float maxbuf = fmaxf(tiling.maxbuf_cl, 1.0f);
 
-  int width = _min(_max(roi_in->width, roi_out->width), dt_opencl_get_global()->dev[devid].max_image_width);
-  int height = _min(_max(roi_in->height, roi_out->height), dt_opencl_get_global()->dev[devid].max_image_height);
+  int max_width = 0, max_height = 0;
+  dt_opencl_get_device_max_image_size(devid, &max_width, &max_height);
+  int width = _min(_max(roi_in->width, roi_out->width), max_width);
+  int height = _min(_max(roi_in->height, roi_out->height), max_height);
 
   /* Alignment rules: we need to make sure that alignment requirements of module are fulfilled.
      Modules will report alignment requirements via xalign and yalign within tiling_callback().
@@ -1170,6 +1182,12 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
     else
       height -= xyalign;
   }
+
+  /* Same re-alignment as in the pixel-perfect tiler above: this loop only preserves the
+     alignment it was handed, and the branches that set it are all conditional, so a tile that
+     took none of them reaches here still carrying the raw image dimensions. */
+  if(width < _max(roi_in->width, roi_out->width)) width = _max((int)xyalign, _align_down(width, xyalign));
+  if(height < _max(roi_in->height, roi_out->height)) height = _max((int)xyalign, _align_down(height, xyalign));
 
   int tiles_x = 1, tiles_y = 1;
 
@@ -1454,7 +1472,7 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
    * the largest run, evicting to make room — eviction merges adjacent free
    * runs, but cannot merge across entries pinned by the pipe recursion. */
   size_t available = dt_get_available_mem();
-  size_t largest_run = dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+  size_t largest_run = dt_pixelpipe_cache_get_largest_free_run();
 
   int error = 0;
   while(!error && (available < total || (size_t)(0.9f * largest_run) < total))
@@ -1466,12 +1484,12 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
      * cache would not change the answer; the caller tiles instead. */
     size_t cache_current = 0;
     size_t cache_max = 0;
-    dt_dev_pixelpipe_cache_get_usage(dt_pixelpipe_cache_get_global(), &cache_current, &cache_max);
+    dt_dev_pixelpipe_cache_get_usage(&cache_current, &cache_max);
     if(cache_max - cache_current >= total && (size_t)(0.9f * largest_run) >= total) break;
 
-    error = dt_dev_pixel_pipe_cache_remove_lru(dt_pixelpipe_cache_get_global());
+    error = dt_dev_pixel_pipe_cache_remove_lru();
     available = dt_get_available_mem();
-    largest_run = dt_pixelpipe_cache_get_largest_free_run(dt_pixelpipe_cache_get_global());
+    largest_run = dt_pixelpipe_cache_get_largest_free_run();
   }
 
   return total <= available && total <= (size_t)(0.9f * largest_run);

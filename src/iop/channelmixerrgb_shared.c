@@ -21,7 +21,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #endif
 
-#include "gui/bauhaus.h"
+#include "widgets/bauhaus.h"
 #include "pixel/chromatic_adaptation.h"
 #include "pixel/illuminants.h"
 #include "math/matrices.h"
@@ -29,7 +29,6 @@
 
 #include <float.h>
 #include <math.h>
-#include <string.h>
 
 #define DT_IOP_CHANNELMIXER_SHARED_INV_SQRT_3 0.5773502691896258f
 
@@ -120,6 +119,29 @@ void dt_iop_channelmixer_shared_primaries_to_sliders(const dt_iop_channelmixer_s
   dt_bauhaus_slider_set(widgets[6], CLAMP(primaries->blue_hue / (float)M_PI_2, -1.f, 1.f));
   dt_bauhaus_slider_set(widgets[7], primaries->blue_purity);
   dt_bauhaus_slider_set(widgets[8], primaries->gain);
+}
+
+void dt_iop_channelmixer_shared_white_preserving_from_sliders(
+    GtkWidget *const widgets[6], dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving)
+{
+  white_preserving->red_rotation = dt_bauhaus_slider_get(widgets[0]) * (float)M_PI_2;
+  white_preserving->red_saturation = dt_bauhaus_slider_get(widgets[1]);
+  white_preserving->green_rotation = dt_bauhaus_slider_get(widgets[2]) * (float)M_PI_2;
+  white_preserving->green_saturation = dt_bauhaus_slider_get(widgets[3]);
+  white_preserving->blue_rotation = dt_bauhaus_slider_get(widgets[4]) * (float)M_PI_2;
+  white_preserving->blue_saturation = dt_bauhaus_slider_get(widgets[5]);
+}
+
+void dt_iop_channelmixer_shared_white_preserving_to_sliders(
+    const dt_iop_channelmixer_shared_white_preserving_params_t *const white_preserving,
+    GtkWidget *const widgets[6])
+{
+  dt_bauhaus_slider_set(widgets[0], CLAMP(white_preserving->red_rotation / (float)M_PI_2, -1.f, 1.f));
+  dt_bauhaus_slider_set(widgets[1], white_preserving->red_saturation);
+  dt_bauhaus_slider_set(widgets[2], CLAMP(white_preserving->green_rotation / (float)M_PI_2, -1.f, 1.f));
+  dt_bauhaus_slider_set(widgets[3], white_preserving->green_saturation);
+  dt_bauhaus_slider_set(widgets[4], CLAMP(white_preserving->blue_rotation / (float)M_PI_2, -1.f, 1.f));
+  dt_bauhaus_slider_set(widgets[5], white_preserving->blue_saturation);
 }
 
 gboolean dt_iop_channelmixer_shared_rows_are_normalized(const gboolean normalize[3])
@@ -257,6 +279,31 @@ float dt_iop_channelmixer_shared_roundtrip_error(const float M[3][3], const floa
       max_error = fmaxf(max_error, fabsf(M[row][col] - roundtrip[row][col]));
 
   return max_error;
+}
+
+/**
+ * @brief Roundtrip error, measured against the magnitude of the matrix itself.
+ *
+ * A reduced mixer model is a reparametrization, so the question its gate asks is whether the
+ * rebuilt matrix is the SAME matrix, which is a relative question. Comparing an absolute
+ * coefficient difference against a fixed tolerance silently demands more and more precision as
+ * the coefficients grow, and the white-preserving model can legitimately produce large ones : two
+ * primaries rotated onto the same ray make the chromaticity basis near-singular, which inflates
+ * the column scales that the white constraint solves for. The denominator is floored at 1 so
+ * ordinary, near-identity matrices keep the plain absolute behaviour.
+ *
+ * @param[in] M Original mixer matrix.
+ * @param[in] roundtrip Matrix rebuilt from the parameters read back from M.
+ * @return Largest coefficient error, relative to the largest coefficient magnitude.
+ */
+float dt_iop_channelmixer_shared_roundtrip_error_relative(const float M[3][3], const float roundtrip[3][3])
+{
+  float max_magnitude = 1.f;
+  for(int row = 0; row < 3; row++)
+    for(int col = 0; col < 3; col++)
+      max_magnitude = fmaxf(max_magnitude, fabsf(M[row][col]));
+
+  return dt_iop_channelmixer_shared_roundtrip_error(M, roundtrip) / max_magnitude;
 }
 
 dt_iop_channelmixer_shared_primaries_basis_t
@@ -442,6 +489,86 @@ static gboolean _affine_polar_from_point(const float white_normalized[3], const 
   return TRUE;
 }
 
+/**
+ * @brief Place one white-preserving primary from its rotation and saturation.
+ *
+ * Unlike the generalized primaries model, the radius is measured against the REFERENCE primary
+ * itself rather than against the gamut footprint edge, so the control reads as a saturation :
+ * 0 keeps the basis primary, -1 collapses it onto the white, +1 doubles its distance to it.
+ *
+ * @param[in] white_normalized Basis white, normalized in the affine plane.
+ * @param[in] reference_primaries Affine coordinates of the three basis primaries.
+ * @param[in] reference_index Which primary is being placed.
+ * @param[in] rotation Rotation around the white, in radians.
+ * @param[in] saturation Radial scaling of the distance to the white, by 1 + saturation.
+ * @param[out] point_normalized Resulting chromaticity, normalized in the affine plane.
+ * @return FALSE when the reference primary is degenerate.
+ */
+static gboolean _white_preserving_point_from_polar(const float white_normalized[3],
+                                                   const float reference_primaries[3][2],
+                                                   const int reference_index, const float rotation,
+                                                   const float saturation, float point_normalized[3])
+{
+  const float *const reference = reference_primaries[reference_index];
+  const float reference_radius = hypotf(reference[0], reference[1]);
+  if(reference_radius < DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS) return FALSE;
+
+  const float scale = 1.f + saturation;
+  float rotated[2] = { 0.f };
+  float difference[3] = { 0.f };
+
+  _rotate_2d(reference, rotation, rotated);
+
+  const float uv[2] = { scale * rotated[0], scale * rotated[1] };
+  _affine_unproject_difference(uv, difference);
+
+  for(int c = 0; c < 3; c++) point_normalized[c] = white_normalized[c] + difference[c];
+  return TRUE;
+}
+
+/**
+ * @brief Read back the rotation and saturation of one white-preserving primary.
+ *
+ * @param[in] white_normalized Basis white, normalized in the affine plane.
+ * @param[in] reference_primaries Affine coordinates of the three basis primaries.
+ * @param[in] reference_index Which primary is being read.
+ * @param[in] point_normalized Chromaticity of the mixer column, normalized in the affine plane.
+ * @param[out] rotation Rotation around the white, in radians.
+ * @param[out] saturation Radial scaling of the distance to the white, minus one.
+ * @return FALSE when the reference primary is degenerate.
+ */
+static gboolean _white_preserving_polar_from_point(const float white_normalized[3],
+                                                   const float reference_primaries[3][2],
+                                                   const int reference_index,
+                                                   const float point_normalized[3], float *rotation,
+                                                   float *saturation)
+{
+  const float *const reference = reference_primaries[reference_index];
+  const float reference_radius = hypotf(reference[0], reference[1]);
+  if(reference_radius < DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS) return FALSE;
+
+  const float reference_angle = atan2f(reference[1], reference[0]);
+  const float difference[3] = { point_normalized[0] - white_normalized[0],
+                                point_normalized[1] - white_normalized[1],
+                                point_normalized[2] - white_normalized[2] };
+  float uv[2] = { 0.f };
+
+  _affine_project_difference(difference, uv);
+
+  const float radius = hypotf(uv[0], uv[1]);
+  if(radius < DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS)
+  {
+    // The column collapsed onto the white : the rotation carries no information any more.
+    *rotation = 0.f;
+    *saturation = -1.f;
+    return TRUE;
+  }
+
+  *rotation = dt_iop_channelmixer_shared_wrap_pi(atan2f(uv[1], uv[0]) - reference_angle);
+  *saturation = radius / reference_radius - 1.f;
+  return TRUE;
+}
+
 gboolean dt_iop_channelmixer_shared_primaries_to_matrix(const dt_iop_channelmixer_shared_primaries_basis_t basis,
                                                         const dt_iop_channelmixer_shared_primaries_params_t *primaries,
                                                         float M[3][3])
@@ -486,7 +613,12 @@ gboolean dt_iop_channelmixer_shared_primaries_to_matrix(const dt_iop_channelmixe
                                             white_gain * custom_white_normalized[2],
                                             0.f };
   dt_aligned_pixel_t column_scales = { 0.f };
-  dt_apply_transposed_color_matrix(custom_white, normalized_inverse, column_scales);
+
+  // The column scales solve normalized_primaries . scales = custom_white, so this is a plain
+  // matrix-vector product with the inverse. dt_apply_transposed_color_matrix() expects a matrix
+  // that is ALREADY stored transposed (see xyz_to_srgb_matrix_transposed) and would therefore
+  // compute the transpose of the inverse here, which is not the solution of that system.
+  dot_product(custom_white, normalized_inverse, column_scales);
 
   for(int col = 0; col < 3; col++)
     for(int row = 0; row < 3; row++)
@@ -539,6 +671,140 @@ gboolean dt_iop_channelmixer_shared_primaries_from_matrix(const dt_iop_channelmi
 
     if(!_affine_polar_from_point(white_reference_normalized, reference_primaries, primary,
                                  custom_primary_normalized, hue, purity))
+      return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * @brief Twice the signed area of a triangle given in affine plane coordinates.
+ *
+ * @param[in] vertices The three vertices, projected on the affine plane.
+ * @return Twice the signed area, whose magnitude vanishes as the three points become collinear.
+ */
+static float _affine_triangle_area(const float vertices[3][2])
+{
+  const float first[2] = { vertices[1][0] - vertices[0][0], vertices[1][1] - vertices[0][1] };
+  const float second[2] = { vertices[2][0] - vertices[0][0], vertices[2][1] - vertices[0][1] };
+
+  return first[0] * second[1] - first[1] * second[0];
+}
+
+/**
+ * @brief Build the mixer matrix of a white-preserving primaries state.
+ *
+ * The three rotated and rescaled chromaticities give the DIRECTION of each mixer column. Their
+ * magnitudes are then solved from the single constraint that the basis white maps to itself :
+ * with `t = P^-1 . w` (P holding the chromaticities in columns), column c of the matrix is
+ * `t_c / w_c` times chromaticity c, and `M . w == w` holds by construction.
+ *
+ * @param[in] basis Affine basis the mixer operates in, from the module's adaptation.
+ * @param[in] white_preserving Per-primary rotations and saturations.
+ * @param[out] M Resulting mixer matrix.
+ * @return FALSE when the displaced primaries are degenerate or the basis white has a null channel.
+ */
+gboolean dt_iop_channelmixer_shared_white_preserving_to_matrix(
+    const dt_iop_channelmixer_shared_primaries_basis_t basis,
+    const dt_iop_channelmixer_shared_white_preserving_params_t *const white_preserving, float M[3][3])
+{
+  const float rotations[3] = { white_preserving->red_rotation, white_preserving->green_rotation,
+                               white_preserving->blue_rotation };
+  const float saturations[3] = { white_preserving->red_saturation, white_preserving->green_saturation,
+                                 white_preserving->blue_saturation };
+  float white_reference[3] = { 0.f };
+  float white_reference_normalized[3] = { 0.f };
+  float reference_primaries[3][2] = { { 0.f } };
+  float custom_primaries[3][3] = { { 0.f } };
+  dt_colormatrix_t normalized_primaries = { { 0.f } };
+  dt_colormatrix_t normalized_inverse = { { 0.f } };
+
+  _primaries_reference_white(basis, white_reference);
+  if(!_build_affine_simplex(basis, white_reference_normalized, reference_primaries)) return FALSE;
+
+  float custom_footprint[3][2] = { { 0.f } };
+
+  for(int primary = 0; primary < 3; primary++)
+  {
+    if(!_white_preserving_point_from_polar(white_reference_normalized, reference_primaries, primary,
+                                           rotations[primary], saturations[primary], custom_primaries[primary]))
+      return FALSE;
+
+    const float difference[3] = { custom_primaries[primary][0] - white_reference_normalized[0],
+                                  custom_primaries[primary][1] - white_reference_normalized[1],
+                                  custom_primaries[primary][2] - white_reference_normalized[2] };
+    _affine_project_difference(difference, custom_footprint[primary]);
+  }
+
+  // Two primaries rotated onto the same ray flatten the chromaticity triangle. The matrix is then
+  // still invertible on paper, but the column scales the white constraint solves for explode and
+  // the model stops being numerically reversible, so refuse it here rather than hand back a
+  // matrix no roundtrip can recognize. The bound is a fraction of the untouched basis triangle,
+  // which keeps it scale-free across bases.
+  if(fabsf(_affine_triangle_area(custom_footprint))
+     < DT_IOP_CHANNELMIXER_SHARED_MIN_FOOTPRINT * fabsf(_affine_triangle_area(reference_primaries)))
+    return FALSE;
+
+  for(int row = 0; row < 3; row++)
+    for(int col = 0; col < 3; col++)
+      normalized_primaries[row][col] = custom_primaries[col][row];
+
+  if(mat3SSEinv(normalized_inverse, normalized_primaries)) return FALSE;
+
+  const dt_aligned_pixel_t padded_white
+      = { white_reference[0], white_reference[1], white_reference[2], 0.f };
+  dt_aligned_pixel_t white_weights = { 0.f };
+  dot_product(padded_white, normalized_inverse, white_weights);
+
+  for(int col = 0; col < 3; col++)
+  {
+    if(fabsf(white_reference[col]) < DT_IOP_CHANNELMIXER_SHARED_SIMPLE_EPS) return FALSE;
+
+    const float column_scale = white_weights[col] / white_reference[col];
+    for(int row = 0; row < 3; row++) M[row][col] = column_scale * custom_primaries[col][row];
+  }
+
+  return TRUE;
+}
+
+/**
+ * @brief Read a white-preserving primaries state back from a mixer matrix.
+ *
+ * Only the column DIRECTIONS are read here, so this succeeds for any matrix whose columns have a
+ * non-zero affine sum, white-preserving or not. Callers must gate on the roundtrip error against
+ * dt_iop_channelmixer_shared_white_preserving_to_matrix() to know whether the matrix actually sits
+ * on the white-preserving submanifold : a matrix that moves the white reconstructs to a different
+ * one, exactly like the other reduced mixer models.
+ *
+ * @param[in] basis Affine basis the mixer operates in, from the module's adaptation.
+ * @param[in] M Mixer matrix.
+ * @param[out] white_preserving Per-primary rotations and saturations.
+ * @return FALSE when a column has a null affine sum or the basis is degenerate.
+ */
+gboolean dt_iop_channelmixer_shared_white_preserving_from_matrix(
+    const dt_iop_channelmixer_shared_primaries_basis_t basis, const float M[3][3],
+    dt_iop_channelmixer_shared_white_preserving_params_t *white_preserving)
+{
+  float white_reference_normalized[3] = { 0.f };
+  float reference_primaries[3][2] = { { 0.f } };
+  float custom_primary_normalized[3] = { 0.f };
+
+  if(!_build_affine_simplex(basis, white_reference_normalized, reference_primaries)) return FALSE;
+
+  for(int primary = 0; primary < 3; primary++)
+  {
+    const float column[3] = { M[0][primary], M[1][primary], M[2][primary] };
+    if(!_affine_normalize(column, custom_primary_normalized)) return FALSE;
+
+    float *rotation = primary == 0 ? &white_preserving->red_rotation
+                                   : primary == 1 ? &white_preserving->green_rotation
+                                                  : &white_preserving->blue_rotation;
+    float *saturation = primary == 0 ? &white_preserving->red_saturation
+                                     : primary == 1 ? &white_preserving->green_saturation
+                                                    : &white_preserving->blue_saturation;
+
+    if(!_white_preserving_polar_from_point(white_reference_normalized, reference_primaries, primary,
+                                           custom_primary_normalized, rotation, saturation))
       return FALSE;
   }
 
@@ -919,4 +1185,66 @@ void dt_iop_channelmixer_shared_paint_primaries_sliders(
   }
 
   for(int widget = 0; widget < 9; widget++) gtk_widget_queue_draw(widgets[widget]);
+}
+
+void dt_iop_channelmixer_shared_paint_white_preserving_sliders(
+    const dt_adaptation_t adaptation, const dt_iop_order_iccprofile_info_t *const work_profile,
+    const dt_iop_order_iccprofile_info_t *const display_profile,
+    const dt_iop_channelmixer_shared_primaries_basis_t basis,
+    const dt_iop_channelmixer_shared_white_preserving_params_t *const white_preserving,
+    GtkWidget *const widgets[6])
+{
+  for(int widget = 0; widget < 6; widget++) dt_bauhaus_slider_clear_stops(widgets[widget]);
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    const float stop = (float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
+
+    for(int widget = 0; widget < 6; widget++)
+    {
+      dt_iop_channelmixer_shared_white_preserving_params_t probe = *white_preserving;
+      float M[3][3] = { { 0.f } };
+      float module_color[3] = { 0.f };
+      float display_rgb[3] = { 0.f };
+      const float hard_min = dt_bauhaus_slider_get_hard_min(widgets[widget]);
+      const float hard_max = dt_bauhaus_slider_get_hard_max(widgets[widget]);
+      const float value = hard_min + stop * (hard_max - hard_min);
+
+      switch(widget)
+      {
+        case 0:
+          probe.red_rotation = value * (float)M_PI_2;
+          break;
+        case 1:
+          probe.red_saturation = value;
+          break;
+        case 2:
+          probe.green_rotation = value * (float)M_PI_2;
+          break;
+        case 3:
+          probe.green_saturation = value;
+          break;
+        case 4:
+          probe.blue_rotation = value * (float)M_PI_2;
+          break;
+        case 5:
+          probe.blue_saturation = value;
+          break;
+        default:
+          break;
+      }
+
+      if(!dt_iop_channelmixer_shared_white_preserving_to_matrix(basis, &probe, M)) continue;
+
+      // Each pair of sliders drives one mixer column : show that column's own color.
+      const int column = widget / 2;
+      for(int row = 0; row < 3; row++) module_color[row] = M[row][column];
+
+      dt_iop_channelmixer_shared_module_color_to_display(module_color, adaptation, work_profile, display_profile,
+                                                         display_rgb);
+      dt_bauhaus_slider_set_stop(widgets[widget], stop, display_rgb[0], display_rgb[1], display_rgb[2]);
+    }
+  }
+
+  for(int widget = 0; widget < 6; widget++) gtk_widget_queue_draw(widgets[widget]);
 }

@@ -156,7 +156,8 @@ const dt_thumbtable_layout_ops_t *dt_thumbtable_filmstrip_ops(void);
 int dt_thumbtable_thumb_cell_decoration(void);
 
 // Coalesced focus/scroll-to-selection scheduling (used by grid-only zoom & grid-config API).
-void dt_thumbtable_schedule_focus(dt_thumbtable_t *table, const gint priority);
+void dt_thumbtable_schedule_focus_real(dt_thumbtable_t *table, const gint priority);
+#define dt_thumbtable_schedule_focus(table, priority) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_LIGHTTABLE, dt_thumbtable_schedule_focus_real, (table), (priority))
 
 // LUT lookup: collection index of an imgid, or UNKNOWN_IMAGE. Caller MUST hold table->lock
 // (matches every existing call site; the helper does not lock internally).
