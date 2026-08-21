@@ -385,3 +385,48 @@ jobs:
                  --conf worker_threads=4 -t 4 \
                  --conf plugins/lighttable/export/force_lcms2=FALSE \
                  --conf plugins/lighttable/export/iccintent=0
+      - name: Probe OpenCL
+        # Nothing else in CI ever initialises OpenCL: every ansel-cli invocation in this file
+        # passes --disable-opencl, so device enumeration and kernel building are untested on
+        # every platform. ansel-cltest exists precisely for this -- it forces `-d opencl`, runs
+        # dt_init(), and that enumerates devices and builds every .cl program.
+        #
+        # This is NOT the same check as TESTBUILD_OPENCL_PROGRAMS. That one compiles the kernel
+        # sources with clang's OpenCL frontend, which proves the source is valid OpenCL C. It
+        # cannot see a driver refusing an already-valid program -- which is exactly the reported
+        # macOS failure, where Apple's OpenCL-over-Metal shim answers
+        # "createKernel: newComputePipelineState failed" and Ansel then disables OpenCL entirely.
+        #
+        # Informational on purpose, for now. Whether a GitHub macOS runner exposes a usable
+        # OpenCL device at all is unknown -- these are VMs -- and a gate that fails on "no device"
+        # would simply be red forever. Once a few runs show what the hardware reports, the
+        # classification below becomes the gate.
+        #
+        # Two details this has to get right to mean anything:
+        #  - a COLD cache. With a warm --cachedir, dt_opencl_load_program() loads cached binaries
+        #    and compiles nothing, so the probe would pass while testing nothing at all.
+        #  - parse the output, not the exit status. ansel-cltest exits 0 whether OpenCL worked or
+        #    not: dt_init() succeeds regardless, and a failed OpenCL init merely disables OpenCL.
+        if: ${{ matrix.btype == 'Release' }}
+        continue-on-error: true
+        run: |
+          probe="$(mktemp -d)"
+          "${INSTALL_PREFIX}/bin/ansel-cltest" \
+                 --configdir "${probe}/config" --cachedir "${probe}/cache" \
+                 > "${probe}/cltest.log" 2>&1 || true
+          echo "----- ansel-cltest output -----"
+          cat "${probe}/cltest.log"
+          echo "-------------------------------"
+
+          if grep -q "failed to compile program" "${probe}/cltest.log"; then
+            grep -o "failed to compile program '[^']*'" "${probe}/cltest.log" | sort -u
+            echo "::warning title=OpenCL kernels failed to build::A driver refused one or more kernels; see the list above."
+            exit 1
+          elif grep -q "newComputePipelineState failed" "${probe}/cltest.log"; then
+            echo "::warning title=Apple OpenCL shim rejected a kernel::newComputePipelineState failed -- the Metal translation layer could not build a kernel."
+            exit 1
+          elif grep -q "opencl is AVAILABLE" "${probe}/cltest.log"; then
+            echo "::notice title=OpenCL usable on this runner::Every kernel built. This runner can gate OpenCL regressions."
+          else
+            echo "::notice title=No OpenCL device on this runner::Nothing was compiled, so this run proves nothing about the kernels."
+          fi
