@@ -384,7 +384,7 @@ fi
 # they are not the same claim.
 toolkit_develop_baseline=20
 toolkit_iop_baseline=97
-toolkit_imageio_baseline=13
+toolkit_imageio_baseline=12
 toolkit_pixel_baseline=0
 toolkit_caches_baseline=0
 toolkit_database_baseline=0
