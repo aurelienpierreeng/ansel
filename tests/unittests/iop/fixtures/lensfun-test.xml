@@ -1,0 +1,4 @@
+<lensdatabase version="1">
+ <camera><maker>Ansel test</maker><model>Camera</model><mount>Ansel test</mount><cropfactor>1.0</cropfactor></camera>
+ <lens><maker>Ansel test</maker><model>Lens</model><mount>Ansel test</mount><cropfactor>1.0</cropfactor><calibration><distortion model="poly3" focal="50" k1="0.01"/><vignetting model="pa" focal="50" aperture="5.6" distance="10" k1="-0.1" k2="0.01" k3="-0.001"/><tca model="linear" focal="50" kr="1.02" kb="0.98"/></calibration></lens>
+</lensdatabase>

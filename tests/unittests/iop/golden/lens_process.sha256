@@ -1,0 +1,36 @@
+[identity]
+sha256=8f14aee69f8bd4ce3ab4d319f461a63bfa3b97ec20a53948d226606c2885c996
+trace=copy
+roi_in=5;7;11;9;
+roi_out=5;7;11;9;
+
+[mixed_mask]
+sha256=ec8fef40a7be0ca53a3073c12efa8a84a053bdd346d2c1d52b17c1943311a9c6
+
+[embedded]
+sha256=a1d840d71c0477c9a44744dd2506666e8e531570c5fb18ff42108246cec770dd
+trace=copy -> embedded vignette -> embedded remap
+roi_in=3;5;15;13;
+roi_out=5;7;11;9;
+
+[lensfun]
+sha256=dff5e18cd34ac20a971ee257d12553238308f26b62eb8ede42aa159e4f300d6b
+trace=Lensfun vignette -> remaining Lensfun remap
+roi_in=3;5;14;12;
+roi_out=5;7;11;9;
+
+[mixed]
+sha256=9bf3434947d61af764f9dafaefba7919af3522f639dc0345b1f3c8195dc817a0
+trace=copy -> Lensfun vignette -> TCA-only remap -> embedded remap
+roi_in=2;4;18;16;
+roi_out=5;7;11;9;
+tca_roi=4;6;14;12;
+
+[recovery_no_tca]
+sha256=dbe21c8adcde43e39e18db4d7addf439b66e1574b77208224544cd92bd54f36f
+
+[recovery_coordinate_failure]
+sha256=74c9ff67e704b23d3d8716e26f4b0a3ff6b87feec00041f096b7b3c451be92f9
+
+[recovery_output_failure]
+sha256=74c9ff67e704b23d3d8716e26f4b0a3ff6b87feec00041f096b7b3c451be92f9

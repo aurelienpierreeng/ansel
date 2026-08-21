@@ -564,6 +564,23 @@ typedef struct {
   gboolean apply_tca;
 } _emb_axes_t;
 
+#ifdef BUILD_TESTING
+static thread_local char *_lens_test_trace = NULL;
+static thread_local gboolean _lens_test_normal_alpha_initialized = FALSE;
+static thread_local int _lens_test_tca_allocation_failure = 0;
+
+static void _lens_test_trace_event(const char *const event)
+{
+  if(!IS_NULL_PTR(_lens_test_trace))
+  {
+    if(_lens_test_trace[0] != '\0') g_strlcat(_lens_test_trace, " -> ", 128);
+    g_strlcat(_lens_test_trace, event, 128);
+  }
+}
+#else
+#define _lens_test_trace_event(...) ((void)0)
+#endif
+
 static void _apply_vignette_gain_3ch(float *const work_pixel, const float *const in_pixel,
                                        const int ch,
                                        const float *const knots_vig, const float *const vig,
@@ -641,11 +658,16 @@ typedef struct {
   float limw;
   float limh;
   gboolean raw_monochrome;
+  gboolean mask_display;
   _emb_axes_t axes;
 } _warp_geom_domain_t;
 
 static inline int _select_warp_plane(const int c, const _warp_geom_domain_t *dom)
 {
+#ifdef LENS_PROCESS_MUTATE_RB_ROUTE
+  if(c == 0 && !dom->raw_monochrome) return 2;
+  if(c == 2 && !dom->raw_monochrome) return 0;
+#endif
   if(dom->axes.apply_distortion && !dom->axes.apply_tca) return 1;
   if(c < 3 && !dom->raw_monochrome) return c;
   return 1;
@@ -668,6 +690,12 @@ static void _warp_geom_pass(const float *work, float *ovoid,
       const float radius = hypotf(cx, cy) * dom->inv_rn;
       for(int c = 0; c < dom->ch; c++)
       {
+        if(c == 3 && !dom->mask_display)
+        {
+          out_row[x * dom->ch + c] = work[((size_t)(roi_out->y + y - roi_in->y) * roi_in->width
+                                           + roi_out->x + x - roi_in->x) * dom->ch + c];
+          continue;
+        }
         const int plane = _select_warp_plane(c, dom);
         float sx;
         float sy;
@@ -692,7 +720,7 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
                                             float *const ovoid,
                                             const _emb_axes_t *emb_axes)
 {
-  (void)pipe;
+  _lens_test_trace_event("copy");
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
@@ -722,6 +750,7 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
   if(apply_vignette)
   {
     _apply_embedded_vignette_pass(work, static_cast<const float *>(ivoid), roi_in, piece, ch, d);
+    _lens_test_trace_event("embedded vignette");
   }
   else
   {
@@ -746,9 +775,10 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
     _emb_axes_t axes = { FALSE, apply_dist, apply_tca };
     const _warp_geom_domain_t dom = {
       ch, ch_width, w2, h2, inv_rn, limw, limh,
-      raw_monochrome, axes
+        raw_monochrome, pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK, axes
     };
     _warp_geom_pass(work, ovoid, roi_in, roi_out, d, interpolation, &dom);
+    _lens_test_trace_event("embedded remap");
   }
 
   dt_free_align(work);
@@ -955,6 +985,132 @@ static void _modify_roi_in_embedded_metadata_warp(const dt_iop_module_t *self, c
   roi_in->height = CLAMP(roi_in->height, 1, (int)ceilf(orig_h) - roi_in->y);
 }
 
+static void _set_roi_from_bounds(dt_iop_roi_t *const roi, const float xm, const float xM,
+                                 const float ym, const float yM, const int image_width,
+                                 const int image_height, const int kernel_width)
+{
+  const int x = CLAMP((int)floorf(xm) - kernel_width + 1, 0, image_width - 1);
+  const int y = CLAMP((int)floorf(ym) - kernel_width + 1, 0, image_height - 1);
+  const int x_end = CLAMP((int)floorf(xM) + kernel_width + 1, x + 1, image_width);
+  const int y_end = CLAMP((int)floorf(yM) + kernel_width + 1, y + 1, image_height);
+  roi->x = x;
+  roi->y = y;
+  roi->width = x_end - x;
+  roi->height = y_end - y;
+}
+
+static void _include_roi(dt_iop_roi_t *const outer, const dt_iop_roi_t *const inner,
+                         const int image_width, const int image_height)
+{
+  const int x = CLAMP(MIN(outer->x, inner->x), 0, image_width - 1);
+  const int y = CLAMP(MIN(outer->y, inner->y), 0, image_height - 1);
+  const int x_end = CLAMP(MAX(outer->x + outer->width, inner->x + inner->width), x + 1, image_width);
+  const int y_end = CLAMP(MAX(outer->y + outer->height, inner->y + inner->height), y + 1, image_height);
+  outer->x = x;
+  outer->y = y;
+  outer->width = x_end - x;
+  outer->height = y_end - y;
+}
+
+static gboolean _roi_contains(const dt_iop_roi_t *const outer, const dt_iop_roi_t *const inner)
+{
+  return outer->x <= inner->x && outer->y <= inner->y
+         && outer->x + outer->width >= inner->x + inner->width
+         && outer->y + outer->height >= inner->y + inner->height;
+}
+
+static void _derive_embedded_geometry_roi(const dt_dev_pixelpipe_iop_t *const piece,
+                                          const dt_iop_roi_t *const roi_out,
+                                          const dt_iop_lensfun_data_t *const d,
+                                          dt_iop_roi_t *const roi_in)
+{
+  const int image_width = (int)ceilf(roi_out->scale * piece->buf_in.width);
+  const int image_height = (int)ceilf(roi_out->scale * piece->buf_in.height);
+  const float w2 = 0.5f * image_width;
+  const float h2 = 0.5f * image_height;
+  const float inv_rn = 1.0f / hypotf(w2, h2);
+  float xm = FLT_MAX, xM = -FLT_MAX, ym = FLT_MAX, yM = -FLT_MAX;
+  for(int y = 0; y < roi_out->height; y++)
+    for(int x = 0; x < roi_out->width; x++)
+    {
+      const float cx = roi_out->x + x - w2;
+      const float cy = roi_out->y + y - h2;
+      const float dr = dt_embedded_lens_linear_spline(d->embedded.knots.knots_dist,
+                                                       d->embedded.knots.cor_rgb[1], d->embedded.nc,
+                                                       hypotf(cx, cy) * inv_rn);
+      const float sx = dr * cx + w2;
+      const float sy = dr * cy + h2;
+      if(isfinite(sx)) { xm = fminf(xm, sx); xM = fmaxf(xM, sx); }
+      if(isfinite(sy)) { ym = fminf(ym, sy); yM = fmaxf(yM, sy); }
+    }
+  if(!isfinite(xm) || !isfinite(xM) || !isfinite(ym) || !isfinite(yM))
+  {
+    *roi_in = *roi_out;
+    return;
+  }
+  const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
+  _set_roi_from_bounds(roi_in, xm, xM, ym, yM, image_width, image_height, interpolation->width);
+  roi_in->scale = roi_out->scale;
+}
+
+static gboolean _derive_lensfun_tca_roi(const dt_dev_pixelpipe_iop_t *const piece,
+                                         const dt_iop_lensfun_data_t *const d,
+                                         const dt_iop_roi_t *const roi_out,
+                                         dt_iop_roi_t *const roi_in)
+{
+  const int image_width = (int)ceilf(roi_out->scale * piece->buf_in.width);
+  const int image_height = (int)ceilf(roi_out->scale * piece->buf_in.height);
+  if(roi_out->width <= 0 || roi_out->height <= 0 || image_width <= 0 || image_height <= 0) return FALSE;
+  int modflags = 0;
+  dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
+  lfModifier *const modifier = get_modifier(&modflags, image_width, image_height, d, LF_MODIFY_TCA, FALSE);
+  dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+  if(IS_NULL_PTR(modifier) || !(modflags & LF_MODIFY_TCA))
+  {
+    delete modifier;
+    return FALSE;
+  }
+  const size_t coordinates_count = (size_t)roi_out->width * 6;
+  if(coordinates_count / 6 != (size_t)roi_out->width)
+  {
+    delete modifier;
+    return FALSE;
+  }
+  float *const coordinates = dt_alloc_align_float(coordinates_count);
+  if(IS_NULL_PTR(coordinates))
+  {
+    delete modifier;
+    return FALSE;
+  }
+  float xm = FLT_MAX, xM = -FLT_MAX, ym = FLT_MAX, yM = -FLT_MAX;
+  for(int y = 0; y < roi_out->height; y++)
+  {
+    float *const row = coordinates;
+    modifier->ApplySubpixelGeometryDistortion(roi_out->x, roi_out->y + y, roi_out->width, 1, row);
+    for(int x = 0; x < roi_out->width * 3; x++)
+    {
+      const float px = row[2 * x];
+      const float py = row[2 * x + 1];
+      if(isfinite(px)) { xm = fminf(xm, px); xM = fmaxf(xM, px); }
+      if(isfinite(py)) { ym = fminf(ym, py); yM = fmaxf(yM, py); }
+    }
+  }
+  dt_free_align(coordinates);
+  delete modifier;
+  if(!isfinite(xm) || !isfinite(xM) || !isfinite(ym) || !isfinite(yM))
+  {
+    return FALSE;
+  }
+  const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
+  _set_roi_from_bounds(roi_in, xm, xM, ym, yM, image_width, image_height, interpolation->width);
+  _include_roi(roi_in, roi_out, image_width, image_height);
+  if(roi_in->width <= 0 || roi_in->height <= 0 || !_roi_contains(roi_in, roi_out))
+  {
+    return FALSE;
+  }
+  return TRUE;
+}
+
 static void _modify_roi_out_embedded_metadata_warp(const dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                                      const dt_dev_pixelpipe_iop_t *piece, dt_iop_roi_t *roi_out,
                                                     const dt_iop_roi_t *roi_in,
@@ -1081,7 +1237,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   if(!any_lf)
   {
     dt_iop_image_copy_by_size(static_cast<float *>(ovoid), static_cast<const float *>(ivoid),
-                              piece->roi_out.width, piece->roi_out.height, ch);
+                               piece->roi_out.width, piece->roi_out.height, ch);
+    _lens_test_trace_event("copy");
     if(self->dev->gui_attached && g)
     {
       dt_iop_gui_enter_critical_section(self);
@@ -1101,7 +1258,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
                                              static_cast<float *>(ovoid), &axes);
     }
     dt_iop_image_copy_by_size(static_cast<float *>(ovoid), static_cast<const float *>(ivoid),
-                              piece->roi_out.width, piece->roi_out.height, ch);
+                               piece->roi_out.width, piece->roi_out.height, ch);
+    _lens_test_trace_event("copy");
     if(self->dev->gui_attached && g)
     {
       dt_iop_gui_enter_critical_section(self);
@@ -1127,10 +1285,13 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   const auto *src_pixels = static_cast<const float *>(ivoid);
   float *work_buf = nullptr;
+  dt_iop_roi_t tca_roi = {};
+  const dt_iop_roi_t *embedded_roi_in = roi_in;
   gboolean tca_applied = FALSE;
 
   if(any_emb)
   {
+    _lens_test_trace_event("copy");
     const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
     work_buf = (float *)dt_pixelpipe_cache_alloc_align_cache(bufsize, pipe->type);
     if(IS_NULL_PTR(work_buf)) { delete modifier; return 1; }
@@ -1139,6 +1300,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(af.emb_vig)
     {
       _apply_embedded_vignette_pass(work_buf, work_buf, roi_in, piece, ch, d);
+      _lens_test_trace_event("embedded vignette");
     }
 
     if(modflags & LF_MODIFY_VIGNETTING)
@@ -1150,10 +1312,22 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         modifier->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
                                          pixelformat, ch * roi_in->width);
       }
+      _lens_test_trace_event("Lensfun vignette");
     }
 
+#ifdef LENS_PROCESS_MUTATE_TCA_GATE
+    if(FALSE)
+#else
     if(af.emb_dist && af.lf_tca && !af.lf_dist)
+#endif
     {
+      _derive_embedded_geometry_roi(piece, roi_out, d, &tca_roi);
+      if(!_roi_contains(roi_in, &tca_roi))
+      {
+        dt_pixelpipe_cache_free_align(work_buf);
+        delete modifier;
+        return 1;
+      }
       int tca_modflags = 0;
       lfModifier *tca_modifier = NULL;
       dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
@@ -1162,49 +1336,82 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
                                   roi_in->scale * piece->buf_in.height,
                                   d, LF_MODIFY_TCA, FALSE);
       dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
-      if(tca_modifier)
+      if(tca_modifier && (tca_modflags & LF_MODIFY_TCA))
       {
-        const size_t tca_buf2size = (size_t)roi_in->width * 2 * 3;
+        const size_t tca_buf2size = (size_t)tca_roi.width * 2 * 3;
         size_t tca_padded;
         auto tca_buf2 = dt_pixelpipe_cache_alloc_perthread_float(tca_buf2size, &tca_padded);
         auto tca_out = static_cast<float *>(dt_pixelpipe_cache_alloc_align_cache(
-            (size_t)roi_in->width * roi_in->height * ch * sizeof(float), pipe->type));
+            (size_t)tca_roi.width * tca_roi.height * ch * sizeof(float), pipe->type));
+#ifdef BUILD_TESTING
+        if(_lens_test_tca_allocation_failure == 1)
+        {
+          dt_pixelpipe_cache_free_align(tca_buf2);
+          tca_buf2 = NULL;
+        }
+        else if(_lens_test_tca_allocation_failure == 2)
+        {
+          dt_pixelpipe_cache_free_align(tca_out);
+          tca_out = NULL;
+        }
+#endif
         if(!IS_NULL_PTR(tca_buf2) && !IS_NULL_PTR(tca_out))
         {
+          for(int y = 0; y < tca_roi.height; y++)
+            memcpy(tca_out + (size_t)y * tca_roi.width * ch,
+                   work_buf + ((size_t)(tca_roi.y - roi_in->y + y) * roi_in->width
+                               + tca_roi.x - roi_in->x) * ch,
+                   (size_t)tca_roi.width * ch * sizeof(float));
+#ifdef BUILD_TESTING
+          _lens_test_normal_alpha_initialized = TRUE;
+          if(!(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) && ch == DT_PIXEL_SIMD_CHANNELS)
+            for(int y = 0; y < tca_roi.height; y++)
+              for(int x = 0; x < tca_roi.width; x++)
+                _lens_test_normal_alpha_initialized &= memcmp(tca_out + ((size_t)y * tca_roi.width + x) * ch + 3,
+                                                              work_buf + ((size_t)(tca_roi.y - roi_in->y + y) * roi_in->width
+                                                                          + tca_roi.x - roi_in->x + x) * ch + 3,
+                                                              sizeof(float)) == 0;
+#endif
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  firstprivate(roi_in, ch, tca_modifier, tca_buf2, tca_padded, tca_out, \
+  firstprivate(roi_in, tca_roi, ch, tca_modifier, tca_buf2, tca_padded, tca_out, \
                work_buf, d, raw_monochrome, mask_display, interpolation)
 #endif
-          for(int y = 0; y < roi_in->height; y++)
+          for(int y = 0; y < tca_roi.height; y++)
           {
             auto tca_buf2ptr = static_cast<float *>(dt_get_perthread(tca_buf2, tca_padded));
-            tca_modifier->ApplySubpixelGeometryDistortion(roi_in->x, roi_in->y + y,
-                                                          roi_in->width, 1, tca_buf2ptr);
-            float *dst = tca_out + (size_t)y * roi_in->width * ch;
+            tca_modifier->ApplySubpixelGeometryDistortion(tca_roi.x, tca_roi.y + y,
+                                                          tca_roi.width, 1, tca_buf2ptr);
+            float *dst = tca_out + (size_t)y * tca_roi.width * ch;
             const _remap_ctx_t tca_remap = { ch, ch * roi_in->width, d->lensfun.do_nan_checks,
                                               raw_monochrome, mask_display };
-            for(int x = 0; x < roi_in->width; x++, tca_buf2ptr += 6)
+            for(int x = 0; x < tca_roi.width; x++, tca_buf2ptr += 6)
+            {
               _remap_pixel_inverse_or_not(dst + x * ch, tca_buf2ptr, work_buf, tca_remap,
                                           roi_in, interpolation);
+            }
           }
-          memcpy(work_buf, tca_out, (size_t)roi_in->width * roi_in->height * ch * sizeof(float));
+          dt_pixelpipe_cache_free_align(work_buf);
+          work_buf = tca_out;
+          embedded_roi_in = &tca_roi;
+          tca_out = NULL;
           tca_applied = TRUE;
+          _lens_test_trace_event("TCA-only remap");
         }
         dt_pixelpipe_cache_free_align(tca_out);
         dt_pixelpipe_cache_free_align(tca_buf2);
-        delete tca_modifier;
       }
+      delete tca_modifier;
     }
 
     if(af.emb_dist || af.emb_tca)
     {
-      const float w2 = 0.5f * roi_in->scale * piece->buf_in.width;
-      const float h2 = 0.5f * roi_in->scale * piece->buf_in.height;
+      const float w2 = 0.5f * embedded_roi_in->scale * piece->buf_in.width;
+      const float h2 = 0.5f * embedded_roi_in->scale * piece->buf_in.height;
       const float rn = hypotf(w2, h2);
       const float inv_rn = (rn > 1e-6f) ? 1.0f / rn : 0.0f;
-      const float limw = (float)roi_in->width - 1.0f;
-      const float limh = (float)roi_in->height - 1.0f;
+      const float limw = (float)embedded_roi_in->width - 1.0f;
+      const float limh = (float)embedded_roi_in->height - 1.0f;
 
       const size_t ov_bufsize = (size_t)roi_out->width * roi_out->height * ch * sizeof(float);
       auto work_ovoid = static_cast<float *>(dt_pixelpipe_cache_alloc_align_cache(ov_bufsize, pipe->type));
@@ -1217,10 +1424,11 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
       _emb_axes_t axes_w = { FALSE, af.emb_dist, af.emb_tca };
       const _warp_geom_domain_t dom = {
-        ch, ch_width, w2, h2, inv_rn, limw, limh,
-        raw_monochrome, axes_w
+        ch, ch * embedded_roi_in->width, w2, h2, inv_rn, limw, limh,
+        raw_monochrome, mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK, axes_w
       };
-      _warp_geom_pass(work_buf, work_ovoid, roi_in, roi_out, d, interpolation, &dom);
+      _warp_geom_pass(work_buf, work_ovoid, embedded_roi_in, roi_out, d, interpolation, &dom);
+      _lens_test_trace_event("embedded remap");
       dt_pixelpipe_cache_free_align(work_buf);
       work_buf = work_ovoid;
     }
@@ -1248,6 +1456,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         modifier->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
                                          pixelformat, ch * roi_in->width);
       }
+      _lens_test_trace_event("Lensfun vignette");
     }
 
     if(!tca_applied && (modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE)))
@@ -1280,12 +1489,24 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
                                        roi_in, interpolation);
       }
       dt_pixelpipe_cache_free_align(buf2);
+      _lens_test_trace_event("remaining Lensfun remap");
     }
     else
     {
       memcpy(ovoid, buf, read_size);
     }
     dt_pixelpipe_cache_free_align(buf);
+  }
+  if(!(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) && ch == DT_PIXEL_SIMD_CHANNELS)
+  {
+    const float *const input = static_cast<const float *>(ivoid);
+    float *const output = static_cast<float *>(ovoid);
+    __OMP_PARALLEL_FOR_CPP__(firstprivate(input, output, roi_in, roi_out, ch))
+    for(int y = 0; y < roi_out->height; y++)
+      for(int x = 0; x < roi_out->width; x++)
+        output[((size_t)y * roi_out->width + x) * ch + 3]
+            = input[((size_t)(roi_out->y + y - roi_in->y) * roi_in->width
+                     + roi_out->x + x - roi_in->x) * ch + 3];
   }
   dt_pixelpipe_cache_free_align(work_buf);
   delete modifier;
@@ -2042,7 +2263,25 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
                         && dt_embedded_lens_has_ca(&self->dev->image_storage);
   const gboolean any_emb_geom = emb_dist || emb_tca;
   const gboolean lf_tca  = (p->tca_method == dt_iop_lens_tca_source_t::LENSFUN_DB)
-                           || (p->tca_method == dt_iop_lens_tca_source_t::MANUAL);
+                             || (p->tca_method == dt_iop_lens_tca_source_t::MANUAL);
+  const gboolean mixed_tca_then_embedded = emb_dist
+                                            && p->tca_method == dt_iop_lens_tca_source_t::LENSFUN_DB
+                                            && p->distortion_method != dt_iop_lens_correction_source_t::LENSFUN_DB
+                                             && !dt_image_is_monochrome(&self->dev->image_storage);
+
+  if(mixed_tca_then_embedded)
+  {
+    dt_iop_roi_t intermediate_roi;
+    _derive_embedded_geometry_roi(piece, roi_out, d, &intermediate_roi);
+    if(_derive_lensfun_tca_roi(piece, d, &intermediate_roi, roi_in)
+       && roi_in->width > 0 && roi_in->height > 0) return;
+    roi_in->x = 0;
+    roi_in->y = 0;
+    roi_in->width = (int)ceilf(roi_out->scale * piece->buf_in.width);
+    roi_in->height = (int)ceilf(roi_out->scale * piece->buf_in.height);
+    roi_in->scale = roi_out->scale;
+    return;
+  }
 
   if(any_emb_geom)
   {
@@ -2061,6 +2300,7 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
 
   if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
   {
+    const dt_iop_roi_t intermediate_roi = *roi_in;
     const int xoff = roi_in->x;
     const int yoff = roi_in->y;
     const int width = roi_in->width;
@@ -2128,16 +2368,39 @@ void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t
     if(!isfinite(yM) || !(1 <= yM && yM < orig_h)) yM = orig_h;
 
     const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
-    roi_in->x = fmaxf(0.0f, roundf(xm - interpolation->width));
-    roi_in->y = fmaxf(0.0f, roundf(ym - interpolation->width));
-    roi_in->width = roundf(fminf(orig_w - roi_in->x, xM - roi_in->x + interpolation->width));
-    roi_in->height = roundf(fminf(orig_h - roi_in->y, yM - roi_in->y + interpolation->width));
+    if(mixed_tca_then_embedded && (modflags & LF_MODIFY_TCA))
+    {
+      roi_in->x = MAX(0, (int)floorf(xm) - interpolation->width + 1);
+      roi_in->y = MAX(0, (int)floorf(ym) - interpolation->width + 1);
+      roi_in->width = MIN((int)ceilf(orig_w), (int)floorf(xM) + interpolation->width + 1) - roi_in->x;
+      roi_in->height = MIN((int)ceilf(orig_h), (int)floorf(yM) + interpolation->width + 1) - roi_in->y;
+    }
+    else
+    {
+      roi_in->x = fmaxf(0.0f, roundf(xm - interpolation->width));
+      roi_in->y = fmaxf(0.0f, roundf(ym - interpolation->width));
+      roi_in->width = roundf(fminf(orig_w - roi_in->x, xM - roi_in->x + interpolation->width));
+      roi_in->height = roundf(fminf(orig_h - roi_in->y, yM - roi_in->y + interpolation->width));
+    }
 
     // sanity check.
     roi_in->x = CLAMP(roi_in->x, 0, (int)floorf(orig_w));
     roi_in->y = CLAMP(roi_in->y, 0, (int)floorf(orig_h));
     roi_in->width = CLAMP(roi_in->width, 1, (int)ceilf(orig_w) - roi_in->x);
     roi_in->height = CLAMP(roi_in->height, 1, (int)ceilf(orig_h) - roi_in->y);
+
+    if(mixed_tca_then_embedded && (modflags & LF_MODIFY_TCA))
+    {
+      const int x = MIN(intermediate_roi.x, roi_in->x);
+      const int y = MIN(intermediate_roi.y, roi_in->y);
+      const int x_end = MAX(intermediate_roi.x + intermediate_roi.width, roi_in->x + roi_in->width);
+      const int y_end = MAX(intermediate_roi.y + intermediate_roi.height, roi_in->y + roi_in->height);
+      roi_in->x = x;
+      roi_in->y = y;
+      roi_in->width = x_end - x;
+      roi_in->height = y_end - y;
+    }
+
   }
   delete modifier;
 }
@@ -3768,6 +4031,216 @@ void gui_cleanup(struct dt_iop_module_t *self)
 {
   IOP_GUI_FREE;
 }
+
+#ifdef BUILD_TESTING
+typedef enum test_lens_process_fixture_t
+{
+  TEST_LENS_PROCESS_EMBEDDED_ONLY,
+  TEST_LENS_PROCESS_EMBEDDED_VIGNETTE_ONLY,
+  TEST_LENS_PROCESS_LENSFUN_ONLY,
+  TEST_LENS_PROCESS_IDENTITY,
+  TEST_LENS_PROCESS_MIXED,
+  TEST_LENS_PROCESS_MIXED_TCA_SUPPRESSED,
+  TEST_LENS_PROCESS_MIXED_NO_TCA,
+  TEST_LENS_PROCESS_MIXED_TCA_COORDINATE_ALLOCATION_FAILURE,
+  TEST_LENS_PROCESS_MIXED_TCA_OUTPUT_ALLOCATION_FAILURE
+} test_lens_process_fixture_t;
+
+typedef struct test_lens_process_result_t
+{
+  float pixels[32 * 32 * 4];
+  size_t pixels_count;
+  int roi_in[4];
+  int roi_out[4];
+  int tca_roi[4];
+  char trace[128];
+  gboolean normal_alpha_initialized;
+  gboolean alpha_copy_contained;
+  gboolean fallback_used;
+} test_lens_process_result_t;
+
+extern "C" int test_lens_process_characterize(const test_lens_process_fixture_t fixture,
+                                                dt_develop_t *const develop,
+                                                dt_dev_pixelpipe_t *const pipe,
+                                                lfDatabase *const database,
+                                                const dt_iop_roi_t *const requested_roi,
+                                                const int channels,
+                                                const gboolean monochrome,
+                                                const int mask_display,
+                                                test_lens_process_result_t *const result)
+{
+  dt_dev_pixelpipe_iop_t piece = {};
+  dt_iop_module_t module = {};
+  dt_iop_lensfun_global_data_t global_data = {};
+  float input[32 * 32 * 4] = {};
+  float output[32 * 32 * 4] = {};
+  develop->image_storage.width = 32;
+  develop->image_storage.height = 32;
+  develop->image_storage.p_width = 32;
+  develop->image_storage.p_height = 32;
+  develop->image_storage.exif_crop = 1.0f;
+  develop->image_storage.exif_aperture = 5.6f;
+  develop->image_storage.exif_focal_length = 50.0f;
+  develop->image_storage.exif_focus_distance = 10.0f;
+  develop->image_storage.flags = monochrome ? DT_IMAGE_MONOCHROME : 0;
+  g_strlcpy(develop->image_storage.exif_maker, "Ansel test", sizeof(develop->image_storage.exif_maker));
+  g_strlcpy(develop->image_storage.exif_model, "Camera", sizeof(develop->image_storage.exif_model));
+  g_strlcpy(develop->image_storage.exif_lens, "Lens", sizeof(develop->image_storage.exif_lens));
+  if(fixture == TEST_LENS_PROCESS_EMBEDDED_ONLY || fixture == TEST_LENS_PROCESS_EMBEDDED_VIGNETTE_ONLY
+     || fixture == TEST_LENS_PROCESS_MIXED || fixture == TEST_LENS_PROCESS_MIXED_TCA_SUPPRESSED
+     || fixture == TEST_LENS_PROCESS_MIXED_NO_TCA
+     || fixture == TEST_LENS_PROCESS_MIXED_TCA_COORDINATE_ALLOCATION_FAILURE
+     || fixture == TEST_LENS_PROCESS_MIXED_TCA_OUTPUT_ALLOCATION_FAILURE)
+  {
+    develop->image_storage.exif_correction_type = CORRECTION_TYPE_DNG;
+    develop->image_storage.exif_correction_data.dng.has_warp = TRUE;
+    develop->image_storage.exif_correction_data.dng.warp_planes = 3;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[0][0] = 1.004f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[0][1] = -0.012f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[0][2] = 0.018f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[0][3] = -0.002f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[1][0] = 1.002f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[1][1] = -0.010f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[1][2] = 0.020f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[1][3] = -0.003f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[2][0] = 0.996f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[2][1] = -0.008f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[2][2] = 0.022f;
+    develop->image_storage.exif_correction_data.dng.warp_coeffs[2][3] = -0.004f;
+    develop->image_storage.exif_correction_data.dng.has_vignette = TRUE;
+    develop->image_storage.exif_correction_data.dng.vig_coeffs[0] = -0.3;
+    develop->image_storage.exif_correction_data.dng.vig_coeffs[1] = 0.1;
+  }
+
+  module.dev = develop;
+  module.params = static_cast<dt_iop_params_t *>(dt_calloc_align(sizeof(dt_iop_lensfun_params_t)));
+  module.default_params = static_cast<dt_iop_params_t *>(dt_calloc_align(sizeof(dt_iop_lensfun_params_t)));
+  if(IS_NULL_PTR(module.params) || IS_NULL_PTR(module.default_params))
+  {
+    dt_free_align(module.default_params);
+    dt_free_align(module.params);
+    return 1;
+  }
+  global_data.db = database;
+  module.global_data = &global_data;
+  reload_defaults(&module);
+  memcpy(module.params, module.default_params, sizeof(dt_iop_lensfun_params_t));
+  auto params = static_cast<dt_iop_lensfun_params_t *>(module.params);
+  params->has_been_set = 0;
+  piece.buf_in = { 0, 0, 32, 32, 1.0f };
+  piece.dsc_in.channels = channels;
+  piece.roi_out = *requested_roi;
+  if(fixture == TEST_LENS_PROCESS_EMBEDDED_ONLY)
+  {
+    params->vignetting_method = dt_iop_lens_correction_source_t::EMBEDDED;
+    params->distortion_method = dt_iop_lens_correction_source_t::EMBEDDED;
+    params->tca_method = dt_iop_lens_tca_source_t::OFF;
+  }
+  else if(fixture == TEST_LENS_PROCESS_EMBEDDED_VIGNETTE_ONLY)
+  {
+    params->vignetting_method = dt_iop_lens_correction_source_t::EMBEDDED;
+    params->distortion_method = dt_iop_lens_correction_source_t::OFF;
+    params->tca_method = dt_iop_lens_tca_source_t::OFF;
+  }
+  else if(fixture == TEST_LENS_PROCESS_LENSFUN_ONLY)
+  {
+    params->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+    params->distortion_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+    params->tca_method = dt_iop_lens_tca_source_t::LENSFUN_DB;
+  }
+  else if(fixture == TEST_LENS_PROCESS_MIXED
+          || fixture == TEST_LENS_PROCESS_MIXED_NO_TCA
+          || fixture == TEST_LENS_PROCESS_MIXED_TCA_COORDINATE_ALLOCATION_FAILURE
+          || fixture == TEST_LENS_PROCESS_MIXED_TCA_OUTPUT_ALLOCATION_FAILURE)
+  {
+    params->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+    params->distortion_method = dt_iop_lens_correction_source_t::EMBEDDED;
+    params->tca_method = dt_iop_lens_tca_source_t::LENSFUN_DB;
+  }
+  else if(fixture == TEST_LENS_PROCESS_MIXED_TCA_SUPPRESSED)
+  {
+    params->vignetting_method = dt_iop_lens_correction_source_t::LENSFUN_DB;
+    params->distortion_method = dt_iop_lens_correction_source_t::EMBEDDED;
+    params->tca_method = dt_iop_lens_tca_source_t::OFF;
+  }
+  else
+  {
+    params->vignetting_method = params->distortion_method = dt_iop_lens_correction_source_t::OFF;
+    params->tca_method = dt_iop_lens_tca_source_t::OFF;
+  }
+
+  init_pipe(&module, pipe, &piece);
+  commit_params(&module, module.params, pipe, &piece);
+
+  modify_roi_out(&module, pipe, &piece, &piece.roi_out, requested_roi);
+  modify_roi_in(&module, pipe, &piece, &piece.roi_out, &piece.roi_in);
+  const size_t output_count = (size_t)piece.roi_out.width * piece.roi_out.height * channels;
+  if(output_count > sizeof(output) / sizeof(*output))
+  {
+    cleanup_pipe(&module, pipe, &piece);
+    dt_free_align(module.default_params);
+    dt_free_align(module.params);
+    return 1;
+  }
+  const size_t input_count = (size_t)piece.roi_in.width * piece.roi_in.height * channels;
+  if(input_count > sizeof(input) / sizeof(*input))
+  {
+    cleanup_pipe(&module, pipe, &piece);
+    dt_free_align(module.default_params);
+    dt_free_align(module.params);
+    return 1;
+  }
+  for(int y = 0; y < piece.roi_in.height; y++)
+    for(int x = 0; x < piece.roi_in.width; x++)
+      for(int c = 0; c < channels; c++)
+        input[((size_t)y * piece.roi_in.width + x) * channels + c]
+            = (float)(((piece.roi_in.y + y) * 32 + piece.roi_in.x + x + c * 13) % 251) / 251.0f;
+  result->roi_in[0] = piece.roi_in.x;
+  result->roi_in[1] = piece.roi_in.y;
+  result->roi_in[2] = piece.roi_in.width;
+  result->roi_in[3] = piece.roi_in.height;
+  result->roi_out[0] = piece.roi_out.x;
+  result->roi_out[1] = piece.roi_out.y;
+  result->roi_out[2] = piece.roi_out.width;
+  result->roi_out[3] = piece.roi_out.height;
+  dt_iop_roi_t tca_roi;
+  _derive_embedded_geometry_roi(&piece, &piece.roi_out, static_cast<dt_iop_lensfun_data_t *>(piece.data), &tca_roi);
+  result->tca_roi[0] = tca_roi.x;
+  result->tca_roi[1] = tca_roi.y;
+  result->tca_roi[2] = tca_roi.width;
+  result->tca_roi[3] = tca_roi.height;
+  result->alpha_copy_contained = _roi_contains(&piece.roi_in, &tca_roi);
+  const int scaled_width = (int)ceilf(requested_roi->scale * piece.buf_in.width);
+  const int scaled_height = (int)ceilf(requested_roi->scale * piece.buf_in.height);
+  result->fallback_used = piece.roi_in.width == scaled_width && piece.roi_in.height == scaled_height
+                          && piece.roi_in.x == 0 && piece.roi_in.y == 0
+                          && (requested_roi->width != scaled_width || requested_roi->height != scaled_height);
+  const int previous_mask_display = pipe->mask_display;
+  pipe->mask_display = mask_display;
+  _lens_test_trace = result->trace;
+  _lens_test_normal_alpha_initialized = FALSE;
+  _lens_test_tca_allocation_failure = fixture == TEST_LENS_PROCESS_MIXED_TCA_COORDINATE_ALLOCATION_FAILURE ? 1
+                                      : fixture == TEST_LENS_PROCESS_MIXED_TCA_OUTPUT_ALLOCATION_FAILURE ? 2 : 0;
+  const int status = process(&module, pipe, &piece, input, output);
+  _lens_test_tca_allocation_failure = 0;
+  _lens_test_trace = NULL;
+  pipe->mask_display = previous_mask_display;
+  if(status || output_count > sizeof(result->pixels) / sizeof(*result->pixels))
+  {
+    cleanup_pipe(&module, pipe, &piece);
+    dt_free_align(module.default_params);
+    dt_free_align(module.params);
+    return 1;
+  }
+  memcpy(result->pixels, output, output_count * sizeof(*result->pixels));
+  result->pixels_count = output_count;
+  result->normal_alpha_initialized = _lens_test_normal_alpha_initialized;
+  cleanup_pipe(&module, pipe, &piece);
+  dt_free_align(module.default_params);
+  dt_free_align(module.params);
+  return 0;
+}
+#endif
 
 }
 
