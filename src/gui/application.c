@@ -1111,6 +1111,18 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_free(keyboardrc);
   dt_free(keyboardrc_path);
 
+  // Load the user's saved shortcuts right away, before _init_widgets() below builds the
+  // main window and enters the default view. Views call dt_accels_connect_accels() from
+  // their own enter() (see e.g. views/lighttable.c), which happens well before darktable.c's
+  // own later, single dt_accels_connect_accels() call -- without this earlier load, that
+  // first connect reconciles every shortcut against an empty accel map (key=0, mods=0) and
+  // permanently records it as a deliberate "user cleared this shortcut" override, before the
+  // real saved value has had a chance to be read at all. This must be the ONLY call to
+  // dt_accels_load_user_config(): calling it again anywhere later would re-read the
+  // still-on-disk (unsaved until exit) file and clobber any normalization applied to the
+  // live GtkAccelMap since this first load.
+  dt_accels_load_user_config(gui->accels);
+
   // Initializing widgets
   _init_widgets(gui);
 

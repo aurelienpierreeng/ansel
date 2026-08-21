@@ -1781,7 +1781,11 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   if(init_gui)
   {
-    dt_accels_load_user_config(darktable.gui->accels);
+    // The user config is already loaded from gui/application.c, right after dt_accels_init()
+    // and before any widget/menu is built -- loading it again here would re-read the
+    // still-on-disk (unsaved) file and clobber any normalization dt_accels_connect_accels()
+    // already applied to the live GtkAccelMap in the meantime (e.g. an old Ctrl-flavored
+    // save recognized as today's platform-native default and resynced accordingly).
     dt_accels_connect_accels(darktable.gui->accels);
     //gtk_window_add_accel_group(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), darktable.gui->accels->global_accels);
 

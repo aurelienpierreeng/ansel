@@ -51,6 +51,7 @@
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
 #include "widgets/gdkkeys.h"
+#include "widgets/accelerators.h"
 #include "database/metadata_repository.h"
 #include "common/conf.h"
 #include "widgets/label.h"
@@ -334,13 +335,13 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
 
   guint key = dt_keys_mainpad_alternatives(event->keyval);
 
-  if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+  if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
   {
     switch(key)
     {
       case GDK_KEY_Return:
         // insert new line
-        event->state &= ~GDK_CONTROL_MASK;  //TODO: on Mac, remap Ctrl to Cmd key
+        event->state &= ~DT_PRIMARY_MASK;
         d->editing = TRUE;
         break;
       default:

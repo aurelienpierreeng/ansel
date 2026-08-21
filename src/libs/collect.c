@@ -126,6 +126,7 @@
 #include "libs/collect.h"
 #include "control/settings.h"
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "common/collection.h"
 #include "common/film.h"
 #include "common/image.h"
@@ -1660,7 +1661,7 @@ static void update_view(dt_lib_collect_rule_t *dr)
 // exact node (no suffix).
 static gchar *_decorate_hierarchy(gchar *text, GdkEventButton *event)
 {
-  if(event && dt_modifier_is(event->state, GDK_CONTROL_MASK))
+  if(event && dt_modifier_is(event->state, DT_PRIMARY_MASK))
   {
     gchar *n = g_strconcat(text, "|%", NULL);
     dt_free(text);

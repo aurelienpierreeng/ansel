@@ -481,21 +481,21 @@ static gboolean paste_ask_checked_callback(GtkWidget *widget)
 
 void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
-  add_sub_menu_entry(menus, lists, _("Undo"), index, NULL, undo_callback, NULL, NULL, undo_sensitive_callback, GDK_KEY_z, GDK_CONTROL_MASK);
+  add_sub_menu_entry(menus, lists, _("Undo"), index, NULL, undo_callback, NULL, NULL, undo_sensitive_callback, GDK_KEY_z, DT_PRIMARY_MASK);
 
-  add_sub_menu_entry(menus, lists, _("Redo"), index, NULL, redo_callback, NULL, NULL, redo_sensitive_callback, GDK_KEY_y, GDK_CONTROL_MASK);
+  add_sub_menu_entry(menus, lists, _("Redo"), index, NULL, redo_callback, NULL, NULL, redo_sensitive_callback, GDK_KEY_y, DT_PRIMARY_MASK);
 
   add_menu_separator(menus[index]);
 
-  add_sub_menu_entry(menus, lists, _("Copy history (all)"), index, NULL, copy_callback, NULL, NULL, has_selection, GDK_KEY_c, GDK_CONTROL_MASK);
+  add_sub_menu_entry(menus, lists, _("Copy history (all)"), index, NULL, copy_callback, NULL, NULL, has_selection, GDK_KEY_c, DT_PRIMARY_MASK);
 
-  add_sub_menu_entry(menus, lists, _("Copy history (parts)..."), index, NULL, copy_parts_callback, NULL, NULL, has_selection, GDK_KEY_c, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+  add_sub_menu_entry(menus, lists, _("Copy history (parts)..."), index, NULL, copy_parts_callback, NULL, NULL, has_selection, GDK_KEY_c, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_sub_menu_entry(menus, lists, _("Paste history (all)"), index, NULL, paste_all_callback, NULL, NULL,
-                     paste_sensitive_callback, GDK_KEY_v, GDK_CONTROL_MASK);
+                     paste_sensitive_callback, GDK_KEY_v, DT_PRIMARY_MASK);
 
   add_sub_menu_entry(menus, lists, _("Paste history (parts)..."), index, NULL, paste_parts_callback, NULL, NULL,
-                     paste_sensitive_callback, GDK_KEY_v, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                     paste_sensitive_callback, GDK_KEY_v, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_menu_separator(menus[index]);
 
@@ -536,10 +536,10 @@ void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
                      load_xmp_callback, NULL, NULL, has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Create new history"), index, NULL,
-                    new_history_callback, NULL, NULL, has_active_images, GDK_KEY_n, GDK_CONTROL_MASK);
+                    new_history_callback, NULL, NULL, has_active_images, GDK_KEY_n, DT_PRIMARY_MASK);
 
   add_sub_menu_entry(menus, lists, _("Duplicate existing history"), index, NULL,
-                     duplicate_callback, NULL, NULL, has_active_images, GDK_KEY_d, GDK_CONTROL_MASK);
+                     duplicate_callback, NULL, NULL, has_active_images, GDK_KEY_d, DT_PRIMARY_MASK);
 
   add_sub_menu_entry(menus, lists, _("Compress history"), index, NULL,
                      compress_history_callback, NULL, NULL, has_active_images, 0, 0);

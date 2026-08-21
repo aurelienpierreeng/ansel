@@ -33,6 +33,7 @@
 
 #include <math.h>
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 
 
 // --- Content widget ---------------------------------------------------------------------------
@@ -296,7 +297,7 @@ static gboolean _grid_handle_key(dt_thumbtable_t *table, GdkEventKey *event, gui
         dt_pthread_mutex_unlock(&table->lock);
         dt_thumbtable_select_range(table, rowid);
       }
-      else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+      else if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
         dt_selection_toggle(dt_selection_get_global(), imgid);
       else
         dt_selection_select_single(dt_selection_get_global(), imgid);

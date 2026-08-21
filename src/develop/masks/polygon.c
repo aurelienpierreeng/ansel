@@ -47,6 +47,8 @@
 #include "common/glib_utils.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
+#include "widgets/accelerators.h"
+#include "widgets/widget_settings.h"
 #include "common/conf.h"
 #include "develop/imageop.h"
 #include "develop/masks/masks_distort.h"
@@ -1769,7 +1771,7 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, double
 
   if(mask_gui->edit_mode == DT_MASKS_EDIT_FULL && dt_masks_is_anything_selected(mask_gui))
   {
-    if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    if(dt_modifier_is(state, DT_PRIMARY_MASK))
       return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parent_id, up, flow);
     if(dt_modifier_is(state, GDK_SHIFT_MASK) || mask_gui->node_selected)
       return _change_hardness(mask_form, parent_id, mask_gui, module, form_index, up ? +0.01f : -0.01f,
@@ -1821,7 +1823,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
       if(mask_gui->creation_closing_form)
         return _polygon_creation_closing_form(mask_form, mask_gui);
 
-      if(dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_SHIFT_MASK))
+      if(dt_modifier_is(state, DT_PRIMARY_MASK | GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_SHIFT_MASK))
       {
         // set some absolute or relative position for the source of the clone mask
         if(mask_form->type & DT_MASKS_CLONE)
@@ -1871,7 +1873,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
         mask_form->points = g_list_append(mask_form->points, polygon_node);
 
         // if this is a ctrl click, the last created point is a sharp one
-        if(dt_modifier_is(state, GDK_CONTROL_MASK))
+        if(dt_modifier_is(state, DT_PRIMARY_MASK))
         {
           dt_masks_node_polygon_t *polygon_last_node = g_list_nth_data(mask_form->points, node_count - 1);
           polygon_last_node->ctrl1[0] = polygon_last_node->ctrl2[0] = polygon_last_node->node[0];
@@ -1901,7 +1903,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
     else if(mask_gui->node_hovered >= 0)
     {
       // if ctrl is pressed, we change the type of point
-      if(mask_gui->node_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
+      if(mask_gui->node_selected && dt_modifier_is(state, DT_PRIMARY_MASK))
       {
         dt_masks_node_polygon_t *node
             = (dt_masks_node_polygon_t *)g_list_nth_data(mask_form->points, mask_gui->node_hovered);
@@ -1954,7 +1956,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
     {
       mask_gui->node_hovered = -1;
 
-      if(dt_modifier_is(state, GDK_CONTROL_MASK))
+      if(dt_modifier_is(state, DT_PRIMARY_MASK))
       {
         _add_node_to_segment(module, mask_form, parent_id, mask_gui, form_index);
       }
@@ -3690,7 +3692,7 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
   
   
   GtkWidget *menu_item = NULL;
-  gchar *accel = g_strdup_printf(_("%s+Click"), gtk_accelerator_get_label(0, GDK_CONTROL_MASK));
+  gchar *accel = g_strdup_printf(_("%s+Click"), gtk_accelerator_get_label(0, dt_accels_display_mods(DT_PRIMARY_MASK)));
 
   gboolean ret = FALSE;
 

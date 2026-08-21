@@ -64,6 +64,7 @@
 #include "widgets/icon_cell_renderer.h"
 
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "gui/drag_and_drop.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -3449,7 +3450,7 @@ void gui_init(dt_lib_module_t *self)
 
   dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self,
                                 dt_gui_get_accels()->lighttable_accels, N_("Lighttable/Tags"),
-                                N_("Tag"), GDK_KEY_t, GDK_CONTROL_MASK, FALSE,
+                                N_("Tag"), GDK_KEY_t, DT_PRIMARY_MASK, FALSE,
                                 _("Opens the quick tagging entry"));
   dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self,
                                 dt_gui_get_accels()->lighttable_accels, N_("Lighttable/Tags"),
@@ -3457,7 +3458,7 @@ void gui_init(dt_lib_module_t *self)
                                 _("Re-applies the last used tag"));
   dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_show_accel, self,
                                 dt_gui_get_accels()->map_accels, N_("Map/Tags"),
-                                N_("Tag"), GDK_KEY_t, GDK_CONTROL_MASK, FALSE,
+                                N_("Tag"), GDK_KEY_t, DT_PRIMARY_MASK, FALSE,
                                 _("Opens the quick tagging entry"));
   dt_accels_new_action_shortcut(dt_gui_get_accels(), _lib_tagging_tag_redo_accel, self,
                                 dt_gui_get_accels()->map_accels, N_("Map/Tags"),

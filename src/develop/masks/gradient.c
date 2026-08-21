@@ -41,6 +41,7 @@
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
 #include "math/openmp_maths.h"
+#include "widgets/accelerators.h"
 
 #define extent_MIN 0.0005f
 #define extent_MAX 1.0f
@@ -533,9 +534,9 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, doubl
   
   if(gui->creation)
   {
-    if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
+    if(dt_modifier_is(state, GDK_SHIFT_MASK | DT_PRIMARY_MASK))
       return _init_rotation(form, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
-    else if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    else if(dt_modifier_is(state, DT_PRIMARY_MASK))
       return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _init_curvature(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
@@ -544,9 +545,9 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, doubl
   }
   else if(gui->form_selected  || gui->seg_selected || gui->pivot_selected)
   {
-    if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
+    if(dt_modifier_is(state, GDK_SHIFT_MASK | DT_PRIMARY_MASK))
       return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
-    else if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    else if(dt_modifier_is(state, DT_PRIMARY_MASK))
       return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_curvature(form, gui, module, index, (up ? +0.02f : -0.02f), DT_MASKS_INCREMENT_OFFSET, flow);

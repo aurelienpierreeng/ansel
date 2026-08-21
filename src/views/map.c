@@ -1821,7 +1821,7 @@ static gboolean _view_map_scroll_event(GtkWidget *w, GdkEventScroll *event, dt_v
         else
           lib->loc.main.data.delta1 /= 1.1;
       }
-      else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+      else if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
       {
         if(event->direction == GDK_SCROLL_DOWN)
           lib->loc.main.data.delta2 *= 1.1;
@@ -1872,7 +1872,7 @@ static gboolean _view_map_button_press_callback(GtkWidget *w, GdkEventButton *e,
   {
     // check if the click was in a location form - crtl gives priority to images
     if(lib->loc.main.id > 0 && (lib->loc.main.data.shape != MAP_LOCATION_SHAPE_POLYGONS)
-                            && !dt_modifier_is(e->state, GDK_CONTROL_MASK))
+                            && !dt_modifier_is(e->state, DT_PRIMARY_MASK))
     {
 
       OsmGpsMapPoint *p = osm_gps_map_get_event_location(lib->map, e);
@@ -1890,7 +1890,7 @@ static gboolean _view_map_button_press_callback(GtkWidget *w, GdkEventButton *e,
       }
     }
     // check if another location is clicked - ctrl gives priority to images
-    if (!dt_modifier_is(e->state, GDK_CONTROL_MASK) &&
+    if (!dt_modifier_is(e->state, DT_PRIMARY_MASK) &&
         dt_conf_get_bool("plugins/map/showalllocations"))
     {
       OsmGpsMapPoint *p = osm_gps_map_get_event_location(lib->map, e);

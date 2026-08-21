@@ -18,6 +18,7 @@
 */
 #include "system/mem_alloc.h"
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "gui/actions/menu.h"
 #ifdef __APPLE__
 #include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
@@ -236,7 +237,7 @@ void append_help(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_menu_separator(menus[index]);
   add_sub_menu_entry(menus, lists, _("Open contextual help"), index, NULL, contextual_help_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Search actions..."), index, NULL, search_accels_callback, NULL, NULL,
-                     NULL, GDK_KEY_p, GDK_CONTROL_MASK);
+                     NULL, GDK_KEY_p, DT_PRIMARY_MASK);
   add_menu_separator(menus[index]);
   add_sub_menu_entry(menus, lists, _("Event supervisor..."), index, NULL, supervisor_callback, NULL, NULL, NULL, 0, 0);
   add_menu_separator(menus[index]);

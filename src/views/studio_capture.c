@@ -25,6 +25,7 @@
 #include "develop/masks_gui.h"
 #include "system/atomic.h"
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 #include "common/collection.h"
 #include "common/module_versioning.h"
 #include "common/selection.h"
@@ -1196,8 +1197,8 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
   const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
-  const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
-  const gboolean ctrl_any = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
+  const gboolean ctrl = dt_modifier_is(event->state, DT_PRIMARY_MASK);
+  const gboolean ctrl_any = dt_modifiers_include(event->state, DT_PRIMARY_MASK);
   guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   // Studio Capture's visible surface is driven by d->zoom/pan_x/pan_y (see

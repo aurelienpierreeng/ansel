@@ -49,6 +49,7 @@
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 #include "widgets/widget_style.h"
 
 DT_MODULE(1)
@@ -199,7 +200,7 @@ static gboolean _thumbtable_scroll(GtkWidget *widget, GdkEventScroll *event, gpo
 {
   dt_lib_module_t *self = (dt_lib_module_t *)data;
 
-  if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+  if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
   {
     int scroll_y;
     dt_gui_get_scroll_unit_deltas(event, NULL, &scroll_y);
@@ -250,7 +251,7 @@ void append_thumbnails(GtkWidget **menus, GList **lists, const dt_menus_t index,
 
   add_generic_sub_menu_entry(menus, lists, _("Overlay focus peaking"), index, NULL, focus_peaking_callback,
                              focus_peaking_checked_callback, NULL, NULL, GDK_KEY_p,
-                             GDK_CONTROL_MASK | GDK_SHIFT_MASK, accel_group);
+                             DT_PRIMARY_MASK | GDK_SHIFT_MASK, accel_group);
 
   // Zoom
   add_generic_top_submenu_entry(menus, lists, _("Zoom"), index, accel_group);
@@ -301,9 +302,9 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->columns), "value-changed", G_CALLBACK(_lib_lighttable_columns_slider_changed), self);
 
   dt_accels_new_lighttable_action(_columns_in_action, self, N_("Lighttable/Actions"), N_("Zoom in the thumbtable grid"),
-                                  GDK_KEY_plus, GDK_CONTROL_MASK, _("Triggers the action"));
+                                  GDK_KEY_plus, DT_PRIMARY_MASK, _("Triggers the action"));
   dt_accels_new_lighttable_action(_columns_out_action, self, N_("Lighttable/Actions"), N_("Zoom out the thumbtable grid"),
-                                  GDK_KEY_minus, GDK_CONTROL_MASK, _("Triggers the action"));
+                                  GDK_KEY_minus, DT_PRIMARY_MASK, _("Triggers the action"));
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                                   G_CALLBACK(_dt_collection_changed_callback), self);

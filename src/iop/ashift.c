@@ -51,6 +51,7 @@
 #include "common/conf.h"
 #endif
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -5297,7 +5298,7 @@ static int _event_structure_auto_clicked(GtkWidget *widget, GdkEventButton *even
 
     _do_clean_structure(self, p, TRUE);
 
-    const int control = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
+    const int control = dt_modifiers_include(event->state, DT_PRIMARY_MASK);
     const int shift   = dt_modifiers_include(event->state, GDK_SHIFT_MASK);
 
     dt_iop_ashift_enhance_t enhance =

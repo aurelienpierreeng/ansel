@@ -27,6 +27,7 @@
 #include "metadata/tags.h"
 #include "control/settings.h"
 #include "widgets/togglebutton.h"
+#include "widgets/accelerators.h"
 #include "widgets/paint.h"
 #include "common/collection.h"
 #include "system/macros.h"
@@ -114,7 +115,7 @@ static gboolean _mouse_scroll(GtkWidget *treeview, GdkEventScroll *event,
                               dt_lib_module_t *self)
 {
   dt_lib_map_locations_t *d = (dt_lib_map_locations_t *)self->data;
-  if (dt_modifier_is(event->state, GDK_CONTROL_MASK))
+  if (dt_modifier_is(event->state, DT_PRIMARY_MASK))
   {
     const gint increment = DT_PIXEL_APPLY_DPI(10.0);
     const gint min_height = DT_PIXEL_APPLY_DPI(100.0);
@@ -889,7 +890,7 @@ static gboolean _click_on_view(GtkWidget *view, GdkEventButton *event, dt_lib_mo
   }
 
   const int button_pressed = (event->type == GDK_BUTTON_PRESS) ? event->button : 0;
-  const gboolean ctrl_pressed = dt_modifier_is(event->state, GDK_CONTROL_MASK);
+  const gboolean ctrl_pressed = dt_modifier_is(event->state, DT_PRIMARY_MASK);
   if((button_pressed == 3)
      || (button_pressed == 1 && !ctrl_pressed)
      || (button_pressed == 1 && ctrl_pressed)

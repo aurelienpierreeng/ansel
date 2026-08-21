@@ -43,6 +43,7 @@
 #include "gui/dtgtk/thumbtable_info.h"
 
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "database/history_repository.h"
 #include "database/image_repository.h"
@@ -836,7 +837,7 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
   {
     if(dt_modifier_is(event->state, 0))
       dt_selection_select_single(dt_selection_get_global(), thumb->info.id);
-    else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+    else if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
       dt_selection_toggle(dt_selection_get_global(), thumb->info.id);
     else if(dt_modifier_is(event->state, GDK_SHIFT_MASK) && thumb->table)
       dt_thumbtable_select_range(thumb->table, thumb->rowid);

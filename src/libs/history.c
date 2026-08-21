@@ -52,6 +52,7 @@
 
 #include "develop/imageop_gui.h"
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 #include "common/history_actions.h"
 #include "gui/common/history_actions_gui.h"
 #include "system/macros.h"
@@ -800,7 +801,7 @@ static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpo
 static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
 {
   // Ctrl-click just shows the corresponding module in modulegroups
-  if(e->button == 1 && dt_modifier_is(e->state, GDK_CONTROL_MASK))
+  if(e->button == 1 && dt_modifier_is(e->state, DT_PRIMARY_MASK))
   {
     GtkTreePath *path = NULL;
     if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), (gint)e->x, (gint)e->y, &path, NULL, NULL, NULL))

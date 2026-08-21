@@ -50,6 +50,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "widgets/draw.h"
+#include "widgets/accelerators.h"
 #include "gui/application.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -1277,7 +1278,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
     // if we are already inside the selection, no change
     if(on_row && !gtk_tree_selection_path_is_selected(selection, mouse_path))
     {
-      if(!dt_modifier_is(event->state, GDK_CONTROL_MASK)) gtk_tree_selection_unselect_all(selection);
+      if(!dt_modifier_is(event->state, DT_PRIMARY_MASK)) gtk_tree_selection_unselect_all(selection);
       gtk_tree_selection_select_path(selection, mouse_path);
       gtk_tree_path_free(mouse_path);
     }

@@ -64,6 +64,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "develop/iop_profile.h"
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 #include "widgets/gdkkeys.h"
 #include "config.h"
 #endif
@@ -1322,7 +1323,7 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget, GdkEventButton 
 
   if(event->button == 1)
   {
-    if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, GDK_CONTROL_MASK)
+    if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, DT_PRIMARY_MASK)
       && nodes < MAXNODES && c->selected == -1)
     {
       // if we are not on a node -> add a new node at the current x of the pointer and y of the curve at that x

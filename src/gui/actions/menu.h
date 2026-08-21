@@ -72,6 +72,10 @@ typedef struct dt_menu_entry_t
   dt_menus_t menu;           // Index of first-level menu
   dt_menu_entry_style_t style;
   GtkAccelGroup *accel_group;
+  gchar *accel_path;         // NULL if this entry has no real (accel_group-backed) shortcut.
+                             // GTK has no public getter for a widget's own accel path (only
+                             // gtk_widget_set_accel_path()), so update_entry() needs its own copy
+                             // to look up the live GtkAccelMap entry on every menu open.
 } dt_menu_entry_t;
 
 

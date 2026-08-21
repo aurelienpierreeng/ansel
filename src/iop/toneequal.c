@@ -99,6 +99,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 #endif
 #include "develop/masks_gui.h"
 #include <assert.h>
@@ -2105,7 +2106,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   float step;
   if(dt_modifier_is(state, GDK_SHIFT_MASK))
     step = 1.0f;  // coarse
-  else if(dt_modifier_is(state, GDK_CONTROL_MASK))
+  else if(dt_modifier_is(state, DT_PRIMARY_MASK))
     step = 0.1f;  // fine
   else
     step = 0.25f; // standard

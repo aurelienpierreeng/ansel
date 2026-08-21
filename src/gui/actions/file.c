@@ -25,6 +25,7 @@
 #include "common/usermanual_url.h"
 #include "control/signal.h"
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "gui/actions/menu.h"
 #ifdef __APPLE__
 #include "osx/osx.h"   // dt_osx_disallow_fullscreen(), used under GDK_WINDOWING_QUARTZ below
@@ -390,10 +391,10 @@ MAKE_ACCEL_WRAPPER(dt_control_quit)
 void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
   add_sub_menu_entry(menus, lists, _("Import..."), index, NULL, GET_ACCEL_WRAPPER(dt_images_import), NULL, NULL,
-                     NULL, GDK_KEY_i, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                     NULL, GDK_KEY_i, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_sub_menu_entry(menus, lists, _("Export..."), index, NULL, export_files_callback, NULL, NULL,
-                     NULL, GDK_KEY_e, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                     NULL, GDK_KEY_e, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_sub_menu_entry(menus, lists, _("Export image list..."), index, NULL, export_image_list_callback, NULL, NULL,
                      has_selection, 0, 0);
@@ -448,5 +449,5 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_menu_separator(menus[index]);
 
-  add_sub_menu_entry(menus, lists, _("Quit"), index, NULL, GET_ACCEL_WRAPPER(dt_control_quit), NULL, NULL, NULL,  GDK_KEY_q, GDK_CONTROL_MASK);
+  add_sub_menu_entry(menus, lists, _("Quit"), index, NULL, GET_ACCEL_WRAPPER(dt_control_quit), NULL, NULL, NULL,  GDK_KEY_q, DT_PRIMARY_MASK);
 }

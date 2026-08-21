@@ -59,6 +59,7 @@
 
 #ifdef HAVE_CONFIG_H
 #include "widgets/gdkkeys.h"
+#include "widgets/accelerators.h"
 #include "widgets/widget_settings.h"
 #include "common/conf.h"
 #include "config.h"
@@ -1881,12 +1882,12 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
   if(event->button == 1)
   {
-    if(c->edit_by_area && event->type != GDK_2BUTTON_PRESS && !dt_modifier_is(event->state, GDK_CONTROL_MASK))
+    if(c->edit_by_area && event->type != GDK_2BUTTON_PRESS && !dt_modifier_is(event->state, DT_PRIMARY_MASK))
     {
       c->dragging = 1;
       return TRUE;
     }
-    else if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, GDK_CONTROL_MASK)
+    else if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, DT_PRIMARY_MASK)
             && nodes < DT_IOP_COLORZONES_MAXNODES && (c->selected == -1 || c->edit_by_area))
     {
       // if we are not on a node -> add a new node at the current x of the pointer and y of the curve at that x
@@ -1986,7 +1987,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     }
 
     // right click deletes the node, ctrl+right click reset the node to y-zero
-    _delete_node(self, curve, &p->curve_num_nodes[ch], c->selected, dt_modifier_is(event->state, GDK_CONTROL_MASK));
+    _delete_node(self, curve, &p->curve_num_nodes[ch], c->selected, dt_modifier_is(event->state, DT_PRIMARY_MASK));
     c->selected = -2; // avoid re-insertion of that point immediately after this
 
     return TRUE;
@@ -2183,7 +2184,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
     const GdkModifierType state = dt_key_modifier_state();
     int picker_set_upper_lower; // flat=0, lower=-1, upper=1
-    if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    if(dt_modifier_is(state, DT_PRIMARY_MASK))
       picker_set_upper_lower = 1;
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       picker_set_upper_lower = -1;

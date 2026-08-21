@@ -74,6 +74,7 @@
 #include "control/signal.h"
 
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -1311,7 +1312,7 @@ void gui_init(dt_lib_module_t *self)
 
   // Export button
   d->export_button = GTK_BUTTON(dt_action_button_new(self, N_("export"), _export_button_clicked, d,
-                                                     _("export with current settings"), GDK_KEY_e, GDK_CONTROL_MASK));
+                                                     _("export with current settings"), GDK_KEY_e, DT_PRIMARY_MASK));
   gtk_box_pack_start(hbox, GTK_WIDGET(d->export_button), TRUE, TRUE, 0);
 
   g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d);

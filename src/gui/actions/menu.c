@@ -21,6 +21,7 @@
 #include "common/act_on.h"
 #include "common/selection.h"
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "views/view.h"
 #include "math.h"
 #include "menu.h"
@@ -91,6 +92,7 @@ static gboolean _menu_icon_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
 static void _menu_entry_destroy(GtkWidget *widget, gpointer user_data)
 {
   dt_menu_entry_t *entry = (dt_menu_entry_t *)user_data;
+  dt_free(entry->accel_path);
   dt_free(entry);
 }
 
@@ -390,13 +392,26 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
 
       gchar *path = dt_accels_build_path(parent_path, clean_label);
       gtk_widget_set_accel_path(entry->widget, path, (!IS_NULL_PTR(action_callback)) ? accel_group : NULL);
-      dt_free(path);
+
+      // GtkAccelLabel would otherwise read the accel path's live GtkAccelMap entry itself, but
+      // that entry must keep GDK_MOD2_MASK (needed for gtk_accel_map_save() to collapse it to
+      // the portable "<Primary>" token -- see widgets/accelerators.h's DT_PRIMARY_MASK doc
+      // comment), and GTK only ever renders the "⌘" glyph for GDK_META_MASK, never
+      // GDK_MOD2_MASK. update_entry() re-asserts the display-swapped accel on every menu open
+      // (gtk_accel_label_set_accel() overrides the accel-path-driven value), so this is just
+      // the initial value shown before the menu is ever opened.
+      GtkAccelKey initial_key = { 0 };
+      if(gtk_accel_map_lookup_entry(path, &initial_key) && initial_key.accel_key)
+        gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), initial_key.accel_key,
+                                  dt_accels_display_mods(initial_key.accel_mods));
+
+      entry->accel_path = path; // transfer ownership, see update_entry()
       dt_free(clean_label);
     }
     else
     {
       // Show a fake shortcut
-      gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), key_val, mods);
+      gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), key_val, dt_accels_display_mods(mods));
     }
 
     g_signal_connect(G_OBJECT(entry->widget), "activate", G_CALLBACK(_activate_callback_to_action_callback), entry);
@@ -432,6 +447,19 @@ void update_entry(dt_menu_entry_t *entry)
       dt_gui_add_class(entry->widget, "menu-active");
     else
       dt_gui_remove_class(entry->widget, "menu-active");
+  }
+
+  // Re-assert the display-swapped accelerator (see set_menu_entry()'s doc comment) every time
+  // the menu is opened, since the user may have rebound this shortcut since the last open, and
+  // gtk_accel_label_set_accel() does not itself track the live GtkAccelMap entry.
+  if(entry->accel_path)
+  {
+    GtkAccelKey key = { 0 };
+    GtkWidget *child = gtk_bin_get_child(GTK_BIN(entry->widget));
+    if(gtk_accel_map_lookup_entry(entry->accel_path, &key) && key.accel_key)
+      gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), key.accel_key, dt_accels_display_mods(key.accel_mods));
+    else
+      gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), 0, 0);
   }
 }
 

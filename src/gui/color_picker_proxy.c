@@ -32,6 +32,7 @@
 #include "gui/color_picker_proxy.h"
 #include "develop/iop_profile.h"
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "common/color_picker.h"
 #include "control/signal.h"
 #include "control/redraw.h"
@@ -767,7 +768,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   if(off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(off), TRUE);
 
   const GdkModifierType state = !IS_NULL_PTR(e) ? e->state : dt_key_modifier_state();
-  const gboolean ctrl_key_pressed = dt_modifier_is(state, GDK_CONTROL_MASK) || (!IS_NULL_PTR(e) && e->button == 3);
+  const gboolean ctrl_key_pressed = dt_modifier_is(state, DT_PRIMARY_MASK) || (!IS_NULL_PTR(e) && e->button == 3);
   dt_iop_color_picker_kind_t kind = self->kind;
 
   if(prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&

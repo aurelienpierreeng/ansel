@@ -66,6 +66,7 @@
 */
 #ifdef HAVE_CONFIG_H
 #include "widgets/gdkkeys.h"
+#include "widgets/accelerators.h"
 #include "develop/iop_profile.h"
 #include "widgets/widget_settings.h"
 #include "common/colorspaces_inline_conversions.h"
@@ -1658,7 +1659,7 @@ static gboolean dt_iop_tonecurve_button_press(GtkWidget *widget, GdkEventButton 
 
   if(event->button == 1)
   {
-    if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, GDK_CONTROL_MASK)
+    if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, DT_PRIMARY_MASK)
        && nodes < DT_IOP_TONECURVE_MAXNODES && c->selected == -1)
     {
       // if we are not on a node -> add a new node at the current x of the pointer and y of the curve at that x

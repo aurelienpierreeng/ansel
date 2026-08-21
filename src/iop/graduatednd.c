@@ -69,6 +69,7 @@
 #include <string.h>
 
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "colorprofiles/colorspaces.h"
 #include "math/math.h"
 #include "common/opencl.h"
@@ -630,7 +631,7 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
   // Ctrl/Shift+scroll into this module's density/hardness adjustment.
   if(self->dev->form_gui && dt_masks_get_visible_form(self->dev)) return 0;
 
-  if(dt_modifier_is(state, GDK_CONTROL_MASK))
+  if(dt_modifier_is(state, DT_PRIMARY_MASK))
   {
     float dens;
     if(up)

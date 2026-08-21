@@ -44,6 +44,7 @@
 #include "develop/masks_gui.h"
 #include "develop/masks/masks_functions.h"
 #include "math/openmp_maths.h"
+#include "widgets/accelerators.h"
 
 #define HARDNESS_MIN 0.0005f
 #define HARDNESS_MAX 1.0f
@@ -317,7 +318,7 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, double 
   
   if(gui->creation)
   {
-    if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    if(dt_modifier_is(state, DT_PRIMARY_MASK))
       return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _init_hardness(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
@@ -326,7 +327,7 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, double 
   }
   else if(gui->form_selected)
   {
-    if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    if(dt_modifier_is(state, DT_PRIMARY_MASK))
       return dt_masks_form_change_opacity(gui->dev, form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_hardness(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
@@ -344,7 +345,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
   {
     if(gui->creation)
     {
-      if((dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK)) || dt_modifier_is(state, GDK_SHIFT_MASK))
+      if((dt_modifier_is(state, DT_PRIMARY_MASK | GDK_SHIFT_MASK)) || dt_modifier_is(state, GDK_SHIFT_MASK))
       {
         // set some absolute or relative position for the source of the clone mask
         if(form->type & DT_MASKS_CLONE) dt_masks_set_source_pos_initial_state(gui, state);

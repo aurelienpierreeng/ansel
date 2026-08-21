@@ -29,6 +29,7 @@
 #include "math/math.h"
 #include "system/dtpthread.h"
 #include "widgets/gdkkeys.h"
+#include "widgets/accelerators.h"
 #include "control/control.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
@@ -2623,7 +2624,7 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
   }
 
   if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
-  if(dt_modifier_is(state, GDK_CONTROL_MASK)) return;
+  if(dt_modifier_is(state, DT_PRIMARY_MASK)) return;
   if(!shape_was_selected) return;
 
   dt_masks_gui_set_dragging(mask_gui);
@@ -4433,7 +4434,7 @@ void dt_masks_select_form(dt_develop_t *dev, struct dt_iop_module_t *module, dt_
  */
 void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *mask_gui, const uint32_t key_state)
 {
-  if(dt_modifier_is(key_state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
+  if(dt_modifier_is(key_state, GDK_SHIFT_MASK | DT_PRIMARY_MASK))
     mask_gui->source_pos_type = DT_MASKS_SOURCE_POS_ABSOLUTE;
   else if(dt_modifier_is(key_state, GDK_SHIFT_MASK))
     mask_gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE_TEMP;

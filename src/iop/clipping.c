@@ -73,6 +73,7 @@
 #include "config.h"
 #endif
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "system/macros.h"
 #include "system/openmp.h"
 #include "system/target_clones.h"
@@ -3435,7 +3436,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
       /* if shift is pressed, then lock crop on center */
       if(dt_modifiers_include(state, GDK_SHIFT_MASK)) g->shift_hold = TRUE;
-      if(dt_modifiers_include(state, GDK_CONTROL_MASK)) g->ctrl_hold = TRUE;
+      if(dt_modifiers_include(state, DT_PRIMARY_MASK)) g->ctrl_hold = TRUE;
     }
 
     return 1;

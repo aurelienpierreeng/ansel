@@ -190,7 +190,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
     return TRUE;
   }
 
-  gchar *shortcut_label = gtk_accelerator_get_label(shortcut->key, shortcut->mods);
+  gchar *shortcut_label = gtk_accelerator_get_label(shortcut->key, dt_accels_display_mods(shortcut->mods));
   if(IS_NULL_PTR(shortcut_label) || !shortcut_label[0])
   {
     dt_free(shortcut_label);
@@ -470,6 +470,18 @@ void dt_accels_disconnect_active_group(dt_accels_t *accels)
 }
 
 
+// Whether a keyboardrc entry is recognized as "still at default" is decided purely by GTK's
+// own accelerator-string round-trip, not by comparing raw GdkModifierType bits here: a
+// shortcut registered with DT_PRIMARY_MASK is saved via gtk_accel_map_save() as the portable
+// "<Primary>" token whenever the live value equals this platform's own
+// gtk_accelerator_get_default_mod_mask()-relevant primary bit (GDK_CONTROL_MASK on X11/Win32,
+// GDK_MOD2_MASK on Quartz -- see _gtk_get_primary_accel_mod() in GTK's own gtkprivate.c), and
+// gtk_accel_map_load() resolves that same token back to whichever bit is native on the
+// platform actually running -- transparently migrating an old or foreign-platform save.
+// A shortcut deliberately rebound to the literal Ctrl key on Quartz saves as the literal
+// "<Control>" token instead, and must never be reinterpreted as the Cmd default: comparing
+// only the resolved numeric values here, with no extra fuzzy-matching layer, is what lets a
+// real user override survive intact.
 static gboolean _update_shortcut_state(dt_shortcut_t *shortcut, GtkAccelKey *key, gboolean init)
 {
   gboolean changed = FALSE;
@@ -574,12 +586,25 @@ static void _add_generic_accel(dt_shortcut_t *shortcut, GtkAccelFlags flags)
 }
 
 
+static void _connect_accel(dt_shortcut_t *shortcut);
+
 static void _insert_accel(dt_accels_t *accels, dt_shortcut_t *shortcut)
 {
   // init an accel_map entry with no keys so Gtk collects them from user config later.
   gtk_accel_map_add_entry(shortcut->path, 0, 0);
   dt_pthread_mutex_lock(&accels->lock);
   g_hash_table_insert(accels->acceleratables, shortcut->path, shortcut);
+
+  // dt_accels_load_user_config() now runs before any widget/menu is built (see
+  // gui/application.c), so the user's saved keys are already in the GtkAccelMap by this
+  // point -- reconcile right away instead of waiting for the next dt_accels_connect_accels()
+  // pass. A GtkAccelLabel reads the accel map once, when gtk_widget_set_accel_path() is
+  // called just after this (e.g. gui/actions/menu.c's set_menu_entry()); if that read still
+  // sees the raw, unreconciled value, the menu's displayed shortcut is stuck showing it even
+  // after a later pass corrects the live dt_shortcut_t. Done under the same lock every other
+  // caller of _connect_accel() (dt_accels_connect_accels()'s g_hash_table_foreach) already
+  // holds it under.
+  _connect_accel(shortcut);
   dt_pthread_mutex_unlock(&accels->lock);
 }
 
@@ -957,6 +982,19 @@ static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *key
   // Remove all modifiers that are irrelevant to key strokes
   *mods &= accels->default_mod_mask;
 
+#ifdef GDK_WINDOWING_QUARTZ
+  // On the Quartz GDK backend, a single physical Cmd key press can end up reported
+  // through GDK_MOD2_MASK and GDK_META_MASK at once, depending on which code path
+  // read it (NSEvent-derived key events vs a live device/CGEvent state poll -- see
+  // _shortcut_edited(), which merges both). There is only one physical Command key.
+  // Every shortcut is registered and matched against GDK_MOD2_MASK (DT_PRIMARY_MASK's
+  // Quartz value, and what dt_modifier_primary_mask() remaps GDK_CONTROL_MASK to), so
+  // that is the bit to KEEP -- clearing it instead would make a real Cmd press stop
+  // matching any never-rebound default shortcut whenever both bits are set together.
+  if((*mods & GDK_MOD2_MASK) && (*mods & GDK_META_MASK))
+    *mods &= ~GDK_META_MASK;
+#endif
+
   // Get the canonical key code, that is without the modifiers
   GdkModifierType consumed;
   gdk_keymap_translate_keyboard_state(accels->keymap, event->key.hardware_keycode, event->key.state,
@@ -1231,6 +1269,11 @@ enum
   COL_SHORTCUT,
   COL_KEYVAL,
   COL_MODS,
+  // Same modifiers as COL_MODS, but swapped for display (GDK_MOD2_MASK -> GDK_META_MASK on
+  // Quartz, via dt_accels_display_mods()) so the "Keys" column's GtkCellRendererAccel renders
+  // the "⌘" glyph. Never read for matching/search: COL_MODS stays the real value for that
+  // (see filter_callback()'s gtk_accelerator_parse()-based search, and _shortcut_edited()).
+  COL_DISPLAY_MODS,
   NUM_COLUMNS
 };
 
@@ -1362,7 +1405,8 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
       // And write new keys into the source model
       GtkTreeIter s_iter;
       gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(filter), &s_iter, &f_iter);
-      gtk_tree_store_set(GTK_TREE_STORE(store), &s_iter, COL_KEYVAL, keyval, COL_MODS, mods, -1);
+      gtk_tree_store_set(GTK_TREE_STORE(store), &s_iter, COL_KEYVAL, keyval, COL_MODS, mods,
+                        COL_DISPLAY_MODS, dt_accels_display_mods(mods), -1);
     }
   }
 
@@ -1370,7 +1414,9 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
   {
     // The GtkAccelMap could not be updated because another accel uses the same keys
     // That also happens if we try to unset a shortcut more than once, but then it's no issue.
-    char *new_text = gtk_accelerator_name(keyval, mods);
+    // A human-readable label ("⌘C"), not the machine accelerator-string spelling ("<Primary>c"
+    // -- see gtk_accelerator_name() elsewhere in this file for that, used only for debug logs).
+    char *new_text = gtk_accelerator_get_label(keyval, dt_accels_display_mods(mods));
     GtkWidget *dlg
         = gtk_message_dialog_new_with_markup(NULL, 0, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s <tt>%s</tt>\n%s <tt>%s</tt>.\n%s",
                                               _("The shortcut for"), shortcut_path,
@@ -1409,6 +1455,7 @@ static void _create_main_row(GtkTreeStore *store, GtkTreeIter *iter, const char 
                      COL_PATH, path,
                      COL_KEYVAL, shortcut->key,
                      COL_MODS, shortcut->mods,
+                     COL_DISPLAY_MODS, dt_accels_display_mods(shortcut->mods),
                      COL_SHORTCUT, shortcut, -1);
 }
 
@@ -1533,7 +1580,7 @@ void _for_each_path_create_treeview_row(gpointer key, gpointer value, gpointer u
                        3, shortcut->description, // description
                        4, leaf, // leaf label used for inline completion
                        5, shortcut->key,
-                       6, shortcut->mods,
+                       6, dt_accels_display_mods(shortcut->mods), // display-only, see COL_DISPLAY_MODS
                        -1);
     g_strfreev(tail_parts);
     dt_free(tail);
@@ -1775,7 +1822,7 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
 
   // Create the full (non-filtered) tree view model
   GtkTreeStore *store = gtk_tree_store_new(NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, GDK_TYPE_PIXBUF, G_TYPE_STRING,
-                                           G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_UINT);
+                                           G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_UINT, G_TYPE_UINT);
 
   // Add a tree view row for each accel
   GHashTable *node_cache = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
@@ -1812,7 +1859,7 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
 
   GtkCellRenderer *renderer = gtk_cell_renderer_accel_new();
   column = gtk_tree_view_column_new_with_attributes(_("Keys"), renderer, "accel-key", COL_KEYVAL, "accel-mods",
-                                                    COL_MODS, NULL);
+                                                    COL_DISPLAY_MODS, NULL);
   gtk_tree_view_column_set_cell_data_func(column, renderer, _make_column_editable, NULL, NULL);
   g_signal_connect(renderer, "accel-edited", G_CALLBACK(_shortcut_edited), filter_model);
   g_signal_connect(renderer, "accel-cleared", G_CALLBACK(_shortcut_cleared), filter_model);

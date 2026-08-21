@@ -43,6 +43,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "develop/iop_profile.h"
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 #include "common/conf.h"
 #include "config.h"
 #endif
@@ -1756,7 +1757,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
     dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
     if(!IS_NULL_PTR(grp) && (grp->type & DT_MASKS_GROUP) && grp->points)
     {
-      const gboolean control_button_pressed = dt_modifier_is(event->state, GDK_CONTROL_MASK);
+      const gboolean control_button_pressed = dt_modifier_is(event->state, DT_PRIMARY_MASK);
 
       switch(bd->masks_shown)
       {
@@ -1824,7 +1825,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
   gboolean accept = TRUE;
 
   const int index = rt_get_selected_shape_index(self->dev, p);
-  if(index >= 0 && dt_modifier_is(e->state, GDK_CONTROL_MASK))
+  if(index >= 0 && dt_modifier_is(e->state, DT_PRIMARY_MASK))
   {
     const dt_iop_retouch_algo_type_t current_algo = p->rt_forms[index].algorithm;
     accept = (new_algo != current_algo && !rt_algo_pair_compatible(current_algo, new_algo));
@@ -1845,7 +1846,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     return FALSE;
   }
 
-  if(index >= 0 && dt_modifier_is(e->state, GDK_CONTROL_MASK))
+  if(index >= 0 && dt_modifier_is(e->state, DT_PRIMARY_MASK))
   {
     if(p->algorithm != p->rt_forms[index].algorithm)
     {

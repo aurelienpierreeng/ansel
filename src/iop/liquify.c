@@ -46,6 +46,7 @@
 #ifdef HAVE_CONFIG_H
 #include "caches/pixelpipe_cache_alloc.h"
 #include "widgets/gdkkeys.h"
+#include "widgets/accelerators.h"
 #include "config.h"
 #endif
 #include "system/macros.h"
@@ -3339,7 +3340,7 @@ int scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_
       dt_conf_set_float(CONF_STRENGTH, r);
       return 1;
     }
-    else if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    else if(dt_modifier_is(state, DT_PRIMARY_MASK))
     {
       //  change the strength direction
       float phi = cargf(strength_v);
@@ -3458,7 +3459,7 @@ int button_pressed(struct dt_iop_module_t *module,
 
   if(gtk_toggle_button_get_active(g->btn_node_tool))
   {
-    if(which == 1 && dt_modifier_is(g->last_mouse_mods, GDK_CONTROL_MASK) &&
+    if(which == 1 && dt_modifier_is(g->last_mouse_mods, DT_PRIMARY_MASK) &&
         (g->last_hit.layer == DT_LIQUIFY_LAYER_CENTERPOINT))
     {
       // cycle node type: smooth -> cusp etc.
@@ -3467,7 +3468,7 @@ int button_pressed(struct dt_iop_module_t *module,
       handled = 1;
       goto done;
     }
-    if(which == 1 && dt_modifier_is(g->last_mouse_mods, GDK_CONTROL_MASK) &&
+    if(which == 1 && dt_modifier_is(g->last_mouse_mods, DT_PRIMARY_MASK) &&
         (g->last_hit.layer == DT_LIQUIFY_LAYER_STRENGTHPOINT))
     {
       // cycle warp type: linear -> radial etc.
@@ -3666,7 +3667,7 @@ int button_released(struct dt_iop_module_t *module,
         goto done;
       }
     }
-    if(which == 1 && dt_modifier_is(g->last_mouse_mods, GDK_CONTROL_MASK) && !dragged)
+    if(which == 1 && dt_modifier_is(g->last_mouse_mods, DT_PRIMARY_MASK) && !dragged)
     {
       // add node
       if(g->last_hit.layer == DT_LIQUIFY_LAYER_PATH)
@@ -3725,7 +3726,7 @@ int button_released(struct dt_iop_module_t *module,
       }
     }
     if(which == 1
-       && dt_modifier_is(g->last_mouse_mods, GDK_MOD1_MASK | GDK_CONTROL_MASK)
+       && dt_modifier_is(g->last_mouse_mods, GDK_MOD1_MASK | DT_PRIMARY_MASK)
        && !dragged)
     {
       if(g->last_hit.layer == DT_LIQUIFY_LAYER_PATH)

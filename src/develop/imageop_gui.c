@@ -1182,7 +1182,7 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
   //Ctrl is used to apply any auto-presets to the current module
   //If Ctrl was not pressed, or no auto-presets were applied, reset the module parameters
   // FIXME: can we stop with all the easter-eggs key modifiers doing undocumented stuff all along ?
-  if(!(event && dt_modifier_is(event->state, GDK_CONTROL_MASK)) || !dt_gui_presets_autoapply_for_module(module))
+  if(!(event && dt_modifier_is(event->state, DT_PRIMARY_MASK)) || !dt_gui_presets_autoapply_for_module(module))
   {
     /* Resetting a module's parameters does not change GUI focus, so the
        focus-loss cleanup in dt_iop_request_focus() never runs here: an active
@@ -1531,7 +1531,7 @@ static gboolean _iop_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
   {
     if(module->gui->expander) g_object_set_data(G_OBJECT(module->gui->expander), "dt-module-dragged", NULL);
 
-    if(!dt_modifier_is(e->state, GDK_CONTROL_MASK))
+    if(!dt_modifier_is(e->state, DT_PRIMARY_MASK))
     {
       return FALSE;
     }

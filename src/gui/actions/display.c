@@ -26,6 +26,7 @@
 #include "develop/develop.h"
 #include "gui/actions/menu.h"
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "views/view.h"
 
 #include "gui/window_manager.h"
@@ -479,16 +480,16 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   // Children of sub-menu panels
   add_sub_sub_menu_entry(menus, parent, lists, _("Top"), index, NULL, panel_top_callback,
-                         panel_top_checked_callback, NULL, NULL, GDK_KEY_t, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                         panel_top_checked_callback, NULL, NULL, GDK_KEY_t, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Left"), index, NULL,
-                         panel_left_callback, panel_left_checked_callback, NULL, NULL, GDK_KEY_l, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                         panel_left_callback, panel_left_checked_callback, NULL, NULL, GDK_KEY_l, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Right"), index, NULL,
-                         panel_right_callback, panel_right_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_r, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                         panel_right_callback, panel_right_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_r, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Filmstrip"), index, NULL,
-                         filmstrip_callback, filmstrip_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_f, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                         filmstrip_callback, filmstrip_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_f, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_menu_separator(menus[index]);
 
@@ -497,13 +498,13 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   parent = get_last_widget(lists);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Always hide"), index, NULL,
-                         always_hide_overlays_callback, always_hide_overlays_checked_callback, NULL, NULL, GDK_KEY_h, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                         always_hide_overlays_callback, always_hide_overlays_checked_callback, NULL, NULL, GDK_KEY_h, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Show on hover"), index, NULL,
                          hover_overlays_callback, hover_overlays_checked_callback, NULL, NULL, 0, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Always show"), index, NULL,
-                         always_show_overlays_callback, always_show_overlays_checked_callback, NULL, NULL, GDK_KEY_o, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                         always_show_overlays_callback, always_show_overlays_checked_callback, NULL, NULL, GDK_KEY_o, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   // Submenu embedded JPEG
   add_top_submenu_entry(menus, lists, _("Thumbnail source"), index);
@@ -518,7 +519,7 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_sub_menu_entry(menus, lists, _("Collapse grouped images"), index, NULL, collapse_grouped_callback, collapse_grouped_checked_callback, NULL, NULL, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Show group borders"), index, NULL, group_borders_callback,
-                     group_borders_checked_callback, NULL, NULL, GDK_KEY_p, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                     group_borders_checked_callback, NULL, NULL, GDK_KEY_p, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
   add_menu_separator(menus[index]);
 

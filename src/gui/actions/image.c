@@ -17,6 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "gui/actions/menu.h"
+#include "widgets/accelerators.h"
 #include "common/selection.h"
 #include "common/act_on.h"
 #include "control/jobs/control_jobs.h"
@@ -288,8 +289,8 @@ void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   /* Group/Ungroup */
   add_sub_menu_entry(menus, lists, _("Group images"), index, NULL, group_images_callback, NULL, NULL,
-                     has_active_images, GDK_KEY_g, GDK_CONTROL_MASK);
+                     has_active_images, GDK_KEY_g, DT_PRIMARY_MASK);
 
   add_sub_menu_entry(menus, lists, _("Ungroup images"), index, NULL, ungroup_images_callback, NULL, NULL,
-                     has_active_images, GDK_KEY_g, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                     has_active_images, GDK_KEY_g, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 }

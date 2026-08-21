@@ -18,6 +18,7 @@
 */
 #include "gui/actions/menu.h"
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "common/selection.h"
 #include "common/collection.h"
 
@@ -69,11 +70,11 @@ static gboolean scroll_to_selection_callback(GtkAccelGroup *group, GObject *acce
 
 void append_select(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
-  add_sub_menu_entry(menus, lists, _("Select all"), index, NULL, select_all_callback, NULL, NULL, select_all_sensitive_callback, GDK_KEY_a, GDK_CONTROL_MASK);
+  add_sub_menu_entry(menus, lists, _("Select all"), index, NULL, select_all_callback, NULL, NULL, select_all_sensitive_callback, GDK_KEY_a, DT_PRIMARY_MASK);
 
-  add_sub_menu_entry(menus, lists, _("Clear selection"), index, NULL, clear_selection_callback, NULL, NULL, clear_selection_sensitive_callback, GDK_KEY_a, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+  add_sub_menu_entry(menus, lists, _("Clear selection"), index, NULL, clear_selection_callback, NULL, NULL, clear_selection_sensitive_callback, GDK_KEY_a, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
 
-  add_sub_menu_entry(menus, lists, _("Invert selection"), index, NULL, invert_selection_callback, NULL, NULL, clear_selection_sensitive_callback, GDK_KEY_i, GDK_CONTROL_MASK);
+  add_sub_menu_entry(menus, lists, _("Invert selection"), index, NULL, invert_selection_callback, NULL, NULL, clear_selection_sensitive_callback, GDK_KEY_i, DT_PRIMARY_MASK);
 
   add_menu_separator(menus[index]);
 

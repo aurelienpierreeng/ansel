@@ -119,6 +119,22 @@ G_BEGIN_DECLS
 #ifndef DT_WIDGETS_ACCELERATORS_H
 #define DT_WIDGETS_ACCELERATORS_H
 
+/* Ansel's accelerator system is fully custom (see dt_accels_dispatch()) and never
+ * goes through GTK's own accelerator string parser, so it gets none of the
+ * "<Primary>" -> Ctrl/Cmd translation that convention normally provides for free.
+ * Each default shortcut that is meant to follow the OS's own accelerator
+ * convention (most menu/window-level shortcuts) must be registered with
+ * DT_PRIMARY_MASK instead of GDK_CONTROL_MASK. A shortcut that must remain the
+ * literal Ctrl key even on macOS should keep GDK_CONTROL_MASK explicitly.
+ * On the Quartz GDK backend a physical Cmd keypress is reported through
+ * GDK_MOD2_MASK (see _accels_keys_decode() in accelerators.c for the matching
+ * GDK_META_MASK duplicate it has to filter out on that same backend). */
+#ifdef GDK_WINDOWING_QUARTZ
+#define DT_PRIMARY_MASK GDK_MOD2_MASK
+#else
+#define DT_PRIMARY_MASK GDK_CONTROL_MASK
+#endif
+
 typedef struct dt_accels_t
 {
   char *config_file;

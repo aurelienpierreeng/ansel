@@ -54,6 +54,7 @@
 #include "develop/blend.h"
 #include "develop/blend_gui.h"
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "gui/bauhaus_conf.h"
 #include "system/dtpthread.h"
 #include "math/math.h"
@@ -1132,11 +1133,11 @@ static gboolean _blendop_blendif_showmask_clicked(GtkToggleButton *button, GdkEv
         &= ~(DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL
              | DT_DEV_PIXELPIPE_DISPLAY_ANY | DT_DEV_PIXELPIPE_DISPLAY_STICKY);
 
-    if(dt_modifier_is(event->state, GDK_CONTROL_MASK | GDK_SHIFT_MASK))
+    if(dt_modifier_is(event->state, DT_PRIMARY_MASK | GDK_SHIFT_MASK))
       module->request_mask_display |= (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL);
     else if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
       module->request_mask_display |= DT_DEV_PIXELPIPE_DISPLAY_CHANNEL;
-    else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+    else if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
       module->request_mask_display |= DT_DEV_PIXELPIPE_DISPLAY_MASK;
     else
       module->request_mask_display |= (has_mask_display ? 0 : DT_DEV_PIXELPIPE_DISPLAY_MASK);
@@ -1301,7 +1302,7 @@ static gboolean _blendop_masks_show_and_edit(GtkWidget *widget, GdkEventButton *
     dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
     if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
     {
-      const gboolean control_button_pressed = dt_modifier_is(event->state, GDK_CONTROL_MASK);
+      const gboolean control_button_pressed = dt_modifier_is(event->state, DT_PRIMARY_MASK);
 
       switch(bd->masks_shown)
       {
@@ -2631,7 +2632,7 @@ gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt
     float picker_min[8] DT_ALIGNED_PIXEL, picker_max[8] DT_ALIGNED_PIXEL;
     dt_aligned_pixel_t picker_values;
 
-    const int in_out = ((dt_key_modifier_state() == GDK_CONTROL_MASK) && data->output_channels_shown) ? 1 : 0;
+    const int in_out = (dt_modifier_is(dt_key_modifier_state(), DT_PRIMARY_MASK) && data->output_channels_shown) ? 1 : 0;
 
     if(in_out)
     {
@@ -3242,7 +3243,7 @@ static gboolean _blendop_blendif_enter(GtkWidget *widget, GdkEventCrossing *even
   dt_dev_pixelpipe_display_mask_t mode = 0;
 
   // depending on shift modifiers we activate channel and/or mask display
-  if(dt_modifier_is(event->state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
+  if(dt_modifier_is(event->state, GDK_SHIFT_MASK | DT_PRIMARY_MASK))
   {
     mode = (DT_DEV_PIXELPIPE_DISPLAY_MASK | DT_DEV_PIXELPIPE_DISPLAY_CHANNEL);
   }
@@ -3250,7 +3251,7 @@ static gboolean _blendop_blendif_enter(GtkWidget *widget, GdkEventCrossing *even
   {
     mode = DT_DEV_PIXELPIPE_DISPLAY_CHANNEL;
   }
-  else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+  else if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
   {
     mode = DT_DEV_PIXELPIPE_DISPLAY_MASK;
   }

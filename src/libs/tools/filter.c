@@ -56,6 +56,7 @@
 #include "develop/develop.h"
 
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "widgets/button.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -590,7 +591,7 @@ void gui_init(dt_lib_module_t *self)
 
   gchar *path = dt_accels_build_path(_("Lighttable/Actions"), _("Reload current collection"));
   dt_accels_new_widget_shortcut(dt_gui_get_accels(), d->refresh, "activate",
-                                dt_gui_get_accels()->lighttable_accels, path, GDK_KEY_r, GDK_CONTROL_MASK,
+                                dt_gui_get_accels()->lighttable_accels, path, GDK_KEY_r, DT_PRIMARY_MASK,
                                 FALSE);
   dt_free(path);
 
@@ -695,7 +696,7 @@ void gui_init(dt_lib_module_t *self)
 
   path = dt_accels_build_path(_("Lighttable/Actions"), _("Toggle culling mode"));
   dt_accels_new_widget_shortcut(dt_gui_get_accels(), d->culling, "activate",
-                                dt_gui_get_accels()->lighttable_accels, path, GDK_KEY_s, GDK_CONTROL_MASK,
+                                dt_gui_get_accels()->lighttable_accels, path, GDK_KEY_s, DT_PRIMARY_MASK,
                                 FALSE);
   dt_free(path);
 
@@ -761,7 +762,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_name(d->text, "quickfilter-search-box");
 
   dt_accels_new_lighttable_action(_focus_search_action, self, N_("Lighttable/Actions"), N_("Search a picture"),
-                                  GDK_KEY_f, GDK_CONTROL_MASK, _("Focuses the control"));
+                                  GDK_KEY_f, DT_PRIMARY_MASK, _("Focuses the control"));
 
   _insert_section_sep(self);
 

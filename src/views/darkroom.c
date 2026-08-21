@@ -83,6 +83,7 @@
 
 #include "develop/imageop_gui.h"
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "widgets/widget_settings.h"
 #include <glib/gstdio.h>
 #include "common/paths.h"
@@ -1612,7 +1613,7 @@ void gui_init(dt_view_t *self)
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up (fine step)"));
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
-                                 path, dt_gui_center_widget(), GDK_KEY_Up, GDK_CONTROL_MASK);
+                                 path, dt_gui_center_widget(), GDK_KEY_Up, DT_PRIMARY_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down"));
@@ -1627,7 +1628,7 @@ void gui_init(dt_view_t *self)
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down (fine step)"));
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
-                                 path, dt_gui_center_widget(), GDK_KEY_Down, GDK_CONTROL_MASK);
+                                 path, dt_gui_center_widget(), GDK_KEY_Down, DT_PRIMARY_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left"));
@@ -1642,7 +1643,7 @@ void gui_init(dt_view_t *self)
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left (fine step)"));
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
-                                 path, dt_gui_center_widget(), GDK_KEY_Left, GDK_CONTROL_MASK);
+                                 path, dt_gui_center_widget(), GDK_KEY_Left, DT_PRIMARY_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right"));
@@ -1657,17 +1658,17 @@ void gui_init(dt_view_t *self)
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right (fine step)"));
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
-                                 path, dt_gui_center_widget(), GDK_KEY_Right, GDK_CONTROL_MASK);
+                                 path, dt_gui_center_widget(), GDK_KEY_Right, DT_PRIMARY_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom in"));
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
-                                 path, dt_gui_center_widget(), GDK_KEY_plus, GDK_CONTROL_MASK);
+                                 path, dt_gui_center_widget(), GDK_KEY_plus, DT_PRIMARY_MASK);
   dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom out"));
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
-                                 path, dt_gui_center_widget(), GDK_KEY_minus, GDK_CONTROL_MASK);
+                                 path, dt_gui_center_widget(), GDK_KEY_minus, DT_PRIMARY_MASK);
   dt_free(path);
   /*
    * Add view specific tool buttons
@@ -3026,8 +3027,8 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   }
 
   const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
-  const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
-  const gboolean ctrl_any = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
+  const gboolean ctrl = dt_modifier_is(event->state, DT_PRIMARY_MASK);
+  const gboolean ctrl_any = dt_modifiers_include(event->state, DT_PRIMARY_MASK);
   guint key = dt_keys_mainpad_alternatives(event->keyval);
 
   if(ctrl_any)

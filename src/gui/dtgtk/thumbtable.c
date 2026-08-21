@@ -2109,6 +2109,8 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
     dt_accels_new_virtual_shortcut(dt_gui_get_accels(), accel_group,
                                    path, table->grid, GDK_KEY_space, 0);
     dt_free(path);
+    // Kept as the literal Ctrl key (not DT_PRIMARY_MASK): Cmd+Space is reserved
+    // system-wide by macOS to open Spotlight.
     path = dt_accels_build_path(path_base, _("Toogle the current thumbnail from selection"));
     dt_accels_new_virtual_shortcut(dt_gui_get_accels(), accel_group,
                                    path, table->grid, GDK_KEY_space, GDK_CONTROL_MASK);

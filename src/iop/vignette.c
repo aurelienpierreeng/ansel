@@ -62,6 +62,7 @@
 #include <string.h>
 
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "math/math.h"
 #include "common/opencl.h"
 #include "pixel/tea.h"
@@ -563,7 +564,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       //        I guess we have to split the computation.
       if(ratio <= 1.0)
       {
-        if(dt_modifier_is(which, GDK_CONTROL_MASK))
+        if(dt_modifier_is(which, DT_PRIMARY_MASK))
         {
           dt_bauhaus_slider_set(g->scale, new_scale);
         }
@@ -576,7 +577,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       {
         dt_bauhaus_slider_set(g->scale, new_scale);
 
-        if(!dt_modifier_is(which, GDK_CONTROL_MASK))
+        if(!dt_modifier_is(which, DT_PRIMARY_MASK))
         {
           float new_whratio = 2.0 - 1.0 / ratio;
           dt_bauhaus_slider_set(g->whratio, new_whratio);
@@ -593,7 +594,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       //        I guess we have to split the computation.
       if(ratio <= 1.0)
       {
-        if(dt_modifier_is(which, GDK_CONTROL_MASK))
+        if(dt_modifier_is(which, DT_PRIMARY_MASK))
         {
           const float new_scale = 100.0 * new_vignette_h / max;
           dt_bauhaus_slider_set(g->scale, new_scale);
@@ -608,7 +609,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
         const float new_scale = 100.0 * new_vignette_h / max;
         dt_bauhaus_slider_set(g->scale, new_scale);
 
-        if(!dt_modifier_is(which, GDK_CONTROL_MASK))
+        if(!dt_modifier_is(which, DT_PRIMARY_MASK))
         {
           const float new_whratio = 1.0 / ratio;
           dt_bauhaus_slider_set(g->whratio, new_whratio);

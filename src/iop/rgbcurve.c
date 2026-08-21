@@ -42,6 +42,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #include "widgets/widget_settings.h"
+#include "widgets/accelerators.h"
 #include "common/colorspaces_inline_conversions.h"
 #endif
 
@@ -548,7 +549,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
     const GdkModifierType state = dt_key_modifier_state();
     int picker_set_upper_lower; // flat=0, lower=-1, upper=1
-    if(dt_modifier_is(state, GDK_CONTROL_MASK))
+    if(dt_modifier_is(state, DT_PRIMARY_MASK))
       picker_set_upper_lower = 1;
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       picker_set_upper_lower = -1;
@@ -1135,7 +1136,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
   if(event->button == 1)
   {
-    if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, GDK_CONTROL_MASK)
+    if(event->type == GDK_BUTTON_PRESS && dt_modifier_is(event->state, DT_PRIMARY_MASK)
        && nodes < DT_IOP_RGBCURVE_MAXNODES && g->selected == -1)
     {
       // if we are not on a node -> add a new node at the current x of the pointer and y of the curve at that x

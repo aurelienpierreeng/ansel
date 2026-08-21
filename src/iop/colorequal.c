@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "widgets/bauhaus.h"
+#include "widgets/accelerators.h"
 #include "pixel/colorequal_shared.h"
 #include "system/macros.h"
 #include "system/openmp.h"
@@ -1556,7 +1557,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
     return TRUE;
   }
 
-  if(event->button == 1 && dt_modifier_is(event->state, GDK_CONTROL_MASK) && *nodes < DT_IOP_COLOREQUAL_MAXNODES)
+  if(event->button == 1 && dt_modifier_is(event->state, DT_PRIMARY_MASK) && *nodes < DT_IOP_COLOREQUAL_MAXNODES)
   {
     const float y
         = dt_colorrings_curve_periodic_sample((const dt_colorrings_node_t *)curve, *nodes, mouse_x);
@@ -1831,10 +1832,10 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   const float sigma2 = 2.f * sigma * sigma;
   const float step = (channel == DT_IOP_COLOREQUAL_HUE)
                          ? (dt_modifier_is(state, GDK_SHIFT_MASK) ? DT_IOP_COLOREQUAL_SCROLL_HUE_STEP_COARSE
-                            : dt_modifier_is(state, GDK_CONTROL_MASK) ? DT_IOP_COLOREQUAL_SCROLL_HUE_STEP_FINE
+                            : dt_modifier_is(state, DT_PRIMARY_MASK) ? DT_IOP_COLOREQUAL_SCROLL_HUE_STEP_FINE
                                                                       : DT_IOP_COLOREQUAL_SCROLL_HUE_STEP)
                          : (dt_modifier_is(state, GDK_SHIFT_MASK) ? DT_IOP_COLOREQUAL_SCROLL_STEP_COARSE
-                            : dt_modifier_is(state, GDK_CONTROL_MASK) ? DT_IOP_COLOREQUAL_SCROLL_STEP_FINE
+                            : dt_modifier_is(state, DT_PRIMARY_MASK) ? DT_IOP_COLOREQUAL_SCROLL_STEP_FINE
                                                                       : DT_IOP_COLOREQUAL_SCROLL_STEP);
 
   for(int k = 0; k < nodes; k++)

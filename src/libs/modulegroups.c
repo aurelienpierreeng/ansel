@@ -57,6 +57,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "gui/application.h"
+#include "widgets/accelerators.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 
@@ -1070,6 +1071,9 @@ void gui_init(dt_lib_module_t *self)
   // causes unnecessary expander reparenting, which drops native Gtk focus from
   // focused Bauhaus controls after committed key/scroll edits.
 
+  // Kept as the literal Ctrl key (not DT_PRIMARY_MASK): Cmd+Tab is reserved system-wide by
+  // macOS for the application switcher and never reaches any app's event loop, so binding
+  // this to Cmd would make it silently dead on that platform.
   dt_accels_new_darkroom_action(_modulegroups_switch_tab_next, self, N_("Darkroom/Actions"),
                                 N_("move to the next modules tab"), GDK_KEY_Tab, GDK_CONTROL_MASK, _("Triggers the action"));
   dt_accels_new_darkroom_action(_modulegroups_switch_tab_previous, self, N_("Darkroom/Actions"),
@@ -1082,9 +1086,9 @@ void gui_init(dt_lib_module_t *self)
                                        N_("Focus on the previous module"), GDK_KEY_Page_Up, 0, _("Triggers the action"));
 
   dt_accels_new_darkroom_locked_action(_focus_next_control, self, N_("Darkroom/Actions"),
-                                       N_("Focus on the next module control"), GDK_KEY_Down, GDK_CONTROL_MASK, _("Triggers the action"));
+                                       N_("Focus on the next module control"), GDK_KEY_Down, DT_PRIMARY_MASK, _("Triggers the action"));
   dt_accels_new_darkroom_locked_action(_focus_previous_control, self, N_("Darkroom/Actions"),
-                                       N_("Focus on the previous module control"), GDK_KEY_Up, GDK_CONTROL_MASK, _("Triggers the action"));
+                                       N_("Focus on the previous module control"), GDK_KEY_Up, DT_PRIMARY_MASK, _("Triggers the action"));
 }
 
 static gboolean _modulegroups_move_widget(GtkWidget *widget, GtkWidget *target);

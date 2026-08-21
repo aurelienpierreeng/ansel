@@ -38,6 +38,7 @@
 */
 
 #include "widgets/draw.h"
+#include "widgets/accelerators.h"
 #include "control/control.h"
 #include "common/conf.h"
 #include "caches/mipmap_cache.h"
@@ -1629,7 +1630,7 @@ int button_pressed(struct dt_lib_module_t *self, double x, double y, double pres
     _snap_to_grid(ps, &ps->x1, &ps->y1);
   }
   else if(ps->selected > 0
-          && (which == 2 || (which == 1 && dt_modifier_is(state, GDK_CONTROL_MASK))))
+          && (which == 2 || (which == 1 && dt_modifier_is(state, DT_PRIMARY_MASK))))
   {
     // middle click (or ctrl-click), move selected image down
     dt_image_box b;
@@ -2676,7 +2677,7 @@ void gui_init(dt_lib_module_t *self)
   // Print button
 
   GtkWidget *button = dt_action_button_new(self, N_("print"), _print_button_clicked, self,
-                                           _("print with current settings"), GDK_KEY_p, GDK_CONTROL_MASK);
+                                           _("print with current settings"), GDK_KEY_p, DT_PRIMARY_MASK);
   d->print_button = GTK_BUTTON(button);
   gtk_box_pack_start(GTK_BOX(self->widget), button, TRUE, TRUE, 0);
   dt_gui_add_help_link(button, dt_get_help_url("print_settings_button"));

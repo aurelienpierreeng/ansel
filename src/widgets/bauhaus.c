@@ -1299,11 +1299,11 @@ dt_bauhaus_t * dt_bauhaus_init()
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (fine step)"));
   dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
-                                  path, NULL, GDK_KEY_Right, GDK_CONTROL_MASK);
+                                  path, NULL, GDK_KEY_Right, DT_PRIMARY_MASK);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Decrease value (fine step)"));
   dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
-                                  path, NULL, GDK_KEY_Left, GDK_CONTROL_MASK);
+                                  path, NULL, GDK_KEY_Left, DT_PRIMARY_MASK);
   dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (coarse step)"));
   dt_accels_new_virtual_shortcut(dt_accels_get_global(), dt_accels_get_global()->darkroom_accels,
@@ -3083,7 +3083,7 @@ static void _slider_add_step(GtkWidget *widget, float delta, guint state)
   dt_bauhaus_slider_data_t *d = &w->data.slider;
 
   delta *= dt_bauhaus_slider_get_step(widget);
-  if(dt_modifier_is(state, GDK_CONTROL_MASK)) delta /= 5.f;
+  if(dt_modifier_is(state, DT_PRIMARY_MASK)) delta /= 5.f;
   else if(dt_modifier_is(state, GDK_SHIFT_MASK)) delta *= 5.f;
 
   // Ensure the requested delta is at least visible given current number of digits in display

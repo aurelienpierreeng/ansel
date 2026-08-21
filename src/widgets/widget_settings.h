@@ -272,20 +272,67 @@ enum
 const GdkRGBA *dt_widget_colorlabel(int index);
 void dt_widget_set_colorlabels(const GdkRGBA *labels, int count);
 
+/* On the Quartz GDK backend, a physical Cmd keypress is reported through GDK_MOD2_MASK
+ * (see widgets/accelerators.h's DT_PRIMARY_MASK, which every accelerator *registration*
+ * already resolves to instead of GDK_CONTROL_MASK). Every mouse/keyboard interaction check
+ * in the codebase asks for GDK_CONTROL_MASK meaning "the platform's primary modifier", so
+ * that substitution is done once, here, rather than at each of the ~80 call sites. */
+static inline GdkModifierType dt_modifier_primary_mask(GdkModifierType desired_modifier_mask)
+{
+#ifdef GDK_WINDOWING_QUARTZ
+  if(desired_modifier_mask & GDK_CONTROL_MASK)
+    desired_modifier_mask = (GdkModifierType)((desired_modifier_mask & ~GDK_CONTROL_MASK) | GDK_MOD2_MASK);
+#endif
+  return desired_modifier_mask;
+}
+
+/* GDK_MOD2_MASK is the bit a real Cmd keypress produces, matched against for actual dispatch
+ * (dt_modifier_primary_mask() above) and the bit GTK's own gtk_accelerator_name() collapses to
+ * the portable "<Primary>" token for on Quartz (see widgets/accelerators.h's DT_PRIMARY_MASK
+ * doc comment) -- so it must stay what is stored and saved. But GTK's accelerator-label
+ * renderer (gtk_accelerator_get_label(), and anything built on it: GtkCellRendererAccel,
+ * GtkAccelLabel) only ever emits the "⌘" glyph for GDK_META_MASK, never GDK_MOD2_MASK, on any
+ * platform. This is the reverse, display-only swap: takes a mask meant for storage/matching
+ * and returns what to hand to a label/rendering function instead. Never store or match against
+ * this result -- GDK_META_MASK is not reliably present on mouse-sourced events, only real key
+ * events (see dt_modifier_is() above). */
+static inline GdkModifierType dt_accels_display_mods(GdkModifierType mods)
+{
+#ifdef GDK_WINDOWING_QUARTZ
+  if(mods & GDK_MOD2_MASK)
+    mods = (GdkModifierType)((mods & ~GDK_MOD2_MASK) | GDK_META_MASK);
+#endif
+  return mods;
+}
+
 /* Does `state` carry exactly `desired_modifier_mask`, ignoring lock/scroll bits? */
-static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+static inline gboolean dt_modifier_is(GdkModifierType state, const GdkModifierType desired_modifier_mask)
 {
   const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
-//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
-  return (state & modifiers) == desired_modifier_mask;
+#ifdef GDK_WINDOWING_QUARTZ
+  // A real GDK_KEY_PRESS/RELEASE's state carries both GDK_MOD2_MASK and GDK_META_MASK for a
+  // single physical Cmd press (GDK's own virtual-modifier step adds GDK_META_MASK next to the
+  // real GDK_MOD2_MASK bit for every key event -- see _accels_keys_decode() in
+  // widgets/accelerators.c for the same dedup on the accelerator-dispatch path). Mouse/scroll
+  // events never carry GDK_META_MASK, so this is a no-op for the majority of this function's
+  // callers; it only matters for the callers that read a real GdkEventKey.state directly.
+  if((state & GDK_MOD2_MASK) && (state & GDK_META_MASK))
+    state &= ~GDK_META_MASK;
+#endif
+  return (state & modifiers) == dt_modifier_primary_mask(desired_modifier_mask);
 }
 
 /* Does `state` carry AT LEAST `desired_modifier_mask`? Same arithmetic, weaker test. */
-static inline gboolean dt_modifiers_include(const GdkModifierType state, const GdkModifierType desired_modifier_mask)
+static inline gboolean dt_modifiers_include(GdkModifierType state, const GdkModifierType desired_modifier_mask)
 {
-//TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
   const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
-  return (state & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
+  const GdkModifierType wanted = dt_modifier_primary_mask(desired_modifier_mask);
+#ifdef GDK_WINDOWING_QUARTZ
+  // See dt_modifier_is() just above.
+  if((state & GDK_MOD2_MASK) && (state & GDK_META_MASK))
+    state &= ~GDK_META_MASK;
+#endif
+  return (state & (modifiers & wanted)) == wanted;
 }
 
 /* Scroll deltas as fractions, for consumers that want the raw smooth-scroll amount rather
