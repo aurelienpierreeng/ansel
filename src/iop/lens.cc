@@ -111,6 +111,10 @@
 
 #include "develop/geometry/geometry.h"
 
+#ifdef BUILD_TESTING
+#include <type_traits>
+#endif
+
 enum class dt_iop_lens_method_t
 {
   LENSFUN = 0,
@@ -749,7 +753,7 @@ static int _process_embedded_metadata_warp(dt_iop_module_t *self, const dt_dev_p
 
   if(apply_vignette)
   {
-    _apply_embedded_vignette_pass(work, static_cast<const float *>(ivoid), roi_in, piece, ch, d);
+    _apply_embedded_vignette_pass(work, ivoid, roi_in, piece, ch, d);
     _lens_test_trace_event("embedded vignette");
   }
   else
@@ -847,14 +851,11 @@ static int _distort_backtransform_embedded_metadata_warp(const dt_iop_lensfun_da
   return 1;
 }
 
-static void _distort_mask_embedded_metadata_warp(const dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                                  dt_dev_pixelpipe_iop_t *piece, const float *const in,
+static void _distort_mask_embedded_metadata_warp(dt_dev_pixelpipe_iop_t *piece, const float *const in,
                                                   float *const out, const dt_iop_roi_t *const roi_in,
                                                   const dt_iop_roi_t *const roi_out,
                                                   const _emb_axes_t *emb_axes)
 {
-  (void)self;
-  (void)pipe;
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
 
   if(const auto apply_geom = emb_axes && (emb_axes->apply_distortion || emb_axes->apply_tca); !d->embedded.nc || !apply_geom)
@@ -890,6 +891,14 @@ static void _distort_mask_embedded_metadata_warp(const dt_iop_module_t *self, co
     }
   }
 }
+
+#ifdef BUILD_TESTING
+static_assert(std::is_same_v<decltype(&_distort_mask_embedded_metadata_warp),
+                             void (*)(dt_dev_pixelpipe_iop_t *, const float *const, float *const,
+                                      const dt_iop_roi_t *const, const dt_iop_roi_t *const,
+                                      const _emb_axes_t *)>,
+              "reduced mask signature");
+#endif
 
 typedef struct {
   float px;
@@ -1668,41 +1677,14 @@ static cl_int _cl_embedded_run_forward(const _cl_embedded_run_ctx_t *ctx)
   return err;
 }
 
-static cl_int _cl_embedded_try_passthrough(int devid, cl_mem dev_in, cl_mem dev_out,
-                                            size_t *origin, size_t *oregion,
-                                            const dt_iop_lensfun_data_t *d,
-                                            dt_iop_module_t *self,
-                                            const _emb_axes_t *emb_axes)
-{
-  cl_int err;
-  if(!d->embedded.nc)
-  {
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
-    if(err == CL_SUCCESS)
-      _report_corrections_done(self, d->lensfun.modify_flags);
-    return (err == CL_SUCCESS) ? TRUE : FALSE;
-  }
-
-  const gboolean apply_vignette = emb_axes ? emb_axes->apply_vignette : FALSE;
-  const gboolean apply_dist = emb_axes ? emb_axes->apply_distortion : FALSE;
-  const gboolean apply_tca = emb_axes ? emb_axes->apply_tca : FALSE;
-
-  if(!apply_vignette && !apply_dist && !apply_tca)
-  {
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
-    if(err == CL_SUCCESS)
-      _report_corrections_done(self, d->lensfun.modify_flags);
-    return (err == CL_SUCCESS) ? TRUE : FALSE;
-  }
-
-  return -1;
-}
-
 static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                        const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-                                        dt_iop_lensfun_data_t *d, dt_iop_lensfun_global_data_t *gd,
-                                        const _emb_axes_t *emb_axes)
+                                        const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
+  auto p = (dt_iop_lensfun_params_t *)self->params;
+  auto d = (dt_iop_lensfun_data_t *)piece->data;
+  auto gd = (dt_iop_lensfun_global_data_t *)self->global_data;
+  const _lens_axis_flags_t af = _compute_axis_flags(self, p, d);
+  const _emb_axes_t emb_axes = { af.emb_vig, af.emb_dist, af.emb_tca };
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const int devid = pipe->devid;
@@ -1726,12 +1708,25 @@ static int process_embedded_metadata_cl(struct dt_iop_module_t *self, const dt_d
   size_t isizes[] = { (size_t)ROUNDUPDWD(iwidth, devid), (size_t)ROUNDUPDHT(iheight, devid), 1 };
   size_t osizes[] = { (size_t)ROUNDUPDWD(owidth, devid), (size_t)ROUNDUPDHT(oheight, devid), 1 };
 
-  const int passthrough = _cl_embedded_try_passthrough(devid, dev_in, dev_out, origin, oregion, d, self, emb_axes);
-  if(passthrough != -1) return passthrough;
+  if(!d->embedded.nc)
+  {
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err == CL_SUCCESS)
+      _report_corrections_done(self, d->lensfun.modify_flags);
+    return (err == CL_SUCCESS) ? TRUE : FALSE;
+  }
 
-  const gboolean apply_vignette = emb_axes ? emb_axes->apply_vignette : FALSE;
-  const gboolean apply_dist = emb_axes ? emb_axes->apply_distortion : FALSE;
-  const gboolean apply_tca = emb_axes ? emb_axes->apply_tca : FALSE;
+  const gboolean apply_vignette = emb_axes.apply_vignette;
+  const gboolean apply_dist = emb_axes.apply_distortion;
+  const gboolean apply_tca = emb_axes.apply_tca;
+
+  if(!apply_vignette && !apply_dist && !apply_tca)
+  {
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err == CL_SUCCESS)
+      _report_corrections_done(self, d->lensfun.modify_flags);
+    return (err == CL_SUCCESS) ? TRUE : FALSE;
+  }
 
   const float orig_w = roi_in->scale * piece->buf_in.width;
   const float orig_h = roi_in->scale * piece->buf_in.height;
@@ -1804,6 +1799,13 @@ error:
   return FALSE;
 }
 
+#ifdef BUILD_TESTING
+static_assert(std::is_same_v<decltype(&process_embedded_metadata_cl),
+                             int (*)(dt_iop_module_t *, const dt_dev_pixelpipe_t *,
+                                     const dt_dev_pixelpipe_iop_t *, cl_mem, cl_mem)>,
+              "reduced embedded OpenCL signature");
+#endif
+
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   auto p = (dt_iop_lensfun_params_t *)self->params;
@@ -1819,8 +1821,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   if(any_emb && !any_lf)
   {
-    const _emb_axes_t axes = { af.emb_vig, af.emb_dist, af.emb_tca };
-    return process_embedded_metadata_cl(self, pipe, piece, dev_in, dev_out, d, gd, &axes);
+    return process_embedded_metadata_cl(self, pipe, piece, dev_in, dev_out);
   }
 
   if(any_emb && any_lf) return FALSE;
@@ -2167,7 +2168,7 @@ void distort_mask(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t 
   if(any_emb_geom)
   {
     _emb_axes_t axes = { FALSE, emb_dist, emb_tca };
-    _distort_mask_embedded_metadata_warp(self, pipe, piece, in, out, roi_in, roi_out, &axes);
+    _distort_mask_embedded_metadata_warp(piece, in, out, roi_in, roi_out, &axes);
     return;
   }
 
@@ -3170,7 +3171,7 @@ static void camera_menu_fill(dt_iop_module_t *self, const lfCamera *const *camli
   g->lens_selection.camera_menu = GTK_MENU(gtk_menu_new());
   for(i = 0; i < makers->len; i++)
   {
-    GtkWidget *item = (GtkWidget *)gtk_menu_item_new_with_label((const gchar *)g_ptr_array_index(makers, i));
+    GtkWidget *item = gtk_menu_item_new_with_label((const gchar *)g_ptr_array_index(makers, i));
     gtk_widget_show(item);
     gtk_menu_shell_append(GTK_MENU_SHELL(g->lens_selection.camera_menu), item);
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), (GtkWidget *)g_ptr_array_index(submenus, i));
