@@ -59,7 +59,6 @@ github/ansel/build/macosx/package/Ansel.app/Contents/MacOS/ansel:
 --> gettext
 --> git
 --> glib
---> gmic
 --> gtk-mac-integration
 --> gtk+3
 --> icu4c
@@ -107,7 +106,6 @@ Deps_output.txt:
 ==> curl: stable 8.0.1 (bottled), HEAD [keg-only]
 ==> desktop-file-utils: stable 0.26 (bottled)
 ==> exiv2: stable 0.27.6 (bottled), HEAD
-==> fftw: stable 3.3.10 (bottled)
 ==> fontconfig: stable 2.14.2 (bottled), HEAD
 ==> freetype: stable 2.13.0 (bottled)
 ==> fribidi: stable 1.0.12 (bottled)
@@ -119,7 +117,6 @@ Deps_output.txt:
 ==> git: stable 2.40.1 (bottled), HEAD
 ==> glib: stable 2.76.2 (bottled)
 ==> glib-networking: stable 2.76.0 (bottled)
-==> gmic: stable 3.2.4 (bottled), HEAD
 ==> gmp: stable 6.2.1 (bottled), HEAD
 ==> gnutls: stable 3.8.0 (bottled)
 ==> graphite2: stable 1.3.14 (bottled), HEAD

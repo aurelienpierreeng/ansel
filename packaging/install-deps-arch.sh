@@ -48,7 +48,6 @@ PACMAN_PACKAGES=(
   gdb
   gettext
   git
-  gmic
   graphviz
   gdk-pixbuf2
   glib2
