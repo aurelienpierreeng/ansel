@@ -200,7 +200,7 @@ Baseline: `toolkit_develop` 20 → ~6.
 ### Phase 5 — `src/imageio` (2 PRs)
 
 Same shape as Phase 3, 13 files: `format/{avif,pdf,png,tiff,webp,jpeg,j2k,exr,copy}.c` and
-`storage/{disk,gallery,piwigo}.c` each hold a codec and its settings panel.
+`storage/{disk,gallery}.c` each hold a codec and its settings panel.
 `imageio/format/imageio_format_api.h` and `imageio/storage/imageio_storage_api.h` are already
 X-macro headers with the same `FULL_API_H` discipline, so Phase 2's split applies verbatim.
 

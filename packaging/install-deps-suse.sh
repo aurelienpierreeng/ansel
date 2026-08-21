@@ -79,7 +79,6 @@ function tumbleweed_function
 	libpng16-devel
 	libraw-devel
 	librsvg-devel
-	libsecret-devel
 	libsoup2-devel
 	libtiff-devel
 	libwebp-devel
@@ -173,7 +172,6 @@ function leap_function
 	libpng16-devel
 	libraw-devel
 	librsvg-devel
-	libsecret-devel
 	libsoup2-devel
 	libtiff-devel
 	libwebp-devel

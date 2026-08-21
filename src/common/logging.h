@@ -39,7 +39,6 @@ typedef enum dt_debug_thread_t
   DT_DEBUG_GTK            = 1 <<  3,
   DT_DEBUG_PERF           = 1 <<  4,
   DT_DEBUG_PIPECACHE      = 1 <<  5,
-  DT_DEBUG_PWSTORAGE      = 1 <<  6,
   DT_DEBUG_OPENCL         = 1 <<  7,
   DT_DEBUG_SQL            = 1 <<  8,
   DT_DEBUG_MEMORY         = 1 <<  9,

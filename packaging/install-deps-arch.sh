@@ -68,7 +68,6 @@ PACMAN_PACKAGES=(
   libpng
   libraw
   librsvg
-  libsecret
   libsoup
   libtiff
   libwebp

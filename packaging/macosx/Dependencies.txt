@@ -39,7 +39,6 @@ github/ansel/build/macosx/package/Ansel.app/Contents/MacOS/ansel:
 	@executable_path/../Resources/lib/libjson-glib-1.0.0.dylib (compatibility version 601.0.0, current version 601.6.0)
 	@executable_path/../Resources/lib/libexiv2.27.dylib (compatibility version 27.0.0, current version 0.27.6)
 	@executable_path/../Resources/lib/libopenjp2.7.dylib (compatibility version 7.0.0, current version 2.5.0)
-	@executable_path/../Resources/lib/libsecret-1.0.dylib (compatibility version 0.0.0, current version 0.0.0)
 	@executable_path/../Resources/lib/libgtkmacintegration-gtk3.4.dylib (compatibility version 5.0.0, current version 5.1.0)
 	@executable_path/../Resources/lib/libicui18n.72.dylib (compatibility version 72.0.0, current version 72.1.0)
 	@executable_path/../Resources/lib/libicuuc.72.dylib (compatibility version 72.0.0, current version 72.1.0)
@@ -73,7 +72,6 @@ github/ansel/build/macosx/package/Ansel.app/Contents/MacOS/ansel:
 --> libheif
 --> libomp
 --> librsvg
---> libsecret
 --> little-cms2
 --> llvm
 --> lua
@@ -153,7 +151,6 @@ Deps_output.txt:
 ==> libpng: stable 1.6.39 (bottled), HEAD
 ==> libpsl: stable 0.21.2 (bottled)
 ==> librsvg: stable 2.56.0 (bottled)
-==> libsecret: stable 0.20.5 (bottled)
 ==> libsoup@2: stable 2.74.2 (bottled) [keg-only]
 ==> libssh: stable 0.10.5 (bottled), HEAD
 ==> libssh2: stable 1.10.0 (bottled), HEAD

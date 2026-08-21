@@ -2382,7 +2382,6 @@ PREDEFINED             = HAVE_OPENCL \
                          __linux__ \
                          USE_LUA \
                          HAVE_GPHOTO2 \
-                         HAVE_LIBSECRET \
                          HAVE_PRINT \
                          HAVE_MAP \
 

@@ -15,7 +15,6 @@ in stdenv.mkDerivation rec {
       libjpeg libpng
       librsvg libtiff libxcb openexr pixman pkgconfig sqlite libxslt
       colord colord-gtk libxshmfence libxkbcommon at_spi2_core
-      libwebp libsecret wrapGAppsHook gnome3.adwaita-icon-theme
       osm-gps-map
     ];
 
