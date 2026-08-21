@@ -29,6 +29,8 @@ extern "C" int dt_get_num_openmp_threads(void)
 enum test_lens_process_fixture_t { TEST_LENS_PROCESS_EMBEDDED_ONLY, TEST_LENS_PROCESS_EMBEDDED_VIGNETTE_ONLY, TEST_LENS_PROCESS_LENSFUN_ONLY, TEST_LENS_PROCESS_IDENTITY, TEST_LENS_PROCESS_MIXED, TEST_LENS_PROCESS_MIXED_TCA_SUPPRESSED, TEST_LENS_PROCESS_MIXED_NO_TCA, TEST_LENS_PROCESS_MIXED_TCA_COORDINATE_ALLOCATION_FAILURE, TEST_LENS_PROCESS_MIXED_TCA_OUTPUT_ALLOCATION_FAILURE };
 typedef struct { float pixels[32 * 32 * 4]; size_t pixels_count; int roi_in[4]; int roi_out[4]; int tca_roi[4]; char trace[128]; gboolean normal_alpha_initialized; gboolean alpha_copy_contained; gboolean fallback_used; } test_lens_process_result_t;
 extern "C" int test_lens_process_characterize(test_lens_process_fixture_t, dt_develop_t *, dt_dev_pixelpipe_t *, lfDatabase *, const dt_iop_roi_t *, int, gboolean, int, test_lens_process_result_t *);
+extern "C" size_t test_lens_process_modifier_deletions(void);
+extern "C" size_t test_lens_process_tca_modifier_deletions(void);
 
 typedef struct { dt_test_develop_context_t context; lfDatabase database; lfDatabase no_tca_database; const lfLens *lens; char *fixture; char *no_tca_fixture; } fixture_t;
 
@@ -314,6 +316,32 @@ static void test_tca_recovery_paths(void **state)
   g_key_file_free(golden);
 }
 
+static void test_modifier_lifetime_exactly_once(void **state)
+{
+  fixture_t *fixture = static_cast<fixture_t *>(*state);
+  const dt_iop_roi_t roi = { 5, 7, 11, 9, 1.0f };
+  const test_lens_process_fixture_t kinds[] = {
+    TEST_LENS_PROCESS_IDENTITY,
+    TEST_LENS_PROCESS_EMBEDDED_ONLY,
+    TEST_LENS_PROCESS_EMBEDDED_VIGNETTE_ONLY,
+    TEST_LENS_PROCESS_LENSFUN_ONLY,
+    TEST_LENS_PROCESS_MIXED,
+    TEST_LENS_PROCESS_MIXED_TCA_SUPPRESSED,
+    TEST_LENS_PROCESS_MIXED_NO_TCA,
+    TEST_LENS_PROCESS_MIXED_TCA_COORDINATE_ALLOCATION_FAILURE,
+    TEST_LENS_PROCESS_MIXED_TCA_OUTPUT_ALLOCATION_FAILURE
+  };
+  const size_t expected_modifier_deletions[] = { 0, 0, 0, 1, 1, 1, 1, 1, 1 };
+  const size_t expected_tca_deletions[] = { 0, 0, 0, 0, 1, 0, 1, 1, 1 };
+  for(size_t i = 0; i < G_N_ELEMENTS(kinds); i++)
+  {
+    test_lens_process_result_t result = {};
+    characterize(fixture, kinds[i], &roi, 4, FALSE, 0, &result);
+    assert_int_equal(test_lens_process_modifier_deletions(), expected_modifier_deletions[i]);
+    assert_int_equal(test_lens_process_tca_modifier_deletions(), expected_tca_deletions[i]);
+  }
+}
+
 static void test_monochrome_skips_lensfun_tca(void **state)
 {
   fixture_t *fixture = static_cast<fixture_t *>(*state);
@@ -386,7 +414,7 @@ int main(void)
   const CMUnitTest tests[] = { cmocka_unit_test(test_rb_route_mutation_changes_pixels_without_reordering) };
 #endif
 #else
-  const CMUnitTest tests[] = { cmocka_unit_test(test_identity), cmocka_unit_test(test_embedded), cmocka_unit_test(test_lensfun), cmocka_unit_test(test_mixed), cmocka_unit_test(test_nonzero_tile_matches_full_frame), cmocka_unit_test(test_rgb_rgba_mask_and_alpha), cmocka_unit_test(test_embedded_vignette_preserves_alpha), cmocka_unit_test(test_mixed_normal_alpha_is_initialized), cmocka_unit_test(test_monochrome_skips_lensfun_tca) };
+  const CMUnitTest tests[] = { cmocka_unit_test(test_identity), cmocka_unit_test(test_embedded), cmocka_unit_test(test_lensfun), cmocka_unit_test(test_mixed), cmocka_unit_test(test_nonzero_tile_matches_full_frame), cmocka_unit_test(test_rgb_rgba_mask_and_alpha), cmocka_unit_test(test_embedded_vignette_preserves_alpha), cmocka_unit_test(test_mixed_normal_alpha_is_initialized), cmocka_unit_test(test_monochrome_skips_lensfun_tca), cmocka_unit_test(test_modifier_lifetime_exactly_once) };
 #endif
   return cmocka_run_group_tests(tests, setup, teardown);
 }

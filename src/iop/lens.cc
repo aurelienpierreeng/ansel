@@ -108,6 +108,7 @@
 #include "widgets/popup.h"
 #include "widgets/widget_style.h"
 #include "control/signal.h"
+#include <memory>
 
 #include "develop/geometry/geometry.h"
 
@@ -572,6 +573,36 @@ typedef struct {
 static thread_local char *_lens_test_trace = NULL;
 static thread_local gboolean _lens_test_normal_alpha_initialized = FALSE;
 static thread_local int _lens_test_tca_allocation_failure = 0;
+static thread_local size_t _lens_test_modifier_deletions = 0;
+static thread_local size_t _lens_test_tca_modifier_deletions = 0;
+
+struct _lens_test_modifier_deleter_t
+{
+  void operator()(lfModifier *const mod) const
+  {
+    if(!IS_NULL_PTR(mod)) _lens_test_modifier_deletions++;
+    delete mod;
+  }
+};
+
+struct _lens_test_tca_modifier_deleter_t
+{
+  void operator()(lfModifier *const mod) const
+  {
+    if(!IS_NULL_PTR(mod)) _lens_test_tca_modifier_deletions++;
+    delete mod;
+  }
+};
+
+extern "C" size_t test_lens_process_modifier_deletions(void)
+{
+  return _lens_test_modifier_deletions;
+}
+
+extern "C" size_t test_lens_process_tca_modifier_deletions(void)
+{
+  return _lens_test_tca_modifier_deletions;
+}
 
 static void _lens_test_trace_event(const char *const event)
 {
@@ -583,6 +614,8 @@ static void _lens_test_trace_event(const char *const event)
 }
 #else
 #define _lens_test_trace_event(...) ((void)0)
+using _lens_test_modifier_deleter_t = std::default_delete<lfModifier>;
+using _lens_test_tca_modifier_deleter_t = std::default_delete<lfModifier>;
 #endif
 
 static void _apply_vignette_gain_3ch(float *const work_pixel, const float *const in_pixel,
@@ -1286,9 +1319,11 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
   dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
   int modflags;
-  const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
+  std::unique_ptr<lfModifier, _lens_test_modifier_deleter_t> modifier(
+      get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE));
 
   dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+  lfModifier *const modifier_raw = modifier.get();
 
   const struct dt_interpolation *const interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
 
@@ -1303,7 +1338,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     _lens_test_trace_event("copy");
     const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
     work_buf = (float *)dt_pixelpipe_cache_alloc_align_cache(bufsize, pipe->type);
-    if(IS_NULL_PTR(work_buf)) { delete modifier; return 1; }
+    if(IS_NULL_PTR(work_buf)) { return 1; }
     memcpy(work_buf, ivoid, bufsize);
 
     if(af.emb_vig)
@@ -1314,12 +1349,12 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 
     if(modflags & LF_MODIFY_VIGNETTING)
     {
-      __OMP_PARALLEL_FOR_CPP__(firstprivate(work_buf, roi_in, ch, pixelformat, modifier))
+      __OMP_PARALLEL_FOR_CPP__(firstprivate(work_buf, roi_in, ch, pixelformat, modifier_raw))
       for(int y = 0; y < roi_in->height; y++)
       {
         float *bufptr = work_buf + (size_t)y * roi_in->width * ch;
-        modifier->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
-                                         pixelformat, ch * roi_in->width);
+        modifier_raw->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
+                                             pixelformat, ch * roi_in->width);
       }
       _lens_test_trace_event("Lensfun vignette");
     }
@@ -1334,17 +1369,17 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       if(!_roi_contains(roi_in, &tca_roi))
       {
         dt_pixelpipe_cache_free_align(work_buf);
-        delete modifier;
         return 1;
       }
       int tca_modflags = 0;
-      lfModifier *tca_modifier = NULL;
       dt_pthread_mutex_lock(dt_plugin_threadsafe_mutex());
-      tca_modifier = get_modifier(&tca_modflags,
-                                  roi_in->scale * piece->buf_in.width,
-                                  roi_in->scale * piece->buf_in.height,
-                                  d, LF_MODIFY_TCA, FALSE);
+      std::unique_ptr<lfModifier, _lens_test_tca_modifier_deleter_t> tca_modifier(
+          get_modifier(&tca_modflags,
+                       roi_in->scale * piece->buf_in.width,
+                       roi_in->scale * piece->buf_in.height,
+                       d, LF_MODIFY_TCA, FALSE));
       dt_pthread_mutex_unlock(dt_plugin_threadsafe_mutex());
+      lfModifier *const tca_modifier_raw = tca_modifier.get();
       if(tca_modifier && (tca_modflags & LF_MODIFY_TCA))
       {
         const size_t tca_buf2size = (size_t)tca_roi.width * 2 * 3;
@@ -1383,14 +1418,14 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
 #endif
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  firstprivate(roi_in, tca_roi, ch, tca_modifier, tca_buf2, tca_padded, tca_out, \
+  firstprivate(roi_in, tca_roi, ch, tca_modifier_raw, tca_buf2, tca_padded, tca_out, \
                work_buf, d, raw_monochrome, mask_display, interpolation)
 #endif
           for(int y = 0; y < tca_roi.height; y++)
           {
             auto tca_buf2ptr = static_cast<float *>(dt_get_perthread(tca_buf2, tca_padded));
-            tca_modifier->ApplySubpixelGeometryDistortion(tca_roi.x, tca_roi.y + y,
-                                                          tca_roi.width, 1, tca_buf2ptr);
+            tca_modifier_raw->ApplySubpixelGeometryDistortion(tca_roi.x, tca_roi.y + y,
+                                                              tca_roi.width, 1, tca_buf2ptr);
             float *dst = tca_out + (size_t)y * tca_roi.width * ch;
             const _remap_ctx_t tca_remap = { ch, ch * roi_in->width, d->lensfun.do_nan_checks,
                                               raw_monochrome, mask_display };
@@ -1410,7 +1445,6 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         dt_pixelpipe_cache_free_align(tca_out);
         dt_pixelpipe_cache_free_align(tca_buf2);
       }
-      delete tca_modifier;
     }
 
     if(af.emb_dist || af.emb_tca)
@@ -1427,7 +1461,6 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       if(IS_NULL_PTR(work_ovoid))
       {
         dt_pixelpipe_cache_free_align(work_buf);
-        delete modifier;
         return 1;
       }
 
@@ -1452,18 +1485,18 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
         : (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
     const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
     void *buf = dt_pixelpipe_cache_alloc_align_cache(bufsize, pipe->type);
-    if(IS_NULL_PTR(buf)) { delete modifier; dt_pixelpipe_cache_free_align(work_buf); return 1; }
+    if(IS_NULL_PTR(buf)) { dt_pixelpipe_cache_free_align(work_buf); return 1; }
     memcpy(buf, src_pixels, read_size);
     if(read_size < bufsize) memset((char *)buf + read_size, 0, bufsize - read_size);
 
     if((modflags & LF_MODIFY_VIGNETTING) && !any_emb)
     {
-      __OMP_PARALLEL_FOR_CPP__(firstprivate(buf, roi_in, ch, pixelformat, modifier))
+      __OMP_PARALLEL_FOR_CPP__(firstprivate(buf, roi_in, ch, pixelformat, modifier_raw))
       for(int y = 0; y < roi_in->height; y++)
       {
         float *bufptr = ((float *)buf) + (size_t)ch * roi_in->width * y;
-        modifier->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
-                                         pixelformat, ch * roi_in->width);
+        modifier_raw->ApplyColorModification(bufptr, roi_in->x, roi_in->y + y, roi_in->width, 1,
+                                             pixelformat, ch * roi_in->width);
       }
       _lens_test_trace_event("Lensfun vignette");
     }
@@ -1477,19 +1510,18 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       {
         dt_pixelpipe_cache_free_align(buf);
         dt_pixelpipe_cache_free_align(work_buf);
-        delete modifier;
         return 1;
       }
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none)  \
-  firstprivate(roi_out, roi_in, ovoid, ch, padded_buf2size, modifier, mask_display, raw_monochrome, interpolation, ch_width, buf, d, buf2)
+  firstprivate(roi_out, roi_in, ovoid, ch, padded_buf2size, modifier_raw, mask_display, raw_monochrome, interpolation, ch_width, buf, d, buf2)
 #endif
       for(int y = 0; y < roi_out->height; y++)
       {
         float *buf2ptr = (float*)dt_get_perthread(buf2, padded_buf2size);
-        modifier->ApplySubpixelGeometryDistortion(roi_out->x, roi_out->y + y, roi_out->width,
-                                                  1, buf2ptr);
+        modifier_raw->ApplySubpixelGeometryDistortion(roi_out->x, roi_out->y + y, roi_out->width,
+                                                      1, buf2ptr);
         float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
         for(int x = 0; x < roi_out->width; x++, buf2ptr += 6, out += ch)
           _remap_pixel_inverse_or_not(out, buf2ptr, (const float *)buf,
@@ -1518,7 +1550,6 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
                      + roi_out->x + x - roi_in->x) * ch + 3];
   }
   dt_pixelpipe_cache_free_align(work_buf);
-  delete modifier;
 
   if(self->dev->gui_attached && g)
   {
@@ -4226,6 +4257,8 @@ extern "C" int test_lens_process_characterize(const test_lens_process_fixture_t 
   pipe->mask_display = mask_display;
   _lens_test_trace = result->trace;
   _lens_test_normal_alpha_initialized = FALSE;
+  _lens_test_modifier_deletions = 0;
+  _lens_test_tca_modifier_deletions = 0;
   _lens_test_tca_allocation_failure = fixture == TEST_LENS_PROCESS_MIXED_TCA_COORDINATE_ALLOCATION_FAILURE ? 1
                                       : fixture == TEST_LENS_PROCESS_MIXED_TCA_OUTPUT_ALLOCATION_FAILURE ? 2 : 0;
   const int status = process(&module, pipe, &piece, input, output);
