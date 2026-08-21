@@ -255,59 +255,28 @@ static void _dng_process_vignette_radial(uint8_t *param, uint32_t param_size, dt
   dng->has_vignette = TRUE;
 }
 
-// Parses OpcodeList3 (post-demosaic corrections): WarpRectilinear (id 1) and
-// VignetteRadial (id 3), writing into img->exif_correction_data.dng. Independent of
-// dt_dng_opcode_process_opcode_list_2() above -- does not touch img->dng_gain_maps and
-// does not set img->exif_correction_type (the exif.cc caller owns that).
-//
-// Bounds guard, applied before every read: (a) buf_size < 4 is rejected before the
-// opcode count is read; (b) each opcode's 16-byte header is validated against buf_size
-// before any header field is read; (c) the header's declared param_size is validated
-// against buf_size before the param body is touched; (d) each opcode class enforces its
-// own fixed minimum param_size before indexing into the param bytes it uses. Unknown
-// opcode ids are skipped (logged at DT_DEBUG_IMAGEIO); no correction is invented for a
-// class that wasn't actually present in the data.
+static void _dng_opcode_process_list_3(const _dng_opcode_envelope_t *envelope, void *context)
+{
+  dt_image_t *img = context;
+  if(envelope->opcode_id == OPCODE_ID_WARP_RECTILINEAR)
+    _dng_process_warp_rectilinear(envelope->payload, envelope->payload_size, img);
+  else if(envelope->opcode_id == OPCODE_ID_VIGNETTE_RADIAL)
+    _dng_process_vignette_radial(envelope->payload, envelope->payload_size, img);
+  else
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] OpcodeList3 has unsupported %s opcode %d\n",
+             envelope->flags & 1 ? "optional" : "mandatory", envelope->opcode_id);
+}
+
 void dt_dng_opcode_process_opcode_list_3(uint8_t *buf, uint32_t buf_size, dt_image_t *img)
 {
   memset(&img->exif_correction_data.dng, 0, sizeof(img->exif_correction_data.dng));
 
-  if(buf_size < 4)
-  {
+  const _dng_opcode_iter_status_t status = _dng_opcode_foreach(buf, buf_size,
+                                                                 _dng_opcode_process_list_3, img);
+  if(status == _DNG_OPCODE_ITER_COUNT_TRUNCATED)
     dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] OpcodeList3 buffer too small for opcode count\n");
-    return;
-  }
-
-  uint32_t count = get_long(&buf[0]);
-  uint64_t offset = 4;
-
-  while(count > 0)
-  {
-    if(offset + 16 > buf_size)
-    {
-      dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Truncated opcode header in OpcodeList3\n");
-      return;
-    }
-
-    const uint32_t opcode_id = get_long(&buf[offset]);
-    const uint32_t flags = get_long(&buf[offset + 8]);
-    const uint32_t param_size = get_long(&buf[offset + 12]);
-    uint8_t *param = &buf[offset + 16];
-
-    if(offset + 16 + (uint64_t)param_size > buf_size)
-    {
-      dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Invalid opcode size in OpcodeList3\n");
-      return;
-    }
-
-    if(opcode_id == OPCODE_ID_WARP_RECTILINEAR)
-      _dng_process_warp_rectilinear(param, param_size, img);
-    else if(opcode_id == OPCODE_ID_VIGNETTE_RADIAL)
-      _dng_process_vignette_radial(param, param_size, img);
-    else
-      dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] OpcodeList3 has unsupported %s opcode %d\n",
-               flags & 1 ? "optional" : "mandatory", opcode_id);
-
-    offset += 16 + (uint64_t)param_size;
-    count--;
-  }
+  else if(status == _DNG_OPCODE_ITER_HEADER_TRUNCATED)
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Truncated opcode header in OpcodeList3\n");
+  else if(status == _DNG_OPCODE_ITER_PAYLOAD_TRUNCATED)
+    dt_print(DT_DEBUG_IMAGEIO, "[dng_opcode] Invalid opcode size in OpcodeList3\n");
 }
