@@ -195,11 +195,6 @@
 #include <xmmintrin.h>
 #endif
 
-#ifdef HAVE_GRAPHICSMAGICK
-#include <magick/api.h>
-#elif defined HAVE_IMAGEMAGICK
-#include <MagickWand/MagickWand.h>
-#endif
 
 #include "common/dbus.h"
 #include "common/utility.h"
@@ -987,18 +982,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                "  Colord support disabled\n"
 #endif
 
-#ifdef HAVE_GRAPHICSMAGICK
-               "  GraphicsMagick support enabled\n"
-#else
-               "  GraphicsMagick support disabled\n"
-#endif
-
-#ifdef HAVE_IMAGEMAGICK
-               "  ImageMagick support enabled\n"
-#else
-               "  ImageMagick support disabled\n"
-#endif
-
 #ifdef HAVE_OPENEXR
                "  OpenEXR support enabled\n"
 #else
@@ -1598,29 +1581,27 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   darktable.guides = dt_guides_init();
 
-#ifdef HAVE_GRAPHICSMAGICK
-  /* GraphicsMagick init */
-  InitializeMagick(darktable.progname);
-
-  // *SIGH*
+  // Re-assert our handlers once the third-party libraries above are up. This used to compensate
+  // for GraphicsMagick's InitializeMagick(), which stole all of them; that library is gone, but
+  // the call is cheap and idempotent (system_signal_handling.c counts its invocations), and it
+  // keeps the guarantee that whatever init ran before this point cannot leave us without a
+  // SIGSEGV handler. Crash reporting is initialized after it, deliberately.
   dt_set_signal_handlers();
 
-#elif defined HAVE_IMAGEMAGICK
-
-  /* ImageMagick init */
-  MagickWandGenesis();
-
-#endif
-
-#if(defined(HAVE_GRAPHICSMAGICK) || defined(HAVE_IMAGEMAGICK)) && defined(_OPENMP)
-  // *SIGH*, part two. GraphicsMagick's InitializeMagick() sizes its own thread pool from
-  // omp_get_num_procs() and publishes that by calling omp_set_num_threads() -- a PROCESS-wide
-  // side effect on a library-local decision. It runs after our own omp_set_num_threads() above,
-  // so it silently overrode `-t N` and the "CPU cores" preference for every parallel region
-  // entered from this thread afterwards. That is invisible in the GUI, where pixel work runs on
-  // control worker threads that set their own count in dt_control_work(), and total in ansel-cli,
-  // where the export pipeline runs on this very thread: `-t 1` still ran a full-width team.
-  // Re-assert ours last. Keep this call after EVERY library init that may do the same.
+#ifdef _OPENMP
+  // Re-assert our thread count last, after every library above has initialised.
+  //
+  // omp_set_num_threads() writes only the CALLING thread's ICV, and a library that sizes its own
+  // pool from omp_get_num_procs() publishes that by calling it -- a process-wide side effect on a
+  // library-local decision. GraphicsMagick's InitializeMagick() did exactly that from here, which
+  // silently overrode `-t N` and the "CPU cores" preference for every parallel region entered from
+  // this thread afterwards: invisible in the GUI, where pixel work runs on control worker threads
+  // that set their own count in dt_control_work(), and total in ansel-cli, where the export
+  // pipeline runs on this very thread.
+  //
+  // That dependency is gone, but the hazard is not specific to it: libgmic, still linked, imports
+  // omp_set_num_threads too. So this is deliberately NOT conditional on any one library. Keep it
+  // after every library init that could do the same.
   omp_set_num_threads(darktable.num_openmp_threads);
 #endif
 
@@ -1981,12 +1962,6 @@ void dt_cleanup()
 
   dt_opencl_cleanup();
   dt_pwstorage_destroy(darktable.pwstorage);
-
-#ifdef HAVE_GRAPHICSMAGICK
-  DestroyMagick();
-#elif defined HAVE_IMAGEMAGICK
-  MagickWandTerminus();
-#endif
 
   dt_guides_cleanup(darktable.guides);
 

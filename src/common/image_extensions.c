@@ -23,8 +23,8 @@
 /* These 3 lists are the decode-routing ground truth: each extension appears in AT MOST one of
  * them. Do NOT list an extension in more than one -- dt_imageio_open() tries the matching
  * decoder(s) in order and a generic/exotic fallback can silently "succeed" on data it
- * misinterprets (e.g. GraphicsMagick reading a .dng's embedded TIFF structure as a normal image
- * instead of letting rawspeed/libraw demosaic the actual sensor data). Ambiguity about the
+ * misinterprets (e.g. a generic TIFF reader taking a .dng's embedded TIFF structure for a normal
+ * image instead of letting rawspeed/libraw demosaic the actual sensor data). Ambiguity about the
  * eventual *class* of a file (raw-vs-processed, LDR-vs-HDR) is handled separately by
  * dt_image_ext_is_ambiguous() below, which never adds a second routing entry. */
 
@@ -47,11 +47,6 @@ static const char *_ldr_extensions[] = {
 #endif
 #ifdef HAVE_WEBP
   "webp",
-#endif
-#if defined(HAVE_GRAPHICSMAGICK) || defined(HAVE_IMAGEMAGICK)
-  // Formats only reachable through the generic exotic decoder inside dt_imageio_open_raster(),
-  // gated on the same libraries CMake requires to actually decode them (src/CMakeLists.txt).
-  "gif", "bmp", "dcm", "jng", "miff", "mng", "pnm", "pam",
 #endif
   NULL
 };

@@ -44,7 +44,6 @@ MINGW_PACKAGES=(
   gettext
   gdb
   gmic
-  graphicsmagick
   gtk3
   icu
   imath

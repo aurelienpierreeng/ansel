@@ -80,9 +80,6 @@
 #ifdef HAVE_OPENJPEG
 #include "imageio/imageio_j2k.h"
 #endif
-#include "imageio/imageio_gm.h"
-#include "imageio/imageio_im.h"
-#include "imageio/imageio_magick_abort_guard.h"
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_pfm.h"
 #include "imageio/imageio_png.h"
@@ -108,12 +105,6 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 
-#if defined(HAVE_GRAPHICSMAGICK)
-#include <magick/api.h>
-#include <magick/blob.h>
-#elif defined(HAVE_IMAGEMAGICK)
-#include <MagickWand/MagickWand.h>
-#endif
 
 #include <assert.h>
 #include <glib/gstdio.h>
@@ -126,40 +117,6 @@
 #include "imageio/imageio_profile.h"
 #include "control/signal.h"
 
-/**
- * @brief Map Exiv2 preview MIME types to decoder format identifiers.
- *
- * @details
- * Embedded previews are handed to GraphicsMagick/ImageMagick as anonymous blobs.
- * Some camera vendors store TIFF/PNG-style previews whose blob headers are not
- * sufficient for GraphicsMagick to infer the format on its own, which yields the
- * "Unrecognized image format ()" path seen in issue #711. When EXIF already gave
- * us the preview MIME type, pass that format hint explicitly to the blob decoder
- * instead of relying on autodetection.
- *
- * @param mime_type MIME type returned by Exiv2 for the embedded preview.
- *
- * @return Decoder format identifier, or NULL when we have no useful hint.
- */
-#if defined(HAVE_GRAPHICSMAGICK)
-static const char *_preview_format_from_mime_type(const char *mime_type)
-{
-  if(IS_NULL_PTR(mime_type) || mime_type[0] == '\0') return NULL;
-
-  if(!strcmp(mime_type, "image/jpeg")) return "JPEG";
-  if(!strcmp(mime_type, "image/png")) return "PNG";
-  if(!strcmp(mime_type, "image/tiff")) return "TIFF";
-  if(!strcmp(mime_type, "image/x-tiff")) return "TIFF";
-  if(!strcmp(mime_type, "image/gif")) return "GIF";
-  if(!strcmp(mime_type, "image/bmp")) return "BMP";
-  if(!strcmp(mime_type, "image/x-portable-pixmap")) return "PPM";
-  if(!strcmp(mime_type, "image/x-portable-graymap")) return "PGM";
-  if(!strcmp(mime_type, "image/x-portable-bitmap")) return "PBM";
-  if(!strcmp(mime_type, "image/x-portable-anymap")) return "PNM";
-  if(!strcmp(mime_type, "image/webp")) return "WEBP";
-  return NULL;
-}
-#endif
 
 // Best-effort image-type hint from the file extension. Returns DT_IMAGE_RAW / DT_IMAGE_LDR /
 // DT_IMAGE_HDR for the unambiguous extensions, or 0 ("unknown") for containers whose dynamic range
@@ -201,143 +158,16 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
 
     res = 0;
   }
-  else
+  else if(!strcmp(mime_type, "image/tiff") || !strcmp(mime_type, "image/x-tiff"))
   {
-#if defined(HAVE_GRAPHICSMAGICK)
-    const char *const preview_format = _preview_format_from_mime_type(mime_type);
-    ExceptionInfo exception;
-    Image *image = NULL;
-    ImageInfo *image_info = NULL;
-
-    GetExceptionInfo(&exception);
-    image_info = CloneImageInfo((ImageInfo *)NULL);
-    if(!IS_NULL_PTR(preview_format))
-      g_strlcpy(image_info->magick, preview_format, sizeof(image_info->magick));
-
-    // GraphicsMagick calls assert() -> abort() on some malformed embedded
-    // previews instead of reporting through `exception`. Recover instead of
-    // crashing the whole app; on recovery, `image`/`image_info`/`exception`
-    // are NOT touched again (see imageio_magick_abort_guard.h) - we leak
-    // them and bail out directly, only freeing the buffer Ansel itself
-    // allocated if the per-row decode loop got partway through it.
-    DT_MAGICK_ABORT_GUARD("dt_imageio_large_thumbnail GM", filename, {
-      if(*buffer)
-      {
-        dt_pixelpipe_cache_free_align(*buffer);
-        *buffer = NULL;
-      }
-      goto error;
-    });
-
-    image = BlobToImage(image_info, buf, bufsize, &exception);
-
-    if(exception.severity != UndefinedException) CatchException(&exception);
-
-    if(IS_NULL_PTR(image))
+    // The only other preview format raw files actually use. See
+    // dt_imageio_tiff_decode_blob() for why libtiff rather than a generic decoder.
+    if(dt_imageio_tiff_decode_blob(buf, bufsize, buffer, th_width, th_height))
     {
-      fprintf(stderr, "[dt_imageio_large_thumbnail GM] thumbnail not found?\n");
-      goto error_gm;
-    }
-
-    *th_width = image->columns;
-    *th_height = image->rows;
-    *color_space = DT_COLORSPACE_SRGB; // FIXME: this assumes that embedded thumbnails are always srgb
-
-    *buffer = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
-        sizeof(uint8_t) * 4 * image->columns * image->rows,
-        0);
-    if(!*buffer) goto error_gm;
-
-    for(uint32_t row = 0; row < image->rows; row++)
-    {
-      uint8_t *bufprt = *buffer + (size_t)4 * row * image->columns;
-      int gm_ret = DispatchImage(image, 0, row, image->columns, 1, "RGBP", CharPixel, bufprt, &exception);
-
-      if(exception.severity != UndefinedException) CatchException(&exception);
-
-      if(gm_ret != MagickPass)
-      {
-        fprintf(stderr, "[dt_imageio_large_thumbnail GM] error_gm reading thumbnail\n");
-        dt_pixelpipe_cache_free_align(*buffer);
-        *buffer = NULL;
-        goto error_gm;
-      }
-    }
-
-    // fprintf(stderr, "[dt_imageio_large_thumbnail GM] successfully decoded thumbnail\n");
-    res = 0;
-
-  error_gm:
-    DT_MAGICK_ABORT_GUARD_DISARM();
-    if(image) DestroyImage(image);
-    if(image_info) DestroyImageInfo(image_info);
-    DestroyExceptionInfo(&exception);
-    if(res) goto error;
-#elif defined(HAVE_IMAGEMAGICK)
-    MagickWand *image = NULL;
-	MagickBooleanType mret;
-
-    image = NewMagickWand();
-
-    // ImageMagick calls assert() -> abort() on some malformed embedded
-    // previews instead of reporting through its normal error status.
-    // Recover instead of crashing the whole app; on recovery, `image` is
-    // NOT touched again (see imageio_magick_abort_guard.h) - we leak the
-    // wand and bail out directly, only freeing the buffer Ansel itself
-    // allocated if it was set before the abort.
-    DT_MAGICK_ABORT_GUARD("dt_imageio_large_thumbnail IM", filename, {
-      if(*buffer)
-      {
-        dt_free(*buffer);
-        *buffer = NULL;
-      }
-      goto error;
-    });
-
-	mret = MagickReadImageBlob(image, buf, bufsize);
-    if(mret != MagickTrue)
-    {
-      fprintf(stderr, "[dt_imageio_large_thumbnail IM] thumbnail not found?\n");
-      goto error_im;
-    }
-
-    *th_width = MagickGetImageWidth(image);
-    *th_height = MagickGetImageHeight(image);
-    switch (MagickGetImageColorspace(image)) {
-    case sRGBColorspace:
+      // TODO: check if the embedded thumbs have a color space set! currently we assume that it's always sRGB
       *color_space = DT_COLORSPACE_SRGB;
-      break;
-    default:
-      fprintf(stderr,
-          "[dt_imageio_large_thumbnail IM] could not map colorspace, using sRGB");
-      *color_space = DT_COLORSPACE_SRGB;
-      break;
+      res = 0;
     }
-
-    *buffer = malloc(sizeof(uint8_t) * (*th_width) * (*th_height) * 4);
-    if(IS_NULL_PTR(*buffer)) goto error_im;
-
-    mret = MagickExportImagePixels(image, 0, 0, *th_width, *th_height, "RGBP", CharPixel, *buffer);
-    if(mret != MagickTrue) {
-      dt_free(*buffer);
-      fprintf(stderr,
-          "[dt_imageio_large_thumbnail IM] error while reading thumbnail\n");
-      goto error_im;
-    }
-
-    res = 0;
-
-error_im:
-    DT_MAGICK_ABORT_GUARD_DISARM();
-    DestroyMagickWand(image);
-    if(res != 0) goto error;
-#else
-    fprintf(stderr,
-      "[dt_imageio_large_thumbnail] error: The thumbnail image is not in "
-      "JPEG format, and DT was built without neither GraphicsMagick or "
-      "ImageMagick. Please rebuild DT with GraphicsMagick or ImageMagick "
-      "support enabled.\n");
-#endif
   }
 
   if(res)
@@ -546,10 +376,6 @@ dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, d
     return ret;
 #endif
 
-  ret = dt_imageio_open_exotic(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-    return ret;
-
   return DT_IMAGEIO_FILE_CORRUPTED;
 }
 
@@ -659,10 +485,6 @@ dt_imageio_retval_t dt_imageio_open_raster(dt_image_t *img, const char *filename
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
 
-  ret = dt_imageio_open_exotic(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-    return ret;
-
   return DT_IMAGEIO_FILE_CORRUPTED;
 }
 
@@ -699,11 +521,6 @@ dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, d
     if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
       return ret;
   }
-
-  /* fallback that tries to open file via GraphicsMagick */
-  ret = dt_imageio_open_exotic(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-    return ret;
 
   return DT_IMAGEIO_FILE_CORRUPTED;
 }
@@ -1176,27 +993,6 @@ error:
 }
 
 
-// fallback read method in case file could not be opened yet.
-// use GraphicsMagick (if supported) to read exotic LDRs
-dt_imageio_retval_t dt_imageio_open_exotic(dt_image_t *img, const char *filename,
-                                           dt_mipmap_buffer_t *buf)
-{
-  // if buf is NULL, don't proceed
-  if(IS_NULL_PTR(buf))
-    return DT_IMAGEIO_OK;
-
-  dt_imageio_retval_t ret;
-
-#if defined(HAVE_GRAPHICSMAGICK)
-  ret = dt_imageio_open_gm(img, filename, buf);
-#elif defined(HAVE_IMAGEMAGICK)
-  ret = dt_imageio_open_im(img, filename, buf);
-#else
-  ret = DT_IMAGEIO_FILE_CORRUPTED;
-#endif
-
-  return ret;
-}
 
 // =================================================
 //   combined reading

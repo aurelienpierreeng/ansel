@@ -59,7 +59,6 @@ APT_PACKAGES=(
   libgdk-pixbuf2.0-dev
   libglib2.0-dev
   libgmic-dev
-  libgraphicsmagick1-dev
   libgomp1
   libgtk-3-dev
   libheif-dev

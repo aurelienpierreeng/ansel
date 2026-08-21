@@ -260,15 +260,13 @@ typedef enum dt_image_loader_t
   LOADER_EXR      =  5,
   LOADER_RGBE     =  6,
   LOADER_PFM      =  7,
-  LOADER_GM       =  8,
-  LOADER_RAWSPEED =  9,
-  LOADER_PNM      = 10,
-  LOADER_AVIF     = 11,
-  LOADER_IM       = 12,
-  LOADER_HEIF     = 13,
-  LOADER_LIBRAW   = 14,
-  LOADER_WEBP     = 15,
-  LOADER_COUNT    = 16, // keep last
+  LOADER_RAWSPEED =  8,
+  LOADER_PNM      =  9,
+  LOADER_AVIF     = 10,
+  LOADER_HEIF     = 11,
+  LOADER_LIBRAW   = 12,
+  LOADER_WEBP     = 13,
+  LOADER_COUNT    = 14, // keep last
 } dt_image_loader_t;
 
 typedef enum dt_image_path_source_t
@@ -293,11 +291,9 @@ static const struct
   { N_("exr"),             'e'},
   { N_("rgbe"),            'R'},
   { N_("pfm"),             'P'},
-  { N_("GraphicsMagick"),  'g'},
   { N_("rawspeed"),        'r'},
   { N_("netpnm"),          'n'},
   { N_("avif"),            'a'},
-  { N_("ImageMagick"),     'i'},
   { N_("heif"),            'h'},
   { N_("libraw"),          'l'},
   { N_("webp"),            'w'}

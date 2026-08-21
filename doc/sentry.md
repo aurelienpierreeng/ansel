@@ -101,7 +101,7 @@ cannot be shown, so Sentry initialises only if the user already opted in during 
 The `inproc` backend installs its own `SIGSEGV` handler. Ansel also has a long-standing local
 handler in `src/common/system_signal_handling.c` that forks `gdb` to write a backtrace file.
 Signal handlers chain in reverse install order, so Sentry must be installed **after** the last
-`dt_set_signal_handlers()` call (which itself runs after GraphicsMagick clobbers handlers). That is
+`dt_set_signal_handlers()` call, so nothing installed during startup can displace ours. That is
 why `dt_sentry_init()` sits at the very end of `dt_init()`: Sentry runs first on a crash, then
 chains down into the local handler.
 
