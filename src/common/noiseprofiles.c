@@ -349,7 +349,8 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
             json_reader_end_element(reader);
 
             // everything worked out, add tmp_profile to result
-            dt_noiseprofile_t *new_profile = (dt_noiseprofile_t *)malloc(sizeof(dt_noiseprofile_t));
+            // dt_alloc_align: dt_noiseprofile_t is 64-aligned; dt_noiseprofile_free() pairs with it.
+  dt_noiseprofile_t *new_profile = (dt_noiseprofile_t *)dt_alloc_align(sizeof(dt_noiseprofile_t));
             *new_profile = tmp_profile;
             result = g_list_prepend(result, new_profile);
 
@@ -383,7 +384,7 @@ void dt_noiseprofile_free(gpointer data)
   dt_free(profile->name);
   dt_free(profile->maker);
   dt_free(profile->model);
-  dt_free(profile);
+  dt_free_align(profile);
 }
 
 void dt_noiseprofile_interpolate(

@@ -1515,7 +1515,7 @@ static box_t *find_patch(GHashTable *table, gpointer key)
   if(IS_NULL_PTR(patch))
   {
     // the patch won't be found in the first pass
-    patch = (box_t *)calloc(1, sizeof(box_t));
+    patch = (box_t *)dt_calloc_align(sizeof(box_t)); // goes into box_table, freed via _free_box_gpointer
     g_hash_table_insert(table, g_strdup(key), patch);
   }
   return patch;

@@ -15,6 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "system/mem_alloc.h"
 #include "common/conf.h"
 #include "import_jobs.h"
 #include "common/collection.h"
@@ -256,7 +257,7 @@ int _import_copy_txt(const char *const filename, const char *dest_file_path)
  */
 int _import_copy_file(const char *const filename, const int index, dt_control_import_t *data, gchar *img_path_to_db, size_t pathname_len, GList **discarded)
 {
-  dt_image_t *img = malloc(sizeof(dt_image_t));
+  dt_image_t *img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
   dt_image_init(img);
 
   // Generate file I/O only if the pattern is using EXIF variables.
@@ -271,7 +272,7 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
 
   gchar *dest_file_path = dt_build_filename_from_pattern(filename, index, img, data);
   dt_print(DT_DEBUG_IMPORT, "[Import] Image %s will be copied into %s\n", filename, dest_file_path);
-  dt_free(img);
+  dt_free_align(img);
 
   int process = TRUE;
   int copied = 0;
