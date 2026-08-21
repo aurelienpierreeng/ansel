@@ -2108,23 +2108,36 @@ static int _distort_lensfun_common(dt_iop_module_t *self,
   return 1;
 }
 
+static _emb_axes_t _embedded_geometry_axes(const dt_iop_module_t *self,
+                                           const dt_iop_lensfun_params_t *p,
+                                           const dt_iop_lensfun_data_t *d,
+                                           gboolean *const any_geom)
+{
+  const gboolean emb_dist = (p->distortion_method == dt_iop_lens_correction_source_t::EMBEDDED)
+                            && d->embedded.nc > 0;
+  const gboolean emb_tca = (p->tca_method == dt_iop_lens_tca_source_t::EMBEDDED) && d->embedded.nc > 0
+                        && dt_embedded_lens_has_ca(&self->dev->image_storage);
+  *any_geom = emb_dist || emb_tca;
+  return { FALSE, emb_dist, emb_tca };
+}
+
+#ifdef BUILD_TESTING
+static_assert(std::is_same_v<decltype(&_embedded_geometry_axes),
+                             _emb_axes_t (*)(const dt_iop_module_t *, const dt_iop_lensfun_params_t *,
+                                             const dt_iop_lensfun_data_t *, gboolean *const)>,
+              "shared embedded axis selection");
+#endif
+
 int distort_transform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                       float *const __restrict points, size_t points_count)
 {
   auto p = (dt_iop_lensfun_params_t *)self->params;
   auto d = (dt_iop_lensfun_data_t *)piece->data;
 
-  const gboolean emb_dist = (p->distortion_method == dt_iop_lens_correction_source_t::EMBEDDED)
-                            && d->embedded.nc > 0;
-  const gboolean emb_tca = (p->tca_method == dt_iop_lens_tca_source_t::EMBEDDED) && d->embedded.nc > 0
-                        && dt_embedded_lens_has_ca(&self->dev->image_storage);
-  const gboolean any_emb_geom = emb_dist || emb_tca;
+  gboolean any_geom;
+  const _emb_axes_t axes = _embedded_geometry_axes(self, p, d, &any_geom);
 
-  if(any_emb_geom)
-  {
-    _emb_axes_t axes = { FALSE, emb_dist, emb_tca };
-    return _distort_transform_embedded_metadata_warp(d, piece->buf_in.width, piece->buf_in.height, points, points_count, &axes);
-  }
+if(any_geom) return _distort_transform_embedded_metadata_warp(self, pipe, piece, points, points_count, &axes);
 
   return _distort_lensfun_common(self, piece, points, points_count, TRUE);
 }
@@ -2135,17 +2148,10 @@ int distort_backtransform(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
   auto p = (dt_iop_lensfun_params_t *)self->params;
   auto d = (dt_iop_lensfun_data_t *)piece->data;
 
-  const gboolean emb_dist = (p->distortion_method == dt_iop_lens_correction_source_t::EMBEDDED)
-                            && d->embedded.nc > 0;
-  const gboolean emb_tca = (p->tca_method == dt_iop_lens_tca_source_t::EMBEDDED) && d->embedded.nc > 0
-                        && dt_embedded_lens_has_ca(&self->dev->image_storage);
-  const gboolean any_emb_geom = emb_dist || emb_tca;
+  gboolean any_geom;
+  const _emb_axes_t axes = _embedded_geometry_axes(self, p, d, &any_geom);
 
-  if(any_emb_geom)
-  {
-    _emb_axes_t axes = { FALSE, emb_dist, emb_tca };
-    return _distort_backtransform_embedded_metadata_warp(d, piece->buf_in.width, piece->buf_in.height, points, points_count, &axes);
-  }
+if(any_geom) return _distort_backtransform_embedded_metadata_warp(self, pipe, piece, points, points_count, &axes);
 
   return _distort_lensfun_common(self, piece, points, points_count, FALSE);
 }
