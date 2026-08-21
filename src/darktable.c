@@ -1599,9 +1599,10 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // that set their own count in dt_control_work(), and total in ansel-cli, where the export
   // pipeline runs on this very thread.
   //
-  // That dependency is gone, but the hazard is not specific to it: libgmic, still linked, imports
-  // omp_set_num_threads too. So this is deliberately NOT conditional on any one library. Keep it
-  // after every library init that could do the same.
+  // Both of the libraries known to have done it -- GraphicsMagick and G'MIC -- have since been
+  // removed, so nothing in the current dependency set is known to clobber the count. This stays
+  // anyway, and deliberately unconditional: it costs one call at startup, the failure mode is
+  // silent, and it took an LD_PRELOAD shim to find the last one. Keep it after every library init.
   omp_set_num_threads(darktable.num_openmp_threads);
 #endif
 
